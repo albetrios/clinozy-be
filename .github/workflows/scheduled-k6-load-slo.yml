@@ -54,7 +54,9 @@ jobs:
           --health-retries=20
 
     env:
-      NODE_ENV: development
+      # `local`: a throwaway runner, never a deployed target — and the only target that accepts
+      # the static login code below.
+      NODE_ENV: local
       LOG_LEVEL: warn
       HOST: 0.0.0.0
       PORT: 3000
@@ -91,7 +93,7 @@ jobs:
       # minutes after the refresh step that mints it. CI-only: the same 15 minutes as a user token.
       GLOBAL_ADMIN_ACCESS_TOKEN_EXPIRY_SECONDS: '900'
       # fe-full-surface signs its pool users in with a fixed email code (STATIC_VERIFICATION_CODE)
-      # instead of a mailed one. A refine allows this on the local and development targets only.
+      # instead of a mailed one. A refine allows this on the local target only (hence NODE_ENV).
       AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED: 'true'
       # CI-only fixtures, the Vitest harness's. fe-full-surface starts a Google sign-in, which answers
       # 302 to the authorize URL (string work, no outbound call) only once a provider is configured.

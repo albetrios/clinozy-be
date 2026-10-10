@@ -381,9 +381,9 @@ const envSchemaBase = z.object({
    * anti-enumeration floor, none of which say anything useful about the app under test.
    *
    * Defaults false, so the behaviour does not exist unless a developer opts in. A refine permits
-   * `true` ONLY on the `local` and `development` targets — an allowlist rather than a
-   * "not production" test, so a target added to the enum later is refused by default instead of
-   * silently inheriting a master login code. It never creates accounts, never skips the
+   * `true` ONLY on the `local` target — never on a deployed one (`development` is hosted too) — as an
+   * allowlist rather than a "not production" test, so a target added to the enum later is refused
+   * by default instead of silently inheriting a master login code. It never creates accounts, never skips the
    * account-active check, and never bypasses the per-user attempt cap: an unknown email still
    * 401s exactly as before.
    */
@@ -1622,13 +1622,10 @@ export const envSchema = envSchemaBase
     path: ['TEST_MODE'],
   })
   .refine(
-    (data) =>
-      !data.AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED ||
-      data.NODE_ENV === 'local' ||
-      data.NODE_ENV === 'development',
+    (data) => !data.AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED || data.NODE_ENV === 'local',
     {
       message:
-        "AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED may only be true on the 'local' or 'development' targets (it makes email login accept a well-known master code, so a deployed runtime must only ever accept the one-time codes issued by send-code). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
+        "AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED may only be true on the 'local' target (it makes email login accept a well-known master code, so a deployed runtime — development included — must only ever accept the one-time codes issued by send-code). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
       path: ['AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED'],
     },
   )

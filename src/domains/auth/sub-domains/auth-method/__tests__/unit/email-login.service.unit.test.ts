@@ -422,7 +422,7 @@ describe('EmailLoginService', () => {
   });
 
   /**
-   * AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED — the local/development escape hatch that lets a
+   * AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED — the local-only escape hatch that lets a
    * caller log in without the `send-code` round trip. The env schema permits the flag only on the
    * `local` and `development` targets, so these paths cannot exist on a deployed production
    * runtime; what the suite pins is that switching it on skips ONLY the stored-code lookup and

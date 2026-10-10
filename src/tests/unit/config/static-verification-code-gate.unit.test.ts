@@ -12,25 +12,26 @@ describe('AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED gate', () => {
     expect(r.success && r.data.AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED).toBe(false);
   });
 
-  for (const target of ['local', 'development'] as const) {
-    it(`allows true on ${target}`, () => {
+  it('allows true on local', () => {
+    const r = envSchema.safeParse({
+      ...base(),
+      NODE_ENV: 'local',
+      AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED: 'true',
+    });
+    expect(hit(r as never)).toBe(false);
+  });
+
+  // Both deployed targets: a master login code must never be accepted on a hosted runtime.
+  for (const target of ['development', 'production'] as const) {
+    it(`REFUSES true on ${target}`, () => {
       const r = envSchema.safeParse({
         ...base(),
         NODE_ENV: target,
         AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED: 'true',
       });
-      expect(hit(r as never)).toBe(false);
+      expect(hit(r as never)).toBe(true);
     });
   }
-
-  it('REFUSES true in production', () => {
-    const r = envSchema.safeParse({
-      ...base(),
-      NODE_ENV: 'production',
-      AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED: 'true',
-    });
-    expect(hit(r as never)).toBe(true);
-  });
 
   it('allows false in production', () => {
     const r = envSchema.safeParse({

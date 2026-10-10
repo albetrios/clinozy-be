@@ -69,13 +69,7 @@ async function countLiveUploads(): Promise<number> {
 
 function buildService(): UploadService {
   // Only the repository and storage participate in the tombstone paths.
-  return new UploadService(
-    new UploadRepository(),
-    {} as never,
-    {} as never,
-    storageStub,
-    {} as never,
-  );
+  return new UploadService(new UploadRepository(), {} as never, {} as never, storageStub);
 }
 
 describe('Integration: offboarding actually erases uploads', () => {

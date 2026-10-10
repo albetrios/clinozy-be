@@ -53,7 +53,6 @@ describe('UploadService offboarding', () => {
       {} as ConstructorParameters<typeof UploadService>[1],
       {} as ConstructorParameters<typeof UploadService>[2],
       { deleteObject } as unknown as ConstructorParameters<typeof UploadService>[3],
-      {} as ConstructorParameters<typeof UploadService>[4],
     );
 
     const count = await service.tombstoneAllByUserId(42);
@@ -89,7 +88,6 @@ describe('UploadService offboarding', () => {
       {} as ConstructorParameters<typeof UploadService>[1],
       {} as ConstructorParameters<typeof UploadService>[2],
       { deleteObject } as unknown as ConstructorParameters<typeof UploadService>[3],
-      {} as ConstructorParameters<typeof UploadService>[4],
     );
 
     const count = await service.tombstoneAllByUserId(9);

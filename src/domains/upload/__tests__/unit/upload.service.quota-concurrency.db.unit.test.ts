@@ -54,13 +54,7 @@ describe('UploadService pending-quota concurrency (database)', () => {
       requireUserRecordByPublicId: async () => user,
     } as unknown as UserService;
     const organizationService = {} as unknown as OrganizationService;
-    const service = new UploadService(
-      repository,
-      userService,
-      organizationService,
-      objectStorage,
-      {} as ConstructorParameters<typeof UploadService>[4],
-    );
+    const service = new UploadService(repository, userService, organizationService, objectStorage);
 
     const results = await Promise.allSettled(
       Array.from({ length: CONCURRENT_REQUESTS }, () =>
@@ -72,7 +66,13 @@ describe('UploadService pending-quota concurrency (database)', () => {
             file_name: 'avatar.png',
             file_size: 1024,
           },
-          user.public_id,
+          {
+            userPublicId: user.public_id,
+            organizationPublicId: null,
+            authorizeOrganization: async () => {
+              throw new Error('a personal upload never authorizes an organization');
+            },
+          },
         ),
       ),
     );

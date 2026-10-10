@@ -5,7 +5,6 @@ import { UPLOAD_STATUS } from '@/domains/upload/upload.constants.js';
 import type { UploadRepository, UploadRow } from '@/domains/upload/upload.repository.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import { createObjectStoragePortMock } from '@/tests/helpers/object-storage-mock.helper.js';
 
 vi.mock('@/shared/config/env.config.js', () => ({
@@ -37,7 +36,6 @@ describe('UploadService — assertKeyConfirmed / assertKeyConfirmedForOwner', ()
     {} as unknown as UserService,
     {} as unknown as OrganizationService,
     createObjectStoragePortMock(),
-    {} as unknown as AuthorizationService,
   );
 
   /** A row shaped like `upload.uploads`, defaulted to the confirmed/user-owned happy case. */

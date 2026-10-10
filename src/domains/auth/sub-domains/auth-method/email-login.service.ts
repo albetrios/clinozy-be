@@ -367,10 +367,10 @@ export class EmailLoginService {
         // sec-r5-L2 + code scoping: consumeOtpForUser is bound to (user.id, EMAIL_CODE) so a code from
         // another flow or another user never matches/burns, and its atomic UPDATE prevents two
         // concurrent logins from both producing a session.
-        // Local/dev escape hatch: while AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED is on, the
+        // Local escape hatch: while AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED is on, the
         // well-known STATIC_VERIFICATION_CODE is also accepted, so callers can log in without the
-        // `send-code` round trip. The env schema permits that flag only on the `local` and
-        // `development` targets, so this branch cannot exist on a deployed production runtime.
+        // `send-code` round trip. The env schema permits that flag only on the `local` target, so
+        // this branch cannot exist on any deployed runtime (development or production).
         // Everything protective around it still runs — the user must already exist (resolved
         // above), the per-user attempt cap has already been charged, and the account-active
         // assertion below is unchanged. It only skips the stored-code lookup itself.

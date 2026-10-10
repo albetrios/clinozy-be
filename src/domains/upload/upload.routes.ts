@@ -21,7 +21,7 @@ export const uploadRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Request pre-signed upload URL',
         description:
-          'Returns a pre-signed S3 URL for direct file upload. Specify the file purpose, content type, and size.',
+          'Returns a pre-signed S3 URL for direct file upload. Specify the file purpose, content type, and size. An organization upload must target the active organization and needs UPLOAD_MANAGE there (with its MFA requirement).',
         tags: ['Upload'],
         body: createUploadDto,
       },

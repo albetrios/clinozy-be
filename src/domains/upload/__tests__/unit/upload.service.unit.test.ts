@@ -14,7 +14,6 @@ import type { UserService } from '@/domains/user/user.service.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 
 import { createObjectStoragePortMock } from '@/tests/helpers/object-storage-mock.helper.js';
-import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 
 // UploadService now wraps repository work in the real principal wrapper, which
 // opens a `database.transaction()` — passthrough so this stays a pure unit test.
@@ -102,21 +101,14 @@ describe('UploadService', () => {
   } as unknown as OrganizationService;
 
   const objectStorage = createObjectStoragePortMock();
-  const resolveUserOrganizationPermissions = vi.fn().mockResolvedValue(['upload:manage']);
-  const authorizationService = {
-    resolveUserOrganizationPermissions,
-  } as unknown as AuthorizationService;
-  const service = new UploadService(
-    repository,
-    userService,
-    organizationService,
-    objectStorage,
-    authorizationService,
-  );
+  // The route's organization authorization (`upload:manage` in the active organization).
+  const authorizeOrganization = vi.fn().mockResolvedValue(undefined);
+  const principal = { userPublicId, organizationPublicId: 'org_public', authorizeOrganization };
+  const service = new UploadService(repository, userService, organizationService, objectStorage);
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    resolveUserOrganizationPermissions.mockResolvedValue(['upload:manage']);
+    authorizeOrganization.mockResolvedValue(undefined);
     const { getEnv } = await import('@/shared/config/env.config.js');
     vi.mocked(getEnv).mockReturnValue({
       S3_BUCKET: 'test-bucket',
@@ -140,7 +132,7 @@ describe('UploadService', () => {
         file_name: 'avatar.png',
         file_size: 1024,
       },
-      userPublicId,
+      principal,
     );
     expect(result.upload_url).toContain('https://');
     expect(repository.create).toHaveBeenCalled();
@@ -170,7 +162,7 @@ describe('UploadService', () => {
         file_name: 'avatar.png',
         file_size: 1024,
       },
-      userPublicId,
+      principal,
     );
 
     expect(objectStorage.createPresignedUploadPost).toHaveBeenCalledWith(
@@ -182,7 +174,9 @@ describe('UploadService', () => {
   });
 
   it('createUpload rejects organization upload without manage permission', async () => {
-    resolveUserOrganizationPermissions.mockResolvedValueOnce([]);
+    authorizeOrganization.mockRejectedValueOnce(
+      new ForbiddenError('errors:insufficientOrganizationPermissions'),
+    );
 
     await expect(
       service.createUpload(
@@ -194,18 +188,18 @@ describe('UploadService', () => {
           file_name: 'logo.png',
           file_size: 2048,
         },
-        userPublicId,
+        principal,
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it('getUpload returns serialized upload', async () => {
-    const result = await service.getUpload(uploadPublicId, userPublicId);
+    const result = await service.getUpload(uploadPublicId, principal);
     expect(result.id).toBe(uploadPublicId);
   });
 
   it('deleteUpload removes upload for user', async () => {
-    await service.deleteUpload(uploadPublicId, userPublicId);
+    await service.deleteUpload(uploadPublicId, principal);
     expect(repository.softDeleteByPublicId).toHaveBeenCalled();
   });
 
@@ -216,7 +210,7 @@ describe('UploadService', () => {
       organization_id: 10,
     } as never);
 
-    await service.deleteUpload(uploadPublicId, userPublicId);
+    await service.deleteUpload(uploadPublicId, principal);
 
     expect(objectStorage.deleteObject).toHaveBeenCalledWith(uploadRow.file_key);
     expect(repository.softDeleteByPublicId).toHaveBeenCalledWith(uploadPublicId);
@@ -229,7 +223,7 @@ describe('UploadService', () => {
       organization_id: null,
     } as never);
 
-    await expect(service.deleteUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.deleteUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       NotFoundError,
     );
     expect(objectStorage.deleteObject).not.toHaveBeenCalled();
@@ -241,9 +235,11 @@ describe('UploadService', () => {
       ...uploadRow,
       organization_id: 10,
     } as never);
-    resolveUserOrganizationPermissions.mockResolvedValueOnce([]);
+    authorizeOrganization.mockRejectedValueOnce(
+      new ForbiddenError('errors:insufficientOrganizationPermissions'),
+    );
 
-    await expect(service.deleteUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.deleteUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       ForbiddenError,
     );
     expect(objectStorage.deleteObject).not.toHaveBeenCalled();
@@ -263,10 +259,10 @@ describe('UploadService', () => {
       null as never,
     );
 
-    await expect(service.deleteUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.deleteUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       NotFoundError,
     );
-    expect(resolveUserOrganizationPermissions).not.toHaveBeenCalled();
+    expect(authorizeOrganization).not.toHaveBeenCalled();
   });
 
   it('sec-UP1: confirmUpload refuses a row without the pending prefix and marks it FAILED', async () => {
@@ -281,7 +277,7 @@ describe('UploadService', () => {
       file_key: 'avatars/user_public/not-pending-keyed.png', // no `pending/` prefix
     } as never);
 
-    await expect(service.confirmUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.confirmUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       ValidationError,
     );
     expect(repository.markStatusByPublicId).toHaveBeenCalledWith(uploadPublicId, 'FAILED');
@@ -299,14 +295,14 @@ describe('UploadService', () => {
         file_name: 'logo.png',
         file_size: 2048,
       },
-      userPublicId,
+      principal,
     );
     expect(result.upload_url).toContain('https://');
   });
 
   it('getUpload throws when upload is missing', async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue(null);
-    await expect(service.getUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.getUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       NotFoundError,
     );
   });
@@ -380,7 +376,7 @@ describe('UploadService', () => {
       status: 'UPLOADED',
     } as never);
 
-    const result = await service.confirmUpload(uploadPublicId, userPublicId);
+    const result = await service.confirmUpload(uploadPublicId, principal);
 
     expect(objectStorage.verifyUploadedObject).toHaveBeenCalledWith(pendingKey, {
       contentType: 'image/png',
@@ -417,7 +413,7 @@ describe('UploadService', () => {
       status: 'UPLOADED',
     } as never);
 
-    const result = await service.confirmUpload(uploadPublicId, userPublicId);
+    const result = await service.confirmUpload(uploadPublicId, principal);
 
     // Verified against the pending object, then server-side copied to the final key (no re-upload).
     expect(objectStorage.verifyUploadedObject).toHaveBeenCalledWith(pendingKey, expect.anything());
@@ -445,7 +441,7 @@ describe('UploadService', () => {
         file_name: 'avatar.png',
         file_size: 1024,
       },
-      userPublicId,
+      principal,
     );
     const presignArgs = vi.mocked(objectStorage.createPresignedUploadUrl).mock.calls[0]?.[0];
     expect(presignArgs?.key).toMatch(/^pending\/avatars\//);
@@ -463,7 +459,7 @@ describe('UploadService', () => {
         file_name: 'avatar.png',
         file_size: 1024,
       },
-      userPublicId,
+      principal,
     );
 
     const presignArgs = vi.mocked(objectStorage.createPresignedUploadUrl).mock.calls[0]?.[0];
@@ -486,7 +482,7 @@ describe('UploadService', () => {
         file_name: 'doc.png',
         file_size: 1024,
       },
-      userPublicId,
+      principal,
     );
 
     expect(result.key).toMatch(new RegExp(`^user-files/${userPublicId}/[0-9a-f-]{36}\\.png$`));
@@ -505,7 +501,7 @@ describe('UploadService', () => {
         file_name: 'doc.png',
         file_size: 1024,
       },
-      userPublicId,
+      principal,
     );
 
     expect(result.key).toMatch(/^organization-files\/org_public\/[0-9a-f-]{36}\.png$/);
@@ -541,7 +537,7 @@ describe('UploadService', () => {
       status: 'UPLOADED',
     } as never);
 
-    const result = await service.confirmUpload(uploadPublicId, userPublicId);
+    const result = await service.confirmUpload(uploadPublicId, principal);
 
     expect(result.status).toBe('UPLOADED');
     expect(repository.markConfirmedByPublicId).toHaveBeenCalledWith(uploadPublicId, finalKey);
@@ -565,7 +561,7 @@ describe('UploadService', () => {
       eTag: '"etag"',
     });
 
-    await expect(service.confirmUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.confirmUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       ValidationError,
     );
     expect(repository.markStatusByPublicId).toHaveBeenCalledWith(uploadPublicId, 'FAILED');
@@ -583,7 +579,7 @@ describe('UploadService', () => {
       reason: 'content_length_mismatch',
     });
 
-    await expect(service.confirmUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.confirmUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       ValidationError,
     );
     expect(repository.markStatusByPublicId).toHaveBeenCalledWith(uploadPublicId, 'FAILED');
@@ -601,7 +597,7 @@ describe('UploadService', () => {
       new ExternalServiceError({ integration: 's3', category: 'timeout' }),
     );
 
-    await expect(service.confirmUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.confirmUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       ExternalServiceError,
     );
     // The upload must stay PENDING for retry — never permanently FAILED on a blip.
@@ -620,7 +616,7 @@ describe('UploadService', () => {
       new CircuitBreakerOpenError('s3', 15_000, 'Circuit s3 is open'),
     );
 
-    await expect(service.confirmUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.confirmUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       CircuitBreakerOpenError,
     );
     expect(repository.markStatusByPublicId).not.toHaveBeenCalled();
@@ -641,7 +637,7 @@ describe('UploadService', () => {
       new ExternalServiceError({ integration: 's3', category: 'http_5xx', status: 503 }),
     );
 
-    await expect(service.confirmUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.confirmUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       ExternalServiceError,
     );
     expect(repository.markStatusByPublicId).not.toHaveBeenCalled();
@@ -665,7 +661,7 @@ describe('UploadService', () => {
     vi.mocked(objectStorage.copyObject).mockResolvedValueOnce({ kind: 'source_changed' });
 
     const error = await service
-      .confirmUpload(uploadPublicId, userPublicId)
+      .confirmUpload(uploadPublicId, principal)
       .catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(ConflictError);
@@ -714,7 +710,7 @@ describe('UploadService', () => {
     });
     vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({ kind: 'deleted' });
 
-    const result = await service.confirmUpload(uploadPublicId, userPublicId);
+    const result = await service.confirmUpload(uploadPublicId, principal);
 
     expect(objectStorage.getObject).toHaveBeenCalledWith(pendingKey);
     expect(objectStorage.putObject).toHaveBeenCalledTimes(1);
@@ -752,7 +748,7 @@ describe('UploadService', () => {
       contentType: 'image/svg+xml',
     });
 
-    await expect(service.confirmUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.confirmUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       ValidationError,
     );
     expect(repository.markStatusByPublicId).toHaveBeenCalledWith(uploadPublicId, 'FAILED');
@@ -765,7 +761,7 @@ describe('UploadService', () => {
       status: 'UPLOADED',
     } as never);
 
-    const result = await service.confirmUpload(uploadPublicId, userPublicId);
+    const result = await service.confirmUpload(uploadPublicId, principal);
     expect(result.status).toBe('UPLOADED');
     expect(objectStorage.verifyUploadedObject).not.toHaveBeenCalled();
     expect(repository.markStatusByPublicId).not.toHaveBeenCalled();
@@ -777,7 +773,7 @@ describe('UploadService', () => {
       status: 'FAILED',
     } as never);
 
-    await expect(service.confirmUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.confirmUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       ValidationError,
     );
     expect(objectStorage.verifyUploadedObject).not.toHaveBeenCalled();
@@ -785,7 +781,7 @@ describe('UploadService', () => {
 
   it('confirmUpload throws NotFound when the upload is missing', async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue(null);
-    await expect(service.confirmUpload(uploadPublicId, userPublicId)).rejects.toBeInstanceOf(
+    await expect(service.confirmUpload(uploadPublicId, principal)).rejects.toBeInstanceOf(
       NotFoundError,
     );
   });
@@ -802,7 +798,7 @@ describe('UploadService', () => {
           file_name: 'avatar.png',
           file_size: 1024,
         },
-        userPublicId,
+        principal,
       ),
     ).rejects.toBeInstanceOf(ValidationError);
     // Reservation takes the per-user advisory lock before counting, and never inserts
@@ -836,7 +832,7 @@ describe('UploadService', () => {
         file_name: 'avatar.png',
         file_size: 1024,
       },
-      userPublicId,
+      principal,
     );
 
     expect(callOrder).toEqual(['lock', 'create', 'presign']);
@@ -853,7 +849,7 @@ describe('UploadService', () => {
         file_name: 'avatar.png',
         file_size: 1024,
       },
-      userPublicId,
+      principal,
     );
 
     expect(result.upload_url).toContain('https://');
@@ -878,7 +874,7 @@ describe('UploadService', () => {
           file_name: 'avatar.png',
           file_size: 1024,
         },
-        userPublicId,
+        principal,
       ),
     ).rejects.toThrow('S3_BUCKET is not configured');
   });
@@ -937,7 +933,10 @@ describe('UploadService', () => {
         return scopeAtCall()?.organizationPublicId ? uploadRow : null;
       }) as never);
 
-      await service.deleteUpload(uploadPublicId, userPublicId, ORGANIZATION_PUBLIC_ID);
+      await service.deleteUpload(uploadPublicId, {
+        ...principal,
+        organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      });
 
       expect(scopesAtWrite).toHaveLength(1);
       expect(scopesAtWrite[0]).toMatchObject({ organizationPublicId: ORGANIZATION_PUBLIC_ID });
@@ -963,11 +962,10 @@ describe('UploadService', () => {
       }) as never);
 
       // This is the call that returned 404 for every organization logo before the fix.
-      const result = await service.confirmUpload(
-        uploadPublicId,
-        userPublicId,
-        ORGANIZATION_PUBLIC_ID,
-      );
+      const result = await service.confirmUpload(uploadPublicId, {
+        ...principal,
+        organizationPublicId: ORGANIZATION_PUBLIC_ID,
+      });
 
       expect(result.status).toBe('UPLOADED');
       expect(scopesAtWrite).toHaveLength(1);

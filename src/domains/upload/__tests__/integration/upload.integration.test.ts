@@ -18,6 +18,15 @@ import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { uploads } from '@/domains/upload/upload.schema.js';
 import { stripPendingObjectKeyPrefix } from '@/domains/upload/upload.constants.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { MFA_AUTHENTICATION_METHOD } from '@/shared/utils/security/jwt.util.js';
+import { createTestOrganization } from '@/tests/factories/organization.factory.js';
+import {
+  createMembership,
+  createRoleWithPermissions,
+  seedPermissions,
+} from '@/domains/tenancy/__tests__/factories/permission.factory.js';
+import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
+import { UPLOAD_PERMISSIONS } from '@/domains/upload/upload.permissions.js';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
@@ -484,6 +493,86 @@ describe('Upload Domain — Integration', () => {
       } finally {
         await redisConnection.del(cacheKey);
       }
+    });
+  });
+
+  describe('organization uploads are authorized like every organization route', () => {
+    async function memberWithUploadManage(options: { mfaRequired: boolean }) {
+      await seedPermissions([UPLOAD_PERMISSIONS.UPLOAD_MANAGE]);
+      const member = await createTestUser();
+      const organization = await createTestOrganization({ ownerUserId: member.id });
+      await getOperatorDatabase()
+        .insert(organization_settings)
+        .values({
+          organization_id: organization.id,
+          security_policy: { mfa_required: options.mfaRequired },
+          default_locale: 'en',
+        });
+      const role = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [UPLOAD_PERMISSIONS.UPLOAD_MANAGE],
+      });
+      await createMembership({
+        userId: member.id,
+        organizationId: organization.id,
+        roleId: role.id,
+      });
+      return { member, organization, role };
+    }
+
+    function requestOrganizationLogo(token: string, organizationPublicId: string) {
+      return app.inject({
+        method: 'POST',
+        url: testApiPath('/uploads'),
+        headers: { authorization: `Bearer ${token}`, 'x-idempotency-key': `idem-${randomUUID()}` },
+        payload: {
+          purpose: 'organization-logo',
+          for: 'organization',
+          organization_id: organizationPublicId,
+          content_type: 'image/png',
+          file_name: 'logo.png',
+          file_size: 1024,
+        },
+      });
+    }
+
+    it('an MFA-required organization refuses a session without a second factor', async () => {
+      const { member, organization } = await memberWithUploadManage({ mfaRequired: true });
+
+      const firstFactorOnly = await generateTestToken({
+        userId: member.public_id,
+        organizationPublicId: organization.public_id,
+      });
+      const refused = await requestOrganizationLogo(firstFactorOnly, organization.public_id);
+      expect(refused.statusCode, refused.body).toBe(403);
+      expect((refused.json() as { error: { reason?: string } }).error.reason).toBe('mfa_required');
+
+      const withMfa = await generateTestToken({
+        userId: member.public_id,
+        organizationPublicId: organization.public_id,
+        authenticationMethods: [MFA_AUTHENTICATION_METHOD],
+      });
+      const allowed = await requestOrganizationLogo(withMfa, organization.public_id);
+      expect(allowed.statusCode, allowed.body).toBe(200);
+    });
+
+    it('an organization upload must target the active organization', async () => {
+      const { member, organization } = await memberWithUploadManage({ mfaRequired: false });
+      const other = await createTestOrganization({ ownerUserId: member.id });
+      const otherRole = await createRoleWithPermissions({
+        organizationId: other.id,
+        permissionCodes: [UPLOAD_PERMISSIONS.UPLOAD_MANAGE],
+      });
+      await createMembership({ userId: member.id, organizationId: other.id, roleId: otherRole.id });
+
+      const token = await generateTestToken({
+        userId: member.public_id,
+        organizationPublicId: organization.public_id,
+      });
+      const refused = await requestOrganizationLogo(token, other.public_id);
+      expect(refused.statusCode, refused.body).toBe(403);
+      const allowed = await requestOrganizationLogo(token, organization.public_id);
+      expect(allowed.statusCode, allowed.body).toBe(200);
     });
   });
 });

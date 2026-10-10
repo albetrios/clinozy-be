@@ -9,7 +9,6 @@ import {
   NotFoundError,
   ValidationError,
 } from '@/shared/errors/index.js';
-import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import {
@@ -32,8 +31,12 @@ import {
   MAGIC_BYTE_PREFIX_LENGTH,
   verifyFileMagicBytes,
 } from '@/shared/utils/validation/file-magic.util.js';
-import { UPLOAD_PERMISSIONS } from './upload.permissions.js';
-import type { CreateUploadInput, UploadCreateOutput, UploadDetailOutput } from './upload.types.js';
+import type {
+  CreateUploadInput,
+  UploadCreateOutput,
+  UploadDetailOutput,
+  UploadPrincipal,
+} from './upload.types.js';
 import type { UploadRepository, UploadRow } from './upload.repository.js';
 import { serializeUploadCreate, serializeUploadDetail } from './upload.serializer.js';
 import { validateUploadPublicIdParam } from './upload.validator.js';
@@ -117,16 +120,16 @@ export class UploadService {
     private readonly userService: UserService,
     private readonly organizationService: OrganizationService,
     private readonly objectStorage: ObjectStoragePort,
-    private readonly authorizationService: AuthorizationService,
   ) {}
 
-  async createUpload(input: CreateUploadInput, userPublicId: string): Promise<UploadCreateOutput> {
+  async createUpload(
+    input: CreateUploadInput,
+    principal: UploadPrincipal,
+  ): Promise<UploadCreateOutput> {
+    const { userPublicId } = principal;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
 
-    const organizationInternalId = await this.resolveUploadOrganizationInternalId(
-      input,
-      userPublicId,
-    );
+    const organizationInternalId = await this.resolveUploadOrganizationInternalId(input, principal);
     const config = UPLOAD_PURPOSE_CONFIG[input.purpose];
     const extension = getCanonicalExtensionForContentType(input.content_type);
     const ownerSegment =
@@ -327,23 +330,16 @@ export class UploadService {
 
   private async resolveUploadOrganizationInternalId(
     input: CreateUploadInput,
-    userPublicId: string,
+    principal: UploadPrincipal,
   ): Promise<number | null> {
     if (input.for === UPLOAD_TARGETS.ORGANIZATION && input.organization_id) {
-      const permissions = await this.authorizationService.resolveUserOrganizationPermissions(
-        userPublicId,
-        input.organization_id,
-      );
-      if (!permissions.includes(UPLOAD_PERMISSIONS.UPLOAD_MANAGE)) {
-        throw new ForbiddenError('errors:insufficientUploadPermissions');
-      }
+      await principal.authorizeOrganization(input.organization_id);
       /**
-       * `requireOrganizationByPublicId` reads `tenancy.organizations` which is FORCE RLS.
-       * The call needs either an active organization context or `app.current_user_public_id` + the `organizations_user_discovery`
-       * policy. The latter is appropriate here because we have just authorized the user.
+       * `requireOrganizationByPublicId` reads `tenancy.organizations` which is FORCE RLS. The
+       * caller was just authorized in this organization (its active one), so its own context reads it.
        */
       const organization = await withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: input.organization_id }),
         () => this.organizationService.requireOrganizationByPublicId(input.organization_id!),
       );
       return organization.id;
@@ -392,27 +388,21 @@ export class UploadService {
 
   private async assertUserCanAccessOrgScopedUpload(
     row: UploadRow,
-    userPublicId: string,
+    principal: UploadPrincipal,
   ): Promise<void> {
     if (row.organization_id === null) {
       return;
     }
 
     const organization = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: principal.userPublicId }),
       () => this.organizationService.findOrganizationByInternalId(row.organization_id!),
     );
     if (!organization) {
       throw new NotFoundError('Upload');
     }
 
-    const permissions = await this.authorizationService.resolveUserOrganizationPermissions(
-      userPublicId,
-      organization.public_id,
-    );
-    if (!permissions.includes(UPLOAD_PERMISSIONS.UPLOAD_MANAGE)) {
-      throw new ForbiddenError('errors:insufficientUploadPermissions');
-    }
+    await principal.authorizeOrganization(organization.public_id);
   }
 
   /**
@@ -436,11 +426,11 @@ export class UploadService {
    */
   private async loadUploadForUserAction(input: {
     public_id: string;
-    userPublicId: string;
     userInternalId: number;
-    organizationPublicId?: string | null | undefined;
+    principal: UploadPrincipal;
   }): Promise<LoadedUpload> {
-    const { public_id, userPublicId, userInternalId, organizationPublicId } = input;
+    const { public_id, userInternalId, principal } = input;
+    const { userPublicId, organizationPublicId } = principal;
     const userScope = PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId });
     const ownRow = await withAppDatabaseContext(userScope, () =>
       this.repository.findByPublicId(public_id),
@@ -474,22 +464,18 @@ export class UploadService {
       return { row, scope };
     }
 
-    await this.assertUserCanAccessOrgScopedUpload(row, userPublicId);
+    await this.assertUserCanAccessOrgScopedUpload(row, principal);
     return { row, scope };
   }
 
-  async getUpload(
-    public_id: string,
-    userPublicId: string,
-    organizationPublicId?: string | null,
-  ): Promise<UploadDetailOutput> {
+  async getUpload(public_id: string, principal: UploadPrincipal): Promise<UploadDetailOutput> {
     const validatedPublicId = validateUploadPublicIdParam(public_id);
+    const { userPublicId } = principal;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     const { row } = await this.loadUploadForUserAction({
       public_id: validatedPublicId,
-      userPublicId,
       userInternalId: user.id,
-      organizationPublicId,
+      principal,
     });
 
     return this.toUploadDetail(row, userPublicId);
@@ -543,18 +529,14 @@ export class UploadService {
    * served bytes can never execute as stored XSS. Consumers must require UPLOADED before
    * attaching the object. Idempotent for already-UPLOADED rows.
    */
-  async confirmUpload(
-    public_id: string,
-    userPublicId: string,
-    organizationPublicId?: string | null,
-  ): Promise<UploadDetailOutput> {
+  async confirmUpload(public_id: string, principal: UploadPrincipal): Promise<UploadDetailOutput> {
     const validatedPublicId = validateUploadPublicIdParam(public_id);
+    const { userPublicId } = principal;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     const { row, scope } = await this.loadUploadForUserAction({
       public_id: validatedPublicId,
-      userPublicId,
       userInternalId: user.id,
-      organizationPublicId,
+      principal,
     });
 
     if (row.status === UPLOAD_STATUS.UPLOADED) {
@@ -719,18 +701,14 @@ export class UploadService {
     return serializeUploadDetail(row, organizationPublicId);
   }
 
-  async deleteUpload(
-    public_id: string,
-    userPublicId: string,
-    organizationPublicId?: string | null,
-  ): Promise<void> {
+  async deleteUpload(public_id: string, principal: UploadPrincipal): Promise<void> {
     const validatedPublicId = validateUploadPublicIdParam(public_id);
+    const { userPublicId } = principal;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     const { row, scope } = await this.loadUploadForUserAction({
       public_id: validatedPublicId,
-      userPublicId,
       userInternalId: user.id,
-      organizationPublicId,
+      principal,
     });
 
     // S3 delete runs outside the DB context. A failure leaves the object for tombstone retention,
