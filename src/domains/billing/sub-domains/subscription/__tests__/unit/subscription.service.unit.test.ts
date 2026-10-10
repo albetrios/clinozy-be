@@ -44,7 +44,6 @@ vi.mock('@/infrastructure/cache/redis-lock.util.js', () => redisLockMocks);
 
 import {
   ConflictError,
-  ConfigurationError,
   NotFoundError,
   ServiceUnavailableError,
   UnprocessableEntityError,
@@ -350,7 +349,10 @@ describe('SubscriptionService', () => {
           { plan_id: 'plan_public', billing_cycle: billingCycle },
           'user_public',
         ),
-      ).rejects.toBeInstanceOf(ConfigurationError);
+      ).rejects.toMatchObject({
+        statusCode: 422,
+        message: 'errors:planNotAvailableForBillingCycle',
+      });
       expect(stripeMocks.createStripeCustomer).not.toHaveBeenCalled();
       expect(stripeMocks.createStripeSubscription).not.toHaveBeenCalled();
       expect(organizationService.updateStripeCustomerIdForOrganization).not.toHaveBeenCalled();
@@ -631,7 +633,7 @@ describe('SubscriptionService', () => {
     );
   });
 
-  it('create fails closed when configured Stripe plan has no price id', async () => {
+  it('create rejects a configured Stripe plan without a price id as 422, before any mutation', async () => {
     stripeMocks.isStripeConfigured.mockReturnValue(true);
     vi.mocked(planService.requireActivePlanByPublicId).mockResolvedValue({
       ...plan,
@@ -641,7 +643,10 @@ describe('SubscriptionService', () => {
 
     await expect(
       service.create(scope, { plan_id: 'plan_public', billing_cycle: 'monthly' }, 'user_public'),
-    ).rejects.toBeInstanceOf(ConfigurationError);
+    ).rejects.toMatchObject({
+      statusCode: 422,
+      message: 'errors:planNotAvailableForBillingCycle',
+    });
     expect(stripeMocks.createStripeCustomer).not.toHaveBeenCalled();
     expect(stripeMocks.createStripeSubscription).not.toHaveBeenCalled();
     expect(repository.create).not.toHaveBeenCalled();

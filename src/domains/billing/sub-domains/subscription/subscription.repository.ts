@@ -91,9 +91,10 @@ const subscriptionRowWithPlanPublicId = {
  *   in-place sync uses strict `<` while cancellation uses `<=`; this asymmetry is
  *   deliberate and makes a terminal cancel **deterministically win** a same-second
  *   in-place update regardless of delivery order (audit-#6, locked by test). Stripe
- *   `event.created` has 1-second resolution, so the residual theoretical edge — a
- *   genuine same-second cancel-then-reactivation — would require a monotonic event
- *   sequence (Stripe does not emit such a pair); tracked as a future hardening.
+ *   `event.created` has 1-second resolution, so a created/updated event in the same
+ *   second as the stored watermark is resolved by re-reading the subscription from
+ *   Stripe: the sync's `reconciliation` branch applies that snapshot only to the row
+ *   version (`xmin`) it was read against, keeping the watermark with `GREATEST`.
  * - **Failure modes:** Insert collisions on `public_id` are retried by
  *   {@link runInsertWithPublicIdentifierRetry}; updates that miss the
  *   timestamp guard return `null` to the caller so the worker can log a stale

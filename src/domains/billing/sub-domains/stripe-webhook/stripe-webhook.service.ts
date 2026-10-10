@@ -2,7 +2,10 @@ import type Stripe from 'stripe';
 import { retrieveStripeSubscriptionSnapshot } from '@/infrastructure/payment/stripe.client.js';
 import type { StripeSubscriptionOrderingState } from '@/domains/billing/sub-domains/subscription/subscription.types.js';
 import type { SubscriptionRepository } from '@/domains/billing/sub-domains/subscription/subscription.repository.js';
-import { createWorkerSubscriptionRepository } from '@/domains/billing/sub-domains/subscription/subscription.repository.js';
+import {
+  createWorkerSubscriptionRepository,
+  INACTIVE_SUBSCRIPTION_STATUSES,
+} from '@/domains/billing/sub-domains/subscription/subscription.repository.js';
 import type { SubscriptionService } from '@/domains/billing/sub-domains/subscription/subscription.service.js';
 import { isPostgresUniqueViolation } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -69,7 +72,7 @@ function resolveStripeSubscriptionPeriod(subscription: Stripe.Subscription): {
     end === undefined ||
     !Number.isSafeInteger(start) ||
     !Number.isSafeInteger(end) ||
-    end < start
+    end <= start // chk_subs_period: end > start
   ) {
     throw new StripeWebhookPermanentError('stripe.webhook.subscription_invalid_period_boundaries');
   }
@@ -273,7 +276,7 @@ export class StripeWebhookService {
     );
     if (
       !ordering?.watermark ||
-      ['CANCELED', 'INCOMPLETE_EXPIRED'].includes(ordering.status) ||
+      new Set<string>(INACTIVE_SUBSCRIPTION_STATUSES).has(ordering.status) ||
       Math.floor(ordering.watermark.getTime() / 1000) !== event.created
     )
       return { event };

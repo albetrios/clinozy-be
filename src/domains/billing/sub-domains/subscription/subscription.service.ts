@@ -668,6 +668,14 @@ export class SubscriptionService {
           return { organization, plan, createdByUserInternalId };
         },
       );
+      // A configured provider cannot bill a cycle without a price: same 422 as changePlan,
+      // raised before any Stripe call.
+      if (
+        this.paymentProvider.isConfigured() &&
+        !this.paymentProvider.getProviderPriceId(plan, parsed.billing_cycle)
+      ) {
+        throw new UnprocessableEntityError('errors:planNotAvailableForBillingCycle');
+      }
 
       const now = new Date();
       // addMonths clamps month-end dates (Jan 31 + 1mo → Feb 28/29, not Mar 3) instead of the raw

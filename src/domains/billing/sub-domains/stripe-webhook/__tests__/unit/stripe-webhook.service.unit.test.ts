@@ -451,6 +451,11 @@ describe('StripeWebhookService', () => {
         item: { current_period_start: periodEndSeconds, current_period_end: periodStartSeconds },
       },
       {
+        // chk_subs_period requires end > start; reject before the CHECK turns it into retries.
+        label: 'equal boundaries',
+        item: { current_period_start: periodStartSeconds, current_period_end: periodStartSeconds },
+      },
+      {
         label: 'timestamps beyond Date range',
         item: { current_period_start: 9_000_000_000_000, current_period_end: 9_000_000_000_001 },
       },
