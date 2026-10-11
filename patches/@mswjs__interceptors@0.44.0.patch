@@ -1,8 +1,25 @@
 diff --git a/lib/node/net-B3HDxRlp.js b/lib/node/net-B3HDxRlp.js
-index d76d926d3b08fb26377469b9a289a59ee8008748..c304043c3bc1f2496ca0e4012c71c01981eecb6c 100644
+index d76d926d3b08fb26377469b9a289a59ee8008748..27669622305b2f54e92c1ac26e9e30c7bb316f0d 100644
 --- a/lib/node/net-B3HDxRlp.js
 +++ b/lib/node/net-B3HDxRlp.js
-@@ -707,7 +707,12 @@ var TcpSocketController = class extends SocketController {
+@@ -152,6 +152,16 @@ function getEphemeralPort() {
+ const kListenerWrap = Symbol("kListenerWrap");
+ const kRawSocket = Symbol("kRawSocket");
+ const kPatched = Symbol("kPatched");
++/**
++* Whether a connection stays on this machine: a loopback address or a
++* local IPC (Unix domain) socket.
++*/
++function isLocalConnection(options) {
++	// Node.js treats a non-empty "path" as an IPC socket (an HTTP agent passes "").
++	if (options.path) return true;
++	const host = options.host ?? "localhost";
++	return host === "localhost" || host === "::1" || host.startsWith("127.");
++}
+ const logger$1 = createLogger("socket");
+ function toServerSocket(socket) {
+ 	/**
+@@ -707,7 +717,12 @@ var TcpSocketController = class extends SocketController {
  		* connecting (the info of connecting sockets is never cached).
  		*/
  		this.socket.remoteAddress;
@@ -16,3 +33,20 @@ index d76d926d3b08fb26377469b9a289a59ee8008748..c304043c3bc1f2496ca0e4012c71c019
  		this.socket.emit("ready");
  	};
  	#onRealSocketConnectionAttemptFailed = (address, port, family, error) => {
+@@ -1317,6 +1332,16 @@ var SocketInterceptor = class extends Interceptor {
+ 					*/
+ 					const connectArgs = Array.isArray(args[0]) ? args[0] : args;
+ 					const [transportConnectionOptions, connectionCallback] = normalizeNetConnectArgs(connectArgs);
++					/**
++					* @note Local connections reach Node.js as-is. They carry this machine's
++					* own services (a database, a cache, a local server), not an outbound call
++					* to mock, and the emulated "connect" would report a refused connection
++					* as established, with no "error" or "close" to follow.
++					*/
++					if (isLocalConnection(transportConnectionOptions)) {
++						socket[kPatched] = true;
++						return realSocketConnect.apply(socket, args);
++					}
+ 					logger.verbose("connection options %o", {
+ 						transportConnectionOptions,
+ 						connectionCallback

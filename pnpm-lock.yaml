@@ -174,9 +174,10 @@ overrides:
   '@esbuild-kit/core-utils>esbuild': ^0.25.12
 
 patchedDependencies:
-  '@mswjs/interceptors@0.44.0': e4f3c049860db91ecb7aad272f604856a7969bd7c28e39bfa36c1d1912f9ce90
+  '@mswjs/interceptors@0.44.0': 5e404cfd9982a844224be9b8706bdf1ca66a32bd921b4908a7a3eef845a209e4
   '@stryker-mutator/vitest-runner@10.0.0': 2635868beea712de5d4bbcc561738d55c888a27c2cd24b06de9b6c1bf1309485
   drizzle-orm@0.45.4: bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176
+  postgres@3.4.9: c58049df6020dc683efb97f68afccba883b032add8502372a865c49380a7fb58
 
 importers:
 
@@ -244,7 +245,7 @@ importers:
         version: 18.0.7
       drizzle-orm:
         specifier: 0.45.4
-        version: 0.45.4(patch_hash=bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176)(@opentelemetry/api@1.9.1)(postgres@3.4.9)
+        version: 0.45.4(patch_hash=bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176)(@opentelemetry/api@1.9.1)(postgres@3.4.9(patch_hash=c58049df6020dc683efb97f68afccba883b032add8502372a865c49380a7fb58))
       fastify:
         specifier: ^5.12.5
         version: 5.12.5
@@ -285,8 +286,8 @@ importers:
         specifier: ^10.4.0
         version: 10.4.0
       postgres:
-        specifier: ^3.4.9
-        version: 3.4.9
+        specifier: 3.4.9
+        version: 3.4.9(patch_hash=c58049df6020dc683efb97f68afccba883b032add8502372a865c49380a7fb58)
       posthog-node:
         specifier: ^5.55.1
         version: 5.55.1(rxjs@7.8.2)
@@ -7313,7 +7314,7 @@ snapshots:
   '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.4':
     optional: true
 
-  '@mswjs/interceptors@0.44.0(patch_hash=e4f3c049860db91ecb7aad272f604856a7969bd7c28e39bfa36c1d1912f9ce90)(supports-color@8.1.1)':
+  '@mswjs/interceptors@0.44.0(patch_hash=5e404cfd9982a844224be9b8706bdf1ca66a32bd921b4908a7a3eef845a209e4)(supports-color@8.1.1)':
     dependencies:
       '@open-draft/until': 3.0.1
       '@types/debug': 4.1.13
@@ -9208,10 +9209,10 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.15
 
-  drizzle-orm@0.45.4(patch_hash=bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176)(@opentelemetry/api@1.9.1)(postgres@3.4.9):
+  drizzle-orm@0.45.4(patch_hash=bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176)(@opentelemetry/api@1.9.1)(postgres@3.4.9(patch_hash=c58049df6020dc683efb97f68afccba883b032add8502372a865c49380a7fb58)):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      postgres: 3.4.9
+      postgres: 3.4.9(patch_hash=c58049df6020dc683efb97f68afccba883b032add8502372a865c49380a7fb58)
 
   dunder-proto@1.0.1:
     dependencies:
@@ -11031,7 +11032,7 @@ snapshots:
 
   nock@15.0.1(supports-color@8.1.1):
     dependencies:
-      '@mswjs/interceptors': 0.44.0(patch_hash=e4f3c049860db91ecb7aad272f604856a7969bd7c28e39bfa36c1d1912f9ce90)(supports-color@8.1.1)
+      '@mswjs/interceptors': 0.44.0(patch_hash=5e404cfd9982a844224be9b8706bdf1ca66a32bd921b4908a7a3eef845a209e4)(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -11393,7 +11394,7 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.2
 
-  postgres@3.4.9: {}
+  postgres@3.4.9(patch_hash=c58049df6020dc683efb97f68afccba883b032add8502372a865c49380a7fb58): {}
 
   posthog-node@5.55.1(rxjs@7.8.2):
     dependencies:

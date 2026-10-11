@@ -12,9 +12,10 @@
  * api.stripe.com, and one confirm path reached AWS S3 — passing only because the fake key was
  * refused. nock now refuses every HTTP(S) and `fetch` connection to a host that is not loopback,
  * so such a call fails at once, offline, instead of depending on a third party's answer.
- * Loopback stays open for the test servers and Toxiproxy's admin API; Postgres and Redis speak
- * their own protocols over raw sockets, which nock never touches. Contract tests register their
- * own interceptors on top.
+ * Loopback stays open for the test servers and Toxiproxy's admin API. nock 15 intercepts every
+ * socket, not only HTTP; the pinned `@mswjs/interceptors` patch (`pnpm-workspace.yaml`) lets
+ * loopback ones reach Node.js untouched, so Postgres, Redis and Toxiproxy's proxies behave — and
+ * fail — exactly as without nock. Contract tests register their own interceptors on top.
  *
  * Also removed: the S3 endpoint (a local MinIO URL changes presigned URLs), the separate BullMQ
  * Redis (queues must share the test prefix on the test Redis) and every telemetry sink.

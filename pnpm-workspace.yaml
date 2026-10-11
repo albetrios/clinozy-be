@@ -67,12 +67,16 @@ overrides:
 # with spaces, so no test matched and every mutant ran zero tests. Drop once the runner ships the fix
 # (the entry is version-keyed: bumping the runner without re-keying it fails the install).
 patchedDependencies:
-  # nock 15's socket interceptor fires "connect" twice on a passed-through connection whose client
-  # waits for it before writing: once emulated, once when the real socket connects. postgres.js
-  # listens with `on('connect')`, sends its startup message twice, and Postgres refuses the login
-  # (08P01 "expected SASL response, got message type 0") — every database-bound test while nock is
-  # active. The patch skips the second "connect". Still present in 0.45.7; re-key or drop it when nock
-  # moves to a newer interceptors line (the entry is version-keyed, so the install fails until then).
+  # nock 15 intercepts every socket, not only HTTP, and two defects follow for the test harness's own
+  # Postgres and Redis (both still present in 0.45.7; upstream mswjs/interceptors#860, open):
+  # - a client that waits for "connect" before writing gets it twice, once emulated and once when the
+  #   real socket connects; postgres.js listens with `on('connect')`, sends its startup message twice,
+  #   and Postgres refuses the login (08P01 "expected SASL response, got message type 0");
+  # - the emulated "connect" reports a refused connection as established, with no "error" or "close"
+  #   to follow, so the chaos suite's outages stop looking like outages.
+  # The patch lets loopback and local IPC connections reach Node.js as-is, as nock 14 did (nock still
+  # governs every other host), and skips the second "connect" for any remote one. Re-key or drop it
+  # when nock moves to a newer interceptors line (the entry is version-keyed, so the install fails).
   '@mswjs/interceptors@0.44.0': patches/@mswjs__interceptors@0.44.0.patch
   '@stryker-mutator/vitest-runner@10.0.0': patches/@stryker-mutator__vitest-runner@10.0.0.patch
   # Drizzle's postgres.js session prepares a statement only when the query is named
@@ -81,3 +85,11 @@ patchedDependencies:
   # `prepare: false` (pooler) connection, so the pool's option decides. Pinned exactly in
   # package.json because the entry is version-keyed. Remove when upstream prepares these paths.
   drizzle-orm@0.45.4: patches/drizzle-orm@0.45.4.patch
+  # postgres.js keeps a transaction's Connection after its socket closes: closed() sets the socket
+  # to null, and the transaction's next statement — begin()'s own ROLLBACK included — is written from
+  # a setImmediate that throws "Cannot read properties of null (reading 'write')". No caller can catch
+  # it, and the API and worker exit on an uncaught exception, so a connection lost mid-transaction (a
+  # failover, a network drop) took the whole process down. The patch is upstream's proposed guard
+  # (porsager/postgres#1208, PR #1209, open): the pending queries settle with CONNECTION_CLOSED.
+  # Pinned exactly in package.json because the entry is version-keyed. Remove once a release has it.
+  postgres@3.4.9: patches/postgres@3.4.9.patch

@@ -1896,6 +1896,7 @@ src/
     │   │   ├── prepared-statements.integration.test.ts
     │   │   ├── request-transaction-budget.integration.test.ts
     │   │   ├── resource-quota-lock.integration.test.ts
+    │   │   ├── transaction-connection-loss.integration.test.ts
     │   │   └── transaction-rollback.integration.test.ts
     │   ├── observability/
     │   │   ├── db-pool-metrics.integration.test.ts
@@ -2239,6 +2240,7 @@ src/
     │   │   │   └── retry-with-backoff.unit.test.ts
     │   │   ├── boot-tls-guards.unit.test.ts
     │   │   ├── database-suite-lock.unit.test.ts
+    │   │   ├── harness-network-isolation.unit.test.ts
     │   │   ├── local-test-database.unit.test.ts
     │   │   ├── migration-error-hint.unit.test.ts
     │   │   └── stripe-client-proxy.unit.test.ts

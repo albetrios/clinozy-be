@@ -40,7 +40,9 @@ via a GitHub Actions service container (see below), so this local build affects 
 > `src/tests/helpers/harness-provider-env.ts` (fake provider keys, no telemetry, no network beyond
 > loopback — the main suite loads the same module) and sets the test-affordance flags —
 > `TEST_MODE=true`, the single gate for `cleanupDatabase`/`cleanupTestRedis` — so the suite behaves the same
-> locally and in CI.
+> locally and in CI. nock never sees a loopback socket (the pinned `@mswjs/interceptors` patch in
+> `pnpm-workspace.yaml`), so an outage Toxiproxy injects reaches the Postgres and Redis clients exactly as a
+> real one would — `harness-network-isolation.unit.test.ts` fails if a nock bump brings the interception back.
 
 ## Continuous integration
 

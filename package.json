@@ -263,7 +263,7 @@
     "opossum": "^10.0.0",
     "otplib": "^13.5.0",
     "pino": "^10.4.0",
-    "postgres": "^3.4.9",
+    "postgres": "3.4.9",
     "posthog-node": "^5.55.1",
     "resend": "^6.32.1",
     "stripe": "^23.0.0",
