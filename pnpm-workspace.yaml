@@ -85,11 +85,15 @@ patchedDependencies:
   # `prepare: false` (pooler) connection, so the pool's option decides. Pinned exactly in
   # package.json because the entry is version-keyed. Remove when upstream prepares these paths.
   drizzle-orm@0.45.4: patches/drizzle-orm@0.45.4.patch
-  # postgres.js keeps a transaction's Connection after its socket closes: closed() sets the socket
-  # to null, and the transaction's next statement — begin()'s own ROLLBACK included — is written from
-  # a setImmediate that throws "Cannot read properties of null (reading 'write')". No caller can catch
-  # it, and the API and worker exit on an uncaught exception, so a connection lost mid-transaction (a
-  # failover, a network drop) took the whole process down. The patch is upstream's proposed guard
-  # (porsager/postgres#1208, PR #1209, open): the pending queries settle with CONNECTION_CLOSED.
-  # Pinned exactly in package.json because the entry is version-keyed. Remove once a release has it.
+  # postgres.js keeps a transaction's Connection after its session ends, with two outcomes:
+  # - nothing queued: the next statement — begin()'s own ROLLBACK included — is written from a
+  #   setImmediate onto the closed socket and throws "Cannot read properties of null (reading
+  #   'write')". No caller can catch it, and the API and worker exit on an uncaught exception, so a
+  #   connection lost mid-transaction (a failover, a network drop) took the whole process down;
+  # - a query queued: the pool reconnects that same Connection, and the callback's later statements
+  #   — its COMMIT included — run on the new session outside any transaction, each committing alone.
+  # The patch settles the closed-socket writes with CONNECTION_CLOSED (upstream's proposed guard,
+  # porsager/postgres#1208 / PR #1209) and makes begin() refuse every statement of a transaction
+  # whose session is gone (porsager/postgres#1248); both upstream issues are open. Pinned exactly in
+  # package.json because the entry is version-keyed. Remove once a release fixes both.
   postgres@3.4.9: patches/postgres@3.4.9.patch

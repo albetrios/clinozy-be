@@ -50,6 +50,9 @@ jobs:
               - 'migrations/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              # Dependency patches (postgres.js, the nock interceptors) change runtime behaviour.
+              - 'pnpm-workspace.yaml'
+              - 'patches/**'
               - 'vitest.config.ts'
               - 'tooling/**'
             docker:
@@ -57,6 +60,8 @@ jobs:
               - 'Dockerfile.worker'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'patches/**'
               - 'tooling/ci/check-dockerfile-sync.mjs'
             ci-config:
               - '.github/**'

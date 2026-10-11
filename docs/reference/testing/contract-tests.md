@@ -31,7 +31,7 @@ flowchart LR
 
 - **`CONTRACT_TESTS_ENABLED=true`** (set by the npm script): `src/tests/setup.ts` pins placeholder keys and bucket names; `src/tests/global-setup.ts` skips DB provisioning when only contracts run.
 - **`stripe.client`**: Under contract-only test runs, the Stripe SDK uses **`Stripe.createFetchHttpClient`** so requests go through **fetch / undici**, which nock intercepts faithfully. Through the default Node `http` client, nock 15 hands an intercepted connection error back raw (`ERR_NOCK_NO_MATCH`, not a `StripeConnectionError`), and nock 14 could **hang** it (upstream: stripe-node#2211, nock#2785).
-- **Loopback is never intercepted**: nock 15 intercepts every socket, not only HTTP. The pinned `@mswjs/interceptors` patch (`patchedDependencies` in `pnpm-workspace.yaml`) lets loopback and local IPC connections reach Node.js as-is — the harness's Postgres, Redis and Toxiproxy proxies — so a nock scope for `localhost` / `127.0.0.1` never matches; mock only third-party hosts.
+- **Loopback is never intercepted**: nock 15 intercepts every socket, not only HTTP. The pinned `@mswjs/interceptors` patch (`patchedDependencies` in `pnpm-workspace.yaml`) lets loopback and local IPC connections reach Node.js as-is — the harness's Postgres, Redis and Toxiproxy proxies — so a nock scope for `localhost` / `127.0.0.1` never matches; mock only third-party hosts. `harness-network-isolation.unit.test.ts` checks the behaviour and `patched-dependencies.policy.unit.test.ts` the installed patch, so a nock bump cannot drop it unnoticed.
 - **Body matchers**: nock passes **`querystring.parse` objects** for `application/x-www-form-urlencoded` bodies; helpers in **`helpers/stripe-form.ts`** decode strings, buffers, and parsed objects.
 
 ## Live provider checks

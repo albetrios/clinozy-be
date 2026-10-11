@@ -19,6 +19,43 @@ index 8e79170aeb13efe8c3c77ccede0cd3a115b5e1b5..47d3193e32fff6d832a021c1b53ec717
      const x = socket.write(chunk, fn)
      nextWriteTimer !== null && clearImmediate(nextWriteTimer)
      chunk = nextWriteTimer = null
+diff --git a/cf/src/index.js b/cf/src/index.js
+index ffbe7aef075d6037c540cbd5e8f7e298d4345cc3..549d4ec140f0b00c375e8bd3ae2f552a8b0151ed 100644
+--- a/cf/src/index.js
++++ b/cf/src/index.js
+@@ -238,12 +238,22 @@ function Postgres(a, b) {
+     let savepoints = 0
+       , connection
+       , prepare = null
++      , closedError = null
+ 
+     try {
+       await sql.unsafe('begin ' + options.replace(/[^a-z ]/ig, ''), [], { onexecute }).execute()
+       return await Promise.race([
+         scope(connection, fn),
+-        new Promise((_, reject) => connection.onclose = reject)
++        new Promise((_, reject) => connection.onclose = error => {
++          // The session that held this transaction is gone, and the pool may reconnect this same
++          // Connection for a queued query. Settle what waits for the transaction and refuse every
++          // later statement of the callback (its ROLLBACK/COMMIT included), so none runs on the
++          // new session outside the transaction (porsager/postgres#1248).
++          closedError = error
++          while (queries.length)
++            queries.shift().reject(error)
++          reject(error)
++        })
+       ])
+     } catch (error) {
+       throw error
+@@ -291,6 +301,8 @@ function Postgres(a, b) {
+ 
+       function handler(q) {
+         q.catch(e => uncaughtError || (uncaughtError = e))
++        if (closedError)
++          return q.reject(closedError)
+         c.queue === full
+           ? queries.push(q)
+           : c.execute(q) || move(c, full)
 diff --git a/cjs/src/connection.js b/cjs/src/connection.js
 index 07f6716702ac888215c86ad6e0071aaf55ae519c..2b815bd586d79acfe0a7a5e1fb2a8dc8cd588f3a 100644
 --- a/cjs/src/connection.js
@@ -40,6 +77,43 @@ index 07f6716702ac888215c86ad6e0071aaf55ae519c..2b815bd586d79acfe0a7a5e1fb2a8dc8
      const x = socket.write(chunk, fn)
      nextWriteTimer !== null && clearImmediate(nextWriteTimer)
      chunk = nextWriteTimer = null
+diff --git a/cjs/src/index.js b/cjs/src/index.js
+index f09c61c7e998f411560b95c9a8e1ed6a97972c11..21831abd9bd6786c759ba2487776310e5a690205 100644
+--- a/cjs/src/index.js
++++ b/cjs/src/index.js
+@@ -237,12 +237,22 @@ function Postgres(a, b) {
+     let savepoints = 0
+       , connection
+       , prepare = null
++      , closedError = null
+ 
+     try {
+       await sql.unsafe('begin ' + options.replace(/[^a-z ]/ig, ''), [], { onexecute }).execute()
+       return await Promise.race([
+         scope(connection, fn),
+-        new Promise((_, reject) => connection.onclose = reject)
++        new Promise((_, reject) => connection.onclose = error => {
++          // The session that held this transaction is gone, and the pool may reconnect this same
++          // Connection for a queued query. Settle what waits for the transaction and refuse every
++          // later statement of the callback (its ROLLBACK/COMMIT included), so none runs on the
++          // new session outside the transaction (porsager/postgres#1248).
++          closedError = error
++          while (queries.length)
++            queries.shift().reject(error)
++          reject(error)
++        })
+       ])
+     } catch (error) {
+       throw error
+@@ -290,6 +300,8 @@ function Postgres(a, b) {
+ 
+       function handler(q) {
+         q.catch(e => uncaughtError || (uncaughtError = e))
++        if (closedError)
++          return q.reject(closedError)
+         c.queue === full
+           ? queries.push(q)
+           : c.execute(q) || move(c, full)
 diff --git a/src/connection.js b/src/connection.js
 index 1b1cccde43b4570d5d071d6ffaab2669b3c2065a..6c76c63189d5a90115462d9280a05a59def3f41b 100644
 --- a/src/connection.js
@@ -61,3 +135,40 @@ index 1b1cccde43b4570d5d071d6ffaab2669b3c2065a..6c76c63189d5a90115462d9280a05a59
      const x = socket.write(chunk, fn)
      nextWriteTimer !== null && clearImmediate(nextWriteTimer)
      chunk = nextWriteTimer = null
+diff --git a/src/index.js b/src/index.js
+index c7fba3dace20173f4cb13f3f138bb6d213b43683..6bbb7cd8707170796eff22d66539ccb8e52cdb3e 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -237,12 +237,22 @@ function Postgres(a, b) {
+     let savepoints = 0
+       , connection
+       , prepare = null
++      , closedError = null
+ 
+     try {
+       await sql.unsafe('begin ' + options.replace(/[^a-z ]/ig, ''), [], { onexecute }).execute()
+       return await Promise.race([
+         scope(connection, fn),
+-        new Promise((_, reject) => connection.onclose = reject)
++        new Promise((_, reject) => connection.onclose = error => {
++          // The session that held this transaction is gone, and the pool may reconnect this same
++          // Connection for a queued query. Settle what waits for the transaction and refuse every
++          // later statement of the callback (its ROLLBACK/COMMIT included), so none runs on the
++          // new session outside the transaction (porsager/postgres#1248).
++          closedError = error
++          while (queries.length)
++            queries.shift().reject(error)
++          reject(error)
++        })
+       ])
+     } catch (error) {
+       throw error
+@@ -290,6 +300,8 @@ function Postgres(a, b) {
+ 
+       function handler(q) {
+         q.catch(e => uncaughtError || (uncaughtError = e))
++        if (closedError)
++          return q.reject(closedError)
+         c.queue === full
+           ? queries.push(q)
+           : c.execute(q) || move(c, full)

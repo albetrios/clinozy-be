@@ -20,17 +20,22 @@ failover, a network drop, a server restart: the transaction's next statement (or
 `Cannot read properties of null (reading 'write')`. Every request's unit of work runs in a
 transaction, so one blip could restart every replica at once and drop all their in-flight work.
 
-The pinned postgres.js patch (`patchedDependencies` in `pnpm-workspace.yaml`, upstream's proposed
-guard for porsager/postgres#1208) settles those writes with a catchable `CONNECTION_CLOSED`
-instead: the transaction rejects, the request answers 5xx, and the process lives.
-[`transaction-connection-loss.integration.test.ts`](../../../src/tests/integration/database/transaction-connection-loss.integration.test.ts)
-cuts a transaction's connection mid-query and between queries and fails on any uncaught exception.
+The same defect had a second outcome when another query was queued: the pool reconnected that
+connection, and a transaction callback still running after the failure sent its later statements —
+its `COMMIT` included — on the new session, outside any transaction, each committing on its own.
 
-Still open upstream (porsager/postgres#1248): when another query is queued, the pool reconnects the
-same connection and a transaction callback that keeps running after the failure can send its later
-statements on the new session, outside any transaction. A callback that stops at its first failed
-statement is not exposed; one that catches a statement's error inside the transaction and carries on
-is — let the error leave the callback.
+The pinned postgres.js patch (`patchedDependencies` in `pnpm-workspace.yaml`) fixes both: writes
+onto a closed socket settle with a catchable `CONNECTION_CLOSED` (upstream's proposed guard for
+porsager/postgres#1208), and `begin()` refuses every statement of a transaction whose session is
+gone (porsager/postgres#1248). The transaction rejects, the request answers 5xx, nothing commits
+outside it, the pool recovers, and the process lives.
+[`transaction-connection-loss.integration.test.ts`](../../../src/tests/integration/database/transaction-connection-loss.integration.test.ts)
+cuts a transaction's connection mid-query and between queries, cuts it with a query waiting, and
+terminates its backend between statements; it fails on any uncaught exception and on any statement
+that reaches the reconnected session. Without a database,
+[`patched-dependencies.policy.unit.test.ts`](../../../src/tests/unit/ci/patched-dependencies.policy.unit.test.ts)
+fails on every commit and PR if the patch is dropped, re-cut without either fix, or left behind by a
+postgres.js bump; a PR touching `pnpm-workspace.yaml` or `patches/` runs the full test matrix.
 
 ## Unhandled-rejection burst thresholds
 

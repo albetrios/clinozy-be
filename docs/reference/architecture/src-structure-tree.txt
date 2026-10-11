@@ -2150,6 +2150,7 @@ src/
     │   │   ├── hosted-docs-publish.policy.unit.test.ts
     │   │   ├── k6-coverage.policy.unit.test.ts
     │   │   ├── openapi-drift-check.policy.unit.test.ts
+    │   │   ├── patched-dependencies.policy.unit.test.ts
     │   │   ├── post-merge-ci.policy.unit.test.ts
     │   │   ├── pr-quality-gate.policy.unit.test.ts
     │   │   ├── pr-rls-security-gate.policy.unit.test.ts

@@ -177,7 +177,7 @@ patchedDependencies:
   '@mswjs/interceptors@0.44.0': 5e404cfd9982a844224be9b8706bdf1ca66a32bd921b4908a7a3eef845a209e4
   '@stryker-mutator/vitest-runner@10.0.0': 2635868beea712de5d4bbcc561738d55c888a27c2cd24b06de9b6c1bf1309485
   drizzle-orm@0.45.4: bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176
-  postgres@3.4.9: c58049df6020dc683efb97f68afccba883b032add8502372a865c49380a7fb58
+  postgres@3.4.9: 14769a44cc22f230e714969054721f27a7c8772f229f70efae75611b25ec8823
 
 importers:
 
@@ -245,7 +245,7 @@ importers:
         version: 18.0.7
       drizzle-orm:
         specifier: 0.45.4
-        version: 0.45.4(patch_hash=bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176)(@opentelemetry/api@1.9.1)(postgres@3.4.9(patch_hash=c58049df6020dc683efb97f68afccba883b032add8502372a865c49380a7fb58))
+        version: 0.45.4(patch_hash=bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176)(@opentelemetry/api@1.9.1)(postgres@3.4.9(patch_hash=14769a44cc22f230e714969054721f27a7c8772f229f70efae75611b25ec8823))
       fastify:
         specifier: ^5.12.5
         version: 5.12.5
@@ -287,7 +287,7 @@ importers:
         version: 10.4.0
       postgres:
         specifier: 3.4.9
-        version: 3.4.9(patch_hash=c58049df6020dc683efb97f68afccba883b032add8502372a865c49380a7fb58)
+        version: 3.4.9(patch_hash=14769a44cc22f230e714969054721f27a7c8772f229f70efae75611b25ec8823)
       posthog-node:
         specifier: ^5.55.1
         version: 5.55.1(rxjs@7.8.2)
@@ -9209,10 +9209,10 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.15
 
-  drizzle-orm@0.45.4(patch_hash=bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176)(@opentelemetry/api@1.9.1)(postgres@3.4.9(patch_hash=c58049df6020dc683efb97f68afccba883b032add8502372a865c49380a7fb58)):
+  drizzle-orm@0.45.4(patch_hash=bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176)(@opentelemetry/api@1.9.1)(postgres@3.4.9(patch_hash=14769a44cc22f230e714969054721f27a7c8772f229f70efae75611b25ec8823)):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      postgres: 3.4.9(patch_hash=c58049df6020dc683efb97f68afccba883b032add8502372a865c49380a7fb58)
+      postgres: 3.4.9(patch_hash=14769a44cc22f230e714969054721f27a7c8772f229f70efae75611b25ec8823)
 
   dunder-proto@1.0.1:
     dependencies:
@@ -11394,7 +11394,7 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.2
 
-  postgres@3.4.9(patch_hash=c58049df6020dc683efb97f68afccba883b032add8502372a865c49380a7fb58): {}
+  postgres@3.4.9(patch_hash=14769a44cc22f230e714969054721f27a7c8772f229f70efae75611b25ec8823): {}
 
   posthog-node@5.55.1(rxjs@7.8.2):
     dependencies:
