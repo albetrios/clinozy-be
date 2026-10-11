@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { getRequestIdentifier, requireAuth } from '@/shared/utils/http/request.util.js';
 import { successResponse } from '@/shared/utils/http/response.util.js';
 import { ForbiddenError } from '@/shared/errors/index.js';
+import { validatePublicIdParam } from '@/shared/utils/identity/public-id-param.util.js';
 import { assertOrganizationPermission } from '@/shared/utils/auth/authorization.util.js';
 import { UPLOAD_PERMISSIONS } from './upload.permissions.js';
 import type { UploadService } from './upload.service.js';
@@ -45,6 +46,12 @@ function uploadPrincipal(request: FastifyRequest): UploadPrincipal {
   };
 }
 
+/** The `upload_id` path parameter, checked as a public id like every other entity-id param. */
+function readUploadIdParam(request: FastifyRequest): string {
+  const { upload_id: uploadId } = (request.params as { upload_id?: string }) ?? {};
+  return validatePublicIdParam({ value: uploadId ?? '', fieldName: 'upload_id' });
+}
+
 /**
  * HTTP handlers for the upload routes: request a presigned URL, fetch metadata,
  * confirm completion, and soft-delete an upload. Each hands the service the request's
@@ -65,7 +72,7 @@ export function createUploadController(uploadService: UploadService) {
     },
 
     getUpload: async (request: FastifyRequest, reply: FastifyReply) => {
-      const publicId = (request.params as { upload_id: string }).upload_id;
+      const publicId = readUploadIdParam(request);
       const result = await uploadService.getUpload({
         public_id: publicId,
         principal: uploadPrincipal(request),
@@ -76,7 +83,7 @@ export function createUploadController(uploadService: UploadService) {
     },
 
     confirmUpload: async (request: FastifyRequest, reply: FastifyReply) => {
-      const publicId = (request.params as { upload_id: string }).upload_id;
+      const publicId = readUploadIdParam(request);
       const result = await uploadService.confirmUpload({
         public_id: publicId,
         principal: uploadPrincipal(request),
@@ -87,7 +94,7 @@ export function createUploadController(uploadService: UploadService) {
     },
 
     deleteUpload: async (request: FastifyRequest, reply: FastifyReply) => {
-      const publicId = (request.params as { upload_id: string }).upload_id;
+      const publicId = readUploadIdParam(request);
       await uploadService.deleteUpload({
         public_id: publicId,
         principal: uploadPrincipal(request),
