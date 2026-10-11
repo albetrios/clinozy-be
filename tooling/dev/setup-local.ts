@@ -59,6 +59,7 @@ import {
   planLocalDatabaseLogins,
 } from './local-database-logins.js';
 import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
+import { listProcessTree, signalProcesses } from '@/scripts/ops/process-tree.util.js';
 import dotenv from 'dotenv';
 import postgres from 'postgres';
 import {
@@ -1118,16 +1119,24 @@ async function runDevServer(
     detached: false,
   });
 
+  // pnpm runs each script in a process group of its own and ignores a SIGINT sent to it, so
+  // signalling pnpm left the API listening on :3000 and this process waiting for an exit that never
+  // came. Interrupt every process under each child instead.
+  const interruptTree = (child: ChildProcess | null): void => {
+    if (child?.pid !== undefined) {
+      signalProcesses({ processIds: listProcessTree(child.pid), signal: 'SIGINT' });
+    }
+  };
   const cleanup = (): void => {
-    if (worker && !worker.killed) worker.kill('SIGINT');
-    if (!dev.killed) dev.kill('SIGINT');
+    interruptTree(worker);
+    interruptTree(dev);
   };
 
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
   await new Promise<void>((resolveExit) => {
     dev.on('exit', (code) => {
-      if (worker && !worker.killed) worker.kill('SIGINT');
+      interruptTree(worker);
       process.exitCode = code ?? 0;
       resolveExit();
     });
