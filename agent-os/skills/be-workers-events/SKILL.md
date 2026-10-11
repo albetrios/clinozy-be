@@ -144,7 +144,9 @@ notify/sub-domains/webhook/events/organization-resource.event-handlers.ts
 
 Every unit of work releases its after-commit tasks only when it commits (`runInCommitUnit`), so
 enqueues wait for the commit in workers too, and are dropped when the unit rolls back. The fan-out
-runs in one savepoint (`withSavepoint`): a failure there never fails the producer's write.
+runs in one savepoint (`withSavepoint`): a failure there never fails the producer's write. Outside a
+savepoint, a failed statement fails the whole unit of work even when its error is caught
+(`database.transaction.failed_statement_caught`).
 
 **Notify — outbound webhook delivery**
 

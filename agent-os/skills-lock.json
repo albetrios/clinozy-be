@@ -185,7 +185,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-rls-tenant-isolation-guard/SKILL.md",
-      "computedHash": "2eaddc7d43e0c12941505c4009f16a20125c8a26cb041842e6dfa43219c04504"
+      "computedHash": "3d481ba7a2a32cdc3a464dd45de99b5b7bfc4f660e9d56ab318d797dc398d463"
     },
     "be-route-catalog": {
       "source": "local",
@@ -251,7 +251,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-test-generator/SKILL.md",
-      "computedHash": "af5401ee85e656127b3229af810ea0f9e1db3f64e507ed1b356444609fc4c14c"
+      "computedHash": "d160d1acc5c9434cad791960fa324e4033bc920f2d8390ddfd0567533130496c"
     },
     "be-tsdoc-export-guard": {
       "source": "local",
@@ -263,7 +263,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-workers-events/SKILL.md",
-      "computedHash": "b45a58bb26e1d12a03f89ded221ee84d4fe2d0b77ee2218daad8172f7535e539"
+      "computedHash": "d2ee886d9725da5b1987cbe33bb9faa42f5559927a264349c244b73ec179abc8"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",

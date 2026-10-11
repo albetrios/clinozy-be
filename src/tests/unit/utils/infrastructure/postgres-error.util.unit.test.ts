@@ -16,9 +16,9 @@ describe('postgres-error.util', () => {
     expect(isPostgresForeignKeyViolation(null)).toBe(false);
   });
 
-  it('unwraps a Drizzle-wrapped PostgresError (code on error.cause)', () => {
+  it('unwraps a Drizzle-wrapped node-postgres DatabaseError (code on error.cause)', () => {
     // Drizzle wraps the driver error: the SQLSTATE lives on `.cause`, not the top.
-    const wrapped = { query: 'insert ...', cause: { name: 'PostgresError', code: '23505' } };
+    const wrapped = { query: 'insert ...', cause: { name: 'DatabaseError', code: '23505' } };
     expect(isPostgresUniqueViolation(wrapped)).toBe(true);
     const wrappedFk = { query: 'insert ...', cause: { code: '23503' } };
     expect(isPostgresForeignKeyViolation(wrappedFk)).toBe(true);

@@ -353,7 +353,7 @@ All 19 phases from the Consolidated Master Plan (Domain API Upgrade + CI/CD + en
 
 ### Phase 1 — Infrastructure hardening
 
-- [x] Postgres.js connection: SSL in production, `statement_timeout`, `max_lifetime`, pool sizing via env
+- [x] node-postgres pool: SSL in production, `statement_timeout`, max connection lifetime, pool sizing via env, `error` listeners (`createDatabasePool`)
 - [x] ioredis connection: `retryStrategy`, `keyPrefix`, error handlers, `lazyConnect`
 - [x] Pino logger: redaction of sensitive fields (authorization, password, token, secret, cookie)
 - [x] Env validation: Zod schema for all environment variables (`src/shared/config/env.config.ts`)

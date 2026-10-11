@@ -13,7 +13,7 @@ When you create or modify matching files:
 
 ### Quick rules
 
-1. **Database connections**: Must use SSL in production, statement_timeout, max_lifetime
+1. **Database connections**: Must use SSL in production, statement_timeout, a max connection lifetime, and pools created through `createDatabasePool()` (its `error` listeners keep a dropped connection from becoming an uncaught exception)
 2. **Redis connections**: Must have retryStrategy, error handlers, keyPrefix, close timeout
 3. **Logger**: Must use Pino redaction for sensitive fields (authorization, password, token, secret)
 4. **JWT**: Must validate issuer + audience claims, use RS256 in production

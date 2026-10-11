@@ -164,6 +164,9 @@ k6 scenarios and helpers live in `src/tests/load/k6/` (`.js` files, not Vitest).
 
 ### 1. Pure layers (unit)
 
+- [ ] Raw SQL in a test → ``database.execute(sql`…`)`` (`sql` from `drizzle-orm`) or `getOperatorDatabase().execute(…)` for
+      harness-only work, rows via a local `rowsOf<T>(result)` normalizer; a raw client (lock holding, backend termination)
+      comes from `getOperatorPool()` — see `docs/reference/testing/testing-conventions.md`
 - [ ] Suite touches services that enter database contexts → mock the context module with
       `mockDatabaseContexts(actual)` from `@/tests/helpers/database-context-mock.helper.js`
       (stubs ALL three wrappers — a partial `...actual` spread leaves siblings REAL and

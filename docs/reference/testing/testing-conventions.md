@@ -114,6 +114,13 @@ root factories (`user.factory.ts`, `organization.factory.ts`) deliberately do **
 they insert through the same context the application uses, because "can this row be created the
 way production creates it" is worth asserting for the two tables every other fixture hangs off.
 
+**Raw SQL in a test** goes through Drizzle, as in the application: ``database.execute(sql`…`)``
+(`sql` from `drizzle-orm`), or ``getOperatorDatabase().execute(sql`…`)`` for work the application role
+may not do. node-postgres returns a result object, so read the rows with the file's local
+`rowsOf<T>(result)` helper (the `Array.isArray(result) ? result : result.rows` normalizer the
+repositories use). A test that needs a raw client — holding a lock across statements, terminating a
+backend — takes one from `getOperatorPool()`.
+
 A test that passes normally and fails under this runner is depending on an RLS bypass — either
 the code is missing a context, or the fixture is writing somewhere it should not. Both are worth
 knowing. When it is the fixture, the symptom is a silent zero-row write, which reads as an

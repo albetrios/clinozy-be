@@ -2352,6 +2352,7 @@ src/
     │   │   ├── agent-tool-versions.policy.unit.test.ts
     │   │   ├── check-load-coverage.unit.test.ts
     │   │   ├── check-patch-coverage.unit.test.ts
+    │   │   ├── dashboards-mcp.unit.test.ts
     │   │   ├── db-viewer.unit.test.ts
     │   │   ├── env-file.unit.test.ts
     │   │   ├── external-credentials.unit.test.ts
