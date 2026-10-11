@@ -52,18 +52,18 @@ describe('Performance: permission cache hit ratio', () => {
   it('runs the 5-table join once for repeated resolutions of the same (user, organization)', async () => {
     const { user, organization, service, joinSpy } = await createResolutionContext();
 
-    const first = await service.resolveUserOrganizationPermissions(
-      user.public_id,
-      organization.public_id,
-    );
-    const second = await service.resolveUserOrganizationPermissions(
-      user.public_id,
-      organization.public_id,
-    );
-    const third = await service.resolveUserOrganizationPermissions(
-      user.public_id,
-      organization.public_id,
-    );
+    const first = await service.resolveUserOrganizationPermissions({
+      userPublicId: user.public_id,
+      organizationPublicId: organization.public_id,
+    });
+    const second = await service.resolveUserOrganizationPermissions({
+      userPublicId: user.public_id,
+      organizationPublicId: organization.public_id,
+    });
+    const third = await service.resolveUserOrganizationPermissions({
+      userPublicId: user.public_id,
+      organizationPublicId: organization.public_id,
+    });
 
     // The cached reads must return the SAME set (order is not part of the contract) —
     // a budget met by returning [] from a broken cache entry would be a regression.
@@ -88,15 +88,18 @@ describe('Performance: permission cache hit ratio', () => {
       roleId: role.id,
     });
 
-    const ownerCodes = await service.resolveUserOrganizationPermissions(
-      user.public_id,
-      organization.public_id,
-    );
-    const otherCodes = await service.resolveUserOrganizationPermissions(
-      otherMember.public_id,
-      organization.public_id,
-    );
-    await service.resolveUserOrganizationPermissions(otherMember.public_id, organization.public_id);
+    const ownerCodes = await service.resolveUserOrganizationPermissions({
+      userPublicId: user.public_id,
+      organizationPublicId: organization.public_id,
+    });
+    const otherCodes = await service.resolveUserOrganizationPermissions({
+      userPublicId: otherMember.public_id,
+      organizationPublicId: organization.public_id,
+    });
+    await service.resolveUserOrganizationPermissions({
+      userPublicId: otherMember.public_id,
+      organizationPublicId: organization.public_id,
+    });
 
     // One join per distinct (user, organization) — never zero (shared entry leaking one
     // member's codes to another) and never three (cache not hitting at all).
@@ -108,14 +111,14 @@ describe('Performance: permission cache hit ratio', () => {
   it('cache-bypassing resolution pays the join every time (no accidental caching on the strict path)', async () => {
     const { user, organization, service, joinSpy } = await createResolutionContext();
 
-    await service.resolveUserOrganizationPermissionsFromDatabase(
-      user.public_id,
-      organization.public_id,
-    );
-    await service.resolveUserOrganizationPermissionsFromDatabase(
-      user.public_id,
-      organization.public_id,
-    );
+    await service.resolveUserOrganizationPermissionsFromDatabase({
+      userPublicId: user.public_id,
+      organizationPublicId: organization.public_id,
+    });
+    await service.resolveUserOrganizationPermissionsFromDatabase({
+      userPublicId: user.public_id,
+      organizationPublicId: organization.public_id,
+    });
 
     // The strict path exists precisely so privilege-escalation guards never trust a stale
     // cached set (sec-r5-L3) — if it ever starts caching, that guarantee is gone.

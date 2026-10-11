@@ -49,7 +49,13 @@ export const RESOURCE_QUOTA_LOCK_NAMESPACE = {
  * - **Notes:** closes the count-then-insert race where concurrent create requests each pass the
  *   same pre-check before any row is inserted and overshoot the configured cap.
  */
-export async function acquireResourceQuotaLock(namespace: number, key: number): Promise<void> {
+export async function acquireResourceQuotaLock({
+  namespace,
+  key,
+}: {
+  namespace: number;
+  key: number;
+}): Promise<void> {
   await getRequestDatabase().execute(
     sql`SELECT pg_advisory_xact_lock(${namespace}::int, (hashtextextended(${key}::text, 0) & 2147483647::bigint)::int)`,
   );

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { sql } from '@/infrastructure/database/connection.js';
 import { EXPECTED_FORCE_RLS_TABLES } from '@/tests/helpers/rls-matrix.helper.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * `schema-rls-parity.global.test.ts` asserts that a table **declares** FORCE RLS. It does not
@@ -34,11 +40,13 @@ function permitsEverything(clause: string | null): boolean {
 
 describe('FORCE RLS tables must carry policies that actually restrict', () => {
   it('no FORCE RLS table grants unrestricted access to PUBLIC', async () => {
-    const policies = await sql<LivePolicy[]>`
+    const policies = rowsOf<LivePolicy>(
+      await database.execute(sql`
       SELECT schemaname, tablename, policyname, roles::text AS roles, qual, with_check
       FROM pg_policies
       ORDER BY schemaname, tablename, policyname
-    `;
+    `),
+    );
 
     const forceRlsKeys = new Set(
       EXPECTED_FORCE_RLS_TABLES.map((table) => `${table.schemaName}.${table.tableName}`),

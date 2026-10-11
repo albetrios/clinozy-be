@@ -31,7 +31,7 @@ function bracket(tables: readonly string[], body: string): string {
 }
 
 function flaggedTables(filename: string, sql: string): string[] {
-  return lintMigrationFileContent(filename, sql)
+  return lintMigrationFileContent({ filename, fileContent: sql })
     .violations.filter(
       (violation) => violation.ruleId === 'force_rls_data_migration_without_owner_bracket',
     )

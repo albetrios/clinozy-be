@@ -204,7 +204,7 @@ Answers "is every route — organization-level included — covered, and what is
 | Method | Path | Access | Bucket | Status |
 | --- | --- | --- | --- | --- |
 | GET | `/internal/ops/circuit-breakers` | TOKEN: metrics | `bearer-token` | ✅ token-auth |
-| POST | `/internal/ops/circuit-breakers/:circuit_name/reset` | TOKEN: metrics | `bearer-token` | ✅ token-auth |
+| POST | `/internal/ops/circuit-breakers/:circuit_name/reset` | TOKEN: ops-admin (`OPS_ADMIN_TOKEN`, never the scrape token) | `bearer-token` | ✅ token-auth |
 
 ### HEALTH (2)
 

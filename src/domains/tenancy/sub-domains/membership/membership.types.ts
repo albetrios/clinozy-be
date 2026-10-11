@@ -26,6 +26,23 @@ export function membershipStatusConsumesSeat(status: string): boolean {
   return (SEAT_CONSUMING_MEMBERSHIP_STATUSES as readonly string[]).includes(status);
 }
 
+/** One of a departing user's membership rows, with its organization (account deletion). */
+export interface DepartingUserMembershipRow {
+  membership_public_id: string;
+  membership_deleted_at: Date | null;
+  organization_public_id: string;
+  organization_type: string;
+  organization_deleted_at: Date | null;
+}
+
+/**
+ * Caller details a membership update or removal needs beyond the scope: an API key's scopes, its
+ * held permissions for the role-ordering check (a user caller's are read from the database).
+ */
+export interface MembershipActionOptions {
+  callerApiKeyScopes?: readonly string[];
+}
+
 /**
  * Raw `tenancy.memberships` row shape from Drizzle. Holds internal numeric
  * ids and the soft-delete marker (`deleted_at`); do not return this shape

@@ -53,7 +53,13 @@ export interface BulkUploadProfile {
  * mix: organization-scoped vs personal alternates so every organization has both, and the status cycles
  * through `PENDING` / `UPLOADED` / `FAILED` so the per-organization pool always spans all states.
  */
-export function generateBulkUpload(faker: Faker, slot: number): BulkUploadProfile {
+export function generateBulkUpload({
+  faker,
+  slot,
+}: {
+  faker: Faker;
+  slot: number;
+}): BulkUploadProfile {
   const isOrganizationScoped = slot % 2 === 0;
   const candidatePurposes = isOrganizationScoped ? ORGANIZATION_PURPOSES : PERSONAL_PURPOSES;
   const purpose = faker.helpers.arrayElement(candidatePurposes);

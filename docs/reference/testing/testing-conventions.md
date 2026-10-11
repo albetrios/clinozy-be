@@ -114,6 +114,13 @@ root factories (`user.factory.ts`, `organization.factory.ts`) deliberately do **
 they insert through the same context the application uses, because "can this row be created the
 way production creates it" is worth asserting for the two tables every other fixture hangs off.
 
+**Raw SQL in a test** goes through Drizzle, as in the application: ``database.execute(sql`…`)``
+(`sql` from `drizzle-orm`), or ``getOperatorDatabase().execute(sql`…`)`` for work the application role
+may not do. node-postgres returns a result object, so read the rows with the file's local
+`rowsOf<T>(result)` helper (the `Array.isArray(result) ? result : result.rows` normalizer the
+repositories use). A test that needs a raw client — holding a lock across statements, terminating a
+backend — takes one from `getOperatorPool()`.
+
 A test that passes normally and fails under this runner is depending on an RLS bypass — either
 the code is missing a context, or the fixture is writing somewhere it should not. Both are worth
 knowing. When it is the fixture, the symptom is a silent zero-row write, which reads as an
@@ -213,7 +220,7 @@ See also [api-versioning.md](../api/api-versioning.md).
 2. `beforeAll`: `createTestApp()`; `afterAll`: `await app.close()`.
 3. `beforeEach`: `cleanupDatabase()`; seed permissions if needed.
 4. Per route: 401, 403 (if gated), 200 (204 for DELETE), 400 validation.
-5. Run targeted `pnpm test:*`. `pnpm dev` can keep running: local test runs use their own database (`<local database>_test`, created and migrated by the global setup — see `src/tests/helpers/local-test-database.ts`), never the one `pnpm dev` serves. A remote `DATABASE_*URL` in your env files is replaced (main and migration logins) or dropped (operator and maintenance logins), every wipe checks `current_database()` first, and Redis cleanup only ever touches the `<product>:test:` namespace. Provider keys are fakes forced by `src/tests/helpers/harness-provider-env.ts`, which also makes nock refuse every HTTP(S) and `fetch` connection to a non-loopback host — no suite can reach the real Stripe, Resend or S3, even by accident. Stub the client module in a suite that needs a provider call (a call that slips through fails at once with nock's `NetConnectNotAllowedError`).
+5. Run targeted `pnpm test:*`. `pnpm dev` can keep running: local test runs use their own database (`<project>_test`, created and migrated by the global setup — see `src/tests/helpers/local-test-database.ts`), never the one `pnpm dev` serves. A remote `DATABASE_*URL` in your env files is replaced (main and migration logins) or dropped (operator and maintenance logins), every wipe checks `current_database()` first, and Redis cleanup only ever touches the `<product>:test:` namespace. Provider keys are fakes forced by `src/tests/helpers/harness-provider-env.ts`, which also makes nock refuse every HTTP(S) and `fetch` connection to a non-loopback host — no suite can reach the real Stripe, Resend or S3, even by accident. Stub the client module in a suite that needs a provider call (a call that slips through fails at once with nock's `NetConnectNotAllowedError`).
 
 ---
 

@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { audit_outbox } from '@/domains/audit/audit-outbox.schema.js';
 import { runAuditOutboxDrainJob } from '@/domains/audit/workers/audit-outbox-drain.processor.js';
+import { BILLING_PERMISSIONS } from '@/domains/billing/billing.permissions.js';
 import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
 import {
   createMembership,
@@ -23,7 +24,12 @@ import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 
-const WEBHOOK_PERMISSIONS = [NOTIFY_PERMISSIONS.WEBHOOK_READ, NOTIFY_PERMISSIONS.WEBHOOK_MANAGE];
+// Subscribing to `subscription.*` also needs the permission to read subscriptions.
+const WEBHOOK_PERMISSIONS = [
+  NOTIFY_PERMISSIONS.WEBHOOK_READ,
+  NOTIFY_PERMISSIONS.WEBHOOK_MANAGE,
+  BILLING_PERMISSIONS.SUBSCRIPTION_READ,
+];
 
 /**
  * A webhook sends organization events to an outside URL — creating one is a classic exfiltration
@@ -135,10 +141,10 @@ describe('notify audit trail — webhook changes reach the audit log', () => {
     const everyRow = JSON.stringify(await getOperatorDatabase().select().from(audit_outbox));
     expect(everyRow).not.toContain('do-not-log');
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
-      (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
-    );
+    const result = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+      callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+    });
     expect(result.transientFailed + result.permanentlyFailed).toBe(0);
   });
 });

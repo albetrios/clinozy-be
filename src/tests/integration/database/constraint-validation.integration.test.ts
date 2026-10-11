@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { sql } from '@/infrastructure/database/connection.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Every constraint the migrations create is VALIDATED by migration head.
@@ -12,14 +18,16 @@ import { sql } from '@/infrastructure/database/connection.js';
  */
 describe('Integration: constraint validation', () => {
   it('leaves no NOT VALID constraint behind at migration head', async () => {
-    const rows = await sql<{ constraint_name: string }[]>`
+    const rows = rowsOf<{ constraint_name: string }>(
+      await database.execute(sql`
       SELECT c.conrelid::regclass::text || ' ' || c.conname AS constraint_name
       FROM pg_constraint c
       JOIN pg_namespace n ON n.oid = c.connamespace
       WHERE NOT c.convalidated
         AND n.nspname IN ('auth', 'tenancy', 'billing', 'notify', 'audit', 'upload', 'public')
       ORDER BY 1
-    `;
+    `),
+    );
     expect(rows.map((row) => row.constraint_name)).toEqual([]);
   });
 });

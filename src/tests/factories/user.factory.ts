@@ -32,9 +32,9 @@ export async function createTestUser(options: CreateUserOptions = {}) {
   // the same, so it creates users the way production does rather than by out-privileging the
   // policy. Without it the insert is rejected the moment the pool under test is RLS-subject —
   // which is every run of `pnpm test:rls-role`.
-  const [user] = await withAppDatabaseContext(
-    PRINCIPAL_SCOPE.VERIFIED({ userPublicId: publicId }),
-    (databaseHandle) =>
+  const [user] = await withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: publicId }),
+    callback: (databaseHandle) =>
       (databaseHandle ?? database)
         .insert(users)
         .values({
@@ -48,7 +48,7 @@ export async function createTestUser(options: CreateUserOptions = {}) {
           is_email_verified: options.isEmailVerified ?? false,
         })
         .returning(),
-  );
+  });
 
   return user!;
 }

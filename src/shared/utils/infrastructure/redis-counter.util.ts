@@ -23,11 +23,15 @@ return count
  * - **Notes:** for fixed-window counters (failed-login / MFA-lockout); the window is anchored to the
  *   first increment and not extended by later ones.
  */
-export async function incrementWithExpiryOnFirst(
-  redis: Redis,
-  key: string,
-  ttlSeconds: number,
-): Promise<number> {
+export async function incrementWithExpiryOnFirst({
+  redis,
+  key,
+  ttlSeconds,
+}: {
+  redis: Redis;
+  key: string;
+  ttlSeconds: number;
+}): Promise<number> {
   const result = await redis.eval(INCREMENT_WITH_EXPIRY_ON_FIRST_LUA, 1, key, String(ttlSeconds));
   return typeof result === 'number' ? result : Number(result);
 }

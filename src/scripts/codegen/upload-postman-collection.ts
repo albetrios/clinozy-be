@@ -47,11 +47,15 @@ function getRequiredEnvironmentVariable(name: string): string {
   return value;
 }
 
-async function postmanFetch<T>(
-  path: string,
-  apiKey: string,
-  options: RequestInit = {},
-): Promise<T> {
+async function postmanFetch<T>({
+  path,
+  apiKey,
+  options = {},
+}: {
+  path: string;
+  apiKey: string;
+  options?: RequestInit | undefined;
+}): Promise<T> {
   const response = await fetch(`${POSTMAN_API_BASE}${path}`, {
     ...options,
     headers: {
@@ -73,47 +77,67 @@ async function postmanFetch<T>(
   return body as T;
 }
 
-async function findExistingCollection(
-  apiKey: string,
-  workspaceIdentifier: string,
-): Promise<PostmanCollectionInfo | undefined> {
-  const data = await postmanFetch<PostmanListResponse>(
-    `/collections?workspace=${workspaceIdentifier}`,
+async function findExistingCollection({
+  apiKey,
+  workspaceIdentifier,
+}: {
+  apiKey: string;
+  workspaceIdentifier: string;
+}): Promise<PostmanCollectionInfo | undefined> {
+  const data = await postmanFetch<PostmanListResponse>({
+    path: `/collections?workspace=${workspaceIdentifier}`,
     apiKey,
-  );
+  });
 
   return data.collections?.find((collection) => collection.name.startsWith(COLLECTION_NAME_PREFIX));
 }
 
-async function createCollection(
-  apiKey: string,
-  workspaceIdentifier: string,
-  collectionData: object,
-): Promise<string> {
-  const result = await postmanFetch<{ collection: { uid: string; name: string } }>(
-    `/collections?workspace=${workspaceIdentifier}`,
+async function createCollection({
+  apiKey,
+  workspaceIdentifier,
+  collectionData,
+}: {
+  apiKey: string;
+  workspaceIdentifier: string;
+  collectionData: object;
+}): Promise<string> {
+  const result = await postmanFetch<{ collection: { uid: string; name: string } }>({
+    path: `/collections?workspace=${workspaceIdentifier}`,
     apiKey,
-    {
+    options: {
       method: 'POST',
       body: JSON.stringify({ collection: collectionData }),
     },
-  );
+  });
   return result.collection.uid;
 }
 
-async function updateCollection(
-  apiKey: string,
-  collectionUid: string,
-  collectionData: object,
-): Promise<void> {
-  await postmanFetch<{ collection: { uid: string } }>(`/collections/${collectionUid}`, apiKey, {
-    method: 'PUT',
-    body: JSON.stringify({ collection: collectionData }),
+async function updateCollection({
+  apiKey,
+  collectionUid,
+  collectionData,
+}: {
+  apiKey: string;
+  collectionUid: string;
+  collectionData: object;
+}): Promise<void> {
+  await postmanFetch<{ collection: { uid: string } }>({
+    path: `/collections/${collectionUid}`,
+    apiKey,
+    options: {
+      method: 'PUT',
+      body: JSON.stringify({ collection: collectionData }),
+    },
   });
 }
 
 async function main(): Promise<void> {
-  if (shouldSkipHostedUpload('Postman', POSTMAN_UPLOAD_REQUIRED_VARIABLES)) {
+  if (
+    shouldSkipHostedUpload({
+      targetName: 'Postman',
+      requiredVariableNames: POSTMAN_UPLOAD_REQUIRED_VARIABLES,
+    })
+  ) {
     return;
   }
 
@@ -127,18 +151,18 @@ async function main(): Promise<void> {
   console.log(`Uploading "${collectionName}" to workspace ${workspaceIdentifier}...`);
 
   // Check for existing collection in workspace
-  const existingCollection = await findExistingCollection(apiKey, workspaceIdentifier);
+  const existingCollection = await findExistingCollection({ apiKey, workspaceIdentifier });
 
   if (existingCollection) {
     console.log(
       `Found existing collection "${existingCollection.name}" (${existingCollection.uid}). Updating...`,
     );
-    await updateCollection(apiKey, existingCollection.uid, collectionData);
+    await updateCollection({ apiKey, collectionUid: existingCollection.uid, collectionData });
     console.log(`Updated collection → ${existingCollection.uid}`);
     console.log(`View: https://go.postman.co/collection/${existingCollection.uid}`);
   } else {
     console.log('No existing collection found. Creating new...');
-    const newUid = await createCollection(apiKey, workspaceIdentifier, collectionData);
+    const newUid = await createCollection({ apiKey, workspaceIdentifier, collectionData });
     console.log(`Created collection → ${newUid}`);
     console.log(`View: https://go.postman.co/collection/${newUid}`);
   }

@@ -88,16 +88,16 @@ export async function enqueueWebhookDelivery(options: {
 }): Promise<void> {
   const { deliveryAttemptPublicId, organizationPublicId, requestId } = options;
   const queue = getWebhookDeliveryQueue();
-  const jobData = parseBullMQJobData(
-    webhookDeliveryJobDataSchema,
-    omitUndefined({
+  const jobData = parseBullMQJobData({
+    schema: webhookDeliveryJobDataSchema,
+    data: omitUndefined({
       deliveryAttemptPublicId,
       organizationPublicId,
       requestId,
       ...captureTraceContextForPropagation(),
     }),
-    WEBHOOK_DELIVERY_QUEUE_NAME,
-  );
+    queueName: WEBHOOK_DELIVERY_QUEUE_NAME,
+  });
   // The job id dedupes a re-enqueue of the same attempt (BullMQ drops an add whose job id still
   // exists, retained for SEVEN_DAYS_SECONDS). It is the attempt's public id (`wda_…`) as-is: the
   // queue name is already part of every key, and the bigserial restarts at 1 after

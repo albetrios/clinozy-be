@@ -5,7 +5,7 @@ import { trimmedString, trimmedStringMinMax } from '@/shared/utils/validation/va
 /** Zod schema for the `:subscription_id` path param (get/update/change-plan/cancel/resume). */
 export const subscriptionIdParamsDto = z
   .object({
-    subscription_id: trimmedStringMinMax(1, 28),
+    subscription_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 

@@ -65,8 +65,8 @@ can hang/fail at the compose step. To bring up the stack manually:
   `docs/integrations/claude-code-web-environment.md`). The compose Postgres allows 500
   connections. `pnpm dev` (API) runs fine with defaults.
 
-Health: `GET /livez`, `GET /readyz` on `:3000`. Sentry/OpenTelemetry "duplicate registration" lines
-at API boot are benign (invalid placeholder DSN) and do not block startup.
+Health: `GET /livez`, `GET /readyz` on `:3000`. Sentry "duplicate registration" lines at API boot
+are benign (invalid placeholder DSN) and do not block startup.
 
 ## Additional resources
 

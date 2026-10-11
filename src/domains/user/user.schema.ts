@@ -60,15 +60,15 @@ export const users = authSchema
       index('idx_users_email').on(table.email),
       index('idx_users_email_hash').on(table.email_hash),
       index('idx_users_status_deleted').on(table.status, table.deleted_at),
-      index('idx_users_last_active').on(table.last_active_at),
       index('idx_users_verified_status').on(table.is_email_verified, table.status),
       uniqueIndex('idx_users_email_unique').on(table.email).where(sql`${table.deleted_at} IS NULL`),
       index('idx_users_created_id_active')
         .on(table.created_at, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
-      index('idx_users_last_active_not_deleted')
-        .on(table.last_active_at)
-        .where(sql`${table.deleted_at} IS NULL`),
+      // Tombstone purge: only the soft-deleted rows, so live writes never maintain it.
+      index('idx_users_tombstoned')
+        .on(table.deleted_at)
+        .where(sql`${table.deleted_at} IS NOT NULL`),
       index('idx_users_locked')
         .on(table.account_locked_until)
         .where(sql`${table.account_locked_until} IS NOT NULL`),

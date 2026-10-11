@@ -5,6 +5,7 @@ import Backend from 'i18next-fs-backend';
 import { join } from 'node:path';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectRoute } from '@/tests/helpers/test-http-inject.helper.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 const LOCALES_DIR = join(process.cwd(), 'src', 'shared', 'locales');
 const LOCALES_LOAD_PATH = join(LOCALES_DIR, '{{lng}}', '{{ns}}.json');
@@ -103,5 +104,40 @@ describe('Integration: i18n locale fallback', () => {
     } finally {
       i18next.addResource('es', 'errors', 'routeNotFound', 'Ruta no encontrada');
     }
+  });
+
+  it('names the missing resource in Spanish, not "Plan no encontrado"', async () => {
+    const response = await injectRoute(app, {
+      method: 'GET',
+      url: testApiPath(`/billing/plans/${generatePublicId('plan')}`),
+      headers: { 'accept-language': 'es' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect((response.json() as { error: { detail: string } }).error.detail).toBe(
+      'No se encontró el plan',
+    );
+  });
+
+  it("answers validation messages in the caller's language", async () => {
+    const send = (language: string) =>
+      injectRoute(app, {
+        method: 'POST',
+        url: testApiPath('/auth/email/send-code'),
+        headers: { 'accept-language': language },
+        payload: { email: 42 },
+      });
+    const spanish = await send('es');
+    const english = await send('en');
+
+    expect(spanish.statusCode).toBe(400);
+    const spanishMessages = (
+      spanish.json() as { error: { errors: Array<{ field: string; message: string }> } }
+    ).error.errors.map((item) => item.message);
+    const englishMessages = (
+      english.json() as { error: { errors: Array<{ field: string; message: string }> } }
+    ).error.errors.map((item) => item.message);
+    expect(spanishMessages.join(' ')).toMatch(/se esperaba/);
+    expect(englishMessages.join(' ')).toMatch(/expected/);
   });
 });

@@ -35,9 +35,10 @@ export function createOrganizationApiKeyTombstoneRetentionWorker(): WorkerHandle
   const worker = new Worker(
     ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME,
     async () =>
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, (databaseHandle) =>
-        runOrganizationApiKeyTombstoneRetentionJob(databaseHandle),
-      ),
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: (databaseHandle) => runOrganizationApiKeyTombstoneRetentionJob(databaseHandle),
+      }),
     {
       connection: getBullMQConnectionOptions(),
       prefix: getBullMQKeyPrefix(),
@@ -53,5 +54,8 @@ export function createOrganizationApiKeyTombstoneRetentionWorker(): WorkerHandle
     );
   });
 
-  return buildWorkerHandle(worker, ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME);
+  return buildWorkerHandle({
+    worker,
+    queueName: ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME,
+  });
 }

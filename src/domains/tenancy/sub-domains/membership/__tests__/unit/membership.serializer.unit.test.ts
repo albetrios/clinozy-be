@@ -15,37 +15,37 @@ const role = { id: 'role-public', name: 'Admin' };
 describe('membership serializer', () => {
   it('serializeMembership maps null joined_at and a null invitation (active row)', () => {
     expect(
-      serializeMembership(
-        {
+      serializeMembership({
+        row: {
           public_id: 'mem-public',
           status: 'ACTIVE',
           joined_at: null,
           created_at: createdAt,
           updated_at: updatedAt,
         },
-        'org-public',
+        organization_public_id: 'org-public',
         user,
         role,
-        null,
-      ),
+        invitation: null,
+      }),
     ).toMatchObject({ status: 'ACTIVE', joined_at: null, invitation: null });
   });
 
   it('emits public ids + embedded user/role and never the internal sequential ids', () => {
     const joinedAt = new Date('2026-01-03T00:00:00.000Z');
-    const serialized = serializeMembership(
-      {
+    const serialized = serializeMembership({
+      row: {
         public_id: 'mem-public',
         status: 'ACTIVE',
         joined_at: joinedAt,
         created_at: createdAt,
         updated_at: updatedAt,
       },
-      'org-public',
+      organization_public_id: 'org-public',
       user,
       role,
-      null,
-    );
+      invitation: null,
+    });
 
     expect(serialized).toEqual({
       id: 'mem-public',
@@ -67,19 +67,19 @@ describe('membership serializer', () => {
 
   it('embeds the live invitation ref on an INVITED row (id + ISO expires_at)', () => {
     const expiresAt = new Date('2026-02-01T00:00:00.000Z');
-    const serialized = serializeMembership(
-      {
+    const serialized = serializeMembership({
+      row: {
         public_id: 'mem-public',
         status: 'INVITED',
         joined_at: null,
         created_at: createdAt,
         updated_at: updatedAt,
       },
-      'org-public',
+      organization_public_id: 'org-public',
       user,
       role,
-      { public_id: 'inv-public', expires_at: expiresAt },
-    );
+      invitation: { public_id: 'inv-public', expires_at: expiresAt },
+    });
     expect(serialized.invitation).toEqual({
       id: 'inv-public',
       expires_at: expiresAt.toISOString(),

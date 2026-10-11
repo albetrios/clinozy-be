@@ -13,19 +13,25 @@ import type {
  * are part of the contract; `invitation` is the live pending invite (present only on `INVITED`
  * rows). Timestamps become ISO-8601.
  */
-export function serializeMembership(
+export function serializeMembership({
+  row,
+  organization_public_id,
+  user,
+  role,
+  invitation,
+}: {
   row: {
     public_id: string;
     status: string;
     joined_at: Date | null;
     created_at: Date;
     updated_at: Date;
-  },
-  organization_public_id: string,
-  user: MembershipUserSummary,
-  role: MembershipRoleSummary,
-  invitation: { public_id: string; expires_at: Date } | null,
-): MembershipOutput {
+  };
+  organization_public_id: string;
+  user: MembershipUserSummary;
+  role: MembershipRoleSummary;
+  invitation: { public_id: string; expires_at: Date } | null;
+}): MembershipOutput {
   return {
     id: row.public_id,
     user_id: user.id,

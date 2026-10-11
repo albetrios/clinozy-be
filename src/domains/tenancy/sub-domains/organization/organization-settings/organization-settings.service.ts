@@ -49,40 +49,57 @@ export class OrganizationSettingsService {
   ) {}
 
   async get(scope: OrganizationPrincipalDatabaseScope): Promise<OrganizationSettingsOutput> {
-    return withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationRepository.findByPublicId(
-        scope.organizationPublicId,
-      );
-      if (!organization) throw new NotFoundError('Organization');
-      const settings = await this.settingsRepository.findByOrganizationId(organization.id);
-      if (!settings) {
-        const created = await this.settingsRepository.upsert(organization.id, {});
-        return serializeOrganizationSettings(organization.public_id, created);
-      }
-      return serializeOrganizationSettings(organization.public_id, settings);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization = await this.organizationRepository.findByPublicId(
+          scope.organizationPublicId,
+        );
+        if (!organization) throw new NotFoundError('Organization');
+        const settings = await this.settingsRepository.findByOrganizationId(organization.id);
+        if (!settings) {
+          const created = await this.settingsRepository.upsert(organization.id, {});
+          return serializeOrganizationSettings({
+            organization_public_id: organization.public_id,
+            row: created,
+          });
+        }
+        return serializeOrganizationSettings({
+          organization_public_id: organization.public_id,
+          row: settings,
+        });
+      },
     });
   }
 
-  async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    _updated_by_user_public_id: string | undefined,
-  ): Promise<OrganizationSettingsOutput> {
+  async update({
+    scope,
+    body,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+  }): Promise<OrganizationSettingsOutput> {
     const parsed = validateUpdateOrganizationSettings(body);
-    const result = await withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationRepository.findByPublicId(
-        scope.organizationPublicId,
-      );
-      if (!organization) throw new NotFoundError('Organization');
-      const updated = await this.settingsRepository.upsert(
-        organization.id,
-        omitUndefined({
-          is_email_notifications_enabled: parsed.is_email_notifications_enabled,
-          default_locale: parsed.default_locale,
-          security_policy: parsed.security_policy as object | undefined,
-        }),
-      );
-      return serializeOrganizationSettings(organization.public_id, updated);
+    const result = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization = await this.organizationRepository.findByPublicId(
+          scope.organizationPublicId,
+        );
+        if (!organization) throw new NotFoundError('Organization');
+        const updated = await this.settingsRepository.upsert(
+          organization.id,
+          omitUndefined({
+            is_email_notifications_enabled: parsed.is_email_notifications_enabled,
+            default_locale: parsed.default_locale,
+            security_policy: parsed.security_policy as object | undefined,
+          }),
+        );
+        return serializeOrganizationSettings({
+          organization_public_id: organization.public_id,
+          row: updated,
+        });
+      },
     });
     // sec-M1: drop the i18n locale cache for the organization so a dashboard switch
     // is reflected in the next request rather than waiting for the TTL.
@@ -116,17 +133,17 @@ export class OrganizationSettingsService {
     if (cached !== null) {
       return cached as OrganizationDefaultLocale;
     }
-    const locale = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
-      async () => {
+    const locale = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
+      callback: async () => {
         const found =
           await this.settingsRepository.findDefaultLocaleByOrganizationPublicId(
             organizationPublicId,
           );
         return found ?? 'en';
       },
-    );
-    await setCachedOrganizationDefaultLocale(organizationPublicId, locale);
+    });
+    await setCachedOrganizationDefaultLocale({ organizationPublicId, locale });
     return locale;
   }
 

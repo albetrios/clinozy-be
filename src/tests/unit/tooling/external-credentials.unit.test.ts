@@ -44,8 +44,6 @@ describe('setup:local — third-party API keys for .env.local', () => {
         'S3_SECRET_ACCESS_KEY=real/secret+key=',
         'POSTHOG_KEY=phc_realProjectKey',
         'POSTHOG_HOST=https://eu.i.posthog.com',
-        'OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.collector.test',
-        'OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer collector-token',
         'LOG_LEVEL=info',
       ].join('\n'),
     );
@@ -58,9 +56,6 @@ describe('setup:local — third-party API keys for .env.local', () => {
     expect(result.STRIPE_SECRET_KEY).toBe('stripe-key-from-file');
     expect(result.EMAIL_FROM_ADDRESS).toBe('Example Sender <no-reply@mail.example.test>');
     expect(result.S3_SECRET_ACCESS_KEY).toBe('real/secret+key=');
-    expect(result.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('https://otlp.collector.test');
-    // Not in the template at all, still copied — and a value with a space reads back unchanged.
-    expect(result.OTEL_EXPORTER_OTLP_HEADERS).toBe('authorization=Bearer collector-token');
     // Not an external credential: the local value stays even though the source differs.
     expect(result.LOG_LEVEL).toBe('debug');
   });
@@ -154,42 +149,6 @@ describe('setup:local — third-party API keys for .env.local', () => {
       LOG_LEVEL: 'debug',
       STRIPE_SECRET_KEY: 'stripe-key-from-file',
     });
-  });
-
-  it('comments out a retired placeholder when no source has a real value', () => {
-    const local = `${EXAMPLE}OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com\n`;
-    const fill = fillExternalCredentials({ local, example: EXAMPLE, sources: [] });
-    expect(fill.retired).toEqual(['OTEL_EXPORTER_OTLP_ENDPOINT']);
-    expect(fill.missing).not.toContain('OTEL_EXPORTER_OTLP_ENDPOINT');
-    expect(dotenv.parse(fill.content).OTEL_EXPORTER_OTLP_ENDPOINT).toBeUndefined();
-    expect(fill.content).toContain('# OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com');
-  });
-
-  it('replaces a retired placeholder with a real source value, but never copies one', () => {
-    const local = `${EXAMPLE}OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com\n`;
-    const replaced = fillExternalCredentials({
-      local,
-      example: EXAMPLE,
-      sources: [file('env file', 'OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.collector.test')],
-    });
-    expect(dotenv.parse(replaced.content).OTEL_EXPORTER_OTLP_ENDPOINT).toBe(
-      'https://otlp.collector.test',
-    );
-    expect(replaced.retired).toEqual([]);
-    const notCopied = fillExternalCredentials({
-      local: EXAMPLE,
-      example: EXAMPLE,
-      sources: [file('env file', 'OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com')],
-    });
-    expect(notCopied.copied).toEqual([]);
-    expect(dotenv.parse(notCopied.content).OTEL_EXPORTER_OTLP_ENDPOINT).toBeUndefined();
-  });
-
-  it('keeps a real collector endpoint the developer set', () => {
-    const local = `${EXAMPLE}OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318\n`;
-    const fill = fillExternalCredentials({ local, example: EXAMPLE, sources: [] });
-    expect(fill.kept).toContain('OTEL_EXPORTER_OTLP_ENDPOINT');
-    expect(fill.retired).toEqual([]);
   });
 
   it('reports key names and source labels only — no value ever appears in the outcome', () => {

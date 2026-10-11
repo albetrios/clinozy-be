@@ -52,7 +52,13 @@ export function isMagicByteVerifiable(contentType: string): boolean {
  * Verifies that the buffer's magic bytes match the declared content type.
  * Returns true if valid, false otherwise.
  */
-export function verifyFileMagicBytes(buffer: Buffer, contentType: string): boolean {
+export function verifyFileMagicBytes({
+  buffer,
+  contentType,
+}: {
+  buffer: Buffer;
+  contentType: string;
+}): boolean {
   const entry = MAGIC_SIGNATURES.find((entry) => entry.contentType === contentType);
   if (!entry) return false;
 

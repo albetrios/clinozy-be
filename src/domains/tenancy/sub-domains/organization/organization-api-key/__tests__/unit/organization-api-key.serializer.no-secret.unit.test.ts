@@ -21,7 +21,10 @@ describe('serializeOrganizationApiKey — no secret leakage', () => {
   };
 
   it('does not expose key_hash or raw secret fields', () => {
-    const serialized = serializeOrganizationApiKey(row, 'org_public_abc');
+    const serialized = serializeOrganizationApiKey({
+      row,
+      organization_public_id: 'org_public_abc',
+    });
     const json = JSON.stringify(serialized);
     expect(json).not.toContain('super-secret-hash-value');
     expect(serialized).not.toHaveProperty('key_hash');
@@ -31,13 +34,19 @@ describe('serializeOrganizationApiKey — no secret leakage', () => {
   });
 
   it('exposes only the display prefix, not the full secret', () => {
-    const serialized = serializeOrganizationApiKey(row, 'org_public_abc');
+    const serialized = serializeOrganizationApiKey({
+      row,
+      organization_public_id: 'org_public_abc',
+    });
     expect(serialized.key_prefix).toBe('ak_prefix12345');
     expect(serialized.key_prefix.length).toBeLessThan(64);
   });
 
   it('maps public_id to id and organization public id', () => {
-    const serialized = serializeOrganizationApiKey(row, 'org_public_abc');
+    const serialized = serializeOrganizationApiKey({
+      row,
+      organization_public_id: 'org_public_abc',
+    });
     expect(serialized.id).toBe('apikey_public_abc');
     expect(serialized.organization_id).toBe('org_public_abc');
   });

@@ -1,4 +1,5 @@
 import { and, desc, eq, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -13,7 +14,7 @@ import {
 } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import {
   buildDescendingCreatedAtIdCursorCondition,
-  createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 
@@ -69,11 +70,11 @@ export class WebhookDeliveryAttemptRepository {
     const includeTotal = pagination.include_total === true;
     const filterConditions: SQL[] = [eq(webhook_delivery_attempts.webhook_id, webhook_id)];
     const countWhere = and(...filterConditions);
-    const cursorCondition = buildDescendingCreatedAtIdCursorCondition(
-      webhook_delivery_attempts.created_at,
-      webhook_delivery_attempts.id,
-      parseListCursor(after),
-    );
+    const cursorCondition = buildDescendingCreatedAtIdCursorCondition({
+      createdAtColumn: webhook_delivery_attempts.created_at,
+      idColumn: webhook_delivery_attempts.id,
+      cursor: parseListCursor(after),
+    });
     const where =
       cursorCondition !== undefined ? and(...filterConditions, cursorCondition) : countWhere;
 
@@ -93,6 +94,7 @@ export class WebhookDeliveryAttemptRepository {
         attempt_count: webhook_delivery_attempts.attempt_count,
         next_retry_at: webhook_delivery_attempts.next_retry_at,
         created_at: webhook_delivery_attempts.created_at,
+        cursor_created_at: cursorTimestampSelection(webhook_delivery_attempts.created_at),
         // Keep the keyset cursor columns available to the serializer.
         id: webhook_delivery_attempts.id,
       })
@@ -110,16 +112,7 @@ export class WebhookDeliveryAttemptRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    const hasMore = fetchedRows.length > limit;
-    const items = hasMore ? fetchedRows.slice(0, limit) : fetchedRows;
-    const lastItem = items.at(-1);
-    return {
-      items,
-      total,
-      limit,
-      has_more: hasMore,
-      next_cursor: hasMore && lastItem !== undefined ? createOpaqueCursorFromRow(lastItem) : null,
-    };
+    return finishKeysetPage({ rows: fetchedRows, args: { limit, total } });
   }
 
   /** Resolve webhook public_id + organization_id to internal webhook_id for auth */
@@ -218,6 +211,40 @@ export class WebhookDeliveryAttemptRepository {
   }
 
   /** Record a delivery attempt (used for both real events and test deliveries). */
+  /**
+   * Nulls a deleted user's personal fields (email, name, avatar) in the stored `membership.*`
+   * payloads of one organization, keeping their public id and the payload's shape (account
+   * deletion). Returns how many attempts changed.
+   *
+   * @remarks `organization_id` scopes the update explicitly as well as through RLS: only attempts
+   * of that organization's webhooks are touched.
+   */
+  async redactMemberDetails(options: {
+    organizationId: number;
+    userPublicId: string;
+  }): Promise<number> {
+    const rows = await this.db()
+      .update(webhook_delivery_attempts)
+      .set({
+        payload: sql`jsonb_set(${webhook_delivery_attempts.payload}, '{data,user}', jsonb_build_object(
+          'id', ${options.userPublicId}::text,
+          'email', NULL, 'first_name', NULL, 'last_name', NULL, 'avatar_url', NULL
+        ))`,
+      })
+      .where(
+        and(
+          sql`${webhook_delivery_attempts.webhook_id} IN (
+            SELECT ${webhooks.id} FROM ${webhooks} WHERE ${webhooks.organization_id} = ${options.organizationId}
+          )`,
+          sql`${webhook_delivery_attempts.event_type} LIKE 'membership.%'`,
+          sql`${webhook_delivery_attempts.payload} -> 'data' ->> 'user_id' = ${options.userPublicId}`,
+          sql`${webhook_delivery_attempts.payload} -> 'data' -> 'user' ->> 'email' IS NOT NULL`,
+        ),
+      )
+      .returning({ id: webhook_delivery_attempts.id });
+    return rows.length;
+  }
+
   async create(data: {
     webhook_id: number;
     event_type: string;

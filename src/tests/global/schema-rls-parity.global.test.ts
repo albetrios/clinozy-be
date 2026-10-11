@@ -77,7 +77,7 @@ describe('Global: schema ↔ FORCE-RLS parity', () => {
         unresolvedDeclarations.push(`${filePath} → ${identifier}.table('${tableName}')`);
         continue;
       }
-      declaredTables.set(forceRlsTableKey(schemaName, tableName), filePath);
+      declaredTables.set(forceRlsTableKey({ schemaName, tableName }), filePath);
     }
   }
 
@@ -96,7 +96,9 @@ describe('Global: schema ↔ FORCE-RLS parity', () => {
 
   it('every declared table is in EXPECTED_FORCE_RLS_TABLES (or a reviewed exemption)', () => {
     const expectedKeys = new Set(
-      EXPECTED_FORCE_RLS_TABLES.map((table) => forceRlsTableKey(table.schemaName, table.tableName)),
+      EXPECTED_FORCE_RLS_TABLES.map((table) =>
+        forceRlsTableKey({ schemaName: table.schemaName, tableName: table.tableName }),
+      ),
     );
     const missing = [...declaredTables.entries()]
       .filter(([key]) => !(expectedKeys.has(key) || NON_FORCE_RLS_TABLE_EXEMPTIONS.has(key)))
@@ -111,7 +113,7 @@ describe('Global: schema ↔ FORCE-RLS parity', () => {
 
   it('every EXPECTED_FORCE_RLS_TABLES entry maps to a declared table (no stale entries)', () => {
     const stale = EXPECTED_FORCE_RLS_TABLES.map((table) =>
-      forceRlsTableKey(table.schemaName, table.tableName),
+      forceRlsTableKey({ schemaName: table.schemaName, tableName: table.tableName }),
     ).filter((key) => !declaredTables.has(key));
     expect(
       stale,
@@ -121,7 +123,9 @@ describe('Global: schema ↔ FORCE-RLS parity', () => {
 
   it('no table is both expected and exempted', () => {
     const expectedKeys = new Set(
-      EXPECTED_FORCE_RLS_TABLES.map((table) => forceRlsTableKey(table.schemaName, table.tableName)),
+      EXPECTED_FORCE_RLS_TABLES.map((table) =>
+        forceRlsTableKey({ schemaName: table.schemaName, tableName: table.tableName }),
+      ),
     );
     const contradictions = [...NON_FORCE_RLS_TABLE_EXEMPTIONS].filter((key) =>
       expectedKeys.has(key),

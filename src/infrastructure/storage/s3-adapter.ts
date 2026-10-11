@@ -136,10 +136,13 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
     return { url, fields };
   }
 
-  async verifyUploadedObject(
-    key: string,
-    expected: { contentType: string; contentLength: number },
-  ): Promise<UploadedObjectVerdict> {
+  async verifyUploadedObject({
+    key,
+    expected,
+  }: {
+    key: string;
+    expected: { contentType: string; contentLength: number };
+  }): Promise<UploadedObjectVerdict> {
     const head = await this.headObjectResult(key);
     // audit-#5: a storage failure is not a verdict on the object. Rethrow what the call threw (an
     // ExternalServiceError, or the CircuitBreakerOpenError of an open circuit) so the confirm path
@@ -241,10 +244,7 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
     });
   }
 
-  async getObjectFirstBytes(
-    key: string,
-    byteCount: number,
-  ): Promise<{
+  async getObjectFirstBytes({ key, byteCount }: { key: string; byteCount: number }): Promise<{
     body: Buffer;
     contentType: string | undefined;
     /**

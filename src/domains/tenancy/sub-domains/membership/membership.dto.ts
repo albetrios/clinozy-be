@@ -5,7 +5,7 @@ import { trimmedEmail, trimmedStringMinMax } from '@/shared/utils/validation/val
 /** Zod schema for the `:membership_id` path param (get/get-permissions/update/delete membership). */
 export const membershipIdParamsDto = z
   .object({
-    membership_id: trimmedStringMinMax(1, 28),
+    membership_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
@@ -20,7 +20,7 @@ export const membershipIdParamsDto = z
 export const createMembershipDto = z
   .object({
     email: trimmedEmail(),
-    role_id: trimmedStringMinMax(1, 28),
+    role_id: trimmedStringMinMax({ min: 1, max: 28 }),
     expires_in_days: z.number().int().min(1).max(365).optional().default(7),
   })
   .strict();
@@ -33,11 +33,11 @@ export const createMembershipDto = z
 export const updateMembershipDto = z
   .object({
     status: z.enum(['INVITED', 'ACTIVE', 'SUSPENDED']).optional(),
-    role_id: trimmedStringMinMax(1, 28).optional(),
+    role_id: trimmedStringMinMax({ min: 1, max: 28 }).optional(),
   })
   .strict()
   .refine((value) => value.status !== undefined || value.role_id !== undefined, {
-    message: 'Provide at least one of status or role_id',
+    message: 'errors:validation.statusOrRoleRequired',
   });
 
 /**
@@ -58,7 +58,7 @@ export const listMembershipsQueryDto = listSearchSortSchema(['name', 'created_at
  */
 export const transferOwnershipDto = z
   .object({
-    new_owner_user_id: trimmedStringMinMax(1, 28),
+    new_owner_user_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 

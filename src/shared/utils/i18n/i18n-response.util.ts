@@ -8,10 +8,13 @@ export type MessageKeyPayload = {
 };
 
 /** Translates a success messageKey for HTTP responses (controller layer). */
-export function translateMessageKeyPayload(
-  request: FastifyRequest,
-  payload: MessageKeyPayload,
-): { message: string } {
+export function translateMessageKeyPayload({
+  request,
+  payload,
+}: {
+  request: FastifyRequest;
+  payload: MessageKeyPayload;
+}): { message: string } {
   const translate = (
     request as { t?: (key: string, params?: Record<string, string | number>) => string }
   ).t;

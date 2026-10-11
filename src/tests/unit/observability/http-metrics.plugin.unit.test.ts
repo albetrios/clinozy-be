@@ -31,7 +31,7 @@ describe('http-metrics.plugin', () => {
     );
     const { renderMetrics } = await import('@/infrastructure/observability/metrics/metrics.js');
 
-    recordHttpRequest('GET', '/direct', 200, 0.01);
+    recordHttpRequest({ method: 'GET', route: '/direct', statusCode: 200, durationSeconds: 0.01 });
     const metricsBody = await renderMetrics();
     expect(metricsBody).toMatch(/method="GET"/);
     expect(metricsBody).toMatch(/route="\/direct"/);

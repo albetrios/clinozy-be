@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import {
+  getTableColumns,
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  ne,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
   getContextFreeDatabase,
@@ -9,12 +20,19 @@ import { member_invitations } from '@/domains/tenancy/sub-domains/membership/mem
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import { role_permissions } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.schema.js';
-import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
-import { type MembershipRow, SEAT_CONSUMING_MEMBERSHIP_STATUSES } from './membership.types.js';
+import {
+  type DepartingUserMembershipRow,
+  type MembershipRow,
+  SEAT_CONSUMING_MEMBERSHIP_STATUSES,
+} from './membership.types.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
-import { parseListCursor } from '@/shared/utils/http/pagination.util.js';
+import {
+  type CursorTimestampRow,
+  cursorTimestampSelection,
+  parseListCursor,
+} from '@/shared/utils/http/pagination.util.js';
 import {
   buildContainsLikePattern,
   computeListFilterFingerprint,
@@ -78,7 +96,25 @@ export interface MembershipInvitationRefRow {
  * Listing uses a `(created_at, id)` keyset cursor; `update` flips
  * `joined_at` to `now()` when the status transitions to `ACTIVE`.
  */
-export class MembershipRepository extends BaseRepository {
+export class MembershipRepository {
+  /**
+   * Every membership row a user has — live or already removed — with its organization, for
+   * account deletion. Spans tenants, so the caller runs it under the retention maintenance context.
+   */
+  async listForDepartingUser(user_id: number): Promise<DepartingUserMembershipRow[]> {
+    return getRequestDatabase()
+      .select({
+        membership_public_id: memberships.public_id,
+        membership_deleted_at: memberships.deleted_at,
+        organization_public_id: organizations.public_id,
+        organization_type: organizations.type,
+        organization_deleted_at: organizations.deleted_at,
+      })
+      .from(memberships)
+      .innerJoin(organizations, eq(memberships.organization_id, organizations.id))
+      .where(eq(memberships.user_id, user_id));
+  }
+
   async listOrganizationsForUserDataExport(
     user_id: number,
     limit: number,
@@ -149,7 +185,10 @@ export class MembershipRepository extends BaseRepository {
         after,
       });
     const rows = (await getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(memberships),
+        cursor_created_at: cursorTimestampSelection(memberships.created_at),
+      })
       .from(memberships)
       .where(
         and(
@@ -160,8 +199,8 @@ export class MembershipRepository extends BaseRepository {
         ),
       )
       .orderBy(...orderBy)
-      .limit(limit + 1)) as MembershipRow[];
-    return finishKeysetPage(rows, { limit, sortValueFor, filterFingerprint });
+      .limit(limit + 1)) as (MembershipRow & CursorTimestampRow)[];
+    return finishKeysetPage({ rows, args: { limit, sortValueFor, filterFingerprint } });
   }
 
   /**
@@ -212,11 +251,14 @@ export class MembershipRepository extends BaseRepository {
     // Preserve the definer function's ordering; drop any id the RLS-scoped fetch didn't return.
     const rows = idsInOrder
       .map((id) => rowsById.get(id))
-      .filter((row): row is MembershipRow => row !== undefined);
-    return finishKeysetPage(rows, {
-      limit,
-      sortValueFor: (row) => sortValueById.get(row.id),
-      filterFingerprint,
+      .filter((row): row is MembershipRow & CursorTimestampRow => row !== undefined);
+    return finishKeysetPage({
+      rows,
+      args: {
+        limit,
+        sortValueFor: (row) => sortValueById.get(row.id),
+        filterFingerprint,
+      },
     });
   }
 
@@ -251,10 +293,13 @@ export class MembershipRepository extends BaseRepository {
   private async findByIdsForOrganization(
     ids: readonly number[],
     organization_id: number,
-  ): Promise<Map<number, MembershipRow>> {
+  ): Promise<Map<number, MembershipRow & CursorTimestampRow>> {
     if (ids.length === 0) return new Map();
     const rows = (await getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(memberships),
+        cursor_created_at: cursorTimestampSelection(memberships.created_at),
+      })
       .from(memberships)
       .where(
         and(
@@ -262,7 +307,7 @@ export class MembershipRepository extends BaseRepository {
           eq(memberships.organization_id, organization_id),
           isNull(memberships.deleted_at),
         ),
-      )) as MembershipRow[];
+      )) as (MembershipRow & CursorTimestampRow)[];
     return new Map(rows.map((row) => [row.id, row]));
   }
 
@@ -486,15 +531,15 @@ export class MembershipRepository extends BaseRepository {
    * - **Failure modes:** none beyond the underlying queries; runs inside the caller's organization
    *   DB context (RLS-scoped) and transaction.
    * - **Side effects:** writes `status = 'SUSPENDED'` (a suspended seat is not counted toward the
-   *   cap, so this lowers the org's seat usage). Returns the internal `user_id`s actually suspended
-   *   (empty when no non-owner ACTIVE members remain — e.g. an owner-only organization that can't shrink
-   *   further) so the caller can purge each suspended member's permission cache.
+   *   cap, so this lowers the org's seat usage). Returns the suspended membership rows (empty when
+   *   no non-owner ACTIVE members remain — e.g. an owner-only organization that can't shrink
+   *   further) so the caller can emit their events and purge each member's permission cache.
    */
   async suspendExcessActiveMembers(options: {
     organization_id: number;
     owner_user_id: number;
     suspend_count: number;
-  }): Promise<number[]> {
+  }): Promise<MembershipRow[]> {
     if (options.suspend_count <= 0) return [];
     const candidates = await getRequestDatabase()
       .select({ id: memberships.id, user_id: memberships.user_id })
@@ -510,7 +555,7 @@ export class MembershipRepository extends BaseRepository {
       .orderBy(desc(memberships.joined_at))
       .limit(options.suspend_count);
     if (candidates.length === 0) return [];
-    await getRequestDatabase()
+    return getRequestDatabase()
       .update(memberships)
       .set({ status: 'SUSPENDED', updated_at: new Date() })
       .where(
@@ -518,8 +563,8 @@ export class MembershipRepository extends BaseRepository {
           memberships.id,
           candidates.map((candidate) => candidate.id),
         ),
-      );
-    return candidates.map((candidate) => candidate.user_id);
+      )
+      .returning();
   }
 
   async findByUserAndOrganization(
@@ -563,20 +608,22 @@ export class MembershipRepository extends BaseRepository {
     invited_by_user_id?: number | null;
     created_by_user_id?: number | null;
   }) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('membership');
-      const row = {
-        public_id,
-        organization_id: data.organization_id,
-        user_id: data.user_id,
-        role_id: data.role_id,
-        status: data.status ?? 'INVITED',
-        invited_by_user_id: data.invited_by_user_id ?? undefined,
-        created_by_user_id: data.created_by_user_id ?? undefined,
-        updated_by_user_id: data.created_by_user_id ?? undefined,
-      };
-      const rows = await getRequestDatabase().insert(memberships).values(row).returning();
-      return rows[0]! as MembershipRow;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const public_id = generatePublicId('membership');
+        const row = {
+          public_id,
+          organization_id: data.organization_id,
+          user_id: data.user_id,
+          role_id: data.role_id,
+          status: data.status ?? 'INVITED',
+          invited_by_user_id: data.invited_by_user_id ?? undefined,
+          created_by_user_id: data.created_by_user_id ?? undefined,
+          updated_by_user_id: data.created_by_user_id ?? undefined,
+        };
+        const rows = await getRequestDatabase().insert(memberships).values(row).returning();
+        return rows[0]! as MembershipRow;
+      },
     });
   }
 
@@ -589,7 +636,7 @@ export class MembershipRepository extends BaseRepository {
     const payload: {
       status?: string;
       role_id?: number;
-      joined_at?: Date;
+      joined_at?: SQL;
       updated_at: Date | SQL;
       updated_by_user_id?: number;
     } = omitUndefined({
@@ -597,7 +644,10 @@ export class MembershipRepository extends BaseRepository {
       updated_by_user_id: updated_by_user_id ?? undefined,
     });
     if (data.status) payload.status = data.status;
-    if (data.status === 'ACTIVE') payload.joined_at = new Date();
+    // Stamped once: a reactivated member keeps the date they first joined, which orders who is
+    // suspended first when the organization must shed seats (most recently joined first).
+    if (data.status === 'ACTIVE')
+      payload.joined_at = sql`COALESCE(${memberships.joined_at}, now())`;
     if (data.role_id !== undefined) payload.role_id = data.role_id;
     const rows = await getRequestDatabase()
       .update(memberships)

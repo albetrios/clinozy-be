@@ -1,4 +1,5 @@
-import { sql } from '@/infrastructure/database/connection.js';
+import { sql as drizzleSql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
 import { computeWorkerPostgresPoolDemand } from '@/infrastructure/queue/worker-runtime/worker-connection-budget.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -47,11 +48,12 @@ export async function resolvePostgresMaxConnections(): Promise<number> {
     return env.POSTGRES_MAX_CONNECTIONS;
   }
 
-  const rows = await sql<{ setting: string }[]>`
-    SELECT setting
-    FROM pg_settings
-    WHERE name = 'max_connections'
-  `;
+  const result = await database.execute<{ setting: string }>(
+    drizzleSql`SELECT setting FROM pg_settings WHERE name = 'max_connections'`,
+  );
+  const rows = Array.isArray(result)
+    ? (result as { setting: string }[])
+    : ((result as { rows?: { setting: string }[] }).rows ?? []);
   const setting = rows[0]?.setting;
   if (!setting) {
     throw new Error('database.connection_budget.max_connections_query_empty');
@@ -111,10 +113,13 @@ function resolveProcessCount(counts: ResolvedDeploymentCounts): number {
   return counts.apiProcessCount + counts.workerProcessCount;
 }
 
-function computeRequiredPoolConnections(
-  counts: ResolvedDeploymentCounts,
-  perProcessConnections: number,
-): number {
+function computeRequiredPoolConnections({
+  counts,
+  perProcessConnections,
+}: {
+  counts: ResolvedDeploymentCounts;
+  perProcessConnections: number;
+}): number {
   return resolveProcessCount(counts) * perProcessConnections;
 }
 
@@ -233,7 +238,7 @@ export async function resolvePostgresAllowedApplicationConnections(): Promise<nu
 }
 
 /**
- * Validates postgres.js pool sizing against Postgres max_connections and deployment process count.
+ * Validates the pool sizing against Postgres max_connections and deployment process count.
  * Call once at API and worker process startup.
  */
 export async function assertPostgresConnectionBudget(
@@ -254,10 +259,10 @@ export async function assertPostgresConnectionBudget(
   const deploymentCounts = resolveDeploymentCounts();
 
   if (deploymentCounts !== undefined) {
-    const requiredConnections = computeRequiredPoolConnections(
-      deploymentCounts,
-      poolMaxConnections + maintenancePoolMaxConnections,
-    );
+    const requiredConnections = computeRequiredPoolConnections({
+      counts: deploymentCounts,
+      perProcessConnections: poolMaxConnections + maintenancePoolMaxConnections,
+    });
     if (requiredConnections > allowedApplicationConnections) {
       throw new Error(
         buildDeploymentBudgetErrorMessage({

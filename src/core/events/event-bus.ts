@@ -1,4 +1,8 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
+import {
+  getOnCommitQueue,
+  getOrCreateOnCommitQueue,
+  type OnCommitTask,
+} from '@/core/events/on-commit-scope.js';
 import {
   acknowledgeCommitDispatchTask,
   appendCommitDispatchTask,
@@ -28,11 +32,15 @@ export interface DomainEvent<TPayload = unknown> {
 }
 
 /** Builds a domain event without assigning `undefined` to optional fields. */
-export function buildDomainEvent<TPayload>(
-  type: string,
-  payload: TPayload,
-  options?: { timestamp?: Date; requestId?: string },
-): DomainEvent<TPayload> {
+export function buildDomainEvent<TPayload>({
+  type,
+  payload,
+  options,
+}: {
+  type: string;
+  payload: TPayload;
+  options?: { timestamp?: Date; requestId?: string } | undefined;
+}): DomainEvent<TPayload> {
   const event: DomainEvent<TPayload> = {
     type,
     payload,
@@ -52,24 +60,9 @@ export function buildDomainEvent<TPayload>(
  */
 export type EventHandler<TPayload = unknown> = (event: DomainEvent<TPayload>) => Promise<void>;
 
-type OnCommitTask = () => Promise<void>;
+export { enterOnCommitScope, runWithOnCommitScope } from '@/core/events/on-commit-scope.js';
 
-interface OnCommitQueue {
-  tasks: OnCommitTask[];
-}
-
-const onCommitStorage = new AsyncLocalStorage<OnCommitQueue>();
 const pendingCommitDispatchRequestIds = new Set<string>();
-
-function getOrCreateOnCommitQueue(): OnCommitQueue {
-  const existing = onCommitStorage.getStore();
-  if (existing !== undefined) {
-    return existing;
-  }
-  const queue: OnCommitQueue = { tasks: [] };
-  onCommitStorage.enterWith(queue);
-  return queue;
-}
 
 /**
  * In-process publish-subscribe bus for domain events. One singleton instance
@@ -84,7 +77,7 @@ function getOrCreateOnCommitQueue(): OnCommitQueue {
 export class EventBus {
   private readonly handlers: Map<string, EventHandler[]> = new Map();
 
-  on(eventType: string, handler: EventHandler): void {
+  on({ eventType, handler }: { eventType: string; handler: EventHandler }): void {
     const existing = this.handlers.get(eventType) ?? [];
     existing.push(handler);
     this.handlers.set(eventType, existing);
@@ -121,7 +114,10 @@ export class EventBus {
             await acknowledgeCommitDispatchTask({ requestId, raw });
           } catch (error) {
             logger.error({ error, requestId, task }, 'event-bus.commit-dispatch.task.failed');
-            captureException(error, { requestId, tags: { source: 'event-bus.commit-dispatch' } });
+            captureException({
+              error,
+              context: { requestId, tags: { source: 'event-bus.commit-dispatch' } },
+            });
           }
         }
       } catch (error) {
@@ -129,7 +125,7 @@ export class EventBus {
       }
     }
 
-    const queue = onCommitStorage.getStore();
+    const queue = getOnCommitQueue();
     if (queue === undefined || queue.tasks.length === 0) return;
     const tasks = queue.tasks.splice(0, queue.tasks.length);
     // Bounded fan-out: a task that touches the database opens its own scoped context, and so its
@@ -145,7 +141,7 @@ export class EventBus {
           await task();
         } catch (error) {
           logger.error({ error }, 'event-bus.on-commit.task.failed');
-          captureException(error, { tags: { source: 'event-bus.on-commit' } });
+          captureException({ error, context: { tags: { source: 'event-bus.on-commit' } } });
         }
       }
     };
@@ -163,7 +159,10 @@ export class EventBus {
           await handler(event);
         } catch (error) {
           logger.error({ eventType: event.type, error }, 'Domain event handler failed');
-          captureException(error, { tags: { source: 'event-bus.emit', eventType: event.type } });
+          captureException({
+            error,
+            context: { tags: { source: 'event-bus.emit', eventType: event.type } },
+          });
           // Per-event failure counter: emit swallows handler errors by design (a failed email must
           // not fail the HTTP request), so this metric is the only rate signal for a handler that
           // fails persistently. Critical side effects use emitStrict instead (propagates the error).
@@ -199,16 +198,6 @@ export class EventBus {
   }
 }
 
-/** Runs `callback` with an isolated onCommit task queue (HTTP request scope). */
-export function runWithOnCommitScope<T>(callback: () => Promise<T>): Promise<T> {
-  return onCommitStorage.run({ tasks: [] }, callback);
-}
-
-/** Pins an empty onCommit queue for the current HTTP request (call from `onRequest`). */
-export function enterOnCommitScope(): void {
-  onCommitStorage.enterWith({ tasks: [] });
-}
-
 /**
  * Process-wide {@link EventBus} singleton. Services import this directly to
  * emit; handlers are registered against it at startup by
@@ -236,10 +225,13 @@ export interface ScheduleCommitDispatchOptions {
  * - **Side effects:** may write Redis keys; execution deferred until {@link EventBus.flushOnCommit}.
  * - **Notes:** task payloads must stay secret-free — identifiers only.
  */
-export async function scheduleCommitDispatch(
-  task: CommitDispatchTask,
-  options?: ScheduleCommitDispatchOptions,
-): Promise<void> {
+export async function scheduleCommitDispatch({
+  task,
+  options,
+}: {
+  task: CommitDispatchTask;
+  options?: ScheduleCommitDispatchOptions | undefined;
+}): Promise<void> {
   const requestId = options?.requestId;
   if (requestId !== undefined) {
     try {
@@ -252,8 +244,11 @@ export async function scheduleCommitDispatch(
         { error, requestId, taskType: task.type },
         'commit-dispatch.append_failed.fallback_to_memory',
       );
-      captureException(error, {
-        tags: { source: 'event-bus.commit-dispatch', taskType: task.type },
+      captureException({
+        error,
+        context: {
+          tags: { source: 'event-bus.commit-dispatch', taskType: task.type },
+        },
       });
       recordCommitDispatchDurabilityFallback();
     }
@@ -262,11 +257,14 @@ export async function scheduleCommitDispatch(
 }
 
 /**
- * Runs `callback` immediately when no HTTP onCommit scope is active (workers, scripts);
- * otherwise defers until {@link EventBus.flushOnCommit} runs in the request's `onResponse`.
+ * Defers `callback` until the database work that requested it has committed: inside a unit of work
+ * (every `withAppDatabaseContext` / `withMaintenanceDatabaseContext` transaction and every
+ * `withSavepoint`) it runs once that unit commits — over HTTP from the request's `onResponse`
+ * flush, in a worker right after the commit — and never if the unit rolls back. Outside every unit
+ * and scope (a script) it runs immediately.
  */
 export async function runEnqueueAfterCommit(callback: OnCommitTask): Promise<void> {
-  if (onCommitStorage.getStore() === undefined) {
+  if (getOnCommitQueue() === undefined) {
     await callback();
     return;
   }

@@ -16,7 +16,15 @@ const metricsMiddleware: FastifyPluginAsync = async (application) => {
   application.get('/metrics', { config: { raw_response: true } }, async (request, reply) => {
     const environment = getEnv();
     const bearerToken = environment.METRICS_SCRAPE_TOKEN;
-    if (!(bearerToken && isBearerTokenValid(request.headers.authorization, bearerToken))) {
+    if (
+      !(
+        bearerToken &&
+        isBearerTokenValid({
+          authorizationHeader: request.headers.authorization,
+          expectedBearerToken: bearerToken,
+        })
+      )
+    ) {
       throw new UnauthorizedError('errors:invalidMetricsToken');
     }
 

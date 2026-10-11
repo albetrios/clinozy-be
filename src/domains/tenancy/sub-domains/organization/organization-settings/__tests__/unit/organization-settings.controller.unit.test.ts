@@ -81,11 +81,14 @@ describe('createOrganizationSettingsController', () => {
       }),
       mockReply(),
     );
-    expect(service.update).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId, userPublicId: userId, source: 'request' }),
+    expect(service.update).toHaveBeenCalledWith({
+      scope: expect.objectContaining({
+        organizationPublicId,
+        userPublicId: userId,
+        source: 'request',
+      }),
       body,
-      userId,
-    );
+    });
     expect(response).toMatchObject({ data: settingsRow });
   });
 

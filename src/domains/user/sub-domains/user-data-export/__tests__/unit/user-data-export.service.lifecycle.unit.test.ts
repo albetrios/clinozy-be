@@ -17,10 +17,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -110,7 +112,7 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
   // ─── markProcessing: request path ─────────────────────────────
 
   it('flips the row to PROCESSING on the request path', async () => {
-    await service.markProcessing(EXPORT_PUBLIC_ID, 1);
+    await service.markProcessing({ exportPublicId: EXPORT_PUBLIC_ID, userInternalId: 1 });
 
     expect(exportRepository.updateStatus).toHaveBeenCalledWith(EXPORT_PUBLIC_ID, 1, {
       status: USER_DATA_EXPORT_STATUSES.PROCESSING,
@@ -118,7 +120,7 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
   });
 
   it('skips the cancellation re-check when no worker handle is supplied', async () => {
-    await service.markProcessing(EXPORT_PUBLIC_ID, 1);
+    await service.markProcessing({ exportPublicId: EXPORT_PUBLIC_ID, userInternalId: 1 });
 
     // The cancellation probe reads the row through the worker repository; on the request path
     // it must not run at all.
@@ -127,7 +129,11 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
 
   it('skips the cancellation re-check when a handle is supplied without a user public id', async () => {
     // Both arguments gate the probe — a handle alone is not enough context to resolve the user.
-    await service.markProcessing(EXPORT_PUBLIC_ID, 1, WORKER_HANDLE);
+    await service.markProcessing({
+      exportPublicId: EXPORT_PUBLIC_ID,
+      userInternalId: 1,
+      databaseHandle: WORKER_HANDLE,
+    });
 
     expect(workerExportRepository.findByPublicIdAndUserId).not.toHaveBeenCalled();
     expect(workerExportRepository.updateStatus).toHaveBeenCalledOnce();
@@ -136,7 +142,12 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
   // ─── markProcessing: worker path ──────────────────────────────
 
   it('re-checks cancellation and proceeds when the export is still live', async () => {
-    await service.markProcessing(EXPORT_PUBLIC_ID, 1, WORKER_HANDLE, 'user_public');
+    await service.markProcessing({
+      exportPublicId: EXPORT_PUBLIC_ID,
+      userInternalId: 1,
+      databaseHandle: WORKER_HANDLE,
+      userPublicId: 'user_public',
+    });
 
     expect(workerExportRepository.findByPublicIdAndUserId).toHaveBeenCalledWith(
       EXPORT_PUBLIC_ID,
@@ -151,7 +162,12 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
     workerExportRepository.findByPublicIdAndUserId.mockResolvedValue(null);
 
     await expect(
-      service.markProcessing(EXPORT_PUBLIC_ID, 1, WORKER_HANDLE, 'user_public'),
+      service.markProcessing({
+        exportPublicId: EXPORT_PUBLIC_ID,
+        userInternalId: 1,
+        databaseHandle: WORKER_HANDLE,
+        userPublicId: 'user_public',
+      }),
     ).rejects.toBeInstanceOf(UserDataExportCancelledError);
     expect(workerExportRepository.updateStatus).not.toHaveBeenCalled();
   });
@@ -163,7 +179,12 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
     });
 
     await expect(
-      service.markProcessing(EXPORT_PUBLIC_ID, 1, WORKER_HANDLE, 'user_public'),
+      service.markProcessing({
+        exportPublicId: EXPORT_PUBLIC_ID,
+        userInternalId: 1,
+        databaseHandle: WORKER_HANDLE,
+        userPublicId: 'user_public',
+      }),
     ).rejects.toBeInstanceOf(UserDataExportCancelledError);
     expect(workerExportRepository.updateStatus).not.toHaveBeenCalled();
   });
@@ -174,16 +195,21 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
     workerExportRepository.updateStatus.mockResolvedValue(null);
 
     await expect(
-      service.markProcessing(EXPORT_PUBLIC_ID, 1, WORKER_HANDLE, 'user_public'),
+      service.markProcessing({
+        exportPublicId: EXPORT_PUBLIC_ID,
+        userInternalId: 1,
+        databaseHandle: WORKER_HANDLE,
+        userPublicId: 'user_public',
+      }),
     ).rejects.toBeInstanceOf(UserDataExportCancelledError);
   });
 
   it('treats a null status update as a cancellation on the request path too', async () => {
     exportRepository.updateStatus.mockResolvedValue(null);
 
-    await expect(service.markProcessing(EXPORT_PUBLIC_ID, 1)).rejects.toBeInstanceOf(
-      UserDataExportCancelledError,
-    );
+    await expect(
+      service.markProcessing({ exportPublicId: EXPORT_PUBLIC_ID, userInternalId: 1 }),
+    ).rejects.toBeInstanceOf(UserDataExportCancelledError);
   });
 
   // ─── offboarding delete: logging branches ─────────────────────
@@ -191,7 +217,7 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
   it('logs the offboarding delete count when rows were removed', async () => {
     exportRepository.deleteAllByUserId.mockResolvedValue(3);
 
-    await service.deleteAllExportsForUser(1, 'user_public');
+    await service.deleteAllExportsForUser({ userInternalId: 1, userPublicId: 'user_public' });
 
     expect(loggerInfoMock).toHaveBeenCalledWith(
       { userPublicId: 'user_public', deletedCount: 3 },
@@ -202,7 +228,7 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
   it('stays silent when offboarding found nothing to delete', async () => {
     exportRepository.deleteAllByUserId.mockResolvedValue(0);
 
-    await service.deleteAllExportsForUser(1, 'user_public');
+    await service.deleteAllExportsForUser({ userInternalId: 1, userPublicId: 'user_public' });
 
     expect(loggerInfoMock).not.toHaveBeenCalledWith(
       expect.anything(),
@@ -219,7 +245,7 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
     exportRepository.deleteAllByUserId.mockResolvedValue(1);
     vi.mocked(objectStorage.deleteObject).mockResolvedValue({ kind: 'failed', circuitOpen: false });
 
-    await service.deleteAllExportsForUser(1, 'user_public');
+    await service.deleteAllExportsForUser({ userInternalId: 1, userPublicId: 'user_public' });
 
     expect(loggerWarnMock).toHaveBeenCalledWith(
       { userPublicId: 'user_public', s3Key: 'exports/1/a.json.gz' },
@@ -236,7 +262,7 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
     exportRepository.deleteAllByUserId.mockResolvedValue(1);
     vi.mocked(objectStorage.deleteObject).mockResolvedValue({ kind: 'deleted' });
 
-    await service.deleteAllExportsForUser(1, 'user_public');
+    await service.deleteAllExportsForUser({ userInternalId: 1, userPublicId: 'user_public' });
 
     expect(loggerWarnMock).not.toHaveBeenCalledWith(
       expect.anything(),

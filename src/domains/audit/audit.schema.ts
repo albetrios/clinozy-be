@@ -90,6 +90,8 @@ export const logs = auditSchema
         'chk_audit_severity',
         sql`${table.severity} IN ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')`,
       ),
+      // The header is client-controlled: writers cut it (`truncateUserAgent`), the CHECK holds the line.
+      check('chk_audit_logs_user_agent_length', sql`char_length(${table.user_agent}) <= 512`),
       // sec-U3: audit.logs is append-only at the DB layer. The old `FOR ALL`
       // policy let any caller with `app.current_organization_public_id` UPDATE or
       // DELETE audit rows for their own organization. We split into FOR

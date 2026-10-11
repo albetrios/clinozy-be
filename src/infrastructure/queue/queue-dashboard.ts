@@ -150,10 +150,13 @@ const DASHBOARD_MUTATION_RULES: DashboardMutationRule[] = [
  * Maps a Bull Board API path (under /admin/queues) and HTTP method to an audit action.
  * Returns null when the request should not be audited (e.g. read-only).
  */
-export function parseQueueDashboardMutation(
-  pathname: string,
-  method: string,
-): QueueDashboardMutationAudit | null {
+export function parseQueueDashboardMutation({
+  pathname,
+  method,
+}: {
+  pathname: string;
+  method: string;
+}): QueueDashboardMutationAudit | null {
   if (!MUTATING_METHODS.has(method)) return null;
   if (!pathname.startsWith(DASHBOARD_PREFIX)) return null;
   const relativePath = pathname.slice(DASHBOARD_PREFIX.length);
@@ -182,10 +185,13 @@ export interface RegisterQueueDashboardDeps {
  * Mutating Bull Board API calls (2xx) are written to audit.logs.
  * Only registered when ENABLE_QUEUE_DASHBOARD is true.
  */
-export async function registerQueueDashboard(
-  app: FastifyInstance,
-  deps: RegisterQueueDashboardDeps,
-): Promise<void> {
+export async function registerQueueDashboard({
+  app,
+  deps,
+}: {
+  app: FastifyInstance;
+  deps: RegisterQueueDashboardDeps;
+}): Promise<void> {
   const connectionOptions = getBullMQConnectionOptions();
   const queues = QUEUE_NAMES.map(
     (name) => new Queue(name, { connection: connectionOptions, prefix: getBullMQKeyPrefix() }),
@@ -218,7 +224,7 @@ export async function registerQueueDashboard(
           if (reply.statusCode < 200 || reply.statusCode >= 300) return;
 
           const pathname = request.url.split('?')[0] ?? '';
-          const parsed = parseQueueDashboardMutation(pathname, request.method);
+          const parsed = parseQueueDashboardMutation({ pathname, method: request.method });
           if (!parsed) return;
 
           const userAgent = request.headers['user-agent'] ?? null;

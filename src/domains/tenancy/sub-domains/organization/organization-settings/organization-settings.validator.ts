@@ -17,11 +17,9 @@ function assertSecurityPolicyHasNoPollutionKeys(data: unknown): void {
   if (securityPolicy === null || typeof securityPolicy !== 'object') return;
   for (const key of Reflect.ownKeys(securityPolicy)) {
     if (typeof key === 'string' && PROTO_POLLUTION_KEYS.has(key)) {
-      throw new ValidationError('errors:invalidInput', undefined, {
-        security_policy: [
-          'security_policy: keys __proto__, constructor, and prototype are not allowed',
-        ],
-      });
+      throw new ValidationError('errors:invalidInput', undefined, undefined, [
+        { field: 'security_policy', messageKey: 'errors:validation.reservedSecurityPolicyKey' },
+      ]);
     }
   }
 }
@@ -29,5 +27,5 @@ function assertSecurityPolicyHasNoPollutionKeys(data: unknown): void {
 /** Parses raw `PATCH /organization/settings` body via {@link updateOrganizationSettingsDto}; throws `ValidationError('errors:invalidInput')` on failure. */
 export function validateUpdateOrganizationSettings(data: unknown): UpdateOrganizationSettingsInput {
   assertSecurityPolicyHasNoPollutionKeys(data);
-  return parseWithSchema(updateOrganizationSettingsDto, data);
+  return parseWithSchema({ schema: updateOrganizationSettingsDto, data });
 }

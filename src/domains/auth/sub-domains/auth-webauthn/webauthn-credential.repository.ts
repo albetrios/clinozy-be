@@ -69,7 +69,10 @@ export class WebauthnCredentialRepository {
    * so concurrent registrations cannot both pass the cap check and overshoot the per-user passkey cap.
    */
   async acquireCreationQuotaLock(userId: number): Promise<void> {
-    await acquireResourceQuotaLock(RESOURCE_QUOTA_LOCK_NAMESPACE.WEBAUTHN_CREDENTIAL, userId);
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.WEBAUTHN_CREDENTIAL,
+      key: userId,
+    });
   }
 
   async createCredential(data: {

@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
  *
  * `tenancy.organizations` and `tenancy.memberships` are FORCE RLS, and their policies honor only
  * `app.current_organization_public_id` (`organizations_tenant_isolation`) and `app.current_user_public_id`
- * (`organizations_user_discovery` / `memberships_user_self_discovery`). Unlike the `auth.*` and
+ * (`organizations_user_discovery` / `memberships_user_self_discovery`, read-only). Unlike the `auth.*` and
  * `audit.logs` policies, **none of them carries an `app.global_admin` arm** — so
  * `withMaintenanceDatabaseContext` grants exactly nothing on tenancy tables while looking like it
  * grants everything.

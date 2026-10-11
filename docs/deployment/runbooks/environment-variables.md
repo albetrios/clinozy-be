@@ -338,7 +338,6 @@ instead of running insecure — you cannot ship the dev value:
 | `WEBAUTHN_RP_ID`                      | `localhost` / fallback    | optional; when set, a bare hostname the `FRONTEND_URL` host equals or sits under (passkeys are bound to it) |
 | `COOKIE_SECURE`                       | `false`                   | `true` (cookies sent over HTTPS only)                                              |
 | `UPLOAD_USE_PRESIGNED_POST`           | may be `false`            | `true` (presigned PUT has no min-size enforcement)                                 |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`         | `http://…` ok             | `https://` (telemetry must not transmit SQL/paths in plaintext)                   |
 | `METRICS_SCRAPE_TOKEN`                | optional                  | **required (≥32 chars)** when `METRICS_ENABLED=true`                               |
 | `EMAIL_FROM_ADDRESS`                  | optional                  | **required** when `RESEND_API_KEY` or `STRIPE_SECRET_KEY` is set                   |
 
@@ -378,7 +377,7 @@ hand on every `.env.production`:**
 | `DATABASE_POOL_MAX` / `DEPLOYMENT_*_REPLICA_COUNT` / `POSTGRES_MAX_CONNECTIONS` | tuned to a 12-core box (`44`/`10`/`500`) | match the managed DB plan + replica topology | over/under-provisioned pool; boot connection-budget assert can fail or starve queries — [resource-limits.md](./resource-limits.md) |
 | `LOG_LEVEL`                                                              | `debug` (common in dev)        | `info` (default) / `warn`                 | noisy logs, larger PII surface                                            |
 | `LOG_PRETTY`                                                             | `true` (readable local output) | `false` (default, JSON)                   | no pretty output anyway — every image installs `--prod`, so the `pino-pretty` devDependency is pruned; the logger warns once and stays JSON |
-| `SENTRY_DSN`                                                             | empty                          | real DSN (`SENTRY_ENVIRONMENT=production`) | no error / performance visibility (ops, not security)                     |
+| `SENTRY_DSN`                                                             | empty                          | real DSN (`SENTRY_ENVIRONMENT=production`) — **required**, boot fails without it | every error, final job failure and alert dropped silently                     |
 | `HTTP_SERVER_TIMING_ENABLED`                                            | `true` (journey reads `app;dur=`) | consider `false`                          | exposes server compute time (coarsened to 5 ms in prod, but still a signal) |
 
 The full set of **required** production variables (replicas, retention, JWT,

@@ -30,11 +30,11 @@ describe('Integration: migrations backward (forward-only + optional down compani
       );
     }
 
-    const rollbackViolations = lintMigrationRollbackPairing(
-      migrationsFolder,
+    const rollbackViolations = lintMigrationRollbackPairing({
+      _migrationsFolder: migrationsFolder,
       upMigrationFilenames,
       fileContentsByFilename,
-    );
+    });
 
     expect(rollbackViolations).toEqual([]);
 

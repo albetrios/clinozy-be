@@ -31,7 +31,7 @@ describe('AuditSerializer', () => {
       organizationPublicIds: new Map([[11, 'org_owner_pub']]),
     };
 
-    const result = AuditSerializer.many([input] as never, resolution);
+    const result = AuditSerializer.many({ items: [input] as never, resolution });
 
     expect(result).toEqual([
       {
@@ -62,8 +62,8 @@ describe('AuditSerializer', () => {
   it('sec-re-08: emits null public ids when the resolution map does not cover an id', () => {
     // Defensive: a partial resolution map must not leak the bigint, and must
     // not throw. Better to surface null than to regress the strip.
-    const result = AuditSerializer.many(
-      [
+    const result = AuditSerializer.many({
+      items: [
         {
           actor_user_id: 7,
           target_user_id: 9,
@@ -74,8 +74,8 @@ describe('AuditSerializer', () => {
           created_at: '2026-06-07T00:00:00.000Z',
         },
       ] as never,
-      { userPublicIds: new Map(), organizationPublicIds: new Map() },
-    );
+      resolution: { userPublicIds: new Map(), organizationPublicIds: new Map() },
+    });
 
     expect(result[0]).toMatchObject({
       actor_user_id: null,
@@ -85,8 +85,8 @@ describe('AuditSerializer', () => {
   });
 
   it('sec-re-08: emits null public ids when the row carries null internal ids', () => {
-    const result = AuditSerializer.many(
-      [
+    const result = AuditSerializer.many({
+      items: [
         {
           actor_user_id: null,
           target_user_id: null,
@@ -97,8 +97,8 @@ describe('AuditSerializer', () => {
           created_at: '2026-06-07T00:00:00.000Z',
         },
       ] as never,
-      { userPublicIds: new Map(), organizationPublicIds: new Map() },
-    );
+      resolution: { userPublicIds: new Map(), organizationPublicIds: new Map() },
+    });
 
     expect(result[0]).toMatchObject({
       actor_user_id: null,

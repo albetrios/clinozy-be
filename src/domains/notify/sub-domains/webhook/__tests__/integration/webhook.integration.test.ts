@@ -25,6 +25,7 @@ import {
   createRoleWithPermissions,
   createMembership,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
+import { BILLING_PERMISSIONS } from '@/domains/billing/billing.permissions.js';
 import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import {
@@ -33,7 +34,12 @@ import {
 } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import { WebhookDeliveryAttemptRepository } from '@/domains/notify/sub-domains/webhook/webhook-delivery/webhook-delivery-attempt.repository.js';
 
-const WEBHOOK_PERMISSIONS = [NOTIFY_PERMISSIONS.WEBHOOK_READ, NOTIFY_PERMISSIONS.WEBHOOK_MANAGE];
+// Subscribing to `subscription.*` also needs the permission to read subscriptions.
+const WEBHOOK_PERMISSIONS = [
+  NOTIFY_PERMISSIONS.WEBHOOK_READ,
+  NOTIFY_PERMISSIONS.WEBHOOK_MANAGE,
+  BILLING_PERMISSIONS.SUBSCRIPTION_READ,
+];
 
 /** Well-formed but nonexistent public id — passes `webhookIdParamsDto`, misses every row. */
 const UNKNOWN_WEBHOOK_ID = 'whk_aaaaaaaaaaaaaaaaaaaaa';
@@ -203,18 +209,20 @@ describe('Webhook Sub-Domain — Integration', () => {
       for (let index = 0; index < 3; index += 1) {
         const attempt = await runWithPinnedDatabaseHandle(
           // Seeded on the operator connection: a fixture, not the behaviour under test.
-          getOperatorDatabase() as unknown as RequestScopedPostgresDatabase,
-          () =>
-            attemptRepository.create({
-              webhook_id: webhook.id,
-              event_type: 'subscription.updated',
-              payload: { id: `evt_${index}` },
-              status: 'SENT',
-              http_status_code: 200,
-              response_body: 'ok',
-              sent_at: new Date(),
-              attempt_count: 1,
-            }),
+          {
+            databaseHandle: getOperatorDatabase() as unknown as RequestScopedPostgresDatabase,
+            callback: () =>
+              attemptRepository.create({
+                webhook_id: webhook.id,
+                event_type: 'subscription.updated',
+                payload: { id: `evt_${index}` },
+                status: 'SENT',
+                http_status_code: 200,
+                response_body: 'ok',
+                sent_at: new Date(),
+                attempt_count: 1,
+              }),
+          },
         );
         await getOperatorDatabase()
           .update(webhook_delivery_attempts)
@@ -441,6 +449,35 @@ describe('Webhook Sub-Domain — Integration', () => {
       expect(response.statusCode, response.body).toBe(400);
     });
 
+    it('returns 400 naming events for an event type outside the catalog', async () => {
+      const { user, organization, token } = await createAuthorizedContext();
+      const webhook = await createTestWebhook({
+        organizationId: organization.id,
+        url: 'https://example.com/patch-unknown-event',
+        createdByUserId: user.id,
+      });
+
+      const response = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/notify/webhooks/${webhook.public_id}`),
+        token,
+        // A typo of `membership.updated`: stored, it would be a subscription that never fires.
+        payload: { events: ['membership.update'] },
+      });
+
+      expect(response.statusCode, response.body).toBe(400);
+      // The route schema rejects it first and names the entry; the message lists the catalog.
+      const body = response.json() as {
+        error: { errors: Array<{ field: string; message: string }> };
+      };
+      expect(body.error.errors).toEqual([
+        expect.objectContaining({
+          field: 'body.events/0',
+          message: expect.stringContaining('"membership.updated"'),
+        }),
+      ]);
+    });
+
     it('returns 403 without webhook manage permission', async () => {
       const { user, organization, token } = await createAuthorizedContext([
         NOTIFY_PERMISSIONS.WEBHOOK_READ,
@@ -523,9 +560,12 @@ describe('Webhook Sub-Domain — Integration', () => {
       // racing two real requests would be inherently flaky. Same approach as
       // `src/tests/integration/runtime/idempotency-in-flight-409.integration.test.ts`.
       // The cache key is scoped by the active organization (the signed `org` JWT claim), not just the user.
-      const cacheKey = buildIdempotencyCacheKey(idempotencyKey, {
-        userId: user.public_id,
-        organizationId: organization.public_id,
+      const cacheKey = buildIdempotencyCacheKey({
+        idempotencyKey,
+        scope: {
+          userId: user.public_id,
+          organizationId: organization.public_id,
+        },
       });
       const payload = {
         url: 'https://example.com/idem-in-flight',

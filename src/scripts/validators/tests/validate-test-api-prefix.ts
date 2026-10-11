@@ -33,10 +33,13 @@ export type InjectUrlViolation = { file: string; line: number };
  * `testApiPath()` helper. Files in {@link EXCLUDED_RELATIVE_PATHS} are
  * skipped because they intentionally embed literal inject URLs.
  */
-export function findInjectUrlViolations(
-  sourceRoot: string,
-  projectRoot: string = process.cwd(),
-): InjectUrlViolation[] {
+export function findInjectUrlViolations({
+  sourceRoot,
+  projectRoot = process.cwd(),
+}: {
+  sourceRoot: string;
+  projectRoot?: string | undefined;
+}): InjectUrlViolation[] {
   const violations: InjectUrlViolation[] = [];
   const srcDirectory = join(sourceRoot, 'src');
 
@@ -66,7 +69,7 @@ export function findInjectUrlViolations(
 }
 
 function main(): void {
-  const violations = findInjectUrlViolations(process.cwd());
+  const violations = findInjectUrlViolations({ sourceRoot: process.cwd() });
 
   if (violations.length > 0) {
     console.error('Hardcoded /api/vN in inject url fields (use testApiPath()):\n');

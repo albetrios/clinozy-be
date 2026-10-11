@@ -14,7 +14,7 @@ export function createWebhookEventController(service: WebhookEventService) {
       requirePrincipal(request);
       const events = await service.list();
       const serialized = serializeWebhookEventList(events);
-      return successResponse(serialized, getRequestIdentifier(request));
+      return successResponse({ data: serialized, request_id: getRequestIdentifier(request) });
     },
   };
 }

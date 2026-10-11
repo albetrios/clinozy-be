@@ -88,7 +88,13 @@ async function ensureMonthlyPartition(monthWindow: MonthWindow): Promise<void> {
 }
 
 /** Counts existing bulk-seeded audit rows for an organization + month (matched by the `seedBatch` marker). */
-async function countSeededRows(organizationId: number, monthKey: string): Promise<number> {
+async function countSeededRows({
+  organizationId,
+  monthKey,
+}: {
+  organizationId: number;
+  monthKey: string;
+}): Promise<number> {
   const rows = await getRequestDatabase()
     .select({ value: count() })
     .from(logs)
@@ -163,13 +169,20 @@ async function seedOrganizationMonth(options: {
   target: number;
 }): Promise<number> {
   const { context, organization, monthWindow, target } = options;
-  const existing = await countSeededRows(organization.id, monthWindow.key);
+  const existing = await countSeededRows({
+    organizationId: organization.id,
+    monthKey: monthWindow.key,
+  });
   const missing = target - existing;
   if (missing <= 0) return 0;
 
   const values: AuditLogInsert[] = [];
   for (let index = 0; index < missing; index += 1) {
-    const profile = generateBulkAudit(context.faker, monthWindow.start, monthWindow.next);
+    const profile = generateBulkAudit({
+      faker: context.faker,
+      monthStart: monthWindow.start,
+      nextMonthStart: monthWindow.next,
+    });
     values.push({
       public_id: generatePublicId('auditLog'),
       organization_id: organization.id,

@@ -26,7 +26,7 @@ const MIN_JWT_RSA_MODULUS_BITS = 2048;
  * truncated PEM or an accidental sub-2048-bit / non-RSA key fails fast instead of
  * issuing forgeable tokens or failing opaquely at first sign/verify (audit #8).
  */
-const isStrongRsaPem = (pem: string, kind: 'private' | 'public'): boolean => {
+const isStrongRsaPem = ({ pem, kind }: { pem: string; kind: 'private' | 'public' }): boolean => {
   try {
     const key = kind === 'private' ? createPrivateKey(pem) : createPublicKey(pem);
     return (
@@ -125,89 +125,132 @@ const trustProxyHopCountSchema = z
  * registry drives `pnpm env:catalog`. Migrating a field is a mechanical wrap — the Zod is untouched.
  */
 const SERVER_VARS = {
-  PORT: envVar(z.coerce.number().int().min(1).max(65535).default(3000), {
-    allowed: 'integer 1–65535',
-    description: 'HTTP port the API server binds to.',
+  PORT: envVar({
+    schema: z.coerce.number().int().min(1).max(65535).default(3000),
+    meta: {
+      allowed: 'integer 1–65535',
+      description: 'HTTP port the API server binds to.',
+    },
   }),
-  HTTP_BIND_HOST: envVar(z.string().min(1).default('0.0.0.0'), {
-    allowed: 'non-empty string (host or IP)',
-    description: 'Fastify HTTP bind address (the worker health server also binds here).',
+  HTTP_BIND_HOST: envVar({
+    schema: z.string().min(1).default('0.0.0.0'),
+    meta: {
+      allowed: 'non-empty string (host or IP)',
+      description: 'Fastify HTTP bind address (the worker health server also binds here).',
+    },
   }),
-  NODE_ENV: envVar(nodeEnvSchema, {
-    allowed: 'local | development | production',
-    description:
-      'Runtime environment name; names the .env file and gates the production-only refines.',
+  NODE_ENV: envVar({
+    schema: nodeEnvSchema,
+    meta: {
+      allowed: 'local | development | production',
+      description:
+        'Runtime environment name; names the .env file and gates the production-only refines.',
+    },
   }),
   // sec-C9: enum-constrained so a typo (`info ` with trailing whitespace, `dbug`) fails at boot
   // instead of silently degrading pino. Default `info`; a `debug` template value would 10–100x log
   // volume in any environment scaffolded from it — including production.
-  LOG_LEVEL: envVar(
-    z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
-    {
+  LOG_LEVEL: envVar({
+    schema: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+    meta: {
       allowed: 'fatal | error | warn | info | debug | trace | silent',
       description:
         'Pino log level. Enum-constrained so a typo fails at boot instead of silently degrading.',
     },
-  ),
-  TRUST_PROXY: envVar(trustProxyHopCountSchema, {
-    allowed: 'false | 0, or integer 1–10',
-    description: 'Number of reverse-proxy hops Fastify may trust for X-Forwarded-* headers.',
   }),
-  FASTIFY_KEEP_ALIVE_TIMEOUT_MS: envVar(
-    z.coerce.number().int().min(1_000).max(600_000).optional(),
-    {
+  TRUST_PROXY: envVar({
+    schema: trustProxyHopCountSchema,
+    meta: {
+      allowed: 'false | 0, or integer 1–10',
+      description: 'Number of reverse-proxy hops Fastify may trust for X-Forwarded-* headers.',
+    },
+  }),
+  FASTIFY_KEEP_ALIVE_TIMEOUT_MS: envVar({
+    schema: z.coerce.number().int().min(1_000).max(600_000).optional(),
+    meta: {
       allowed: 'integer 1000–600000 (optional)',
       description: 'Fastify keep-alive timeout in milliseconds.',
     },
-  ),
-  FASTIFY_HEADERS_TIMEOUT_MS: envVar(z.coerce.number().int().min(1_000).max(600_000).optional(), {
-    allowed: 'integer 1000–600000 (optional)',
-    description: 'Fastify headers timeout in milliseconds.',
   }),
-  FASTIFY_REQUEST_TIMEOUT_MS: envVar(z.coerce.number().int().min(1_000).max(600_000).optional(), {
-    allowed: 'integer 1000–600000 (optional)',
-    description: 'Fastify request timeout in milliseconds.',
-  }),
-  FASTIFY_CONNECTION_TIMEOUT_MS: envVar(
-    z.coerce.number().int().min(1_000).max(600_000).optional(),
-    {
+  FASTIFY_HEADERS_TIMEOUT_MS: envVar({
+    schema: z.coerce.number().int().min(1_000).max(600_000).optional(),
+    meta: {
       allowed: 'integer 1000–600000 (optional)',
-      description: 'Fastify connection timeout in milliseconds.',
+      description: 'Fastify headers timeout in milliseconds.',
     },
-  ),
+  }),
+  FASTIFY_REQUEST_TIMEOUT_MS: envVar({
+    schema: z.coerce.number().int().min(1_000).max(600_000).optional(),
+    meta: {
+      allowed: 'integer 1000–600000 (optional)',
+      description: 'Fastify request timeout in milliseconds.',
+    },
+  }),
+  // Node's socket INACTIVITY timeout (`server.timeout`), not an accept timeout: a socket with no
+  // bytes in or out for this long is destroyed — a handler waiting on the database or Stripe
+  // included, so its 503 + Retry-After never arrives. Off by default (Fastify's own default):
+  // requestTimeout / headersTimeout bound slow clients and keepAliveTimeout reaps idle sockets.
+  FASTIFY_CONNECTION_TIMEOUT_MS: envVar({
+    schema: z.coerce.number().int().min(0).max(600_000).optional(),
+    meta: {
+      allowed: 'integer 0–600000 (optional; unset or 0 disables)',
+      description:
+        'Socket inactivity timeout in milliseconds; when set, at least DATABASE_POOL_ACQUIRE_TIMEOUT_MS + STRIPE_HTTP_TIMEOUT_MS.',
+    },
+  }),
   // Network-independent latency for load tools (k6, curl) and browser devtools without scraping
   // /metrics. Default on; set false to suppress the header (it is coarsened in production).
-  HTTP_SERVER_TIMING_ENABLED: envVar(booleanString('true'), {
-    allowed: 'true | false (or 1 | 0)',
-    description: 'Emit a Server-Timing response header carrying total server-side processing time.',
+  HTTP_SERVER_TIMING_ENABLED: envVar({
+    schema: booleanString('true'),
+    meta: {
+      allowed: 'true | false (or 1 | 0)',
+      description:
+        'Emit a Server-Timing response header carrying total server-side processing time.',
+    },
   }),
   // Dormant until the loop truly stalls (a long sync op / GC pause), since 250 ms is well above the
   // tens-of-ms of normal load. Lower to shed sooner; raise to tolerate longer stalls.
-  OVERLOAD_MAX_EVENT_LOOP_DELAY_MS: envVar(
-    z.coerce.number().int().min(1).max(60_000).default(250),
-    {
+  OVERLOAD_MAX_EVENT_LOOP_DELAY_MS: envVar({
+    schema: z.coerce.number().int().min(1).max(60_000).default(250),
+    meta: {
       allowed: 'integer 1–60000',
       description:
         'Overload-guard shed threshold: p99 event-loop delay (ms) above which requests get a 503.',
     },
-  ),
+  }),
   // DB-pool exhaustion shows as awaiting-promise time (the loop stays idle), so the event-loop valve
   // never trips on it; shedding at pool saturation bounds that tail. The gauge counts units of work
-  // still waiting for a connection too, so a ratio above 1 lets a bounded queue form first: 3 sheds at
-  // three times the pool (the pool busy plus a queue twice its size). Set 0 to disable (loop valve stays on).
-  OVERLOAD_DB_POOL_SHED_RATIO: envVar(z.coerce.number().min(0).max(10).default(3), {
-    allowed: 'number 0–10',
-    description:
-      'Multiple of DATABASE_POOL_MAX in-flight units of work (running plus waiting for a connection) at which the overload guard sheds requests; above 1 lets a bounded queue form.',
+  // still waiting for a connection too, so a ratio above 1 lets a bounded queue form first: 10 sheds at
+  // ten times the pool (the pool busy plus a queue nine times its size — a synchronized 240-user burst
+  // on the default pool of 30 queues, bounded by DATABASE_POOL_ACQUIRE_TIMEOUT_MS, instead of failing
+  // fast). Set 0 to disable (loop valve stays on).
+  OVERLOAD_DB_POOL_SHED_RATIO: envVar({
+    schema: z.coerce.number().min(0).max(10).default(10),
+    meta: {
+      allowed: 'number 0–10',
+      description:
+        'Multiple of DATABASE_POOL_MAX in-flight units of work (running plus waiting for a connection) at which the overload guard sheds requests; above 1 lets a bounded queue form.',
+    },
   }),
-  DATABASE_POOL_ACQUIRE_TIMEOUT_MS: envVar(
-    z.coerce.number().int().min(0).max(60_000).default(10_000),
-    {
+  // A slow database keeps the queue short but undrained, so the ratio above never trips while every
+  // waiter runs into DATABASE_POOL_ACQUIRE_TIMEOUT_MS: shed new requests once the oldest unit of work
+  // has waited this long. A burst the pool drains is served — its waiters are milliseconds old.
+  OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS: envVar({
+    schema: z.coerce.number().int().min(0).max(60_000).default(2_000),
+    meta: {
+      allowed: 'integer 0–60000 (ms; 0 disables)',
+      description:
+        'Overload-guard shed threshold: how long the oldest unit of work may wait for a pooled connection before new requests get a 503.',
+    },
+  }),
+  DATABASE_POOL_ACQUIRE_TIMEOUT_MS: envVar({
+    schema: z.coerce.number().int().min(0).max(60_000).default(10_000),
+    meta: {
       allowed: 'integer 0–60000 (ms; 0 disables)',
       description:
         'Deadline for a unit of work to get a pooled connection. Past it the caller gets 503 + Retry-After, and a connection that arrives later rolls the transaction back unrun.',
     },
-  ),
+  }),
 } satisfies Record<string, EnvVarSpec>;
 
 const envSchemaBase = z.object({
@@ -379,9 +422,9 @@ const envSchemaBase = z.object({
    * anti-enumeration floor, none of which say anything useful about the app under test.
    *
    * Defaults false, so the behaviour does not exist unless a developer opts in. A refine permits
-   * `true` ONLY on the `local` and `development` targets — an allowlist rather than a
-   * "not production" test, so a target added to the enum later is refused by default instead of
-   * silently inheriting a master login code. It never creates accounts, never skips the
+   * `true` ONLY on the `local` target — never on a deployed one (`development` is hosted too) — as an
+   * allowlist rather than a "not production" test, so a target added to the enum later is refused
+   * by default instead of silently inheriting a master login code. It never creates accounts, never skips the
    * account-active check, and never bypasses the per-user attempt cap: an unknown email still
    * 401s exactly as before.
    */
@@ -645,16 +688,14 @@ const envSchemaBase = z.object({
   METRICS_ENABLED: booleanString('true'),
   /** Bearer token a Prometheus scraper sends when scraping /metrics. Required when METRICS_ENABLED=true (min 32 chars). */
   METRICS_SCRAPE_TOKEN: z.string().min(32).optional(),
-  /** OTLP HTTP traces endpoint base URL (e.g. https://otel.example.com). Appends /v1/traces when omitted. */
   /**
-   * sec-C3: in production the OTLP exporter MUST use https://. The
-   * runtime accepts both http:// and https://; spans carry SQL fragments,
-   * request paths, and request ids that should not traverse the network in
-   * plaintext. Refine enforced below.
+   * Category-B (security). Bearer token for the operator-only write on the internal ops routes
+   * (`POST /internal/ops/circuit-breakers/:circuit_name/reset`). Separate from
+   * `METRICS_SCRAPE_TOKEN` — that one is handed to scrapers and dashboards, and a read token must
+   * not be able to force a breaker closed. Unset, the reset route refuses every request. Min 32
+   * chars, and a refine refuses the scrape token's value.
    */
-  OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
-  /** OpenTelemetry service.name override (defaults to the generated API / worker service names). */
-  OTEL_SERVICE_NAME: z.string().min(1).optional(),
+  OPS_ADMIN_TOKEN: z.string().min(32).optional(),
 
   // S3 / Object Storage
   /** Allow image/svg+xml uploads; sanitized with DOMPurify on confirm (default false). */
@@ -747,7 +788,7 @@ const envSchemaBase = z.object({
    */
   WORKER_QUEUE_FAMILIES: z.string().min(1).default('all'),
   /**
-   * Postgres pool size per Node process (postgres-js `max`). Not the cluster-wide total. Default 30.
+   * Postgres pool size per Node process (node-postgres `max`). Not the cluster-wide total. Default 30.
    *
    * Each HTTP request runs in its own RLS transaction holding one pooled connection for its
    * duration, so the pool size is the per-process in-flight DB concurrency ceiling. The default
@@ -775,11 +816,14 @@ const envSchemaBase = z.object({
   DEPLOYMENT_API_REPLICA_COUNT: z.coerce.number().int().min(1).optional(),
   /** Worker service replica count for the Postgres connection budget. */
   DEPLOYMENT_WORKER_REPLICA_COUNT: z.coerce.number().int().min(1).optional(),
-  /** postgres-js `idle_timeout` (seconds). */
+  /** How long an idle pooled connection stays open (seconds; node-postgres `idleTimeoutMillis`). */
   DATABASE_POOL_IDLE_TIMEOUT_SECONDS: z.coerce.number().int().min(1).optional(),
-  /** postgres-js `connect_timeout` (seconds). */
+  /**
+   * How long opening a connection, or waiting for a free pooled one, may take (seconds;
+   * node-postgres `connectionTimeoutMillis`). Either failure answers 503 with `Retry-After`.
+   */
   DATABASE_POOL_CONNECT_TIMEOUT_SECONDS: z.coerce.number().int().min(1).optional(),
-  /** postgres-js `max_lifetime` (seconds). */
+  /** How long a pooled connection lives before it is replaced (seconds; node-postgres `maxLifetimeSeconds`). */
   DATABASE_POOL_MAX_LIFETIME_SECONDS: z.coerce.number().int().min(60).optional(),
   /** Per-connection statement_timeout (ms). Caps runaway queries; 0 disables. Default: 30000. */
   DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).optional(),
@@ -1317,7 +1361,10 @@ export const envSchema = envSchemaBase
   )
   .refine(
     (data) => {
-      return validateProductionRedisTopology(data.REDIS_URL, data.REDIS_BULLMQ_URL);
+      return validateProductionRedisTopology({
+        _cacheRedisUrl: data.REDIS_URL,
+        bullMqRedisUrl: data.REDIS_BULLMQ_URL,
+      });
     },
     {
       message:
@@ -1562,9 +1609,27 @@ export const envSchema = envSchemaBase
       path: ['COOKIE_SECURE'],
     },
   )
+  // A socket that goes quiet while its handler waits for a pooled connection and then for Stripe
+  // must not be cut before the handler can answer (with a 503 + Retry-After, at worst).
+  .refine(
+    (data) =>
+      !data.FASTIFY_CONNECTION_TIMEOUT_MS ||
+      data.FASTIFY_CONNECTION_TIMEOUT_MS >=
+        data.DATABASE_POOL_ACQUIRE_TIMEOUT_MS + data.STRIPE_HTTP_TIMEOUT_MS,
+    {
+      message:
+        'FASTIFY_CONNECTION_TIMEOUT_MS is a socket inactivity timeout: unset it (or 0), or make it at least DATABASE_POOL_ACQUIRE_TIMEOUT_MS + STRIPE_HTTP_TIMEOUT_MS so a handler waiting on the pool and Stripe can still answer.',
+      path: ['FASTIFY_CONNECTION_TIMEOUT_MS'],
+    },
+  )
   // ── Category-B environment constraints for the policy flags ────────────────
   // Runtime code no longer compares NODE_ENV; these refines are the single place that keeps a
   // security-critical flag from being overridden to an unsafe value in the wrong environment.
+  .refine((data) => data.NODE_ENV !== 'production' || data.SENTRY_DSN !== undefined, {
+    message:
+      'SENTRY_DSN must be set in production (without it every error, final job failure and alert is dropped silently).',
+    path: ['SENTRY_DSN'],
+  })
   .refine((data) => data.NODE_ENV !== 'production' || data.CAPTCHA_BYPASS_ALLOWED === false, {
     message:
       'CAPTCHA_BYPASS_ALLOWED must be false in production (captcha bypass is a dev/test affordance only).',
@@ -1624,19 +1689,25 @@ export const envSchema = envSchemaBase
       'TRUST_PROXY_REQUIRED must be true in production (without a trusted proxy hop every client collapses to the proxy IP).',
     path: ['TRUST_PROXY_REQUIRED'],
   })
+  .refine(
+    (data) =>
+      data.OPS_ADMIN_TOKEN === undefined || data.OPS_ADMIN_TOKEN !== data.METRICS_SCRAPE_TOKEN,
+    {
+      message:
+        'OPS_ADMIN_TOKEN must differ from METRICS_SCRAPE_TOKEN (the scrape token is shared with scrapers and must not authorize operator writes).',
+      path: ['OPS_ADMIN_TOKEN'],
+    },
+  )
   .refine((data) => data.NODE_ENV !== 'production' || data.TEST_MODE === false, {
     message:
       'TEST_MODE must be false in production (it gates test-only affordances that must never be reachable on a deployed runtime).',
     path: ['TEST_MODE'],
   })
   .refine(
-    (data) =>
-      !data.AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED ||
-      data.NODE_ENV === 'local' ||
-      data.NODE_ENV === 'development',
+    (data) => !data.AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED || data.NODE_ENV === 'local',
     {
       message:
-        "AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED may only be true on the 'local' or 'development' targets (it makes email login accept a well-known master code, so a deployed runtime must only ever accept the one-time codes issued by send-code). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
+        "AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED may only be true on the 'local' target (it makes email login accept a well-known master code, so a deployed runtime — development included — must only ever accept the one-time codes issued by send-code). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
       path: ['AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED'],
     },
   )
@@ -1733,26 +1804,6 @@ export const envSchema = envSchemaBase
       message:
         'RESPONSE_ENCRYPTION_KEY (64 hex chars / 32 bytes for AES-256) or a RESPONSE_ENCRYPTION_KEYS keyring is required when ENABLE_RESPONSE_ENCRYPTION=true.',
       path: ['RESPONSE_ENCRYPTION_KEY'],
-    },
-  )
-  .refine(
-    (data) => {
-      // sec-C3: OTLP traffic carries SQL fragments, request paths, request ids.
-      // Allow plaintext http:// in dev/test (typical local collector), require
-      // https:// in production — those environments must export over
-      // an encrypted channel.
-      if (data.OTEL_EXPORTER_OTLP_ENDPOINT === undefined) return true;
-      if (data.NODE_ENV !== 'production') return true;
-      try {
-        return new URL(data.OTEL_EXPORTER_OTLP_ENDPOINT).protocol === 'https:';
-      } catch {
-        return false;
-      }
-    },
-    {
-      message:
-        'OTEL_EXPORTER_OTLP_ENDPOINT must be an https:// URL in production (telemetry exporters cannot transmit SQL fragments / request paths in plaintext).',
-      path: ['OTEL_EXPORTER_OTLP_ENDPOINT'],
     },
   )
   .refine(
@@ -1898,14 +1949,18 @@ export const envSchema = envSchemaBase
   // PEMs of adequate modulus in DEPLOYED runtimes (production) — mirroring the entropy
   // floor already gated on SECRETS_ENCRYPTION_KEY. local/development/test use ephemeral keys.
   .refine(
-    (data) => data.NODE_ENV !== 'production' || isStrongRsaPem(data.JWT_PRIVATE_KEY, 'private'),
+    (data) =>
+      data.NODE_ENV !== 'production' ||
+      isStrongRsaPem({ pem: data.JWT_PRIVATE_KEY, kind: 'private' }),
     {
       message: `JWT_PRIVATE_KEY must be a valid RSA private-key PEM of at least ${MIN_JWT_RSA_MODULUS_BITS} bits.`,
       path: ['JWT_PRIVATE_KEY'],
     },
   )
   .refine(
-    (data) => data.NODE_ENV !== 'production' || isStrongRsaPem(data.JWT_PUBLIC_KEY, 'public'),
+    (data) =>
+      data.NODE_ENV !== 'production' ||
+      isStrongRsaPem({ pem: data.JWT_PUBLIC_KEY, kind: 'public' }),
     {
       message: `JWT_PUBLIC_KEY must be a valid RSA public-key PEM of at least ${MIN_JWT_RSA_MODULUS_BITS} bits.`,
       path: ['JWT_PUBLIC_KEY'],

@@ -1,15 +1,18 @@
-import { inArray, sql as drizzleSql } from 'drizzle-orm';
 import { withMaintenanceDatabaseContext } from '@/infrastructure/database/contexts/database-context.js';
-import { createDrainAuditOutboxRepository } from '@/domains/audit/audit-outbox.repository.js';
+import {
+  createAuditOutboxResolutionRepository,
+  createDrainAuditOutboxRepository,
+} from '@/domains/audit/audit-outbox.repository.js';
 import type { AuditOutboxRow } from '@/domains/audit/audit-outbox.schema.js';
-import { logs } from '@/domains/audit/audit.schema.js';
-import { users } from '@/domains/user/user.schema.js';
 import type { RequestScopedPostgresDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { setLocalDatabaseConfig } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { env } from '@/shared/config/env.config.js';
+import { MILLISECONDS_PER_DAY, MILLISECONDS_PER_HOUR } from '@/shared/constants/index.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
   AUDIT_OUTBOX_DRAIN_STALE_PENDING_WARN_SECONDS,
+  AUDIT_OUTBOX_PROCESSED_RETENTION_HOURS,
+  AUDIT_OUTBOX_PRUNE_BATCH_SIZE,
   DEFAULT_AUDIT_OUTBOX_DRAIN_BATCH_SIZE,
   DEFAULT_AUDIT_OUTBOX_DRAIN_MAX_ATTEMPTS,
 } from '@/domains/audit/workers/audit-outbox-drain.constants.js';
@@ -62,19 +65,6 @@ function collectAuditOutboxPublicIds(batch: readonly AuditOutboxRow[]): {
   return { userPublicIds, organizationPublicIds, apiKeyPublicIds };
 }
 
-/** Runs one SECURITY DEFINER resolver query and normalizes the driver's row shape. */
-async function executeResolverFunction(
-  databaseHandle: RequestScopedPostgresDatabase,
-  statement: ReturnType<typeof drizzleSql>,
-): Promise<{ id: number | string; public_id: string }[]> {
-  const result = await databaseHandle.execute<{ id: number | string; public_id: string }>(
-    statement,
-  );
-  return Array.isArray(result)
-    ? (result as { id: number | string; public_id: string }[])
-    : ((result as { rows?: { id: number | string; public_id: string }[] }).rows ?? []);
-}
-
 /**
  * Pre-resolves every distinct actor / target / organization / API-key public id in the batch
  * to its internal id in 3 round trips (one per table). Done UNDER `app.global_admin = true`
@@ -89,52 +79,31 @@ async function executeResolverFunction(
  * - **Side effects:** `SET LOCAL app.global_admin = 'true'` for the duration of the
  *   drain transaction; one SELECT per resolved table.
  */
-async function buildResolutionMaps(
-  databaseHandle: RequestScopedPostgresDatabase,
-  batch: readonly AuditOutboxRow[],
-): Promise<ResolutionMaps> {
-  await setLocalDatabaseConfig(databaseHandle, 'app.global_admin', 'true');
+async function buildResolutionMaps({
+  databaseHandle,
+  batch,
+}: {
+  databaseHandle: RequestScopedPostgresDatabase;
+  batch: readonly AuditOutboxRow[];
+}): Promise<ResolutionMaps> {
+  await setLocalDatabaseConfig({ databaseHandle, key: 'app.global_admin', value: 'true' });
 
   const { userPublicIds, organizationPublicIds, apiKeyPublicIds } =
     collectAuditOutboxPublicIds(batch);
-
-  const userIdsByPublicId = new Map<string, number>();
-  if (userPublicIds.size > 0) {
-    const rows = await databaseHandle
-      .select({ id: users.id, public_id: users.public_id })
-      .from(users)
-      .where(inArray(users.public_id, [...userPublicIds]));
-    for (const row of rows) userIdsByPublicId.set(row.public_id, row.id);
-  }
-
-  // Org and API-key ids resolve through SECURITY DEFINER functions (migration
-  // 20260827040000): app.global_admin grants NOTHING on tenancy.*, so plain
-  // selects here returned ZERO rows under the RLS-subject roles and every
-  // organization-scoped / api-key-actor outbox row was permanently discarded after max
-  // attempts. The functions are narrow id lookups, mirroring the existing
-  // billing.resolve_organization_public_id_for_stripe_subscription pattern.
-  const organizationIdsByPublicId = new Map<string, number>();
-  if (organizationPublicIds.size > 0) {
-    const rows = await executeResolverFunction(
-      databaseHandle,
-      // Bound as one comma-joined param + string_to_array: the driver's JS-array
-      // binding is not a reliable text[] literal, and public ids are [a-z0-9_] so
-      // the join is unambiguous.
-      drizzleSql`SELECT id, public_id FROM audit.resolve_organization_ids_for_public_ids(string_to_array(${[...organizationPublicIds].join(',')}, ','))`,
-    );
-    for (const row of rows) organizationIdsByPublicId.set(row.public_id, Number(row.id));
-  }
-
-  const apiKeyIdsByPublicId = new Map<string, number>();
-  if (apiKeyPublicIds.size > 0) {
-    const rows = await executeResolverFunction(
-      databaseHandle,
-      drizzleSql`SELECT id, public_id FROM audit.resolve_api_key_ids_for_public_ids(string_to_array(${[...apiKeyPublicIds].join(',')}, ','))`,
-    );
-    for (const row of rows) apiKeyIdsByPublicId.set(row.public_id, Number(row.id));
-  }
-
-  return { userIdsByPublicId, organizationIdsByPublicId, apiKeyIdsByPublicId };
+  const resolutionRepository = createAuditOutboxResolutionRepository(databaseHandle);
+  // Organization and API-key ids resolve through SECURITY DEFINER functions (migration
+  // 20260827040000): app.global_admin grants NOTHING on tenancy.*, so plain selects returned
+  // ZERO rows under the RLS-subject roles and every organization-scoped / api-key-actor outbox
+  // row was discarded after max attempts.
+  return {
+    userIdsByPublicId: await resolutionRepository.resolveUserIdsByPublicIds([...userPublicIds]),
+    organizationIdsByPublicId: await resolutionRepository.resolveOrganizationIdsByPublicIds([
+      ...organizationPublicIds,
+    ]),
+    apiKeyIdsByPublicId: await resolutionRepository.resolveApiKeyIdsByPublicIds([
+      ...apiKeyPublicIds,
+    ]),
+  };
 }
 
 interface ResolvedAuditLogInsertRow {
@@ -152,10 +121,13 @@ interface ResolvedAuditLogInsertRow {
   metadata: Record<string, unknown>;
 }
 
-function resolveRowInserts(
-  row: AuditOutboxRow,
-  maps: ResolutionMaps,
-): { row: ResolvedAuditLogInsertRow } | { error: string } {
+function resolveRowInserts({
+  row,
+  maps,
+}: {
+  row: AuditOutboxRow;
+  maps: ResolutionMaps;
+}): { row: ResolvedAuditLogInsertRow } | { error: string } {
   const actor_user_id = row.actor_user_public_id
     ? (maps.userIdsByPublicId.get(row.actor_user_public_id) ?? null)
     : null;
@@ -223,7 +195,7 @@ async function drainOutboxRow(options: {
   maxAttempts: number;
 }): Promise<DrainOutboxRowOutcome> {
   const { databaseHandle, drainRepository, row, maps, maxAttempts } = options;
-  const resolution = resolveRowInserts(row, maps);
+  const resolution = resolveRowInserts({ row, maps });
   if ('error' in resolution) {
     await drainRepository.markPermanentlyFailed(row.id, resolution.error);
     logger.warn(
@@ -241,8 +213,8 @@ async function drainOutboxRow(options: {
     // leaving the poison row at the head of `claimPendingBatch` (ORDER BY created_at ASC) forever,
     // never reaching the attempt cap. drizzle rolls the nested transaction back to its savepoint
     // and re-throws, leaving the OUTER batch transaction valid so the failure is recorded and the
-    // row's retries stay bounded. (Raw `SAVEPOINT` via execute() does NOT integrate with the
-    // postgres-js transaction-error state, so the nested transaction is the supported mechanism.)
+    // row's retries stay bounded. (Drizzle's nested transaction is the supported mechanism: it
+    // names, releases and rolls back its own savepoint.)
     await databaseHandle.transaction(async (savepoint) => {
       const savepointHandle = savepoint as unknown as RequestScopedPostgresDatabase;
       // Set BOTH GUCs on every row, never just the one this row needs.
@@ -257,19 +229,19 @@ async function drainOutboxRow(options: {
       // arm on the row's `organization_id` COLUMN rather than on the GUC; one edit to either the
       // policy or this branch turns it into a cross-tenant insert. Writing both values every
       // iteration makes each row's RLS identity total, so nothing is inherited.
-      await setLocalDatabaseConfig(
-        savepointHandle,
-        'app.current_organization_public_id',
-        row.organization_public_id ?? '',
-      );
+      await setLocalDatabaseConfig({
+        databaseHandle: savepointHandle,
+        key: 'app.current_organization_public_id',
+        value: row.organization_public_id ?? '',
+      });
       // Tenantless audit (system events) need the system arm; `resolveRowInserts` guarantees such
       // rows carry `organization_id IS NULL`, which the policy's system arm also requires.
-      await setLocalDatabaseConfig(
-        savepointHandle,
-        'app.system_audit_insert',
-        row.organization_public_id === null ? 'true' : 'false',
-      );
-      await savepointHandle.insert(logs).values(resolution.row);
+      await setLocalDatabaseConfig({
+        databaseHandle: savepointHandle,
+        key: 'app.system_audit_insert',
+        value: row.organization_public_id === null ? 'true' : 'false',
+      });
+      await createAuditOutboxResolutionRepository(savepointHandle).insertAuditLog(resolution.row);
     });
     return { kind: 'success', id: row.id };
   } catch (error) {
@@ -291,6 +263,31 @@ async function drainOutboxRow(options: {
       'audit.outbox.drain.row.transient_failure',
     );
     return { kind: 'transient' };
+  }
+}
+
+/**
+ * Deletes finished outbox rows once their window ends, at most {@link AUDIT_OUTBOX_PRUNE_BATCH_SIZE}
+ * per status per pass: drained rows after {@link AUDIT_OUTBOX_PROCESSED_RETENTION_HOURS}, failed
+ * ones after `AUDIT_RETENTION_DAYS` (the audit log's own window). Without it the outbox grew without
+ * bound and kept each event's actor, IP and metadata past retention and erasure.
+ */
+async function pruneFinishedAuditOutboxRows(
+  drainRepository: ReturnType<typeof createDrainAuditOutboxRepository>,
+): Promise<void> {
+  const now = Date.now();
+  const processedDeleted = await drainRepository.deleteRowsCreatedBefore({
+    status: 'PROCESSED',
+    olderThan: new Date(now - AUDIT_OUTBOX_PROCESSED_RETENTION_HOURS * MILLISECONDS_PER_HOUR),
+    limit: AUDIT_OUTBOX_PRUNE_BATCH_SIZE,
+  });
+  const failedDeleted = await drainRepository.deleteRowsCreatedBefore({
+    status: 'FAILED',
+    olderThan: new Date(now - env.AUDIT_RETENTION_DAYS * MILLISECONDS_PER_DAY),
+    limit: AUDIT_OUTBOX_PRUNE_BATCH_SIZE,
+  });
+  if (processedDeleted + failedDeleted > 0) {
+    logger.info({ processedDeleted, failedDeleted }, 'audit.outbox.prune.completed');
   }
 }
 
@@ -322,12 +319,13 @@ export async function runAuditOutboxDrainJob(
     env.AUDIT_OUTBOX_DRAIN_MAX_ATTEMPTS ?? DEFAULT_AUDIT_OUTBOX_DRAIN_MAX_ATTEMPTS;
 
   const drainRepository = createDrainAuditOutboxRepository(databaseHandle);
+  await pruneFinishedAuditOutboxRows(drainRepository);
   const batch = await drainRepository.claimPendingBatch(batchSize);
   if (batch.length === 0) {
     return { drained: 0, transientFailed: 0, permanentlyFailed: 0 };
   }
 
-  const maps = await buildResolutionMaps(databaseHandle, batch);
+  const maps = await buildResolutionMaps({ databaseHandle, batch });
 
   const successIds: number[] = [];
   let transientFailed = 0;
@@ -389,29 +387,3 @@ export async function runAuditOutboxDrainJob(
 
 /** Re-export so callers do not couple to the constants module. */
 export type { RequestScopedPostgresDatabase };
-/**
- * Counts PENDING rows in `audit.outbox` for tests and operator dashboards.
- *
- * @remarks
- * - **Algorithm:** single `SELECT COUNT(*)` against `audit.outbox` filtered to
- *   `status = 'PENDING'`. Bypasses Drizzle's typed query builder via
- *   `databaseHandle.execute` so the caller can pass a worker-pinned transaction
- *   handle without a typed table reference threaded through tests.
- * - **Failure modes:** propagates query errors (e.g. missing drain GUC under
- *   RLS); the caller is expected to be in a drain or admin context.
- * - **Side effects:** read-only.
- * - **Notes:** exported solely for the audit-outbox integration test that asserts
- *   the drain worker actually empties the queue. Production observability uses
- *   the structured `audit.outbox.drain.pass.completed` log fields instead.
- */
-export async function countPendingAuditOutboxRows(
-  databaseHandle: RequestScopedPostgresDatabase,
-): Promise<number> {
-  const result = await databaseHandle.execute<{ count: number }>(
-    drizzleSql`SELECT COUNT(*)::int AS count FROM audit.outbox WHERE status = 'PENDING'`,
-  );
-  const rows = Array.isArray(result)
-    ? (result as { count: number }[])
-    : ((result as { rows?: { count: number }[] }).rows ?? []);
-  return rows[0]?.count ?? 0;
-}

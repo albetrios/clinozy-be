@@ -51,7 +51,7 @@ describe('Security: Privilege escalation', () => {
       organizationId: organization.id,
       roleId: role.id,
     });
-    await invalidatePermissions(user.public_id, organization.public_id);
+    await invalidatePermissions({ userId: user.public_id, organizationId: organization.public_id });
     // Flat tenancy routes resolve the organization from the JWT `org` claim; the
     // member's bearer is scoped to its own organization.
     const token = await generateTestToken({

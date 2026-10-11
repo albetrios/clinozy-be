@@ -11,17 +11,23 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   ) => unknown;
   return {
     ...actual,
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withMaintenanceDatabaseContext: vi.fn((_scope: unknown, ...parameters: unknown[]) =>
-      inner(...parameters),
+    withMaintenanceDatabaseContext: vi.fn(
+      ({ callback, options }: { scope: unknown; callback: unknown; options?: unknown }) =>
+        inner(callback, options),
     ),
   };
 });
 
 vi.mock('@/shared/utils/infrastructure/postgres-error.util.js', () => ({
-  runInsertWithPublicIdentifierRetry: async (operation: () => Promise<unknown>) => operation(),
+  runInsertWithPublicIdentifierRetry: async ({
+    insert: operation,
+  }: {
+    insert: () => Promise<unknown>;
+  }) => operation(),
 }));
 
 /**

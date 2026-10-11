@@ -112,17 +112,17 @@ Import shared helpers — never define local ones:
 import { getRequestIdentifier, requireAuth } from '@/shared/utils/http/request.util.js';
 ```
 
-### Validators (function-based + safeParse)
+### Validators (function-based, `parseWithSchema`)
 
 ```typescript
+import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
+
 export function validateCreate<Resource>(data: unknown): Create<Resource>Input {
-  const result = create<Resource>Dto.safeParse(data);
-  if (!result.success) {
-    throw new ValidationError('Invalid input', result.error.flatten().fieldErrors);
-  }
-  return result.data;
+  return parseWithSchema({ schema: create<Resource>Dto, data });
 }
 ```
+
+A schema's own message is a translation key (`{ message: 'errors:validation.<key>' }`), never English text; `parseWithSchema` renders every message in each response language.
 
 ### Serializers (function-based)
 
@@ -177,7 +177,7 @@ export function <domain>Routes(deps: <Domain>RoutesDeps): FastifyPluginAsync {
 
 - **controllers/** may import: own service(s) or container deps, `@/shared/utils/http/request.util.js`, `@/shared/utils/http/response.util.js`, shared errors.
 - **services/** may import: **same-domain** repository, own validator, shared errors, `src/core/events/event-bus.ts`, `src/shared/utils/infrastructure/logger.util.js`. For cross-domain reads/writes, import the other domain's **service** only — never its repository or schema.
-- **repositories/** may import: DB connection, schema, own domain types; may extend `base-repository.ts`.
+- **repositories/** may import: DB connection, schema, own domain types; a list builds its page with `finishKeysetPage` (`list-query.util.ts`).
 - **containers/** may import: own domain repositories, services. Accept cross-domain deps as parameters. Export services for route registration.
 - **validators/** call DTO `.safeParse()` methods and throw `ValidationError`.
 - **DTOs** contain Zod schemas only.

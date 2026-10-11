@@ -22,15 +22,18 @@ export function isPaddleEnvelope(
  * envelope used by the public API. Skipped for error responses (≥400), non-JSON content
  * types, already-wrapped payloads, and routes that opt out via `raw_response` route config.
  */
-export function formatResponsePayload(
-  payload: unknown,
+export function formatResponsePayload({
+  payload,
+  context,
+}: {
+  payload: unknown;
   context: {
     rawResponse?: boolean;
     statusCode: number;
     contentType: unknown;
     requestId: string;
-  },
-): unknown {
+  };
+}): unknown {
   if (context.rawResponse) return payload;
   if (context.statusCode >= 400) return payload;
 
@@ -75,11 +78,14 @@ const responseFormatMiddleware: FastifyPluginAsync = async (app) => {
   app.addHook('onSend', async (request, reply, payload) => {
     if (isEnvelopeExemptPath(request.url)) return payload;
     const config = (reply.routeOptions?.config ?? {}) as RouteConfig;
-    return formatResponsePayload(payload, {
-      statusCode: reply.statusCode,
-      contentType: reply.getHeader('content-type'),
-      requestId: request.id,
-      ...(config.raw_response !== undefined ? { rawResponse: config.raw_response } : {}),
+    return formatResponsePayload({
+      payload,
+      context: {
+        statusCode: reply.statusCode,
+        contentType: reply.getHeader('content-type'),
+        requestId: request.id,
+        ...(config.raw_response !== undefined ? { rawResponse: config.raw_response } : {}),
+      },
     });
   });
 };

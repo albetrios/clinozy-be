@@ -8,7 +8,7 @@ import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.j
  */
 export const invitationIdParamsDto = z
   .object({
-    invitation_id: trimmedStringMinMax(1, 28),
+    invitation_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
@@ -19,7 +19,7 @@ export const invitationIdParamsDto = z
  */
 export const acceptMemberInvitationDto = z
   .object({
-    token: trimmedStringMinMax(1, 512),
+    token: trimmedStringMinMax({ min: 1, max: 512 }),
   })
   .strict();
 

@@ -75,10 +75,10 @@ describe('createMemberRoleController', () => {
       next_cursor: 'role_cursor_2',
     } as never);
     const response = await controller.listRoles(mockRequest({ params: {} }), mockReply());
-    expect(service.list).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      { limit: 25 },
-    );
+    expect(service.list).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      pagination: { limit: 25 },
+    });
     expect(response).toMatchObject({
       data: [role],
       meta: { pagination: expect.objectContaining({ has_more: true, next: 'role_cursor_2' }) },
@@ -87,10 +87,10 @@ describe('createMemberRoleController', () => {
 
   it('getRole delegates to service', async () => {
     await controller.getRole(mockRequest({ params: { role_id: rolePublicId } }), mockReply());
-    expect(service.getByPublicId).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      rolePublicId,
-    );
+    expect(service.getByPublicId).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      role_public_id: rolePublicId,
+    });
   });
 
   it('createRole returns 200', async () => {
@@ -122,10 +122,10 @@ describe('createMemberRoleController', () => {
   it('deleteRole returns 204', async () => {
     const reply = mockReply();
     await controller.deleteRole(mockRequest({ params: { role_id: rolePublicId } }), reply);
-    expect(service.delete).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      rolePublicId,
-    );
+    expect(service.delete).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      role_public_id: rolePublicId,
+    });
     expect(reply.code).toHaveBeenCalledWith(204);
   });
 
@@ -189,19 +189,19 @@ describe('createMemberRoleController', () => {
       }),
       mockReply(),
     );
-    expect(service.list).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId }),
-      expect.anything(),
-    );
+    expect(service.list).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId }),
+      pagination: expect.anything(),
+    });
   });
 
   it('getRole with valid organization id uses params without fallback', async () => {
     vi.mocked(service.getByPublicId).mockClear();
     await controller.getRole(mockRequest({ params: { role_id: rolePublicId } }), mockReply());
-    expect(service.getByPublicId).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      rolePublicId,
-    );
+    expect(service.getByPublicId).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      role_public_id: rolePublicId,
+    });
   });
 
   // sec-new-T3: getRole, updateRole, deleteRole now validate both id and roleId.
@@ -230,10 +230,10 @@ describe('createMemberRoleController', () => {
       }),
       mockReply(),
     );
-    expect(service.getByPublicId).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId }),
-      rolePublicId,
-    );
+    expect(service.getByPublicId).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId }),
+      role_public_id: rolePublicId,
+    });
   });
 
   it('getRole rejects empty params with ForbiddenError (sec-new-T3)', async () => {
@@ -273,12 +273,12 @@ describe('createMemberRoleController', () => {
       }),
       mockReply(),
     );
-    expect(service.update).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId }),
-      rolePublicId,
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(service.update).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId }),
+      role_public_id: rolePublicId,
+      body: expect.anything(),
+      updated_by_user_public_id: expect.anything(),
+    });
   });
 
   it('deleteRole rejects malformed roleId (sec-new-T3)', async () => {

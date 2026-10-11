@@ -37,6 +37,9 @@ Run this skill when **any** of the following are created or modified:
 ## Checklist to enforce
 
 - [ ] No raw user-facing message strings in `throw new AppError(...)`, `throw new ValidationError(...)`, or subclasses (use **messageKey** + **messageParams**).
+- [ ] A field-level `ValidationError` item is `{ field, messageKey }` (snake_case field), never English text.
+- [ ] A Zod DTO's own message is a translation key (`{ message: 'errors:validation.<key>' }`); Zod's built-in messages need nothing — they are rendered per language from Zod's catalogs.
+- [ ] Emails and notifications built off the request carry the language in the payload (`locale`) and translate with `lng`; see the internationalization reference.
 - [ ] No hardcoded user-facing strings in the error handler’s `detail` or `errors[].message` (use `request.t()` with keys).
 - [ ] No `return { message: '...' }` with a raw string from services that reach the client; use **messageKey** and controller-side `request.t()`.
 - [ ] Every key used in code exists in **`src/shared/locales/en/`** (and in other locales if they exist).

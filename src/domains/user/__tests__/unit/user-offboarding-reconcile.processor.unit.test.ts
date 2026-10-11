@@ -13,8 +13,9 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   const inner = vi.fn() as unknown as (...parameters: unknown[]) => unknown;
   return {
     ...actual,
-    withMaintenanceDatabaseContext: vi.fn((_scope: unknown, ...parameters: unknown[]) =>
-      inner(...parameters),
+    withMaintenanceDatabaseContext: vi.fn(
+      ({ callback, options }: { scope: unknown; callback: unknown; options?: unknown }) =>
+        inner(callback, options),
     ),
   };
 });
@@ -54,9 +55,12 @@ describe('runUserOffboardingReconcileJob (USER-04/USER-09)', () => {
     // The per-row failure is not merely counted — it is reported to Sentry with the row's public id
     // and the reconcile source tag, so a silently stuck offboarding surfaces operationally.
     expect(captureException).toHaveBeenCalledTimes(1);
-    expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
-      userId: 'user_a',
-      tags: { source: 'user-offboarding-reconcile' },
+    expect(captureException).toHaveBeenCalledWith({
+      error: expect.any(Error),
+      context: {
+        userId: 'user_a',
+        tags: { source: 'user-offboarding-reconcile' },
+      },
     });
   });
 

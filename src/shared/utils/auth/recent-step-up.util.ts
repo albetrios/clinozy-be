@@ -30,7 +30,13 @@ const RECENT_STEP_UP_KEY_PREFIX = 'step-up:';
  * other session for the same user. With binding, only the session that earned the step-up
  * can present it for `requireRecentStepUpPreHandler`.
  */
-function buildRecentStepUpKey(userPublicId: string, sessionPublicId: string): string {
+function buildRecentStepUpKey({
+  userPublicId,
+  sessionPublicId,
+}: {
+  userPublicId: string;
+  sessionPublicId: string;
+}): string {
   return `${RECENT_STEP_UP_KEY_PREFIX}${userPublicId}:${sessionPublicId}`;
 }
 
@@ -43,17 +49,22 @@ function buildRecentStepUpKey(userPublicId: string, sessionPublicId: string): st
  * value is the factor (not the session id) so {@link hasRecentStrongStepUp} can exclude
  * `email_code` windows from destructive mutations.
  */
-export async function recordRecentStepUp(
-  redis: Redis,
-  userPublicId: string,
-  sessionPublicId: string,
-  factor: StepUpFactor,
-): Promise<void> {
+export async function recordRecentStepUp({
+  redis,
+  userPublicId,
+  sessionPublicId,
+  factor,
+}: {
+  redis: Redis;
+  userPublicId: string;
+  sessionPublicId: string;
+  factor: StepUpFactor;
+}): Promise<void> {
   if (!sessionPublicId) {
     throw new Error('recordRecentStepUp requires a non-empty sessionPublicId');
   }
   await redis.set(
-    buildRecentStepUpKey(userPublicId, sessionPublicId),
+    buildRecentStepUpKey({ userPublicId, sessionPublicId }),
     factor,
     'EX',
     RECENT_STEP_UP_TTL_SECONDS,
@@ -68,15 +79,19 @@ export async function recordRecentStepUp(
  * cannot identify the session never satisfies the gate (sec-A2). This protects against a
  * future regression where an authenticator forgets to populate the session id.
  */
-export async function hasRecentStepUp(
-  redis: Redis,
-  userPublicId: string,
-  sessionPublicId: string | undefined,
-): Promise<boolean> {
+export async function hasRecentStepUp({
+  redis,
+  userPublicId,
+  sessionPublicId,
+}: {
+  redis: Redis;
+  userPublicId: string;
+  sessionPublicId: string | undefined;
+}): Promise<boolean> {
   if (!sessionPublicId) {
     return false;
   }
-  const value = await redis.get(buildRecentStepUpKey(userPublicId, sessionPublicId));
+  const value = await redis.get(buildRecentStepUpKey({ userPublicId, sessionPublicId }));
   return value !== null;
 }
 
@@ -89,14 +104,18 @@ export async function hasRecentStepUp(
  * sessions or delete credentials on that weaker factor. Fails closed on a missing session id and
  * on any stored value that is not a strong factor.
  */
-export async function hasRecentStrongStepUp(
-  redis: Redis,
-  userPublicId: string,
-  sessionPublicId: string | undefined,
-): Promise<boolean> {
+export async function hasRecentStrongStepUp({
+  redis,
+  userPublicId,
+  sessionPublicId,
+}: {
+  redis: Redis;
+  userPublicId: string;
+  sessionPublicId: string | undefined;
+}): Promise<boolean> {
   if (!sessionPublicId) {
     return false;
   }
-  const value = await redis.get(buildRecentStepUpKey(userPublicId, sessionPublicId));
+  const value = await redis.get(buildRecentStepUpKey({ userPublicId, sessionPublicId }));
   return value !== null && STRONG_STEP_UP_FACTORS.includes(value as StepUpFactor);
 }

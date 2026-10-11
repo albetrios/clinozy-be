@@ -73,11 +73,15 @@ export async function seedUser(payload: SeedUserPayload) {
  * Stamps `onboarding_completed_at`: the demo admin exists to land on a working
  * dashboard, so the frontend must never route it through the onboarding wizard.
  */
-export async function seedDemoUser(
-  email: string,
-  password: string,
-  options?: { first_name?: string; last_name?: string },
-) {
+export async function seedDemoUser({
+  email,
+  password,
+  options,
+}: {
+  email: string;
+  password: string;
+  options?: { first_name?: string; last_name?: string } | undefined;
+}) {
   const passwordHash = await hashPassword(password);
   return seedUser({
     email,

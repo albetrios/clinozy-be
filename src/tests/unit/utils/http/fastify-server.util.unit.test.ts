@@ -45,7 +45,8 @@ describe('fastify-server.util', () => {
     expect(options.trustProxy).toBe(false);
     expect(options.bodyLimit).toBe(1_048_576);
     expect(options.requestTimeout).toBe(30_000);
-    expect(options.connectionTimeout).toBe(10_000);
+    // Off by default: a socket inactivity timeout shorter than the slowest handler cut its response.
+    expect(options.connectionTimeout).toBe(0);
   });
 
   it('suppresses per-request logs via a LogController instance, not the deprecated top-level flag (FSTDEP023)', async () => {
@@ -65,14 +66,14 @@ describe('fastify-server.util', () => {
 
   it('buildFastifyServerOptions honors FASTIFY_REQUEST_TIMEOUT_MS and FASTIFY_CONNECTION_TIMEOUT_MS', async () => {
     envState.FASTIFY_REQUEST_TIMEOUT_MS = 45_000;
-    envState.FASTIFY_CONNECTION_TIMEOUT_MS = 15_000;
+    envState.FASTIFY_CONNECTION_TIMEOUT_MS = 45_000;
     vi.resetModules();
     const { buildFastifyServerOptions: buildTimeoutOptions } = await import(
       '@/shared/utils/http/fastify-server.util.js'
     );
     const options = buildTimeoutOptions();
     expect(options.requestTimeout).toBe(45_000);
-    expect(options.connectionTimeout).toBe(15_000);
+    expect(options.connectionTimeout).toBe(45_000);
     envState.FASTIFY_REQUEST_TIMEOUT_MS = undefined;
     envState.FASTIFY_CONNECTION_TIMEOUT_MS = undefined;
     vi.resetModules();

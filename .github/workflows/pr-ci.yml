@@ -50,6 +50,9 @@ jobs:
               - 'migrations/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              # Dependency overrides and patches change what installs and how it behaves.
+              - 'pnpm-workspace.yaml'
+              - 'patches/**'
               - 'vitest.config.ts'
               - 'tooling/**'
             docker:
@@ -57,6 +60,8 @@ jobs:
               - 'Dockerfile.worker'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'patches/**'
               - 'tooling/ci/check-dockerfile-sync.mjs'
             ci-config:
               - '.github/**'
@@ -513,7 +518,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 1
+          # The baseline scan below needs the PR's base commit.
+          fetch-depth: 0
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -526,8 +532,12 @@ jobs:
       - name: Install Semgrep
         run: pip install "semgrep==${SEMGREP_VERSION}"
 
+      # Fails on the findings this PR introduces: `--baseline-commit` reports only what is new since
+      # the base (the findings already on main are known), `--error` turns them into a red job.
       - name: Semgrep SAST
-        run: semgrep scan --config p/default --metrics off
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: semgrep scan --config p/default --metrics off --error --baseline-commit "$BASE_SHA"
 
   security-iac:
     # Trivy config (IaC misconfiguration scan) — closes the Dockerfile/compose

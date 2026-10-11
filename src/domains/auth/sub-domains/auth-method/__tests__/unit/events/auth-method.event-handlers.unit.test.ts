@@ -1,13 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { join } from 'node:path';
-import Backend from 'i18next-fs-backend';
-import i18next from 'i18next';
 import { enterOnCommitScope, eventBus } from '@/core/events/event-bus.js';
 import { AUTH_EVENT } from '@/domains/auth/sub-domains/auth-method/events/auth.events.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { registerAuthMethodEventHandlers } from '@/domains/auth/sub-domains/auth-method/events/auth.event-handlers.js';
 import { isMailConfigured } from '@/infrastructure/mail/mail.service.js';
 import { ServiceUnavailableError } from '@/shared/errors/index.js';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
 
 const recordOutboxEmailMock = vi.fn();
 const dispatchOutboxEmailMock = vi.fn();
@@ -22,16 +20,9 @@ vi.mock('@/infrastructure/mail/mail.service.js', () => ({
 }));
 
 describe('auth event handlers', () => {
+  // Email copy comes from the locale files, as in the API and the worker.
   beforeAll(async () => {
-    await i18next.use(Backend).init({
-      lng: 'en',
-      fallbackLng: 'en',
-      ns: ['mail'],
-      defaultNS: 'mail',
-      backend: {
-        loadPath: join(process.cwd(), 'src/shared/locales/{{lng}}/{{ns}}.json'),
-      },
-    });
+    await initializeI18nextForBackgroundWork();
   });
 
   beforeEach(() => {
@@ -69,7 +60,7 @@ describe('auth event handlers', () => {
       }),
     );
     expect(dispatchOutboxEmailMock).toHaveBeenCalledOnce();
-    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith(42);
+    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith({ mailOutboxToken: 42 });
   });
 
   it('records outbox and dispatches after commit on auth.password_reset.requested', async () => {
@@ -93,6 +84,37 @@ describe('auth event handlers', () => {
     );
     expect(dispatchOutboxEmailMock).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    [
+      AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED,
+      { verification_code: 'AB2CD3', expires_in_minutes: 15 },
+      'Inicia sesión en tu cuenta',
+      'caduca en 15 minutos',
+    ],
+    [
+      AUTH_EVENT.PASSWORD_RESET_REQUESTED,
+      { reset_token: 'reset-token', expires_in_minutes: 60 },
+      'Restablece tu contraseña',
+      'caduca en 60 minutos',
+    ],
+  ])(
+    "writes %s in the requester's language",
+    async (eventType, fields, expectedSubject, expectedBodyText) => {
+      await emitAndFlushOnCommit({
+        type: eventType,
+        payload: { email: 'user@example.com', locale: 'es', ...fields },
+        timestamp: new Date(),
+      });
+
+      expect(recordOutboxEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: expectedSubject,
+          html: expect.stringContaining(expectedBodyText),
+        }),
+      );
+    },
+  );
 
   it('does not dispatch BullMQ job until flushOnCommit runs', async () => {
     enterOnCommitScope();

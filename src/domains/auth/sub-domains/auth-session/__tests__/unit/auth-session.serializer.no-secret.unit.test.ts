@@ -26,7 +26,7 @@ function buildRow(overrides: Record<string, unknown> = {}) {
 
 describe('auth-session.serializer', () => {
   it('omits credential material and internal identifiers', () => {
-    const output = serializeAuthSession(buildRow(), NO_CURRENT_SESSION);
+    const output = serializeAuthSession({ row: buildRow(), options: NO_CURRENT_SESSION });
     const keys = Object.keys(output);
     expect(keys).not.toContain('token_hash');
     expect(keys).not.toContain('refresh_token_hash');
@@ -43,7 +43,7 @@ describe('auth-session.serializer', () => {
   });
 
   it('exposes only the safe display fields as ISO strings', () => {
-    const output = serializeAuthSession(buildRow(), NO_CURRENT_SESSION);
+    const output = serializeAuthSession({ row: buildRow(), options: NO_CURRENT_SESSION });
     // The bare 'Mozilla/5.0' carries no device/browser token, so the derived fields are null.
     expect(output).toEqual({
       id: 'sess-public-id',
@@ -59,38 +59,50 @@ describe('auth-session.serializer', () => {
   });
 
   it('normalizes a missing user_agent to null', () => {
-    const output = serializeAuthSession(buildRow({ user_agent: null }), NO_CURRENT_SESSION);
+    const output = serializeAuthSession({
+      row: buildRow({ user_agent: null }),
+      options: NO_CURRENT_SESSION,
+    });
     expect(output.user_agent).toBeNull();
     expect(output.device).toBeNull();
     expect(output.browser).toBeNull();
   });
 
   it('flags the row whose public id matches the current session', () => {
-    const current = serializeAuthSession(buildRow({ public_id: 'sess-current' }), {
-      currentSessionPublicId: 'sess-current',
+    const current = serializeAuthSession({
+      row: buildRow({ public_id: 'sess-current' }),
+      options: {
+        currentSessionPublicId: 'sess-current',
+      },
     });
-    const other = serializeAuthSession(buildRow({ public_id: 'sess-other' }), {
-      currentSessionPublicId: 'sess-current',
+    const other = serializeAuthSession({
+      row: buildRow({ public_id: 'sess-other' }),
+      options: {
+        currentSessionPublicId: 'sess-current',
+      },
     });
     expect(current.is_current).toBe(true);
     expect(other.is_current).toBe(false);
   });
 
   it('parses device and browser from a real user-agent', () => {
-    const output = serializeAuthSession(
-      buildRow({
+    const output = serializeAuthSession({
+      row: buildRow({
         user_agent:
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
       }),
-      NO_CURRENT_SESSION,
-    );
+      options: NO_CURRENT_SESSION,
+    });
     expect(output.device).toBe('Mac');
     expect(output.browser).toBe('Chrome');
   });
 
   it('serializes a list', () => {
-    const output = serializeAuthSessions([buildRow(), buildRow({ public_id: 'sess-2' })], {
-      currentSessionPublicId: 'sess-2',
+    const output = serializeAuthSessions({
+      rows: [buildRow(), buildRow({ public_id: 'sess-2' })],
+      options: {
+        currentSessionPublicId: 'sess-2',
+      },
     });
     expect(output).toHaveLength(2);
     expect(output[1]?.id).toBe('sess-2');

@@ -1,6 +1,9 @@
-import { and, asc, count, eq, gt, isNull, type SQL } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
-import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import { and, asc, count, eq, gt, isNull, sql, type SQL } from 'drizzle-orm';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
+import {
+  getContextFreeDatabase,
+  getRequestDatabase,
+} from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -12,7 +15,7 @@ import {
 import type { MemberInvitationRow } from './member-invitation.types.js';
 import {
   buildAscendingCreatedAtIdCursorCondition,
-  createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 
@@ -29,6 +32,13 @@ export interface MemberInvitationOrganizationLookupRow {
   membership_public_id: string;
   membership_id: number;
 }
+
+type MemberInvitationOrganizationLookupDatabaseRow = {
+  organization_public_id: string;
+  organization_id: string | number;
+  membership_public_id: string;
+  membership_id: string | number;
+};
 
 /**
  * Cursor-pagination options for {@link MemberInvitationRepository.findByOrganizationId}.
@@ -57,17 +67,18 @@ export class MemberInvitationRepository {
       isNull(memberships.deleted_at),
     ];
     const countWhere = and(...filterConditions);
-    const cursorCondition = buildAscendingCreatedAtIdCursorCondition(
-      member_invitations.created_at,
-      member_invitations.id,
-      parseListCursor(after),
-    );
+    const cursorCondition = buildAscendingCreatedAtIdCursorCondition({
+      createdAtColumn: member_invitations.created_at,
+      idColumn: member_invitations.id,
+      cursor: parseListCursor(after),
+    });
     const where =
       cursorCondition !== undefined ? and(...filterConditions, cursorCondition) : countWhere;
 
     const rowsPromise = getRequestDatabase()
       .select({
         invitation: member_invitations,
+        cursor_created_at: cursorTimestampSelection(member_invitations.created_at),
         membership_public_id: memberships.public_id,
       })
       .from(member_invitations)
@@ -86,20 +97,12 @@ export class MemberInvitationRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    const hasMore = fetchedRows.length > limit;
-    const rows = hasMore ? fetchedRows.slice(0, limit) : fetchedRows;
-    const items = rows.map((row) => ({
+    const rows = fetchedRows.map((row) => ({
       ...row.invitation,
+      cursor_created_at: row.cursor_created_at,
       membership_public_id: row.membership_public_id,
     }));
-    const lastItem = items.at(-1);
-    return {
-      items,
-      total,
-      limit,
-      has_more: hasMore,
-      next_cursor: hasMore && lastItem !== undefined ? createOpaqueCursorFromRow(lastItem) : null,
-    };
+    return finishKeysetPage({ rows, args: { limit, total } });
   }
 
   async findByPublicId(public_id: string): Promise<MemberInvitationRow | null> {
@@ -141,10 +144,10 @@ export class MemberInvitationRepository {
    * {@link MemberInvitationRepository.countPendingByOrganization}.
    */
   async acquireCreationQuotaLock(organization_id: number): Promise<void> {
-    await acquireResourceQuotaLock(
-      RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBER_INVITATION,
-      organization_id,
-    );
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBER_INVITATION,
+      key: organization_id,
+    });
   }
 
   /**
@@ -158,21 +161,13 @@ export class MemberInvitationRepository {
   async lookupOrganizationByInvitationPublicId(
     invitation_public_id: string,
   ): Promise<MemberInvitationOrganizationLookupRow | null> {
-    const rows = await sql<
-      Array<{
-        organization_public_id: string;
-        organization_id: string | number;
-        membership_public_id: string;
-        membership_id: string | number;
-      }>
-    >`
-      SELECT
-        organization_public_id,
-        organization_id,
-        membership_public_id,
-        membership_id
-      FROM tenancy.resolve_member_invitation_lookup_by_public_id(${invitation_public_id})
-    `;
+    const result =
+      await getContextFreeDatabase().execute<MemberInvitationOrganizationLookupDatabaseRow>(
+        sql`SELECT organization_public_id, organization_id, membership_public_id, membership_id FROM tenancy.resolve_member_invitation_lookup_by_public_id(${invitation_public_id})`,
+      );
+    const rows = (
+      Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? [])
+    ) as MemberInvitationOrganizationLookupDatabaseRow[];
     const row = rows[0];
     if (!row) return null;
     return {
@@ -191,24 +186,26 @@ export class MemberInvitationRepository {
     expires_at: Date;
     created_by_user_id?: number | null;
   }) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('memberInvitation');
-      const rows = await getRequestDatabase()
-        .insert(member_invitations)
-        .values({
-          public_id,
-          membership_id: data.membership_id,
-          email: data.email,
-          token_hash: data.token_hash,
-          invited_by_user_id: data.invited_by_user_id,
-          expires_at: data.expires_at,
-          ...(data.created_by_user_id !== undefined &&
-            data.created_by_user_id !== null && {
-              created_by_user_id: data.created_by_user_id,
-            }),
-        })
-        .returning();
-      return rows[0]! as MemberInvitationRow;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const public_id = generatePublicId('memberInvitation');
+        const rows = await getRequestDatabase()
+          .insert(member_invitations)
+          .values({
+            public_id,
+            membership_id: data.membership_id,
+            email: data.email,
+            token_hash: data.token_hash,
+            invited_by_user_id: data.invited_by_user_id,
+            expires_at: data.expires_at,
+            ...(data.created_by_user_id !== undefined &&
+              data.created_by_user_id !== null && {
+                created_by_user_id: data.created_by_user_id,
+              }),
+          })
+          .returning();
+        return rows[0]! as MemberInvitationRow;
+      },
     });
   }
 

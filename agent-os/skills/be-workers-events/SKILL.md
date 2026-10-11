@@ -60,7 +60,7 @@ Scheduled sweeps and `webhook-delivery` do not pause. Detail: [workers-and-event
   work (mail outbox, webhook delivery attempts, the Stripe event ledger), an enqueue error leaves
   the row pending — never marks it failed — and a scheduled sweep in the **same family** as the
   worker re-enqueues rows still pending after a cutoff (`mail-outbox-sweeper`,
-  `webhook-delivery-reclaim`, `stripe-webhook-event-reclaim`). Key the job on the row's public id or
+  `webhook-delivery-reclaim`, `stripe-webhook-event-reclaim`, `reclaim-pending-user-data-exports`). Key the job on the row's public id or
   token so the sweep's add is a no-op while the job exists. Table: [workers-and-events.md → When
   Redis refuses the enqueue](../../../docs/reference/runtime/workers-and-events.md#when-redis-refuses-the-enqueue).
 - **A job that pushes an aggregate's latest state runs one at a time per aggregate.** Deduplicate
@@ -105,7 +105,7 @@ For a visual flow diagram (Service → EventBus → Handler → Queue → Redis 
 ## Distributed tracing across the queue
 
 - **Inject on enqueue:** spread `captureTraceContextForPropagation()` into the job payload in every `enqueue*` helper, and merge `traceContextJobFieldsSchema` (`src/infrastructure/observability/tracing/trace-context-job-fields.schema.ts`) into the job's `*.job.schema.ts` so `traceparent` / `tracestate` validate.
-- **Extract in the worker:** wrap the job body in `runWithPropagatedTraceContext({ traceparent, tracestate }, job.name, () => …)` (`trace-context.util.ts`) so the worker span is a child of the originating request. Both helpers no-op when no span is active or OTEL is disabled.
+- **Extract in the worker:** wrap the job body in `runWithPropagatedTraceContext({ traceparent, tracestate }, job.name, () => …)` (`trace-context.util.ts`) so the worker span is a child of the originating request. Both helpers no-op when no span is active or tracing is off.
 
 ## Canonical examples
 
@@ -132,7 +132,21 @@ member-invitation.service  →  eventBus.emit(tenancy.member_invitation.accepted
 notify/sub-domains/notification/events/member-invitation-accepted.event-handlers.ts  →  notification row + enqueue
 ```
 
-Billing emits no domain events today (`billing.overview.md`).
+**Tenancy + billing → notify — organization resource events** (the webhook catalog)
+
+```text
+organization / membership / member-invitation / subscription services (+ Stripe webhook dispatch)
+  →  eventBus.emit(<ORGANIZATION|MEMBERSHIP|SUBSCRIPTION>_EVENT.*, { organization_public_id, data })
+     inside the write's organization context
+notify/sub-domains/webhook/events/organization-resource.event-handlers.ts
+  →  WebhookService.dispatchOrganizationWebhooks → PENDING attempts in the same transaction
+```
+
+Every unit of work releases its after-commit tasks only when it commits (`runInCommitUnit`), so
+enqueues wait for the commit in workers too, and are dropped when the unit rolls back. The fan-out
+runs in one savepoint (`withSavepoint`): a failure there never fails the producer's write. Outside a
+savepoint, a failed statement fails the whole unit of work even when its error is caught
+(`database.transaction.failed_statement_caught`).
 
 **Notify — outbound webhook delivery**
 
@@ -141,7 +155,8 @@ emitWebhookDeliveryRequested()  →  notify/sub-domains/webhook/webhook-delivery
 notify/sub-domains/webhook/webhook-delivery/events/webhook-delivery.event-handlers.ts  →  enqueueWebhookDelivery()
 ```
 
-`notify/events/notify.event-handlers.ts` registers exactly these two notify handlers.
+`notify/events/notify.event-handlers.ts` registers these notify handlers plus the
+invite-accepted notification and the organization resource fan-out above.
 
 `src/core/events/register-event-handlers.ts` calls each domain’s `register*EventHandlers()` (from `buildApp()` before routes).
 
@@ -167,10 +182,10 @@ notify/sub-domains/webhook/webhook-delivery/events/webhook-delivery.event-handle
      - **Runtime guard:** `src/worker.ts` sets `CLINOZY_BE_RUNTIME=worker`. Unpinned `getRequestDatabase()` throws `WorkerDatabaseContextError`. Context kind is tracked in `database-context-runtime.ts` (ALS).
      - Use `runOrganizationScopedWorkerJob`, `runGlobalRetentionWorkerJob`, or `runUserScopedWorkerJob` from `worker-processor.util.ts`, or `createTenantScopedBullMQWorker` for tenant-scoped queues, or call the context wrappers directly
      - Tenant-scoped jobs → `withAppDatabaseContext(PRINCIPAL_SCOPE.JOB({ organizationPublicId }), (databaseHandle) => …)` — pins ALS + `SET LOCAL app.current_organization_public_id`
-     - Global tombstone/retention → `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, (databaseHandle) => …)` — `app.global_retention_cleanup`
+     - Global tombstone/retention → `withMaintenanceDatabaseContext({ scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, callback: (databaseHandle) => … })` — `app.global_retention_cleanup`
      - GDPR export → `withAppDatabaseContext(PRINCIPAL_SCOPE.JOB({ userPublicId }), (databaseHandle) => …)` — `app.current_user_public_id`
-     - Session cleanup → `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SESSION_RETENTION_CLEANUP, …)` — `app.session_retention_cleanup`
-     - Mail outbox + Stripe webhook ledger (no tenant RLS) → `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, …)` in processors/workers
+     - Session cleanup → `withMaintenanceDatabaseContext({ scope: MAINTENANCE_SCOPE.SESSION_RETENTION_CLEANUP, callback })` — `app.session_retention_cleanup`
+     - Mail outbox + Stripe webhook ledger (no tenant RLS) → `withMaintenanceDatabaseContext({ scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, callback })` in processors/workers
      - Pass `databaseHandle` into `createWorker*Repository(databaseHandle)` factories; factories call `assertWorkerDatabaseContext` for the expected kind
 
 4. **Bootstrap**
@@ -216,8 +231,8 @@ Every BullMQ worker is registered exactly once in [`worker-registration.registry
 | Field                             | How to choose                                                                                                                                                                                                                                                                                                                                                                                                            |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `family`                          | Pick the smallest family that fits. Throughput workers → `mail` / `notify` / `webhook` / `stripe`. Crons / sweepers / tombstone / partition / GDPR retention → `retention`. Redis-only monitoring → `observability`.                                                                                                                                                                                                     |
-| `usesPostgres`                    | `true` if the processor checks out a postgres.js connection at any point during a job. `false` only when the processor talks exclusively to Redis / external HTTP (e.g. `dlq-depth`, `idempotency-cardinality`).                                                                                                                                                                                                         |
-| `scheduled`                       | `true` when there is a matching `upsertJobScheduler` entry in `scheduler.ts`. `false` for event-driven workers (`mail`, `webhook-delivery`, `notification`, `user-data-export`, `stripe-webhook`, `subscription-seat-sync`). `scheduler-registry-audit.ts` cross-checks both directions and logs `worker.registry.scheduler_mismatch` on drift.                                                                                                    |
+| `usesPostgres`                    | `true` if the processor checks out a pooled Postgres connection at any point during a job. `false` only when the processor talks exclusively to Redis / external HTTP (e.g. `dlq-depth`, `idempotency-cardinality`).                                                                                                                                                                                                         |
+| `scheduled`                       | `true` when there is a matching `upsertJobScheduler` entry in `scheduler.ts`. `false` for event-driven workers (`mail`, `webhook-delivery`, `notification`, `stripe-webhook`). `subscription-seat-sync` and `user-data-export` are `true`: their workers also run a recovery sweep routed on `job.name` (the hourly `subscription-seat-reconcile`, the five-minute `reclaim-pending-user-data-exports`) — the pattern for a sweep that needs no worker or connection budget of its own. `scheduler-registry-audit.ts` cross-checks both directions and logs `worker.registry.scheduler_mismatch` on drift.                                                                                                    |
 | `criticality`                     | `throughput` for workers that drive user-visible latency (event-driven mail/notify/webhook/stripe). `maintenance` for retention/cron/sweeper/reclaim. `observability` for metrics-only workers (`dlq-depth`, `idempotency-cardinality`). Surfaced in `worker.queue_families.selected` and pool alerts.                                                                                                                   |
 | `holdsConnectionDuringExternalIo` | `true` when the Postgres checkout is held during an outbound HTTP / S3 / Resend / Stripe call. No worker sets it today. Omit / `false` when the DB context closes before any external IO — e.g. `audit-export`, which reads each batch in its own short retention context and uploads it to S3 outside, `webhook-delivery`, which claims and records the attempt in separate short transactions around (not across) the outbound POST, and the upload sweep / S3 retention purges (`purgeRowsAfterTheirObjects`), which open a short context per page with the S3 calls outside. Prefer that shape to a new `true`. Only meaningful when `usesPostgres: true`. |
 | `resolvePostgresConcurrency`      | Throughput: `() => getWorkerConcurrencyMail()` / `_Notify()` / `_Webhook()` / `_Stripe()` from `@/shared/config/worker-concurrency.util.js`. Cron / retention / sweeper: use the `retentionDefinition()` helper (concurrency `RETENTION_WORKER_CONCURRENCY = 1`). Required when `usesPostgres: true`.                                                                                                                    |

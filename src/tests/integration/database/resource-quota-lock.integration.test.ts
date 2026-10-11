@@ -16,14 +16,20 @@ describe('acquireResourceQuotaLock — bigint scope id (B-1)', () => {
   it('locks without int4 overflow for a scope id beyond 2^31', async () => {
     const beyondInt4 = 3_000_000_000; // > 2,147,483,647 (int4 max)
     await expect(
-      acquireResourceQuotaLock(RESOURCE_QUOTA_LOCK_NAMESPACE.WEBHOOK, beyondInt4),
+      acquireResourceQuotaLock({
+        namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.WEBHOOK,
+        key: beyondInt4,
+      }),
     ).resolves.toBeUndefined();
   });
 
   it('locks without overflow for a very large bigint scope id', async () => {
     const largeBigint = 9_000_000_000_000; // far beyond int4, well within int8/bigserial
     await expect(
-      acquireResourceQuotaLock(RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBER_ROLE, largeBigint),
+      acquireResourceQuotaLock({
+        namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBER_ROLE,
+        key: largeBigint,
+      }),
     ).resolves.toBeUndefined();
   });
 });

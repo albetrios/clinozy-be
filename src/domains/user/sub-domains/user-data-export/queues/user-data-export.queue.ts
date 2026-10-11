@@ -47,11 +47,11 @@ function getUserDataExportQueue(): Queue<UserDataExportJobData> {
  */
 export async function enqueueUserDataExport(jobData: UserDataExportJobData): Promise<void> {
   const queue = getUserDataExportQueue();
-  const validated = parseBullMQJobData(
-    userDataExportJobDataSchema,
-    { ...jobData, ...captureTraceContextForPropagation() },
-    USER_DATA_EXPORT_QUEUE_NAME,
-  );
+  const validated = parseBullMQJobData({
+    schema: userDataExportJobDataSchema,
+    data: { ...jobData, ...captureTraceContextForPropagation() },
+    queueName: USER_DATA_EXPORT_QUEUE_NAME,
+  });
   await queue.add('process-user-data-export', validated, { jobId: validated.exportPublicId });
 }
 

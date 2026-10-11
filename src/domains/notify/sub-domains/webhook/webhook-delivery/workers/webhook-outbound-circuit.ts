@@ -26,9 +26,15 @@ const WEBHOOK_CIRCUIT_RESET_TIMEOUT_MS = MILLISECONDS_PER_MINUTE;
 /** Minimum calls in the rolling window before the error percentage is evaluated. */
 const WEBHOOK_CIRCUIT_VOLUME_THRESHOLD = 5;
 
+/**
+ * A breaker around {@link executeWebhookFetch}: typed with its arguments so `fire` is checked
+ * against the action (opossum forwards `fire`'s arguments to it unchanged).
+ */
+type WebhookOutboundCircuit = CircuitBreaker<[Parameters<typeof executeWebhookFetch>[0]], Response>;
+
 /** Cache entry pairing a breaker with the last time it was accessed (for idle-TTL eviction). */
 type WebhookCircuitCacheEntry = {
-  circuit: CircuitBreaker;
+  circuit: WebhookOutboundCircuit;
   lastAccessedAtMs: number;
 };
 
@@ -42,18 +48,25 @@ type WebhookCircuitCacheEntry = {
  */
 const circuitsByWebhookPublicId = new Map<string, WebhookCircuitCacheEntry>();
 
-async function executeWebhookFetch(
-  webhookUrl: string,
-  init: RequestInit,
-  fetchImplementation: WebhookDeliveryFetch,
-): Promise<Response> {
+async function executeWebhookFetch({
+  webhookUrl,
+  init,
+  fetchImplementation,
+}: {
+  webhookUrl: string;
+  init: RequestInit;
+  fetchImplementation: WebhookDeliveryFetch;
+}): Promise<Response> {
   return fetchImplementation(webhookUrl, init);
 }
 
-function attachCircuitEventListeners(
-  circuit: CircuitBreaker,
-  logContext: { webhookPublicId: string; webhookUrl: string },
-): void {
+function attachCircuitEventListeners({
+  circuit,
+  logContext,
+}: {
+  circuit: WebhookOutboundCircuit;
+  logContext: { webhookPublicId: string; webhookUrl: string };
+}): void {
   const safeUrl = safeWebhookUrlForLogs(logContext.webhookUrl);
   const redactedContext = { webhookPublicId: logContext.webhookPublicId, ...safeUrl };
 
@@ -71,11 +84,15 @@ function attachCircuitEventListeners(
 }
 
 /** Touch an entry so it becomes most-recently-used (move-to-end + refresh timestamp). */
-function touchCircuitCacheEntry(
-  webhookPublicId: string,
-  entry: WebhookCircuitCacheEntry,
-  nowMs: number,
-): void {
+function touchCircuitCacheEntry({
+  webhookPublicId,
+  entry,
+  nowMs,
+}: {
+  webhookPublicId: string;
+  entry: WebhookCircuitCacheEntry;
+  nowMs: number;
+}): void {
   entry.lastAccessedAtMs = nowMs;
   circuitsByWebhookPublicId.delete(webhookPublicId);
   circuitsByWebhookPublicId.set(webhookPublicId, entry);
@@ -100,19 +117,25 @@ function evictLeastRecentlyUsedIfFull(): void {
   }
 }
 
-function getWebhookOutboundCircuit(webhookPublicId: string, webhookUrl: string): CircuitBreaker {
+function getWebhookOutboundCircuit({
+  webhookPublicId,
+  webhookUrl,
+}: {
+  webhookPublicId: string;
+  webhookUrl: string;
+}): WebhookOutboundCircuit {
   const nowMs = Date.now();
   evictExpiredCircuits(nowMs);
 
   const existing = circuitsByWebhookPublicId.get(webhookPublicId);
   if (existing) {
-    touchCircuitCacheEntry(webhookPublicId, existing, nowMs);
+    touchCircuitCacheEntry({ webhookPublicId, entry: existing, nowMs });
     return existing.circuit;
   }
 
   evictLeastRecentlyUsedIfFull();
 
-  const circuit = new CircuitBreaker(executeWebhookFetch, {
+  const circuit: WebhookOutboundCircuit = new CircuitBreaker(executeWebhookFetch, {
     timeout: WEBHOOK_FETCH_TIMEOUT_MS + WEBHOOK_CIRCUIT_TIMEOUT_BUFFER_MS,
     errorThresholdPercentage: WEBHOOK_CIRCUIT_ERROR_THRESHOLD_PERCENTAGE,
     resetTimeout: WEBHOOK_CIRCUIT_RESET_TIMEOUT_MS,
@@ -120,7 +143,7 @@ function getWebhookOutboundCircuit(webhookPublicId: string, webhookUrl: string):
     name: `webhook-outbound:${webhookPublicId}`,
   });
 
-  attachCircuitEventListeners(circuit, { webhookPublicId, webhookUrl });
+  attachCircuitEventListeners({ circuit, logContext: { webhookPublicId, webhookUrl } });
   circuitsByWebhookPublicId.set(webhookPublicId, { circuit, lastAccessedAtMs: nowMs });
   return circuit;
 }
@@ -155,11 +178,11 @@ export async function fetchWebhookWithCircuitBreaker(
   options: FetchWebhookWithCircuitBreakerOptions,
 ): Promise<Response> {
   const { webhookPublicId, webhookUrl, init, fetchImplementation } = options;
-  return getWebhookOutboundCircuit(webhookPublicId, webhookUrl).fire(
+  return getWebhookOutboundCircuit({ webhookPublicId, webhookUrl }).fire({
     webhookUrl,
     init,
     fetchImplementation,
-  ) as Promise<Response>;
+  });
 }
 
 /**

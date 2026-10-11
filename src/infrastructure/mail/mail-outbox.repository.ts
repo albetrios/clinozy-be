@@ -174,6 +174,29 @@ export async function findStalePendingMailOutboxTokens(
 }
 
 /**
+ * Deletes up to `limit` finished (`sent` / `failed`) rows created before `olderThan`, oldest first
+ * (served by `idx_mail_outbox_status_created_at`). Returns how many went.
+ */
+export async function deleteFinishedMailOutboxRowsCreatedBefore(
+  olderThan: Date,
+  limit: number,
+): Promise<number> {
+  const oldest = mailOutboxDatabase()
+    .select({ id: mail_outbox.id })
+    .from(mail_outbox)
+    .where(
+      and(inArray(mail_outbox.status, ['sent', 'failed']), lt(mail_outbox.created_at, olderThan)),
+    )
+    .orderBy(asc(mail_outbox.created_at))
+    .limit(limit);
+  const deleted = await mailOutboxDatabase()
+    .delete(mail_outbox)
+    .where(inArray(mail_outbox.id, oldest))
+    .returning({ id: mail_outbox.id });
+  return deleted.length;
+}
+
+/**
  * Finalises a row as `sent`, stamping the Resend message id and `sent_at` —
  * called after a successful Resend `emails.send` in {@link processMailOutboxJob}.
  */

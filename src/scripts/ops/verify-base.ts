@@ -18,6 +18,7 @@ import { resolve } from 'node:path';
 import dotenv from 'dotenv';
 import { DATABASE_URL_KEYS } from '@/infrastructure/database/utils/connection-url.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { listProcessTree, signalProcesses } from './process-tree.util.js';
 
 const BASE_URL_FOR_HEALTH = (process.env.BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const HEALTH_URL = `${BASE_URL_FOR_HEALTH}/readyz`;
@@ -61,21 +62,20 @@ async function sleep(milliseconds: number): Promise<void> {
   });
 }
 
+/** Every process under the spawned dev server and worker, roots included. */
+function spawnedProcessTrees(): number[] {
+  return spawnedChildProcesses.flatMap((child) =>
+    child.pid === undefined ? [] : listProcessTree(child.pid),
+  );
+}
+
 function registerSignalHandlersForTeardown(): void {
   if (didRegisterSignalHandlers) {
     return;
   }
   didRegisterSignalHandlers = true;
   const teardownSynchronously = (): void => {
-    for (const child of spawnedChildProcesses) {
-      if (!child.killed && child.pid !== undefined) {
-        try {
-          child.kill('SIGTERM');
-        } catch {
-          /* ignore */
-        }
-      }
-    }
+    signalProcesses({ processIds: spawnedProcessTrees(), signal: 'SIGTERM' });
   };
   process.on('SIGINT', () => {
     teardownSynchronously();
@@ -87,7 +87,13 @@ function registerSignalHandlersForTeardown(): void {
   });
 }
 
-function runPnpmStep(stepName: string, pnpmArguments: string[]): Promise<void> {
+function runPnpmStep({
+  stepName,
+  pnpmArguments,
+}: {
+  stepName: string;
+  pnpmArguments: string[];
+}): Promise<void> {
   const startedAt = performance.now();
   logger.info({ stepName, pnpmArguments }, 'verify.base: step start');
   return new Promise((resolve, reject) => {
@@ -148,17 +154,12 @@ async function teardownSpawnedProcesses(): Promise<void> {
     return;
   }
   logger.info('verify.base: stopping spawned dev processes');
-  for (const child of spawnedChildProcesses) {
-    if (!child.killed && child.pid !== undefined) {
-      child.kill('SIGTERM');
-    }
-  }
+  // The whole trees, snapshotted before the first signal: pnpm runs the script in a process group
+  // of its own, so signalling pnpm alone left the API listening on its port.
+  const processIds = spawnedProcessTrees();
+  signalProcesses({ processIds, signal: 'SIGTERM' });
   await sleep(TEARDOWN_GRACE_MILLISECONDS);
-  for (const child of spawnedChildProcesses) {
-    if (!child.killed && child.pid !== undefined) {
-      child.kill('SIGKILL');
-    }
-  }
+  signalProcesses({ processIds, signal: 'SIGKILL' });
   spawnedChildProcesses.length = 0;
 }
 
@@ -205,18 +206,21 @@ async function main(): Promise<void> {
   const gateStartedAt = performance.now();
 
   try {
-    await runPnpmStep('db:migrate', ['db:migrate']);
+    await runPnpmStep({ stepName: 'db:migrate', pnpmArguments: ['db:migrate'] });
     // The migrations create the role logins NOLOGIN; turn them on before anything connects.
-    await runPnpmStep('database logins', ['setup:local', '--only-env']);
-    await runPnpmStep('db:seed', ['db:seed']);
-    await runPnpmStep('db:seed:full', ['db:seed:full']);
+    await runPnpmStep({
+      stepName: 'database logins',
+      pnpmArguments: ['setup:local', '--only-env'],
+    });
+    await runPnpmStep({ stepName: 'db:seed', pnpmArguments: ['db:seed'] });
+    await runPnpmStep({ stepName: 'db:seed:full', pnpmArguments: ['db:seed:full'] });
     await ensureServerRunning();
-    await runPnpmStep('test:api-smoke', ['test:api-smoke']);
+    await runPnpmStep({ stepName: 'test:api-smoke', pnpmArguments: ['test:api-smoke'] });
   } finally {
     await teardownSpawnedProcesses();
   }
 
-  await runPnpmStep('validate', ['validate']);
+  await runPnpmStep({ stepName: 'validate', pnpmArguments: ['validate'] });
 
   logger.info(
     { durationMs: Math.round(performance.now() - gateStartedAt) },

@@ -47,7 +47,7 @@ describe('Security: app.global_admin does not expose tenancy tables', () => {
     const owner = await createTestUser();
     // Provisioning writes organization + Owner role + grants + ACTIVE membership in one transaction, so both
     // tables genuinely hold rows — otherwise the zero-row assertions below would pass vacuously.
-    await provisionPersonalOrganization(owner.id);
+    await provisionPersonalOrganization({ ownerUserId: owner.id });
 
     const seededAsSuperuser = {
       organizations: rowCount(

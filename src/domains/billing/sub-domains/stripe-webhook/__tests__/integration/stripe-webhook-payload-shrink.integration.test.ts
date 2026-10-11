@@ -83,7 +83,7 @@ describe('stripe-webhook — id-only Redis payload (payload shrink)', () => {
 
     await completion;
 
-    expect(retrieveStripeEventMock).toHaveBeenCalledWith(stripeEventId);
+    expect(retrieveStripeEventMock).toHaveBeenCalledWith({ stripeEventId });
 
     const rows = await getOperatorDatabase()
       .select()

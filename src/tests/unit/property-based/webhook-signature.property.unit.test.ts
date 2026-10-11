@@ -20,8 +20,10 @@ describe('webhook signature (property)', () => {
         payloadArbitrary,
         timestampArbitrary,
         (secret, payload, timestamp) => {
-          const signature = signWebhookPayload(secret, payload, timestamp);
-          expect(verifyWebhookPayloadSignature(secret, payload, timestamp, signature)).toBe(true);
+          const signature = signWebhookPayload({ secret, payload, timestamp });
+          expect(
+            verifyWebhookPayloadSignature({ secret, payload, timestamp, signatureHex: signature }),
+          ).toBe(true);
         },
       ),
       propertyOptions,
@@ -37,8 +39,15 @@ describe('webhook signature (property)', () => {
         timestampArbitrary,
         (secret, payloadA, payloadB, timestamp) => {
           fc.pre(payloadA !== payloadB);
-          const signature = signWebhookPayload(secret, payloadA, timestamp);
-          expect(verifyWebhookPayloadSignature(secret, payloadB, timestamp, signature)).toBe(false);
+          const signature = signWebhookPayload({ secret, payload: payloadA, timestamp });
+          expect(
+            verifyWebhookPayloadSignature({
+              secret,
+              payload: payloadB,
+              timestamp,
+              signatureHex: signature,
+            }),
+          ).toBe(false);
         },
       ),
       propertyOptions,
@@ -54,8 +63,15 @@ describe('webhook signature (property)', () => {
         timestampArbitrary,
         (secret, payload, timestampA, timestampB) => {
           fc.pre(timestampA !== timestampB);
-          const signature = signWebhookPayload(secret, payload, timestampA);
-          expect(verifyWebhookPayloadSignature(secret, payload, timestampB, signature)).toBe(false);
+          const signature = signWebhookPayload({ secret, payload, timestamp: timestampA });
+          expect(
+            verifyWebhookPayloadSignature({
+              secret,
+              payload,
+              timestamp: timestampB,
+              signatureHex: signature,
+            }),
+          ).toBe(false);
         },
       ),
       propertyOptions,

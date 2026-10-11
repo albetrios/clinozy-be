@@ -65,14 +65,17 @@ export class OAuthService {
 
   async getRedirectUrl(provider: string): Promise<{ redirect_url: string; nonce: string }> {
     const normalizedProvider = assertOAuthProviderSupported(provider);
-    const { state, codeVerifier, nonce } = await createOAuthState(this.redis, normalizedProvider);
+    const { state, codeVerifier, nonce } = await createOAuthState({
+      redis: this.redis,
+      provider: normalizedProvider,
+    });
     const codeChallenge = derivePkceCodeChallengeS256(codeVerifier);
 
     if (normalizedProvider === 'google') {
-      return { redirect_url: buildGoogleOAuthRedirectUrl(state, codeChallenge), nonce };
+      return { redirect_url: buildGoogleOAuthRedirectUrl({ state, codeChallenge }), nonce };
     }
     if (normalizedProvider === 'github') {
-      return { redirect_url: buildGitHubOAuthRedirectUrl(state, codeChallenge), nonce };
+      return { redirect_url: buildGitHubOAuthRedirectUrl({ state, codeChallenge }), nonce };
     }
 
     throw new NotImplementedError(
@@ -92,12 +95,12 @@ export class OAuthService {
     requestId?: string;
   }): Promise<FirstFactorAuthResult> {
     const ipAddress = options.ipAddress ?? '127.0.0.1';
-    const { provider: normalizedProvider, codeVerifier } = await consumeOAuthState(
-      this.redis,
-      options.provider,
-      options.state,
-      options.nonce,
-    );
+    const { provider: normalizedProvider, codeVerifier } = await consumeOAuthState({
+      redis: this.redis,
+      provider: options.provider,
+      state: options.state,
+      nonce: options.nonce,
+    });
 
     const profile =
       normalizedProvider === 'google'

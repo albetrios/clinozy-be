@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { sql } from '@/infrastructure/database/connection.js';
 import { CHAOS_POSTGRES_PROXY_NAME } from '@/tests/chaos/chaos.constants.js';
 import {
   resetChaosTestingListeningProxyFailuresGloballyViaToxiproxy,
   withTemporaryListeningProxyToxinForChaosAssertion,
 } from '@/tests/chaos/helpers/toxiproxy.client.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
 
 describe('Chaos resilience: Postgres RST through reset_peer toxin', () => {
   it('eventually reconnects cleanly after toxin removal restores upstream TCP', async () => {
+    // Poison an established connection: a cold handshake otherwise reconnects while its query waits.
+    await expect(database.execute(sql`SELECT 1`)).resolves.not.toThrow();
     await withTemporaryListeningProxyToxinForChaosAssertion(
       CHAOS_POSTGRES_PROXY_NAME,
       {
@@ -21,11 +24,11 @@ describe('Chaos resilience: Postgres RST through reset_peer toxin', () => {
         },
       },
       async () => {
-        await expect(sql`SELECT 1`).rejects.toThrow();
+        await expect(database.execute(sql`SELECT 1`)).rejects.toThrow();
       },
     );
 
-    await expect(sql`SELECT 1`).resolves.not.toThrow();
+    await expect(database.execute(sql`SELECT 1`)).resolves.not.toThrow();
     await resetChaosTestingListeningProxyFailuresGloballyViaToxiproxy();
   });
 });

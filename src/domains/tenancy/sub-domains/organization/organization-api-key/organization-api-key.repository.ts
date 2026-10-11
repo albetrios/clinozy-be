@@ -1,4 +1,8 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import {
+  type CursorTimestampRow,
+  cursorTimestampSelection,
+} from '@/shared/utils/http/pagination.util.js';
+import { getTableColumns, and, eq, isNull, sql } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
   getContextFreeDatabase,
@@ -6,7 +10,6 @@ import {
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { api_keys } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.schema.js';
-import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import {
@@ -60,7 +63,7 @@ const API_KEY_PREFIX_RESOLVER_CAP = 16;
  * cursor-paginated organization-scoped listings, soft-delete, prefix lookup for
  * authentication, and `last_used_at` touches.
  */
-export class OrganizationApiKeyRepository extends BaseRepository {
+export class OrganizationApiKeyRepository {
   /**
    * Counts the active (not soft-deleted) API keys for the given organization.
    *
@@ -87,10 +90,10 @@ export class OrganizationApiKeyRepository extends BaseRepository {
    * {@link countActiveByOrganization}.
    */
   async acquireCreationQuotaLock(organization_id: number): Promise<void> {
-    await acquireResourceQuotaLock(
-      RESOURCE_QUOTA_LOCK_NAMESPACE.ORGANIZATION_API_KEY,
-      organization_id,
-    );
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.ORGANIZATION_API_KEY,
+      key: organization_id,
+    });
   }
 
   async findByOrganizationId(
@@ -114,16 +117,19 @@ export class OrganizationApiKeyRepository extends BaseRepository {
     const where = and(
       eq(api_keys.organization_id, organization_id),
       isNull(api_keys.deleted_at),
-      buildSearchCondition([api_keys.name], q),
+      buildSearchCondition({ columns: [api_keys.name], q }),
       cursorCondition,
     );
     const rows = (await getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(api_keys),
+        cursor_created_at: cursorTimestampSelection(api_keys.created_at),
+      })
       .from(api_keys)
       .where(where)
       .orderBy(...orderBy)
-      .limit(limit + 1)) as OrganizationApiKeyRow[];
-    return finishKeysetPage(rows, { limit, sortValueFor, filterFingerprint });
+      .limit(limit + 1)) as (OrganizationApiKeyRow & CursorTimestampRow)[];
+    return finishKeysetPage({ rows, args: { limit, sortValueFor, filterFingerprint } });
   }
 
   async findByPublicId(
@@ -153,25 +159,27 @@ export class OrganizationApiKeyRepository extends BaseRepository {
     expires_at?: Date | null;
     created_by_user_id?: number | null;
   }) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('organizationApiKey');
-      const row = {
-        public_id,
-        organization_id: data.organization_id,
-        name: data.name,
-        key_hash: data.key_hash,
-        key_prefix: data.key_prefix,
-        scopes: data.scopes,
-        expires_at: data.expires_at ?? undefined,
-        created_by_user_id: data.created_by_user_id ?? undefined,
-        updated_by_user_id: data.created_by_user_id ?? undefined,
-      };
-      const rows = await getRequestDatabase().insert(api_keys).values(row).returning();
-      const inserted = rows[0]!;
-      return {
-        ...(inserted as OrganizationApiKeyRow),
-        scopes: parseScopesColumn((inserted as { scopes?: unknown }).scopes),
-      };
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const public_id = generatePublicId('organizationApiKey');
+        const row = {
+          public_id,
+          organization_id: data.organization_id,
+          name: data.name,
+          key_hash: data.key_hash,
+          key_prefix: data.key_prefix,
+          scopes: data.scopes,
+          expires_at: data.expires_at ?? undefined,
+          created_by_user_id: data.created_by_user_id ?? undefined,
+          updated_by_user_id: data.created_by_user_id ?? undefined,
+        };
+        const rows = await getRequestDatabase().insert(api_keys).values(row).returning();
+        const inserted = rows[0]!;
+        return {
+          ...(inserted as OrganizationApiKeyRow),
+          scopes: parseScopesColumn((inserted as { scopes?: unknown }).scopes),
+        };
+      },
     });
   }
 

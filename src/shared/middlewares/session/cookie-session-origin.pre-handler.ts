@@ -14,7 +14,13 @@ function firstHeaderValue(rawHeader: string | string[] | undefined): string | un
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function assertOriginAllowed(origin: string, allowedOriginsList: string[]): void {
+function assertOriginAllowed({
+  origin,
+  allowedOriginsList,
+}: {
+  origin: string;
+  allowedOriginsList: string[];
+}): void {
   if (!allowedOriginsList.includes(origin)) {
     throw new ForbiddenError('errors:originNotAllowed');
   }
@@ -58,7 +64,7 @@ export function requireAllowedSourceOriginForCookieSessionRoute(request: Fastify
 
   const originHeader = firstHeaderValue(request.headers.origin);
   if (originHeader !== undefined) {
-    assertOriginAllowed(originHeader, allowedOriginsList);
+    assertOriginAllowed({ origin: originHeader, allowedOriginsList });
     return;
   }
 
@@ -70,7 +76,7 @@ export function requireAllowedSourceOriginForCookieSessionRoute(request: Fastify
   const refererHeader = firstHeaderValue(request.headers.referer);
   if (refererHeader !== undefined) {
     const refererOrigin = originFromRefererHeader(refererHeader);
-    assertOriginAllowed(refererOrigin, allowedOriginsList);
+    assertOriginAllowed({ origin: refererOrigin, allowedOriginsList });
     return;
   }
 

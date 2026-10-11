@@ -11,14 +11,15 @@
       "customer": "cus_fixture_contract_aa",
       "cancel_at_period_end": false,
       "canceled_at": null,
-      "current_period_start": 1735600700,
-      "current_period_end": 1738279100,
       "items": {
         "object": "list",
         "data": [
           {
             "id": "si_fixture_webhook_item_created",
-            "object": "subscription_item"
+            "object": "subscription_item",
+            "current_period_start": 1735600700,
+            "current_period_end": 1738279100,
+            "quantity": 1
           }
         ]
       }

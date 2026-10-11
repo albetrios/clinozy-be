@@ -29,10 +29,13 @@ export function serializeUploadCreate(data: {
  * internal `organization_id` foreign key with the caller-visible
  * organization public id (resolved by {@link UploadService}).
  */
-export function serializeUploadDetail(
-  row: UploadRow,
-  organization_public_id: string | null,
-): UploadDetailOutput {
+export function serializeUploadDetail({
+  row,
+  organization_public_id,
+}: {
+  row: UploadRow;
+  organization_public_id: string | null;
+}): UploadDetailOutput {
   // `file_key` (the internal S3 object path) and `bucket` are deliberately NOT
   // serialized — they are storage-internal, the client uses presigned URLs and
   // never the raw key, and exposing them reveals storage layout for enumeration.

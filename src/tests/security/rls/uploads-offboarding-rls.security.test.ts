@@ -1,13 +1,18 @@
 import { createHash } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { sql as drizzleSql } from 'drizzle-orm';
-import { database, sql } from '@/infrastructure/database/connection.js';
+import { database } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
 import {
   setLocalApplicationRole,
   setLocalMaintenanceRole,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Offboarding erases uploads through `UploadService.tombstoneAllBy{User,Organization}Id`, and
@@ -73,7 +78,8 @@ describe('uploads offboarding RLS (as the production roles)', () => {
     // Seeded through the privileged harness connection; the assertions below all run as an
     // RLS-subject production role.
     const seedEmail = 'uploads-rls@example.test';
-    const [user] = await sql<{ id: number }[]>`
+    const [user] = rowsOf<{ id: number }>(
+      await database.execute(drizzleSql`
       INSERT INTO auth.users (public_id, email, email_hash, is_email_verified)
       VALUES (
         'usr_uploadsrlsseeduser01',
@@ -82,26 +88,33 @@ describe('uploads offboarding RLS (as the production roles)', () => {
         true
       )
       RETURNING id
-    `;
-    const [organization] = await sql<{ id: number }[]>`
+    `),
+    );
+    const [organization] = rowsOf<{ id: number }>(
+      await database.execute(drizzleSql`
       INSERT INTO tenancy.organizations (public_id, name, slug, owner_user_id, type)
       VALUES ('org_uploadsrlsseedorg001', 'Uploads RLS', 'uploads-rls', ${user!.id}, 'TEAM')
       RETURNING id
-    `;
-    const [organizationScoped] = await sql<{ id: number }[]>`
+    `),
+    );
+    const [organizationScoped] = rowsOf<{ id: number }>(
+      await database.execute(drizzleSql`
       INSERT INTO upload.uploads
         (public_id, user_id, organization_id, file_name, file_key, mime_type, file_size, bucket, status)
       VALUES ('upl_uploadsrlsorgscoped1', ${user!.id}, ${organization!.id},
               'org.png', 'uploads/org.png', 'image/png', 10, 'test-bucket', 'UPLOADED')
       RETURNING id
-    `;
-    const [userScoped] = await sql<{ id: number }[]>`
+    `),
+    );
+    const [userScoped] = rowsOf<{ id: number }>(
+      await database.execute(drizzleSql`
       INSERT INTO upload.uploads
         (public_id, user_id, organization_id, file_name, file_key, mime_type, file_size, bucket, status)
       VALUES ('upl_uploadsrlsuserscoped', ${user!.id}, NULL,
               'me.png', 'uploads/me.png', 'image/png', 10, 'test-bucket', 'UPLOADED')
       RETURNING id
-    `;
+    `),
+    );
 
     seeded = {
       organizationScopedId: Number(organizationScoped!.id),

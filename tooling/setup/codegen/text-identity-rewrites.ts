@@ -99,20 +99,11 @@ export const TEXT_REWRITE_TARGETS: readonly TextRewriteTarget[] = [
   },
   {
     path: '.env.example',
-    reason: 'Header comment, OTEL service-name default, and the Scalar slug default.',
+    reason: 'Header comment and the Scalar slug default.',
     rules: [
       {
         pattern: /^# \S+ environment variables$/m,
         replace: (snapshot) => `# ${snapshot.slug} environment variables`,
-      },
-      {
-        pattern: /^# Default: \S+-api \/ \S+-worker$/m,
-        replace: (snapshot) =>
-          `# Default: ${snapshot.artifacts.apiImage} / ${snapshot.artifacts.workerImage}`,
-      },
-      {
-        pattern: /^OTEL_SERVICE_NAME=\S+$/m,
-        replace: (snapshot) => `OTEL_SERVICE_NAME=${snapshot.artifacts.apiImage}`,
       },
       {
         pattern: /(the upload script defaults to `)[^`]*(`)/,

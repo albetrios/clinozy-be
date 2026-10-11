@@ -89,7 +89,7 @@ const TOOLS = [
   {
     name: 'local_metrics',
     description:
-      'Key parsed Prometheus metrics from the API: HTTP requests, memory (RSS), event-loop p99 lag, CPU time, queue waiting/failed, mail outbox, DLQ depth. Use for a quick runtime snapshot.',
+      "Key parsed Prometheus metrics from the API: HTTP requests, memory (RSS), event-loop p99 lag, CPU time, the API's database pool (connections in use / max, units of work waiting for one), queue waiting/failed, mail outbox, DLQ depth. Use for a quick runtime snapshot.",
     inputSchema: EMPTY,
     run: async () => {
       const text = await get('/metrics');
@@ -100,6 +100,12 @@ const TOOLS = [
         if (!m) continue;
         const v = parseFloat(m[3]);
         sums[m[1]] = (sums[m[1]] || 0) + (Number.isFinite(v) ? v : 0);
+        // Per-state sums for gauges labelled by `state` (`postgres_pool_connections.in_use`, …).
+        const state = m[2] && /state="([^"]*)"/.exec(m[2]);
+        if (state) {
+          const key = `${m[1]}.${state[1]}`;
+          sums[key] = (sums[key] || 0) + (Number.isFinite(v) ? v : 0);
+        }
       }
       const pick = [
         ['http_requests_total', 'HTTP requests', (v) => Math.round(v).toLocaleString()],
@@ -110,6 +116,12 @@ const TOOLS = [
           (v) => `${(v * 1000).toFixed(1)} ms`,
         ],
         ['process_cpu_seconds_total', 'CPU time', (v) => `${v.toFixed(1)} s`],
+        [
+          'postgres_pool_connections.in_use',
+          'DB pool in use',
+          (v) => `${Math.round(v)} / ${Math.round(sums.postgres_pool_max_connections ?? 0)}`,
+        ],
+        ['postgres_pool_waiting', 'DB pool waiting', (v) => String(Math.round(v))],
         ['bullmq_queue_waiting', 'Queue waiting', (v) => String(Math.round(v))],
         ['bullmq_queue_failed', 'Queue failed', (v) => String(Math.round(v))],
         ['mail_outbox_pending', 'Mail outbox', (v) => String(Math.round(v))],

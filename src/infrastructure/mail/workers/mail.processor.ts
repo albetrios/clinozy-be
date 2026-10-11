@@ -112,13 +112,17 @@ export type ProcessMailOutboxJobResult =
  *   `sent`. Runs inside a `system_table` worker context (no tenant RLS) because
  *   `auth.mail_outbox` is not tenant-scoped.
  */
-export async function processMailOutboxJob(
-  jobData: MailJobData,
-  options: ProcessMailOutboxJobOptions = {},
-): Promise<ProcessMailOutboxJobResult> {
-  return withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, () =>
-    processMailOutboxJobInner(jobData, options),
-  );
+export async function processMailOutboxJob({
+  jobData,
+  options = {},
+}: {
+  jobData: MailJobData;
+  options?: ProcessMailOutboxJobOptions | undefined;
+}): Promise<ProcessMailOutboxJobResult> {
+  return withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+    callback: () => processMailOutboxJobInner({ jobData, options }),
+  });
 }
 
 /** Claim outcomes that end the job before any send — or `null` when this execution owns the row. */
@@ -155,15 +159,18 @@ function settleUnclaimedRow(options: {
   }
 }
 
-async function processMailOutboxJobInner(
-  jobData: MailJobData,
-  options: ProcessMailOutboxJobOptions = {},
-): Promise<ProcessMailOutboxJobResult> {
-  const { mailOutboxToken, requestId } = parseBullMQJobData(
-    mailJobDataSchema,
-    jobData,
-    MAIL_QUEUE_NAME,
-  );
+async function processMailOutboxJobInner({
+  jobData,
+  options = {},
+}: {
+  jobData: MailJobData;
+  options?: ProcessMailOutboxJobOptions | undefined;
+}): Promise<ProcessMailOutboxJobResult> {
+  const { mailOutboxToken, requestId } = parseBullMQJobData({
+    schema: mailJobDataSchema,
+    data: jobData,
+    queueName: MAIL_QUEUE_NAME,
+  });
   const maxJobAttempts = options.maxJobAttempts ?? DEFAULT_MAIL_JOB_MAX_ATTEMPTS;
   const jobAttemptNumber = options.jobAttemptNumber ?? 0;
   const isFinalJobAttempt = jobAttemptNumber + 1 >= maxJobAttempts;

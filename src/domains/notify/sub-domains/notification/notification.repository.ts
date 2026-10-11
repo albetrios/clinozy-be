@@ -1,4 +1,5 @@
-import { and, count, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import { getTableColumns, and, count, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import { NOTIFICATION_MARK_ALL_READ_BATCH_SIZE } from '@/shared/constants/notification.constants.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
@@ -13,7 +14,7 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { users } from '@/domains/user/user.schema.js';
 import {
   buildDescendingCreatedAtIdCursorCondition,
-  createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 
@@ -128,17 +129,20 @@ export class NotificationRepository {
     const includeTotal = pagination.include_total === true;
     const filterConditions: SQL[] = [eq(notifications.user_id, user_id)];
     const countWhere = and(...filterConditions);
-    const cursorCondition = buildDescendingCreatedAtIdCursorCondition(
-      notifications.created_at,
-      notifications.id,
-      parseListCursor(after),
-    );
+    const cursorCondition = buildDescendingCreatedAtIdCursorCondition({
+      createdAtColumn: notifications.created_at,
+      idColumn: notifications.id,
+      cursor: parseListCursor(after),
+    });
     const where =
       cursorCondition !== undefined ? and(...filterConditions, cursorCondition) : countWhere;
 
     // Fetch one extra row so has_more is accurate without depending on count(*).
     const rowsPromise = this.db()
-      .select()
+      .select({
+        ...getTableColumns(notifications),
+        cursor_created_at: cursorTimestampSelection(notifications.created_at),
+      })
       .from(notifications)
       .where(where)
       .orderBy(desc(notifications.created_at), desc(notifications.id))
@@ -149,18 +153,7 @@ export class NotificationRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    const hasMore = fetchedRows.length > limit;
-    const items = hasMore ? fetchedRows.slice(0, limit) : fetchedRows;
-    const lastItem = items.at(-1);
-    const nextCursor =
-      hasMore && lastItem !== undefined ? createOpaqueCursorFromRow(lastItem) : null;
-    return {
-      items,
-      total,
-      limit,
-      has_more: hasMore,
-      next_cursor: nextCursor,
-    };
+    return finishKeysetPage({ rows: fetchedRows, args: { limit, total } });
   }
 
   async listForUserDataExport(

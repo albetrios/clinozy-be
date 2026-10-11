@@ -42,7 +42,10 @@ describe('hosted-docs-upload.util', () => {
       expect(check.skip).toBe(false);
       expect(check.missingVariables).toEqual([]);
       expect(
-        shouldSkipHostedUpload('Scalar Registry', ['SCALAR_API_KEY', 'SCALAR_NAMESPACE']),
+        shouldSkipHostedUpload({
+          targetName: 'Scalar Registry',
+          requiredVariableNames: ['SCALAR_API_KEY', 'SCALAR_NAMESPACE'],
+        }),
       ).toBe(false);
     } finally {
       if (previousScalarApiKey === undefined) {

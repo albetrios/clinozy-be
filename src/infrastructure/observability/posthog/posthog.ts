@@ -22,7 +22,7 @@ let client: PostHog | null = null;
 /**
  * Initialize the PostHog product-analytics client for server-side event capture.
  *
- * Call this **after** {@link initSentry} / {@link initOpenTelemetry} when building
+ * Call this **after** {@link initSentry} when building
  * the API or worker entrypoint. No-op when `POSTHOG_KEY` is not configured, so
  * deployments without analytics simply run with capture disabled.
  */

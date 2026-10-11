@@ -21,7 +21,11 @@ const mockValues = vi.fn(() => ({
 const mockInsert = vi.fn(() => ({ values: mockValues }));
 
 vi.mock('@/shared/utils/infrastructure/postgres-error.util.js', () => ({
-  runInsertWithPublicIdentifierRetry: async (operation: () => Promise<unknown>) => operation(),
+  runInsertWithPublicIdentifierRetry: async ({
+    insert: operation,
+  }: {
+    insert: () => Promise<unknown>;
+  }) => operation(),
 }));
 
 vi.mock('@/shared/utils/identity/public-id.util.js', () => ({

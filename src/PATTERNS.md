@@ -15,7 +15,7 @@ Prevent cross-tenant data leaks. Every read and write performed under an organiz
 ### Where it lives
 
 - HTTP layer: [src/shared/middlewares/core/auth.middleware.ts](src/shared/middlewares/core/auth.middleware.ts) — verifies the JWT / API key and eagerly attaches `request.principalScope` (plus the claim-derived `request.organizationId` decoration). The **authoritative** active organization is the signed `org` JWT claim; routes carry no `{organization_id}` path segment and the legacy `X-Organization-Id` header was removed.
-- Database layer: [src/infrastructure/database/contexts/database-context.ts](src/infrastructure/database/contexts/database-context.ts) — `withAppDatabaseContext(scope, …)` opens a Drizzle transaction and sets the identity GUCs (`app.current_organization_public_id` / `app.current_user_public_id`) from the token-minted principal scope in one `set_config` statement. RLS policies on organization-scoped tables read those GUCs.
+- Database layer: [src/infrastructure/database/contexts/database-context.ts](src/infrastructure/database/contexts/database-context.ts) — `withAppDatabaseContext({ scope, callback })` opens a Drizzle transaction and sets the identity GUCs (`app.current_organization_public_id` / `app.current_user_public_id`) from the token-minted principal scope in one `set_config` statement. RLS policies on organization-scoped tables read those GUCs.
 - Worker layer: [src/infrastructure/queue/worker-runtime/worker-processor.util.ts](src/infrastructure/queue/worker-runtime/worker-processor.util.ts) — `runOrganizationScopedWorkerJob` requires `organizationPublicId` in the job payload and wraps the processor body in `withAppDatabaseContext` (with a job-minted principal scope) so RLS sees the same GUC the HTTP layer would have set.
 
 ### Implementation
@@ -32,7 +32,7 @@ sequenceDiagram
   Auth->>Auth: verify JWT; attach request.principalScope
   Ctl->>Ctl: requireOrganizationScope(request) — 403 without an organization
   Ctl->>Svc: service.method(scope, dto)
-  Svc->>Ctx: withAppDatabaseContext(scope, fn)
+  Svc->>Ctx: withAppDatabaseContext({ scope, callback })
   Ctx->>DB: BEGIN; SET LOCAL app.current_organization_public_id
   Ctx->>Svc: pinned databaseHandle (transaction)
   Svc->>DB: SELECT/INSERT/UPDATE (RLS filters by organization)
@@ -43,8 +43,8 @@ The same context is reused if a worker is already running inside one (no nested 
 
 ### How to apply
 
-- New tenant-scoped repository: extend `BaseRepository`, scope every query by `organization_id`. Any RLS-eligible table also needs an RLS policy in its migration.
-- New tenant-scoped service method: wrap database I/O in `withAppDatabaseContext(scope, fn)` — the scope is attached by the auth middleware, narrowed at the controller (`requireOrganizationScope(request)`), and relayed through the service. **Network I/O (Stripe, S3, Resend) MUST stay outside** the wrapper to avoid holding a pool checkout across remote round trips — enforced by `pnpm test:global` (`rls-context-network-isolation.global.test.ts`).
+- New tenant-scoped repository: scope every query by `organization_id`; a list builds its page with `finishKeysetPage`. Any RLS-eligible table also needs an RLS policy in its migration.
+- New tenant-scoped service method: wrap database I/O in `withAppDatabaseContext({ scope, callback })` — the scope is attached by the auth middleware, narrowed at the controller (`requireOrganizationScope(request)`), and relayed through the service. **Network I/O (Stripe, S3, Resend) MUST stay outside** the wrapper to avoid holding a pool checkout across remote round trips — enforced by `pnpm test:global` (`rls-context-network-isolation.global.test.ts`).
 - New worker job: use `runOrganizationScopedWorkerJob`; never call `getRequestDatabase()` from a `*.worker.ts` / `*.processor.ts` (enforced by global tests).
 - Outside a context, `getRequestDatabase()` counts the access (`database_unscoped_query_total`) — a FORCE RLS query with no GUC silently returns zero rows. A query that **cannot** depend on a context — a `SECURITY DEFINER` resolver (`<schema>.resolve_*`) or the `tenancy.permissions` catalog read — uses `getContextFreeDatabase()` instead, so a non-zero counter always means a real missing context. Confined per call site by `context-free-database-usage.policy.unit.test.ts`.
 - New tenant-scoped endpoint: the active organization comes from the `org` JWT claim (no `{organization_id}` path segment); narrow `request.principalScope` with `requireOrganizationScope(request)` at the controller and pass it into `withAppDatabaseContext`.
@@ -53,23 +53,23 @@ The same context is reused if a worker is already running inside one (no nested 
 
 ### Purpose
 
-Every security- or governance-relevant write stages a row in the `audit.outbox` table inside the caller's transaction; the audit drain worker later inserts it into `audit.logs` so post-hoc investigation always has a non-repudiable trail. Audit failures must never fail the originating request — the user-visible operation is the source of truth and the audit row is best-effort.
+Every security- or governance-relevant write stages a row in the `audit.outbox` table right after the primary write commits — in its own short unit of work (the organization's context, or `SYSTEM_AUDIT_INSERT` for a tenantless row), **not** inside the write's transaction; the audit drain worker later inserts it into `audit.logs` so post-hoc investigation has a trail. Audit failures must never fail the originating request — the user-visible operation is the source of truth and the audit row is best-effort, so a crash between the two can lose the row.
 
 ### Where it lives
 
 - Domain: [src/domains/audit/](src/domains/audit/) owns the audit write path and the `audit.outbox` → `audit.logs` drain worker.
-- Caller helper: [src/shared/utils/infrastructure/audit-request-context.util.ts](src/shared/utils/infrastructure/audit-request-context.util.ts) — `recordScopedAuditEvent(request, input)` fills in IP / user-agent / actor fields and stages the outbox row. It wraps [audit-record.util.ts](src/shared/utils/infrastructure/audit-record.util.ts)'s `recordAuditEvent`, which swallows + logs failures so callers don't need a try/catch.
+- Caller helper: [src/shared/utils/infrastructure/audit-request-context.util.ts](src/shared/utils/infrastructure/audit-request-context.util.ts) — `recordScopedAuditEvent({ request, input })` fills in IP / user-agent / actor fields and stages the outbox row. It wraps [audit-record.util.ts](src/shared/utils/infrastructure/audit-record.util.ts)'s `recordAuditEvent`, which swallows + logs failures so callers don't need a try/catch.
 
 ### Implementation
 
 1. Handler performs its primary write (e.g. an organization or auth-method mutation).
-2. The handler calls `recordScopedAuditEvent(request, { <actor>, action, resource_type, resource_id, organizationPublicId, severity, metadata })` — network context (IP, user-agent) is filled in by the helper. `<actor>` is exactly one of `actorUserPublicId`, `actorApiKeyPublicId` (spread `buildAuditActorFields(auth)` for a request principal, which may be either) or `anonymousActor: true` (pre-authentication events only, e.g. `auth.login_failure`). The `AuditActor` type makes it required — an actorless call does not compile.
-3. The row is staged in `audit.outbox` inside the caller's transaction (no synchronous id lookup). The audit drain worker later resolves internal ids and inserts into `audit.logs`.
+2. The handler calls `recordScopedAuditEvent({ request, input: { <actor>, action, resource_type, resource_id, organizationPublicId, severity, metadata } })` — network context (IP, user-agent) is filled in by the helper. `<actor>` is exactly one of `actorUserPublicId`, `actorApiKeyPublicId` (spread `buildAuditActorFields(auth)` for a request principal, which may be either) or `anonymousActor: true` (pre-authentication events only, e.g. `auth.login_failure`). The `AuditActor` type makes it required — an actorless call does not compile.
+3. `AuditService.record` stages the row in `audit.outbox` in its own unit of work after the primary write (no synchronous id lookup). The audit drain worker later resolves internal ids and inserts into `audit.logs`.
 4. Errors are caught and logged at `warn`; the originating request still returns success.
 
 ### How to apply
 
-- Adding a security-relevant route: name the action `<domain>.<resource>.<verb>` and add it to the catalog in [docs/reference/security/audit-logs.md](docs/reference/security/audit-logs.md), call `recordScopedAuditEvent(request, {...})` after the primary write, populate `metadata` with the public ids and operation parameters that future investigators will need.
+- Adding a security-relevant route: name the action `<domain>.<resource>.<verb>` and add it to the catalog in [docs/reference/security/audit-logs.md](docs/reference/security/audit-logs.md), call `recordScopedAuditEvent({ request, input: {...} })` after the primary write, populate `metadata` with the public ids and operation parameters that future investigators will need.
 - Severity defaults to `INFO`. Use `WARNING` for failed-but-recorded actions (e.g. permission denied) and `CRITICAL` for global-admin lifecycle events.
 
 ## idempotency
@@ -97,7 +97,7 @@ flowchart TD
     C -- miss --> F[SETNX placeholder TTL=60s]
     F -- claimed --> G[Run handler]
     G --> H[onSend: stash response]
-    H --> I[onResponse: SET completed entry, TTL=24h]
+    H --> I[onResponse — or route-level onSend when the client left: SET completed entry, TTL=24h]
     F -- not claimed --> E
 ```
 
@@ -120,7 +120,7 @@ Some tables are deliberately exempt: immutable billing ledgers (audit, ledger en
 ### Where it lives
 
 - Schema definitions: every soft-deletable table declares `deleted_at: timestamp('deleted_at', { withTimezone: true })`.
-- Repositories: list/find methods filter `WHERE deleted_at IS NULL` by default; explicit `includeDeleted` flag is opt-in for admin/forensic paths.
+- Repositories: list/find methods filter `WHERE deleted_at IS NULL`. There is no generic opt-out flag: a path that needs tombstoned rows (the retention sweeps) has its own named read, e.g. `findTombstonedUploadsBefore`.
 - Tombstone retention workers: [src/domains/tenancy/sub-domains/organization/organization-notification-policy/workers/organization-notification-policy-tombstone-retention.processor.ts](src/domains/tenancy/sub-domains/organization/organization-notification-policy/workers/organization-notification-policy-tombstone-retention.processor.ts) and similar — sweep tombstoned rows after a retention window.
 
 ### Implementation
@@ -133,7 +133,7 @@ Some tables are deliberately exempt: immutable billing ledgers (audit, ledger en
 
 - New table: add `deleted_at` unless the table is an immutable ledger. If exempt, document **why** in the schema file.
 - New repository: any query that returns user-visible rows must include `eq(table.deleted_at, null)` or use a base helper that does.
-- Forensic / admin paths: opt out explicitly via a documented `includeDeleted: true` flag.
+- Forensic / retention paths: add a dedicated, named read for tombstoned rows (run under a maintenance context) rather than a flag on the user-facing one.
 
 ## rls-context
 
@@ -152,7 +152,7 @@ Postgres Row-Level Security is the **defense-in-depth** layer for tenant isolati
 
 - HTTP requests get RLS per unit of work: `withAppDatabaseContext` opens a short transaction with `SET LOCAL app.current_organization_public_id = $1`.
 - Workers get RLS via `runOrganizationScopedWorkerJob` which **requires** `organizationPublicId` in the job payload and opens its own `withAppDatabaseContext` transaction (job-minted organization scope). Workers are forbidden from importing `database-context-runtime.ts` (enforced by `worker-database-guard.unit.test.ts` and global tests).
-- Global-scope workers (cross-organization sweeps) use `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, …)`, which sets a different GUC that RLS policies recognize as "global retention" — strictly limited to retention/cleanup operations.
+- Global-scope workers (cross-organization sweeps) use `withMaintenanceDatabaseContext({ scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, callback })`, which sets a different GUC that RLS policies recognize as "global retention" — strictly limited to retention/cleanup operations.
 
 ### Each context grants only what a policy names
 
@@ -161,7 +161,7 @@ A context sets **one** GUC. It grants access only on tables whose policies test 
 | Context | GUC it sets | Grants on |
 | --- | --- | --- |
 | `withAppDatabaseContext` (organization scope) | `app.current_organization_public_id` | tenant-scoped tables (`organizations_tenant_isolation` and the per-table `*_tenant_isolation` policies) |
-| `withAppDatabaseContext` (user scope) | `app.current_user_public_id` | user-owned rows — `auth.users`, `auth.auth_methods`, uploads/notifications, **and the tenancy discovery policies** (`organizations_user_discovery`, `memberships_user_self_discovery`) |
+| `withAppDatabaseContext` (user scope) | `app.current_user_public_id` | user-owned rows — `auth.users`, `auth.auth_methods`, uploads/notifications, **and the tenancy discovery policies** (`organizations_user_discovery`, `memberships_user_self_discovery` — read-only: tenancy writes need the organization's context) |
 | `MAINTENANCE_SCOPE.GLOBAL_ADMIN` | `app.global_admin` | **`auth.*` and `audit.logs` ONLY** |
 | `MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP` | `app.global_retention_cleanup` | retention-sweep tables only |
 
@@ -182,7 +182,9 @@ These four properties hold today and are what keep lock contention from becoming
 
 **Three timeouts, three different failures, no substitutes** (all connection parameters, see [database.overview.md](src/infrastructure/database/database.overview.md)): `statement_timeout` bounds a running query, `idle_in_transaction_session_timeout` bounds an open-and-idle transaction, `lock_timeout` bounds a statement **blocked behind someone else's lock**. A lock waiter is neither running nor idle, so only `lock_timeout` bounds it — while it holds its pooled checkout for the entire wait.
 
-**Getting the connection is bounded separately** (`DATABASE_POOL_ACQUIRE_TIMEOUT_MS`): postgres.js has no acquire timeout, so a unit of work waiting on a cold pool during an outage would otherwise commit after its request had already failed. Every pooled unit of work runs through `runPooledUnitOfWork`, which answers `503` + `Retry-After` at the deadline and rolls a late connection's transaction back unrun (see [database.overview.md](src/infrastructure/database/database.overview.md)).
+**Getting the connection is bounded separately** (`DATABASE_POOL_ACQUIRE_TIMEOUT_MS`): a unit of work waiting on a cold pool during an outage would otherwise commit after its request had already failed. Every pooled unit of work runs through `runPooledUnitOfWork`, which answers `503` + `Retry-After` when the connection cannot be opened or has not arrived by the deadline, and rolls a late connection's transaction back unrun (see [database.overview.md](src/infrastructure/database/database.overview.md)).
+
+**A failed statement fails the whole transaction**: Postgres answers `COMMIT` of an aborted transaction by rolling back without an error, so every transaction the contexts and `withTransaction` open refuses to commit after a statement in it failed — even one the callback caught. A best-effort write runs in `withSavepoint`.
 
 ### How to apply
 
@@ -265,7 +267,7 @@ Four layers, each owning one decision. Nothing else may talk to Redis for a read
 | Domain cache module | `<domain>/…/<thing>.cache.ts` | key shape, TTL constant, stored shape, and the `getCached…` / `setCached…` / `invalidateCached…` trio. Example: [notification-unread-count.cache.ts](src/domains/notify/sub-domains/notification/notification-unread-count.cache.ts) |
 | Caller | the service (or the controller, for a serialized payload) | reading **after** authorization, and invalidating **after commit** at every write choke point — in the API *and* in workers |
 
-This keeps [cache.overview.md](src/infrastructure/cache/cache.overview.md)'s "no generic cache abstraction" rule: the shared util is not a cache, it is the three-command race protocol, and it exists because that protocol was already hand-written once in [session-token-cache.service.ts](src/domains/auth/sub-domains/auth-session/session-token-cache.service.ts) for revoked bearers and getting it subtly wrong the second time is the likely failure.
+This keeps [cache.overview.md](src/infrastructure/cache/cache.overview.md)'s "no generic cache abstraction" rule: the shared util is not a cache, it is the three-command race protocol, and it exists because that protocol was already hand-written once in [session-token-cache.service.ts](src/domains/auth/sub-domains/auth-session/session-token-cache.service.ts) for revoked bearers (which now uses the util as well) and getting it subtly wrong the second time is the likely failure.
 
 ### Implementation
 
@@ -284,7 +286,7 @@ sequenceDiagram
     R-->>S: value
     S-->>C: 200 (no pool checkout at all)
   else miss, or tombstone, or Redis down
-    S->>PG: withAppDatabaseContext(scope, …)
+    S->>PG: withAppDatabaseContext({ scope, callback })
     PG-->>S: value
     S->>R: SET … EX ttl NX (loses to a racing invalidation)
     S-->>C: 200

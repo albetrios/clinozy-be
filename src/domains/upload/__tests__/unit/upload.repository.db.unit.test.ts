@@ -20,9 +20,10 @@ describe('UploadRepository (database)', () => {
 
   /** Run the worker-scoped confirm the way the pending-sweep worker does (global retention context). */
   const confirm = (id: number, finalKey: string) =>
-    withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, (handle) =>
-      markConfirmedByInternalId(handle, id, finalKey),
-    );
+    withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: (handle) => markConfirmedByInternalId(handle, id, finalKey),
+    });
 
   async function readRow(id: number) {
     const [row] = await database

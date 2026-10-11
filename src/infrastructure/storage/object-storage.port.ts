@@ -74,10 +74,10 @@ export interface ObjectStoragePort {
    * storage itself fails (an `ExternalServiceError`, or the `CircuitBreakerOpenError` an open
    * circuit raises) — never mark an upload FAILED on a throw.
    */
-  verifyUploadedObject(
-    key: string,
-    expected: { contentType: string; contentLength: number },
-  ): Promise<UploadedObjectVerdict>;
+  verifyUploadedObject(options: {
+    key: string;
+    expected: { contentType: string; contentLength: number };
+  }): Promise<UploadedObjectVerdict>;
 
   /**
    * HEAD as a result: `found`, `not_found` (an explicit 404 — the only outcome that may drive
@@ -123,10 +123,10 @@ export interface ObjectStoragePort {
    * object's ETag at the time of the read; callers pass it to `copyObject` to close the
    * verify→copy TOCTOU window.
    */
-  getObjectFirstBytes(
-    key: string,
-    byteCount: number,
-  ): Promise<{ body: Buffer; contentType: string | undefined; eTag: string } | null>;
+  getObjectFirstBytes(options: {
+    key: string;
+    byteCount: number;
+  }): Promise<{ body: Buffer; contentType: string | undefined; eTag: string } | null>;
 
   createPresignedDownloadUrl(options: { key: string; expiresInSeconds: number }): Promise<string>;
 }

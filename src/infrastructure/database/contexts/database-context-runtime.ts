@@ -113,10 +113,13 @@ export function getWorkerDatabaseContext(): WorkerDatabaseContext | undefined {
  * build on top of this primitive — application code should call the wrappers
  * directly rather than this raw helper.
  */
-export function runWithWorkerDatabaseContext<T>(
-  context: WorkerDatabaseContext,
-  callback: () => Promise<T>,
-): Promise<T> {
+export function runWithWorkerDatabaseContext<T>({
+  context,
+  callback,
+}: {
+  context: WorkerDatabaseContext;
+  callback: () => Promise<T>;
+}): Promise<T> {
   return workerDatabaseContextStorage.run(context, callback);
 }
 
@@ -154,7 +157,7 @@ export function assertWorkerForceRlsTableAccess(tableRef: ForceRlsTableRef): voi
     return;
   }
 
-  if (!isForceRlsTable(tableRef.schemaName, tableRef.tableName)) {
+  if (!isForceRlsTable({ schemaName: tableRef.schemaName, tableName: tableRef.tableName })) {
     return;
   }
 
@@ -193,7 +196,7 @@ export function workerDatabaseContextForUser(userPublicId: string): WorkerDataba
 }
 
 /**
- * Drizzle handle pinned to a single postgres.js checkout for the lifetime of a
+ * Drizzle handle pinned to a single pooled connection for the lifetime of a
  * unit of work (an HTTP service transaction or a worker-scoped context) — alias of
  * {@link PostgresDatabaseHandle} carried through ALS by the helpers in this file.
  */
@@ -202,7 +205,7 @@ export type RequestScopedPostgresDatabase = PostgresDatabaseHandle;
 /**
  * Organization-scoped Fastify HTTP requests run inside a single Drizzle
  * transaction with `SET LOCAL app.current_organization_public_id` so every query shares one
- * checkout from the postgres.js pool and RLS policies see a stable GUC.
+ * checkout from the pool and RLS policies see a stable GUC.
  *
  * Workers must use context wrappers that pin ALS via `runWithPinnedOrganizationDatabaseSession`
  * and pass the explicit `databaseHandle` into processors/repositories — never rely on the
@@ -290,21 +293,28 @@ export function getOrganizationRequestDatabaseSession():
  * Pins `databaseHandle` in ALS so `getRequestDatabase()` returns the same checkout for
  * tenant-scoped worker and HTTP organization RLS transactions.
  */
-export function runWithPinnedOrganizationDatabaseSession<T>(
-  organizationPublicId: string,
-  databaseHandle: RequestScopedPostgresDatabase,
-  callback: () => Promise<T>,
-): Promise<T> {
+export function runWithPinnedOrganizationDatabaseSession<T>({
+  organizationPublicId,
+  databaseHandle,
+  callback,
+}: {
+  organizationPublicId: string;
+  databaseHandle: RequestScopedPostgresDatabase;
+  callback: () => Promise<T>;
+}): Promise<T> {
   return organizationRequestDatabaseStorage.run({ databaseHandle, organizationPublicId }, callback);
 }
 
 /**
  * Pins `databaseHandle` in ALS for retention/session workers without a tenant public id.
  */
-export function runWithPinnedDatabaseHandle<T>(
-  databaseHandle: RequestScopedPostgresDatabase,
-  callback: () => Promise<T>,
-): Promise<T> {
+export function runWithPinnedDatabaseHandle<T>({
+  databaseHandle,
+  callback,
+}: {
+  databaseHandle: RequestScopedPostgresDatabase;
+  callback: () => Promise<T>;
+}): Promise<T> {
   const existingSession = getOrganizationRequestDatabaseSession();
   return organizationRequestDatabaseStorage.run(
     {
@@ -315,18 +325,88 @@ export function runWithPinnedDatabaseHandle<T>(
   );
 }
 
+/** The parts of the node-postgres client behind a Drizzle transaction that {@link assertTransactionNotFailed} reads. */
+interface TransactionClientStatus {
+  readyForQuery?: boolean;
+  getTransactionStatus?: () => string | null;
+  query?: (text: string) => Promise<unknown>;
+}
+
+/**
+ * Throws when a statement of the transaction behind `databaseHandle` failed, so the transaction
+ * never reaches COMMIT.
+ *
+ * @remarks
+ * - **Why:** one failed statement aborts a transaction (25P02), and Postgres answers COMMIT of an
+ *   aborted transaction by rolling back without an error. A unit of work whose callback caught a
+ *   failed statement would report success with none of its writes kept. Thrown before COMMIT, the
+ *   transaction rolls back and the caller sees the failure; a statement that may fail without
+ *   failing the work belongs in `withSavepoint`.
+ * - **Algorithm:** node-postgres keeps the transaction status the server reports with every
+ *   ReadyForQuery; `E` is a failed transaction. It rejects a failed statement on the error message,
+ *   which can arrive before that ReadyForQuery: while the client is not ready yet, one `SELECT 1`
+ *   (queued behind it) settles the status — the rare case; otherwise there is no round trip.
+ * - **Failure modes:** throws `database.transaction.failed_statement_caught`. A connection that has
+ *   dropped is left to COMMIT, which rejects.
+ * - **Notes:** call it at the end of every callback that opened the transaction, never inside a
+ *   savepoint (RELEASE of a failed savepoint already rejects).
+ */
+export async function assertTransactionNotFailed(databaseHandle: unknown): Promise<void> {
+  const client = (databaseHandle as { session?: { client?: TransactionClientStatus } } | undefined)
+    ?.session?.client;
+  if (client?.getTransactionStatus === undefined) return;
+  if (client.readyForQuery === false && client.query !== undefined) {
+    // safe-catch: the statement only waits for the status; a failed transaction rejects it (25P02).
+    await client.query('SELECT 1').catch(() => undefined);
+  }
+  if (client.getTransactionStatus() === 'E') {
+    throw new Error(
+      'database.transaction.failed_statement_caught: a statement in this transaction failed and ' +
+        'its error was caught, so the transaction was rolled back. Run a statement that may fail ' +
+        'without failing the work in withSavepoint.',
+    );
+  }
+}
+
 /**
  * Sets a transaction-scoped Postgres GUC (`SET LOCAL` via `set_config(..., true)`)
  * on the supplied handle. Used to pin RLS-driving variables such as
  * `app.current_organization_public_id` and `app.global_retention_cleanup` for the
  * duration of the surrounding transaction.
  */
-export async function setLocalDatabaseConfig(
-  databaseHandle: RequestScopedPostgresDatabase,
-  key: string,
-  value: string,
-): Promise<void> {
+export async function setLocalDatabaseConfig({
+  databaseHandle,
+  key,
+  value,
+}: {
+  databaseHandle: RequestScopedPostgresDatabase;
+  key: string;
+  value: string;
+}): Promise<void> {
   await databaseHandle.execute(drizzleSql`SELECT set_config(${key}, ${value}, true)`);
+}
+
+/**
+ * Sets a transaction-local session setting and returns its previous value (`null` when unset), in
+ * one round trip: the materialized CTE reads the old value before `set_config` runs.
+ */
+export async function exchangeLocalDatabaseConfig({
+  databaseHandle,
+  key,
+  value,
+}: {
+  databaseHandle: RequestScopedPostgresDatabase;
+  key: string;
+  value: string;
+}): Promise<string | null> {
+  const result = await databaseHandle.execute<{ previous: string | null }>(
+    drizzleSql`WITH previous AS MATERIALIZED (SELECT current_setting(${key}, true) AS value)
+      SELECT previous.value AS previous, set_config(${key}, ${value}, true) FROM previous`,
+  );
+  const rows = Array.isArray(result)
+    ? result
+    : ((result as { rows?: { previous: string | null }[] } | undefined)?.rows ?? []);
+  return rows[0]?.previous ?? null;
 }
 
 /** Anything that runs a Drizzle statement on one connection: a database or transaction handle. */
@@ -447,10 +527,13 @@ export function resolveRepositoryDatabaseHandle(
  * Verifies the Postgres session GUC for the active worker context kind is set (non-empty).
  * Call from createWorker*Repository factories before tenant-scoped queries.
  */
-export async function assertWorkerRlsGucSet(
-  databaseHandle: RequestScopedPostgresDatabase,
-  expectedKind: Exclude<WorkerDatabaseContextKind, 'system_table'>,
-): Promise<void> {
+export async function assertWorkerRlsGucSet({
+  databaseHandle,
+  expectedKind,
+}: {
+  databaseHandle: RequestScopedPostgresDatabase;
+  expectedKind: Exclude<WorkerDatabaseContextKind, 'system_table'>;
+}): Promise<void> {
   if (!isWorkerRuntime()) {
     return;
   }

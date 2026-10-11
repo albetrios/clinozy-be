@@ -16,13 +16,17 @@ export function createPlanController(service: PlanService) {
     listPlans: async (request: FastifyRequest, reply: FastifyReply) => {
       const data = await service.list();
       const serialized = PlanSerializer.many(data);
-      const payload = paginatedResponse(serialized, getRequestIdentifier(request), {
-        per_page: serialized.length,
-        next: null,
-        has_more: false,
-        estimated_total: serialized.length,
+      const payload = paginatedResponse({
+        data: serialized,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: serialized.length,
+          next: null,
+          has_more: false,
+          estimated_total: serialized.length,
+        },
       });
-      if (applyCatalogCacheHeaders(request, reply, payload)) {
+      if (applyCatalogCacheHeaders({ request, reply, payload })) {
         return reply;
       }
       return payload;
@@ -30,7 +34,10 @@ export function createPlanController(service: PlanService) {
     getPlan: async (request: FastifyRequest, _reply: FastifyReply) => {
       const { plan_id: planId } = validateGetPlanParams(request.params);
       const data = await service.getByPublicId(planId);
-      return successResponse(PlanSerializer.one(data), getRequestIdentifier(request));
+      return successResponse({
+        data: PlanSerializer.one(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
   };
 }

@@ -39,6 +39,7 @@ export const memberships = tenancySchema
       status: varchar('status', { length: 20 }).notNull().default('INVITED'),
       invited_by_user_id: bigint('invited_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       joined_at: timestamp('joined_at', { withTimezone: true }),
       deleted_at: timestamp('deleted_at', { withTimezone: true }),
@@ -46,12 +47,18 @@ export const memberships = tenancySchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [
+      // Tombstone purge: only the soft-deleted rows, so live writes never maintain it.
+      index('idx_memberships_tombstoned')
+        .on(table.deleted_at)
+        .where(sql`${table.deleted_at} IS NOT NULL`),
       // Attribution FK indexes (partial on IS NOT NULL) from migration 20260623000000 — declared so
       // the schema lists every index the database has (pinned by index-hygiene.integration.test.ts).
       index('idx_memberships_created_by_user_id')

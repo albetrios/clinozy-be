@@ -20,10 +20,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -267,14 +269,13 @@ describe('processWebhookDeliveryAttempt', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('fails terminally when the attempt row does not exist in the job organization', async () => {
+  it('skips — no request, nothing recorded — when the attempt is not visible in the job organization', async () => {
     findDeliveryContextMock.mockResolvedValueOnce(null);
 
-    const error = await deliver().catch((rejection: unknown) => rejection);
-
-    expect(error).toBeInstanceOf(UnrecoverableError);
-    expect((error as Error).message).toContain(DELIVERY_ATTEMPT_PUBLIC_ID);
+    // The organization was deleted (RLS hides it) or a restore lost the row: nothing to send.
+    await expect(deliver()).resolves.toEqual({ outcome: 'skipped', reason: 'attempt_missing' });
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(repository.recordOutcome).not.toHaveBeenCalled();
   });
 
   it('fails terminally — recorded, no retry, no request — when the signing secret cannot be decrypted', async () => {

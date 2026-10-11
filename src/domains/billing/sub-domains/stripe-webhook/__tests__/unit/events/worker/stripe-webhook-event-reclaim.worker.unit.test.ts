@@ -15,7 +15,8 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   return {
     ...actual,
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -77,10 +78,10 @@ describe('stripe-webhook-event-reclaim.worker', () => {
     const result = await runStripeWebhookEventReclaimJob();
 
     expect(sweepReclaimableEventsMock).toHaveBeenCalledWith(50);
-    expect(enqueueStripeWebhookByEventIdForReclaimMock).toHaveBeenCalledWith(
-      'evt_reclaim_1',
-      'stripe-webhook-event-reclaim',
-    );
+    expect(enqueueStripeWebhookByEventIdForReclaimMock).toHaveBeenCalledWith({
+      stripeEventId: 'evt_reclaim_1',
+      requestId: 'stripe-webhook-event-reclaim',
+    });
     expect(setStripeWebhookEventsFailedCountMock).toHaveBeenCalledWith(0);
     expect(result).toEqual({ scannedCount: 2, enqueuedCount: 1, abandonedCount: 0 });
     expect(captureMessageMock).not.toHaveBeenCalled();
@@ -96,9 +97,12 @@ describe('stripe-webhook-event-reclaim.worker', () => {
     const result = await runStripeWebhookEventReclaimJob();
 
     expect(abandonExhaustedEventsMock).toHaveBeenCalledWith(50);
-    expect(captureMessageMock).toHaveBeenCalledExactlyOnceWith('stripe.webhook.event_abandoned', {
-      level: 'error',
-      extra: { stripeEventId: 'evt_exhausted', failureReason: 'boom' },
+    expect(captureMessageMock).toHaveBeenCalledExactlyOnceWith({
+      message: 'stripe.webhook.event_abandoned',
+      options: {
+        level: 'error',
+        extra: { stripeEventId: 'evt_exhausted', failureReason: 'boom' },
+      },
     });
     expect(result.abandonedCount).toBe(1);
     expect(abandonExhaustedEventsMock.mock.invocationCallOrder[0]!).toBeLessThan(

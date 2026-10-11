@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { requireRecentStepUpPreHandler } from '@/shared/middlewares/core/recent-step-up.middleware.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   EXPENSIVE_AUTHED_RATE_LIMIT,
@@ -172,10 +173,12 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         // idempotencyRequired by merging into a single config object.
         config: { idempotencyRequired: true, ...EXPENSIVE_AUTHED_RATE_LIMIT.config },
         onRequest: [app.authenticate],
+        // Effectively irreversible: a stolen owner access token alone must not be enough.
+        preHandler: [requireRecentStepUpPreHandler],
         schema: {
           summary: 'Transfer organization ownership',
           description:
-            'Transfers ownership of the organization to another member. Only the current owner can perform this action.',
+            'Transfers ownership of the organization to another member. Only the current owner can perform this action. Requires a recent step-up on this session (`POST /auth/step-up`, within 10 minutes).',
           tags: ['Membership'],
           body: transferOwnershipDto,
         },

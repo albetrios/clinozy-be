@@ -28,6 +28,7 @@ export {
 export function getBullMQConnectionOptions(): {
   host: string;
   port: number;
+  username?: string;
   password?: string;
   db: number;
   family: number;
@@ -47,6 +48,9 @@ export function getBullMQConnectionOptions(): {
     tls: 'tls' in tlsOptions ? tlsOptions.tls : undefined,
     host: parsed.host,
     port: parsed.port,
+    // The ACL user: without it the password was sent for `default`, and a Redis with per-service
+    // ACL users refused every queue and worker connection.
+    username: parsed.username,
     password: parsed.password,
     db: parsed.databaseIndex,
     family: 0,

@@ -1,7 +1,7 @@
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
 /** Drizzle handle for a single Postgres checkout (pool, transaction, or pinned ALS session). */
-export type PostgresDatabaseHandle = PostgresJsDatabase;
+export type PostgresDatabaseHandle = NodePgDatabase;
 
 declare const workerContextDatabaseHandleBrand: unique symbol;
 

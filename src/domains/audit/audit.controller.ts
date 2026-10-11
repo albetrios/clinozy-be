@@ -27,27 +27,30 @@ export function createAuditController(service: AuditService) {
       const result = await service.listForAdmin(query as Record<string, unknown>);
       if (query.actor_user_id || query.organization_id) {
         const auth = requireAuth(request);
-        await recordScopedAuditEvent(request, {
-          actorUserPublicId: auth.userId,
-          action: 'audit.admin.read',
-          resource_type: 'audit_log',
-          severity: 'WARNING',
-          metadata: {
-            ...(query.actor_user_id ? { target_actor_user_id: query.actor_user_id } : {}),
-            ...(query.organization_id ? { target_organization_id: query.organization_id } : {}),
+        await recordScopedAuditEvent({
+          request,
+          input: {
+            actorUserPublicId: auth.userId,
+            action: 'audit.admin.read',
+            resource_type: 'audit_log',
+            severity: 'WARNING',
+            metadata: {
+              ...(query.actor_user_id ? { target_actor_user_id: query.actor_user_id } : {}),
+              ...(query.organization_id ? { target_organization_id: query.organization_id } : {}),
+            },
           },
         });
       }
-      return paginatedResponse(
-        AuditSerializer.many(result.items, result.resolution),
-        getRequestIdentifier(request),
-        {
+      return paginatedResponse({
+        data: AuditSerializer.many({ items: result.items, resolution: result.resolution }),
+        request_id: getRequestIdentifier(request),
+        pagination: {
           per_page: result.limit,
           next: result.next_cursor,
           has_more: result.has_more,
           ...(result.total !== null ? { estimated_total: result.total } : {}),
         },
-      );
+      });
     },
   };
 }

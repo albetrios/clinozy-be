@@ -13,7 +13,8 @@ export const billingRouteResponses: Record<string, ResponseDefinition> = {
         name: 'Free',
         description: 'For individuals and small projects',
         price_monthly: '0.00',
-        price_yearly: '0.00',
+        price_yearly: null,
+        billing_cycles: ['monthly'],
       },
       schemas.planExample,
       {

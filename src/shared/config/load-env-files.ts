@@ -46,7 +46,13 @@ const SAFE_KEY = /^[A-Z][A-Z0-9_]*$/;
  * @param envFilePath - absolute path of the `.env.*` file
  * @param override - whether the file's values replace ones already in `process.env`
  */
-export function applyDotenvFile(envFilePath: string, override = false): void {
+export function applyDotenvFile({
+  envFilePath,
+  override = false,
+}: {
+  envFilePath: string;
+  override?: boolean | undefined;
+}): void {
   const result = config({ path: envFilePath, override });
   const parsed: DotenvParseOutput = result.parsed ?? {};
   for (const key of Object.keys(parsed)) {
@@ -64,7 +70,7 @@ function loadEnvFiles(): void {
   const nodeEnv = process.env.NODE_ENV ?? 'local';
   const primary = resolve(projectRoot, `.env.${nodeEnv}`);
   if (existsSync(primary)) {
-    applyDotenvFile(primary);
+    applyDotenvFile({ envFilePath: primary });
   }
 
   // `.env.local` is a machine-local override layered on top of the primary (`override: true`). When
@@ -74,7 +80,7 @@ function loadEnvFiles(): void {
   // `.env.local` is physically absent in production and this never runs there. No NODE_ENV guard needed.
   const localOverride = resolve(projectRoot, '.env.local');
   if (localOverride !== primary && existsSync(localOverride)) {
-    applyDotenvFile(localOverride, true);
+    applyDotenvFile({ envFilePath: localOverride, override: true });
   }
 }
 

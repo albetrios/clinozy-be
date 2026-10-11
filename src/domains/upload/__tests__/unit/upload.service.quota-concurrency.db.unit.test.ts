@@ -54,26 +54,26 @@ describe('UploadService pending-quota concurrency (database)', () => {
       requireUserRecordByPublicId: async () => user,
     } as unknown as UserService;
     const organizationService = {} as unknown as OrganizationService;
-    const service = new UploadService(
-      repository,
-      userService,
-      organizationService,
-      objectStorage,
-      {} as ConstructorParameters<typeof UploadService>[4],
-    );
+    const service = new UploadService(repository, userService, organizationService, objectStorage);
 
     const results = await Promise.allSettled(
       Array.from({ length: CONCURRENT_REQUESTS }, () =>
-        service.createUpload(
-          {
+        service.createUpload({
+          input: {
             purpose: 'avatar',
             for: 'user',
             content_type: 'image/png',
             file_name: 'avatar.png',
             file_size: 1024,
           },
-          user.public_id,
-        ),
+          principal: {
+            userPublicId: user.public_id,
+            organizationPublicId: null,
+            authorizeOrganization: async () => {
+              throw new Error('a personal upload never authorizes an organization');
+            },
+          },
+        }),
       ),
     );
 
@@ -90,10 +90,10 @@ describe('UploadService pending-quota concurrency (database)', () => {
     }
 
     // Exactly `PENDING_CAP` rows were persisted, and presigned URLs were minted only for them.
-    const pendingCount = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
-      () => repository.countPendingByUserId(user.id),
-    );
+    const pendingCount = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+      callback: () => repository.countPendingByUserId(user.id),
+    });
     expect(pendingCount).toBe(PENDING_CAP);
     expect(objectStorage.createPresignedUploadUrl).toHaveBeenCalledTimes(PENDING_CAP);
   });

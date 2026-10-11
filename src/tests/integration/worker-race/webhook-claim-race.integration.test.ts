@@ -49,10 +49,10 @@ describe('Integration: webhook delivery claim race', () => {
   function raceClaims(options: { organizationPublicId: string; deliveryAttemptId: number }) {
     return Promise.all(
       Array.from({ length: RACING_CLAIM_COUNT }, () =>
-        withAppDatabaseContext(
-          PRINCIPAL_SCOPE.JOB({ organizationPublicId: options.organizationPublicId }),
-          () => repository.tryMarkSending(options.deliveryAttemptId),
-        ),
+        withAppDatabaseContext({
+          scope: PRINCIPAL_SCOPE.JOB({ organizationPublicId: options.organizationPublicId }),
+          callback: () => repository.tryMarkSending(options.deliveryAttemptId),
+        }),
       ),
     );
   }

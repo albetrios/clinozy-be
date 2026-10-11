@@ -27,7 +27,10 @@ describe('withRedisLock', () => {
   it('acquires the lock, runs fn, and releases via the nonce-guarded Lua', async () => {
     mockedRedisSet(redisConnection.set).mockResolvedValue('OK');
 
-    const result = await withRedisLock({ key: 'lock:a', ttlSeconds: 10 }, async () => 'value');
+    const result = await withRedisLock({
+      options: { key: 'lock:a', ttlSeconds: 10 },
+      fn: async () => 'value',
+    });
 
     expect(result).toBe('value');
     const setArgs = mockedRedisSet(redisConnection.set).mock.calls[0]!;
@@ -46,8 +49,11 @@ describe('withRedisLock', () => {
     mockedRedisSet(redisConnection.set).mockResolvedValue('OK');
 
     await expect(
-      withRedisLock({ key: 'lock:b', ttlSeconds: 10 }, async () => {
-        throw new Error('boom');
+      withRedisLock({
+        options: { key: 'lock:b', ttlSeconds: 10 },
+        fn: async () => {
+          throw new Error('boom');
+        },
       }),
     ).rejects.toThrow('boom');
 
@@ -58,7 +64,7 @@ describe('withRedisLock', () => {
     mockedRedisSet(redisConnection.set).mockResolvedValue(null); // NX fails — lock held
 
     await expect(
-      withRedisLock({ key: 'lock:c', ttlSeconds: 10 }, async () => 'never'),
+      withRedisLock({ options: { key: 'lock:c', ttlSeconds: 10 }, fn: async () => 'never' }),
     ).rejects.toBeInstanceOf(RedisLockUnavailableError);
     // fn never runs, so no release either.
     expect(redisConnection.eval).not.toHaveBeenCalled();
@@ -67,10 +73,10 @@ describe('withRedisLock', () => {
   it('waits and acquires once the lock frees within waitTimeoutMs', async () => {
     mockedRedisSet(redisConnection.set).mockResolvedValueOnce(null).mockResolvedValue('OK');
 
-    const result = await withRedisLock(
-      { key: 'lock:d', ttlSeconds: 10, waitTimeoutMs: 200, pollIntervalMs: 10 },
-      async () => 'acquired',
-    );
+    const result = await withRedisLock({
+      options: { key: 'lock:d', ttlSeconds: 10, waitTimeoutMs: 200, pollIntervalMs: 10 },
+      fn: async () => 'acquired',
+    });
 
     expect(result).toBe('acquired');
     expect(mockedRedisSet(redisConnection.set).mock.calls.length).toBeGreaterThanOrEqual(2);

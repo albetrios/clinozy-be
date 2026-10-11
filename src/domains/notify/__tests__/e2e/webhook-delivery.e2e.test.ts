@@ -19,7 +19,8 @@ vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(),
 }));
 
-const WEBHOOK_PERMISSIONS = ['webhook:read', 'webhook:manage'];
+// Subscribing to `subscription.*` also needs the permission to read subscriptions.
+const WEBHOOK_PERMISSIONS = ['webhook:read', 'webhook:manage', 'subscription:read'];
 const mockedLookup = vi.mocked(lookup);
 
 function mockWebhookDnsLookup(): void {

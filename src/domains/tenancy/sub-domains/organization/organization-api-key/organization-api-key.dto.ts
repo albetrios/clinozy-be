@@ -5,7 +5,7 @@ import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.j
 /** Zod schema for the `:api_key_id` path param (get/update/delete/rotate API key). */
 export const apiKeyIdParamsDto = z
   .object({
-    api_key_id: trimmedStringMinMax(1, 28),
+    api_key_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
@@ -16,8 +16,11 @@ export const apiKeyIdParamsDto = z
  */
 export const createOrganizationApiKeyDto = z
   .object({
-    name: trimmedStringMinMax(1, 255),
-    scopes: z.array(trimmedStringMinMax(1, 100)).min(1).max(50),
+    name: trimmedStringMinMax({ min: 1, max: 255 }),
+    scopes: z
+      .array(trimmedStringMinMax({ min: 1, max: 100 }))
+      .min(1)
+      .max(50),
     expires_in_days: z.number().int().min(1).max(365).optional().nullable(),
   })
   .strict();
@@ -29,7 +32,7 @@ export const createOrganizationApiKeyDto = z
  */
 export const updateOrganizationApiKeyDto = z
   .object({
-    name: trimmedStringMinMax(1, 255).optional(),
+    name: trimmedStringMinMax({ min: 1, max: 255 }).optional(),
     status: z.enum(['ACTIVE', 'REVOKED']).optional(),
   })
   .strict();

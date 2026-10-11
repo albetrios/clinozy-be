@@ -20,10 +20,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -84,15 +86,18 @@ describe('UserSettingsService', () => {
   });
 
   it('update upserts settings for user', async () => {
-    const result = await service.update(asUserScope('user_public'), { language: 'fr' });
+    const result = await service.update({
+      scope: asUserScope('user_public'),
+      body: { language: 'fr' },
+    });
     expect(settingsRepository.upsert).toHaveBeenCalledWith(1, { language: 'fr' });
     expect(result.language).toBe('es');
   });
 
   it('update throws when user is missing', async () => {
     vi.mocked(userService.resolveInternalIdByPublicId).mockResolvedValue(null);
-    await expect(service.update(asUserScope('missing'), { language: 'de' })).rejects.toBeInstanceOf(
-      NotFoundError,
-    );
+    await expect(
+      service.update({ scope: asUserScope('missing'), body: { language: 'de' } }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 });

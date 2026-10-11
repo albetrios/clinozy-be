@@ -1,5 +1,7 @@
-/** BCP 47 locale tag exposed in serialized organization settings (mirrors the constrained DB column). */
-export type OrganizationDefaultLocale = 'en' | 'es';
+import type { SupportedLanguage } from '@/shared/constants/i18n.constants.js';
+
+/** Locale tag exposed in serialized organization settings (mirrors the constrained DB column). */
+export type OrganizationDefaultLocale = SupportedLanguage;
 
 /** Public shape returned by `/organization/settings` — produced by {@link serializeOrganizationSettings}. */
 export interface OrganizationSettingsOutput {

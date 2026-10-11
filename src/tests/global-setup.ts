@@ -5,7 +5,7 @@
 import '@/shared/config/load-env-files.js';
 import { execSync } from 'node:child_process';
 import { acquireDatabaseSuiteLock } from '@/tests/database-suite-lock.js';
-import postgres from 'postgres';
+import pg from 'pg';
 import {
   buildMigrationChildEnvironment,
   ensureLocalTestDatabaseExists,
@@ -57,18 +57,20 @@ export default async function globalSetup(): Promise<() => void> {
   if (!migrationUrl) {
     throw new Error('DATABASE_URL must be set for test global setup');
   }
-  const sql = postgres(migrationUrl, { max: 1 });
+  const client = new pg.Client({ connectionString: migrationUrl });
+  client.on('error', () => undefined);
 
   try {
     // First local run: the test database does not exist yet (CI's service container brings its own).
     await ensureLocalTestDatabaseExists();
-    await sql`SELECT 1`;
+    await client.connect();
+    await client.query('SELECT 1');
   } catch (connectionError) {
     if (isHarnessOnProvidedDatabase()) {
       throw connectionError;
     }
     console.warn('Test database unavailable — skipping global setup. Start it: pnpm compose:up');
-    await sql.end({ timeout: 5_000 }).catch(() => {});
+    await client.end().catch(() => {});
     return releaseDatabaseSuiteLock;
   }
 
@@ -82,7 +84,7 @@ export default async function globalSetup(): Promise<() => void> {
     });
     await seedPermissionCatalog();
   } finally {
-    await sql.end({ timeout: 5_000 });
+    await client.end();
   }
 
   return releaseDatabaseSuiteLock;

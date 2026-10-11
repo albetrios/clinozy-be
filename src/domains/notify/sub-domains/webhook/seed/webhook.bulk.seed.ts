@@ -22,15 +22,24 @@ const BULK_WEBHOOK_HOST_SUFFIX = '.webhooks.seed.local';
 export const BULK_WEBHOOK_URL_PATTERN = `https://bulk-seed-organization-%${BULK_WEBHOOK_HOST_SUFFIX}/endpoint`;
 
 /** Builds the deterministic, schema-valid (`^https://`) seed URL for one org's webhook index. */
-function bulkWebhookUrl(organizationId: number, index: number): string {
+function bulkWebhookUrl({
+  organizationId,
+  index,
+}: {
+  organizationId: number;
+  index: number;
+}): string {
   return `https://bulk-seed-organization-${organizationId}-hook-${index}${BULK_WEBHOOK_HOST_SUFFIX}/endpoint`;
 }
 
 /** Seeds the webhook endpoints for a single organization, resuming from the existing count. */
-async function seedWebhooksForOrganization(
-  context: SeedContext,
-  organization: SeededOrg,
-): Promise<void> {
+async function seedWebhooksForOrganization({
+  context,
+  organization,
+}: {
+  context: SeedContext;
+  organization: SeededOrg;
+}): Promise<void> {
   const database = getRequestDatabase();
   const target = context.counts.webhooksPerOrg;
 
@@ -51,7 +60,7 @@ async function seedWebhooksForOrganization(
       .values({
         public_id: generatePublicId('webhook'),
         organization_id: organization.id,
-        url: bulkWebhookUrl(organization.id, index),
+        url: bulkWebhookUrl({ organizationId: organization.id, index }),
         encrypted_secret: encryptFieldSecret('seed-webhook-secret'),
         events: content.events,
         is_enabled: true,
@@ -80,7 +89,7 @@ export async function seedWebhooksBulk(context: SeedContext): Promise<void> {
   }
 
   for (const organization of organizations) {
-    await seedWebhooksForOrganization(context, organization);
+    await seedWebhooksForOrganization({ context, organization });
   }
 
   context.logger.info(

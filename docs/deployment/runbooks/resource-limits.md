@@ -38,7 +38,7 @@ The worker process logs a warning when **RSS** exceeds **512 MiB** ([`src/infras
 
 ### Postgres connection budget
 
-Each **API** and **worker** process opens **two** postgres.js pools: the primary one (`DATABASE_POOL_MAX`, default **30**) and the maintenance role's (`DATABASE_MAINTENANCE_POOL_MAX`, default **10** — mail outbox and ledger workers, retention purges, system audit inserts, all short checkouts). Size deployments so:
+Each **API** and **worker** process opens **two** node-postgres pools: the primary one (`DATABASE_POOL_MAX`, default **30**) and the maintenance role's (`DATABASE_MAINTENANCE_POOL_MAX`, default **10** — mail outbox and ledger workers, retention purges, system audit inserts, all short checkouts). Size deployments so:
 
 ```text
 DEPLOYMENT_TOTAL_REPLICA_COUNT × (DATABASE_POOL_MAX + DATABASE_MAINTENANCE_POOL_MAX) ≤ max_connections − POSTGRES_RESERVED_CONNECTIONS
@@ -51,7 +51,7 @@ If you set split counts instead of `DEPLOYMENT_TOTAL_REPLICA_COUNT`, the API and
 | `DEPLOYMENT_TOTAL_REPLICA_COUNT`  | Shorthand: `api_replicas + worker_replicas`                     | required in production (or use split counts) |
 | `DEPLOYMENT_API_REPLICA_COUNT`    | API service replica count                                       | optional split count                         |
 | `DEPLOYMENT_WORKER_REPLICA_COUNT` | Worker service replica count                                    | optional split count                         |
-| `DATABASE_POOL_MAX`               | primary postgres.js pool `max`, per process                     | `30`                                         |
+| `DATABASE_POOL_MAX`               | primary pool `max`, per process                                 | `30`                                         |
 | `DATABASE_MAINTENANCE_POOL_MAX`   | maintenance-role pool `max`, per process                        | `10`                                         |
 | `POSTGRES_RESERVED_CONNECTIONS`   | Admin, migrations, monitoring headroom                          | `10`                                         |
 | `POSTGRES_MAX_CONNECTIONS`        | Optional override when `SHOW max_connections` is wrong (pooler) | query Postgres                               |
@@ -151,8 +151,9 @@ Organization-scoped HTTP routes hold **one pool checkout per unit of work** via 
 > whole request, a single process sustains at most `DATABASE_POOL_MAX` concurrent organization-scoped
 > requests. Steady-state RPS ≈ `DATABASE_POOL_MAX / avg_request_seconds` per process (e.g. 20 / 0.05s
 > ≈ 400 RPS). Beyond that, units of work queue for a connection. The overload guard sheds new requests
-> with 503 + `Retry-After` once three times the pool is in flight, running plus waiting
-> (`OVERLOAD_DB_POOL_SHED_RATIO`, default 3); a unit of work that still cannot get a connection within
+> with 503 + `Retry-After` once ten times the pool is in flight, running plus waiting
+> (`OVERLOAD_DB_POOL_SHED_RATIO`, default 10), or once the oldest waiter has waited
+> `OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS` (default 2 s — a slow database); a unit of work that still cannot get a connection within
 > `DATABASE_POOL_ACQUIRE_TIMEOUT_MS` gets the same 503, and a running statement past the 5s HTTP
 > statement timeout surfaces as a 504. Scale by raising `DATABASE_POOL_MAX` (within the connection budget above) or
 > adding API replicas; watch the `database.pool.exhaustion.*` Sentry alerts (warn 80% / crit 95%).
@@ -169,7 +170,7 @@ Organization-scoped HTTP routes hold **one pool checkout per unit of work** via 
 | Variable                             | Default | Scope                                                                                                                                                                                             |
 | ------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `FASTIFY_REQUEST_TIMEOUT_MS`         | `30000` | Entire HTTP request (Fastify)                                                                                                                                                                     |
-| `FASTIFY_CONNECTION_TIMEOUT_MS`      | `10000` | TCP connection accept                                                                                                                                                                             |
+| `FASTIFY_CONNECTION_TIMEOUT_MS`      | unset (off) | Socket inactivity — a socket with no bytes in or out this long is destroyed, a handler still waiting on the pool or Stripe included. When set, at least `DATABASE_POOL_ACQUIRE_TIMEOUT_MS` + `STRIPE_HTTP_TIMEOUT_MS` (env refine) |
 | `DATABASE_HTTP_STATEMENT_TIMEOUT_MS` | `5000`  | Connection-level `statement_timeout` for HTTP handlers (scoped RLS contexts only)                                                                                                                   |
 | `DATABASE_POOL_ACQUIRE_TIMEOUT_MS`   | `10000` | Getting a pooled connection for a unit of work — 503 + `Retry-After` past it, and a late connection rolls back unrun; `0` disables |
 | `DATABASE_STATEMENT_TIMEOUT_MS`      | `30000` | Connection-level default for workers and long-running queries                                                                                                                                     |
@@ -190,7 +191,7 @@ The API process polls every `DATABASE_POOL_ALERT_POLL_INTERVAL_MS` (default **5s
 | `DATABASE_POOL_CLUSTER_CRITICAL_RATIO`  | `0.95`  | Critical cluster threshold                                           |
 | `DATABASE_POOL_ALERT_CONSECUTIVE_POLLS` | `2`     | Consecutive polls before alerting                                    |
 
-Alerting runs on API startup (`registerPostgresPoolMetrics` in `server.ts`) and does **not** require `METRICS_ENABLED`. Optional Prometheus gauges use the same sampler when metrics are enabled.
+Alerting runs on API startup (`registerPostgresPoolMetrics` in `server.ts`, and in `worker.ts`) and does **not** require `METRICS_ENABLED`. Every alert carries the process's live pool counts from node-postgres as extras — `primaryPoolInUse`, `primaryPoolIdle`, `primaryPoolWaiting`, `primaryPoolMax`, and the same `maintenancePool*` once that pool is open — so the event shows whether units of work were already queuing for a connection. Optional Prometheus gauges (`postgres_pool_connections`, `postgres_pool_waiting`, `db_pool_connections`) use the same samples when metrics are enabled.
 
 ---
 
@@ -208,7 +209,7 @@ Alerting runs on API startup (`registerPostgresPoolMetrics` in `server.ts`) and 
 
 3. **CD workflow:** `NODE_OPTIONS` can be synced from GitHub Environment variables (`NODE_OPTIONS`) via [reusable-railway-deploy.yml](../../../.github/workflows/reusable-railway-deploy.yml) to both API and worker services. Use equal or higher heap for workers if they run heavier jobs.
 
-4. **Graceful drain:** On `SIGTERM`/`SIGINT`, the API sets a process-wide draining flag before `app.close()`. **`GET /readyz` returns HTTP 503** with `status: "draining"` so the load balancer stops sending traffic while in-flight requests finish, while **`GET /livez` stays HTTP 200** until the process exits. Align platform **draining / health-check grace** with `SHUTDOWN_TIMEOUT_MS` (default 30s).
+4. **Graceful drain:** On `SIGTERM`/`SIGINT`, the API sets a process-wide draining flag before `app.close()`. **`GET /readyz` returns HTTP 503** with `status: "draining"` so the load balancer stops sending traffic while in-flight requests finish, while **`GET /livez` stays HTTP 200** until the process exits. Align platform **draining / health-check grace** with `SHUTDOWN_TIMEOUT_MS` (default 15 s) — one budget every close step shares (worker close, queue and pool drains each wait only for what is left of it), with the force-exit watchdog 5 s after it.
 
 ---
 
@@ -239,7 +240,7 @@ spec:
           memory: '1Gi'
 ```
 
-- **`terminationGracePeriodSeconds`** should exceed application shutdown budget (for example **`SHUTDOWN_TIMEOUT_MS`** default **30000** in [.env.example](../../../.env.example)) so in-flight Fastify drains and BullMQ workers close cleanly.
+- **`terminationGracePeriodSeconds`** should exceed the application's shutdown budget plus its watchdog buffer (**`SHUTDOWN_TIMEOUT_MS`**, default **15000**, + 5 s, + the 3 s API drain pause — see [.env.example](../../../.env.example)) so in-flight Fastify drains and BullMQ workers close cleanly.
 
 ### When a Pod exits with exit code **137**
 

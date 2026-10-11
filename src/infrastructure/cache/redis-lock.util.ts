@@ -50,10 +50,13 @@ export interface RedisLockOptions {
  *   a durable backstop (a unique index, idempotency key, etc.). It only reduces duplicate work /
  *   churn in the common case.
  */
-export async function withRedisLock<T>(
-  options: RedisLockOptions,
-  fn: () => Promise<T>,
-): Promise<T> {
+export async function withRedisLock<T>({
+  options,
+  fn,
+}: {
+  options: RedisLockOptions;
+  fn: () => Promise<T>;
+}): Promise<T> {
   const { key, ttlSeconds, waitTimeoutMs = 0, pollIntervalMs = 50 } = options;
   const nonce = randomUUID();
   const deadline = Date.now() + waitTimeoutMs;

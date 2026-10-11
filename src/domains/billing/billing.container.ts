@@ -30,10 +30,13 @@ export type BillingContainer = {
  * container builds its own `SubscriptionService` without it (the webhook path never returns the
  * public seat-counted shape). The HTTP / worker composition roots always supply it.
  */
-export function createBillingContainer(
-  organizationService: OrganizationService,
-  membershipSeatUsage?: MembershipSeatUsagePort,
-): BillingContainer {
+export function createBillingContainer({
+  organizationService,
+  membershipSeatUsage,
+}: {
+  organizationService: OrganizationService;
+  membershipSeatUsage?: MembershipSeatUsagePort | undefined;
+}): BillingContainer {
   const planRepository = new PlanRepository();
   const subscriptionRepository = new SubscriptionRepository();
 
@@ -67,10 +70,9 @@ export function createBillingContainer(
 export function registerBillingContainer(application: FastifyInstance): void {
   application.decorate(
     'billingDomain',
-    createBillingContainer(
-      application.tenancyDomain.organizationService,
-      // REQ-4: tenancy membership service supplies seats_used.
-      application.tenancyDomain.membershipService,
-    ),
+    createBillingContainer({
+      organizationService: application.tenancyDomain.organizationService,
+      membershipSeatUsage: application.tenancyDomain.membershipService,
+    }),
   );
 }

@@ -164,6 +164,9 @@ k6 scenarios and helpers live in `src/tests/load/k6/` (`.js` files, not Vitest).
 
 ### 1. Pure layers (unit)
 
+- [ ] Raw SQL in a test → ``database.execute(sql`…`)`` (`sql` from `drizzle-orm`) or `getOperatorDatabase().execute(…)` for
+      harness-only work, rows via a local `rowsOf<T>(result)` normalizer; a raw client (lock holding, backend termination)
+      comes from `getOperatorPool()` — see `docs/reference/testing/testing-conventions.md`
 - [ ] Suite touches services that enter database contexts → mock the context module with
       `mockDatabaseContexts(actual)` from `@/tests/helpers/database-context-mock.helper.js`
       (stubs ALL three wrappers — a partial `...actual` spread leaves siblings REAL and
@@ -182,7 +185,7 @@ k6 scenarios and helpers live in `src/tests/load/k6/` (`.js` files, not Vitest).
 - [ ] New/changed **route** → domain test file (see steps below)
 - [ ] **401** without token, **403** without permission (if gated), **200** success (**204** for DELETE), **400** invalid body
 - [ ] New **permission** → align seeds (`be-seed-maintainer`) and test with/without permission
-- [ ] Run e2e freely while `pnpm dev` runs — local test runs use their own `<local database>_test` database (created and migrated by the global setup), never the one `pnpm dev` serves
+- [ ] Run e2e freely while `pnpm dev` runs — local test runs use their own `<project>_test` database (created and migrated by the global setup), never the one `pnpm dev` serves
 
 ### 3. Cross-cutting
 

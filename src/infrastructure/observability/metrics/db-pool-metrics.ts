@@ -1,4 +1,5 @@
-import { sql } from '@/infrastructure/database/connection.js';
+import { sql as drizzleSql } from 'drizzle-orm';
+import { database, readDatabasePoolStatistics } from '@/infrastructure/database/connection.js';
 import { resolvePostgresAllowedApplicationConnections } from '@/infrastructure/database/safety/assert-connection-budget.js';
 import { registerOrganizationRlsCheckoutHoldObserver } from '@/infrastructure/database/pool/organization-rls-checkout-counter.js';
 import { registerUnscopedDatabaseAccessObserver } from '@/infrastructure/database/pool/unscoped-query-counter.js';
@@ -12,8 +13,8 @@ import {
   recordOrganizationRlsCheckoutHold,
   recordUnscopedDatabaseQuery,
   setOrganizationRlsActiveCheckouts,
-  setPostgresPoolConfigMetrics,
   setPostgresPoolConnectionCounts,
+  setPostgresPoolStatistics,
 } from '@/infrastructure/observability/metrics/prometheus-metrics.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
@@ -26,10 +27,10 @@ type PoolCountRow = {
 
 /**
  * Samples connection counts from pg_stat_activity for the current database user.
- * Approximates pool utilization when postgres.js does not expose live pool stats.
+ * Approximates pool utilization from the server's side of every connection this role holds.
  */
 async function samplePostgresPoolConnectionCounts(): Promise<PoolCountRow[]> {
-  const rows = await sql`
+  const result = await database.execute<{ state: string; count: string }>(drizzleSql`
     SELECT
       CASE
         WHEN state = 'active' THEN 'active'
@@ -42,7 +43,10 @@ async function samplePostgresPoolConnectionCounts(): Promise<PoolCountRow[]> {
       AND usename = current_user
       AND pid <> pg_backend_pid()
     GROUP BY 1
-  `;
+  `);
+  const rows = Array.isArray(result)
+    ? (result as { state: string; count: string }[])
+    : ((result as { rows?: { state: string; count: string }[] }).rows ?? []);
 
   const counts: Record<PoolState, number> = { active: 0, idle: 0, waiting: 0 };
   for (const row of rows) {
@@ -89,19 +93,18 @@ export function resolvePostgresPoolPollIntervalMs(): number {
 let poolMonitoringInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
- * Polls `pg_stat_activity` for connection-state counts, updates the
- * `db_pool_connections` / `postgres_pool_*` gauges, and feeds the
- * sample into {@link evaluatePoolExhaustionAndAlert}. Sampling errors fall back
- * to all-zero counts so the alerter still runs (and may flip to `ok`).
+ * Reads this process's live pool counts from node-postgres and the role's cluster-wide
+ * connection states from `pg_stat_activity`, updates the `postgres_pool_*` /
+ * `db_pool_connections` gauges, and feeds both into {@link evaluatePoolExhaustionAndAlert}.
+ * A failed `pg_stat_activity` sample falls back to all-zero cluster counts so the alerter still
+ * runs (and may flip to `ok`); the live pool counts need no query and are always there.
  */
 export async function refreshPostgresPoolMetrics(): Promise<void> {
-  const maxConnections = getEnv().DATABASE_POOL_MAX ?? 10;
+  const poolStatistics = readDatabasePoolStatistics();
   let samples: PoolCountRow[] = [];
-  let liveMetricsAvailable = false;
 
   try {
     samples = await samplePostgresPoolConnectionCounts();
-    liveMetricsAvailable = true;
   } catch (error) {
     logger.warn({ error }, 'metrics.postgres_pool.sample_failed');
     samples = (['active', 'idle', 'waiting'] as const).map((state) => ({ state, count: 0 }));
@@ -109,10 +112,7 @@ export async function refreshPostgresPoolMetrics(): Promise<void> {
 
   if (isMetricsEnabled()) {
     setPostgresPoolConnectionCounts(samples);
-    setPostgresPoolConfigMetrics({
-      maxConnections,
-      liveMetricsAvailable,
-    });
+    setPostgresPoolStatistics(poolStatistics);
   }
 
   const allowedApplicationConnections = await resolveAllowedApplicationConnectionsCached();
@@ -120,6 +120,7 @@ export async function refreshPostgresPoolMetrics(): Promise<void> {
   const pressureSample = evaluatePoolExhaustionAndAlert({
     clusterActiveConnections,
     allowedApplicationConnections,
+    poolStatistics,
   });
 
   if (isMetricsEnabled()) {

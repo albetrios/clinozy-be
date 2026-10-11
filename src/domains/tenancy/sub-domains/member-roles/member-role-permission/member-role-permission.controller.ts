@@ -27,13 +27,19 @@ export function createMemberRolePermissionController(service: MemberRolePermissi
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const { role_id: roleId } = request.params as { role_id: string };
-      const rows = await service.list(scope, roleId);
-      const data = rows.map((row) => serializeMemberRolePermission(row, roleId));
-      return paginatedResponse(data, getRequestIdentifier(request), {
-        per_page: data.length,
-        next: null,
-        has_more: false,
-        estimated_total: data.length,
+      const rows = await service.list({ scope, role_public_id: roleId });
+      const data = rows.map((row) =>
+        serializeMemberRolePermission({ row, role_public_id: roleId }),
+      );
+      return paginatedResponse({
+        data,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: data.length,
+          next: null,
+          has_more: false,
+          estimated_total: data.length,
+        },
       });
     },
     putRolePermissions: async (request: FastifyRequest, _reply: FastifyReply) => {
@@ -41,19 +47,29 @@ export function createMemberRolePermissionController(service: MemberRolePermissi
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const { role_id: roleId } = request.params as { role_id: string };
-      const rows = await service.put(scope, roleId, request.body, getActingUserPublicId(auth));
-      const data = rows.map((row) => serializeMemberRolePermission(row, roleId));
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.role_permissions.put',
-        resource_type: 'role',
-        organizationPublicId: scope.organizationPublicId,
-        metadata: {
-          role_public_id: roleId,
-          permission_codes: data.map((permission) => permission.permission_code),
+      const rows = await service.put({
+        scope,
+        role_public_id: roleId,
+        body: request.body,
+        created_by_user_public_id: getActingUserPublicId(auth),
+      });
+      const data = rows.map((row) =>
+        serializeMemberRolePermission({ row, role_public_id: roleId }),
+      );
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.role_permissions.put',
+          resource_type: 'role',
+          organizationPublicId: scope.organizationPublicId,
+          metadata: {
+            role_public_id: roleId,
+            permission_codes: data.map((permission) => permission.permission_code),
+          },
         },
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

@@ -34,7 +34,15 @@ function readCiLocalStepsFromDisk(): string[] {
   return readCiLocalSteps();
 }
 
-function runStep(stepIndex: number, stepTotal: number, command: string): void {
+function runStep({
+  stepIndex,
+  stepTotal,
+  command,
+}: {
+  stepIndex: number;
+  stepTotal: number;
+  command: string;
+}): void {
   const label = formatCiLocalStepLabel(command);
   console.log(`\n▶ Step ${stepIndex}/${stepTotal}: ${label}`);
   const result = spawnSync(command, {
@@ -64,7 +72,7 @@ function main(): void {
 
   console.log(`Running ${steps.length} ci:local steps…`);
   steps.forEach((step, index) => {
-    runStep(index + 1, steps.length, step);
+    runStep({ stepIndex: index + 1, stepTotal: steps.length, command: step });
   });
   console.log('\n✅ ci:local completed');
 }

@@ -102,11 +102,11 @@ describe('createOrganizationApiKeyController', () => {
       mockReply(),
     );
 
-    expect(service.update).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      apiKeyPublicId,
-      {},
-      undefined,
-    );
+    expect(service.update).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      api_key_public_id: apiKeyPublicId,
+      body: {},
+      updated_by_user_public_id: undefined,
+    });
   });
 });

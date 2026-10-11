@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -6,11 +6,9 @@ import { resetEnvCacheForTests } from '@/shared/config/env.config.js';
 import { ValidationError } from '@/shared/errors/index.js';
 import { UploadRepository } from '@/domains/upload/upload.repository.js';
 import { UploadService } from '@/domains/upload/upload.service.js';
-import { UPLOAD_PERMISSIONS } from '@/domains/upload/upload.permissions.js';
 import { createObjectStoragePortMock } from '@/tests/helpers/object-storage-mock.helper.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
@@ -72,23 +70,12 @@ describe('UploadService organization pending-quota concurrency (database)', () =
     const organizationService = {
       requireOrganizationByPublicId: async () => organization,
     } as unknown as OrganizationService;
-    const authorizationService = {
-      resolveUserOrganizationPermissions: vi
-        .fn()
-        .mockResolvedValue([UPLOAD_PERMISSIONS.UPLOAD_MANAGE]),
-    } as unknown as AuthorizationService;
-    const service = new UploadService(
-      repository,
-      userService,
-      organizationService,
-      objectStorage,
-      authorizationService,
-    );
+    const service = new UploadService(repository, userService, organizationService, objectStorage);
 
     const launchFor = (memberPublicId: string) =>
       Array.from({ length: REQUESTS_PER_USER }, () =>
-        service.createUpload(
-          {
+        service.createUpload({
+          input: {
             purpose: 'organization-file',
             for: 'organization',
             organization_id: organization.public_id,
@@ -96,8 +83,13 @@ describe('UploadService organization pending-quota concurrency (database)', () =
             file_name: 'doc.png',
             file_size: 1024,
           },
-          memberPublicId,
-        ),
+          principal: {
+            userPublicId: memberPublicId,
+            organizationPublicId: organization.public_id,
+            // Both members hold `upload:manage` in the active organization.
+            authorizeOrganization: async () => {},
+          },
+        }),
       );
 
     const results = await Promise.allSettled([
@@ -117,10 +109,10 @@ describe('UploadService organization pending-quota concurrency (database)', () =
       expect(result.reason).toBeInstanceOf(ValidationError);
     }
 
-    const organizationPendingCount = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: owner.public_id }),
-      () => repository.countPendingByOrganizationId(organization.id),
-    );
+    const organizationPendingCount = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: owner.public_id }),
+      callback: () => repository.countPendingByOrganizationId(organization.id),
+    });
     expect(organizationPendingCount).toBe(ORG_CAP);
     expect(objectStorage.createPresignedUploadUrl).toHaveBeenCalledTimes(ORG_CAP);
   });

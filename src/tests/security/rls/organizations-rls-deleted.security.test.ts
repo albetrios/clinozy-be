@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { sql as drizzleSql, eq } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
 import { database } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
@@ -12,6 +11,11 @@ import {
   setLocalMaintenanceRole,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
+
 /**
  * Checks whether the `organizations_tenant_isolation` policy has been patched
  * with the `deleted_at IS NULL` arm from migration
@@ -19,7 +23,8 @@ import {
  * (with a warning) when the migration hasn't been applied yet.
  */
 async function hasSoftDeletedFilterInPolicy(): Promise<boolean> {
-  const rows = await sql<{ has_filter: boolean }[]>`
+  const rows = rowsOf<{ has_filter: boolean }>(
+    await database.execute(drizzleSql`
     SELECT EXISTS (
       SELECT 1
       FROM pg_policies
@@ -28,7 +33,8 @@ async function hasSoftDeletedFilterInPolicy(): Promise<boolean> {
         AND policyname = 'organizations_tenant_isolation'
         AND qual::text LIKE '%deleted_at%'
     ) AS has_filter
-  `;
+  `),
+  );
   return rows[0]?.has_filter === true;
 }
 

@@ -14,7 +14,9 @@ export type OrganizationRlsCheckoutPath =
   // pool-exhaustion alerter and hold histogram see the WHOLE checkout load
   // (retention sweeps can hold long transactions), not just organization-scoped work.
   | 'session_context'
-  | 'maintenance_context';
+  | 'maintenance_context'
+  // `withTransaction` — the unscoped transactions of the sign-in flows.
+  | 'plain_transaction';
 
 /** One completed organization-RLS checkout: how long the pooled connection was held and by which path. */
 export type OrganizationRlsCheckoutHoldSample = {
@@ -43,7 +45,7 @@ export function decrementOrganizationRlsCheckoutCount(): void {
 
 /**
  * Current count of in-flight organization-scoped RLS transaction checkouts —
- * read by the DB-pool exhaustion alerter to detect saturation before postgres.js
+ * read by the DB-pool exhaustion alerter to detect saturation before the pool
  * starts queuing, and exported as the `database_rls_active_checkouts` gauge.
  */
 export function getActiveOrganizationRlsCheckoutCount(): number {
@@ -53,7 +55,7 @@ export function getActiveOrganizationRlsCheckoutCount(): number {
 /**
  * Registers the sink that receives every {@link OrganizationRlsCheckoutHoldSample}. The metrics
  * stack registers a sink that observes the `database_rls_checkout_hold_seconds` histogram; pass
- * `null` to detach. Kept dependency-free here so the hot DB-checkout paths never import prom-client.
+ * `null` to detach. Kept dependency-free here so the hot DB-checkout paths never import the metrics client.
  */
 export function registerOrganizationRlsCheckoutHoldObserver(
   observer: OrganizationRlsCheckoutHoldObserver | null,
@@ -74,8 +76,37 @@ export function observeOrganizationRlsCheckoutHold(
   checkoutHoldObserver(sample);
 }
 
+/**
+ * When each unit of work still waiting for a pooled connection started waiting. A `Map` iterates in
+ * insertion order, so the first entry is always the oldest waiter.
+ */
+const connectionWaitStartedAtMs = new Map<symbol, number>();
+
+/** Marks a unit of work as waiting for a pooled connection; end it with {@link endConnectionWait}. */
+export function beginConnectionWait(): symbol {
+  const waitToken = Symbol('connection-wait');
+  connectionWaitStartedAtMs.set(waitToken, performance.now());
+  return waitToken;
+}
+
+/** Ends a wait begun by {@link beginConnectionWait} (connection claimed, or the unit settled); idempotent. */
+export function endConnectionWait(waitToken: symbol): void {
+  connectionWaitStartedAtMs.delete(waitToken);
+}
+
+/**
+ * How long (ms) the oldest unit of work still waiting for a pooled connection has waited; `0` when
+ * none waits. Read by the overload guard: a queue the pool drains in milliseconds never ages, a
+ * slow database makes it age fast.
+ */
+export function getOldestConnectionWaitMs(): number {
+  const oldest = connectionWaitStartedAtMs.values().next();
+  return oldest.done ? 0 : performance.now() - oldest.value;
+}
+
 /** Test-only: reset checkout counter and detach the hold observer between Vitest cases. */
 export function resetOrganizationRlsCheckoutCountForTests(): void {
   activeOrganizationRlsCheckouts = 0;
   checkoutHoldObserver = null;
+  connectionWaitStartedAtMs.clear();
 }

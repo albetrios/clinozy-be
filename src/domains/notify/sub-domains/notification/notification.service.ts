@@ -75,48 +75,57 @@ export class NotificationService {
    * {@link NotificationListServiceOptions} object so HTTP controllers can pass parsed
    * pagination input forward unchanged.
    */
-  async listForUser(
-    scope: UserPrincipalDatabaseScope,
-    options: NotificationListServiceOptions = {},
-  ) {
+  async listForUser({
+    scope,
+    options = {},
+  }: {
+    scope: UserPrincipalDatabaseScope;
+    options?: NotificationListServiceOptions | undefined;
+  }) {
     const limit = options.limit ?? PAGINATION.DEFAULT_LIMIT;
-    return withAppDatabaseContext(scope, async () =>
-      this.repository.findByUser(
-        await this.resolveUserIdInContext(scope.userPublicId),
-        omitUndefined({
-          after: options.after,
-          limit,
-          include_total: options.include_total,
-        }),
-      ),
-    );
+    return withAppDatabaseContext({
+      scope,
+      callback: async () =>
+        this.repository.findByUser(
+          await this.resolveUserIdInContext(scope.userPublicId),
+          omitUndefined({
+            after: options.after,
+            limit,
+            include_total: options.include_total,
+          }),
+        ),
+    });
   }
 
   /** Lists notification metadata for a GDPR data-export bundle (capped by caller). */
   async listForUserDataExport(options: { userPublicId: string; limit: number }) {
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
-      async () =>
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
+      callback: async () =>
         this.repository.listForUserDataExport(
           await this.resolveUserIdInContext(options.userPublicId),
           options.limit,
         ),
-    );
+    });
   }
 
-  async get(public_id: string, scope: UserPrincipalDatabaseScope) {
-    return withAppDatabaseContext(scope, async () =>
-      this.repository.findByPublicIdForUser(
-        public_id,
-        await this.resolveUserIdInContext(scope.userPublicId),
-      ),
-    );
+  async get({ public_id, scope }: { public_id: string; scope: UserPrincipalDatabaseScope }) {
+    return withAppDatabaseContext({
+      scope,
+      callback: async () =>
+        this.repository.findByPublicIdForUser(
+          public_id,
+          await this.resolveUserIdInContext(scope.userPublicId),
+        ),
+    });
   }
 
-  async markRead(public_id: string, scope: UserPrincipalDatabaseScope) {
-    const result = await withAppDatabaseContext(scope, async () =>
-      this.repository.markRead(public_id, await this.resolveUserIdInContext(scope.userPublicId)),
-    );
+  async markRead({ public_id, scope }: { public_id: string; scope: UserPrincipalDatabaseScope }) {
+    const result = await withAppDatabaseContext({
+      scope,
+      callback: async () =>
+        this.repository.markRead(public_id, await this.resolveUserIdInContext(scope.userPublicId)),
+    });
     // After the commit: invalidating first would let a concurrent read repopulate the pre-write
     // count, which is the race the tombstone exists to close.
     await invalidateCachedUnreadNotificationCount(scope.userPublicId);
@@ -124,9 +133,11 @@ export class NotificationService {
   }
 
   async markAllRead(scope: UserPrincipalDatabaseScope) {
-    const result = await withAppDatabaseContext(scope, async () =>
-      this.repository.markAllReadForUser(await this.resolveUserIdInContext(scope.userPublicId)),
-    );
+    const result = await withAppDatabaseContext({
+      scope,
+      callback: async () =>
+        this.repository.markAllReadForUser(await this.resolveUserIdInContext(scope.userPublicId)),
+    });
     await invalidateCachedUnreadNotificationCount(scope.userPublicId);
     return result;
   }
@@ -147,20 +158,30 @@ export class NotificationService {
     const cached = await getCachedUnreadNotificationCount(scope.userPublicId);
     if (cached !== null) return cached;
 
-    const count = await withAppDatabaseContext(scope, async () =>
-      this.repository.countUnreadForUser(await this.resolveUserIdInContext(scope.userPublicId)),
-    );
-    await setCachedUnreadNotificationCount(scope.userPublicId, count);
+    const count = await withAppDatabaseContext({
+      scope,
+      callback: async () =>
+        this.repository.countUnreadForUser(await this.resolveUserIdInContext(scope.userPublicId)),
+    });
+    await setCachedUnreadNotificationCount({ userPublicId: scope.userPublicId, count });
     return count;
   }
 
-  async deleteNotification(public_id: string, scope: UserPrincipalDatabaseScope) {
-    const result = await withAppDatabaseContext(scope, async () =>
-      this.repository.deleteByPublicIdForUser(
-        public_id,
-        await this.resolveUserIdInContext(scope.userPublicId),
-      ),
-    );
+  async deleteNotification({
+    public_id,
+    scope,
+  }: {
+    public_id: string;
+    scope: UserPrincipalDatabaseScope;
+  }) {
+    const result = await withAppDatabaseContext({
+      scope,
+      callback: async () =>
+        this.repository.deleteByPublicIdForUser(
+          public_id,
+          await this.resolveUserIdInContext(scope.userPublicId),
+        ),
+    });
     // Only when a row actually went. A miss here is a 404, and tombstoning on one would let a
     // caller cold-start their own cache at will by deleting ids that do not exist. Deleting an
     // already-READ notification does not change the count either, but the row's read state is not

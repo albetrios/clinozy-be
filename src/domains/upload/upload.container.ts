@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
@@ -17,19 +16,21 @@ export type UploadContainer = {
  * organization services) and a pluggable {@link ObjectStoragePort} so tests
  * can substitute an in-memory storage adapter for the real S3 client.
  */
-export function createUploadContainer(
-  userService: UserService,
-  organizationService: OrganizationService,
-  objectStorage: ObjectStoragePort,
-  authorizationService: AuthorizationService,
-): UploadContainer {
+export function createUploadContainer({
+  userService,
+  organizationService,
+  objectStorage,
+}: {
+  userService: UserService;
+  organizationService: OrganizationService;
+  objectStorage: ObjectStoragePort;
+}): UploadContainer {
   const uploadRepository = new UploadRepository();
   const uploadService = new UploadService(
     uploadRepository,
     userService,
     organizationService,
     objectStorage,
-    authorizationService,
   );
   return { uploadService };
 }
@@ -41,14 +42,13 @@ export function createUploadContainer(
  */
 export function registerUploadContainer(application: FastifyInstance): void {
   const { userService } = application.userDomain;
-  const { organizationService, authorizationService } = application.tenancyDomain;
+  const { organizationService } = application.tenancyDomain;
   application.decorate(
     'uploadDomain',
-    createUploadContainer(
+    createUploadContainer({
       userService,
       organizationService,
-      getDefaultS3ObjectStorageAdapter(),
-      authorizationService,
-    ),
+      objectStorage: getDefaultS3ObjectStorageAdapter(),
+    }),
   );
 }

@@ -8,7 +8,7 @@ What is **in place today** for production signals, and what is **deferred**. For
 
 | Signal                      | Tool / path                                                         | Notes                                                                                                |
 | --------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Errors, traces, profiling   | [Sentry](../../../src/infrastructure/observability/sentry/sentry.ts)       | `SENTRY_DSN`, release + environment tags                                                             |
+| Errors, traces, profiling   | [Sentry](../../../src/infrastructure/observability/sentry/sentry.ts)       | `SENTRY_DSN` (required in production), release + environment tags; database spans from `postgresIntegration` (node-postgres, the driver in use) |
 | Structured logs             | Pino ([`logger.util.ts`](../../../src/shared/utils/infrastructure/logger.util.ts)) | JSON to stdout; Railway log drain                                                                    |
 | Liveness / readiness        | `GET /livez`, `GET /readyz`                             | See [health-checks.md](../../reference/reliability/health-checks.md); deploy probes and load tests               |
 | Idempotency cardinality     | Repeatable BullMQ job `idempotency-cardinality`                     | Bounded Redis SCAN + log / Sentry thresholds (`IDEMPOTENCY_CARDINALITY_*`)                           |
@@ -22,7 +22,7 @@ What is **in place today** for production signals, and what is **deferred**. For
 
 ## Prometheus (opt-in)
 
-Code is in place (`prom-client`). `METRICS_ENABLED` defaults to **`true`** in every runtime (set `METRICS_ENABLED=false` to disable). Configure a scraper (Grafana Alloy, Prometheus, etc.) and set `METRICS_SCRAPE_TOKEN` (min 32 chars). No in-repo Grafana/Prometheus server.
+Code is in place (`@prometheus-io/client`, the Prometheus project's Node client, formerly `prom-client`). `METRICS_ENABLED` defaults to **`true`** in every runtime (set `METRICS_ENABLED=false` to disable). Configure a scraper (Grafana Alloy, Prometheus, etc.) and set `METRICS_SCRAPE_TOKEN` (min 32 chars). No in-repo Grafana/Prometheus server.
 
 ### Enable
 
@@ -45,7 +45,10 @@ Dynamic gauges (pool, BullMQ depth, event loop) refresh on each scrape via [`ref
 | Metric | Type | Use |
 | ------ | ---- | --- |
 | `event_loop_lag_ms` | Gauge | Node event-loop delay p99 (ms) |
-| `db_pool_connections` | Gauge (`state`: `active` / `idle` / `waiting`) | Postgres connection pressure (sampled from `pg_stat_activity`) |
+| `postgres_pool_connections` | Gauge (`pool`: `primary` / `maintenance`, `state`: `in_use` / `idle`) | This process's own pooled connections, counted live by node-postgres (the maintenance pool appears once it has been opened) |
+| `postgres_pool_waiting` | Gauge (`pool`) | Units of work in this process queued for a pooled connection — above 0 for consecutive scrapes, the pool is exhausted |
+| `postgres_pool_max_connections` | Gauge (`pool`) | Each pool's configured size (`DATABASE_POOL_MAX`, `DATABASE_MAINTENANCE_POOL_MAX`) |
+| `db_pool_connections` | Gauge (`state`: `active` / `idle` / `waiting`) | Server-side connections of this database role across **every** process, sampled from `pg_stat_activity` (`waiting` = neither active nor idle, e.g. idle in transaction) — the cluster-wide signal the pool-exhaustion alert compares with `max_connections` |
 | `database_rls_active_checkouts` | Gauge | In-process organization-scoped RLS transaction checkouts held now; alert near `DATABASE_POOL_MAX` |
 | `database_rls_checkout_hold_seconds` | Histogram (`path`) | How long an RLS checkout pins a pooled connection, by path: `scoped_context` (a unit of work), `session_context` (pre-auth session artifact), `maintenance_context` (bypass) |
 | `http_request_duration_seconds` | Histogram | Per-route latency; p95 via `histogram_quantile` |
@@ -54,7 +57,7 @@ Dynamic gauges (pool, BullMQ depth, event loop) refresh on each scrape via [`ref
 | `read_cache_requests_total` | Counter (`cache`, `result`) | Read-through cache lookups by cache name and result (`hit` \| `miss`). Alert on a **sustained drop**, never an absolute value — the right ratio differs per cache. A ratio near zero means that cache is pure overhead (a Redis round trip to still ask Postgres); a ratio that collapses after a deploy usually means an invalidation became too broad. The label is the cache's name, never its key, so cardinality stays bounded. See [read-caching.md](../../reference/runtime/read-caching.md) |
 | `process_unhandled_rejections_total` | Counter (`process`) | Non-fatal `unhandledRejection` events tolerated by the burst handler (`process="api"` / `"worker"`); alert on a sustained sub-threshold rate — it hides a persistent failing path that never trips the fatal burst exit |
 
-Also exported: `postgres_pool_max_connections`, `http_requests_total`, default Node metrics (`nodejs_eventloop_lag_*`, heap), and domain gauges (e.g. `stripe_webhook_events_failed`). See [health-checks.md](../../reference/reliability/health-checks.md) and [workers-and-events.md](../../reference/runtime/workers-and-events.md).
+Also exported: `http_requests_total`, default Node metrics (`nodejs_eventloop_lag_*`, heap), and domain gauges (e.g. `stripe_webhook_events_failed`). See [health-checks.md](../../reference/reliability/health-checks.md) and [workers-and-events.md](../../reference/runtime/workers-and-events.md).
 
 `database_rls_checkout_hold_seconds` is the primary scale signal for production-readiness finding #2 (per-request checkout pinning): a rising p95 on `path="scoped_context"` means units of work are holding pooled connections too long (often external I/O leaking into an RLS transaction), and `database_rls_active_checkouts` approaching `DATABASE_POOL_MAX` predicts checkout starvation before requests start queuing.
 
@@ -62,7 +65,8 @@ Also exported: `postgres_pool_max_connections`, `http_requests_total`, default N
 
 ```promql
 histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, route))
-db_pool_connections{state="waiting"}
+max_over_time(postgres_pool_waiting{pool="primary"}[5m])
+sum by (pool) (postgres_pool_connections{state="in_use"}) / sum by (pool) (postgres_pool_max_connections)
 sum by (queue) (bullmq_queue_waiting)
 event_loop_lag_ms
 max_over_time(database_rls_active_checkouts[5m])
@@ -92,7 +96,7 @@ curl -sS http://127.0.0.1:3000/metrics | head
 
 | Item                             | Status                                                                                               | When to revisit                                         |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| **OpenTelemetry**                | Not wired                                                                                            | When traces/metrics must export to a non-Sentry backend |
+| **OpenTelemetry export**         | Not wired: Sentry is the one tracing pipeline (the API only carries trace context across jobs)       | When traces must also reach a non-Sentry backend — add an OTLP span processor to Sentry's setup |
 | **Grafana Loki**                 | Direction only: Railway **stdout** as the log drain; no in-repo Loki pipeline                        | When centralizing logs in Grafana Cloud Loki            |
 
 ---

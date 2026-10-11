@@ -11,6 +11,7 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { createTestWebhook } from '@/tests/factories/webhook.factory.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
+import { createPinnedWebhookFetch } from '@/shared/utils/security/webhook-outbound-fetch.util.js';
 import {
   seedPermissions,
   createRoleWithPermissions,
@@ -40,6 +41,7 @@ const NOTIFY_PERMISSIONS = {
 
 const ALL_NOTIFY_PERMISSIONS = Object.values(NOTIFY_PERMISSIONS);
 const mockedLookup = vi.mocked(lookup);
+const mockedCreatePinnedWebhookFetch = vi.mocked(createPinnedWebhookFetch);
 
 function mockWebhookDnsLookup(): void {
   mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as unknown as Awaited<
@@ -229,7 +231,7 @@ describe('Notify Domain — Integration', () => {
         token,
         // Valid body so request passes schema validation and reaches the permission preHandler (403),
         // and a key so it clears the idempotencyRequired onRequest gate first.
-        payload: { url: 'https://example.com/hook', events: ['notification.created'] },
+        payload: { url: 'https://example.com/hook', events: ['membership.created'] },
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
       });
       expect(response.statusCode).toBe(403);
@@ -301,6 +303,64 @@ describe('Notify Domain — Integration', () => {
       expect(body.data).toHaveProperty('success');
       expect(body.data).toHaveProperty('delivered_at');
       expect(typeof body.data.success).toBe('boolean');
+    });
+
+    it('reports a receiver 503 as a failed delivery, then a 200 as a sent one, and lists both attempts', async () => {
+      const { organization, user, token } = await createAuthorizedNotifyContext();
+      const webhook = await createTestWebhook({
+        organizationId: organization.id,
+        url: 'https://hooks.example.com/receiver',
+        createdByUserId: user.id,
+      });
+      // The receiver answers 503 to the first test delivery only; the file-level mock answers 200
+      // to the next one.
+      mockedCreatePinnedWebhookFetch.mockImplementationOnce(
+        async () => async () => new Response('Service Unavailable', { status: 503 }),
+      );
+      const sendTestDelivery = () =>
+        injectAuthenticated(app, {
+          method: 'POST',
+          url: testApiPath(`/notify/webhooks/${webhook.public_id}/test`),
+          token,
+        });
+
+      const failed = await sendTestDelivery();
+      expect(failed.statusCode, failed.body).toBe(200);
+      expect((failed.json() as { data: Record<string, unknown> }).data).toMatchObject({
+        success: false,
+        status_code: 503,
+      });
+
+      const recovered = await sendTestDelivery();
+      expect(recovered.statusCode, recovered.body).toBe(200);
+      expect((recovered.json() as { data: Record<string, unknown> }).data).toMatchObject({
+        success: true,
+        status_code: 200,
+      });
+
+      const attempts = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath(`/notify/webhooks/${webhook.public_id}/delivery-attempts`),
+        token,
+      });
+      expect(attempts.statusCode, attempts.body).toBe(200);
+      const persistedAttempts = (attempts.json() as { data: Record<string, unknown>[] }).data;
+      // The recovery is a new attempt, not an overwrite: the failure stays on record.
+      expect(persistedAttempts).toHaveLength(2);
+      expect(persistedAttempts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event_type: 'webhook.test',
+            status: 'FAILED',
+            http_status_code: 503,
+          }),
+          expect.objectContaining({
+            event_type: 'webhook.test',
+            status: 'SENT',
+            http_status_code: 200,
+          }),
+        ]),
+      );
     });
 
     it('should return 404 for non-existent webhook', async () => {

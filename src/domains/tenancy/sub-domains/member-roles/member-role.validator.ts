@@ -16,7 +16,7 @@ import type {
  * with per-field details on failure.
  */
 export function validateCreateMemberRole(data: unknown): CreateMemberRoleInput {
-  return parseWithSchema(createMemberRoleDto, data);
+  return parseWithSchema({ schema: createMemberRoleDto, data });
 }
 
 /**
@@ -25,7 +25,7 @@ export function validateCreateMemberRole(data: unknown): CreateMemberRoleInput {
  * with per-field details on failure.
  */
 export function validateUpdateMemberRole(data: unknown): UpdateMemberRoleInput {
-  return parseWithSchema(updateMemberRoleDto, data);
+  return parseWithSchema({ schema: updateMemberRoleDto, data });
 }
 
 /**
@@ -33,5 +33,9 @@ export function validateUpdateMemberRole(data: unknown): UpdateMemberRoleInput {
  * {@link listMemberRolesQueryDto} (cursor pagination only).
  */
 export function validateListMemberRolesQuery(data: unknown): ListMemberRolesQueryInput {
-  return parseWithSchema(listMemberRolesQueryDto, data, 'errors:validation.invalidPagination');
+  return parseWithSchema({
+    schema: listMemberRolesQueryDto,
+    data,
+    errorKey: 'errors:validation.invalidPagination',
+  });
 }

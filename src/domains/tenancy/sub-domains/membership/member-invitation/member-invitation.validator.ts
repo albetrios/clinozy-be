@@ -12,7 +12,7 @@ import {
  * compared against the stored `token_hash` by the service.
  */
 export function validateAcceptMemberInvitation(data: unknown): AcceptMemberInvitationInput {
-  return parseWithSchema(acceptMemberInvitationDto, data);
+  return parseWithSchema({ schema: acceptMemberInvitationDto, data });
 }
 
 /**
@@ -20,5 +20,5 @@ export function validateAcceptMemberInvitation(data: unknown): AcceptMemberInvit
  * against {@link resendMemberInvitationDto}.
  */
 export function validateResendMemberInvitation(data: unknown): ResendMemberInvitationInput {
-  return parseWithSchema(resendMemberInvitationDto, data);
+  return parseWithSchema({ schema: resendMemberInvitationDto, data });
 }

@@ -75,9 +75,12 @@ function alertIdempotencyPerActorCapExceeded(payload: {
     return;
   }
   lastIdempotencyPerActorCapAlertAtMs = now;
-  captureMessage('idempotency.per_actor_cap.exceeded', {
-    level: 'warning',
-    extra: payload,
+  captureMessage({
+    message: 'idempotency.per_actor_cap.exceeded',
+    options: {
+      level: 'warning',
+      extra: payload,
+    },
   });
 }
 
@@ -96,9 +99,12 @@ function alertIdempotencyStoreUnavailable(error: unknown): void {
     return;
   }
   lastIdempotencyStoreUnavailableAlertAtMs = now;
-  captureMessage('idempotency.cache.unavailable', {
-    level: 'error',
-    extra: { error: error instanceof Error ? error.message : String(error) },
+  captureMessage({
+    message: 'idempotency.cache.unavailable',
+    options: {
+      level: 'error',
+      extra: { error: error instanceof Error ? error.message : String(error) },
+    },
   });
 }
 
@@ -238,10 +244,13 @@ function resolveIdempotencyScope(request: FastifyRequest): {
   });
 }
 
-function sendCachedIdempotencyResponse(
-  reply: FastifyReply,
-  response: CompletedIdempotencyEntry,
-): FastifyReply {
+function sendCachedIdempotencyResponse({
+  reply,
+  response,
+}: {
+  reply: FastifyReply;
+  response: CompletedIdempotencyEntry;
+}): FastifyReply {
   reply.status(response.statusCode);
   for (const [headerKey, headerValue] of Object.entries(response.headers)) {
     reply.header(headerKey, headerValue);
@@ -257,16 +266,19 @@ function sendCachedIdempotencyResponse(
  * that every other error carries). Keeps the exact `type`/`code`/`detail` each caller already used;
  * `retry_after_seconds` is snake_case per the body-key contract (was `retryAfterSeconds`).
  */
-function buildIdempotencyErrorBody(
-  request: FastifyRequest,
+function buildIdempotencyErrorBody({
+  request,
+  error,
+}: {
+  request: FastifyRequest;
   error: {
     type: string;
     code: string;
     detail: string;
     retryable?: boolean;
     retry_after_seconds?: number;
-  },
-) {
+  };
+}) {
   return {
     error: omitUndefined({
       type: error.type,
@@ -280,17 +292,20 @@ function buildIdempotencyErrorBody(
 }
 
 function sendInFlightConflict(request: FastifyRequest, reply: FastifyReply): FastifyReply {
-  const detail = translateRequestMessage(
+  const detail = translateRequestMessage({
     request,
-    'errors:idempotencyKeyInFlight',
-    'A request with this idempotency key is still in flight',
-  );
+    messageKey: 'errors:idempotencyKeyInFlight',
+    fallback: 'A request with this idempotency key is still in flight',
+  });
   reply.status(409);
   return reply.send(
-    buildIdempotencyErrorBody(request, {
-      type: 'request_error',
-      code: 'conflict_in_flight',
-      detail,
+    buildIdempotencyErrorBody({
+      request,
+      error: {
+        type: 'request_error',
+        code: 'conflict_in_flight',
+        detail,
+      },
     }),
   );
 }
@@ -305,17 +320,20 @@ function sendIdempotencyKeyReuseConflict(
   request: FastifyRequest,
   reply: FastifyReply,
 ): FastifyReply {
-  const detail = translateRequestMessage(
+  const detail = translateRequestMessage({
     request,
-    'errors:idempotencyKeyReuse',
-    'This idempotency key was already used with a different request payload',
-  );
+    messageKey: 'errors:idempotencyKeyReuse',
+    fallback: 'This idempotency key was already used with a different request payload',
+  });
   reply.status(422);
   return reply.send(
-    buildIdempotencyErrorBody(request, {
-      type: 'request_error',
-      code: 'idempotency_key_reuse',
-      detail,
+    buildIdempotencyErrorBody({
+      request,
+      error: {
+        type: 'request_error',
+        code: 'idempotency_key_reuse',
+        detail,
+      },
     }),
   );
 }
@@ -383,20 +401,23 @@ function sendIdempotencyPerActorCapExceeded(
   reply: FastifyReply,
 ): FastifyReply {
   const retryAfterSeconds = env.IDEMPOTENCY_PER_ACTOR_CAP_WINDOW_SECONDS;
-  const detail = translateRequestMessage(
+  const detail = translateRequestMessage({
     request,
-    'errors:idempotencyPerActorCapExceeded',
-    'Too many idempotent requests; reuse a key or wait for the window to reset',
-  );
+    messageKey: 'errors:idempotencyPerActorCapExceeded',
+    fallback: 'Too many idempotent requests; reuse a key or wait for the window to reset',
+  });
   reply.header('Retry-After', String(retryAfterSeconds));
   reply.status(429);
   return reply.send(
-    buildIdempotencyErrorBody(request, {
-      type: 'rate_limit_error',
-      code: 'idempotency_per_actor_cap',
-      detail,
-      retryable: true,
-      retry_after_seconds: retryAfterSeconds,
+    buildIdempotencyErrorBody({
+      request,
+      error: {
+        type: 'rate_limit_error',
+        code: 'idempotency_per_actor_cap',
+        detail,
+        retryable: true,
+        retry_after_seconds: retryAfterSeconds,
+      },
     }),
   );
 }
@@ -439,7 +460,7 @@ async function idempotencyClaimPreHandler(
   });
   requestWithIdempotency._idempotencyRequestFingerprint = requestFingerprint;
 
-  const cacheKey = buildIdempotencyCacheKey(idempotencyKey, scope);
+  const cacheKey = buildIdempotencyCacheKey({ idempotencyKey, scope });
   requestWithIdempotency._idempotencyScope = scope;
 
   let cached: string | null;
@@ -447,12 +468,12 @@ async function idempotencyClaimPreHandler(
   try {
     cached = await redisConnection.get(cacheKey);
     if (cached !== null) {
-      return serveIdempotencyCacheHit(
+      return serveIdempotencyCacheHit({
         request,
         reply,
-        parseIdempotencyEntry(cached),
+        entry: parseIdempotencyEntry(cached),
         requestFingerprint,
-      );
+      });
     }
 
     // P0-#4: per-actor claim cap. The cache-hit path above is intentionally before this check
@@ -477,11 +498,17 @@ async function idempotencyClaimPreHandler(
       'NX',
     );
   } catch (error) {
-    return respondIdempotencyStoreUnavailable(request, reply, error, idempotencyKey);
+    return respondIdempotencyStoreUnavailable({ request, reply, error, idempotencyKey });
   }
 
   if (!claimed) {
-    return handleIdempotencyClaimRace(request, reply, cacheKey, requestFingerprint, idempotencyKey);
+    return handleIdempotencyClaimRace({
+      request,
+      reply,
+      cacheKey,
+      requestFingerprint,
+      idempotencyKey,
+    });
   }
 
   requestWithIdempotency._idempotencyClaimed = true;
@@ -502,12 +529,17 @@ async function idempotencyClaimPreHandler(
  * Replays/cached-conflicts a hit: unreadable → in-flight 409, fingerprint mismatch → 422,
  * completed → replay, else in-flight 409.
  */
-function serveIdempotencyCacheHit(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  entry: IdempotencyEntry,
-  requestFingerprint: string,
-): FastifyReply {
+function serveIdempotencyCacheHit({
+  request,
+  reply,
+  entry,
+  requestFingerprint,
+}: {
+  request: FastifyRequest;
+  reply: FastifyReply;
+  entry: IdempotencyEntry;
+  requestFingerprint: string;
+}): FastifyReply {
   if (entry.state === 'unreadable') {
     logger.warn({ requestId: request.id }, 'idempotency.cache.unreadable_entry');
     sendInFlightConflict(request, reply);
@@ -519,7 +551,7 @@ function serveIdempotencyCacheHit(
     return reply;
   }
   if (entry.state === 'completed') {
-    sendCachedIdempotencyResponse(reply, entry);
+    sendCachedIdempotencyResponse({ reply, response: entry });
     return reply;
   }
   sendInFlightConflict(request, reply);
@@ -533,28 +565,36 @@ function serveIdempotencyCacheHit(
  * the transient Redis blip clears — preserving correctness while turning a write outage into a
  * brief, self-healing retry.
  */
-function respondIdempotencyStoreUnavailable(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  error: unknown,
-  idempotencyKey: string,
-): FastifyReply {
+function respondIdempotencyStoreUnavailable({
+  request,
+  reply,
+  error,
+  idempotencyKey,
+}: {
+  request: FastifyRequest;
+  reply: FastifyReply;
+  error: unknown;
+  idempotencyKey: string;
+}): FastifyReply {
   logger.warn({ error, idempotencyKey }, 'idempotency.cache.unavailable');
   alertIdempotencyStoreUnavailable(error);
-  const detail = translateRequestMessage(
+  const detail = translateRequestMessage({
     request,
-    'errors:serviceUnavailable',
-    'Idempotency store unavailable',
-  );
+    messageKey: 'errors:serviceUnavailable',
+    fallback: 'Idempotency store unavailable',
+  });
   reply.header('Retry-After', String(IDEMPOTENCY_STORE_UNAVAILABLE_RETRY_AFTER_SECONDS));
   reply.status(503);
   reply.send(
-    buildIdempotencyErrorBody(request, {
-      type: 'service_error',
-      code: 'service_unavailable',
-      detail,
-      retryable: true,
-      retry_after_seconds: IDEMPOTENCY_STORE_UNAVAILABLE_RETRY_AFTER_SECONDS,
+    buildIdempotencyErrorBody({
+      request,
+      error: {
+        type: 'service_error',
+        code: 'service_unavailable',
+        detail,
+        retryable: true,
+        retry_after_seconds: IDEMPOTENCY_STORE_UNAVAILABLE_RETRY_AFTER_SECONDS,
+      },
     }),
   );
   return reply;
@@ -564,13 +604,19 @@ function respondIdempotencyStoreUnavailable(
  * Lost the SETNX race: another concurrent claim landed between our GET miss and SETNX. Re-read
  * so we can tell apart "still computing" (409 in_flight) from "already completed" (replay).
  */
-async function handleIdempotencyClaimRace(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  cacheKey: string,
-  requestFingerprint: string,
-  idempotencyKey: string,
-): Promise<FastifyReply> {
+async function handleIdempotencyClaimRace({
+  request,
+  reply,
+  cacheKey,
+  requestFingerprint,
+  idempotencyKey,
+}: {
+  request: FastifyRequest;
+  reply: FastifyReply;
+  cacheKey: string;
+  requestFingerprint: string;
+  idempotencyKey: string;
+}): Promise<FastifyReply> {
   let raceEntry: IdempotencyEntry | null = null;
   try {
     const rawRace = await redisConnection.get(cacheKey);
@@ -587,20 +633,23 @@ async function handleIdempotencyClaimRace(
     return reply;
   }
   if (raceEntry?.state === 'completed') {
-    sendCachedIdempotencyResponse(reply, raceEntry);
+    sendCachedIdempotencyResponse({ reply, response: raceEntry });
     return reply;
   }
-  const detail = translateRequestMessage(
+  const detail = translateRequestMessage({
     request,
-    'errors:idempotencyKeyConflict',
-    'Concurrent request with same idempotency key',
-  );
+    messageKey: 'errors:idempotencyKeyConflict',
+    fallback: 'Concurrent request with same idempotency key',
+  });
   reply.status(409);
   reply.send(
-    buildIdempotencyErrorBody(request, {
-      type: 'request_error',
-      code: 'conflict',
-      detail,
+    buildIdempotencyErrorBody({
+      request,
+      error: {
+        type: 'request_error',
+        code: 'conflict',
+        detail,
+      },
     }),
   );
   return reply;
@@ -725,7 +774,7 @@ export async function idempotencyOnResponse(
 
   const scope = requestWithIdempotency._idempotencyScope ?? resolveIdempotencyScope(request);
   const requestFingerprint = requestWithIdempotency._idempotencyRequestFingerprint;
-  const cacheKey = buildIdempotencyCacheKey(idempotencyKey, scope);
+  const cacheKey = buildIdempotencyCacheKey({ idempotencyKey, scope });
   requestWithIdempotency._idempotencyClaimed = false;
 
   const statusCode = reply.statusCode;

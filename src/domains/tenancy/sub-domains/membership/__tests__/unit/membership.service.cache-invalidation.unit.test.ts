@@ -8,6 +8,7 @@ vi.mock('@/domains/tenancy/sub-domains/permission/permission-cache.service.js', 
 
 vi.mock('@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js', () => ({
   assertCallerCanGrantPermissionCodes: vi.fn().mockResolvedValue(undefined),
+  assertCallerHoldsMemberPermissionCodes: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => {
@@ -18,10 +19,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -82,7 +85,15 @@ describe('MembershipService — permission cache invalidation', () => {
       created_at: new Date(),
       updated_at: new Date(),
     }),
-    softDelete: vi.fn().mockResolvedValue({ public_id: 'membership_public' }),
+    softDelete: vi.fn().mockResolvedValue({
+      public_id: 'membership_public',
+      user_id: 20,
+      role_id: 2,
+      status: 'ACTIVE',
+      joined_at: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }),
     resolveUserSummariesByInternalIds: vi.fn(
       async (ids: readonly number[]) =>
         new Map(
@@ -152,42 +163,65 @@ describe('MembershipService — permission cache invalidation', () => {
   });
 
   it('create invalidates user permission cache after membership is created', async () => {
-    await service.create(
-      asScope('org_public_abc'),
-      { email: 'invitee@example.com', role_id: 'role_public' },
-      'inviter_public',
-    );
+    await service.create({
+      scope: asScope('org_public_abc'),
+      body: { email: 'invitee@example.com', role_id: 'role_public' },
+      invited_by_user_public_id: 'inviter_public',
+    });
 
-    expect(invalidatePermissions).toHaveBeenCalledWith('user_public_new', 'org_public_abc');
+    expect(invalidatePermissions).toHaveBeenCalledWith({
+      userId: 'user_public_new',
+      organizationId: 'org_public_abc',
+    });
   });
 
   it('update invalidates the affected user permission cache', async () => {
-    await service.update(
-      asScope('org_public_abc'),
-      'membership_public',
-      { status: 'SUSPENDED' },
-      'admin',
-    );
+    await service.update({
+      scope: asScope('org_public_abc'),
+      membership_public_id: 'membership_public',
+      body: { status: 'SUSPENDED' },
+      updated_by_user_public_id: 'admin',
+    });
 
     expect(organizationService.resolveUserPublicIdByInternalId).toHaveBeenCalledWith(5);
-    expect(invalidatePermissions).toHaveBeenCalledWith('user_public_affected', 'org_public_abc');
+    expect(invalidatePermissions).toHaveBeenCalledWith({
+      userId: 'user_public_affected',
+      organizationId: 'org_public_abc',
+    });
   });
 
   it('delete invalidates the affected user permission cache', async () => {
     membershipRepository.softDelete.mockResolvedValueOnce({
       public_id: 'membership_public',
       user_id: 5,
+      role_id: 2,
+      status: 'ACTIVE',
+      joined_at: null,
+      created_at: new Date(),
+      updated_at: new Date(),
     });
 
-    await service.delete(asScope('org_public_abc'), 'membership_public');
+    await service.delete({
+      scope: asScope('org_public_abc'),
+      membership_public_id: 'membership_public',
+    });
 
     expect(organizationService.resolveUserPublicIdByInternalId).toHaveBeenCalledWith(5);
-    expect(invalidatePermissions).toHaveBeenCalledWith('user_public_affected', 'org_public_abc');
+    expect(invalidatePermissions).toHaveBeenCalledWith({
+      userId: 'user_public_affected',
+      organizationId: 'org_public_abc',
+    });
   });
 
   it('leaveOrganization invalidates the leaving user permission cache', async () => {
-    await service.leaveOrganization(asScope('org_public_abc'), 'user_public_leaver');
+    await service.leaveOrganization({
+      scope: asScope('org_public_abc'),
+      user_public_id: 'user_public_leaver',
+    });
 
-    expect(invalidatePermissions).toHaveBeenCalledWith('user_public_leaver', 'org_public_abc');
+    expect(invalidatePermissions).toHaveBeenCalledWith({
+      userId: 'user_public_leaver',
+      organizationId: 'org_public_abc',
+    });
   });
 });

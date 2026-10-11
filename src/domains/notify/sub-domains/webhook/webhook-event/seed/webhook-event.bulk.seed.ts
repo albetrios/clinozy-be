@@ -44,7 +44,13 @@ interface DeliveryAttemptInsert {
 }
 
 /** Rotates SENT → FAILED → PENDING by index so every webhook gets a deterministic state mix. */
-function statusForIndex(index: number, edgeCases: boolean): DeliveryStatus {
+function statusForIndex({
+  index,
+  edgeCases,
+}: {
+  index: number;
+  edgeCases: boolean;
+}): DeliveryStatus {
   if (edgeCases && index >= BASE_ATTEMPTS_PER_WEBHOOK) return 'SENDING';
   const cycle = index % 3;
   if (cycle === 0) return 'SENT';
@@ -58,12 +64,15 @@ function statusForIndex(index: number, edgeCases: boolean): DeliveryStatus {
  * un-stamped. `event_key` is left null to avoid the partial unique `(webhook_id, event_key)`
  * pending-collision guard.
  */
-function buildDeliveryAttempt(
-  context: SeedContext,
-  options: { webhookId: number; index: number },
-): DeliveryAttemptInsert {
+function buildDeliveryAttempt({
+  context,
+  options,
+}: {
+  context: SeedContext;
+  options: { webhookId: number; index: number };
+}): DeliveryAttemptInsert {
   const content = generateBulkWebhookEvent(context.faker);
-  const status = statusForIndex(options.index, context.counts.edgeCases);
+  const status = statusForIndex({ index: options.index, edgeCases: context.counts.edgeCases });
   const base: DeliveryAttemptInsert = {
     // sec-new-B2: generate a unique public_id for each seeded attempt row.
     public_id: generatePublicId('webhookDeliveryAttempt'),
@@ -138,7 +147,7 @@ export async function seedWebhookEventsBulk(context: SeedContext): Promise<void>
 
     const pending: DeliveryAttemptInsert[] = [];
     for (let index = have; index < target; index += 1) {
-      pending.push(buildDeliveryAttempt(context, { webhookId: webhook.id, index }));
+      pending.push(buildDeliveryAttempt({ context, options: { webhookId: webhook.id, index } }));
     }
 
     for (let offset = 0; offset < pending.length; offset += INSERT_BATCH_SIZE) {

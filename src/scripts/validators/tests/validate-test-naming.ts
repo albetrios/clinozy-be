@@ -59,7 +59,13 @@ export function detectTier(fileName: string): TierSuffix | undefined {
  * folder without `unit/` because `infrastructure/` and `scripts/` were allowed anywhere. A
  * `*.db.unit` or `*.property.unit` file is collected anywhere under `src/` by its own project.
  */
-export function isPathAllowedForTier(relativePath: string, tier: TierSuffix): boolean {
+export function isPathAllowedForTier({
+  relativePath,
+  tier,
+}: {
+  relativePath: string;
+  tier: TierSuffix;
+}): boolean {
   const normalized = relativePath.replaceAll('\\', '/');
   switch (tier) {
     case 'unit':
@@ -93,12 +99,12 @@ export function isPathAllowedForTier(relativePath: string, tier: TierSuffix): bo
   }
 }
 
-function walk(directory: string, collector: string[]): void {
+function walk({ directory, collector }: { directory: string; collector: string[] }): void {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const fullPath = join(directory, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === 'node_modules') continue;
-      walk(fullPath, collector);
+      walk({ directory: fullPath, collector });
       continue;
     }
     if (entry.name.endsWith('.test.ts') || entry.name.endsWith('.test.tsx')) {
@@ -110,7 +116,7 @@ function walk(directory: string, collector: string[]): void {
 function main(): void {
   const errors: string[] = [];
   const testFiles: string[] = [];
-  walk(ROOT, testFiles);
+  walk({ directory: ROOT, collector: testFiles });
 
   for (const filePath of testFiles) {
     const fileName = filePath.split('/').pop() ?? filePath;
@@ -123,7 +129,7 @@ function main(): void {
       continue;
     }
 
-    if (!isPathAllowedForTier(relativePath, tier)) {
+    if (!isPathAllowedForTier({ relativePath, tier })) {
       errors.push(`*.${tier}.test.ts in wrong folder: ${relativePath}`);
     }
   }

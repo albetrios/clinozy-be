@@ -168,12 +168,6 @@ export const MCP_OPENAPI_RESOURCE_URI = '${slug}://openapi';
 /** MCP resource URI for the route catalog. */
 export const MCP_ROUTES_RESOURCE_URI = '${slug}://routes';
 
-/** OpenTelemetry service name for the API process. */
-export const OTEL_SERVICE_NAME_API = '${artifacts.apiImage}';
-
-/** OpenTelemetry service name for the worker process. */
-export const OTEL_SERVICE_NAME_WORKER = '${artifacts.workerImage}';
-
 /** OpenTelemetry tracer instrumentation scope name. */
 export const OTEL_TRACER_NAME = PROJECT_SLUG;
 

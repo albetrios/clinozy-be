@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
 import { verificationCodeTemplate } from '@/infrastructure/mail/templates/verification-code.template.js';
 import { invitationTemplate } from '@/infrastructure/mail/templates/invitation.template.js';
+
+// Email copy comes from the locale files, as in the API and the worker.
+beforeAll(async () => {
+  await initializeI18nextForBackgroundWork();
+});
 
 describe('mail templates (snapshots)', () => {
   it('verificationCodeTemplate matches snapshot', () => {

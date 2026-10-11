@@ -76,7 +76,10 @@ describe('migration prefix helpers', () => {
     // There is no increment fallback: the helper still returns the wall-clock
     // prefix and leaves monotonic enforcement to lintMigrationTimestamps.
     expect(
-      suggestNextMigrationPrefix(['20260530000001_a.sql', '20260530000002_b.sql'], now),
+      suggestNextMigrationPrefix({
+        upMigrationFilenames: ['20260530000001_a.sql', '20260530000002_b.sql'],
+        now,
+      }),
     ).toEqual({
       currentMax: '20260530000002',
       nextPrefix: '20260528054321',
@@ -86,7 +89,10 @@ describe('migration prefix helpers', () => {
   it('suggestNextMigrationPrefix uses real UTC time when greater than current max', () => {
     const now = new Date('2026-05-30T05:43:21.000Z');
     expect(
-      suggestNextMigrationPrefix(['20260520000001_a.sql', '20260520000002_b.sql'], now),
+      suggestNextMigrationPrefix({
+        upMigrationFilenames: ['20260520000001_a.sql', '20260520000002_b.sql'],
+        now,
+      }),
     ).toEqual({
       currentMax: '20260520000002',
       nextPrefix: '20260530054321',
@@ -95,7 +101,7 @@ describe('migration prefix helpers', () => {
 
   it('suggestNextMigrationPrefix uses real UTC time when no migrations exist', () => {
     const now = new Date('2026-05-28T12:00:00.000Z');
-    expect(suggestNextMigrationPrefix([], now)).toEqual({
+    expect(suggestNextMigrationPrefix({ upMigrationFilenames: [], now })).toEqual({
       currentMax: null,
       nextPrefix: '20260528120000',
     });

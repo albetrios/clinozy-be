@@ -18,7 +18,11 @@ export async function requireRecentStepUpPreHandler(
   _reply: FastifyReply,
 ): Promise<void> {
   const auth = requireAuth(request);
-  const steppedUp = await hasRecentStepUp(redisConnection, auth.userId, auth.sessionPublicId);
+  const steppedUp = await hasRecentStepUp({
+    redis: redisConnection,
+    userPublicId: auth.userId,
+    sessionPublicId: auth.sessionPublicId,
+  });
   if (!steppedUp) {
     throw new ForbiddenError('errors:recentStepUpRequired');
   }
@@ -41,7 +45,11 @@ export async function requireStrongRecentStepUpPreHandler(
   _reply: FastifyReply,
 ): Promise<void> {
   const auth = requireAuth(request);
-  const steppedUp = await hasRecentStrongStepUp(redisConnection, auth.userId, auth.sessionPublicId);
+  const steppedUp = await hasRecentStrongStepUp({
+    redis: redisConnection,
+    userPublicId: auth.userId,
+    sessionPublicId: auth.sessionPublicId,
+  });
   if (!steppedUp) {
     throw new ForbiddenError('errors:strongStepUpRequired');
   }

@@ -194,7 +194,7 @@ Same as single resource; response body is the created entity with `data` + `meta
 
 No body, or empty body. No `data`/`meta` required for 204.
 
-**Implementation:** Add/update helpers in `src/shared/utils/http/response.util.ts` (e.g. `successResponse(data, requestId)`, `paginatedResponse(data, meta)`) and ensure every response includes `request_id` (e.g. from `request.id` or generated per request). Remove `success: true` from responses.
+**Implementation:** Add/update helpers in `src/shared/utils/http/response.util.ts` (e.g. `successResponse({ data, request_id })`, `paginatedResponse({ data, request_id, pagination })`) and ensure every response includes `request_id` (e.g. from `request.id` or generated per request). Remove `success: true` from responses.
 
 ---
 
@@ -250,7 +250,7 @@ Follow [Paddle Errors](https://developer.paddle.com/api-reference/about/errors):
 }
 ```
 
-- **error.errors**: array of `{ field, message }` for each invalid field.
+- **error.errors**: array of `{ field, message }` for each invalid field; `field` is snake_case and `message` is in the request's language (`Accept-Language`, see [internationalization.md](../runtime/internationalization.md)).
 
 **Implementation:** Update `src/shared/middlewares/core/error-handler.middleware.ts` and `src/shared/errors/index.ts` to emit this shape; map existing `AppError` codes to snake_case (`NOT_FOUND` → `not_found`, etc.) and add `type`, `documentation_url`, and `meta.request_id`. Ensure `request_id` is set on the request (e.g. Fastify `request.id` or middleware).
 
@@ -291,7 +291,7 @@ An organization has an immutable `type` — `PERSONAL` (single-owner workspace) 
 
 - **No `capabilities` object** — the organization `type` (`PERSONAL` / `TEAM`) is the sole signal. A client gates a team-only action on `type === 'TEAM'` **and** the caller's permission (e.g. `subscription:manage`); permissions/roles govern what the caller may do, separately. (A redundant type-derived `capabilities` object was removed; reintroduce a purpose-built `features`/`entitlements` object only if availability ever stops being purely type-derived.)
 - **The 9 team-only routes** (reject a personal organization with **HTTP 422** `unprocessable_entity`): the four tenancy mutations `DELETE /api/v1/tenancy/organization`, `POST /api/v1/tenancy/organization/memberships`, `POST /api/v1/tenancy/organization/transfer-ownership`, `POST /api/v1/tenancy/organization/roles`, and the five billing mutations `POST /api/v1/billing/payment-methods/setup`, `POST /api/v1/billing/subscriptions`, `POST /api/v1/billing/subscriptions/{subscription_id}/change-plan`, `POST /api/v1/billing/subscriptions/{subscription_id}/cancel`, `POST /api/v1/billing/subscriptions/{subscription_id}/resume`.
-- **Backstop guard** — `assertTeamOrganization(organization, capability)` (capability buckets `MEMBERS | ROLES | MUTATION | BILLING`) is the single point of enforcement shared by those routes. It returns 422 (not 409) because the organization `type` is immutable, so an identical retry can never succeed. See **[response-codes.md](../api/response-codes.md)** (`409 vs 422`) and **[route-consistency-and-organization-model.md](../api/route-consistency-and-organization-model.md)**.
+- **Backstop guard** — `assertTeamOrganization({ organization, capability })` (capability buckets `MEMBERS | ROLES | MUTATION | BILLING`) is the single point of enforcement shared by those routes. It returns 422 (not 409) because the organization `type` is immutable, so an identical retry can never succeed. See **[response-codes.md](../api/response-codes.md)** (`409 vs 422`) and **[route-consistency-and-organization-model.md](../api/route-consistency-and-organization-model.md)**.
 
 ### 4.3 billing — sub-domains: plans, subscriptions
 
@@ -353,7 +353,7 @@ All 19 phases from the Consolidated Master Plan (Domain API Upgrade + CI/CD + en
 
 ### Phase 1 — Infrastructure hardening
 
-- [x] Postgres.js connection: SSL in production, `statement_timeout`, `max_lifetime`, pool sizing via env
+- [x] node-postgres pool: SSL in production, `statement_timeout`, max connection lifetime, pool sizing via env, `error` listeners (`createDatabasePool`)
 - [x] ioredis connection: `retryStrategy`, `keyPrefix`, error handlers, `lazyConnect`
 - [x] Pino logger: redaction of sensitive fields (authorization, password, token, secret, cookie)
 - [x] Env validation: Zod schema for all environment variables (`src/shared/config/env.config.ts`)
@@ -365,7 +365,7 @@ All 19 phases from the Consolidated Master Plan (Domain API Upgrade + CI/CD + en
 - [x] `DATABASE_MIGRATION_URL` in env config; `migrate.ts` uses it with fallback
 - [x] `db:push` script added to `package.json`
 - [x] RLS migration (consolidated into the baseline `migrations/00000000000000_init.sql`) for all multi-tenant tables
-- [x] Tenant middleware sets `app.current_organization_public_id` Postgres session variable for RLS
+- [x] `app.current_organization_public_id` Postgres session variable set for RLS — today per unit of work by `withAppDatabaseContext`, from the signed `org` claim (the tenant middleware was removed)
 
 ### Phase 3 — Security hardening
 
@@ -379,7 +379,7 @@ All 19 phases from the Consolidated Master Plan (Domain API Upgrade + CI/CD + en
 - [x] CORS with explicit `ALLOWED_ORIGINS`
 - [x] Rate limiting (global + per-route)
 - [x] Idempotency middleware (Redis-backed SETNX, 24h TTL)
-- [x] Organization ID format validation in tenant middleware
+- [x] Organization ID format validation — today the signed `org` claim (the tenant middleware and its header were removed)
 
 ### Phase 4 — Code quality
 

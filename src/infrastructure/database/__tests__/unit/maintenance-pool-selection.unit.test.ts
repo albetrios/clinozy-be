@@ -16,8 +16,11 @@ describe('maintenance context pool selection', () => {
     // Outside worker runtime the system_table_worker kind passes the pool straight
     // through — every maintenance kind runs on getMaintenanceDatabase(), the dedicated
     // clinozy_be_maintenance connection the bypass policy arms are bound to.
-    await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, async (handle) => {
-      expect(handle).toBe(maintenancePoolHandle);
+    await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      callback: async (handle) => {
+        expect(handle).toBe(maintenancePoolHandle);
+      },
     });
   });
 });

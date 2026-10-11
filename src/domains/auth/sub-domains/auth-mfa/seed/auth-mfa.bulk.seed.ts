@@ -21,7 +21,7 @@ const MFA_USER_RATIO = 3;
 const RECOVERY_CODES_PER_USER = 3;
 
 /** Deterministic 64-char recovery-code hash for a given user + slot (idempotency marker). */
-function recoveryCodeHash(userPublicId: string, slot: number): string {
+function recoveryCodeHash({ userPublicId, slot }: { userPublicId: string; slot: number }): string {
   return createHash('sha256').update(`seed-recovery:${userPublicId}:${slot}`).digest('hex');
 }
 
@@ -74,7 +74,7 @@ export async function seedAuthMfaBulk(context: SeedContext): Promise<void> {
         .insert(mfa_recovery_codes)
         .values({
           user_id: user.id,
-          code_hash: recoveryCodeHash(user.public_id, slot),
+          code_hash: recoveryCodeHash({ userPublicId: user.public_id, slot }),
         })
         .onConflictDoNothing();
     }

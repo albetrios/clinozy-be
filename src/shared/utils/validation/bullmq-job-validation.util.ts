@@ -3,7 +3,15 @@ import { z } from 'zod';
 /**
  * Validates BullMQ job payloads at enqueue and worker boundaries.
  */
-export function parseBullMQJobData<T>(schema: z.ZodType<T>, data: unknown, queueName: string): T {
+export function parseBullMQJobData<T>({
+  schema,
+  data,
+  queueName,
+}: {
+  schema: z.ZodType<T>;
+  data: unknown;
+  queueName: string;
+}): T {
   const parsed = schema.safeParse(data);
   if (!parsed.success) {
     const details = z.flattenError(parsed.error);

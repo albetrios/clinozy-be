@@ -873,12 +873,18 @@ function stepUpBlock(auth, email) {
   return state.ok;
 }
 
-/** 52-55 teardown: delete what this VU made, return home, prove it is gone, sign out. */
-function teardownBlock(auth, json, slug) {
+/** 52-55 teardown: step up, delete what this VU made, return home, prove it is gone, sign out. */
+function teardownBlock(auth, json, slug, password) {
   const state = { ok: true };
   const step = stepper(state);
   let session = auth;
 
+  // Deleting an organization needs a recent step-up on this session. Pool users have a password, so
+  // that is the step-up (an email-code one is refused for an account with a password).
+  http.post(`${API}/auth/step-up`, JSON.stringify({ password }), {
+    headers: session,
+    tags: { name: 'teardown-step-up' },
+  });
   const removed = http.del(`${API}/tenancy/organization`, null, {
     headers: session,
     tags: { name: '52-delete-org' },
@@ -1079,7 +1085,7 @@ export function feFullJourney() {
     for (const n of ['49-step-up', '50-mfa-enroll', '51-webauthn-options']) skip(n);
   }
 
-  if (!teardownBlock(auth, json, slug)) state.ok = false;
+  if (!teardownBlock(auth, json, slug, cred.password)) state.ok = false;
 
   journeyDuration.add(Date.now() - t0);
   journeyComplete.add(state.ok);

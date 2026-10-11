@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 /**
  * Policy: `getContextFreeDatabase()` skips the unscoped-query counter, so it may only front a query
  * that cannot depend on a database context:
- * - a `SECURITY DEFINER` resolver (`<schema>.resolve_*(`) run through `.execute`, which reads as
+ * - a `SECURITY DEFINER` resolver (`<schema>.resolve_*(` or the two tenancy MFA policy resolvers) run through `.execute`, which reads as
  *   its owner whatever the caller's GUCs are; or
  * - the `tenancy.permissions` reference catalog read in `permission.repository.ts`, whose policy
  *   is unconditional.
@@ -56,9 +56,10 @@ describe('context-free database usage', () => {
 
     const offenders = sites
       .filter(({ file, following }) => {
-        const securityDefinerResolver = /^\s*\.execute\b[\s\S]*?\b[a-z]+\.resolve_[a-z_]+\(/.test(
-          following,
-        );
+        const securityDefinerResolver =
+          /^\s*\.execute\b[\s\S]*?\b(?:[a-z]+\.resolve_[a-z_]+|tenancy\.(?:organization_requires_mfa|user_has_organization_requiring_mfa))\(/.test(
+            following,
+          );
         const permissionCatalogRead =
           file.endsWith('permission/permission.repository.ts') &&
           /^\s*\.select\(\)\s*\.from\(permissions\)/.test(following);

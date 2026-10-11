@@ -64,7 +64,7 @@ vi.mock('@/infrastructure/queue/worker-runtime/worker-options.js', () => ({
 }));
 
 vi.mock('@/infrastructure/queue/worker-runtime/worker-close.util.js', () => ({
-  buildWorkerHandle: (worker: unknown, queueName: string) => ({
+  buildWorkerHandle: ({ worker, queueName }: { worker: unknown; queueName: string }) => ({
     worker,
     queueName,
     close: async () => undefined,
@@ -95,8 +95,15 @@ vi.mock('@/infrastructure/queue/dlq/poison-job.util.js', () => ({
 }));
 
 vi.mock('@/infrastructure/observability/tracing/trace-context.util.js', () => ({
-  runWithPropagatedTraceContext: (_context: unknown, _name: string, fn: () => Promise<unknown>) =>
-    runWithPropagatedTraceContextMock(_context, _name, fn),
+  runWithPropagatedTraceContext: ({
+    carrier: _context,
+    spanName: _name,
+    callback: fn,
+  }: {
+    carrier: unknown;
+    spanName: string;
+    callback: () => Promise<unknown>;
+  }) => runWithPropagatedTraceContextMock({ carrier: _context, spanName: _name, callback: fn }),
 }));
 
 vi.mock('@/shared/config/worker-concurrency.util.js', () => ({
@@ -145,7 +152,15 @@ describe('mail.worker', () => {
 
     parseJobDataOrDeadLetterMock.mockResolvedValue(validJobData);
     runWithPropagatedTraceContextMock.mockImplementation(
-      async (_context: unknown, _name: string, fn: () => Promise<unknown>) => fn(),
+      async ({
+        carrier: _context,
+        spanName: _name,
+        callback: fn,
+      }: {
+        carrier: unknown;
+        spanName: string;
+        callback: () => Promise<unknown>;
+      }) => fn(),
     );
     processMailOutboxJobMock.mockResolvedValue({ messageId: 'resend-msg-123' });
   });

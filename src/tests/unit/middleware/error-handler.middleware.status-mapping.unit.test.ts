@@ -88,7 +88,7 @@ async function createApp(): Promise<FastifyInstance> {
     throw error;
   });
   app.get('/lock-timeout', async () => {
-    // Shape a postgres.js PostgresError: SQLSTATE lives on `code`, and drizzle wraps the driver
+    // Shape a node-postgres DatabaseError: SQLSTATE lives on `code`, and drizzle wraps the driver
     // error in `cause`, which is where the handler's detection has to look.
     const driverError = Object.assign(new Error('canceling statement due to lock timeout'), {
       code: '55P03',
@@ -167,10 +167,10 @@ describe('error-handler.middleware status + body mapping', () => {
       expect(response.statusCode).toBe(500);
       expect(mockedCaptureException).toHaveBeenCalledTimes(1);
       // The capture context object carries the request id (not an empty object).
-      expect(mockedCaptureException).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ requestId: expect.any(String) }),
-      );
+      expect(mockedCaptureException).toHaveBeenCalledWith({
+        error: expect.anything(),
+        context: expect.objectContaining({ requestId: expect.any(String) }),
+      });
       // 5xx detail is masked to the generic internal message, never the raw thrown text.
       expect(body.error.detail).toBe('translated:errors:internal');
       expect(body.error.detail).not.toContain('boom');

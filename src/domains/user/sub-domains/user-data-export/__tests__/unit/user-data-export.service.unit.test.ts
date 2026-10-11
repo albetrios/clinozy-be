@@ -39,10 +39,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -132,7 +134,7 @@ describe('UserDataExportService', () => {
     });
 
     enterOnCommitScope();
-    const result = await service.requestExport(asUserScope('user_public'));
+    const result = await service.requestExport({ scope: asUserScope('user_public') });
 
     expect(exportRepository.create).toHaveBeenCalled();
     expect(enqueueUserDataExport).not.toHaveBeenCalled();
@@ -158,7 +160,7 @@ describe('UserDataExportService', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(existingPending);
 
-    const result = await service.requestExport(asUserScope('user_public'));
+    const result = await service.requestExport({ scope: asUserScope('user_public') });
 
     expect(result.id).toBe('exp_existing');
     expect(result.status).toBe(USER_DATA_EXPORT_STATUSES.PENDING);
@@ -182,7 +184,7 @@ describe('UserDataExportService', () => {
     });
     objectStorage.createPresignedDownloadUrl.mockResolvedValue('https://example.com/download');
 
-    await service.getExportStatus(asUserScope('user_public'), 'exp_dl');
+    await service.getExportStatus({ scope: asUserScope('user_public'), exportPublicId: 'exp_dl' });
 
     expect(objectStorage.createPresignedDownloadUrl).toHaveBeenCalledWith({
       key: 'user-data-export/user/exp_dl.json.gz',
@@ -315,7 +317,7 @@ describe('UserDataExportService', () => {
       .mockResolvedValueOnce([]);
     exportRepository.deleteAllByUserId.mockResolvedValue(1);
 
-    await service.deleteAllExportsForUser(1, 'user_public');
+    await service.deleteAllExportsForUser({ userInternalId: 1, userPublicId: 'user_public' });
 
     expect(objectStorage.deleteObject).toHaveBeenCalledWith('user-data-export/user/exp_1.json.gz');
     expect(exportRepository.deleteAllByUserId).toHaveBeenCalledWith(1);
@@ -344,7 +346,7 @@ describe('UserDataExportService', () => {
       .mockResolvedValueOnce(secondBatch);
     exportRepository.deleteAllByUserId.mockResolvedValue(501);
 
-    await service.deleteAllExportsForUser(1, 'user_public');
+    await service.deleteAllExportsForUser({ userInternalId: 1, userPublicId: 'user_public' });
 
     // 500 from the first batch + 1 from the second (null s3_key filtered out).
     expect(objectStorage.deleteObject).toHaveBeenCalledTimes(501);
@@ -360,7 +362,11 @@ describe('capExportCategory', () => {
     const truncated: string[] = [];
     const rows = Array.from({ length: GDPR_EXPORT_MAX_ROWS_PER_TABLE }, (_, index) => index);
 
-    const result = capExportCategory(rows, 'sessions', truncated);
+    const result = capExportCategory({
+      rows,
+      category: 'sessions',
+      truncatedCategories: truncated,
+    });
 
     expect(result).toHaveLength(GDPR_EXPORT_MAX_ROWS_PER_TABLE);
     expect(truncated).toEqual([]);
@@ -370,7 +376,11 @@ describe('capExportCategory', () => {
     const truncated: string[] = [];
     const rows = Array.from({ length: GDPR_EXPORT_MAX_ROWS_PER_TABLE + 5 }, (_, index) => index);
 
-    const result = capExportCategory(rows, 'audit_activity', truncated);
+    const result = capExportCategory({
+      rows,
+      category: 'audit_activity',
+      truncatedCategories: truncated,
+    });
 
     expect(result).toHaveLength(GDPR_EXPORT_MAX_ROWS_PER_TABLE);
     expect(truncated).toEqual(['audit_activity']);

@@ -105,9 +105,10 @@ describe('UserNotificationPreferencesRepository (database)', () => {
     const CONCURRENT_REPLACES = 8;
     const settled = await Promise.allSettled(
       Array.from({ length: CONCURRENT_REPLACES }, (_, index) =>
-        withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }), () =>
-          repository.replaceAll(user.id, payload(index % 2 === 0), user.id),
-        ),
+        withAppDatabaseContext({
+          scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+          callback: () => repository.replaceAll(user.id, payload(index % 2 === 0), user.id),
+        }),
       ),
     );
 

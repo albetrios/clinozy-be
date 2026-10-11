@@ -51,5 +51,5 @@ export function createStripeWebhookEventReclaimWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, STRIPE_WEBHOOK_EVENT_RECLAIM_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: STRIPE_WEBHOOK_EVENT_RECLAIM_QUEUE_NAME });
 }

@@ -46,6 +46,7 @@ export const auth_methods = authSchema
       revoked_at: timestamp('revoked_at', { withTimezone: true }),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [

@@ -1,7 +1,7 @@
 import nock from 'nock';
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 
-import { isContractFixtureRecordingEnabled } from './contract-mode.js';
+import { isLiveProviderContractRun } from '@/tests/helpers/harness-provider-env.js';
 import { resetOutboundServiceCircuitBreakerState } from './circuit-reset.js';
 
 let outboundContractIsolationHooksWereRegisteredOnce = false;
@@ -17,25 +17,25 @@ export function registerThirdPartyContractTestIsolationHooks(): void {
   }
   outboundContractIsolationHooksWereRegisteredOnce = true;
 
+  // The live provider run (`pnpm test:contract:live`) makes real requests: no nock at all, only
+  // a fresh circuit breaker per spec.
+  if (isLiveProviderContractRun()) {
+    beforeEach(resetOutboundServiceCircuitBreakerState);
+    return;
+  }
+
   beforeAll(() => {
     if (!nock.isActive()) {
       nock.activate();
     }
-    // The harness (`harness-provider-env.ts`) refuses every non-loopback host for all runs;
-    // recording real provider responses is the one case that needs them back.
-    if (isContractFixtureRecordingEnabled()) {
-      nock.enableNetConnect();
-    } else {
-      nock.disableNetConnect();
-    }
+    // The harness (`harness-provider-env.ts`) refuses every non-loopback host for all runs.
+    nock.disableNetConnect();
   });
 
   beforeEach(async () => {
     await resetOutboundServiceCircuitBreakerState();
     nock.cleanAll();
-    if (!isContractFixtureRecordingEnabled()) {
-      nock.disableNetConnect();
-    }
+    nock.disableNetConnect();
   });
 
   afterAll(() => {

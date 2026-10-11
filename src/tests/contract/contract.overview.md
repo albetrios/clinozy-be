@@ -17,11 +17,12 @@ What this suite covers:
 - Webhook signature verification on inbound (Stripe).
 - Request-id forwarding on outbound customer webhooks.
 
-What it does **not** cover: real network calls (those are in integration tests with mocks), latency (load suite), or business logic (domain suites).
+What it does **not** cover by default: real network calls, latency (load suite), or business logic (domain suites). The opt-in `*.live.contract.test.ts` specs (`pnpm test:contract:live`, never in CI) make the real calls against the Stripe sandbox, Resend, the configured S3 bucket, Cloudflare's Turnstile test secrets, Sentry and PostHog.
 
 ## Test types
 
 - **Per-upstream contract** — one file per provider with all the request shapes pinned.
+- **Live provider check** — `<provider>.live.contract.test.ts`, the same wrappers against the real sandbox.
 
 ## How to run
 
@@ -38,7 +39,7 @@ No Postgres / Redis / network required — `nock` intercepts every outbound requ
 
 ## Dependencies
 
-- **None** — fully offline. Runs in the CI quality slice.
+- **None** — fully offline. Runs in the CI quality slice. (The live specs need the provider keys and the network.)
 
 ## Failure modes
 

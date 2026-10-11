@@ -43,9 +43,10 @@ describe('Security: OrganizationRepository user-id resolvers under FORCE RLS', (
     const user = await createTestUser();
 
     const resolved = await executeAsClinozyBeAppUser(null, async (transaction) =>
-      runWithPinnedDatabaseHandle(transaction as unknown as RequestScopedPostgresDatabase, () =>
-        repository.resolveUserPublicIdByInternalId(user.id),
-      ),
+      runWithPinnedDatabaseHandle({
+        databaseHandle: transaction as unknown as RequestScopedPostgresDatabase,
+        callback: () => repository.resolveUserPublicIdByInternalId(user.id),
+      }),
     );
 
     expect(resolved).toBe(user.public_id);
@@ -55,9 +56,10 @@ describe('Security: OrganizationRepository user-id resolvers under FORCE RLS', (
     const user = await createTestUser();
 
     const resolved = await executeAsClinozyBeAppUser(null, async (transaction) =>
-      runWithPinnedDatabaseHandle(transaction as unknown as RequestScopedPostgresDatabase, () =>
-        repository.resolveUserIdByPublicId(user.public_id),
-      ),
+      runWithPinnedDatabaseHandle({
+        databaseHandle: transaction as unknown as RequestScopedPostgresDatabase,
+        callback: () => repository.resolveUserIdByPublicId(user.public_id),
+      }),
     );
 
     expect(resolved).toBe(user.id);
@@ -68,14 +70,14 @@ describe('Security: OrganizationRepository user-id resolvers under FORCE RLS', (
     await database.update(users).set({ deleted_at: new Date() }).where(eq(users.id, user.id));
 
     const [byInternalId, byPublicId] = await executeAsClinozyBeAppUser(null, async (transaction) =>
-      runWithPinnedDatabaseHandle(
-        transaction as unknown as RequestScopedPostgresDatabase,
-        async () =>
+      runWithPinnedDatabaseHandle({
+        databaseHandle: transaction as unknown as RequestScopedPostgresDatabase,
+        callback: async () =>
           Promise.all([
             repository.resolveUserPublicIdByInternalId(user.id),
             repository.resolveUserIdByPublicId(user.public_id),
           ]),
-      ),
+      }),
     );
 
     expect(byInternalId).toBeNull();

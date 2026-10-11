@@ -1,10 +1,10 @@
 /**
  * Pure helpers for reasoning about a Postgres connection string (SSL mode, pooler
- * detection, strict TLS verification). Kept free of any module-level side effects —
- * importing this file must NOT open a connection pool or trigger env validation — so
- * the migration runner (`migration/migrate.ts`) and boot-time TLS assertion can reuse
- * the same logic without instantiating the process-wide `postgres()` pool in
- * `connection.ts`.
+ * detection, strict TLS verification, the node-postgres `ssl` option). Kept free of any
+ * module-level side effects — importing this file must NOT open a connection pool or
+ * trigger env validation — so the migration runner (`migration/migrate.ts`) and boot-time
+ * TLS assertion can reuse the same logic without instantiating the process-wide
+ * node-postgres pool in `connection.ts`.
  */
 
 /**
@@ -30,10 +30,8 @@ export function parseSslMode(databaseUrl: string): string | null {
 }
 
 /**
- * Heuristic for Neon's PgBouncer-fronted connection string — when true we disable
- * postgres.js prepared statements because PgBouncer in transaction-pooling mode
- * does not preserve server-side prepared statement state across checkouts. The same
- * signal also flags a connection that must NOT be used for migrations, because a
+ * Heuristic for Neon's PgBouncer-fronted connection string — a connection that must NOT
+ * be used for migrations, because a
  * session-level `pg_advisory_lock` is not pinned to a single backend through a
  * transaction-mode pooler.
  *
@@ -44,6 +42,72 @@ export function parseSslMode(databaseUrl: string): string | null {
  */
 export function isNeonPoolerConnection(databaseUrl: string): boolean {
   return /-pooler\./i.test(databaseUrl) || /[?&]pgbouncer=true/i.test(databaseUrl);
+}
+
+/**
+ * The node-postgres `ssl` option for `databaseUrl`, decided once from its `sslmode`.
+ *
+ * @remarks
+ * - **Algorithm:** `sslmode=disable` → no TLS; any other `sslmode`, or none with
+ *   `sslEnabledByDefault`, → TLS. The certificate is verified for `verify-ca` / `verify-full` or
+ *   when `rejectUnauthorizedOverride` is `true` ({@link isStrictDatabaseTlsVerification}); a plain
+ *   `require` encrypts without verifying, as libpq does (Railway's proxy presents a self-signed
+ *   certificate).
+ * - **Failure modes:** none — pure.
+ */
+export function resolveDatabaseSsl({
+  databaseUrl,
+  sslEnabledByDefault,
+  rejectUnauthorizedOverride,
+}: {
+  databaseUrl: string;
+  sslEnabledByDefault: boolean;
+  rejectUnauthorizedOverride?: boolean | undefined;
+}): false | { rejectUnauthorized: boolean } {
+  const sslMode = parseSslMode(databaseUrl);
+  const sslEnabled = sslMode === 'disable' ? false : sslMode !== null || sslEnabledByDefault;
+  if (!sslEnabled) return false;
+  return {
+    rejectUnauthorized: isStrictDatabaseTlsVerification({
+      databaseUrl,
+      rejectUnauthorizedOverride,
+    }),
+  };
+}
+
+/** URL query parameters that carry TLS settings, which node-postgres would read over `ssl`. */
+const SSL_QUERY_PARAMETERS = [
+  'ssl',
+  'sslmode',
+  'sslcert',
+  'sslkey',
+  'sslrootcert',
+  'sslpassword',
+  'sslnegotiation',
+  'uselibpqcompat',
+];
+
+/**
+ * The connection URL without its TLS query parameters, for node-postgres.
+ *
+ * @remarks
+ * - **Why:** node-postgres merges the parsed connection string OVER the config object, so a
+ *   `sslmode` in the URL would silently replace the `ssl` options derived from it (and from
+ *   `DATABASE_SSL_REJECT_UNAUTHORIZED`) — and pg-connection-string treats `require` as
+ *   `verify-full`. The TLS decision is made once, from the URL, and passed as `ssl`.
+ * - **Failure modes:** none — a URL that does not parse is returned unchanged, so the driver
+ *   reports it.
+ */
+export function withoutSslQueryParameters(databaseUrl: string): string {
+  let url: URL;
+  try {
+    url = new URL(databaseUrl);
+  } catch {
+    // safe-catch: an unparseable URL goes to the driver as-is, which names the problem.
+    return databaseUrl;
+  }
+  for (const parameter of SSL_QUERY_PARAMETERS) url.searchParams.delete(parameter);
+  return url.toString();
 }
 
 /** Inputs for {@link isStrictDatabaseTlsVerification}. */

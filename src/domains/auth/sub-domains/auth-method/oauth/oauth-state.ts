@@ -73,10 +73,13 @@ export interface CreateOAuthStateResult {
  * - **Notes:** the verifier and nonce are returned to the caller and must NOT be persisted
  *   anywhere except (verifier) Redis and (nonce) a short-lived httpOnly cookie.
  */
-export async function createOAuthState(
-  redis: Redis,
-  provider: OAuthProvider,
-): Promise<CreateOAuthStateResult> {
+export async function createOAuthState({
+  redis,
+  provider,
+}: {
+  redis: Redis;
+  provider: OAuthProvider;
+}): Promise<CreateOAuthStateResult> {
   const state = randomBytes(32).toString('hex');
   const codeVerifier = generatePkceCodeVerifier();
   const nonce = randomBytes(32).toString('hex');
@@ -116,12 +119,17 @@ export interface ConsumeOAuthStateResult {
  * - **Notes:** the nonce check binds the callback to the browser that initiated authorize,
  *   defeating login-CSRF where an attacker injects their own `state`+`code` pair.
  */
-export async function consumeOAuthState(
-  redis: Redis,
-  provider: string,
-  state: string | undefined,
-  nonce: string | undefined,
-): Promise<ConsumeOAuthStateResult> {
+export async function consumeOAuthState({
+  redis,
+  provider,
+  state,
+  nonce,
+}: {
+  redis: Redis;
+  provider: string;
+  state: string | undefined;
+  nonce: string | undefined;
+}): Promise<ConsumeOAuthStateResult> {
   if (!state || state.length === 0) {
     throw new UnauthorizedError('errors:oauthInvalidState');
   }

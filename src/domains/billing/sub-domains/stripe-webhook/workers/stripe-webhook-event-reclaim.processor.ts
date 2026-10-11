@@ -62,9 +62,10 @@ export type StripeWebhookEventReclaimJobResult = {
 export async function runStripeWebhookEventReclaimJob(
   repository: StripeWebhookEventRepository = new StripeWebhookEventRepository(),
 ): Promise<StripeWebhookEventReclaimJobResult> {
-  return withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, () =>
-    runStripeWebhookEventReclaimJobInner(repository),
-  );
+  return withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+    callback: () => runStripeWebhookEventReclaimJobInner(repository),
+  });
 }
 
 async function runStripeWebhookEventReclaimJobInner(
@@ -79,7 +80,10 @@ async function runStripeWebhookEventReclaimJobInner(
       failureReason: abandonedRow.failure_reason,
     };
     logger.error(alertFields, 'stripe.webhook.event_abandoned');
-    captureMessage('stripe.webhook.event_abandoned', { level: 'error', extra: alertFields });
+    captureMessage({
+      message: 'stripe.webhook.event_abandoned',
+      options: { level: 'error', extra: alertFields },
+    });
   }
   const { scannedCount, candidateStripeEventIds } =
     await repository.sweepReclaimableEvents(batchSize);
@@ -92,10 +96,10 @@ async function runStripeWebhookEventReclaimJobInner(
   const enqueueOutcomes = await Promise.all(
     candidateStripeEventIds.map(async (stripeEventId) => {
       try {
-        await enqueueStripeWebhookByEventIdForReclaim(
+        await enqueueStripeWebhookByEventIdForReclaim({
           stripeEventId,
-          'stripe-webhook-event-reclaim',
-        );
+          requestId: 'stripe-webhook-event-reclaim',
+        });
         return true;
       } catch (error) {
         logger.warn({ error, stripeEventId }, 'stripe-webhook-event-reclaim.enqueue.failed');

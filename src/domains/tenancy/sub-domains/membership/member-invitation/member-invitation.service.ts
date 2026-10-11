@@ -12,8 +12,14 @@ import {
 } from '@/infrastructure/database/contexts/database-context.js';
 import type { OrganizationRepository } from '@/domains/tenancy/sub-domains/organization/organization.repository.js';
 import type { MembershipRepository } from '@/domains/tenancy/sub-domains/membership/membership.repository.js';
-import type { MembershipSeatEnforcementPort } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
+import type {
+  MembershipSeatEnforcementPort,
+  MembershipService,
+} from '@/domains/tenancy/sub-domains/membership/membership.service.js';
+import { MEMBERSHIP_EVENT } from '@/domains/tenancy/sub-domains/membership/events/membership.events.js';
 import type { UserService } from '@/domains/user/user.service.js';
+import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/shared/constants/i18n.constants.js';
 import type { MemberInvitationRepository } from './member-invitation.repository.js';
 import type {
   AcceptMemberInvitationOutput,
@@ -38,32 +44,36 @@ import {
 
 const MEMBER_INVITATION_RESOURCE = 'Member invitation';
 
-function assertInvitationAcceptable(row: MemberInvitationRow, now: Date): void {
+function assertInvitationAcceptable({ row, now }: { row: MemberInvitationRow; now: Date }): void {
   if (row.revoked_at) {
-    throw new ValidationError('errors:validation.invitationRevoked', undefined, {}).withReason(
+    throw new ValidationError('errors:validation.invitationRevoked').withReason(
       'invitation_revoked',
     );
   }
   if (row.accepted_at) {
-    throw new ValidationError(
-      'errors:validation.invitationAlreadyAccepted',
-      undefined,
-      {},
-    ).withReason('invitation_already_accepted');
+    throw new ValidationError('errors:validation.invitationAlreadyAccepted').withReason(
+      'invitation_already_accepted',
+    );
   }
   if (now > row.expires_at) {
-    throw new ValidationError('errors:validation.invitationExpired', undefined, {}).withReason(
+    throw new ValidationError('errors:validation.invitationExpired').withReason(
       'invitation_expired',
     );
   }
 }
 
-function throwInvitationAcceptFailure(current: MemberInvitationRow | null, now: Date): never {
+function throwInvitationAcceptFailure({
+  current,
+  now,
+}: {
+  current: MemberInvitationRow | null;
+  now: Date;
+}): never {
   if (!current) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
-  assertInvitationAcceptable(current, now);
-  throw new ValidationError('errors:validation.invalidToken', undefined, {
-    token: ['Invalid or expired'],
-  });
+  assertInvitationAcceptable({ row: current, now });
+  throw new ValidationError('errors:validation.invalidToken', undefined, undefined, [
+    { field: 'token', messageKey: 'errors:validation.invalidToken' },
+  ]);
 }
 
 /**
@@ -86,7 +96,7 @@ export interface MemberInvitationCommandOptions {
  *
  * @remarks
  * - **Notes:** `invited_by_user_id` is the acting admin's internal id (the invitation's
- *   `invited_by_user_id` FK is NOT NULL); `inviter_label` is the display string for the email body;
+ *   `invited_by_user_id` FK is NOT NULL) — its holder's name is the email's inviter;
  *   `requestId` propagates the HTTP request id into the post-commit mail dispatch (omit on non-HTTP
  *   callers). Carrier-only DTO — it holds no behavior.
  */
@@ -98,8 +108,18 @@ export interface CreateInvitationForMembershipParams {
   email: string;
   expires_in_days: number;
   invited_by_user_id: number;
-  inviter_label: string;
+  /** The organization's public id — its default language is the invitation email's. */
+  organization_public_id: string;
   requestId?: string;
+}
+
+/** A member's display name: their full name, else their email. */
+function memberDisplayName(user: {
+  first_name?: string | null;
+  last_name?: string | null;
+  email: string;
+}): string {
+  return [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.email;
 }
 
 /**
@@ -137,7 +157,34 @@ export class MemberInvitationService {
     private readonly membershipRepository: MembershipRepository,
     private readonly invitationRepository: MemberInvitationRepository,
     private readonly userService?: UserService,
+    private readonly organizationSettingsService?: Pick<
+      OrganizationSettingsService,
+      'resolveDefaultLocaleForOrganization'
+    >,
   ) {}
+
+  /** The organization's default language — what an invitee, who has none yet, is written to in. */
+  private async resolveOrganizationLanguage(
+    organizationPublicId: string,
+  ): Promise<SupportedLanguage> {
+    return (
+      (await this.organizationSettingsService?.resolveDefaultLocaleForOrganization(
+        organizationPublicId,
+      )) ?? DEFAULT_LANGUAGE
+    );
+  }
+
+  /** The name an invitation email shows for a member: the inviter's name, else '' (a team member). */
+  private async resolveInviterName(
+    inviter: { internalId: number } | { publicId: string } | null,
+  ): Promise<string> {
+    if (inviter === null || this.userService === undefined) return '';
+    const user =
+      'internalId' in inviter
+        ? await this.userService.findById(inviter.internalId)
+        : await this.userService.requireUserRecordByPublicId(inviter.publicId);
+    return user ? memberDisplayName(user) : '';
+  }
 
   /**
    * REQ-4 Stripe seat-sync port, late-wired by the composition root.
@@ -161,6 +208,18 @@ export class MemberInvitationService {
   }
 
   /**
+   * Emits the membership events of an accept or a revoke, late-wired by the tenancy container:
+   * {@link MembershipService} takes this service in its constructor, so the reverse edge cannot be a
+   * constructor parameter. Left `null` in minimal test harnesses, where no event is emitted.
+   */
+  private membershipEvents: Pick<MembershipService, 'emitMembershipEvents'> | null = null;
+
+  /** Late-wires the membership event emitter; see {@link membershipEvents}. */
+  wireMembershipEvents(membershipEvents: Pick<MembershipService, 'emitMembershipEvents'>): void {
+    this.membershipEvents = membershipEvents;
+  }
+
+  /**
    * Best-effort enqueue of a Stripe seat-quantity reconciliation. Mirrors
    * `MembershipService.enqueueSeatQuantitySync`: a Redis blip must never fail the revoke that
    * triggered it.
@@ -168,7 +227,9 @@ export class MemberInvitationService {
   private enqueueSeatQuantitySync(organizationPublicId: string): void {
     if (!this.seatQuantitySync) return;
     try {
-      this.seatQuantitySync.enqueueSeatQuantitySync(organizationPublicId);
+      this.seatQuantitySync.enqueueSeatQuantitySync({
+        organization_public_id: organizationPublicId,
+      });
     } catch (error) {
       logger.warn({ error, organizationPublicId }, 'member_invitation.seat_sync.enqueue_failed');
     }
@@ -212,29 +273,37 @@ export class MemberInvitationService {
       expires_at: expiresAt,
       created_by_user_id: params.invited_by_user_id,
     });
-    const output = serializeMemberInvitation(row, params.membership_public_id);
+    const output = serializeMemberInvitation({
+      row,
+      membership_public_id: params.membership_public_id,
+    });
     await eventBus.emitStrict(
-      buildDomainEvent(
-        MEMBER_INVITATION_EVENT.CREATED,
-        {
+      buildDomainEvent({
+        type: MEMBER_INVITATION_EVENT.CREATED,
+        payload: {
           email: params.email,
           organization_name: params.organization_name,
-          inviter_name: params.inviter_label,
+          inviter_name: await this.resolveInviterName({ internalId: params.invited_by_user_id }),
           token,
           invitation_public_id: output.id,
           expires_in_days: params.expires_in_days,
+          locale: await this.resolveOrganizationLanguage(params.organization_public_id),
         } satisfies MemberInvitationEmailPayload,
-        params.requestId !== undefined ? { requestId: params.requestId } : undefined,
-      ),
+        options: params.requestId !== undefined ? { requestId: params.requestId } : undefined,
+      }),
     );
     return output;
   }
 
-  async accept(
-    invitation_public_id: string,
-    body: unknown,
-    actingUserPublicId: string,
-  ): Promise<AcceptMemberInvitationOutput> {
+  async accept({
+    invitation_public_id,
+    body,
+    actingUserPublicId,
+  }: {
+    invitation_public_id: string;
+    body: unknown;
+    actingUserPublicId: string;
+  }): Promise<AcceptMemberInvitationOutput> {
     const parsed = validateAcceptMemberInvitation(body);
     // sec-T4: previously accept was unauthenticated, so anyone with the
     // invitation URL could flip the victim's pending membership to ACTIVE.
@@ -264,9 +333,9 @@ export class MemberInvitationService {
       await this.invitationRepository.lookupOrganizationByInvitationPublicId(invitation_public_id);
     if (!lookup) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
     let acceptedMemberPublicId: string | null = null;
-    const result = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: lookup.organization_public_id }),
-      async () => {
+    const result = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: lookup.organization_public_id }),
+      callback: async () => {
         const row = await this.invitationRepository.findByPublicId(invitation_public_id);
         if (!row) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
         if (row.email.toLowerCase() !== actingUser.email.toLowerCase()) {
@@ -274,7 +343,7 @@ export class MemberInvitationService {
         }
         const tokenHash = hashInvitationToken(parsed.token);
         const now = new Date();
-        assertInvitationAcceptable(row, now);
+        assertInvitationAcceptable({ row, now });
         const updated = await this.invitationRepository.accept(
           invitation_public_id,
           tokenHash,
@@ -282,7 +351,7 @@ export class MemberInvitationService {
         );
         if (!updated) {
           const current = await this.invitationRepository.findByPublicId(invitation_public_id);
-          throwInvitationAcceptFailure(current, now);
+          throwInvitationAcceptFailure({ current, now });
         }
         /**
          * Atomically activate the membership in the same transaction so accepting
@@ -296,6 +365,11 @@ export class MemberInvitationService {
           lookup.organization_id,
         );
         if (!activatedMembership) throw new NotFoundError('Membership');
+        await this.membershipEvents?.emitMembershipEvents({
+          type: MEMBERSHIP_EVENT.UPDATED,
+          memberships: [activatedMembership],
+          organizationPublicId: lookup.organization_public_id,
+        });
         acceptedMemberPublicId =
           (await this.organizationRepository.resolveUserPublicIdByInternalId(
             activatedMembership.user_id,
@@ -316,16 +390,17 @@ export class MemberInvitationService {
             const organization = await this.organizationRepository.findByPublicId(
               lookup.organization_public_id,
             );
-            const inviteeName =
-              [actingUser.first_name, actingUser.last_name].filter(Boolean).join(' ').trim() ||
-              actingUser.email;
             await eventBus.emit(
-              buildDomainEvent(MEMBER_INVITATION_EVENT.ACCEPTED, {
-                recipient_user_ids: recipientUserIds,
-                organization_id: lookup.organization_id,
-                organization_name: organization?.name ?? '',
-                invitee_name: inviteeName,
-              } satisfies MemberInvitationAcceptedPayload),
+              buildDomainEvent({
+                type: MEMBER_INVITATION_EVENT.ACCEPTED,
+                payload: {
+                  recipient_user_ids: recipientUserIds,
+                  organization_id: lookup.organization_id,
+                  organization_name: organization?.name ?? '',
+                  invitee_name: memberDisplayName(actingUser),
+                  locale: await this.resolveOrganizationLanguage(lookup.organization_public_id),
+                } satisfies MemberInvitationAcceptedPayload,
+              }),
             );
           }
         } catch (error) {
@@ -334,40 +409,63 @@ export class MemberInvitationService {
             'member_invitation.accept.notify_failed',
           );
         }
-        return serializeMemberInvitation(updated, lookup.membership_public_id);
+        return serializeMemberInvitation({
+          row: updated,
+          membership_public_id: lookup.membership_public_id,
+        });
       },
-    );
+    });
     // sec-R11: invalidate AFTER commit so the newly-activated member's permissions are recomputed
     // from the committed ACTIVE membership — a pre-commit invalidation could be re-populated with
     // the stale (pre-acceptance) set by a concurrent recompute, delaying the access grant.
     if (acceptedMemberPublicId) {
-      await invalidatePermissions(acceptedMemberPublicId, lookup.organization_public_id);
+      await invalidatePermissions({
+        userId: acceptedMemberPublicId,
+        organizationId: lookup.organization_public_id,
+      });
     }
     // Return the joined org's public id alongside the invitation so the client can
     // POST /auth/switch-to-organization into it without a separate lookup (gate reduction).
     return { ...result, organization_id: lookup.organization_public_id };
   }
 
-  async revoke(
-    scope: OrganizationPrincipalDatabaseScope,
-    invitation_public_id: string,
-  ): Promise<void> {
+  async revoke({
+    scope,
+    invitation_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    invitation_public_id: string;
+  }): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
-    await withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationRepository.findByPublicId(organization_public_id);
-      if (!organization) throw new NotFoundError('Organization');
-      const row = await this.invitationRepository.findByPublicId(invitation_public_id);
-      if (!row) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
-      const membership = await this.membershipRepository.findById(row.membership_id);
-      if (!membership || membership.organization_id !== organization.id)
-        throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
-      const updated = await this.invitationRepository.revoke(invitation_public_id);
-      if (!updated) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
-      // REQ-1: the membership was auto-created by the invite (add-member-by-email). Revoking the
-      // only invitation removes the invitee entirely, so soft-delete the dangling INVITED membership
-      // (revoke only succeeds on a non-accepted invitation, so the row is always still INVITED) —
-      // the members table never shows a ghost invitee. accept remains the only path to ACTIVE.
-      await this.membershipRepository.softDelete(membership.public_id, organization.id);
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationRepository.findByPublicId(organization_public_id);
+        if (!organization) throw new NotFoundError('Organization');
+        const row = await this.invitationRepository.findByPublicId(invitation_public_id);
+        if (!row) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
+        const membership = await this.membershipRepository.findById(row.membership_id);
+        if (!membership || membership.organization_id !== organization.id)
+          throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
+        const updated = await this.invitationRepository.revoke(invitation_public_id);
+        if (!updated) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
+        // REQ-1: the membership was auto-created by the invite (add-member-by-email). Revoking the
+        // only invitation removes the invitee entirely, so soft-delete the dangling INVITED membership
+        // (revoke only succeeds on a non-accepted invitation, so the row is always still INVITED) —
+        // the members table never shows a ghost invitee. accept remains the only path to ACTIVE.
+        const removed = await this.membershipRepository.softDelete(
+          membership.public_id,
+          organization.id,
+        );
+        if (removed) {
+          await this.membershipEvents?.emitMembershipEvents({
+            type: MEMBERSHIP_EVENT.DELETED,
+            memberships: [removed],
+            organizationPublicId: organization_public_id,
+          });
+        }
+      },
     });
     // REQ-4: an INVITED membership holds a seat, so dropping it frees one — the same accounting the
     // add/remove paths report. Without this a revoked invitation stayed billed until some unrelated
@@ -376,59 +474,75 @@ export class MemberInvitationService {
     this.enqueueSeatQuantitySync(organization_public_id);
   }
 
-  async resend(
-    scope: OrganizationPrincipalDatabaseScope,
-    invitation_public_id: string,
-    body: unknown,
-    options?: MemberInvitationCommandOptions,
-  ): Promise<MemberInvitationOutput> {
+  async resend({
+    scope,
+    invitation_public_id,
+    body,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    invitation_public_id: string;
+    body: unknown;
+    options?: MemberInvitationCommandOptions | undefined;
+  }): Promise<MemberInvitationOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateResendMemberInvitation(body);
-    return withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationRepository.findByPublicId(organization_public_id);
-      if (!organization) throw new NotFoundError('Organization');
-      const row = await this.invitationRepository.findByPublicId(invitation_public_id);
-      if (!row) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
-      const membership = await this.membershipRepository.findById(row.membership_id);
-      if (!membership || membership.organization_id !== organization.id)
-        throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
-      if (row.accepted_at)
-        throw new ValidationError('errors:validation.invitationAlreadyAccepted', undefined, {});
-      if (row.revoked_at)
-        throw new ValidationError('errors:validation.invitationRevoked', undefined, {});
-      if (new Date() > row.expires_at)
-        throw new ValidationError('errors:validation.invitationExpired', undefined, {});
-      const token = generateInvitationToken();
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + parsed.expires_in_days);
-      const updated = await this.invitationRepository.resend(
-        invitation_public_id,
-        hashInvitationToken(token),
-        expiresAt,
-      );
-      if (!updated) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
-      const output = serializeMemberInvitation(updated, membership.public_id);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationRepository.findByPublicId(organization_public_id);
+        if (!organization) throw new NotFoundError('Organization');
+        const row = await this.invitationRepository.findByPublicId(invitation_public_id);
+        if (!row) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
+        const membership = await this.membershipRepository.findById(row.membership_id);
+        if (!membership || membership.organization_id !== organization.id)
+          throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
+        if (row.accepted_at)
+          throw new ValidationError('errors:validation.invitationAlreadyAccepted');
+        if (row.revoked_at) throw new ValidationError('errors:validation.invitationRevoked');
+        if (new Date() > row.expires_at)
+          throw new ValidationError('errors:validation.invitationExpired');
+        const token = generateInvitationToken();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + parsed.expires_in_days);
+        const updated = await this.invitationRepository.resend(
+          invitation_public_id,
+          hashInvitationToken(token),
+          expiresAt,
+        );
+        if (!updated) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
+        const output = serializeMemberInvitation({
+          row: updated,
+          membership_public_id: membership.public_id,
+        });
 
-      // R2: emitStrict so the rotated token_hash (already persisted above in this
-      // same organization transaction) and the new outbox row commit atomically. The old
-      // token was overwritten by `resend`, so a swallowed email failure would
-      // otherwise leave the invitee with no working link and no error surfaced.
-      await eventBus.emitStrict(
-        buildDomainEvent(
-          MEMBER_INVITATION_EVENT.RESENT,
-          {
-            email: row.email,
-            organization_name: organization.name ?? organization.public_id,
-            inviter_name: 'Team member',
-            token,
-            invitation_public_id: output.id,
-            expires_in_days: parsed.expires_in_days,
-          } satisfies MemberInvitationEmailPayload,
-          options?.requestId !== undefined ? { requestId: options.requestId } : undefined,
-        ),
-      );
+        // R2: emitStrict so the rotated token_hash (already persisted above in this
+        // same organization transaction) and the new outbox row commit atomically. The old
+        // token was overwritten by `resend`, so a swallowed email failure would
+        // otherwise leave the invitee with no working link and no error surfaced.
+        await eventBus.emitStrict(
+          buildDomainEvent({
+            type: MEMBER_INVITATION_EVENT.RESENT,
+            payload: {
+              email: row.email,
+              organization_name: organization.name ?? organization.public_id,
+              // The member who resends is the inviter the email names.
+              inviter_name: await this.resolveInviterName(
+                scope.userPublicId !== undefined ? { publicId: scope.userPublicId } : null,
+              ),
+              token,
+              invitation_public_id: output.id,
+              expires_in_days: parsed.expires_in_days,
+              locale: await this.resolveOrganizationLanguage(organization.public_id),
+            } satisfies MemberInvitationEmailPayload,
+            options:
+              options?.requestId !== undefined ? { requestId: options.requestId } : undefined,
+          }),
+        );
 
-      return output;
+        return output;
+      },
     });
   }
 }

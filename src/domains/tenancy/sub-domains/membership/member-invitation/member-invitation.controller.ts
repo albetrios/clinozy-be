@@ -34,16 +34,29 @@ export function createMemberInvitationController(service: MemberInvitationServic
         invitation_id: '',
       };
       // sec-new-T2: reject malformed path params before reaching the service layer.
-      const invitationId = validatePublicIdParam(rawAcceptId ?? '', 'invitation_id');
-      const data = await service.accept(invitationId, request.body, auth.userId);
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'tenancy.member_invitation.accept',
-        resource_type: 'member_invitation',
-        organizationPublicId: data.organization_id,
-        metadata: { invitation_public_id: invitationId, membership_public_id: data.membership_id },
+      const invitationId = validatePublicIdParam({
+        value: rawAcceptId ?? '',
+        fieldName: 'invitation_id',
       });
-      return successResponse(data, getRequestIdentifier(request));
+      const data = await service.accept({
+        invitation_public_id: invitationId,
+        body: request.body,
+        actingUserPublicId: auth.userId,
+      });
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'tenancy.member_invitation.accept',
+          resource_type: 'member_invitation',
+          organizationPublicId: data.organization_id,
+          metadata: {
+            invitation_public_id: invitationId,
+            membership_public_id: data.membership_id,
+          },
+        },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     revokeMemberInvitation: async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = requirePrincipal(request);
@@ -51,14 +64,20 @@ export function createMemberInvitationController(service: MemberInvitationServic
       const _organizationId = scope.organizationPublicId;
       // sec-new-T2: reject malformed path params before reaching the service layer.
       const { invitation_id: rawRevokeId } = request.params as { invitation_id: string };
-      const invitationId = validatePublicIdParam(rawRevokeId ?? '', 'invitation_id');
-      await service.revoke(scope, invitationId);
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.member_invitation.revoke',
-        resource_type: 'member_invitation',
-        organizationPublicId: scope.organizationPublicId,
-        metadata: { invitation_public_id: invitationId },
+      const invitationId = validatePublicIdParam({
+        value: rawRevokeId ?? '',
+        fieldName: 'invitation_id',
+      });
+      await service.revoke({ scope, invitation_public_id: invitationId });
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.member_invitation.revoke',
+          resource_type: 'member_invitation',
+          organizationPublicId: scope.organizationPublicId,
+          metadata: { invitation_public_id: invitationId },
+        },
       });
       return reply.code(204).send();
     },
@@ -68,19 +87,30 @@ export function createMemberInvitationController(service: MemberInvitationServic
       const _organizationId = scope.organizationPublicId;
       // sec-new-T2: reject malformed path params before reaching the service layer.
       const { invitation_id: rawResendId } = request.params as { invitation_id: string };
-      const invitationId = validatePublicIdParam(rawResendId ?? '', 'invitation_id');
+      const invitationId = validatePublicIdParam({
+        value: rawResendId ?? '',
+        fieldName: 'invitation_id',
+      });
       // R1 / TEN-34: regenerated token is delivered only via email, never returned.
-      const invitation = await service.resend(scope, invitationId, request.body, {
-        requestId: getRequestIdentifier(request),
+      const invitation = await service.resend({
+        scope,
+        invitation_public_id: invitationId,
+        body: request.body,
+        options: {
+          requestId: getRequestIdentifier(request),
+        },
       });
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.member_invitation.resend',
-        resource_type: 'member_invitation',
-        organizationPublicId: scope.organizationPublicId,
-        metadata: { invitation_public_id: invitationId },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.member_invitation.resend',
+          resource_type: 'member_invitation',
+          organizationPublicId: scope.organizationPublicId,
+          metadata: { invitation_public_id: invitationId },
+        },
       });
-      return successResponse({ invitation }, getRequestIdentifier(request));
+      return successResponse({ data: { invitation }, request_id: getRequestIdentifier(request) });
     },
   };
 }

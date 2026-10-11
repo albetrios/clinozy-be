@@ -4,7 +4,6 @@ import {
   withMaintenanceDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
 import { sql as drizzleSql } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -14,6 +13,12 @@ import {
 } from '@/tests/helpers/rls-matrix.helper.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants.js';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Regression for audit R10.
@@ -73,13 +78,15 @@ describe('Security: audit.outbox INSERT RLS (audit R10)', () => {
 
     let caught: unknown;
     try {
-      await sql.begin(async (transaction) => {
-        await transaction`SET LOCAL ROLE ${transaction(DATABASE_APP_ROLE)}`;
-        await transaction`
+      await database.transaction(async (transaction) => {
+        await transaction.execute(
+          drizzleSql`SET LOCAL ROLE ${drizzleSql.identifier(DATABASE_APP_ROLE)}`,
+        );
+        await transaction.execute(drizzleSql`
           INSERT INTO audit.outbox
             (status, actor_user_public_id, organization_public_id, action, resource_type, severity, metadata)
           VALUES ('PENDING', ${generatePublicId('user')}, ${organization.public_id}, 'test.r10.outbox', 'test', 'INFO', '{}'::jsonb)
-        `;
+        `);
       });
     } catch (error) {
       caught = error;
@@ -95,13 +102,15 @@ describe('Security: audit.outbox INSERT RLS (audit R10)', () => {
   it('R10 BUG: plain clinozy_be_app (no GUC) CANNOT INSERT a tenantless outbox row', async () => {
     let caught: unknown;
     try {
-      await sql.begin(async (transaction) => {
-        await transaction`SET LOCAL ROLE ${transaction(DATABASE_APP_ROLE)}`;
-        await transaction`
+      await database.transaction(async (transaction) => {
+        await transaction.execute(
+          drizzleSql`SET LOCAL ROLE ${drizzleSql.identifier(DATABASE_APP_ROLE)}`,
+        );
+        await transaction.execute(drizzleSql`
           INSERT INTO audit.outbox
             (status, actor_user_public_id, organization_public_id, action, resource_type, severity, metadata)
           VALUES ('PENDING', ${generatePublicId('user')}, ${null}, 'test.r10.outbox', 'test', 'INFO', '{}'::jsonb)
-        `;
+        `);
       });
     } catch (error) {
       caught = error;
@@ -122,21 +131,23 @@ describe('Security: audit.outbox INSERT RLS (audit R10)', () => {
       transaction.execute(outboxInsertSql(organization.public_id)),
     );
 
-    const rows = await sql<{ count: string }[]>`
+    const rows = rowsOf<{ count: string }>(
+      await database.execute(drizzleSql`
       SELECT COUNT(*)::text AS count FROM audit.outbox
       WHERE action = 'test.r10.outbox' AND organization_public_id = ${organization.public_id}
-    `;
+    `),
+    );
     expect(rows[0]?.count).toBe('1');
   });
 
   it('R10 FIX: the system-audit-insert context (clinozy_be_maintenance) CAN INSERT the tenantless outbox row', async () => {
     let caught: unknown;
     try {
-      await withMaintenanceDatabaseContext(
-        MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
-        (databaseHandle) => databaseHandle.execute(outboxInsertSql(null)),
-        { useMaintenanceDatabaseRole: true },
-      );
+      await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
+        callback: (databaseHandle) => databaseHandle.execute(outboxInsertSql(null)),
+        options: { useMaintenanceDatabaseRole: true },
+      });
     } catch (error) {
       caught = error;
     }
@@ -145,10 +156,12 @@ describe('Security: audit.outbox INSERT RLS (audit R10)', () => {
       caught,
       'tenantless INSERT under withMaintenanceDatabaseContext must succeed',
     ).toBeUndefined();
-    const rows = await sql<{ count: string }[]>`
+    const rows = rowsOf<{ count: string }>(
+      await database.execute(drizzleSql`
       SELECT COUNT(*)::text AS count FROM audit.outbox
       WHERE action = 'test.r10.outbox' AND organization_public_id IS NULL
-    `;
+    `),
+    );
     expect(rows[0]?.count).toBe('1');
   });
 });

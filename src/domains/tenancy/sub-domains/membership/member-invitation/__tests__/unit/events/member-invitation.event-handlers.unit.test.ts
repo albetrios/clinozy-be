@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, beforeAll } from 'vitest';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
 import { enterOnCommitScope, eventBus } from '@/core/events/event-bus.js';
 import { MEMBER_INVITATION_EVENT } from '@/domains/tenancy/sub-domains/membership/member-invitation/events/member-invitation.events.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -15,6 +16,11 @@ vi.mock('@/infrastructure/mail/queues/mail.queue.js', () => ({
 vi.mock('@/infrastructure/mail/mail.service.js', () => ({
   isMailConfigured: () => true,
 }));
+
+// Email copy comes from the locale files, as in the API and the worker.
+beforeAll(async () => {
+  await initializeI18nextForBackgroundWork();
+});
 
 describe('tenancy member-invitation event handlers', () => {
   beforeEach(() => {
@@ -57,7 +63,7 @@ describe('tenancy member-invitation event handlers', () => {
       }),
     );
     expect(dispatchOutboxEmailMock).toHaveBeenCalledOnce();
-    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith(99);
+    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith({ mailOutboxToken: 99 });
   });
 
   it('links the invitation to the frontend accept page, not the API route', async () => {

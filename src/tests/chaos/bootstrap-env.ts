@@ -78,14 +78,16 @@ process.env.BLOCK_DISPOSABLE_EMAIL ??= 'false';
  * would bypass proxies, so toxins and administrative proxy disables would not affect the app.
  * The credentials are Compose's (the project's local database name as user and password); the CI
  * chaos job's Postgres service creates the same role. Locally the database is the harness's own
- * `<name>_test` (see src/tests/helpers/local-test-database.ts) — chaos suites run cleanupDatabase()
+ * `<project>_test` — keep it equal to LOCAL_TEST_DATABASE_NAME in
+ * src/tests/helpers/local-test-database.ts, which this alias-free file cannot import. Chaos suites
+ * run cleanupDatabase()
  * too, which must never truncate the database `pnpm dev` serves; CI's service container only has
  * the primary one.
  */
 process.env.DATABASE_URL =
   process.env.GITHUB_ACTIONS === 'true'
     ? 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy'
-    : 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy_test';
+    : 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy_be_test';
 
 process.env.REDIS_URL = 'redis://127.0.0.1:26379';
 
@@ -94,10 +96,15 @@ process.env.REDIS_URL = 'redis://127.0.0.1:26379';
  * go through the proxy too. Left on a developer's direct URL, cleanup bypasses Toxiproxy and the
  * app pool starts every test cold — and a cold pool does not fail fast under a connect-time fault
  * (it keeps reconnecting while the query waits), so an assertion that expects the query to reject
- * waits out the test timeout instead. Pointing it at `DATABASE_URL` makes the operator connection
- * the app pool, as before the harness gained a separate one.
+ * waits out the test timeout instead. Only the host, port and database change: the operator's
+ * role and credentials stay, because fixture owner/session lookups need its privileges under
+ * FORCE RLS.
  */
-process.env.DATABASE_OPERATOR_URL = process.env.DATABASE_URL;
+const proxiedOperatorUrl = new URL(process.env.DATABASE_OPERATOR_URL ?? process.env.DATABASE_URL);
+proxiedOperatorUrl.hostname = '127.0.0.1';
+proxiedOperatorUrl.port = '25432';
+proxiedOperatorUrl.pathname = new URL(process.env.DATABASE_URL).pathname;
+process.env.DATABASE_OPERATOR_URL = proxiedOperatorUrl.toString();
 
 /**
  * Maintenance contexts (`withMaintenanceDatabaseContext` — retention, audit drain, global admin)

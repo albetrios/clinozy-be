@@ -14,12 +14,12 @@ import type {
 
 /** Parses raw `POST /organizations` body via {@link createOrganizationDto}; throws `ValidationError('errors:invalidInput')` on failure. */
 export function validateCreateOrganization(data: unknown): CreateOrganizationInput {
-  return parseWithSchema(createOrganizationDto, data);
+  return parseWithSchema({ schema: createOrganizationDto, data });
 }
 
 /** Parses raw `PATCH /organization` body via {@link updateOrganizationDto}; throws `ValidationError('errors:invalidInput')` on failure. */
 export function validateUpdateOrganization(data: unknown): UpdateOrganizationInput {
-  return parseWithSchema(updateOrganizationDto, data);
+  return parseWithSchema({ schema: updateOrganizationDto, data });
 }
 
 /**
@@ -28,10 +28,14 @@ export function validateUpdateOrganization(data: unknown): UpdateOrganizationInp
  * `ValidationError('errors:validation.invalidPagination')` on failure.
  */
 export function validateListOrganizationsQuery(data: unknown): ListOrganizationsQueryInput {
-  return parseWithSchema(listOrganizationsQueryDto, data, 'errors:validation.invalidPagination');
+  return parseWithSchema({
+    schema: listOrganizationsQueryDto,
+    data,
+    errorKey: 'errors:validation.invalidPagination',
+  });
 }
 
 /** Parses raw `PUT /organization/logo` body via {@link uploadLogoDto}; throws `ValidationError('errors:invalidInput')` on failure. */
 export function validateUploadLogo(data: unknown): UploadLogoInput {
-  return parseWithSchema(uploadLogoDto, data);
+  return parseWithSchema({ schema: uploadLogoDto, data });
 }

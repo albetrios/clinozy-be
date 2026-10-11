@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadRouteRegistryFromCatalog } from '@/tests/helpers/route-catalog-registry.js';
 import { routeSuccessStatusKey } from '@/tests/helpers/route-success-status.helper.js';
+import { PUBLIC_ID_PREFIXES } from '@/shared/utils/identity/public-id.util.js';
 import { ROUTE_EXAMPLES_PATH } from '@tooling/openapi/route-examples/constants.js';
 
 /**
@@ -31,12 +32,14 @@ describe('captured route examples fixture', () => {
       return;
     }
     const raw = readFileSync(fixturePath, 'utf-8');
+    // Public ids are not credentials: allow exactly the registered prefixes.
+    const publicIdPrefixes = Object.values(PUBLIC_ID_PREFIXES).join('|');
     const leakPatterns: Array<[string, RegExp]> = [
       ['JWT', /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./],
       ['Stripe-style secret', /"(sk|whsec|rk)_[A-Za-z0-9_]{8,}"/],
       [
         'prefixed opaque credential',
-        /"(?!(?:usr|org|mem|inv|rol|key|pol|ses|am|mfa|ntf|whk|pln|sub|upl|exp|wda)_)[a-z]{2,8}_[A-Za-z0-9]{16,}"/,
+        new RegExp(`"(?!(?:${publicIdPrefixes})_)[a-z]{2,8}_[A-Za-z0-9]{16,}"`),
       ],
       ['otpauth URI', /otpauth:\/\//],
       ['long hex blob', /"[A-Fa-f0-9]{40,}"/],

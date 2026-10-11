@@ -24,13 +24,20 @@ async function registerDomainContainers(application: FastifyInstance): Promise<v
     userDataExportService: application.userDomain.userDataExportService,
     // route-audit-#2 follow-up: block deleting a user who still owns organizations.
     organizationOwnership: application.tenancyDomain.organizationService,
+    // Account deletion leaves every organization and erases the user from webhook payloads.
+    tenancyDeparture: {
+      removeAllForDepartingUser: (userInternalId) =>
+        application.tenancyDomain.membershipService.removeAllForDepartingUser(userInternalId),
+      offboardPersonalOrganization: (options) =>
+        application.tenancyDomain.organizationService.offboardPersonalOrganization(options),
+    },
+    webhookPayloadErasure: application.notifyDomain.webhookService,
   });
 
-  application.tenancyDomain.organizationService.wireOffboardingUploadService(
-    application.uploadDomain.uploadService,
-    // route-audit-#2: cancel the org's active subscription on organization delete so billing stops.
-    application.billingDomain.subscriptionService,
-  );
+  application.tenancyDomain.organizationService.wireOffboardingUploadService({
+    uploadService: application.uploadDomain.uploadService,
+    subscriptionService: application.billingDomain.subscriptionService,
+  });
 
   // REQ-4: break the membership↔subscription cycle by late-wiring. billing was built with the
   // tenancy membership service (for seats_used); now inject billing's subscription service into the

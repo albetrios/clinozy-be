@@ -18,7 +18,7 @@ describe('attachWorkerQueueHeartbeat', () => {
     redisSetMock.mockReset().mockResolvedValue('OK');
     const worker = new EventEmitter();
     let now = 1_000_000;
-    attachWorkerQueueHeartbeat(worker, 'mail', () => now);
+    attachWorkerQueueHeartbeat({ worker, queueName: 'mail', nowMilliseconds: () => now });
 
     worker.emit('completed');
     worker.emit('completed');
@@ -41,7 +41,7 @@ describe('attachWorkerQueueHeartbeat', () => {
   it('never lets a failed heartbeat write reach the job', async () => {
     redisSetMock.mockReset().mockRejectedValue(new Error('redis down'));
     const worker = new EventEmitter();
-    attachWorkerQueueHeartbeat(worker, 'mail', () => 0);
+    attachWorkerQueueHeartbeat({ worker, queueName: 'mail', nowMilliseconds: () => 0 });
 
     expect(() => worker.emit('completed')).not.toThrow();
     await new Promise((resolve) => setImmediate(resolve));
@@ -57,7 +57,9 @@ describe('worker-queue-heartbeat', () => {
       { queue: 'mail', last_job_at: null },
       { queue: 'webhook-delivery', last_job_at: null },
     ];
-    expect(isWorkerThroughputStalled(heartbeats, stallTimeoutMs, nowMs)).toBe(false);
+    expect(isWorkerThroughputStalled({ heartbeats, stallTimeoutMs, nowMilliseconds: nowMs })).toBe(
+      false,
+    );
   });
 
   it('isWorkerThroughputStalled returns false when at least one queue completed recently', () => {
@@ -65,7 +67,9 @@ describe('worker-queue-heartbeat', () => {
       { queue: 'mail', last_job_at: '2026-05-19T11:58:00.000Z' },
       { queue: 'webhook-delivery', last_job_at: '2026-05-19T11:50:00.000Z' },
     ];
-    expect(isWorkerThroughputStalled(heartbeats, stallTimeoutMs, nowMs)).toBe(false);
+    expect(isWorkerThroughputStalled({ heartbeats, stallTimeoutMs, nowMilliseconds: nowMs })).toBe(
+      false,
+    );
   });
 
   it('isWorkerThroughputStalled returns true when all recorded heartbeats are stale', () => {
@@ -73,7 +77,9 @@ describe('worker-queue-heartbeat', () => {
       { queue: 'mail', last_job_at: '2026-05-19T11:00:00.000Z' },
       { queue: 'webhook-delivery', last_job_at: '2026-05-19T10:30:00.000Z' },
     ];
-    expect(isWorkerThroughputStalled(heartbeats, stallTimeoutMs, nowMs)).toBe(true);
+    expect(isWorkerThroughputStalled({ heartbeats, stallTimeoutMs, nowMilliseconds: nowMs })).toBe(
+      true,
+    );
   });
 });
 

@@ -15,6 +15,9 @@ import {
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { loadOrganizationPermissionRoutesFromCatalog } from '@/tests/helpers/route-catalog-registry.js';
 import type { FastifyInstance } from 'fastify';
+import { eq } from 'drizzle-orm';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
+import { plans } from '@/domains/billing/sub-domains/plan/plan.schema.js';
 
 // Keep provider responses deterministic: this suite proves permission dispatch,
 // while signed webhook/provider transport contracts are exercised separately.
@@ -24,7 +27,10 @@ vi.mock('@/infrastructure/payment/stripe.client.js', async (importOriginal) => {
     ...actual,
     isStripeConfigured: () => true,
     createStripeCustomer: vi.fn(async () => ({ id: 'cus_permission_matrix' })),
-    createStripeSubscription: vi.fn(async () => ({ id: 'sub_permission_matrix' })),
+    createStripeSubscription: vi.fn(async () => ({
+      id: 'sub_permission_matrix',
+      status: 'incomplete',
+    })),
   };
 });
 
@@ -79,7 +85,9 @@ function payloadForPermissionRoute(
     return { default_enabled: false };
   }
   if (route.path.endsWith('/webhooks')) {
-    return { url: 'https://example.com/webhook', events: ['notification.created'] };
+    // An event every member may read: `membership.*` / `subscription.*` would also need their read
+    // permission, and the matrix grants exactly the route's own.
+    return { url: 'https://example.com/webhook', events: ['organization.updated'] };
   }
   if (route.path.includes('/webhooks/:webhook_id')) {
     return { is_enabled: false };
@@ -122,6 +130,19 @@ function routeNeedsExistingPlan(route: (typeof organizationPermissionRoutes)[num
     route.path.endsWith('/subscriptions') ||
     route.path.includes('/subscriptions/:subscription_id/change-plan')
   );
+}
+
+async function createPermissionMatrixPlan() {
+  const plan = await createTestPlan();
+  // The authorized half needs a configured billing fixture; missing prices now fail closed.
+  await getOperatorDatabase()
+    .update(plans)
+    .set({
+      stripe_price_monthly_id: 'price_permission_matrix',
+      stripe_price_yearly_id: 'price_permission_matrix_yearly',
+    })
+    .where(eq(plans.id, plan.id));
+  return plan;
 }
 
 function idempotencyHeadersForPermissionRoute(
@@ -190,7 +211,7 @@ describe('Security: Permission route matrix', () => {
         route.path,
         organization.public_id,
       );
-      const plan = routeNeedsExistingPlan(route) ? await createTestPlan() : undefined;
+      const plan = routeNeedsExistingPlan(route) ? await createPermissionMatrixPlan() : undefined;
       const headers = idempotencyHeadersForPermissionRoute(route);
       const payload = payloadForPermissionRoute(route, plan?.public_id, role.public_id);
 
@@ -220,16 +241,22 @@ describe('Security: Permission route matrix', () => {
         organizationId: organization.id,
         roleId: role.id,
       });
-      await invalidatePermissions(user.public_id, organization.public_id);
+      await invalidatePermissions({
+        userId: user.public_id,
+        organizationId: organization.public_id,
+      });
+      // A recent step-up too: some permission routes also sit behind the step-up gate
+      // (organization deletion), and the matrix asserts the permission outcome.
       const token = await generateTestToken({
         userId: user.public_id,
         organizationPublicId: organization.public_id,
+        stepUp: true,
       });
       const materializedPath = materializeOrganizationScopedPath(
         route.path,
         organization.public_id,
       );
-      const plan = routeNeedsExistingPlan(route) ? await createTestPlan() : undefined;
+      const plan = routeNeedsExistingPlan(route) ? await createPermissionMatrixPlan() : undefined;
       const headers = idempotencyHeadersForPermissionRoute(route);
       const payload = payloadForPermissionRoute(route, plan?.public_id, role.public_id);
 

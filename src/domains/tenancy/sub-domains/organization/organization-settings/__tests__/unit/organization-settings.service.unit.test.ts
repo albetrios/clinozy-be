@@ -8,10 +8,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -111,11 +113,10 @@ describe('OrganizationSettingsService', () => {
 
   describe('update', () => {
     it('validates and upserts settings with provided fields', async () => {
-      const result = await service.update(
+      const result = await service.update({
         scope,
-        { is_email_notifications_enabled: false },
-        'user_public',
-      );
+        body: { is_email_notifications_enabled: false },
+      });
       expect(settingsRepository.upsert).toHaveBeenCalledWith(
         organization.id,
         expect.objectContaining({ is_email_notifications_enabled: false }),
@@ -125,12 +126,12 @@ describe('OrganizationSettingsService', () => {
 
     it('throws NotFoundError when organization is missing', async () => {
       vi.mocked(organizationRepository.findByPublicId).mockResolvedValue(null);
-      await expect(service.update(scope, {}, 'user_public')).rejects.toBeInstanceOf(NotFoundError);
+      await expect(service.update({ scope, body: {} })).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it('propagates upsert errors', async () => {
       vi.mocked(settingsRepository.upsert).mockRejectedValue(new Error('Upsert failed'));
-      await expect(service.update(scope, {}, 'user_public')).rejects.toThrow('Upsert failed');
+      await expect(service.update({ scope, body: {} })).rejects.toThrow('Upsert failed');
     });
   });
 
@@ -175,7 +176,10 @@ describe('OrganizationSettingsService', () => {
 
       await service.resolveDefaultLocaleForOrganization('org_public_abc');
 
-      expect(i18nLocaleCacheSpies.set).toHaveBeenCalledWith('org_public_abc', 'es');
+      expect(i18nLocaleCacheSpies.set).toHaveBeenCalledWith({
+        organizationPublicId: 'org_public_abc',
+        locale: 'es',
+      });
     });
 
     it('caches the "en" fallback so unknown organization ids stop hitting the DB after the first lookup', async () => {
@@ -189,19 +193,22 @@ describe('OrganizationSettingsService', () => {
       // The negative cache stops the existence-oracle path: every subsequent
       // request for the same unknown organization returns 'en' from Redis without
       // ever touching the SECURITY DEFINER function.
-      expect(i18nLocaleCacheSpies.set).toHaveBeenCalledWith('org_unknown', 'en');
+      expect(i18nLocaleCacheSpies.set).toHaveBeenCalledWith({
+        organizationPublicId: 'org_unknown',
+        locale: 'en',
+      });
     });
   });
 
   describe('update — sec-M1 cache invalidation', () => {
     it('invalidates the i18n locale cache when default_locale is changed', async () => {
-      await service.update(scope, { default_locale: 'es' }, undefined);
+      await service.update({ scope, body: { default_locale: 'es' } });
       expect(i18nLocaleCacheSpies.invalidate).toHaveBeenCalledWith('org_public_abc');
     });
 
     it('does NOT invalidate when default_locale is absent from the patch', async () => {
       i18nLocaleCacheSpies.invalidate.mockClear();
-      await service.update(scope, { is_email_notifications_enabled: false }, undefined);
+      await service.update({ scope, body: { is_email_notifications_enabled: false } });
       expect(i18nLocaleCacheSpies.invalidate).not.toHaveBeenCalled();
     });
   });

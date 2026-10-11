@@ -36,9 +36,9 @@ describe('Integration: Stripe webhook enqueue keeps one live job per event', () 
   it('ignores reclaim adds while the event still has a job, and accepts one after it is gone', async () => {
     const stripeEventId = `evt_dedupe_${Date.now()}`;
 
-    await enqueueStripeWebhookByEventId(stripeEventId, 'ingress');
-    await enqueueStripeWebhookByEventIdForReclaim(stripeEventId, 'reclaim-sweep');
-    await enqueueStripeWebhookByEventIdForReclaim(stripeEventId, 'reclaim-sweep');
+    await enqueueStripeWebhookByEventId({ stripeEventId, requestId: 'ingress' });
+    await enqueueStripeWebhookByEventIdForReclaim({ stripeEventId, requestId: 'reclaim-sweep' });
+    await enqueueStripeWebhookByEventIdForReclaim({ stripeEventId, requestId: 'reclaim-sweep' });
 
     const live = await liveJobsFor(stripeEventId);
     expect(live).toHaveLength(1);
@@ -46,7 +46,7 @@ describe('Integration: Stripe webhook enqueue keeps one live job per event', () 
 
     // The job is gone (finished, or lost with Redis): the sweep can re-enqueue the event.
     await live[0]?.remove();
-    await enqueueStripeWebhookByEventIdForReclaim(stripeEventId, 'reclaim-sweep');
+    await enqueueStripeWebhookByEventIdForReclaim({ stripeEventId, requestId: 'reclaim-sweep' });
     const again = await liveJobsFor(stripeEventId);
     expect(again).toHaveLength(1);
     expect(again[0]?.data.requestId).toBe('reclaim-sweep');

@@ -10,6 +10,18 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { eq } from 'drizzle-orm';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { users } from '@/domains/user/user.schema.js';
+import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
+import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
+import {
+  createMembership,
+  createRoleWithPermissions,
+} from '@/domains/tenancy/__tests__/factories/permission.factory.js';
+import { createTestOrganization } from '@/tests/factories/organization.factory.js';
+import {
+  createTestWebhook,
+  createTestWebhookDeliveryAttempt,
+} from '@/tests/factories/webhook.factory.js';
 import { generateTestToken, generateSuperAdminToken } from '@/tests/helpers/test-auth.js';
 import type { FastifyInstance } from 'fastify';
 import type { InjectHttpResult } from '@/tests/helpers/test-http-inject.helper.js';
@@ -33,10 +45,13 @@ vi.mock('@/infrastructure/storage/s3-adapter.js', () => {
       url: 'https://fake-s3.local/upload',
       fields: { key: 'fake-policy-key' },
     }),
-    verifyUploadedObject: async (
-      _key: string,
-      expected: { contentType: string; contentLength: number },
-    ) => ({
+    verifyUploadedObject: async ({
+      key: _key,
+      expected,
+    }: {
+      key: string;
+      expected: { contentType: string; contentLength: number };
+    }) => ({
       contentType: expected.contentType,
       contentLength: expected.contentLength,
       eTag: '"fake-etag"',
@@ -282,9 +297,109 @@ describe('User Domain — Integration', () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it('should soft-delete user, revoke sessions, and hide profile', async () => {
+    it('requires a recent step-up on this session (a stolen access token alone is not enough)', async () => {
       const user = await createTestUser();
       const token = await generateTestToken({ userId: user.public_id });
+      const response = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath('/users/me'),
+        token,
+      });
+      expect(response.statusCode, response.body).toBe(403);
+    });
+
+    it('leaves every organization: team membership removed, personal organization tombstoned, webhook payloads redacted', async () => {
+      const owner = await createTestUser();
+      const team = await createTestOrganization({ ownerUserId: owner.id });
+      const departing = await createTestUser();
+      const personal = await createTestOrganization({
+        ownerUserId: departing.id,
+        type: 'PERSONAL',
+      });
+      const role = await createRoleWithPermissions({
+        organizationId: team.id,
+        permissionCodes: [],
+      });
+      const membership = await createMembership({
+        userId: departing.id,
+        organizationId: team.id,
+        roleId: role.id,
+      });
+      const webhook = await createTestWebhook({
+        organizationId: team.id,
+        url: 'https://example.com/members',
+        events: ['membership.created', 'membership.deleted'],
+        createdByUserId: owner.id,
+      });
+      // A stored `membership.created` delivery carrying the member's details.
+      await createTestWebhookDeliveryAttempt({
+        webhookId: webhook.id,
+        eventType: 'membership.created',
+        status: 'SENT',
+        payload: {
+          id: 'evt_seeded',
+          type: 'membership.created',
+          data: {
+            id: membership.public_id,
+            user_id: departing.public_id,
+            user: {
+              id: departing.public_id,
+              email: departing.email,
+              first_name: 'Departing',
+              last_name: 'Member',
+              avatar_url: null,
+            },
+          },
+        },
+      });
+      const token = await generateTestToken({ userId: departing.public_id, stepUp: true });
+
+      const response = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath('/users/me'),
+        token,
+      });
+      expect(response.statusCode, response.body).toBe(204);
+
+      const operator = getOperatorDatabase();
+      const [removed] = await operator
+        .select({ deleted_at: memberships.deleted_at })
+        .from(memberships)
+        .where(eq(memberships.id, membership.id));
+      // The membership no longer holds a seat in the team organization.
+      expect(removed?.deleted_at).not.toBeNull();
+      const [personalAfter] = await operator
+        .select({ deleted_at: organizations.deleted_at })
+        .from(organizations)
+        .where(eq(organizations.id, personal.id));
+      // Otherwise the personal organization (owner_user_id) blocks the account's purge for ever.
+      expect(personalAfter?.deleted_at).not.toBeNull();
+      const payloads = await operator
+        .select({
+          event_type: webhook_delivery_attempts.event_type,
+          payload: webhook_delivery_attempts.payload,
+        })
+        .from(webhook_delivery_attempts)
+        .where(eq(webhook_delivery_attempts.webhook_id, webhook.id));
+      // The seeded `created` and the `deleted` the removal emitted — both without the member's details.
+      expect(payloads.map((row) => row.event_type).sort()).toEqual([
+        'membership.created',
+        'membership.deleted',
+      ]);
+      for (const { payload } of payloads) {
+        expect((payload as { data: { user: Record<string, unknown> } }).data.user).toEqual({
+          id: departing.public_id,
+          email: null,
+          first_name: null,
+          last_name: null,
+          avatar_url: null,
+        });
+      }
+    });
+
+    it('should soft-delete user, revoke sessions, and hide profile', async () => {
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id, stepUp: true });
 
       const deleteResponse = await injectAuthenticated(app, {
         method: 'DELETE',

@@ -29,7 +29,7 @@ describe('db-pool-metrics integration', () => {
     resetEnvCacheForTests();
   });
 
-  it('GET /metrics exposes db_pool_connections active, idle, and waiting gauges', async () => {
+  it("GET /metrics exposes the live pool gauges and the role's pg_stat_activity gauges", async () => {
     /** /metrics is gated by METRICS_SCRAPE_TOKEN (see `metrics.middleware.ts`); pass the
      * token the test setup configures so the route returns 200 instead of 401. */
     const response = await injectUnauthenticated(application, {
@@ -42,6 +42,11 @@ describe('db-pool-metrics integration', () => {
     const body = response.body;
 
     expect(body).toContain('postgres_pool_metrics_available 1');
+    // This process's own pool, counted by node-postgres.
+    expect(body).toMatch(/postgres_pool_max_connections\{pool="primary"[^}]*\} [1-9]\d*/);
+    expect(body).toMatch(/postgres_pool_connections\{pool="primary",state="in_use"[^}]*\} \d+/);
+    expect(body).toMatch(/postgres_pool_connections\{pool="primary",state="idle"[^}]*\} \d+/);
+    expect(body).toMatch(/postgres_pool_waiting\{pool="primary"[^}]*\} \d+/);
     expect(body).toMatch(/db_pool_connections\{state="active"[^}]*\} \d+/);
     expect(body).toMatch(/db_pool_connections\{state="idle"[^}]*\} \d+/);
     expect(body).toMatch(/db_pool_connections\{state="waiting"[^}]*\} \d+/);

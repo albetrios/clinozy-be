@@ -44,8 +44,11 @@ flowchart LR
 | `registerAuthMethodEventHandlers`       | `AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED`, password reset, email verification | Mail queue              |
 | `registerMemberInvitationEventHandlers` | `MEMBER_INVITATION_EVENT.CREATED`, `RESENT`                           | Mail queue              |
 | `registerNotifyEventHandlers`           | `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED`                             | BullMQ webhook delivery |
+| `registerNotifyEventHandlers`           | `ORGANIZATION_EVENT.*`, `MEMBERSHIP_EVENT.*`, `SUBSCRIPTION_EVENT.*`   | PENDING webhook delivery attempts (organization-resource-webhook-flow) |
 
-Billing side effects use BullMQ directly (for example [`stripe-webhook`](../../../src/domains/billing/sub-domains/stripe-webhook/)) — there is no top-level `billing/events/` aggregator.
+Billing side effects otherwise use BullMQ directly (for example [`stripe-webhook`](../../../src/domains/billing/sub-domains/stripe-webhook/)); its only domain events are `SUBSCRIPTION_EVENT.*`, and there is no top-level `billing/events/` aggregator.
+
+Every unit of work releases its after-commit tasks only when it commits (`runInCommitUnit`, `src/core/events/on-commit-scope.ts`, wrapping each pooled transaction and `withSavepoint`): over HTTP into the request's `onResponse` flush, in a worker right after the commit, and never when it rolls back — so a delivery job never starts before its attempt row exists, and never for one that was rolled back.
 
 ---
 
@@ -62,14 +65,14 @@ Event handler failure must **not** fail the HTTP request (log and continue).
 HTTP handlers pass `getRequestIdentifier(request)` into services as `context.requestId`. Services attach it when emitting:
 
 ```typescript
-await eventBus.emit(buildDomainEvent(EVENT_TYPE, payload, { requestId: context?.requestId }));
+await eventBus.emit(buildDomainEvent({ type: EVENT_TYPE, payload, options: { requestId: context?.requestId } }));
 ```
 
 Event handlers read `event.requestId` and pass it to `recordOutboxEmail()`, `enqueueNotification()`, `enqueueWebhookDelivery()`, etc. Job payloads store `requestId` (Zod-validated); workers log it on `mail.worker.processing` and **`email.sent`** so worker logs correlate with API `request.complete` (`requestId` field).
 
 ### Post-commit enqueue (transactional outbox)
 
-When a handler runs inside an HTTP request, BullMQ enqueue helpers are scheduled with **`eventBus.onCommit(...)`** and run only after **`eventBus.flushOnCommit()`** in [`request-context.middleware.ts`](../../../src/shared/middlewares/core/request-context.middleware.ts) (after the request DB transaction commits). Mail uses a durable outbox row plus deferred `dispatchOutboxEmail`; webhook delivery, notification dispatch, and user-data export defer `queue.add` the same way. Outside HTTP scope (workers, scripts), use **`runEnqueueAfterCommit()`** from [`event-bus.ts`](../../../src/core/events/event-bus.ts) — it enqueues immediately when no onCommit scope is active.
+When a handler runs inside an HTTP request, BullMQ enqueue helpers are scheduled with **`eventBus.onCommit(...)`** and run only after **`eventBus.flushOnCommit()`** in [`request-lifecycle.middleware.ts`](../../../src/shared/middlewares/core/request-lifecycle.middleware.ts) (once the response is sent — or, when the client left first, once the handler has finished). Mail uses a durable outbox row plus deferred `dispatchOutboxEmail`; webhook delivery, notification dispatch, and user-data export defer `queue.add` the same way. Outside HTTP scope (workers, scripts), use **`runEnqueueAfterCommit()`** from [`event-bus.ts`](../../../src/core/events/event-bus.ts) — it enqueues immediately when no onCommit scope is active.
 
 Durable `scheduleCommitDispatch` tasks are appended to Redis at emit time (before commit) and recovered by the `commit-dispatch-recovery` sweeper if the process dies after commit. **On rollback / settle-failed**, `request-lifecycle.middleware.ts` calls **`eventBus.discardCommitDispatchOnRollback()`**, which purges both the in-memory marker and the durable Redis tasks (`purgeCommitDispatchTasks`) — the referenced rows were rolled back, so leaving the tasks would let the sweeper replay them against **phantom rows**, burning the worker retry budget and raising false final-failure DLQ alerts (audit-#M2). As a second line of defence, the mail and notification workers complete a job whose row is missing as **skipped** (warn log) rather than retrying it.
 
@@ -82,9 +85,9 @@ Producers fail fast while Redis is unreachable or full (`noeviction` rejects wri
 | Email | `auth.mail_outbox` row | `mail-outbox-sweeper` — re-enqueues `pending` rows older than `MAIL_OUTBOX_SWEEP_PENDING_MINUTES` (3), every 2 min |
 | Stripe event | `billing.stripe_webhook_events` ledger row | `stripe-webhook-event-reclaim` (5 min) and `stripe-webhook-event-catchup`, which asks Stripe for events never received (15 min) |
 | Outbound customer webhook | `notify.webhook_delivery_attempts` row, left `PENDING` | `webhook-delivery-reclaim` — re-enqueues attempts still `PENDING` after 5 min, every 5 min; the job id is the attempt's public id, so an attempt whose job exists is left alone |
-| Seat sync | — | not recovered: the organization's next membership change syncs the live count again |
+| Seat sync | `subscriptions.seats` (the last quantity pushed to Stripe) | `subscription-seat-reconcile` — hourly, re-enqueues a seat sync for every Stripe-backed subscription whose `seats` differs from the seats in use |
 | Notification | row written, then deleted when its dispatch fails | not recovered — dropped by design |
-| Data export | export row, marked failed | the user requests a new export |
+| Data export | `auth.user_data_exports` row, left `pending` | `reclaim-pending-user-data-exports` — a repeatable job on the export queue itself, every 5 min, re-enqueues exports still `pending` after 5 min; the job id is the export's public id |
 
 An enqueue failure never marks an outbox row failed: it leaves the row for its sweep.
 
@@ -195,12 +198,12 @@ When the same BullMQ job can be processed concurrently (retries, stalls, or mult
 
 | Worker               | Claim mechanism                                                                              | Terminal skip                                                                                  |
 | -------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| **Stripe webhook**   | `StripeWebhookEventRepository.tryClaimEvent()` — insert ledger with `ON CONFLICT DO NOTHING` | `processed_duplicate` → no handler                                                             |
+| **Stripe webhook**   | `StripeWebhookEventRepository.tryClaimEvent()` in the worker — the ingress only records the row (`recordAtIngress`, `ON CONFLICT DO NOTHING`) and never claims it | `processed_duplicate` → no handler                                                             |
 | **Webhook delivery** | `WebhookDeliveryAttemptRepository.tryMarkSending()` — any status but `SENT` → `SENDING` (`attempt_count + 1`) | `already_sent` → no HTTP; a `SENDING` row is re-claimed at once (BullMQ runs one execution per job id, so it belongs to a crashed one); receivers dedupe on `X-Webhook-Delivery-Id` |
 | **Mail**             | `tryClaimPendingMailOutbox()` — `pending` → `sending` update                                 | `already_sent` → no Resend call                                                                |
 | **Seat sync**        | None needed per run — it pushes an absolute quantity. Jobs for one organization never overlap: the enqueue deduplicates on `seat-sync-<organization>` with `keepLastIfActive` (`subscriptionSeatSyncDeduplication`), so a burst collapses into one job and a change that lands mid-run is synced once more after it | — (each run reads the live member count; before the key, two replicas could run one organization at once and the stale count could finish last) |
 
-Stuck `sending` rows (worker crash after claim) are reclaimed to `pending` by the repeatable **mail-outbox-sweeper** job (`reclaimStaleSendingMailOutboxIds`) before re-enqueue.
+Stuck `sending` rows (worker crash after claim) are reclaimed to `pending` by the repeatable **mail-outbox-sweeper** job (`reclaimStaleSendingMailOutboxTokens`) before re-enqueue.
 
 Regression tests: `src/tests/integration/worker-race/*.integration.test.ts` (`pnpm test:integration`).
 
@@ -208,7 +211,7 @@ Regression tests: `src/tests/integration/worker-race/*.integration.test.ts` (`pn
 
 ## Worker Postgres context (RLS)
 
-HTTP requests set `app.current_organization_public_id` via tenant middleware and an organization-scoped transaction. **Workers do not** — each job must use an explicit context wrapper before querying FORCE RLS tables.
+HTTP requests set `app.current_organization_public_id` per unit of work: the auth middleware derives the organization from the signed `org` claim, and the service opens `withAppDatabaseContext` with the request's scope. **Workers do not** have a request — each job must use an explicit context wrapper before querying FORCE RLS tables.
 
 | Context wrapper                                                             | GUC / purpose                                                            |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -293,7 +296,7 @@ Operational sizing per family is documented in [resource-limits.md → Worker Po
 
 ## Distributed tracing across the queue
 
-Every `enqueue*` helper injects the active W3C trace context (`captureTraceContextForPropagation`) into the job payload (`traceparent` / `tracestate`, shared `traceContextJobFieldsSchema`); each worker re-enters that context with `runWithPropagatedTraceContext` (`src/infrastructure/observability/tracing/trace-context.util.ts`), so the worker span is a child of the originating API request. Jobs enqueued outside an active span (or with OTEL disabled) simply omit the fields and run without a new span.
+Every `enqueue*` helper injects the active W3C trace context (`captureTraceContextForPropagation`) into the job payload (`traceparent` / `tracestate`, shared `traceContextJobFieldsSchema`); each worker re-enters that context with `runWithPropagatedTraceContext` (`src/infrastructure/observability/tracing/trace-context.util.ts`), so the worker span is a child of the originating API request. Jobs enqueued outside an active span (or with tracing off) simply omit the fields and run without a new span.
 
 ---
 

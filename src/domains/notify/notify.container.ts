@@ -30,10 +30,13 @@ export type NotifyContainer = {
  * cross-domain collaborators, configure the in-process notification dispatch singleton, and
  * register notify event handlers. Returns the public {@link NotifyContainer} surface.
  */
-export function createNotifyContainer(
-  organizationService: OrganizationService,
-  userService: UserService,
-): NotifyContainer {
+export function createNotifyContainer({
+  organizationService,
+  userService,
+}: {
+  organizationService: OrganizationService;
+  userService: UserService;
+}): NotifyContainer {
   const notificationRepository = new NotificationRepository();
   const webhookRepository = new WebhookRepository();
   const webhookDeliveryAttemptRepository = new WebhookDeliveryAttemptRepository();
@@ -48,7 +51,7 @@ export function createNotifyContainer(
   const webhookEventService = new WebhookEventService(webhookEventRepository);
 
   configureNotificationDispatch(createNotificationDispatch(notificationRepository));
-  registerNotifyEventHandlers();
+  registerNotifyEventHandlers({ webhookService });
 
   return {
     notificationService,
@@ -66,5 +69,5 @@ export function createNotifyContainer(
 export function registerNotifyContainer(application: FastifyInstance): void {
   const { organizationService } = application.tenancyDomain;
   const { userService } = application.userDomain;
-  application.decorate('notifyDomain', createNotifyContainer(organizationService, userService));
+  application.decorate('notifyDomain', createNotifyContainer({ organizationService, userService }));
 }

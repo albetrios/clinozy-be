@@ -13,7 +13,9 @@ async function main(): Promise<void> {
     (filename) => filename.endsWith('.sql') && !filename.endsWith('.down.sql'),
   );
 
-  const { currentMax, nextPrefix } = suggestNextMigrationPrefix(upFilenames);
+  const { currentMax, nextPrefix } = suggestNextMigrationPrefix({
+    upMigrationFilenames: upFilenames,
+  });
   const descriptionSnippet = process.argv[2]?.trim();
   const suffix =
     descriptionSnippet && descriptionSnippet.length > 0 ? descriptionSnippet : 'your_description';

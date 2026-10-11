@@ -86,7 +86,8 @@ what to do, why, and what enforces it. The mechanisms behind the rules are expla
 6. **Row-backed work has a sweep for lost enqueues.** If a Postgres row holds the work, an enqueue
    error leaves the row pending — never marks it failed — and a sweep re-enqueues rows still pending
    after a cutoff (`mail-outbox-sweeper`, `webhook-delivery-reclaim`,
-   `stripe-webhook-event-reclaim`). Table: [When Redis refuses the
+   `stripe-webhook-event-reclaim`, `subscription-seat-reconcile`,
+   `reclaim-pending-user-data-exports`). Table: [When Redis refuses the
    enqueue](workers-and-events.md#when-redis-refuses-the-enqueue).
 7. A queue may set a **rate limiter** only for a real provider limit (mail:
    `RESEND_MAX_REQUESTS_PER_SECOND`, counted across every replica). Put urgent work ahead with
@@ -148,7 +149,10 @@ what to do, why, and what enforces it. The mechanisms behind the rules are expla
    cron is optional.
 2. **A sweep lives in the same family as the worker it backs up**, so it runs wherever that worker
    runs (`mail-outbox-sweeper` → `mail`, `stripe-webhook-event-reclaim` → `stripe`,
-   `webhook-delivery-reclaim` → `webhook`).
+   `webhook-delivery-reclaim` → `webhook`). A sweep may instead ride on the queue it backs up as a
+   second job name its worker routes on `job.name` (`subscription-seat-reconcile` on
+   `subscription-seat-sync`, `reclaim-pending-user-data-exports` on `user-data-export`) — no worker
+   or connection budget of its own.
 3. **Bounded and idempotent**: a fixed batch per run, oldest first, safe to run twice; a delete runs
    in batches with a per-run cap (`deleteInBatchesByCondition`, `BATCH_DELETE_MAX_BATCHES_PER_RUN`)
    and a savepoint per batch, so one blocked row never aborts the run.

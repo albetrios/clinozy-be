@@ -8,7 +8,13 @@ const NOTIFICATION_EMAIL_DISPATCH_KEY_PREFIX = 'notification:email-dispatched:';
 // Keyed by the notification's public id, not its bigserial: the id restarts at 1 after
 // TRUNCATE ... RESTART IDENTITY or a database restore while this marker lives on in Redis for 24
 // hours, so a NEW notification reusing the id would be skipped as "already dispatched".
-function buildKey(notificationPublicId: string, recipient: string): string {
+function buildKey({
+  notificationPublicId,
+  recipient,
+}: {
+  notificationPublicId: string;
+  recipient: string;
+}): string {
   return `${NOTIFICATION_EMAIL_DISPATCH_KEY_PREFIX}${notificationPublicId}:${recipient.toLowerCase()}`;
 }
 
@@ -32,7 +38,7 @@ export async function isNotificationEmailDispatched(options: {
 }): Promise<boolean> {
   const { notificationPublicId, recipient } = options;
   const redis = options.redis ?? redisConnection;
-  const result = await redis.get(buildKey(notificationPublicId, recipient));
+  const result = await redis.get(buildKey({ notificationPublicId, recipient }));
   return result !== null;
 }
 
@@ -58,7 +64,7 @@ export async function markNotificationEmailDispatched(options: {
   const { notificationPublicId, recipient } = options;
   const redis = options.redis ?? redisConnection;
   await redis.set(
-    buildKey(notificationPublicId, recipient),
+    buildKey({ notificationPublicId, recipient }),
     '1',
     'EX',
     NOTIFICATION_EMAIL_DISPATCH_IDEMPOTENCY_TTL_SECONDS,

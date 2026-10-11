@@ -45,10 +45,13 @@ const CAPABILITY_REJECTION_KEY: Record<OrganizationCapability, string> = {
  *   derives them from the organization `type` and gates the action itself on the
  *   caller's permissions (e.g. `subscription:manage`).
  */
-export function assertTeamOrganization(
-  organization: { type: string },
-  capability: OrganizationCapability,
-): void {
+export function assertTeamOrganization({
+  organization,
+  capability,
+}: {
+  organization: { type: string };
+  capability: OrganizationCapability;
+}): void {
   if (organization.type === PERSONAL_ORGANIZATION_TYPE) {
     throw new UnprocessableEntityError(CAPABILITY_REJECTION_KEY[capability]);
   }

@@ -1,3 +1,5 @@
+import Stripe from 'stripe';
+import { toClientFacingStripeError } from '@/infrastructure/payment/stripe-error.util.js';
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -7,6 +9,7 @@ import {
   getStripeCustomer,
   listRecentStripeEvents,
   resumeStripeSubscription,
+  retrieveStripeSubscriptionSnapshot,
   updateStripeSubscription,
   updateStripeSubscriptionQuantity,
 } from '@/infrastructure/payment/stripe.client.js';
@@ -102,7 +105,7 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
     expect(createdStripeCustomerOutbound.id).toBe(customerCreateFixtureResponse.id);
   });
 
-  test('createStripeSubscription sends idempotency header and maps subscription payload', async () => {
+  test('createStripeSubscription sends idempotency header, the seat quantity and maps subscription payload', async () => {
     const outboundIdempotencyKeyForSubscriptionCreateFixture = `idem-contract-subscription-create-${Date.now().toFixed(0)}`;
 
     nock(stripeOutboundApiHostname)
@@ -117,9 +120,11 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       .matchHeader('idempotency-key', outboundIdempotencyKeyForSubscriptionCreateFixture)
       .reply(200, subscriptionCreateFixtureResponse);
 
+    // The first invoice bills every member the organization already has.
     const createdStripeSubscriptionOutbound = await createStripeSubscription({
       customerId: subscriptionCreateRequestSubset.customer,
       priceId: subscriptionCreateRequestSubset['items[0][price]'],
+      quantity: Number(subscriptionCreateRequestSubset['items[0][quantity]']),
       idempotencyKey: outboundIdempotencyKeyForSubscriptionCreateFixture,
     });
 
@@ -153,15 +158,15 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       .matchHeader('authorization', /^Bearer /)
       .reply(200, subscriptionUpdateFixtureResponse);
 
-    const patchedStripeSubscriptionOutbound = await updateStripeSubscription(
-      subscriptionFixtureIdentifierOutbound,
-      {
+    const patchedStripeSubscriptionOutbound = await updateStripeSubscription({
+      subscriptionId: subscriptionFixtureIdentifierOutbound,
+      options: {
         priceId: subscriptionUpdateFixtureRequestSubset['items[0][price]'],
         metadata: {
           next_sync: subscriptionUpdateFixtureRequestSubset['metadata[next_sync]'],
         },
       },
-    );
+    });
 
     StripeSubscriptionApiResponseContractSchema.parse(patchedStripeSubscriptionOutbound);
     expect(patchedStripeSubscriptionOutbound.id).toBe(subscriptionRetrieveFixtureResponse.id);
@@ -199,11 +204,11 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       .matchHeader('idempotency-key', outboundIdempotencyKeyForQuantitySync)
       .reply(200, subscriptionUpdateFixtureResponse);
 
-    const patchedStripeSubscriptionOutbound = await updateStripeSubscriptionQuantity(
-      subscriptionFixtureIdentifierOutbound,
-      7,
-      { idempotencyKey: outboundIdempotencyKeyForQuantitySync },
-    );
+    const patchedStripeSubscriptionOutbound = await updateStripeSubscriptionQuantity({
+      subscriptionId: subscriptionFixtureIdentifierOutbound,
+      quantity: 7,
+      options: { idempotencyKey: outboundIdempotencyKeyForQuantitySync },
+    });
 
     StripeSubscriptionApiResponseContractSchema.parse(patchedStripeSubscriptionOutbound);
     expect(patchedStripeSubscriptionOutbound.id).toBe(subscriptionRetrieveFixtureResponse.id);
@@ -226,10 +231,10 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       .matchHeader('authorization', /^Bearer /)
       .reply(200, subscriptionUpdateCancelFixtureResponse);
 
-    const canceledStripeSubscriptionOutbound = await cancelStripeSubscription(
-      subscriptionFixtureIdentifierOutbound,
-      true,
-    );
+    const canceledStripeSubscriptionOutbound = await cancelStripeSubscription({
+      subscriptionId: subscriptionFixtureIdentifierOutbound,
+      cancelAtPeriodEnd: true,
+    });
 
     StripeSubscriptionApiResponseContractSchema.parse(canceledStripeSubscriptionOutbound);
     expect(canceledStripeSubscriptionOutbound.cancel_at_period_end).toBe(true);
@@ -252,9 +257,9 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       .matchHeader('authorization', /^Bearer /)
       .reply(200, subscriptionResumeFixtureResponse);
 
-    const resumedStripeSubscriptionOutbound = await resumeStripeSubscription(
-      subscriptionFixtureIdentifierOutbound,
-    );
+    const resumedStripeSubscriptionOutbound = await resumeStripeSubscription({
+      subscriptionId: subscriptionFixtureIdentifierOutbound,
+    });
 
     StripeSubscriptionApiResponseContractSchema.parse(resumedStripeSubscriptionOutbound);
     expect(resumedStripeSubscriptionOutbound.cancel_at_period_end).toBe(false);
@@ -268,10 +273,10 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       .matchHeader('authorization', /^Bearer /)
       .reply(200, subscriptionCancelFixtureResponse);
 
-    const immediateCanceledStripeSubscriptionOutbound = await cancelStripeSubscription(
-      subscriptionFixtureIdentifierOutbound,
-      false,
-    );
+    const immediateCanceledStripeSubscriptionOutbound = await cancelStripeSubscription({
+      subscriptionId: subscriptionFixtureIdentifierOutbound,
+      cancelAtPeriodEnd: false,
+    });
 
     StripeSubscriptionApiResponseContractSchema.parse(immediateCanceledStripeSubscriptionOutbound);
     expect(immediateCanceledStripeSubscriptionOutbound.status).toBe('canceled');
@@ -323,8 +328,105 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       });
 
     for (let lookup = 0; lookup < lookupCount; lookup += 1) {
-      await expect(getStripeCustomer('cus_missing')).resolves.toBeNull();
+      await expect(getStripeCustomer({ customerId: 'cus_missing' })).resolves.toBeNull();
     }
+    expect(await stripeCircuit.getState()).toBe('CLOSED');
+  });
+  test('snapshot retrieval exposes provider 5xx after one bounded SDK attempt', async () => {
+    let calls = 0;
+    nock(stripeOutboundApiHostname)
+      .get('/v1/subscriptions/sub_snapshot_failure')
+      .reply(() => {
+        calls += 1;
+        return [
+          503,
+          { error: { type: 'api_error', message: 'Temporary provider outage' } },
+          { 'stripe-should-retry': 'true' },
+        ];
+      });
+    const error = await retrieveStripeSubscriptionSnapshot('sub_snapshot_failure').catch(
+      (failure: unknown) => failure,
+    );
+    expect(error).toBeInstanceOf(Stripe.errors.StripeAPIError);
+    expect(toClientFacingStripeError(error)?.statusCode).toBe(503);
+    expect(calls).toBe(1);
+  });
+
+  test('snapshot connection reset remains visible without an unbounded SDK retry', async () => {
+    nock(stripeOutboundApiHostname)
+      .get('/v1/subscriptions/sub_snapshot_reset')
+      .replyWithError(Object.assign(new Error('socket reset'), { code: 'ECONNRESET' }));
+    const error = await retrieveStripeSubscriptionSnapshot('sub_snapshot_reset').catch(
+      (failure: unknown) => failure,
+    );
+    expect(error).toBeInstanceOf(Stripe.errors.StripeConnectionError);
+    expect(toClientFacingStripeError(error)?.statusCode).toBe(503);
+  });
+
+  test('rate limiting preserves the provider error instead of returning a customer', async () => {
+    nock(stripeOutboundApiHostname)
+      .post('/v1/customers')
+      .reply(
+        429,
+        { error: { type: 'rate_limit_error', message: 'Account rate limited' } },
+        { 'retry-after': '2', 'stripe-should-retry': 'false' },
+      );
+    const error = await createStripeCustomer({
+      email: 'rate-limit@example.com',
+      name: 'Rate limit',
+      idempotencyKey: 'contract-rate-limit',
+    }).catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(Stripe.errors.StripeRateLimitError);
+    expect(toClientFacingStripeError(error)?.statusCode).toBe(503);
+  });
+
+  test('a retried create reuses the same key after the provider accepted the first request', async () => {
+    const key = 'contract-accepted-response-lost';
+    const accepted = new Map<string, typeof customerCreateFixtureResponse>();
+    let calls = 0;
+    nock(stripeOutboundApiHostname)
+      .post('/v1/customers')
+      .matchHeader('idempotency-key', key)
+      .twice()
+      .reply(() => {
+        calls += 1;
+        if (!accepted.has(key)) accepted.set(key, customerCreateFixtureResponse);
+        return calls === 1
+          ? [
+              503,
+              { error: { type: 'api_error', message: 'Response lost after acceptance' } },
+              { 'stripe-should-retry': 'true' },
+            ]
+          : [200, accepted.get(key)!];
+      });
+    const customer = await createStripeCustomer({
+      email: 'retry@example.com',
+      name: 'Retry',
+      idempotencyKey: key,
+    });
+    expect(customer.id).toBe(customerCreateFixtureResponse.id);
+    expect(calls).toBe(2);
+    expect(accepted.size).toBe(1);
+  });
+
+  test('a declined subscription is a caller-visible payment refusal and does not open the circuit', async () => {
+    nock(stripeOutboundApiHostname)
+      .post('/v1/subscriptions')
+      .reply(402, {
+        error: {
+          type: 'card_error',
+          code: 'card_declined',
+          decline_code: 'generic_decline',
+          message: 'Card declined',
+        },
+      });
+    const error = await createStripeSubscription({
+      customerId: subscriptionCreateRequestSubset.customer,
+      priceId: subscriptionCreateRequestSubset['items[0][price]'],
+      idempotencyKey: 'contract-declined-subscription',
+    }).catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(Stripe.errors.StripeCardError);
+    expect(toClientFacingStripeError(error)?.statusCode).toBe(422);
     expect(await stripeCircuit.getState()).toBe('CLOSED');
   });
 });

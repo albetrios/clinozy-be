@@ -219,7 +219,8 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     family: 'notify',
     logLabel: 'user data export worker',
     usesPostgres: true,
-    scheduled: false,
+    // Also runs the `reclaim-pending-user-data-exports` sweep, every five minutes.
+    scheduled: true,
     criticality: 'throughput',
     holdsConnectionDuringExternalIo: false,
     resolvePostgresConcurrency: () => getWorkerConcurrencyNotify(),
@@ -295,13 +296,14 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
   {
     // REQ-4: reconciles the Stripe subscription quantity to the organization member count, out-of-band so a
     // Stripe outage never fails member management. Event-driven (enqueued on member add/remove +
-    // change-plan). Stripe-gated like the rest of the family; the service phases the Stripe call
+    // change-plan), plus the hourly `reconcile-subscription-seats` job (lost enqueues, lapsed dunning
+    // entitlements). Stripe-gated like the rest of the family; the service phases the Stripe call
     // outside its DB context so no checkout is held during external IO.
     queueName: SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME,
     family: 'stripe',
     logLabel: 'subscription seat sync worker',
     usesPostgres: true,
-    scheduled: false,
+    scheduled: true,
     criticality: 'throughput',
     holdsConnectionDuringExternalIo: false,
     resolvePostgresConcurrency: () => getWorkerConcurrencyStripe(),

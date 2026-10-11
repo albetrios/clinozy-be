@@ -96,7 +96,13 @@ describe('stripe idempotency key builder (property)', () => {
       fc.property(segment, segment, (operation, organization) => {
         // Absent client key → absent Stripe key. Stripe treats an undefined key as
         // "no idempotency"; inventing one here would silently dedupe unrelated calls.
-        expect(buildStripeIdempotencyKey(operation, organization, undefined)).toBeUndefined();
+        expect(
+          buildStripeIdempotencyKey({
+            operation,
+            organizationPublicId: organization,
+            clientKey: undefined,
+          }),
+        ).toBeUndefined();
       }),
       propertyOptions,
     );
@@ -105,7 +111,11 @@ describe('stripe idempotency key builder (property)', () => {
   it('is injective over (operation, organization, clientKey) — no two triples share a key', () => {
     fc.assert(
       fc.property(segment, segment, segment, (operation, organization, clientKey) => {
-        const key = buildStripeIdempotencyKey(operation, organization, clientKey);
+        const key = buildStripeIdempotencyKey({
+          operation,
+          organizationPublicId: organization,
+          clientKey,
+        });
         // The three-part namespace is what stops the SAME client key reused on cancel and
         // resume (legal at our API) from colliding at Stripe. Splitting must recover the
         // exact triple for ':'-free segments.

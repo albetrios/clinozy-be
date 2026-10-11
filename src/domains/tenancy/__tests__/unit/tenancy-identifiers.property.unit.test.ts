@@ -216,16 +216,21 @@ describe('opaque keyset cursor (property)', () => {
           noInvalidDate: true,
         }),
         fc.integer({ min: 1, max: 2_000_000 }),
-        (createdAt, id) => {
+        fc.integer({ min: 0, max: 999 }),
+        (createdAt, id, microseconds) => {
+          // PostgreSQL keeps microseconds; the cursor must carry them exactly.
+          const createdAtText = createdAt
+            .toISOString()
+            .replace('Z', `${String(microseconds).padStart(3, '0')}Z`);
           const cursor = createOpaqueCursorFromRow({
-            created_at: createdAt,
+            cursor_created_at: createdAtText,
             id,
             public_id: generatePublicId('membership'),
           });
           const parsed = parseListCursor(cursor);
           expect(parsed).not.toBeNull();
           expect(parsed?.kind).toBe('opaque');
-          expect(parsed?.created_at.toISOString()).toBe(createdAt.toISOString());
+          expect(parsed?.created_at).toBe(createdAtText);
           expect(parsed?.id).toBe(id);
         },
       ),
@@ -285,7 +290,7 @@ describe('opaque keyset cursor (property)', () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 1_000_000 }), (id) => {
         const cursor = createOpaqueCursorFromRow({
-          created_at: new Date('2026-01-01T00:00:00Z'),
+          cursor_created_at: '2026-01-01T00:00:00.000000Z',
           id,
         });
         expect(parseListCursor(cursor)?.id).toBe(id);

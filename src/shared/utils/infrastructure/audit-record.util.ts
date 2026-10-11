@@ -5,11 +5,15 @@ import type { AuditLogRecordInput } from '@/domains/audit/audit.types.js';
 /**
  * Best-effort audit write — failures are logged and must not fail the HTTP request.
  */
-export async function recordAuditEvent(
-  auditService: AuditService,
-  input: AuditLogRecordInput,
-  log: FastifyBaseLogger,
-): Promise<void> {
+export async function recordAuditEvent({
+  auditService,
+  input,
+  log,
+}: {
+  auditService: AuditService;
+  input: AuditLogRecordInput;
+  log: FastifyBaseLogger;
+}): Promise<void> {
   try {
     await auditService.record(input);
   } catch (error) {

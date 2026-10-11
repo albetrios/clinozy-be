@@ -4,6 +4,8 @@ import {
   isNeonPoolerConnection,
   isStrictDatabaseTlsVerification,
   parseSslMode,
+  resolveDatabaseSsl,
+  withoutSslQueryParameters,
 } from '@/infrastructure/database/utils/connection-url.util.js';
 
 describe('connection-url.util', () => {
@@ -59,6 +61,68 @@ describe('connection-url.util', () => {
 
     it('is NOT strict with no sslmode and no override', () => {
       expect(isStrictDatabaseTlsVerification({ databaseUrl: 'postgresql://h/db' })).toBe(false);
+    });
+  });
+
+  describe('resolveDatabaseSsl', () => {
+    it('encrypts without verifying for sslmode=require (a self-signed managed proxy)', () => {
+      const ssl = resolveDatabaseSsl({
+        databaseUrl: 'postgresql://h/db?sslmode=require',
+        sslEnabledByDefault: false,
+      });
+      expect(ssl).toBeTypeOf('object');
+      expect((ssl as { rejectUnauthorized: boolean }).rejectUnauthorized).toBe(false);
+    });
+
+    it('verifies for verify-full, and for require when the override is true', () => {
+      expect(
+        resolveDatabaseSsl({
+          databaseUrl: 'postgresql://h/db?sslmode=verify-full',
+          sslEnabledByDefault: false,
+        }),
+      ).toEqual({ rejectUnauthorized: true });
+      expect(
+        resolveDatabaseSsl({
+          databaseUrl: 'postgresql://h/db?sslmode=require',
+          sslEnabledByDefault: false,
+          rejectUnauthorizedOverride: true,
+        }),
+      ).toEqual({ rejectUnauthorized: true });
+    });
+
+    it('turns TLS off for sslmode=disable even when it is on by default', () => {
+      expect(
+        resolveDatabaseSsl({
+          databaseUrl: 'postgresql://h/db?sslmode=disable',
+          sslEnabledByDefault: true,
+        }),
+      ).toBe(false);
+    });
+
+    it('follows the default when the URL names no sslmode', () => {
+      expect(
+        resolveDatabaseSsl({ databaseUrl: 'postgresql://h/db', sslEnabledByDefault: false }),
+      ).toBe(false);
+      const ssl = resolveDatabaseSsl({
+        databaseUrl: 'postgresql://h/db',
+        sslEnabledByDefault: true,
+      });
+      expect(ssl).toBeTypeOf('object');
+      expect((ssl as { rejectUnauthorized: boolean }).rejectUnauthorized).toBe(false);
+    });
+  });
+
+  describe('withoutSslQueryParameters', () => {
+    it('drops every TLS parameter and keeps the rest of the URL', () => {
+      expect(
+        withoutSslQueryParameters(
+          'postgresql://u:p@h:5432/db?sslmode=require&sslrootcert=/ca.pem&application_name=api&ssl=true',
+        ),
+      ).toBe('postgresql://u:p@h:5432/db?application_name=api');
+    });
+
+    it('returns an unparseable URL unchanged, so the driver reports it', () => {
+      expect(withoutSslQueryParameters('not a url')).toBe('not a url');
     });
   });
 

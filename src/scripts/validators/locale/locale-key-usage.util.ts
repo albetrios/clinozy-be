@@ -36,11 +36,17 @@ function isExcluded(filePath: string): boolean {
   return EXCLUDED_PATH_PATTERNS.some((pattern) => pattern.test(filePath));
 }
 
-function collectTypeScriptFiles(directory: string, collected: string[] = []): string[] {
+function collectTypeScriptFiles({
+  directory,
+  collected = [],
+}: {
+  directory: string;
+  collected?: string[] | undefined;
+}): string[] {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const absolutePath = join(directory, entry.name);
     if (entry.isDirectory()) {
-      collectTypeScriptFiles(absolutePath, collected);
+      collectTypeScriptFiles({ directory: absolutePath, collected });
     } else if (entry.name.endsWith('.ts')) {
       collected.push(absolutePath);
     }
@@ -54,11 +60,13 @@ export function loadDefinedKeys(): Set<string> {
   for (const fileName of LOCALE_PARITY_FILES) {
     const namespace = fileName.replace(/\.json$/, '');
     const leafKeys = new Set<string>();
-    collectLeafKeys(
-      JSON.parse(readFileSync(join(LOCALES_ROOT, BASE_LOCALE, fileName), 'utf-8')) as unknown,
-      '',
-      leafKeys,
-    );
+    collectLeafKeys({
+      value: JSON.parse(
+        readFileSync(join(LOCALES_ROOT, BASE_LOCALE, fileName), 'utf-8'),
+      ) as unknown,
+      prefix: '',
+      keys: leafKeys,
+    });
     for (const leafKey of leafKeys) defined.add(`${namespace}:${leafKey}`);
   }
   return defined;
@@ -73,7 +81,7 @@ export function findUndefinedKeyReferences(): UndefinedKeyReference[] {
   const defined = loadDefinedKeys();
   const violations: UndefinedKeyReference[] = [];
 
-  for (const absolutePath of collectTypeScriptFiles(SRC_ROOT)) {
+  for (const absolutePath of collectTypeScriptFiles({ directory: SRC_ROOT })) {
     const relativePath = relative(process.cwd(), absolutePath);
     if (isExcluded(relativePath)) continue;
 
@@ -81,7 +89,12 @@ export function findUndefinedKeyReferences(): UndefinedKeyReference[] {
     lines.forEach((text, index) => {
       for (const match of text.matchAll(KEY_REFERENCE_PATTERN)) {
         const key = match[0];
-        if (!defined.has(key)) {
+        // A key ending in `.` is a dynamic prefix (`errors:resources.${noun}`): it is defined when
+        // keys exist under it.
+        const isDefined = key.endsWith('.')
+          ? [...defined].some((definedKey) => definedKey.startsWith(key))
+          : defined.has(key);
+        if (!isDefined) {
           violations.push({ file: relativePath, line: index + 1, key });
         }
       }

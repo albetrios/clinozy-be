@@ -147,11 +147,15 @@ function createOnceSettler(options: {
  * nothing may throw out of them: success, a conversion failure, a stream error and an early
  * close all go through `settler`.
  */
-function collectWebhookResponse(
-  response: IncomingMessage,
-  destroyRequest: () => void,
-  settler: OnceSettler,
-): void {
+function collectWebhookResponse({
+  response,
+  destroyRequest,
+  settler,
+}: {
+  response: IncomingMessage;
+  destroyRequest: () => void;
+  settler: OnceSettler;
+}): void {
   const chunks: Buffer[] = [];
   let receivedBytes = 0;
   let exceededLimit = false;
@@ -188,12 +192,17 @@ function collectWebhookResponse(
   response.on('close', () => settler.reject(new Error('webhook.fetch.connection_closed')));
 }
 
-async function pinnedNodeFetch(
-  targetUrl: URL,
-  pinnedAddress: string,
-  port: number,
-  init?: RequestInit,
-): Promise<Response> {
+async function pinnedNodeFetch({
+  targetUrl,
+  pinnedAddress,
+  port,
+  init,
+}: {
+  targetUrl: URL;
+  pinnedAddress: string;
+  port: number;
+  init?: RequestInit | undefined;
+}): Promise<Response> {
   const isHttps = targetUrl.protocol === 'https:';
   const requestFunction = isHttps ? httpsRequest : httpRequest;
   const headerRecord: Record<string, string> = {};
@@ -231,7 +240,8 @@ async function pinnedNodeFetch(
       },
       // `destroyRequest` reads `request` lazily: the response arrives after `requestFunction`
       // has returned and `request` is assigned.
-      (response) => collectWebhookResponse(response, () => request.destroy(), settler),
+      (response) =>
+        collectWebhookResponse({ response, destroyRequest: () => request.destroy(), settler }),
     );
 
     request.on('error', settler.reject);
@@ -295,6 +305,6 @@ export async function createPinnedWebhookFetch(webhookUrl: string): Promise<Pinn
     } else {
       targetUrl = new URL(input.url);
     }
-    return pinnedNodeFetch(targetUrl, pinnedAddress, port, init);
+    return pinnedNodeFetch({ targetUrl, pinnedAddress, port, init });
   };
 }

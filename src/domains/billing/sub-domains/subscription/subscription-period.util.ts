@@ -5,7 +5,7 @@
  * from its start date and billing cycle; for Stripe-backed subscriptions the authoritative period
  * end arrives via webhook and overwrites this value.
  */
-export function addMonths(base: Date, months: number): Date {
+export function addMonths({ base, months }: { base: Date; months: number }): Date {
   const result = new Date(base);
   const dayOfMonth = result.getDate();
   // Shift the month from the 1st so the intermediate date can never overflow, then clamp the day.

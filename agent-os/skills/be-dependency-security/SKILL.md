@@ -59,10 +59,17 @@ Keep **zero known vulnerabilities** in dependencies and avoid **breaking changes
 
    ```yaml
    overrides:
-     package-name: '>=patched.version'
+     # lift only the vulnerable versions, onto the patched release of the same major
+     'package-name@<patched.version': '^patched.version'
+     # no fix on the major a dependency pins: confine the jump to that dependency
+     'parent-package>package-name': '^patched.version'
    ```
 
-   - Look up the advisory (e.g. GitHub Advisory or `pnpm audit` output) for the **patched version**.
+   - Look up the advisory (e.g. GitHub Advisory or `pnpm audit` output) for the **patched version** of each major line.
+   - **Never an open-ended floor** (`package-name: '>=patched.version'`): it moves every consumer onto whatever major is newest, and a capped range (`'>=x <y'`) can pull a consumer of the next major back down. Both happened here (rollup 2→4, minimatch 3→10, undici and fast-uri held below the major fastify and jsdom declare).
+   - Name the advisory, the fixed version and the dependency that pins the vulnerable one in a comment above the entry.
+   - **Remove an entry once nothing needs it**: delete it, run `pnpm install --lockfile-only` and `pnpm deps:audit`; if the audit stays clean, the entry goes.
+   - A dependency patched under `patchedDependencies` is pinned to the exact version the patch is keyed on, so a range cannot resolve past the patch.
    - Run `pnpm install --no-frozen-lockfile` to refresh the lockfile, then `pnpm audit` again. Commit both `pnpm-workspace.yaml` and `pnpm-lock.yaml`.
 
 3. **Upgrade direct dependency only if necessary**

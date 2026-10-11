@@ -17,18 +17,6 @@ allowBuilds:
   ssh2: true
   vue-demi: false
 
-packageExtensions:
-  openapi-to-postmanv2:
-    dependencies:
-      lodash: 4.17.24
-      js-yaml: ^4.1.1
-  postman-collection:
-    dependencies:
-      lodash: 4.17.24
-  '@esbuild-kit/core-utils':
-    dependencies:
-      esbuild: ^0.25.0
-
 # Advisories accepted because no fixed version exists — one entry per GHSA, each with its
 # path and the condition for removing it. Prefer an override above whenever a fix exists.
 auditConfig:
@@ -41,142 +29,49 @@ auditConfig:
     - GHSA-vfj7-8cjw-p6xm
 
 overrides:
-  # Transitive advisories with no direct upgrade path (`deps:audit` is a required
-  # PR-CI gate). CARET-BOUNDED on purpose: an open-ended `>=3.3.17` resolves to the
-  # highest match and silently moves postcss onto the ESM-only 5.x major. Verify in
-  # the lockfile, not the audit summary.
-  'nanoid@<3.3.17': '^3.3.17'
-  'nanoid@>=4.0.0 <5.1.16': '^5.1.16'
-  '@babel/core': '>=7.29.1'
-  # body-parser <2.3.0 — GHSA-v422-hmwv-36x6 (low): DoS when an invalid limit
-  # silently disables size enforcement (transitive via @modelcontextprotocol/sdk
-  # > express). Fixed in 2.3.0.
-  body-parser: '>=2.3.0'
-  # Keep ioredis deduplicated so workers/queues see exactly one copy — two copies caused TS type
-  # errors (docs/reviews/full-codebase-review-deliverables.md). The old exact pin existed because
-  # BullMQ pinned an exact ioredis in its `dependencies`; as of BullMQ 6 ioredis is an OPTIONAL PEER
-  # (`>=5.0.0`), so the lockstep rule no longer applies and a range is enough to dedupe.
-  ioredis: '>=6.0.0'
-  esbuild: '>=0.28.1'
-  '@esbuild-kit/core-utils>esbuild': '>=0.28.1'
-  lodash: '>=4.17.24'
-  # @grpc/grpc-js 1.14.0–1.14.4 — GHSA-m9gg-hp2v-232j (high) / GHSA-f596-whhp-79r4 (low).
-  # Transitive via @opentelemetry/sdk-node. Fixed in 1.14.5.
-  '@grpc/grpc-js': '>=1.14.5'
-  # js-yaml 5.0.0–5.2.0 — GHSA-724g-mxrg-4qvm (moderate): quadratic-complexity
-  # DoS via !!omap in YAML11_SCHEMA (transitive via markdownlint-cli2). Fixed in 5.2.1.
-  # js-yaml 5.0.0–5.2.1 — GHSA-pm4m-ph32-ghv5 (high): exponential parsing time in
-  # flow collections leads to DoS (transitive via @commitlint/cli + markdownlint-cli2).
-  # Fixed in 5.2.2.
-  # js-yaml 5.0.0–5.4.0 — GHSA-r3ph-w7gj-g6xm (moderate). Fixed in 5.4.1; capped <6 so the
-  # floor never silently major-bumps.
-  js-yaml: '>=5.4.1 <6'
-  fast-xml-parser: '>=5.7.0'
-  # hono <4.13.5 — GHSA-8j4g-w8fx-2239 plus GHSA-gqvv-2mrq-wpjv /
-  # GHSA-g6gw-c38x-mqfc / GHSA-crvj-82cr-hjcx. Transitive via
-  # @modelcontextprotocol/sdk + @scalar/cli. Fixed in 4.13.5.
-  hono: '>=4.13.5'
-  # @hono/node-server <2.0.10 — GHSA-frvp-7c67-39w9 (path traversal, <2.0.5) and
-  # GHSA-9mqv-5hh9-4cgg (unauthenticated memory-leak DoS via aborted WebSocket
-  # handshake, <=2.0.9). Transitive via @modelcontextprotocol/sdk + @scalar/cli.
-  # Fixed in 2.0.10.
-  '@hono/node-server': '>=2.0.10'
-  # source-map-js >=1.0.0 <1.2.2 — GHSA-68fv-2mgg-jv7q (high): event-loop DoS through indexed
-  # source-map section offsets. Production tree, transitive via isomorphic-dompurify > jsdom >
-  # css-tree (4 paths). Fixed in 1.2.2; caret-bounded so the floor never silently major-bumps.
-  source-map-js: '^1.2.2'
-  # katex >=0.11.0 <0.18.2 — GHSA-238p-pmpm-9mq7 (low). Dev tree only, transitive via
-  # markdownlint-cli2 > markdownlint > micromark-extension-math. Fixed in 0.18.2.
-  katex: '>=0.18.2 <1'
-  # fast-copy >=4.0.0 <4.1.0 — GHSA-jggr-w7fw-pc2j (moderate). Dev tree only, transitive via
-  # pino-pretty. Fixed in 4.1.0.
-  fast-copy: '^4.1.0'
-  # markdown-it 15.0.0 — GHSA-253c-mchw-3w2r (moderate, no patched 15.x named). Kept on the
-  # 14.x line markdownlint-cli2 0.23.2 declares (14.3.0); an open floor resolved to 15.0.0.
-  markdown-it: '>=14.1.1 <15'
-  minimatch: 10.2.5
-  # brace-expansion <5.0.7 — CVE-2026-13149 (HIGH): ReDoS via exponential-time
-  # complexity in expansion. Transitive (minimatch et al.); fixed in 5.0.7.
-  # brace-expansion >=4.0.0 <5.0.8 — GHSA-mh99-v99m-4gvg (high): DoS via unbounded
-  # expansion length causing an out-of-memory crash. Fixed in 5.0.8.
-  # brace-expansion >=4.0.0 <5.0.12 — GHSA-6j4f-fj2g-mc7p / GHSA-qhr7-859c-m2p7 (high):
-  # DoS via uncontrolled recursion; GHSA-q2hr-2g5m-vwhr (moderate). Fixed in 5.0.12.
-  brace-expansion: '>=5.0.12'
-  micromatch>picomatch: 4.0.4
-  rollup: '>=4.59.0'
-  vite: '>=8.0.16 <9'
-  fastify: '>=5.8.5'
-  # @fastify/static <=10.1.0 — GHSA-83w8-p2f5-377r (high): route-guard bypass via
-  # path traversal; <=10.1.1 — GHSA-8pvw-jcv7-9cmj (moderate): authorization bypass
-  # via non-canonical URL paths. Transitive via @bull-board/fastify + @scalar/cli.
-  # Fixed in 10.1.2.
-  '@fastify/static': '>=10.1.2'
-  # postcss <=8.5.17 — GHSA-r28c-9q8g-f849 (high): path traversal in previous
-  # source-map auto-loading (sourceMappingURL) discloses arbitrary .map files.
-  # Transitive via @scalar/cli > vue > @vue/compiler-sfc. Fixed in 8.5.18.
-  postcss: '>=8.5.18'
-  # fast-uri <3.1.6 — GHSA-5jgf-p345-68v8 / GHSA-jqff-g426-hqxp (high): host
-  # confusion via skipped IDN canonicalization and percent-encoded scheme
-  # normalization; GHSA-f65p-4m7j-42xc / GHSA-fph4-wmhf-6fwf (high): SSRF via
-  # malformed IPv6 normalization and repeated hostname percent-decoding. Also
-  # covers the earlier GHSA-7p8r-x3mc-p8w7 / GHSA-4c8g-83qw-93j6 /
-  # GHSA-v2hh-gcrm-f6hx. Transitive via fastify's ajv/find-my-way URI handling
-  # (request validation + response serialization hot path). Cap <4 so the
-  # override stays on the patched 3.x line ajv declares (^3.x); do not let an
-  # uncapped floor silently major-bump to 4.x. Fixed in 3.1.6.
-  # fast-uri <3.1.7 — GHSA-qw65-cvwx-89v3 (high): authority injection via an unvalidated port;
-  # =3.1.6 — GHSA-58mr-gqgx-xq4g (high): host confusion via an unclosed bracket; <3.1.8 —
-  # GHSA-hrr3-gc8f-f4qj (moderate). Fixed in 3.1.8.
-  fast-uri: '>=3.1.8 <4'
-  # find-my-way <=9.6.0 — GHSA-c96f-x56v-gq3h (high): DDoS via HTTP/2 request
-  # smuggling in the router. Transitive via fastify (also fastify-type-provider-zod,
-  # @scalar/cli). Fixed in 9.6.1.
-  find-my-way: '>=9.6.1'
-  # ip-address <=10.7.0 — GHSA-rpw4-54j3-4h4q / GHSA-2vr4-cq9g-pvrc / GHSA-j6r3-76f7-8jcv /
-  # GHSA-h3mg-xc3c-68pw (moderate). Transitive via @fastify/rate-limit +
-  # @modelcontextprotocol/sdk. Fixed in 10.7.1; capped <11.
-  ip-address: '>=10.7.1 <11'
-  # dompurify 3.4.13–3.4.15 — GHSA-p98j-92pf-mc4p (low). Transitive via isomorphic-dompurify.
-  # Fixed in 3.4.16.
-  dompurify: '>=3.4.16'
-  drizzle-orm: '>=0.45.2'
-  i18next-fs-backend: '>=2.6.4'
-  i18next-http-middleware: '>=3.9.3'
-  # qs >=6.14.2 <=6.15.3 — GHSA-x5fp-wj9c-mxmx; <6.16.0 — GHSA-4mjr-xmp4-gh2g (moderate):
-  # transitive via @stryker-mutator/core > typed-rest-client. Fixed in 6.16.0.
-  qs: '>=6.16.0'
+  # Only advisories a dependency pins or caps below the fix. A version selector (`pkg@<fixed`)
+  # lifts just the vulnerable versions onto the patched release of the SAME major; a parent
+  # selector (`parent>pkg`) confines an unavoidable major jump to the one dependency that needs
+  # it. Never an open-ended floor: it moves every consumer onto whatever major is newest (up or,
+  # with a cap, down) without anyone choosing that. An entry no longer needed is removed — check
+  # by deleting it and re-resolving (`pnpm install --lockfile-only`), then `pnpm deps:audit`.
+  #
+  # js-yaml <4.3.2 — CVE-2026-59870 (high, !!omap quadratic CPU, fixed 4.3.1) and the
+  # maxTotalMergeKeys CPU advisory (high, fixed 4.3.2). openapi-to-postmanv2 pins 4.3.0.
+  'js-yaml@<4.3.2': '^4.3.2'
+  # katex <0.18.2 — GHSA-238p-pmpm-9mq7 (low). Dev tree only: micromark-extension-math caps
+  # ^0.16 and no 0.16 fix exists, so the jump is confined to it.
+  'micromark-extension-math>katex': '>=0.18.2 <1'
+  # qs <6.16.0 — GHSA-x5fp-wj9c-mxmx, GHSA-4mjr-xmp4-gh2g (moderate). typed-rest-client
+  # (@stryker-mutator/core) pins 6.15.1.
+  'qs@<6.16.0': '^6.16.0'
   # @faker-js/faker <=10.4.0 — GHSA-qxc2-j82w-r537 (high, `helpers.fake` template injection).
-  # Force postman-collection onto the patched Faker line so docs codegen does not carry a
-  # vulnerable transitive dev dependency.
-  '@faker-js/faker': '>=10.5.0'
-  'postman-collection>@faker-js/faker': '10.6.0'
-  # smol-toml <=1.7.0 — GHSA-7w5x-hrqm-74c2 (high): malformed TOML DoS.
-  # Transitive markdownlint-cli2. Fixed in 1.7.1.
-  smol-toml: '>=1.7.1'
-  tmp: '>=0.2.6'
-  # undici <7.29.0 — GHSA-8xcm-r25x-g524 / GHSA-m8rv-5g2x-5cg5 /
-  # GHSA-jr45-8vmc-qm54 / GHSA-v3r7-h72x-cjcm (moderate–high): various
-  # injection / disclosure issues. Transitive via @scalar/cli. Fixed in 7.29.0.
-  # undici <7.29.1 — GHSA-rfgv-xxqx-mfg5 / GHSA-w293-vg96-wgc3 (high: WebSocket DoS, TLS
-  # validation bypass in BalancedPool) plus five moderate / three low advisories. Fixed in 7.29.1.
-  undici: '>=7.29.1 <8'
-  uuid: '>=11.1.1'
+  # postman-collection pins 5.5.3 and no 5.x fix exists, so the jump is confined to it.
+  'postman-collection>@faker-js/faker': '^10.6.0'
+  # uuid <14.0.0 — GHSA-w5hq-g745-h8pq / GHSA-qmq6-f8pr-cx5x (buffer bounds in v3/v5/v6).
+  # postman-collection pins 8.3.2; confined to it.
+  'postman-collection>uuid': '^14.0.1'
+  # smol-toml <1.9.0 — GHSA-r4xh-jqrq-34v2 (moderate, quadratic parse) and the older DoS fixes.
+  # markdownlint-cli2 pins 1.8.0.
+  'smol-toml@<1.9.0': '^1.9.0'
+  # undici <7.29.1 — GHSA-rfgv-xxqx-mfg5 / GHSA-w293-vg96-wgc3 (high) and older fixes.
+  # @scalar/json-magic pins 7.29.0; the 8.x consumers (jsdom, @scalar/cli) keep their major.
+  'undici@<7.29.1': '^7.29.1'
+  # yaml 1.10.2 — stack overflow on deeply nested collections (moderate), fixed in 1.10.3.
   yaml@1.10.2: 1.10.3
+  # esbuild <=0.24.2 — GHSA-67mh-4wv8-2f99 (moderate). @esbuild-kit/core-utils (via
+  # drizzle-kit) pins ~0.18.20; confined to it, on the 0.25 line drizzle-kit itself declares.
+  '@esbuild-kit/core-utils>esbuild': '^0.25.12'
 
-# pnpm's minimumReleaseAge safeguard (default 1 day) stays ON. These exact versions were
-# younger than the window when the toolchain was aligned with clinozy-infra / clinozy-fe
-# (published 2026-10-01). Drop each entry once that version is past the window.
-minimumReleaseAgeExclude:
-  - '@aws-sdk/client-s3@3.1145.0'
-  - '@types/node@24.19.1'
-  - '@aws-sdk/s3-presigned-post@3.1145.0'
-  - '@aws-sdk/s3-request-presigner@3.1145.0'
 # Vitest 5 joins suite + test names with " > "; @stryker-mutator/vitest-runner 10.0.0 joins its test ids
 # with spaces, so no test matched and every mutant ran zero tests. Drop once the runner ships the fix
 # (the entry is version-keyed: bumping the runner without re-keying it fails the install).
 patchedDependencies:
+  # nock 15 intercepts every socket, not only HTTP, and its emulated "connect" reports a refused
+  # connection as established, with no "error" or "close" to follow (still present in 0.45.7), so the
+  # chaos suite's outages stop looking like outages. The patch lets loopback and local IPC
+  # connections — the test harness's own Postgres and Redis — reach Node.js as-is, as nock 14 did;
+  # nock still governs every other host. Re-key or drop it when nock moves to a newer interceptors
+  # line (the entry is version-keyed, so the install fails).
+  '@mswjs/interceptors@0.44.0': patches/@mswjs__interceptors@0.44.0.patch
   '@stryker-mutator/vitest-runner@10.0.0': patches/@stryker-mutator__vitest-runner@10.0.0.patch
-  # Drizzle's postgres.js unsafe() calls disable preparation even on direct connections.
-  # Honor the pool's prepare option; postgres.js still gates this off for prepare:false poolers.
-  # Remove when an upstream driver release enables statement preparation on these paths.
-  drizzle-orm@0.45.3: patches/drizzle-orm@0.45.3.patch

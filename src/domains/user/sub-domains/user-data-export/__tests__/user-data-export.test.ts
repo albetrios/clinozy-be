@@ -70,7 +70,10 @@ describe('User Data Export Sub-Domain — Integration', () => {
 
     it('should accept export request for authenticated user', async () => {
       const authenticatedUser = await createTestUser();
-      const bearerToken = await generateTestToken({ userId: authenticatedUser.public_id });
+      const bearerToken = await generateTestToken({
+        userId: authenticatedUser.public_id,
+        stepUp: true,
+      });
       await getAuthenticatedUserReady(app, bearerToken);
 
       const organizationOwner = await createTestUser({

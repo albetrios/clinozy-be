@@ -55,7 +55,13 @@ const FORCE_RLS_TABLE_KEYS = new Set(
 );
 
 /** Canonical `<schema>.<table>` lookup key for the FORCE-RLS set in {@link EXPECTED_FORCE_RLS_TABLES}. */
-export function forceRlsTableKey(schemaName: string, tableName: string): string {
+export function forceRlsTableKey({
+  schemaName,
+  tableName,
+}: {
+  schemaName: string;
+  tableName: string;
+}): string {
   return `${schemaName}.${tableName}`;
 }
 
@@ -64,8 +70,14 @@ export function forceRlsTableKey(schemaName: string, tableName: string): string 
  * Worker context wrappers consult this before letting a job touch a tenant-scoped
  * or retention-protected table.
  */
-export function isForceRlsTable(schemaName: string, tableName: string): boolean {
-  return FORCE_RLS_TABLE_KEYS.has(forceRlsTableKey(schemaName, tableName));
+export function isForceRlsTable({
+  schemaName,
+  tableName,
+}: {
+  schemaName: string;
+  tableName: string;
+}): boolean {
+  return FORCE_RLS_TABLE_KEYS.has(forceRlsTableKey({ schemaName, tableName }));
 }
 
 /** Drift between the live database FORCE-RLS set and {@link EXPECTED_FORCE_RLS_TABLES}. */
@@ -88,15 +100,22 @@ export type ForceRlsRegistryDiff = {
  *   `pg_namespace` with `relkind IN ('r','p')` so partitioned parents are included. Any non-empty
  *   `missing` or `extra` means the registry drifted from migration truth and must be reconciled.
  */
-export function diffForceRlsTables(
-  databaseTables: ForceRlsTableRef[],
-  expected: ForceRlsTableRef[] = EXPECTED_FORCE_RLS_TABLES,
-): ForceRlsRegistryDiff {
+export function diffForceRlsTables({
+  databaseTables,
+  expected = EXPECTED_FORCE_RLS_TABLES,
+}: {
+  databaseTables: ForceRlsTableRef[];
+  expected?: ForceRlsTableRef[] | undefined;
+}): ForceRlsRegistryDiff {
   const databaseKeys = new Set(
-    databaseTables.map((table) => forceRlsTableKey(table.schemaName, table.tableName)),
+    databaseTables.map((table) =>
+      forceRlsTableKey({ schemaName: table.schemaName, tableName: table.tableName }),
+    ),
   );
   const expectedKeys = new Set(
-    expected.map((table) => forceRlsTableKey(table.schemaName, table.tableName)),
+    expected.map((table) =>
+      forceRlsTableKey({ schemaName: table.schemaName, tableName: table.tableName }),
+    ),
   );
   const missing = [...expectedKeys]
     .filter((key) => !databaseKeys.has(key))

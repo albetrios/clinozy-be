@@ -51,17 +51,20 @@ export function createMailWorker(): WorkerHandle {
         queueName: MAIL_QUEUE_NAME,
       });
       const { requestId, traceparent, tracestate } = jobData;
-      return runWithPropagatedTraceContext({ traceparent, tracestate }, job.name, () =>
-        processMailOutboxJob(
-          jobData,
-          omitUndefined({
-            jobId: job.id,
-            requestId,
-            jobAttemptNumber: job.attemptsMade,
-            maxJobAttempts: job.opts.attempts ?? MAIL_QUEUE_MAX_ATTEMPTS,
+      return runWithPropagatedTraceContext({
+        carrier: { traceparent, tracestate },
+        spanName: job.name,
+        callback: () =>
+          processMailOutboxJob({
+            jobData,
+            options: omitUndefined({
+              jobId: job.id,
+              requestId,
+              jobAttemptNumber: job.attemptsMade,
+              maxJobAttempts: job.opts.attempts ?? MAIL_QUEUE_MAX_ATTEMPTS,
+            }),
           }),
-        ),
-      );
+      });
     },
     workerOptions: {
       connection: getBullMQConnectionOptions(),
@@ -81,5 +84,5 @@ export function createMailWorker(): WorkerHandle {
     logger.info({ jobId: job?.id }, 'mail.worker.completed');
   });
 
-  return buildWorkerHandle(worker, MAIL_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: MAIL_QUEUE_NAME });
 }

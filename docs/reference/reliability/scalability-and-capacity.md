@@ -56,15 +56,36 @@ single box, more API processes make it slower.
 
 ## The load-shed valve
 
-`overload-guard.middleware.ts` returns `503` with `Retry-After: 1` when either
-event-loop lag crosses its threshold or in-flight database units of work reach
-`ceil(DATABASE_POOL_MAX × OVERLOAD_DB_POOL_SHED_RATIO)`. The default ratio is
-three; the count includes units waiting for a connection as well as running
-transactions. Liveness, readiness and metrics paths bypass this guard.
+`overload-guard.middleware.ts` returns `503` with `Retry-After: 1` when
+event-loop lag crosses its threshold, when in-flight database units of work reach
+`ceil(DATABASE_POOL_MAX × OVERLOAD_DB_POOL_SHED_RATIO)`, or when the oldest unit
+of work still waiting for a connection has waited `OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS`
+(default 2 s). The default ratio is ten; the count includes every pooled unit of
+work — organization, user-only, session, maintenance and `withTransaction` —
+waiting for a connection as well as running. The wait condition covers a slow
+database: holds of seconds keep the queue short but undrained, so the ratio never
+trips while each waiter would otherwise fail slowly at
+`DATABASE_POOL_ACQUIRE_TIMEOUT_MS`. Liveness, readiness and metrics paths bypass
+this guard.
+
+The default pool of 30 therefore admits 300 in-flight units of work: a
+synchronized burst of 240 distinct users queues for a connection (bounded by
+`DATABASE_POOL_ACQUIRE_TIMEOUT_MS`) instead of receiving
+`database_pool_overload` 503s. The previous default of three (90 units) shed part
+of such a burst even with latency inside the SLO. Lower the ratio to fail fast
+earlier under sustained overload; keep acquisition timeouts and event-loop
+shedding enabled either way.
+
+The API also opens its whole pool before it starts listening
+(`primeDatabasePool()` in `server.ts`, best-effort: during a rolling deploy at `max_connections` the
+connections that open stay, a warning names the rest, and only a database that accepts none fails
+the boot), so a freshly started process does not pay
+every connection handshake under its first burst.
 
 The structured `request.service_unavailable` log identifies the triggering signal
-as `event_loop_overload` or `database_pool_overload` in its `reason` field. If both
-signals cross their thresholds, event-loop overload takes precedence. Internal
+as `event_loop_overload`, `database_pool_overload` or `database_pool_wait_overload`
+in its `reason` field. When several cross their thresholds, they take precedence in
+that order. Internal
 reasons remain absent from the HTTP error body. A calm event loop therefore does
 not rule out deliberate database-pressure shedding. Compare checkout pressure,
 transaction duration and PostgreSQL activity before diagnosing the bottleneck;
@@ -76,19 +97,13 @@ in the oversubscribed cluster it fired ~4,900 times. See
 
 ## Statement planning on direct database connections
 
-The version-pinned Drizzle postgres.js driver patch in `pnpm-workspace.yaml`
-enables statement preparation on its `unsafe()` execution paths. Without the
-patch, those calls explicitly disable preparation, so repeated parameterized
-reads are parsed and planned again even when the connection pool permits reuse.
-The patch covers both ESM and CommonJS driver builds and uses bound parameters;
-it does not cache query results or remove authorization or RLS checks.
-
-postgres.js also checks the pool's `prepare` option, so the existing
-`prepare: false` setting for detected transaction-pooler connections still wins.
-Do not force PostgreSQL's `plan_cache_mode` globally: parameter-sensitive queries
-may need custom plans. The regression suite verifies plan reuse, changing
-transaction-local organization settings and the disabled-preparation path.
-Remove the patch when the upstream driver provides the same behavior.
+Drizzle's node-postgres session sends every statement unnamed: Postgres parses and plans it on each
+execution and keeps nothing prepared between checkouts, so a transaction-mode pooler (Neon's
+`-pooler` host) can serve the pool unchanged.
+[`prepared-statements.integration.test.ts`](../../../src/tests/integration/database/prepared-statements.integration.test.ts)
+checks that no prepared statement is left behind and that every statement in a transaction reads its
+own transaction-local organization setting. Do not force PostgreSQL's `plan_cache_mode` globally:
+parameter-sensitive queries may need custom plans.
 
 ## Concurrency correctness under stress
 

@@ -38,10 +38,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -290,10 +292,10 @@ describe('UserDataExportService — payload shape and download URL', () => {
   it('issues a presigned download URL for a completed, unexpired export', async () => {
     exportRepository.findByPublicIdAndUserId.mockResolvedValue(exportRow());
 
-    const result = await service.getExportStatus(
-      asUserScope('user_public'),
-      'ude_aaaaaaaaaaaaaaaaaaaaa',
-    );
+    const result = await service.getExportStatus({
+      scope: asUserScope('user_public'),
+      exportPublicId: 'ude_aaaaaaaaaaaaaaaaaaaaa',
+    });
 
     expect(objectStorage.createPresignedDownloadUrl).toHaveBeenCalledOnce();
     expect(result.download_url).toBeTruthy();
@@ -306,10 +308,10 @@ describe('UserDataExportService — payload shape and download URL', () => {
       exportRow({ expires_at: new Date(Date.now() - ONE_HOUR_MS) }),
     );
 
-    const result = await service.getExportStatus(
-      asUserScope('user_public'),
-      'ude_aaaaaaaaaaaaaaaaaaaaa',
-    );
+    const result = await service.getExportStatus({
+      scope: asUserScope('user_public'),
+      exportPublicId: 'ude_aaaaaaaaaaaaaaaaaaaaa',
+    });
 
     expect(objectStorage.createPresignedDownloadUrl).not.toHaveBeenCalled();
     expect(result.download_url).toBeNull();
@@ -320,10 +322,10 @@ describe('UserDataExportService — payload shape and download URL', () => {
       exportRow({ status: USER_DATA_EXPORT_STATUSES.PENDING, completed_at: null }),
     );
 
-    const result = await service.getExportStatus(
-      asUserScope('user_public'),
-      'ude_aaaaaaaaaaaaaaaaaaaaa',
-    );
+    const result = await service.getExportStatus({
+      scope: asUserScope('user_public'),
+      exportPublicId: 'ude_aaaaaaaaaaaaaaaaaaaaa',
+    });
 
     expect(objectStorage.createPresignedDownloadUrl).not.toHaveBeenCalled();
     expect(result.download_url).toBeNull();
@@ -332,10 +334,10 @@ describe('UserDataExportService — payload shape and download URL', () => {
   it('withholds the download URL when the row carries no storage key', async () => {
     exportRepository.findByPublicIdAndUserId.mockResolvedValue(exportRow({ s3_key: null }));
 
-    const result = await service.getExportStatus(
-      asUserScope('user_public'),
-      'ude_aaaaaaaaaaaaaaaaaaaaa',
-    );
+    const result = await service.getExportStatus({
+      scope: asUserScope('user_public'),
+      exportPublicId: 'ude_aaaaaaaaaaaaaaaaaaaaa',
+    });
 
     expect(objectStorage.createPresignedDownloadUrl).not.toHaveBeenCalled();
     expect(result.download_url).toBeNull();
@@ -344,10 +346,10 @@ describe('UserDataExportService — payload shape and download URL', () => {
   it('withholds the download URL when the row has no expiry stamp', async () => {
     exportRepository.findByPublicIdAndUserId.mockResolvedValue(exportRow({ expires_at: null }));
 
-    const result = await service.getExportStatus(
-      asUserScope('user_public'),
-      'ude_aaaaaaaaaaaaaaaaaaaaa',
-    );
+    const result = await service.getExportStatus({
+      scope: asUserScope('user_public'),
+      exportPublicId: 'ude_aaaaaaaaaaaaaaaaaaaaa',
+    });
 
     expect(objectStorage.createPresignedDownloadUrl).not.toHaveBeenCalled();
     expect(result.download_url).toBeNull();

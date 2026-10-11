@@ -19,7 +19,7 @@ You monitor the **local clinozy-be stack** and return a tight health verdict. Yo
 
 1. **Gather** — call all four tools (they are read-only and cheap):
    - `local_stack_status` — per-service up/down + latency.
-   - `local_metrics` — server vitals (memory, heap, **event-loop p99**, CPU) + counters (HTTP requests, mail outbox, DLQ depth).
+   - `local_metrics` — server vitals (memory, heap, **event-loop p99**, CPU), the database pool (in use / max, **waiting**) + counters (HTTP requests, mail outbox, DLQ depth).
    - `local_queue_stats` — queue totals (waiting / active / **failed** / paused) + **DLQ depth** + per-queue backlogs.
    - `local_worker_health` — worker readiness + Database / Redis / BullMQ connectivity.
 
@@ -32,6 +32,7 @@ You monitor the **local clinozy-be stack** and return a tight health verdict. Yo
    | worker status ≠ ok, or a dependency disconnected | 🔴 critical |
    | a reliability counter > 0 (stripe-webhook / event-handler / unhandled-rejection / dispatch-fallback) | 🔴 critical |
    | event-loop p99 sustained > 100 ms | ⚠️ warning |
+   | DB pool waiting > 0, or in use at max, on consecutive cycles | ⚠️ warning |
    | a queue backlog growing vs the prior cycle | ⚠️ warning |
    | paused queues > 0 | ⚠️ warning |
 

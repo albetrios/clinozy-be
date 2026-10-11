@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
-import { sql } from '@/infrastructure/database/connection.js';
 import { seedAllPermissions } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { env } from '@/shared/config/env.config.js';
 import { provisionPersonalOrganization } from '@/domains/tenancy/sub-domains/organization/organization-provisioning.js';
@@ -12,6 +11,8 @@ import {
   ensurePersonalOrganization,
   ensurePersonalOrganizationPublicId,
 } from '@/domains/tenancy/sub-domains/organization/resolve-active-organization.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
 
 describe('personal organization provisioning (database)', () => {
   beforeEach(async () => {
@@ -24,7 +25,7 @@ describe('personal organization provisioning (database)', () => {
   it('provisions a PERSONAL organization with a null slug owned by the user', async () => {
     const user = await createTestUser();
 
-    const result = await provisionPersonalOrganization(user.id);
+    const result = await provisionPersonalOrganization({ ownerUserId: user.id });
 
     expect(result.organization.type).toBe('PERSONAL');
     expect(result.organization.slug).toBeNull();
@@ -35,18 +36,18 @@ describe('personal organization provisioning (database)', () => {
 
   it('enforces at most one personal organization per owner', async () => {
     const user = await createTestUser();
-    await provisionPersonalOrganization(user.id);
+    await provisionPersonalOrganization({ ownerUserId: user.id });
 
     // The idx_org_one_personal_per_owner partial unique index rejects a second one.
-    await expect(provisionPersonalOrganization(user.id)).rejects.toThrow();
+    await expect(provisionPersonalOrganization({ ownerUserId: user.id })).rejects.toThrow();
   });
 
   it('provisions independent personal organizations for different users', async () => {
     const userA = await createTestUser();
     const userB = await createTestUser();
 
-    const a = await provisionPersonalOrganization(userA.id);
-    const b = await provisionPersonalOrganization(userB.id);
+    const a = await provisionPersonalOrganization({ ownerUserId: userA.id });
+    const b = await provisionPersonalOrganization({ ownerUserId: userB.id });
 
     expect(a.organization.public_id).not.toBe(b.organization.public_id);
     expect(a.organization.owner_user_id).toBe(userA.id);
@@ -56,7 +57,7 @@ describe('personal organization provisioning (database)', () => {
   describe('resolveDefaultActiveOrganizationPublicId (login selection)', () => {
     it('returns the personal organization for a freshly provisioned user', async () => {
       const user = await createTestUser();
-      const { organization } = await provisionPersonalOrganization(user.id);
+      const { organization } = await provisionPersonalOrganization({ ownerUserId: user.id });
 
       const resolved = await resolveDefaultActiveOrganizationPublicId(user.id);
 
@@ -75,33 +76,54 @@ describe('personal organization provisioning (database)', () => {
   describe('switch-target resolvers', () => {
     it('resolvePersonalOrganizationPublicId returns the user personal org', async () => {
       const user = await createTestUser();
-      const { organization } = await provisionPersonalOrganization(user.id);
+      const { organization } = await provisionPersonalOrganization({ ownerUserId: user.id });
 
-      expect(await resolvePersonalOrganizationPublicId(user.id)).toBe(organization.public_id);
+      expect(await resolvePersonalOrganizationPublicId({ ownerUserInternalId: user.id })).toBe(
+        organization.public_id,
+      );
+    });
+
+    it('resolves the personal organization using an already-known public user identity', async () => {
+      const user = await createTestUser();
+      const { organization } = await provisionPersonalOrganization({ ownerUserId: user.id });
+      expect(
+        await resolvePersonalOrganizationPublicId({
+          ownerUserInternalId: user.id,
+          userPublicId: user.public_id,
+        }),
+      ).toBe(organization.public_id);
     });
 
     it('resolvePersonalOrganizationPublicId returns undefined without a personal org', async () => {
       const user = await createTestUser();
-      expect(await resolvePersonalOrganizationPublicId(user.id)).toBeUndefined();
+      expect(
+        await resolvePersonalOrganizationPublicId({ ownerUserInternalId: user.id }),
+      ).toBeUndefined();
     });
 
     it('findUserActiveOrganizationPublicId confirms the owner active membership', async () => {
       const user = await createTestUser();
-      const { organization } = await provisionPersonalOrganization(user.id);
+      const { organization } = await provisionPersonalOrganization({ ownerUserId: user.id });
 
-      expect(await findUserActiveOrganizationPublicId(user.id, organization.public_id)).toBe(
-        organization.public_id,
-      );
+      expect(
+        await findUserActiveOrganizationPublicId({
+          userInternalId: user.id,
+          organizationPublicId: organization.public_id,
+        }),
+      ).toBe(organization.public_id);
     });
 
     it('findUserActiveOrganizationPublicId rejects a non-member organization', async () => {
       const member = await createTestUser();
       const stranger = await createTestUser();
-      const { organization } = await provisionPersonalOrganization(member.id);
+      const { organization } = await provisionPersonalOrganization({ ownerUserId: member.id });
 
       // The stranger has no membership in the member's personal organization → undefined (→ 403).
       expect(
-        await findUserActiveOrganizationPublicId(stranger.id, organization.public_id),
+        await findUserActiveOrganizationPublicId({
+          userInternalId: stranger.id,
+          organizationPublicId: organization.public_id,
+        }),
       ).toBeUndefined();
     });
   });
@@ -118,20 +140,24 @@ describe('personal organization provisioning (database)', () => {
       const user = await createTestUser();
 
       // Precondition: no personal organization (signup-time provision failed/was skipped).
-      expect(await resolvePersonalOrganizationPublicId(user.id)).toBeUndefined();
+      expect(
+        await resolvePersonalOrganizationPublicId({ ownerUserInternalId: user.id }),
+      ).toBeUndefined();
 
       const ensured = await ensurePersonalOrganization(user);
 
       expect(ensured).toBeDefined();
       expect(ensured!.public_id).toMatch(/^org_[a-z0-9]{21}$/);
       // Now resolvable by the normal read path (an existing stuck user is fixed).
-      expect(await resolvePersonalOrganizationPublicId(user.id)).toBe(ensured!.public_id);
+      expect(await resolvePersonalOrganizationPublicId({ ownerUserInternalId: user.id })).toBe(
+        ensured!.public_id,
+      );
     });
 
     it('returns the existing personal organization without creating a second one', async () => {
       env.PERSONAL_ORGANIZATION_ENABLED = true;
       const user = await createTestUser();
-      const { organization } = await provisionPersonalOrganization(user.id);
+      const { organization } = await provisionPersonalOrganization({ ownerUserId: user.id });
 
       const ensured = await ensurePersonalOrganization(user);
 
@@ -154,7 +180,9 @@ describe('personal organization provisioning (database)', () => {
 
       expect(await ensurePersonalOrganization(user)).toBeUndefined();
       // No organization created — switch-to-personal legitimately stays a 404.
-      expect(await resolvePersonalOrganizationPublicId(user.id)).toBeUndefined();
+      expect(
+        await resolvePersonalOrganizationPublicId({ ownerUserInternalId: user.id }),
+      ).toBeUndefined();
     });
 
     it('ensurePersonalOrganizationPublicId returns the id (enabled) / undefined (disabled)', async () => {
@@ -178,8 +206,8 @@ describe('personal organization provisioning (database)', () => {
 
     beforeEach(async () => {
       // Force the CI condition: empty the reference catalog that cleanupDatabase exempts.
-      await sql`DELETE FROM tenancy.role_permissions`;
-      await sql`DELETE FROM tenancy.permissions`;
+      await database.execute(sql`DELETE FROM tenancy.role_permissions`);
+      await database.execute(sql`DELETE FROM tenancy.permissions`);
     });
 
     afterEach(async () => {
@@ -195,7 +223,9 @@ describe('personal organization provisioning (database)', () => {
       // provisioning FK-fails, but the read-safe variant swallows it → undefined (→ null id).
       await expect(ensurePersonalOrganizationPublicId(user)).resolves.toBeUndefined();
       // No personal organization was created (the provision genuinely failed).
-      expect(await resolvePersonalOrganizationPublicId(user.id)).toBeUndefined();
+      expect(
+        await resolvePersonalOrganizationPublicId({ ownerUserInternalId: user.id }),
+      ).toBeUndefined();
     });
 
     it('EXPLICIT path (ensurePersonalOrganization) still throws so switch-to-personal surfaces it', async () => {

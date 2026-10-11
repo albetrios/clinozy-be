@@ -1,5 +1,6 @@
 import { and, desc, eq, isNull, lt, lte, notInArray, or, sql } from 'drizzle-orm';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
+import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { plans } from '@/domains/billing/sub-domains/plan/plan.schema.js';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
@@ -13,7 +14,12 @@ import { capListWithWarning } from '@/shared/utils/infrastructure/list-cap.util.
 import { subscriptions } from '@/domains/billing/sub-domains/subscription/subscription.schema.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
-import type { SubscriptionCreateData, SubscriptionUpdateData } from './subscription.types.js';
+import type {
+  SubscriptionPublicState,
+  SubscriptionCreateData,
+  SubscriptionUpdateData,
+  StripeSubscriptionOrderingState,
+} from './subscription.types.js';
 
 /**
  * Subscription statuses that release the per-organization subscription slot.
@@ -64,6 +70,31 @@ const subscriptionRowWithPlanPublicId = {
   plan_included_seats: plans.included_seats,
 } as const;
 
+/** The column values of a new subscription row (a fresh public id each call — see `create`). */
+function buildSubscriptionInsertValues(data: SubscriptionCreateData) {
+  return {
+    public_id: generatePublicId('subscription'),
+    organization_id: data.organization_id,
+    plan_id: data.plan_id,
+    billing_cycle: data.billing_cycle,
+    status: data.status ?? 'TRIALING',
+    current_period_start: data.current_period_start,
+    current_period_end: data.current_period_end,
+    trial_end: data.trial_end,
+    // audit-#1: the deletion-tombstone path persists a terminal CANCELED row
+    // (with canceled_at / cancel_at_period_end) so a later out-of-order
+    // `customer.subscription.created` cannot resurrect it. Every other path
+    // leaves these at their column defaults (NULL / false).
+    canceled_at: data.canceled_at,
+    cancel_at_period_end: data.cancel_at_period_end,
+    provider: data.provider,
+    provider_subscription_id: data.provider_subscription_id,
+    provider_customer_id: data.provider_customer_id,
+    created_by_user_id: data.created_by_user_id,
+    last_stripe_event_created_at: data.last_stripe_event_created_at,
+  };
+}
+
 /**
  * Drizzle access to the `billing.subscriptions` table — a **mutable state table**, not an
  * immutable append-only ledger (audit-#B2). Rows are updated in place as the subscription
@@ -87,9 +118,10 @@ const subscriptionRowWithPlanPublicId = {
  *   in-place sync uses strict `<` while cancellation uses `<=`; this asymmetry is
  *   deliberate and makes a terminal cancel **deterministically win** a same-second
  *   in-place update regardless of delivery order (audit-#6, locked by test). Stripe
- *   `event.created` has 1-second resolution, so the residual theoretical edge — a
- *   genuine same-second cancel-then-reactivation — would require a monotonic event
- *   sequence (Stripe does not emit such a pair); tracked as a future hardening.
+ *   `event.created` has 1-second resolution, so a created/updated event in the same
+ *   second as the stored watermark is resolved by re-reading the subscription from
+ *   Stripe: the sync's `reconciliation` branch applies that snapshot only to the row
+ *   version (`xmin`) it was read against, keeping the watermark with `GREATEST`.
  * - **Failure modes:** Insert collisions on `public_id` are retried by
  *   {@link runInsertWithPublicIdentifierRetry}; updates that miss the
  *   timestamp guard return `null` to the caller so the worker can log a stale
@@ -157,9 +189,9 @@ export class SubscriptionRepository {
    *   `FOR UPDATE` against the nullable side of an outer join (`42601`) — so a concurrent member-add
    *   blocks on this row until the caller's seat check + membership insert commit, closing the
    *   two-concurrent-adds-exceed-the-limit race. (2) a plain (unlocked) lookup of the plan's
-   *   `included_seats` (a global catalog row that must NOT be locked). Returns the per-subscription
-   *   `seats` (purchased from Stripe) and `plan_included_seats` so the caller computes
-   *   `seats_total = seats ?? included_seats ?? null` (null = unlimited).
+   *   `included_seats` (a global catalog row that must NOT be locked). Returns
+   *   `plan_included_seats` (the ceiling; null = unlimited) with the status and period the caller
+   *   needs for the Free-ceiling decisions.
    * - **Failure modes:** returns `null` when the organization has no active subscription (the seat check is
    *   then a no-op — the billing-free flow still works).
    * - **Side effects:** acquires a row-level `FOR UPDATE` lock released at the enclosing
@@ -167,14 +199,12 @@ export class SubscriptionRepository {
    *   the subsequent insert.
    */
   async findActiveSeatStateByOrganizationForUpdate(organization_id: number): Promise<{
-    seats: number | null;
     plan_included_seats: number | null;
     status: string;
     current_period_end: Date;
   } | null> {
     const lockedRows = await this.db()
       .select({
-        seats: subscriptions.seats,
         plan_id: subscriptions.plan_id,
         status: subscriptions.status,
         current_period_end: subscriptions.current_period_end,
@@ -197,7 +227,6 @@ export class SubscriptionRepository {
       .where(eq(plans.id, locked.plan_id))
       .limit(1);
     return {
-      seats: locked.seats,
       plan_included_seats: planRows[0]?.included_seats ?? null,
       status: locked.status,
       current_period_end: locked.current_period_end,
@@ -221,63 +250,87 @@ export class SubscriptionRepository {
   }
 
   /**
-   * Resolves the internal organization id from the active webhook RLS context.
-   * Used by the sec-B9 fallback INSERT path so it does not have to take an
-   * `OrganizationService` dependency just to map the public id baked into the
-   * GUC by `runStripeWebhookHandlerWithOrganizationContext`.
+   * The row for one Stripe subscription in the current organization context (with
+   * `plan_public_id`), or `null` — the HTTP create's fallback when the webhook inserted it first.
    */
-  async findOrganizationIdFromCurrentContext(): Promise<number | null> {
+  async findByProviderSubscriptionId(provider_subscription_id: string) {
     const rows = await this.db()
-      .select({ id: organizations.id })
+      .select(subscriptionRowWithPlanPublicId)
+      .from(subscriptions)
+      .leftJoin(plans, eq(subscriptions.plan_id, plans.id))
+      .where(eq(subscriptions.provider_subscription_id, provider_subscription_id))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  /**
+   * Resolves the organization (internal id + public id) named by the active webhook RLS context.
+   * Used by the Stripe webhook paths (the sec-B9 fallback INSERT, the cancellation tombstone, the
+   * subscription events) so they do not have to take an `OrganizationService` dependency just to
+   * map the public id baked into the GUC by `runStripeWebhookHandlerWithOrganizationContext`.
+   */
+  async findOrganizationFromCurrentContext(): Promise<{ id: number; public_id: string } | null> {
+    const rows = await this.db()
+      .select({ id: organizations.id, public_id: organizations.public_id })
       .from(organizations)
       .where(
         sql`${organizations.public_id} = current_setting('app.current_organization_public_id', true)`,
       )
       .limit(1);
-    return rows[0]?.id ?? null;
+    return rows[0] ?? null;
   }
 
   async create(data: SubscriptionCreateData) {
-    const inserted = await runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('subscription');
-      const rows = await this.db()
-        .insert(subscriptions)
-        .values({
-          public_id,
-          organization_id: data.organization_id,
-          plan_id: data.plan_id,
-          billing_cycle: data.billing_cycle,
-          status: data.status ?? 'TRIALING',
-          current_period_start: data.current_period_start,
-          current_period_end: data.current_period_end,
-          trial_end: data.trial_end,
-          // audit-#1: the deletion-tombstone path persists a terminal CANCELED row
-          // (with canceled_at / cancel_at_period_end) so a later out-of-order
-          // `customer.subscription.created` cannot resurrect it. Every other path
-          // leaves these at their column defaults (NULL / false).
-          canceled_at: data.canceled_at,
-          cancel_at_period_end: data.cancel_at_period_end,
-          provider: data.provider,
-          provider_subscription_id: data.provider_subscription_id,
-          provider_customer_id: data.provider_customer_id,
-          created_by_user_id: data.created_by_user_id,
-          last_stripe_event_created_at: data.last_stripe_event_created_at,
-        })
-        .returning();
-      return rows[0]!;
+    const inserted = await runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const rows = await this.db()
+          .insert(subscriptions)
+          .values(buildSubscriptionInsertValues(data))
+          .returning();
+        return rows[0]!;
+      },
     });
-    // sec-re-07: re-select with the plans join so the returned row carries
-    // plan_public_id for the HTTP serializer. The follow-up SELECT runs inside
-    // the same caller-supplied context (organization for HTTP, worker handle
-    // for the webhook fallback path) so RLS still applies — a successful
-    // INSERT in this context is guaranteed visible to the same context's
-    // SELECT, so a missing row would mean a bug elsewhere (and we'd rather
-    // surface that loudly than return a row that's silently missing
-    // plan_public_id).
-    const joined = await this.findByPublicId(inserted.public_id, data.organization_id);
+    return this.reloadInsertedSubscription(inserted.public_id, data.organization_id);
+  }
+
+  /**
+   * Inserts a Stripe-backed row unless one already exists for its `provider_subscription_id` — the
+   * webhook paths, where a concurrent `.created` / `.deleted` may have written it first. `null`
+   * when one did: `ON CONFLICT DO NOTHING` on that index alone keeps the transaction usable (a
+   * caught unique violation would have aborted it), and any other violation still throws.
+   */
+  async createUnlessProviderSubscriptionExists(data: SubscriptionCreateData) {
+    const inserted = await runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const rows = await this.db()
+          .insert(subscriptions)
+          .values(buildSubscriptionInsertValues(data))
+          .onConflictDoNothing({
+            target: subscriptions.provider_subscription_id,
+            where: sql`${subscriptions.provider_subscription_id} IS NOT NULL`,
+          })
+          .returning();
+        return rows[0] ?? null;
+      },
+    });
+    return inserted === null
+      ? null
+      : this.reloadInsertedSubscription(inserted.public_id, data.organization_id);
+  }
+
+  /**
+   * sec-re-07: re-select with the plans join so the returned row carries plan_public_id for the
+   * HTTP serializer. The follow-up SELECT runs inside the same caller-supplied context
+   * (organization for HTTP, worker handle for the webhook fallback path) so RLS still applies — a
+   * successful INSERT in this context is guaranteed visible to the same context's SELECT, so a
+   * missing row would mean a bug elsewhere (and we'd rather surface that loudly than return a row
+   * that's silently missing plan_public_id).
+   */
+  private async reloadInsertedSubscription(public_id: string, organization_id: number) {
+    const joined = await this.findByPublicId(public_id, organization_id);
     if (!joined) {
       throw new Error(
-        `subscription.create: row ${inserted.public_id} not visible after insert (context/RLS mismatch?)`,
+        `subscription.create: row ${public_id} not visible after insert (context/RLS mismatch?)`,
       );
     }
     return joined;
@@ -330,16 +383,122 @@ export class SubscriptionRepository {
     return rows.length > 0;
   }
 
+  /**
+   * The organizations the hourly seat reconcile must act on — read across tenants, so only under
+   * the retention maintenance context. `quantityDrift`: Stripe-backed, non-terminal subscriptions
+   * whose synced quantity (`seats`) differs from the seats in use (ACTIVE + INVITED, at least 1).
+   * `entitlementLapsed`: TEAM organizations without a paid entitlement (no ACTIVE / TRIALING
+   * subscription, and no dunning one still inside `dunningGraceDays`) holding more ACTIVE members
+   * than the Free plan allows (the cheapest active plan's `included_seats`; none when unlimited).
+   */
+  async findSeatReconcileCandidates(options: {
+    limit: number;
+    dunningGraceDays: number;
+  }): Promise<{ quantityDrift: string[]; entitlementLapsed: string[] }> {
+    const quantityDriftRows = await this.db()
+      .select({ public_id: organizations.public_id })
+      .from(subscriptions)
+      .innerJoin(organizations, eq(organizations.id, subscriptions.organization_id))
+      .where(
+        and(
+          isNull(organizations.deleted_at),
+          sql`${subscriptions.provider_subscription_id} IS NOT NULL`,
+          notInArray(subscriptions.status, [...INACTIVE_SUBSCRIPTION_STATUSES]),
+          sql`${subscriptions.seats} IS DISTINCT FROM GREATEST(1, (
+            SELECT count(*) FROM ${memberships}
+            WHERE ${memberships.organization_id} = ${subscriptions.organization_id}
+              AND ${memberships.deleted_at} IS NULL
+              AND ${memberships.status} IN ('ACTIVE', 'INVITED')
+          ))`,
+        ),
+      )
+      .orderBy(subscriptions.id)
+      .limit(options.limit);
+    const entitlementLapsedRows = await this.db()
+      .select({ public_id: organizations.public_id })
+      .from(organizations)
+      .where(
+        and(
+          eq(organizations.type, 'TEAM'),
+          isNull(organizations.deleted_at),
+          sql`NOT EXISTS (
+            SELECT 1 FROM ${subscriptions}
+            WHERE ${subscriptions.organization_id} = ${organizations.id}
+              AND (
+                ${subscriptions.status} IN ('ACTIVE', 'TRIALING')
+                OR (
+                  ${subscriptions.status} IN ('PAST_DUE', 'UNPAID')
+                  AND ${subscriptions.current_period_end} + make_interval(days => ${options.dunningGraceDays}) > now()
+                )
+              )
+          )`,
+          sql`(
+            SELECT count(*) FROM ${memberships}
+            WHERE ${memberships.organization_id} = ${organizations.id}
+              AND ${memberships.deleted_at} IS NULL
+              AND ${memberships.status} = 'ACTIVE'
+          ) > (
+            SELECT ${plans.included_seats} FROM ${plans}
+            WHERE ${plans.is_active} ORDER BY ${plans.price_monthly} ASC LIMIT 1
+          )`,
+        ),
+      )
+      .orderBy(organizations.id)
+      .limit(options.limit);
+    return {
+      quantityDrift: quantityDriftRows.map((row) => row.public_id),
+      entitlementLapsed: entitlementLapsedRows.map((row) => row.public_id),
+    };
+  }
+
+  /** The customer-visible fields a Stripe sync can change, before the sync runs (`null` when absent). */
+  async findPublicStateByProviderSubscriptionId(
+    provider_subscription_id: string,
+  ): Promise<SubscriptionPublicState | null> {
+    const rows = await this.db()
+      .select({
+        status: subscriptions.status,
+        cancel_at_period_end: subscriptions.cancel_at_period_end,
+        canceled_at: subscriptions.canceled_at,
+        current_period_start: subscriptions.current_period_start,
+        current_period_end: subscriptions.current_period_end,
+        plan_id: subscriptions.plan_id,
+      })
+      .from(subscriptions)
+      .where(eq(subscriptions.provider_subscription_id, provider_subscription_id))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  /** Read the precise MVCC version without losing PostgreSQL timestamp microseconds in a JS Date. */
+  async findStripeProviderOrderingState(
+    providerSubscriptionId: string,
+  ): Promise<StripeSubscriptionOrderingState | null> {
+    const rows = await this.db()
+      .select({
+        version: sql<string>`xmin::text`,
+        watermark: subscriptions.last_stripe_event_created_at,
+        status: subscriptions.status,
+      })
+      .from(subscriptions)
+      .where(eq(subscriptions.provider_subscription_id, providerSubscriptionId))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
   async syncFromStripeProviderSubscription(
     provider_subscription_id: string,
     data: SubscriptionUpdateData,
     stripe_event_created_at: Date,
+    reconciliation?: StripeSubscriptionOrderingState,
   ) {
     const rows = await this.db()
       .update(subscriptions)
       .set({
         ...data,
-        last_stripe_event_created_at: stripe_event_created_at,
+        last_stripe_event_created_at: reconciliation
+          ? sql`GREATEST(${subscriptions.last_stripe_event_created_at}, ${stripe_event_created_at.toISOString()}::timestamptz)`
+          : stripe_event_created_at,
         updated_at: databaseNowTimestamp,
       })
       .where(
@@ -352,10 +511,15 @@ export class SubscriptionRepository {
           // (route-audit B5). A non-terminal Dashboard cancel (ACTIVE → CANCELED via `.updated`) is
           // unaffected: the guard checks the CURRENT row status, not the incoming one.
           notInArray(subscriptions.status, [...INACTIVE_SUBSCRIPTION_STATUSES]),
-          or(
-            isNull(subscriptions.last_stripe_event_created_at),
-            lt(subscriptions.last_stripe_event_created_at, stripe_event_created_at),
-          ),
+          reconciliation
+            ? and(
+                sql`xmin::text = ${reconciliation.version}`,
+                sql`date_trunc('second', ${subscriptions.last_stripe_event_created_at}) = ${stripe_event_created_at.toISOString()}::timestamptz`,
+              )
+            : or(
+                isNull(subscriptions.last_stripe_event_created_at),
+                lt(subscriptions.last_stripe_event_created_at, stripe_event_created_at),
+              ),
         ),
       )
       .returning();
@@ -386,6 +550,17 @@ export class SubscriptionRepository {
       .returning();
     return rows[0] ?? null;
   }
+}
+
+/**
+ * {@link SubscriptionRepository} bound to a retention maintenance handle — the seat reconcile's
+ * cross-tenant read ({@link SubscriptionRepository.findSeatReconcileCandidates}).
+ */
+export function createRetentionSubscriptionRepository(
+  databaseHandle: WorkerDatabaseHandle,
+): SubscriptionRepository {
+  assertWorkerDatabaseContext(['global_retention_cleanup']);
+  return new SubscriptionRepository(databaseHandle);
 }
 
 /** Worker-only factory — requires an explicit handle from `withAppDatabaseContext`. */

@@ -80,7 +80,7 @@ DATABASE_MIGRATION_URL=<restored database URL> pnpm db:sequences:advance
 
 It prints one `<sequence>: old -> new` line per sequence — keep them in the incident record — and refuses to run when the role cannot read a sequence. Sequence changes are not transactional, and the command only moves values forward, so running it twice just jumps again, which is harmless. The monthly and weekly [restore drills](backup-drills.md) run the same command right after migrating, so it is exercised against a real restore.
 
-The Redis key prefix (`<project>:<environment>:`) does not change on a restore, which is why the old jobs and counters are still there. After the worker restarts, a notification or mail job whose row was lost in the window completes as skipped (`notification.worker.not_found`, `mail.worker.not_found` at warn); a webhook delivery whose attempt row was lost fails with `webhook.delivery.attempt_not_found:<public id>` and reaches the dead-letter ledger — discard it rather than replaying it ([dlq-runbook.md](dlq-runbook.md)).
+The Redis key prefix (`<project>:<environment>:`) does not change on a restore, which is why the old jobs and counters are still there. After the worker restarts, a notification or mail job whose row was lost in the window completes as skipped (`notification.worker.not_found`, `mail.worker.not_found` at warn); a webhook delivery whose attempt row was lost completes as skipped too (`webhook.delivery.attempt_missing` at warn).
 
 ### 2. Redis (Railway Redis database)
 

@@ -1,6 +1,6 @@
 # i18n (Internationalization)
 
-All user-facing response messages in the API are produced via **i18next**. English (`en`) is the default and fallback locale.
+All user-facing response messages in the API are produced via **i18next**. The languages are `SUPPORTED_LANGUAGES` (`en`, `es`) in `src/shared/constants/i18n.constants.ts`; English (`en`) is the default and fallback locale. `toSupportedLanguage(value)` maps any other value to English.
 
 ---
 
@@ -23,6 +23,29 @@ Services and validators throw typed errors with a **messageKey** (for example `e
 
 - **Error responses**: `error.detail` and each `error.errors[].message` are translated using `request.t(key, params)` in the error handler.
 - **Success responses**: When a controller returns a `message` in the response body, it uses `request.t(messageKey, messageParams)` (or a fallback using `request.language`).
+- **Validation messages**: each `error.errors[].message` follows the request language too — see [Validation messages](#validation-messages).
+- **Emails and notifications**: written in the recipient's language — see [Background work](#background-work-emails-and-notifications).
+
+## Validation messages
+
+A request body that fails its Zod schema answers with one `errors[]` item per field, in the request language:
+
+- **Zod's own message** ("expected number, received string") is rendered from Zod's catalog for each language (`z.locales.en()`, `z.locales.es()`). The parse runs with `reportInput: true` because the catalog names the received type from the input; the input is never stored on the error.
+- **A schema's own message** is a translation key (`errors:validation.webhookUrlMustUseHttps`) — never English text — translated per language.
+- Both paths share one renderer, `renderZodIssueMessages(issue)` in `src/shared/utils/validation/zod-issue-messages.util.ts`: `parseWithSchema` (service validators) and the route `validatorCompiler` (`zod-type-provider.middleware.ts`) attach the rendered messages, and the error handler picks the request's language.
+
+`errors:notFound` names the resource in the request language: the noun (`Plan`, `Membership`) is looked up under `errors:resources.<noun>` (`"No se encontró el plan"`); a noun with no entry stays as written.
+
+## Background work (emails and notifications)
+
+A job has no request, so the language travels in the event or job payload as `locale` (a `SupportedLanguage`):
+
+| Message | Language |
+| ------- | -------- |
+| Sign-in code, password reset | The request's (`toSupportedLanguage(request.language)`) |
+| Member invitation, invitation accepted | The organization's `default_locale` |
+
+Templates translate through `translateMailText({ key, locale, values })` (`src/infrastructure/mail/templates/base.template.ts`), which leaves escaping to the template (`escapeHtml` on every value) and sets `<html lang>`. The worker process loads the locale files once at start with `initializeI18nextForBackgroundWork()`; a unit test that renders copy calls the same function in `beforeAll`.
 
 ## Conventions
 
@@ -65,7 +88,7 @@ Services and validators throw typed errors with a **messageKey** (for example `e
 pnpm validate:locale-keys
 ```
 
-This runs JSON parity (`en` ↔ `es`) for all four files and fails if application code passes a redundant English **fallback** string when an `errors:` messageKey is already set.
+This runs JSON parity (`en` ↔ `es`) for all four files and fails if application code passes a redundant English **fallback** string when an `errors:` messageKey is already set. A key used with a computed suffix (`errors:resources.${noun}`) is written as its prefix ending in `.`; the key-usage scan treats it as a prefix.
 
 CI runs `validate:locale-keys` in `ci:quality`. When adding a key, update **every** locale file in the same change.
 

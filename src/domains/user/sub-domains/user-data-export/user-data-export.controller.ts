@@ -23,17 +23,23 @@ export function createUserDataExportController(userDataExportService: UserDataEx
     async requestExport(request: FastifyRequest, reply: FastifyReply) {
       const requestId = getRequestIdentifier(request);
       const auth = requireAuth(request);
-      const data = await userDataExportService.requestExport(requireUserScope(request), {
-        requestId,
+      const data = await userDataExportService.requestExport({
+        scope: requireUserScope(request),
+        options: {
+          requestId,
+        },
       });
       // A full copy of the account's data is about to exist — record who asked, like each URL mint.
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'user.data_export.request',
-        resource_type: 'user_data_export',
-        metadata: { export_public_id: data.id },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'user.data_export.request',
+          resource_type: 'user_data_export',
+          metadata: { export_public_id: data.id },
+        },
       });
-      return reply.status(202).send(successResponse(data, requestId));
+      return reply.status(202).send(successResponse({ data, request_id: requestId }));
     },
 
     /**
@@ -52,7 +58,10 @@ export function createUserDataExportController(userDataExportService: UserDataEx
       const requestId = getRequestIdentifier(request);
       const auth = requireAuth(request);
       const { data_export_id: exportId } = validateDataExportIdParam(request.params);
-      const data = await userDataExportService.getExportStatus(requireUserScope(request), exportId);
+      const data = await userDataExportService.getExportStatus({
+        scope: requireUserScope(request),
+        exportPublicId: exportId,
+      });
       if (
         data !== null &&
         typeof data === 'object' &&
@@ -60,14 +69,17 @@ export function createUserDataExportController(userDataExportService: UserDataEx
         typeof data.download_url === 'string' &&
         data.download_url.length > 0
       ) {
-        await recordScopedAuditEvent(request, {
-          actorUserPublicId: auth.userId,
-          action: 'user.data_export.url_minted',
-          resource_type: 'user_data_export',
-          metadata: { export_public_id: exportId },
+        await recordScopedAuditEvent({
+          request,
+          input: {
+            actorUserPublicId: auth.userId,
+            action: 'user.data_export.url_minted',
+            resource_type: 'user_data_export',
+            metadata: { export_public_id: exportId },
+          },
         });
       }
-      return successResponse(data, requestId);
+      return successResponse({ data, request_id: requestId });
     },
   };
 }

@@ -3,7 +3,7 @@
  * dataset it promises and is idempotent, so re-running the demo seed in local development
  * upserts rather than duplicating rows. Also guards the import-safety contract of
  * `src/scripts/seed/full.ts`: importing `runFullSeed` here must NOT trigger a seed or tear
- * down the shared postgres.js pool (the module only auto-runs when executed as the CLI entry).
+ * down the shared database pool (the module only auto-runs when executed as the CLI entry).
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { and, count, eq, isNull } from 'drizzle-orm';

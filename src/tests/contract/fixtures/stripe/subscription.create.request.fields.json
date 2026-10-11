@@ -1,5 +1,6 @@
 {
   "customer": "cus_fixture_contract_aa",
   "items[0][price]": "price_fixture_contract_plan_a",
+  "items[0][quantity]": "3",
   "payment_behavior": "default_incomplete"
 }

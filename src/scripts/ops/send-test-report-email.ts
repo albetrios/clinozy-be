@@ -51,9 +51,13 @@ function shortSha(sha?: string): string {
   return sha.slice(0, 7);
 }
 
-function buildTextBody(
-  status: string,
-  coverage: CoverageSummary | null,
+function buildTextBody({
+  status,
+  coverage,
+  options,
+}: {
+  status: string;
+  coverage: CoverageSummary | null;
   options: {
     runUrl?: string;
     workflowName?: string;
@@ -61,8 +65,8 @@ function buildTextBody(
     commitSha?: string;
     actor?: string;
     dateTime?: string;
-  },
-): string {
+  };
+}): string {
   const lines: string[] = [];
 
   lines.push(`${PROJECT_DISPLAY_NAME} CI Test Report — ${status.toUpperCase()}`);
@@ -118,9 +122,13 @@ function buildTextBody(
   return lines.join('\n');
 }
 
-function buildHtmlBody(
-  status: string,
-  coverage: CoverageSummary | null,
+function buildHtmlBody({
+  status,
+  coverage,
+  options,
+}: {
+  status: string;
+  coverage: CoverageSummary | null;
   options: {
     runUrl?: string;
     workflowName?: string;
@@ -128,8 +136,8 @@ function buildHtmlBody(
     commitSha?: string;
     actor?: string;
     dateTime?: string;
-  },
-): string {
+  };
+}): string {
   const rows: string[] = [];
 
   if (coverage?.total) {
@@ -340,8 +348,8 @@ async function main(): Promise<void> {
     actor,
     dateTime,
   });
-  const text = buildTextBody(status, coverage, reportContext);
-  const html = buildHtmlBody(status, coverage, reportContext);
+  const text = buildTextBody({ status, coverage, options: reportContext });
+  const html = buildHtmlBody({ status, coverage, options: reportContext });
 
   const messageId = await sendEmail({
     to,

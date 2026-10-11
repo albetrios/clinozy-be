@@ -10,7 +10,8 @@ import {
   recordLoginAuditEvent,
   recordLoginFailureAuditEvent,
 } from '@/domains/auth/shared/audit-login.util.js';
-import { getIpAddress, getUserAgent, setSessionCookie } from '@/domains/auth/auth.http.util.js';
+import { getIpAddress, setSessionCookie } from '@/domains/auth/auth.http.util.js';
+import { getUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import { validateMfaMethodIdParam } from '@/domains/auth/auth.validator.js';
 import { AuthSerializer } from '@/domains/auth/auth.serializer.js';
 import type { AuthContainer } from '@/domains/auth/auth.container.js';
@@ -41,34 +42,48 @@ export function createAuthMfaHandlers({
       const userAgent = getUserAgent(request) ?? undefined;
       let data: Awaited<ReturnType<typeof mfaService.verifyLoginMfa>>;
       try {
-        data = await mfaService.verifyLoginMfa(request.body, ipAddress, userAgent);
+        data = await mfaService.verifyLoginMfa({ body: request.body, ipAddress, userAgent });
       } catch (error) {
         // The second factor failed/locked out — record the symmetric failure event (no actor id is
         // asserted; the failed-attempt source + IP are what an investigator queries on).
-        await recordLoginFailureAuditEvent(request, mfaLoginSourceFromBody(request.body), error);
+        await recordLoginFailureAuditEvent({
+          request,
+          source: mfaLoginSourceFromBody(request.body),
+          error,
+        });
         throw error;
       }
-      setSessionCookie(reply, data.session_public_id, data.session_refresh_secret);
+      setSessionCookie({
+        reply,
+        sessionPublicId: data.session_public_id,
+        refreshSecret: data.session_refresh_secret,
+      });
       // The session is minted HERE (after the second factor), so this is where the login is audited.
       // The source encodes the factor; for a recovery code, recordLoginAuditEvent also emits the
       // dedicated high-severity `auth.mfa.recovery_code_used` signal (the TOTP-bypass break-glass
       // path an incident responder must be able to find), attributed to the same user.
       const source: LoginAuditSource =
         data.factor === 'recovery_code' ? 'mfa_recovery_code' : 'mfa_totp';
-      await recordLoginAuditEvent(request, data, source);
-      return successResponse(AuthSerializer.accessToken(data), getRequestIdentifier(request));
+      await recordLoginAuditEvent({ request, loginResult: data, source });
+      return successResponse({
+        data: AuthSerializer.accessToken(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
     verifyMfa: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       let data: Awaited<ReturnType<typeof mfaService.verify>>;
       try {
-        data = await mfaService.verify(auth.userId, request.body);
+        data = await mfaService.verify({ userPublicId: auth.userId, body: request.body });
       } catch (error) {
-        await recordScopedAuditEvent(request, {
-          actorUserPublicId: auth.userId,
-          action: 'auth.mfa.step_up_failure',
-          resource_type: 'mfa_method',
-          severity: 'INFO',
+        await recordScopedAuditEvent({
+          request,
+          input: {
+            actorUserPublicId: auth.userId,
+            action: 'auth.mfa.step_up_failure',
+            resource_type: 'mfa_method',
+            severity: 'INFO',
+          },
         });
         throw error;
       }
@@ -76,42 +91,68 @@ export function createAuthMfaHandlers({
       if (!auth.sessionPublicId) {
         throw new ForbiddenError('errors:recentStepUpRequired');
       }
-      await recordRecentStepUp(redisConnection, auth.userId, auth.sessionPublicId, 'mfa');
+      await recordRecentStepUp({
+        redis: redisConnection,
+        userPublicId: auth.userId,
+        sessionPublicId: auth.sessionPublicId,
+        factor: 'mfa',
+      });
       // The session has now proved a second factor: organizations requiring MFA admit it
       // (switch / refresh re-mint its token with `amr: ['mfa']`).
       await authSessionService.markSessionMfaVerified(auth.sessionPublicId);
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'auth.mfa.step_up',
-        resource_type: 'mfa_method',
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'auth.mfa.step_up',
+          resource_type: 'mfa_method',
+        },
       });
-      return successResponse(AuthSerializer.mfaVerified(data), getRequestIdentifier(request));
+      return successResponse({
+        data: AuthSerializer.mfaVerified(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
     enrollMfa: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
-      const data = await mfaService.enrollInit(auth.userId, request.body);
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'auth.mfa.enroll_init',
-        resource_type: 'mfa_method',
+      const data = await mfaService.enrollInit({ userPublicId: auth.userId, body: request.body });
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'auth.mfa.enroll_init',
+          resource_type: 'mfa_method',
+        },
       });
-      return successResponse(AuthSerializer.mfaEnroll(data), getRequestIdentifier(request));
+      return successResponse({
+        data: AuthSerializer.mfaEnroll(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
     confirmEnrollMfa: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
-      const data = await mfaService.enrollConfirm(auth.userId, request.body);
+      const data = await mfaService.enrollConfirm({
+        userPublicId: auth.userId,
+        body: request.body,
+      });
       // Confirming enrollment verified a fresh code from the new factor — a second factor proven
       // on this session, so an invited user who must enroll can enter an MFA-required organization.
       if (auth.sessionPublicId) {
         await authSessionService.markSessionMfaVerified(auth.sessionPublicId);
       }
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'auth.mfa.enroll_confirm',
-        resource_type: 'mfa_method',
-        metadata: { mfa_method_id: data.method_public_id },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'auth.mfa.enroll_confirm',
+          resource_type: 'mfa_method',
+          metadata: { mfa_method_id: data.method_public_id },
+        },
       });
-      return successResponse(AuthSerializer.mfaEnrollConfirm(data), getRequestIdentifier(request));
+      return successResponse({
+        data: AuthSerializer.mfaEnrollConfirm(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
     deleteMfa: async (
       request: FastifyRequest<{ Params: { mfa_method_id: string } }>,
@@ -119,19 +160,22 @@ export function createAuthMfaHandlers({
     ) => {
       const auth = requireAuth(request);
       const mfaMethodId = validateMfaMethodIdParam(request.params.mfa_method_id);
-      await mfaService.deleteMfa(auth.userId, mfaMethodId);
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'auth.mfa.delete',
-        resource_type: 'mfa_method',
-        metadata: { mfa_method_id: mfaMethodId },
+      await mfaService.deleteMfa({ userPublicId: auth.userId, mfaMethodPublicId: mfaMethodId });
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'auth.mfa.delete',
+          resource_type: 'mfa_method',
+          metadata: { mfa_method_id: mfaMethodId },
+        },
       });
       return reply.code(204).send();
     },
     listMfaMethods: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       const data = await mfaService.listMfaMethods(auth.userId);
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

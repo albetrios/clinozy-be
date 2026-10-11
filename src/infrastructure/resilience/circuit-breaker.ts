@@ -209,15 +209,24 @@ export class CircuitBreaker {
     }
   }
 
-  private reportMutateMetrics(latencyMs: number, fallbackLocal: boolean): void {
+  private reportMutateMetrics({
+    latencyMs,
+    fallbackLocal,
+  }: {
+    latencyMs: number;
+    fallbackLocal: boolean;
+  }): void {
     logger.info(
       { circuit: this.name, latencyMs, fallbackLocal },
       fallbackLocal ? 'circuit.mutate.fallback_local_count' : 'circuit.mutate.latency_ms',
     );
     if (fallbackLocal) {
-      captureMessage(`Circuit breaker "${this.name}" fell back to local state`, {
-        level: 'warning',
-        extra: { circuit: this.name, latencyMs, metric: 'circuit.mutate.fallback_local_count' },
+      captureMessage({
+        message: `Circuit breaker "${this.name}" fell back to local state`,
+        options: {
+          level: 'warning',
+          extra: { circuit: this.name, latencyMs, metric: 'circuit.mutate.fallback_local_count' },
+        },
       });
     }
   }
@@ -243,7 +252,7 @@ export class CircuitBreaker {
         Date.now(),
       );
       const next = this.syncLocalFromRedis(raw);
-      this.reportMutateMetrics(Date.now() - startedAt, false);
+      this.reportMutateMetrics({ latencyMs: Date.now() - startedAt, fallbackLocal: false });
       return next;
     } catch (error) {
       logger.warn(
@@ -251,7 +260,7 @@ export class CircuitBreaker {
         'circuit-breaker.redis.unavailable.fallback_local',
       );
       const next = this.applyLocalMutation(command);
-      this.reportMutateMetrics(Date.now() - startedAt, true);
+      this.reportMutateMetrics({ latencyMs: Date.now() - startedAt, fallbackLocal: true });
       return next;
     }
   }
@@ -264,14 +273,21 @@ export class CircuitBreaker {
     return this.localState;
   }
 
-  private reportCircuitStateToSentry(
-    state: CircuitState,
-    level: 'warning' | 'info',
-    extra?: Record<string, unknown>,
-  ): void {
-    captureMessage(`Circuit breaker "${this.name}" state: ${state}`, {
-      level,
-      extra: { circuit: this.name, state, ...extra },
+  private reportCircuitStateToSentry({
+    state,
+    level,
+    extra,
+  }: {
+    state: CircuitState;
+    level: 'warning' | 'info';
+    extra?: Record<string, unknown> | undefined;
+  }): void {
+    captureMessage({
+      message: `Circuit breaker "${this.name}" state: ${state}`,
+      options: {
+        level,
+        extra: { circuit: this.name, state, ...extra },
+      },
     });
   }
 
@@ -283,7 +299,7 @@ export class CircuitBreaker {
       if (elapsed >= this.resetTimeoutMs) {
         data = await this.mutateStateInRedis('attempt_half_open');
         logger.info({ circuit: this.name }, 'circuit-breaker.half-open');
-        this.reportCircuitStateToSentry('HALF_OPEN', 'info');
+        this.reportCircuitStateToSentry({ state: 'HALF_OPEN', level: 'info' });
       } else {
         const retryAfterMs = Math.max(this.resetTimeoutMs - elapsed, MILLISECONDS_PER_SECOND);
         throw new CircuitBreakerOpenError(
@@ -297,7 +313,11 @@ export class CircuitBreaker {
     if (data.state === 'HALF_OPEN' && data.halfOpenAttempts >= this.maxHalfOpenAttempts) {
       await this.mutateStateInRedis('force_open');
       logger.warn({ circuit: this.name }, 'circuit-breaker.re-opened');
-      this.reportCircuitStateToSentry('OPEN', 'warning', { reason: 'half_open_probes_failed' });
+      this.reportCircuitStateToSentry({
+        state: 'OPEN',
+        level: 'warning',
+        extra: { reason: 'half_open_probes_failed' },
+      });
       const retryAfterMs = Math.max(
         this.resetTimeoutMs - (Date.now() - data.lastFailureTime),
         1_000,
@@ -324,7 +344,11 @@ export class CircuitBreaker {
       const newState = await this.getStateData();
       if (newState.state === 'OPEN' && snapshot.state !== 'OPEN') {
         logger.warn({ circuit: this.name, failures: newState.failures }, 'circuit-breaker.open');
-        this.reportCircuitStateToSentry('OPEN', 'warning', { failures: newState.failures });
+        this.reportCircuitStateToSentry({
+          state: 'OPEN',
+          level: 'warning',
+          extra: { failures: newState.failures },
+        });
       }
       throw error;
     }
@@ -334,7 +358,11 @@ export class CircuitBreaker {
     await this.mutateStateInRedis('record_success');
     if (stateBeforeCall === 'HALF_OPEN') {
       logger.info({ circuit: this.name }, 'circuit-breaker.closed');
-      this.reportCircuitStateToSentry('CLOSED', 'info', { recoveredFrom: 'HALF_OPEN' });
+      this.reportCircuitStateToSentry({
+        state: 'CLOSED',
+        level: 'info',
+        extra: { recoveredFrom: 'HALF_OPEN' },
+      });
     }
   }
 

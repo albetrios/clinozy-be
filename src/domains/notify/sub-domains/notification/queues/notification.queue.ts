@@ -15,6 +15,12 @@ import {
   notificationJobDataSchema,
   type NotificationJobDataValidated,
 } from './notification.job.schema.js';
+import {
+  PRINCIPAL_SCOPE,
+  withAppDatabaseContext,
+} from '@/infrastructure/database/contexts/database-context.js';
+import { createWorkerNotificationRepository } from '@/domains/notify/sub-domains/notification/notification.repository.js';
+import { invalidateCachedUnreadNotificationCount } from '@/domains/notify/sub-domains/notification/notification-unread-count.cache.js';
 
 /** BullMQ queue name for asynchronous notification dispatch (in-app + email fan-out). */
 export const NOTIFICATION_QUEUE_NAME = 'notification';
@@ -55,17 +61,17 @@ export async function enqueueNotification(options: {
 }): Promise<void> {
   const { notificationPublicId, organizationPublicId, userPublicId, requestId } = options;
   const queue = getNotificationQueue();
-  const jobData = parseBullMQJobData(
-    notificationJobDataSchema,
-    omitUndefined({
+  const jobData = parseBullMQJobData({
+    schema: notificationJobDataSchema,
+    data: omitUndefined({
       notificationPublicId,
       organizationPublicId,
       userPublicId,
       requestId,
       ...captureTraceContextForPropagation(),
     }),
-    NOTIFICATION_QUEUE_NAME,
-  );
+    queueName: NOTIFICATION_QUEUE_NAME,
+  });
   // audit #6: deduplicate per notification. A recovery/redelivery path (post-commit dispatch
   // recovery, an event handler firing twice, or a producer-side retry) that re-enqueues the same
   // persisted notification must not produce a second dispatch — and therefore a second outbound
@@ -75,6 +81,34 @@ export async function enqueueNotification(options: {
   // the bigserial: that restarts at 1 after TRUNCATE ... RESTART IDENTITY or a restore while Redis
   // keeps finished jobs, and the add for a new notification reusing the id would be dropped.
   await queue.add('dispatch-notification', jobData, { jobId: notificationPublicId });
+}
+
+/**
+ * Deletes a notification row whose delivery job never reached the queue, and drops the recipient's
+ * cached unread count — the post-commit dispatch's clean-up when Redis refuses the add.
+ *
+ * @remarks
+ * - **Algorithm:** delete by public id under the recipient's own scope (`notifications_owner_delete`
+ *   reaches the row with or without an organization), then invalidate the cached count a read in
+ *   between may have taken.
+ * - **Failure modes:** a database error propagates to the dispatch, which retries the task.
+ * - **Side effects:** one deleted `notify.notifications` row; one cache tombstone.
+ * - **Notes:** a notification is not recovered by a sweep — it is dropped by design
+ *   (`workers-and-events.md`, "When Redis refuses the enqueue"). Owned here so infrastructure never
+ *   reaches into this domain's repository.
+ */
+export async function discardUndispatchedNotification(notification: {
+  notificationPublicId: string;
+  userPublicId: string;
+}): Promise<void> {
+  await withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: notification.userPublicId }),
+    callback: (databaseHandle) =>
+      createWorkerNotificationRepository(databaseHandle).deleteByPublicId(
+        notification.notificationPublicId,
+      ),
+  });
+  await invalidateCachedUnreadNotificationCount(notification.userPublicId);
 }
 
 /** Close the lazily-initialised notification queue (graceful-shutdown hook for tests/runtime). */

@@ -8,7 +8,9 @@ Offline HTTP contract checks for **Stripe**, **Resend**, **S3**, **Cloudflare Tu
 pnpm test:contract
 ```
 
-Do **not** rely on real API keys: the script sets `CONTRACT_TESTS_ENABLED=true` and placeholder env (see `src/tests/setup.ts`).
+Do **not** rely on real API keys: the script sets `CONTRACT_TESTS_ENABLED=true` and placeholder env (see `src/tests/helpers/harness-provider-env.ts`).
+
+`pnpm test:contract:live` is the opt-in exception: the `*.live.contract.test.ts` specs call the real sandboxes with the configured keys (never in CI) — see **Live provider checks** in the reference doc.
 
 ## Design notes
 

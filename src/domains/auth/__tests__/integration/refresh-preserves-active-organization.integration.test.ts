@@ -58,7 +58,7 @@ describe('refresh preserves the switched active organization (audit-#3)', () => 
   it('refresh keeps the organization claim on the organization the caller switched to', async () => {
     const { user, password } = await createTestUserWithPassword();
     // Default active organization at login is the personal organization; the caller then switches to TEAM organization B.
-    const personal = await provisionPersonalOrganization(user.id);
+    const personal = await provisionPersonalOrganization({ ownerUserId: user.id });
     const organizationB = await provisionOrganizationWithOwner({
       name: 'Refresh Org B',
       slug: `refresh-organization-b-${generatePublicId('organization').slice(4, 14)}`,
@@ -104,7 +104,7 @@ describe('refresh preserves the switched active organization (audit-#3)', () => 
 
   it('refresh falls back to the default organization when the persisted membership is no longer valid', async () => {
     const { user, password } = await createTestUserWithPassword();
-    const personal = await provisionPersonalOrganization(user.id);
+    const personal = await provisionPersonalOrganization({ ownerUserId: user.id });
 
     const loginResponse = await injectUnauthenticated(app, {
       method: 'POST',

@@ -43,6 +43,27 @@ describe('StripeWebhookEventRepository', () => {
     expect(thirdClaim).toBe('still_processing_within_lease');
   });
 
+  it('recordAtIngress records without claiming, so a redelivery leaves the first run to the worker', async () => {
+    const event = {
+      stripe_event_id: stripeEventId,
+      event_type: 'customer.subscription.updated',
+      stripe_created_at: new Date('2026-01-15T12:00:00.000Z'),
+      request_id: 'req-ingress',
+    };
+
+    expect(await repository.recordAtIngress(event)).toBe('recorded');
+    // Stripe redelivers before the worker ran: still waiting, not claimed.
+    expect(await repository.recordAtIngress({ ...event, request_id: 'req-redelivery' })).toBe(
+      'already_recorded',
+    );
+    // The worker's first claim is still there to take (an ingress claim used to spend it, and the
+    // worker then backed off as "in flight" until the lease expired).
+    expect(await repository.tryClaimEvent(event)).toBe('reclaimed');
+
+    await repository.markProcessed(stripeEventId);
+    expect(await repository.recordAtIngress(event)).toBe('processed_duplicate');
+  });
+
   it('returns processed_duplicate after the event is marked processed', async () => {
     const stripeCreatedAt = new Date('2026-01-15T12:00:00.000Z');
     const processedEventId = `${stripeEventId}_processed`;

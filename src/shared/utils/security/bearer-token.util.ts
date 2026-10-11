@@ -3,10 +3,13 @@ import { timingSafeEqual } from 'node:crypto';
 /**
  * Constant-time comparison of a Bearer authorization header against an expected token.
  */
-export function isBearerTokenValid(
-  authorizationHeader: string | undefined,
-  expectedBearerToken: string,
-): boolean {
+export function isBearerTokenValid({
+  authorizationHeader,
+  expectedBearerToken,
+}: {
+  authorizationHeader: string | undefined;
+  expectedBearerToken: string;
+}): boolean {
   if (!authorizationHeader) {
     return false;
   }

@@ -20,10 +20,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   return {
     ...actual,
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -53,7 +55,6 @@ describe('UploadService offboarding', () => {
       {} as ConstructorParameters<typeof UploadService>[1],
       {} as ConstructorParameters<typeof UploadService>[2],
       { deleteObject } as unknown as ConstructorParameters<typeof UploadService>[3],
-      {} as ConstructorParameters<typeof UploadService>[4],
     );
 
     const count = await service.tombstoneAllByUserId(42);
@@ -89,7 +90,6 @@ describe('UploadService offboarding', () => {
       {} as ConstructorParameters<typeof UploadService>[1],
       {} as ConstructorParameters<typeof UploadService>[2],
       { deleteObject } as unknown as ConstructorParameters<typeof UploadService>[3],
-      {} as ConstructorParameters<typeof UploadService>[4],
     );
 
     const count = await service.tombstoneAllByUserId(9);

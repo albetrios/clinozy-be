@@ -33,13 +33,13 @@ describe('Auth cached payloads — real Redis consumption', () => {
       const key = `${MFA_SESSION_KEY_PREFIX}${token}`;
       keys.add(key);
       await redisConnection.set(key, JSON.stringify(payload), 'EX', 30);
-      await expect(verifyMfaSession(redisConnection, token)).rejects.toBeInstanceOf(
-        UnauthorizedError,
-      );
+      await expect(
+        verifyMfaSession({ redis: redisConnection, mfaSessionToken: token }),
+      ).rejects.toBeInstanceOf(UnauthorizedError);
       expect(await redisConnection.exists(key)).toBe(0);
-      await expect(verifyMfaSession(redisConnection, token)).rejects.toBeInstanceOf(
-        UnauthorizedError,
-      );
+      await expect(
+        verifyMfaSession({ redis: redisConnection, mfaSessionToken: token }),
+      ).rejects.toBeInstanceOf(UnauthorizedError);
     },
   );
 
@@ -51,18 +51,27 @@ describe('Auth cached payloads — real Redis consumption', () => {
       keys.add(key);
       await redisConnection.set(key, JSON.stringify(payload), 'EX', 30);
       await expect(
-        consumeWebauthnChallenge(redisConnection, token, 'authentication'),
+        consumeWebauthnChallenge({
+          redis: redisConnection,
+          challengeToken: token,
+          expectedKind: 'authentication',
+        }),
       ).rejects.toBeInstanceOf(UnauthorizedError);
       expect(await redisConnection.exists(key)).toBe(0);
     },
   );
 
   it('allows exactly one concurrent consumer of a legitimate MFA session', async () => {
-    const token = await createMfaSession(redisConnection, 'usr_cached_payload_test');
+    const token = await createMfaSession({
+      redis: redisConnection,
+      userPublicId: 'usr_cached_payload_test',
+    });
     const key = `${MFA_SESSION_KEY_PREFIX}${token}`;
     keys.add(key);
     const outcomes = await Promise.allSettled(
-      Array.from({ length: 10 }, () => verifyMfaSession(redisConnection, token)),
+      Array.from({ length: 10 }, () =>
+        verifyMfaSession({ redis: redisConnection, mfaSessionToken: token }),
+      ),
     );
     expect(outcomes.filter((result) => result.status === 'fulfilled')).toEqual([
       { status: 'fulfilled', value: { user_public_id: 'usr_cached_payload_test' } },
@@ -81,17 +90,21 @@ describe('Auth cached payloads — real Redis consumption', () => {
       user_public_id: 'decoy:cached-payload-test',
       challenge: 'opaque-challenge',
     };
-    const token = await createWebauthnChallenge(
-      redisConnection,
-      payload.kind,
-      payload.user_public_id,
-      payload.challenge,
-    );
+    const token = await createWebauthnChallenge({
+      redis: redisConnection,
+      kind: payload.kind,
+      userPublicId: payload.user_public_id,
+      challenge: payload.challenge,
+    });
     const key = `${WEBAUTHN_CHALLENGE_KEY_PREFIX}${token}`;
     keys.add(key);
     const outcomes = await Promise.allSettled(
       Array.from({ length: 10 }, () =>
-        consumeWebauthnChallenge(redisConnection, token, 'authentication'),
+        consumeWebauthnChallenge({
+          redis: redisConnection,
+          challengeToken: token,
+          expectedKind: 'authentication',
+        }),
       ),
     );
     expect(outcomes.filter((result) => result.status === 'fulfilled')).toEqual([

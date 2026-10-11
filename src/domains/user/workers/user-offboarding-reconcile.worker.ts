@@ -51,5 +51,5 @@ export function createUserOffboardingReconcileWorker(
     );
   });
 
-  return buildWorkerHandle(worker, USER_OFFBOARDING_RECONCILE_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: USER_OFFBOARDING_RECONCILE_QUEUE_NAME });
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
@@ -13,6 +13,12 @@ import {
   createMembership,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import type { FastifyInstance } from 'fastify';
+import { sql } from 'drizzle-orm';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 const CALLER_PERMISSIONS = ['role:read', 'role:manage', 'membership:read', 'membership:manage'];
 
@@ -97,8 +103,11 @@ describe('Tenancy role and membership detail — happy paths', () => {
       id: targetRole.public_id,
       name: 'Detail Target Role Updated',
     });
-    const [persistedRole] =
-      await getOperatorSql()`SELECT name FROM tenancy.roles WHERE id = ${targetRole.id}`;
+    const [persistedRole] = rowsOf<Record<string, unknown>>(
+      await getOperatorDatabase().execute(
+        sql`SELECT name FROM tenancy.roles WHERE id = ${targetRole.id}`,
+      ),
+    );
     expect(persistedRole?.name).toBe('Detail Target Role Updated');
 
     const remove = await injectAuthenticated(app, {
@@ -113,8 +122,11 @@ describe('Tenancy role and membership detail — happy paths', () => {
       token,
     });
     expect(removed.statusCode, removed.body).toBe(404);
-    const [roleTombstone] =
-      await getOperatorSql()`SELECT deleted_at FROM tenancy.roles WHERE id = ${targetRole.id}`;
+    const [roleTombstone] = rowsOf<Record<string, unknown>>(
+      await getOperatorDatabase().execute(
+        sql`SELECT deleted_at FROM tenancy.roles WHERE id = ${targetRole.id}`,
+      ),
+    );
     expect(roleTombstone).toBeDefined();
     expect(roleTombstone?.deleted_at).not.toBeNull();
   });
@@ -163,8 +175,11 @@ describe('Tenancy role and membership detail — happy paths', () => {
       id: membership.public_id,
       status: 'SUSPENDED',
     });
-    const [persistedMembership] =
-      await getOperatorSql()`SELECT status FROM tenancy.memberships WHERE id = ${membership.id}`;
+    const [persistedMembership] = rowsOf<Record<string, unknown>>(
+      await getOperatorDatabase().execute(
+        sql`SELECT status FROM tenancy.memberships WHERE id = ${membership.id}`,
+      ),
+    );
     expect(persistedMembership?.status).toBe('SUSPENDED');
 
     const remove = await injectAuthenticated(app, {
@@ -179,8 +194,11 @@ describe('Tenancy role and membership detail — happy paths', () => {
       token,
     });
     expect(removed.statusCode, removed.body).toBe(404);
-    const [membershipTombstone] =
-      await getOperatorSql()`SELECT deleted_at FROM tenancy.memberships WHERE id = ${membership.id}`;
+    const [membershipTombstone] = rowsOf<Record<string, unknown>>(
+      await getOperatorDatabase().execute(
+        sql`SELECT deleted_at FROM tenancy.memberships WHERE id = ${membership.id}`,
+      ),
+    );
     expect(membershipTombstone).toBeDefined();
     expect(membershipTombstone?.deleted_at).not.toBeNull();
   });

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { sql as drizzleSql } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import {
   grantClinozyBeAppRoleForTests,
@@ -9,6 +8,12 @@ import {
   tableKey,
   type RlsTenantFixture,
 } from '@/tests/helpers/rls-matrix.helper.js';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Tenant-isolation RLS has two halves: USING (which rows a context can see) and WITH CHECK
@@ -32,9 +37,11 @@ const TENANCY_ORG_SCOPED_TABLES = [
 ] as const;
 
 async function resolveOrganizationInternalId(organizationPublicId: string): Promise<number> {
-  const rows = await sql<{ id: number }[]>`
+  const rows = rowsOf<{ id: number }>(
+    await database.execute(drizzleSql`
     SELECT id FROM tenancy.organizations WHERE public_id = ${organizationPublicId}
-  `;
+  `),
+  );
   return Number(rows[0]!.id);
 }
 
@@ -87,7 +94,9 @@ describe('Security: tenancy RLS WITH CHECK confines cross-organization writes', 
   it.each(TENANCY_ORG_SCOPED_TABLES)(
     'rejects reassigning a $tableName row from organization B to organization A (WITH CHECK)',
     async ({ schemaName, tableName }) => {
-      const rowIds = fixture.rowIdsByTable.get(tableKey(schemaName, tableName));
+      const rowIds = fixture.rowIdsByTable.get(
+        tableKey({ schemaName: schemaName, tableName: tableName }),
+      );
       expect(rowIds, `fixture seeds a ${tableName} row for both orgs`).toBeDefined();
 
       let caught: unknown;
@@ -109,7 +118,9 @@ describe('Security: tenancy RLS WITH CHECK confines cross-organization writes', 
   );
 
   it('allows a same-organization reassignment under the matching tenant context (positive control)', async () => {
-    const rowIds = fixture.rowIdsByTable.get(tableKey('tenancy', 'memberships'))!;
+    const rowIds = fixture.rowIdsByTable.get(
+      tableKey({ schemaName: 'tenancy', tableName: 'memberships' }),
+    )!;
 
     // Re-asserting the row to its own organization passes the predicate and updates exactly one row —
     // proving the rejections above are the organization WITH CHECK, not a blanket permission denial.

@@ -15,46 +15,56 @@ function webpBuffer(): Buffer {
 describe('file-magic.util', () => {
   it('accepts PNG magic bytes', () => {
     const buffer = Buffer.concat([PNG_SIGNATURE, Buffer.alloc(4)]);
-    expect(verifyFileMagicBytes(buffer, 'image/png')).toBe(true);
+    expect(verifyFileMagicBytes({ buffer, contentType: 'image/png' })).toBe(true);
   });
 
   it('accepts JPEG magic bytes', () => {
-    expect(verifyFileMagicBytes(JPEG_SIGNATURE, 'image/jpeg')).toBe(true);
+    expect(verifyFileMagicBytes({ buffer: JPEG_SIGNATURE, contentType: 'image/jpeg' })).toBe(true);
   });
 
   it('accepts WebP magic bytes with WEBP marker at offset 8', () => {
-    expect(verifyFileMagicBytes(webpBuffer(), 'image/webp')).toBe(true);
+    expect(verifyFileMagicBytes({ buffer: webpBuffer(), contentType: 'image/webp' })).toBe(true);
   });
 
   it('accepts PDF magic bytes', () => {
-    expect(verifyFileMagicBytes(PDF_SIGNATURE, 'application/pdf')).toBe(true);
+    expect(verifyFileMagicBytes({ buffer: PDF_SIGNATURE, contentType: 'application/pdf' })).toBe(
+      true,
+    );
   });
 
   it('rejects buffer shorter than minimum length', () => {
-    expect(verifyFileMagicBytes(Buffer.from([0x89]), 'image/png')).toBe(false);
+    expect(verifyFileMagicBytes({ buffer: Buffer.from([0x89]), contentType: 'image/png' })).toBe(
+      false,
+    );
   });
 
   it('rejects unknown content type', () => {
-    expect(verifyFileMagicBytes(PNG_SIGNATURE, 'application/octet-stream')).toBe(false);
+    expect(
+      verifyFileMagicBytes({ buffer: PNG_SIGNATURE, contentType: 'application/octet-stream' }),
+    ).toBe(false);
   });
 
   it('rejects mismatched magic bytes for declared type', () => {
-    expect(verifyFileMagicBytes(JPEG_SIGNATURE, 'image/png')).toBe(false);
+    expect(verifyFileMagicBytes({ buffer: JPEG_SIGNATURE, contentType: 'image/png' })).toBe(false);
   });
 
   it('rejects WebP when WEBP marker is missing', () => {
     const buffer = Buffer.alloc(16);
     Buffer.from([0x52, 0x49, 0x46, 0x46]).copy(buffer, 0);
-    expect(verifyFileMagicBytes(buffer, 'image/webp')).toBe(false);
+    expect(verifyFileMagicBytes({ buffer, contentType: 'image/webp' })).toBe(false);
   });
 
   // audit #33: a valid WebP needs the full 12-byte RIFF+WEBP header. Exactly 12 bytes is the
   // minimum; 11 bytes must be rejected (the explicit WEBP_MINIMUM_LENGTH, not a brittle `+8`).
   it('accepts a WebP at exactly the 12-byte minimum', () => {
-    expect(verifyFileMagicBytes(webpBuffer().subarray(0, 12), 'image/webp')).toBe(true);
+    expect(
+      verifyFileMagicBytes({ buffer: webpBuffer().subarray(0, 12), contentType: 'image/webp' }),
+    ).toBe(true);
   });
 
   it('rejects an 11-byte WebP (one byte short of the WEBP marker)', () => {
-    expect(verifyFileMagicBytes(webpBuffer().subarray(0, 11), 'image/webp')).toBe(false);
+    expect(
+      verifyFileMagicBytes({ buffer: webpBuffer().subarray(0, 11), contentType: 'image/webp' }),
+    ).toBe(false);
   });
 });

@@ -14,7 +14,7 @@ import {
  * field-level details on failure.
  */
 export function validateCreateSubscription(data: unknown): CreateSubscriptionInput {
-  return parseWithSchema(CreateSubscriptionDto, data);
+  return parseWithSchema({ schema: CreateSubscriptionDto, data });
 }
 
 /**
@@ -22,7 +22,7 @@ export function validateCreateSubscription(data: unknown): CreateSubscriptionInp
  * `ValidationError` with field-level details on failure.
  */
 export function validateChangePlan(data: unknown): ChangePlanInput {
-  return parseWithSchema(ChangePlanDto, data);
+  return parseWithSchema({ schema: ChangePlanDto, data });
 }
 
 /**
@@ -30,5 +30,5 @@ export function validateChangePlan(data: unknown): ChangePlanInput {
  * `ValidationError` with field-level details on failure.
  */
 export function validateListInvoicesQuery(data: unknown): ListInvoicesQueryInput {
-  return parseWithSchema(listInvoicesQueryDto, data);
+  return parseWithSchema({ schema: listInvoicesQueryDto, data });
 }

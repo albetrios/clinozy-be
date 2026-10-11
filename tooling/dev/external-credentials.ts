@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { commentOutEnvAssignment, formatEnvValue, upsertEnvAssignment } from './env-file.util.js';
+import { formatEnvValue, upsertEnvAssignment } from './env-file.util.js';
 
 /**
  * One value `.env.local` cannot generate for itself: a credential (or the setting tied to it) that
@@ -26,8 +26,7 @@ export type ExternalCredential = {
  *
  * @remarks
  * Deliberately not listed: `SENTRY_DSN` (local errors would count against the hosted project's
- * quota), `OTEL_SERVICE_NAME` (local traces keep their own service name instead of posing as the
- * development service), OAuth clients (their redirect URIs are registered per environment, so a
+ * quota), OAuth clients (their redirect URIs are registered per environment, so a
  * copied client would not complete a local login), and CAPTCHA (local CAPTCHA uses Cloudflare's test
  * keys — `--with-captcha`). Add a key here when a new integration needs an account value locally.
  */
@@ -70,17 +69,6 @@ export const EXTERNAL_CREDENTIALS: readonly ExternalCredential[] = [
     integration: 'PostHog — the project’s region host',
     reportMissing: false,
   },
-  {
-    key: 'OTEL_EXPORTER_OTLP_ENDPOINT',
-    // Optional: unset means tracing off (no collector is the normal local case), so never reported.
-    integration: 'OpenTelemetry — trace collector endpoint (optional; unset = tracing off)',
-    reportMissing: false,
-  },
-  {
-    key: 'OTEL_EXPORTER_OTLP_HEADERS',
-    integration: 'OpenTelemetry — collector auth headers (read by the SDK when set)',
-    reportMissing: false,
-  },
 ];
 
 /**
@@ -99,17 +87,6 @@ export type ExternalCredentialSource = {
   values: Readonly<Record<string, string | undefined>>;
 };
 
-/**
- * Placeholders an older `.env.example` shipped as ACTIVE lines and the current one comments out.
- * Copied into existing `.env.local` files, they still switch a feature on against a host that does
- * not exist (`https://otel.example.com` made every process retry trace exports to nowhere). A key
- * holding exactly one of these is treated as unset: filled when a source has a real value,
- * otherwise commented out.
- */
-const RETIRED_PLACEHOLDERS: Readonly<Record<string, string>> = {
-  OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otel.example.com',
-};
-
 /** What {@link fillExternalCredentials} did, by key — never values. */
 export type ExternalCredentialFill = {
   /** The updated `.env.local` contents. */
@@ -120,19 +97,11 @@ export type ExternalCredentialFill = {
   kept: string[];
   /** Keys still on the placeholder (or unset) because no source has a real value either. */
   missing: string[];
-  /** Keys whose retired placeholder ({@link RETIRED_PLACEHOLDERS}) was commented out. */
-  retired: string[];
 };
 
-/** A value that is unset, blank, still the `.env.example` placeholder, or a retired placeholder. */
-function isPlaceholder(
-  value: string | undefined,
-  exampleValue: string | undefined,
-  retiredValue: string | undefined,
-): boolean {
-  return (
-    value === undefined || value.trim() === '' || value === exampleValue || value === retiredValue
-  );
+/** A value that is unset, blank, or still the `.env.example` placeholder. */
+function isPlaceholder(value: string | undefined, exampleValue: string | undefined): boolean {
+  return value === undefined || value.trim() === '' || value === exampleValue;
 }
 
 /**
@@ -146,8 +115,6 @@ function isPlaceholder(
  * - **Never copies a placeholder:** a source value that is itself the placeholder (or blank) is not
  *   a real value, so the next source is tried; with none left the key is reported as missing when
  *   its `reportMissing` is set (an optional key, or one whose template value may be real, is not).
- * - **Retires stale placeholders:** a key holding a {@link RETIRED_PLACEHOLDERS} value is filled
- *   from a source with a real value, or else commented out.
  * - **Reports keys, never values,** so the caller can print the outcome safely.
  * - Pure: no file I/O — the caller reads and writes the files.
  */
@@ -163,25 +130,19 @@ export function fillExternalCredentials(options: {
     copied: [],
     kept: [],
     missing: [],
-    retired: [],
   };
   for (const { key, reportMissing } of EXTERNAL_CREDENTIALS) {
     const exampleValue = exampleValues[key];
-    const retiredValue = RETIRED_PLACEHOLDERS[key];
     const localValue = localValues[key];
-    if (!isPlaceholder(localValue, exampleValue, retiredValue)) {
+    if (!isPlaceholder(localValue, exampleValue)) {
       fill.kept.push(key);
       continue;
     }
     const source = options.sources.find(
-      (candidate) => !isPlaceholder(candidate.values[key], exampleValue, retiredValue),
+      (candidate) => !isPlaceholder(candidate.values[key], exampleValue),
     );
     const sourceValue = source?.values[key];
     if (source === undefined || sourceValue === undefined) {
-      if (retiredValue !== undefined && localValue === retiredValue) {
-        fill.content = commentOutEnvAssignment(fill.content, key);
-        fill.retired.push(key);
-      }
       if (reportMissing) fill.missing.push(key);
       continue;
     }

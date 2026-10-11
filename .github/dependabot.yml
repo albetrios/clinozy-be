@@ -34,6 +34,9 @@ updates:
     labels:
       - 'dependencies'
     ignore:
+      # Types follow the runtime: @types/node takes a new major together with NODE_VERSION
+      # (Dockerfile, Dockerfile.worker, .nvmrc, engines) — types for a newer Node describe APIs
+      # the deployed runtime does not have.
       - dependency-name: '@types/node'
         update-types:
           - 'version-update:semver-major'

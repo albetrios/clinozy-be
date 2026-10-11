@@ -1,4 +1,4 @@
-import postgres from 'postgres';
+import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { advanceIdSequences, ID_SEQUENCE_RESTORE_GAP } from '@/scripts/ops/db-sequences-advance.js';
 
@@ -8,34 +8,43 @@ import { advanceIdSequences, ID_SEQUENCE_RESTORE_GAP } from '@/scripts/ops/db-se
  * session's own temporary schema, so the shared test database's sequences never move.
  */
 describe('advanceIdSequences', () => {
-  let sql: postgres.Sql;
+  let client: pg.Client;
   let temporarySchemaName: string;
 
   beforeAll(async () => {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error('DATABASE_URL is required');
-    sql = postgres(databaseUrl, { max: 1, onnotice: () => {} });
+    client = new pg.Client({ connectionString: databaseUrl });
+    await client.connect();
 
-    await sql`CREATE TEMPORARY TABLE restored_rows (id bigserial PRIMARY KEY, note text)`;
-    await sql`CREATE TEMPORARY TABLE unused_rows (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY)`;
-    await sql`CREATE TEMPORARY TABLE narrow_rows (id serial PRIMARY KEY)`;
-    await sql`INSERT INTO restored_rows (note) SELECT 'before the restore' FROM generate_series(1, 5)`;
-    await sql`INSERT INTO narrow_rows DEFAULT VALUES`;
+    await client.query(
+      'CREATE TEMPORARY TABLE restored_rows (id bigserial PRIMARY KEY, note text)',
+    );
+    await client.query(
+      'CREATE TEMPORARY TABLE unused_rows (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY)',
+    );
+    await client.query('CREATE TEMPORARY TABLE narrow_rows (id serial PRIMARY KEY)');
+    await client.query(
+      "INSERT INTO restored_rows (note) SELECT 'before the restore' FROM generate_series(1, 5)",
+    );
+    await client.query('INSERT INTO narrow_rows DEFAULT VALUES');
 
-    const [temporarySchema] = await sql<{ name: string }[]>`
-      SELECT nspname AS name FROM pg_namespace WHERE oid = pg_my_temp_schema()
-    `;
+    const {
+      rows: [temporarySchema],
+    } = await client.query<{ name: string }>(
+      'SELECT nspname AS name FROM pg_namespace WHERE oid = pg_my_temp_schema()',
+    );
     if (!temporarySchema) throw new Error('no temporary schema for this session');
     temporarySchemaName = temporarySchema.name;
   });
 
   afterAll(async () => {
-    await sql.end({ timeout: 5 });
+    await client.end();
   });
 
   it('jumps every bigint sequence by the gap and reports each one in name order', async () => {
     const advancedSequences = await advanceIdSequences({
-      sql,
+      client,
       schemaNames: [temporarySchemaName],
     });
 
@@ -53,17 +62,19 @@ describe('advanceIdSequences', () => {
       },
     ]);
 
-    const [nextRow] = await sql<{ id: string }[]>`
-      INSERT INTO restored_rows (note) VALUES ('after the restore') RETURNING id
-    `;
+    const {
+      rows: [nextRow],
+    } = await client.query<{ id: string }>(
+      "INSERT INTO restored_rows (note) VALUES ('after the restore') RETURNING id",
+    );
     expect(BigInt(nextRow?.id ?? '0')).toBe(5n + ID_SEQUENCE_RESTORE_GAP + 1n);
   });
 
   it('leaves a sequence that is not bigint alone', async () => {
     // A 32-bit id has no room for the gap; ids are bigint by convention, so none should exist.
-    const [nextRow] = await sql<{ id: number }[]>`
-      INSERT INTO narrow_rows DEFAULT VALUES RETURNING id
-    `;
+    const {
+      rows: [nextRow],
+    } = await client.query<{ id: number }>('INSERT INTO narrow_rows DEFAULT VALUES RETURNING id');
     expect(nextRow?.id).toBe(2);
   });
 });

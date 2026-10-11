@@ -1,7 +1,12 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { getRequestIdentifier, requireAuth } from '@/shared/utils/http/request.util.js';
 import { successResponse } from '@/shared/utils/http/response.util.js';
+import { ForbiddenError } from '@/shared/errors/index.js';
+import { validatePublicIdParam } from '@/shared/utils/identity/public-id-param.util.js';
+import { assertOrganizationPermission } from '@/shared/utils/auth/authorization.util.js';
+import { UPLOAD_PERMISSIONS } from './upload.permissions.js';
 import type { UploadService } from './upload.service.js';
+import type { UploadPrincipal } from './upload.types.js';
 import { validateCreateUpload } from './upload.validator.js';
 
 /**
@@ -19,46 +24,81 @@ function activeOrganizationPublicId(request: FastifyRequest): string | null {
 }
 
 /**
+ * The request's {@link UploadPrincipal}: an organization upload belongs to the active organization
+ * (the signed claim), and `upload:manage` is checked there the way every organization route checks a
+ * permission — API-key scopes, the organization's MFA requirement, a deny audit row.
+ */
+function uploadPrincipal(request: FastifyRequest): UploadPrincipal {
+  const auth = requireAuth(request);
+  const organizationPublicId = activeOrganizationPublicId(request);
+  return {
+    userPublicId: auth.userId,
+    organizationPublicId,
+    authorizeOrganization: async (targetOrganizationPublicId) => {
+      if (targetOrganizationPublicId !== organizationPublicId) {
+        throw new ForbiddenError('errors:uploadOrganizationNotActive');
+      }
+      await assertOrganizationPermission({
+        request,
+        permissionCode: UPLOAD_PERMISSIONS.UPLOAD_MANAGE,
+      });
+    },
+  };
+}
+
+/** The `upload_id` path parameter, checked as a public id like every other entity-id param. */
+function readUploadIdParam(request: FastifyRequest): string {
+  const { upload_id: uploadId } = (request.params as { upload_id?: string }) ?? {};
+  return validatePublicIdParam({ value: uploadId ?? '', fieldName: 'upload_id' });
+}
+
+/**
  * HTTP handlers for the upload routes: request a presigned URL, fetch metadata,
- * confirm completion, and soft-delete an upload. All handlers are owner-scoped
- * via the authenticated user public id; ownership and permission checks live
- * inside {@link UploadService}.
+ * confirm completion, and soft-delete an upload. Each hands the service the request's
+ * {@link UploadPrincipal}; the service checks ownership, and calls the principal's organization
+ * authorization for an organization upload.
  */
 export function createUploadController(uploadService: UploadService) {
   return {
     createUpload: async (request: FastifyRequest, reply: FastifyReply) => {
-      const auth = requireAuth(request);
       const input = validateCreateUpload(request.body);
-      const result = await uploadService.createUpload(input, auth.userId);
-      return reply.status(200).send(successResponse(result, getRequestIdentifier(request)));
+      const result = await uploadService.createUpload({
+        input,
+        principal: uploadPrincipal(request),
+      });
+      return reply
+        .status(200)
+        .send(successResponse({ data: result, request_id: getRequestIdentifier(request) }));
     },
 
     getUpload: async (request: FastifyRequest, reply: FastifyReply) => {
-      const auth = requireAuth(request);
-      const publicId = (request.params as { upload_id: string }).upload_id;
-      const result = await uploadService.getUpload(
-        publicId,
-        auth.userId,
-        activeOrganizationPublicId(request),
+      const publicId = readUploadIdParam(request);
+      const result = await uploadService.getUpload({
+        public_id: publicId,
+        principal: uploadPrincipal(request),
+      });
+      return reply.send(
+        successResponse({ data: result, request_id: getRequestIdentifier(request) }),
       );
-      return reply.send(successResponse(result, getRequestIdentifier(request)));
     },
 
     confirmUpload: async (request: FastifyRequest, reply: FastifyReply) => {
-      const auth = requireAuth(request);
-      const publicId = (request.params as { upload_id: string }).upload_id;
-      const result = await uploadService.confirmUpload(
-        publicId,
-        auth.userId,
-        activeOrganizationPublicId(request),
+      const publicId = readUploadIdParam(request);
+      const result = await uploadService.confirmUpload({
+        public_id: publicId,
+        principal: uploadPrincipal(request),
+      });
+      return reply.send(
+        successResponse({ data: result, request_id: getRequestIdentifier(request) }),
       );
-      return reply.send(successResponse(result, getRequestIdentifier(request)));
     },
 
     deleteUpload: async (request: FastifyRequest, reply: FastifyReply) => {
-      const auth = requireAuth(request);
-      const publicId = (request.params as { upload_id: string }).upload_id;
-      await uploadService.deleteUpload(publicId, auth.userId, activeOrganizationPublicId(request));
+      const publicId = readUploadIdParam(request);
+      await uploadService.deleteUpload({
+        public_id: publicId,
+        principal: uploadPrincipal(request),
+      });
       return reply.code(204).send();
     },
   };

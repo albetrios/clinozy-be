@@ -8,10 +8,13 @@ import type {
  * The presigned `download_url` is supplied by the caller (the service mints it only when COMPLETED
  * and not yet past `expires_at`); timestamps are emitted as ISO-8601 strings.
  */
-export function serializeUserDataExport(
-  row: UserDataExportRow,
-  options?: { download_url?: string | null },
-): UserDataExportOutput {
+export function serializeUserDataExport({
+  row,
+  options,
+}: {
+  row: UserDataExportRow;
+  options?: { download_url?: string | null } | undefined;
+}): UserDataExportOutput {
   return {
     id: row.public_id,
     status: row.status as UserDataExportOutput['status'],

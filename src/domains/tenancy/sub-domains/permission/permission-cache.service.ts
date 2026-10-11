@@ -96,11 +96,25 @@ async function bumpOrganizationCacheVersion(organizationId: string): Promise<voi
  * Build the Redis key for a user's organization permissions, scoped by the organization cache version
  * so we can invalidate per-organization with a single INCR (no SCAN sweep).
  */
-function buildKey(version: number, userId: string, organizationId: string): string {
+function buildKey({
+  version,
+  userId,
+  organizationId,
+}: {
+  version: number;
+  userId: string;
+  organizationId: string;
+}): string {
   return `${PERMISSION_CACHE_PREFIX}:${version}:${userId}:${organizationId}`;
 }
 
-function buildRecomputeLockKey(userId: string, organizationId: string): string {
+function buildRecomputeLockKey({
+  userId,
+  organizationId,
+}: {
+  userId: string;
+  organizationId: string;
+}): string {
   return `${PERMISSION_CACHE_PREFIX}:lock:${userId}:${organizationId}`;
 }
 
@@ -121,13 +135,16 @@ function buildRecomputeLockKey(userId: string, organizationId: string): string {
  *   {@link invalidateOrganizationPermissions} can purge an entire organization with a
  *   single `INCR` instead of a SCAN.
  */
-export async function getCachedPermissions(
-  userId: string,
-  organizationId: string,
-): Promise<string[] | null> {
+export async function getCachedPermissions({
+  userId,
+  organizationId,
+}: {
+  userId: string;
+  organizationId: string;
+}): Promise<string[] | null> {
   try {
     const version = await getOrganizationCacheVersion(organizationId);
-    const cached = await redisConnection.get(buildKey(version, userId, organizationId));
+    const cached = await redisConnection.get(buildKey({ version, userId, organizationId }));
     if (!cached) return null;
     return JSON.parse(cached) as string[];
   } catch (error) {
@@ -152,18 +169,23 @@ export async function getCachedPermissions(
  *   {@link PERMISSION_CACHE_DEFAULT_TTL_SECONDS} (5 minutes); callers
  *   typically rely on the default.
  */
-export async function setCachedPermissions(
-  userId: string,
-  organizationId: string,
-  codes: string[],
+export async function setCachedPermissions({
+  userId,
+  organizationId,
+  codes,
   ttlSeconds = PERMISSION_CACHE_DEFAULT_TTL_SECONDS,
-): Promise<void> {
+}: {
+  userId: string;
+  organizationId: string;
+  codes: string[];
+  ttlSeconds?: number | undefined;
+}): Promise<void> {
   try {
     const version = await getOrganizationCacheVersion(organizationId);
     /** Small jitter so many users do not expire and recompute in the same second. */
     const jitterSeconds = randomInt(PERMISSION_CACHE_JITTER_MAX_SECONDS);
     await redisConnection.set(
-      buildKey(version, userId, organizationId),
+      buildKey({ version, userId, organizationId }),
       JSON.stringify(codes),
       'EX',
       ttlSeconds + jitterSeconds,
@@ -213,7 +235,7 @@ async function commitCachedPermissionsIfLockHeld(
       PERMISSION_CACHE_COMMIT_IF_LOCK_HELD_LUA,
       2,
       lockKey,
-      buildKey(version, userId, organizationId),
+      buildKey({ version, userId, organizationId }),
       lockNonce,
       JSON.stringify(codes),
       String(PERMISSION_CACHE_DEFAULT_TTL_SECONDS + jitterSeconds),
@@ -250,12 +272,16 @@ async function commitCachedPermissionsIfLockHeld(
  *   {@link invalidatePermissions} deletes the lock key, so this caller's commit
  *   becomes a no-op instead of re-caching stale permissions.
  */
-export async function withPermissionCacheRecomputeLock(
-  userId: string,
-  organizationId: string,
-  recompute: () => Promise<string[]>,
-): Promise<string[]> {
-  const lockKey = buildRecomputeLockKey(userId, organizationId);
+export async function withPermissionCacheRecomputeLock({
+  userId,
+  organizationId,
+  recompute,
+}: {
+  userId: string;
+  organizationId: string;
+  recompute: () => Promise<string[]>;
+}): Promise<string[]> {
+  const lockKey = buildRecomputeLockKey({ userId, organizationId });
   const lockNonce = randomUUID();
   let acquiredLock = false;
   try {
@@ -279,14 +305,14 @@ export async function withPermissionCacheRecomputeLock(
         await new Promise<void>((resolve) =>
           setTimeout(resolve, PERMISSION_CACHE_STAMPEDE_POLL_MS),
         );
-        const waiterCached = await getCachedPermissions(userId, organizationId);
+        const waiterCached = await getCachedPermissions({ userId, organizationId });
         if (waiterCached !== null) {
           return waiterCached;
         }
       }
     }
 
-    const doubleCheck = await getCachedPermissions(userId, organizationId);
+    const doubleCheck = await getCachedPermissions({ userId, organizationId });
     if (doubleCheck !== null) {
       return doubleCheck;
     }
@@ -358,12 +384,18 @@ export async function withPermissionCacheRecomputeLock(
  *   prefer {@link invalidateOrganizationPermissions}, which bumps the organization
  *   version with a single `INCR` and orphans every per-user key at once.
  */
-export async function invalidatePermissions(userId: string, organizationId: string): Promise<void> {
+export async function invalidatePermissions({
+  userId,
+  organizationId,
+}: {
+  userId: string;
+  organizationId: string;
+}): Promise<void> {
   try {
     const version = await getOrganizationCacheVersion(organizationId);
     await redisConnection.del(
-      buildKey(version, userId, organizationId),
-      buildRecomputeLockKey(userId, organizationId),
+      buildKey({ version, userId, organizationId }),
+      buildRecomputeLockKey({ userId, organizationId }),
     );
   } catch (error) {
     // A failed invalidation leaves the OLD (over-broad) permission set cached until its TTL — a
@@ -371,10 +403,13 @@ export async function invalidatePermissions(userId: string, organizationId: stri
     // must not block on cache), but surface it to Sentry so the operational risk is VISIBLE, not
     // buried in a warn log.
     logger.warn({ error }, 'permission-cache.invalidate.failed');
-    captureException(error, {
-      userId,
-      organizationId,
-      tags: { subsystem: 'permission-cache', operation: 'invalidate' },
+    captureException({
+      error,
+      context: {
+        userId,
+        organizationId,
+        tags: { subsystem: 'permission-cache', operation: 'invalidate' },
+      },
     });
     // Backstop (audit-#T1): we could not target the user's key (version read or DEL failed, e.g.
     // a transient blip that returned a wrong/`0` version). Best-effort bump the organization version so
@@ -417,9 +452,12 @@ export async function invalidateOrganizationPermissions(organizationId: string):
     // Same privilege-retention risk as invalidatePermissions, organization-wide: a failed version bump
     // leaves every user's cached permission set live until TTL. Surface to Sentry.
     logger.warn({ error }, 'permission-cache.invalidate-organization.failed');
-    captureException(error, {
-      organizationId,
-      tags: { subsystem: 'permission-cache', operation: 'invalidate-organization' },
+    captureException({
+      error,
+      context: {
+        organizationId,
+        tags: { subsystem: 'permission-cache', operation: 'invalidate-organization' },
+      },
     });
   }
 }

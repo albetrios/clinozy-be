@@ -38,11 +38,11 @@ describe('http-cache.util', () => {
 
   it('ifNoneMatchSatisfies matches exact etag and wildcard', () => {
     const etag = 'W/"abc"';
-    expect(ifNoneMatchSatisfies(etag, etag)).toBe(true);
-    expect(ifNoneMatchSatisfies('W/"other"', etag)).toBe(false);
-    expect(ifNoneMatchSatisfies('*', etag)).toBe(true);
-    expect(ifNoneMatchSatisfies('W/"other", W/"abc"', etag)).toBe(true);
-    expect(ifNoneMatchSatisfies(undefined, etag)).toBe(false);
+    expect(ifNoneMatchSatisfies({ ifNoneMatchHeader: etag, etag })).toBe(true);
+    expect(ifNoneMatchSatisfies({ ifNoneMatchHeader: 'W/"other"', etag })).toBe(false);
+    expect(ifNoneMatchSatisfies({ ifNoneMatchHeader: '*', etag })).toBe(true);
+    expect(ifNoneMatchSatisfies({ ifNoneMatchHeader: 'W/"other", W/"abc"', etag })).toBe(true);
+    expect(ifNoneMatchSatisfies({ etag, ifNoneMatchHeader: undefined })).toBe(false);
   });
 
   it('exports catalog cache-control directive', () => {

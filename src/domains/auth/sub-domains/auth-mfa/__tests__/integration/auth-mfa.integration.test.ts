@@ -63,6 +63,63 @@ describe('MFA Sub-Domain — Integration', () => {
       });
       expect(response.statusCode).toBe(404);
     });
+
+    it('returns 401 when a recovery code that already completed a login is replayed', async () => {
+      const { user, password } = await createTestUserWithPassword({ isEmailVerified: true });
+      const { token, sessionPublicId } = await generateTestTokenAndSession({
+        userId: user.public_id,
+      });
+      await seedRecentStepUpForTestUser(user.public_id, sessionPublicId, 'password');
+
+      const enroll = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/me/mfa/enroll'),
+        token,
+        payload: { method_type: 'MFA_TOTP' },
+      });
+      expect(enroll.statusCode, enroll.body).toBe(200);
+      const { secret } = (enroll.json() as { data: { secret: string } }).data;
+
+      const confirm = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/me/mfa/enroll/confirm'),
+        token,
+        payload: { code: await generateTotpCode({ secret }) },
+      });
+      expect(confirm.statusCode, confirm.body).toBe(200);
+      const [recoveryCode] = (confirm.json() as { data: { recovery_codes: string[] } }).data
+        .recovery_codes;
+      expect(recoveryCode).toBeTypeOf('string');
+
+      /** Signs in with the password and spends `recoveryCode` on the MFA challenge it returns. */
+      async function completeLoginWithRecoveryCode() {
+        const login = await injectUnauthenticated(app, {
+          method: 'POST',
+          url: testApiPath('/auth/login'),
+          payload: { email: user.email, password },
+        });
+        expect(login.statusCode, login.body).toBe(200);
+        const { mfa_session_token: mfaSessionToken } = (
+          login.json() as { data: { mfa_session_token: string } }
+        ).data;
+        expect(mfaSessionToken).toBeTypeOf('string');
+        return injectUnauthenticated(app, {
+          method: 'POST',
+          url: testApiPath('/auth/mfa/login'),
+          payload: { mfa_session_token: mfaSessionToken, recovery_code: recoveryCode },
+        });
+      }
+
+      const firstUse = await completeLoginWithRecoveryCode();
+      expect(firstUse.statusCode, firstUse.body).toBe(200);
+      expect((firstUse.json() as { data: { access_token?: string } }).data.access_token).toBeTypeOf(
+        'string',
+      );
+
+      // A fresh, valid MFA challenge does not revive a spent recovery code.
+      const replay = await completeLoginWithRecoveryCode();
+      expect(replay.statusCode, replay.body).toBe(401);
+    });
   });
 
   describe('GET /api/v1/auth/me/mfa', () => {
@@ -139,7 +196,7 @@ describe('MFA Sub-Domain — Integration', () => {
       // The route had exactly ONE case (a 401) and no success assertion, while the service side
       // is well covered. This closes the route half: a real enrolled TOTP method is removed over
       // HTTP, the declared 204 is observed, and the follow-up read proves it is gone.
-      const { user } = await createTestUserWithPassword({ isEmailVerified: true });
+      const { user, password } = await createTestUserWithPassword({ isEmailVerified: true });
       const { token, sessionPublicId } = await generateTestTokenAndSession({
         userId: user.public_id,
       });
@@ -186,6 +243,19 @@ describe('MFA Sub-Domain — Integration', () => {
       });
       expect(afterDelete.statusCode).toBe(200);
       expect((afterDelete.json() as { data: unknown[] }).data).toHaveLength(0);
+
+      // With the factor gone, the password alone signs in again: a real access token, no challenge.
+      const login = await injectUnauthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/login'),
+        payload: { email: user.email, password },
+      });
+      expect(login.statusCode, login.body).toBe(200);
+      const loginBody = (
+        login.json() as { data: { access_token?: string; mfa_required?: boolean } }
+      ).data;
+      expect(loginBody.access_token).toBeTypeOf('string');
+      expect(loginBody.mfa_required).toBeUndefined();
     });
   });
 
@@ -226,13 +296,31 @@ describe('MFA Sub-Domain — Integration', () => {
       const { secret } = (enroll.json() as { data: { secret: string } }).data;
       expect(secret).toBeTypeOf('string');
 
+      const enrollmentCode = await generateTotpCode({ secret });
       const confirm = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/auth/me/mfa/enroll/confirm'),
         token,
-        payload: { code: await generateTotpCode({ secret }) },
+        payload: { code: enrollmentCode },
       });
       expect(confirm.statusCode, confirm.body).toBe(200);
+
+      // The accepted enrollment code is spent: confirm has no staged enrollment left to match it,
+      // and verify treats it as a replay — both refuse with 401.
+      const confirmReplay = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/me/mfa/enroll/confirm'),
+        token,
+        payload: { code: enrollmentCode },
+      });
+      expect(confirmReplay.statusCode, confirmReplay.body).toBe(401);
+      const verifyReplay = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/me/mfa/verify'),
+        token,
+        payload: { code: enrollmentCode },
+      });
+      expect(verifyReplay.statusCode, verifyReplay.body).toBe(401);
 
       // Authenticated step-up verification. Consumed codes are replay-protected
       // within their window, so use the NEXT 30s window (server tolerance ±1 step).

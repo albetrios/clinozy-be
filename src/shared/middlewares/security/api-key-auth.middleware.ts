@@ -34,7 +34,13 @@ function hashApiKey(rawKey: string): string {
   return createHash('sha256').update(rawKey, 'utf8').digest('hex');
 }
 
-function hashesMatch(storedHash: string, candidateHash: string): boolean {
+function hashesMatch({
+  storedHash,
+  candidateHash,
+}: {
+  storedHash: string;
+  candidateHash: string;
+}): boolean {
   const storedBuffer = Buffer.from(storedHash, 'hex');
   const candidateBuffer = Buffer.from(candidateHash, 'hex');
   if (storedBuffer.length !== candidateBuffer.length) return false;
@@ -58,11 +64,11 @@ export async function applyApiKeyAuthentication(request: FastifyRequest): Promis
 
   const keyHash = hashApiKey(rawKey);
   const keyPrefix = rawKey.slice(0, 8);
-  const match = await request.server.tenancyDomain.organizationApiKeyService.authenticate(
-    keyPrefix,
-    keyHash,
-    hashesMatch,
-  );
+  const match = await request.server.tenancyDomain.organizationApiKeyService.authenticate({
+    key_prefix: keyPrefix,
+    key_hash: keyHash,
+    hashCompare: hashesMatch,
+  });
 
   if (!match) {
     throw new UnauthorizedError('errors:validation.invalidToken');

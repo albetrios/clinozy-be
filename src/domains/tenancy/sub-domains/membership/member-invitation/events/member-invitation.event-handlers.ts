@@ -1,6 +1,7 @@
 import { eventBus, scheduleCommitDispatch, type DomainEvent } from '@/core/events/event-bus.js';
 import { recordOutboxEmail } from '@/infrastructure/mail/queues/mail.queue.js';
 import { invitationTemplate } from '@/infrastructure/mail/templates/invitation.template.js';
+import { translateMailText } from '@/infrastructure/mail/templates/base.template.js';
 import { isMailConfigured } from '@/infrastructure/mail/mail.service.js';
 import { env } from '@/shared/config/env.config.js';
 import { DEFAULT_FRONTEND_URL } from '@/shared/constants/index.js';
@@ -10,10 +11,13 @@ import {
   type MemberInvitationEmailPayload,
 } from './member-invitation.events.js';
 
-async function handleMemberInvitationEmail(
-  payload: MemberInvitationEmailPayload,
-  requestId?: string,
-): Promise<void> {
+async function handleMemberInvitationEmail({
+  payload,
+  requestId,
+}: {
+  payload: MemberInvitationEmailPayload;
+  requestId?: string | undefined;
+}): Promise<void> {
   if (!isMailConfigured()) {
     logger.warn({ email: payload.email }, 'Mail not configured — invitation email skipped');
     return;
@@ -27,28 +31,37 @@ async function handleMemberInvitationEmail(
   const acceptUrl = `${frontendUrl}/accept-invite/${payload.invitation_public_id}?token=${payload.token}`;
 
   const html = invitationTemplate({
-    inviterName: payload.inviter_name,
+    inviterName:
+      payload.inviter_name ||
+      translateMailText({ key: 'invitationFallbackInviter', locale: payload.locale }),
     organizationName: payload.organization_name,
     acceptUrl,
     expiresInDays: payload.expires_in_days,
+    locale: payload.locale,
   });
 
   const mailOutboxToken = await recordOutboxEmail({
     to: payload.email,
-    subject: `You've been invited to join ${payload.organization_name}`,
+    subject: translateMailText({
+      key: 'invitationSubject',
+      locale: payload.locale,
+      values: {
+        organizationName: payload.organization_name,
+      },
+    }),
     html,
     tags: [{ name: 'category', value: 'invitation' }],
   });
-  await scheduleCommitDispatch(
-    { type: 'mail_outbox', mailOutboxToken },
-    requestId !== undefined ? { requestId } : undefined,
-  );
+  await scheduleCommitDispatch({
+    task: { type: 'mail_outbox', mailOutboxToken },
+    options: requestId !== undefined ? { requestId } : undefined,
+  });
 }
 
 async function onMemberInvitationEmailEvent(event: DomainEvent): Promise<void> {
   const payload = event.payload as MemberInvitationEmailPayload;
   try {
-    await handleMemberInvitationEmail(payload, event.requestId);
+    await handleMemberInvitationEmail({ payload, requestId: event.requestId });
   } catch (error) {
     logger.warn(
       { error, eventType: event.type, email: payload.email },
@@ -68,6 +81,9 @@ let memberInvitationHandlersRegistered = false;
 export function registerMemberInvitationEventHandlers(): void {
   if (memberInvitationHandlersRegistered) return;
   memberInvitationHandlersRegistered = true;
-  eventBus.on(MEMBER_INVITATION_EVENT.CREATED, onMemberInvitationEmailEvent);
-  eventBus.on(MEMBER_INVITATION_EVENT.RESENT, onMemberInvitationEmailEvent);
+  eventBus.on({
+    eventType: MEMBER_INVITATION_EVENT.CREATED,
+    handler: onMemberInvitationEmailEvent,
+  });
+  eventBus.on({ eventType: MEMBER_INVITATION_EVENT.RESENT, handler: onMemberInvitationEmailEvent });
 }

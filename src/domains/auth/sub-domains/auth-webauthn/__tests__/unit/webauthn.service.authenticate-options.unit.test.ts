@@ -29,10 +29,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -61,7 +63,9 @@ describe('WebauthnService.generateAuthenticationOptions', () => {
   });
 
   it('rejects a missing email with ValidationError before querying any account', async () => {
-    await expect(service.generateAuthenticationOptions({})).rejects.toBeInstanceOf(ValidationError);
+    await expect(service.generateAuthenticationOptions(undefined)).rejects.toBeInstanceOf(
+      ValidationError,
+    );
     expect(userService.findByEmail).not.toHaveBeenCalled();
     expect(credentialRepository.listActiveByUserId).not.toHaveBeenCalled();
   });
@@ -74,7 +78,7 @@ describe('WebauthnService.generateAuthenticationOptions', () => {
 
   function challengeOwnerOfLastCall(): string {
     const calls = vi.mocked(createWebauthnChallenge).mock.calls;
-    return calls[calls.length - 1]![2] as string;
+    return calls[calls.length - 1]![0].userPublicId;
   }
 
   it('sends no credential list for an unknown email, and still runs the lookup to equalize timing (route-audit D1)', async () => {

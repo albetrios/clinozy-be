@@ -156,7 +156,6 @@ Import from `@/shared/constants/project-identity.constants.js`:
 | WebAuthn RP name when env unset | `WEBAUTHN_RP_NAME_DEFAULT` | slug literal |
 | MCP URI scheme | `MCP_URI_SCHEME` | `'clinozy-be'` |
 | MCP resource URIs | `MCP_OPENAPI_RESOURCE_URI`, `MCP_ROUTES_RESOURCE_URI` | `clinozy-be://…` |
-| OTEL service names | `OTEL_SERVICE_NAME_API`, `OTEL_SERVICE_NAME_WORKER` | `clinozy-be-api`, `clinozy-be-worker` |
 | OTEL tracer scope | `OTEL_TRACER_NAME` | slug literal |
 | Local Docker tags (scripts/docs only) | `DOCKER_LOCAL_API_TAG`, `DOCKER_LOCAL_WORKER_TAG` | `clinozy-be`, `clinozy-be-worker` |
 | GHCR image repo names (reference) | `GHCR_API_IMAGE_NAME`, `GHCR_WORKER_IMAGE_NAME` | `clinozy-be-api`, … |

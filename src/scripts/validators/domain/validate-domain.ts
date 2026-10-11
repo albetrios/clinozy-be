@@ -44,7 +44,13 @@ function listDomainEntries(domainPath: string): string[] {
   return readdirSync(domainPath, { recursive: true }) as string[];
 }
 
-function walkEmptyTestDirectories(directoryPath: string, result: ValidationResult): void {
+function walkEmptyTestDirectories({
+  directoryPath,
+  result,
+}: {
+  directoryPath: string;
+  result: ValidationResult;
+}): void {
   let entries: import('node:fs').Dirent[];
   try {
     entries = readdirSync(directoryPath, { withFileTypes: true });
@@ -94,7 +100,7 @@ function walkEmptyTestDirectories(directoryPath: string, result: ValidationResul
           );
         }
       }
-      walkEmptyTestDirectories(entryPath, result);
+      walkEmptyTestDirectories({ directoryPath: entryPath, result });
     }
   }
 }
@@ -178,7 +184,7 @@ function validateDomain(domainName: string): ValidationResult {
     );
   }
 
-  walkEmptyTestDirectories(domainPath, result);
+  walkEmptyTestDirectories({ directoryPath: domainPath, result });
 
   const factoriesPath = join(domainPath, '__tests__', 'factories');
   if (existsSync(factoriesPath) && readdirSync(factoriesPath).length === 0) {

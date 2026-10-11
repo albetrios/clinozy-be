@@ -11,9 +11,9 @@
  *
  * For every key of every `*_EVENT` map under `src/domains/**\/events/*.events.ts`:
  * - ≥ 1 EMITTER: `CONST.KEY` referenced in a non-test file that calls
- *   `eventBus.emit(` (covers both `buildDomainEvent(CONST.KEY, …)` and
+ *   `eventBus.emit(` (covers both `buildDomainEvent({ type: CONST.KEY, … })` and
  *   `{ type: CONST.KEY, … }` shapes).
- * - ≥ 1 HANDLER: an `eventBus.on(CONST.KEY, …)` registration.
+ * - ≥ 1 HANDLER: an `eventBus.on({ eventType: CONST.KEY, … })` registration.
  * - Event string values are globally unique across all maps.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -98,7 +98,9 @@ describe('Global: event wiring parity', () => {
   it('every event key has at least one registered handler (eventBus.on)', () => {
     const missingHandlers: string[] = [];
     for (const { constantName, key, definingFile } of eventKeys) {
-      const registration = new RegExp(String.raw`eventBus\.on\(\s*${constantName}\.${key}\b`);
+      const registration = new RegExp(
+        String.raw`eventBus\.on\(\s*\{\s*eventType:\s*${constantName}\.${key}\b`,
+      );
       const hasHandler = [...sources.values()].some((source) => registration.test(source));
       if (!hasHandler) missingHandlers.push(`${constantName}.${key} (${definingFile})`);
     }

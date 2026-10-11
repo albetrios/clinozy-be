@@ -71,10 +71,13 @@ const WEBHOOK_DELIVERY_RESPONSE_BODY_TRUNCATION_MARKER = '…[truncated]';
  *   socket.
  * - **Side effects:** consumes (and cancels) the response stream.
  */
-async function readResponseBodyCapped(
-  response: Response,
-  maxBytes: number,
-): Promise<{ body: string; truncated: boolean }> {
+async function readResponseBodyCapped({
+  response,
+  maxBytes,
+}: {
+  response: Response;
+  maxBytes: number;
+}): Promise<{ body: string; truncated: boolean }> {
   const reader = response.body?.getReader();
   if (!reader) {
     const text = await response.text();
@@ -110,7 +113,13 @@ async function readResponseBodyCapped(
  * Clamps a decoded response body to the stored-length cap, appending a truncation marker when the
  * body was cut at either the byte read-cap or the stored-length cap (audit-#6).
  */
-function formatStoredResponseBody(decoded: string, networkTruncated: boolean): string {
+function formatStoredResponseBody({
+  decoded,
+  networkTruncated,
+}: {
+  decoded: string;
+  networkTruncated: boolean;
+}): string {
   const overStoredLimit = decoded.length > WEBHOOK_DELIVERY_RESPONSE_BODY_STORED_MAX_LENGTH;
   if (!(networkTruncated || overStoredLimit)) {
     return decoded;
@@ -127,7 +136,15 @@ function formatStoredResponseBody(decoded: string, networkTruncated: boolean): s
 /**
  * Sign a webhook payload with HMAC-SHA256 (Stripe-style signature).
  */
-function signPayload(secret: string, payload: string, timestamp: number): string {
+function signPayload({
+  secret,
+  payload,
+  timestamp,
+}: {
+  secret: string;
+  payload: string;
+  timestamp: number;
+}): string {
   const signedPayload = `${timestamp}.${payload}`;
   return createHmac('sha256', secret).update(signedPayload).digest('hex');
 }
@@ -165,8 +182,9 @@ interface WebhookDeliveryJobContext {
 }
 
 /**
- * What one delivery job did: delivered (2xx), skipped (already sent, or the webhook is disabled or
- * deleted), or stopped because the endpoint answered `410 Gone` — after which the webhook is off.
+ * What one delivery job did: delivered (2xx), skipped (already sent, the webhook disabled or
+ * deleted, or the attempt row gone), or stopped because the endpoint answered `410 Gone` — after
+ * which the webhook is off.
  *
  * @remarks
  * Every variant completes the BullMQ job: a skip or a `410` is final, not a failure to retry.
@@ -175,8 +193,15 @@ interface WebhookDeliveryJobContext {
  */
 export type WebhookDeliveryJobResult =
   | { outcome: 'delivered'; httpStatus: number }
-  | { outcome: 'skipped'; reason: 'already_sent' | 'webhook_disabled' }
+  | { outcome: 'skipped'; reason: WebhookDeliverySkipReason }
   | { outcome: 'endpoint_gone'; httpStatus: 410 };
+
+/**
+ * Why a delivery job had nothing to send: the attempt was already sent, its webhook is disabled or
+ * deleted, or the attempt is not visible in the job's organization (the organization was deleted,
+ * or a restore lost the row).
+ */
+type WebhookDeliverySkipReason = 'already_sent' | 'webhook_disabled' | 'attempt_missing';
 
 /**
  * A delivery the receiver failed: a non-2xx answer (other than 410), a timeout, a refused
@@ -198,9 +223,9 @@ export class WebhookEndpointFailure extends Error {
   }
 }
 
-/** Result of the claim phase — a skip (already sent, webhook disabled) or a claimed attempt. */
+/** Result of the claim phase — a skip (see {@link WebhookDeliverySkipReason}) or a claimed attempt. */
 type WebhookDeliveryClaim =
-  | { status: 'skipped'; reason: 'already_sent' | 'webhook_disabled' }
+  | { status: 'skipped'; reason: WebhookDeliverySkipReason }
   | { status: 'claimed'; deliveryContext: WebhookDeliveryAttemptWithWebhook };
 
 /**
@@ -214,9 +239,9 @@ async function claimWebhookDeliveryAttempt(options: {
   deliveryAttemptRepository?: WebhookDeliveryAttemptRepository | undefined;
 }): Promise<WebhookDeliveryClaim> {
   const { deliveryAttemptPublicId, organizationPublicId, deliveryAttemptRepository } = options;
-  return withAppDatabaseContext(
-    PRINCIPAL_SCOPE.JOB({ organizationPublicId: organizationPublicId }),
-    async (databaseHandle) => {
+  return withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.JOB({ organizationPublicId: organizationPublicId }),
+    callback: async (databaseHandle) => {
       const attemptRepository =
         deliveryAttemptRepository ?? createWorkerWebhookDeliveryAttemptRepository(databaseHandle);
       const webhookDeliveryQueries = createWorkerWebhookDeliveryQueries(databaseHandle);
@@ -225,12 +250,10 @@ async function claimWebhookDeliveryAttempt(options: {
         organizationPublicId,
       );
       if (!deliveryContext) {
-        // A job's attempt row is created before the job and never deleted while a delivery can
-        // still run — a missing row (or one in another organization) cannot be retried into
-        // existing, so fail terminally and let the dead-letter record show it.
-        throw new UnrecoverableError(
-          `webhook.delivery.attempt_not_found:${deliveryAttemptPublicId}`,
-        );
+        // The job is enqueued only after its attempt row commits, so a missing row means it is
+        // gone since: the organization was deleted (RLS hides it), or a restore lost the row.
+        // Nothing is left to send and a retry cannot bring the row back — complete as a skip.
+        return { status: 'skipped', reason: 'attempt_missing' };
       }
       // sec-N1: the fan-out filter on is_enabled / deleted_at does NOT apply to
       // BullMQ retries — without this re-check, attempts continue firing the
@@ -253,7 +276,7 @@ async function claimWebhookDeliveryAttempt(options: {
       }
       return { status: 'claimed', deliveryContext };
     },
-  );
+  });
 }
 
 /**
@@ -274,9 +297,9 @@ async function recordWebhookDeliveryOutcome(options: {
   deliveryAttemptRepository?: WebhookDeliveryAttemptRepository | undefined;
 }): Promise<void> {
   const { deliveryContext, organizationPublicId, outcome, deliveryAttemptRepository } = options;
-  await withAppDatabaseContext(
-    PRINCIPAL_SCOPE.JOB({ organizationPublicId: organizationPublicId }),
-    async (databaseHandle) => {
+  await withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.JOB({ organizationPublicId: organizationPublicId }),
+    callback: async (databaseHandle) => {
       const attemptRepository =
         deliveryAttemptRepository ?? createWorkerWebhookDeliveryAttemptRepository(databaseHandle);
       await attemptRepository.recordOutcome(deliveryContext.deliveryAttemptId, outcome);
@@ -286,7 +309,7 @@ async function recordWebhookDeliveryOutcome(options: {
         );
       }
     },
-  );
+  });
 }
 
 /**
@@ -322,7 +345,11 @@ function computeWebhookPreviousSignatureHeader(options: {
   }
   try {
     const previousSecret = decryptFieldSecret(encryptedSecretPrevious);
-    const previousSignature = signPayload(previousSecret, payloadString, timestamp);
+    const previousSignature = signPayload({
+      secret: previousSecret,
+      payload: payloadString,
+      timestamp,
+    });
     return `t=${timestamp},v1=${previousSignature}`;
   } catch (decryptError) {
     logger.warn(
@@ -385,11 +412,11 @@ async function readWebhookResponseBodyOrPlaceholder(options: {
 }): Promise<string> {
   const { response, jobContext, deliveryContext, webhookUrlLogFields } = options;
   try {
-    const capped = await readResponseBodyCapped(
+    const capped = await readResponseBodyCapped({
       response,
-      WEBHOOK_DELIVERY_RESPONSE_BODY_READ_MAX_BYTES,
-    );
-    return formatStoredResponseBody(capped.body, capped.truncated);
+      maxBytes: WEBHOOK_DELIVERY_RESPONSE_BODY_READ_MAX_BYTES,
+    });
+    return formatStoredResponseBody({ decoded: capped.body, networkTruncated: capped.truncated });
   } catch (parseError) {
     logger.warn(
       {
@@ -425,7 +452,10 @@ async function failDeliveryTerminally(options: {
     eventType: deliveryContext.eventType,
     ...(options.error === undefined ? {} : { error: options.error }),
   };
-  captureMessage(`webhook.delivery.${reason}`, { level: 'error', extra: logFields });
+  captureMessage({
+    message: `webhook.delivery.${reason}`,
+    options: { level: 'error', extra: logFields },
+  });
   logger.error(logFields, `webhook.delivery.${reason}`);
   await recordWebhookDeliveryOutcome({
     deliveryContext,
@@ -501,7 +531,7 @@ async function deliverClaimedWebhook(options: {
     organizationPublicId,
     deliveryAttemptRepository,
   });
-  const signature = signPayload(signingSecret, payloadString, timestamp);
+  const signature = signPayload({ secret: signingSecret, payload: payloadString, timestamp });
 
   // sec-N8: dual-sign while inside the rotation overlap window so a customer who has not yet
   // rolled their verifier still sees a matching signature (decrypt failures drop the header).
@@ -525,10 +555,13 @@ async function deliverClaimedWebhook(options: {
   };
   logger.info(logFields, 'webhook.delivery.sending');
 
-  const recordOutcome = (
-    outcome: Parameters<typeof recordWebhookDeliveryOutcome>[0]['outcome'],
+  const recordOutcome = ({
+    outcome,
     disableWebhook = false,
-  ) =>
+  }: {
+    outcome: Parameters<typeof recordWebhookDeliveryOutcome>[0]['outcome'];
+    disableWebhook?: boolean | undefined;
+  }) =>
     recordWebhookDeliveryOutcome({
       deliveryContext,
       organizationPublicId,
@@ -572,9 +605,11 @@ async function deliverClaimedWebhook(options: {
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'Unknown error';
     await recordOutcome({
-      status: 'FAILED',
-      response_body: reason,
-      next_retry_at: computeNextRetryAt(jobContext.attemptsMade),
+      outcome: {
+        status: 'FAILED',
+        response_body: reason,
+        next_retry_at: computeNextRetryAt(jobContext.attemptsMade),
+      },
     });
     throw new WebhookEndpointFailure(`webhook.delivery.request_failed: ${reason}`, {
       cause: error,
@@ -591,9 +626,11 @@ async function deliverClaimedWebhook(options: {
 
   if (httpStatus >= 200 && httpStatus < 300) {
     await recordOutcome({
-      status: 'SENT',
-      http_status_code: httpStatus,
-      response_body: responseBody,
+      outcome: {
+        status: 'SENT',
+        http_status_code: httpStatus,
+        response_body: responseBody,
+      },
     });
     return { outcome: 'delivered', httpStatus };
   }
@@ -601,24 +638,26 @@ async function deliverClaimedWebhook(options: {
   if (httpStatus === HTTP_STATUS_GONE) {
     // The receiver says this endpoint will never accept another delivery: no retries, and the
     // webhook is turned off so later events stop going to it. Its owner re-enables it once fixed.
-    await recordOutcome(
-      {
+    await recordOutcome({
+      outcome: {
         status: 'FAILED',
         http_status_code: httpStatus,
         response_body: responseBody,
         next_retry_at: null,
       },
-      true,
-    );
+      disableWebhook: true,
+    });
     logger.warn({ ...logFields, httpStatus }, 'webhook.delivery.endpoint_gone');
     return { outcome: 'endpoint_gone', httpStatus: HTTP_STATUS_GONE };
   }
 
   await recordOutcome({
-    status: 'FAILED',
-    http_status_code: httpStatus,
-    response_body: responseBody,
-    next_retry_at: computeNextRetryAt(jobContext.attemptsMade),
+    outcome: {
+      status: 'FAILED',
+      http_status_code: httpStatus,
+      response_body: responseBody,
+      next_retry_at: computeNextRetryAt(jobContext.attemptsMade),
+    },
   });
   logger.warn({ ...logFields, httpStatus }, 'webhook.delivery.endpoint_failed');
   throw new WebhookEndpointFailure(`Webhook delivery failed with HTTP ${String(httpStatus)}`);
@@ -639,9 +678,10 @@ async function deliverClaimedWebhook(options: {
  *   with the next retry time and throws {@link WebhookEndpointFailure}: BullMQ retries on the
  *   delivery schedule (a minute, rising to ten hours — about a day in all) and the last failure
  *   reaches the dead-letter ledger without a page. `410 Gone` records `FAILED`, turns the webhook
- *   off and completes. An unreadable or empty signing secret, or a missing attempt row, throws
- *   `UnrecoverableError` (recorded and alerted). A disabled or deleted webhook records `FAILED`
- *   and skips.
+ *   off and completes. An unreadable or empty signing secret throws `UnrecoverableError`
+ *   (recorded and alerted). A disabled or deleted webhook records `FAILED` and skips; an attempt
+ *   not visible in the job's organization (deleted organization, row lost to a restore) skips at
+ *   warn level, with nothing sent.
  * - **Side effects:** outbound HTTPS POST; updates to `webhook_delivery_attempts` (and
  *   `webhooks.is_enabled` on a 410); structured logs at every transition.
  * - **Notes:** the dependency-injection seam (`fetchImplementation`, `deliveryAttemptRepository`)
@@ -664,8 +704,10 @@ export async function processWebhookDeliveryAttempt(options: {
   });
 
   if (claim.status === 'skipped') {
-    logger.info(
-      { deliveryAttemptPublicId, requestId: jobContext.requestId },
+    const log = claim.reason === 'attempt_missing' ? logger.warn : logger.info;
+    log.call(
+      logger,
+      { deliveryAttemptPublicId, organizationPublicId, requestId: jobContext.requestId },
       `webhook.delivery.${claim.reason}`,
     );
     return { outcome: 'skipped', reason: claim.reason };
@@ -710,17 +752,20 @@ export function createWebhookDeliveryWorker(): WorkerHandle {
           job,
           queueName: WEBHOOK_DELIVERY_QUEUE_NAME,
         });
-      return runWithPropagatedTraceContext({ traceparent, tracestate }, job.name, () =>
-        processWebhookDeliveryAttempt({
-          deliveryAttemptPublicId,
-          organizationPublicId,
-          jobContext: omitUndefined({
-            id: job.id,
-            attemptsMade: job.attemptsMade,
-            requestId,
+      return runWithPropagatedTraceContext({
+        carrier: { traceparent, tracestate },
+        spanName: job.name,
+        callback: () =>
+          processWebhookDeliveryAttempt({
+            deliveryAttemptPublicId,
+            organizationPublicId,
+            jobContext: omitUndefined({
+              id: job.id,
+              attemptsMade: job.attemptsMade,
+              requestId,
+            }),
           }),
-        }),
-      );
+      });
     },
     {
       connection: getBullMQConnectionOptions(),
@@ -741,5 +786,5 @@ export function createWebhookDeliveryWorker(): WorkerHandle {
     logger.info({ jobId: job?.id }, 'webhook.delivery.completed');
   });
 
-  return buildWorkerHandle(worker, WEBHOOK_DELIVERY_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: WEBHOOK_DELIVERY_QUEUE_NAME });
 }

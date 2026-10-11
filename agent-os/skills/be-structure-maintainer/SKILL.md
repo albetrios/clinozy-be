@@ -75,7 +75,6 @@ Enforced by `src/tests/global/import-paths.global.test.ts`. Rule: `agent-os/rule
 src/infrastructure/
   database/
     connection.ts             # Postgres + Drizzle
-    base-repository.ts        # Pagination helper
     transaction.ts            # withTransaction()
     pg-schemas.ts             # Shared pgSchema definitions
     pool/                     # Pool tuning helpers

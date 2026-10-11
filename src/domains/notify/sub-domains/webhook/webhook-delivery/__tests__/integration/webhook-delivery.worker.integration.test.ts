@@ -267,7 +267,7 @@ describe('webhook-delivery.worker — status transitions', () => {
         jobContext: { id: 'tenant-isolation', attemptsMade: 0 },
         fetchImplementation: vi.fn(async () => new Response('ok', { status: 200 })),
       }),
-    ).rejects.toThrow(/attempt_not_found/);
+    ).resolves.toEqual({ outcome: 'skipped', reason: 'attempt_missing' });
     expect((await readAttempt(deliveryAttempt.id))?.status).toBe('PENDING');
   });
 });

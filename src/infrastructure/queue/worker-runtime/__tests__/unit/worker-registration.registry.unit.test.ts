@@ -71,10 +71,11 @@ describe('worker-registration.registry', () => {
   it('keeps expected family, criticality, scheduler, and external-io counts', () => {
     const definitions = getWorkerQueueRegistrationDefinitions();
 
-    // REQ-4: subscription-seat-sync adds one Postgres-backed, event-driven, throughput worker; the
-    // webhook-delivery-reclaim sweep one Postgres-backed, scheduled, maintenance worker.
+    // REQ-4: subscription-seat-sync adds one Postgres-backed throughput worker (event-driven, plus the
+    // hourly seat reconcile on its queue); the webhook-delivery-reclaim sweep one Postgres-backed,
+    // scheduled, maintenance worker. user-data-export also runs its lost-enqueue sweep.
     expect(definitions.filter((definition) => definition.usesPostgres)).toHaveLength(30);
-    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(27);
+    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(29);
     expect(
       definitions.filter((definition) => definition.criticality === 'throughput'),
     ).toHaveLength(6);

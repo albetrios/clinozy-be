@@ -49,17 +49,28 @@ interface SmokeContext {
 
 const smokeContext: SmokeContext = {};
 
-function assertStatus(actual: number, expected: ExpectedStatus, detail: string): void {
+function assertStatus({
+  actual,
+  expected,
+  detail,
+}: {
+  actual: number;
+  expected: ExpectedStatus;
+  detail: string;
+}): void {
   const allowed = Array.isArray(expected) ? expected : [expected];
   if (!allowed.includes(actual)) {
     throw new Error(`${detail}: expected ${allowed.join('|')}, got ${actual}`);
   }
 }
 
-async function requestJson(
-  path: string,
-  options: RequestInit & { expectedStatus?: ExpectedStatus } = {},
-): Promise<{ status: number; body: unknown }> {
+async function requestJson({
+  path,
+  options = {},
+}: {
+  path: string;
+  options?: (RequestInit & { expectedStatus?: ExpectedStatus }) | undefined;
+}): Promise<{ status: number; body: unknown }> {
   const { expectedStatus, ...fetchOptions } = options;
   const response = await fetch(`${BASE_URL}${path}`, fetchOptions);
   const text = await response.text();
@@ -74,7 +85,11 @@ async function requestJson(
   if (expectedStatus !== undefined) {
     // assertStatus already rejects any status outside the allowed list, so an
     // explicitly expected status (e.g. a documented typed 501) is not re-flagged.
-    assertStatus(response.status, expectedStatus, `${fetchOptions.method ?? 'GET'} ${path}`);
+    assertStatus({
+      actual: response.status,
+      expected: expectedStatus,
+      detail: `${fetchOptions.method ?? 'GET'} ${path}`,
+    });
   } else if (response.status >= 500) {
     throw new Error(`${path}: server error ${response.status} — ${text.slice(0, 200)}`);
   }
@@ -149,23 +164,26 @@ async function runProbe(probe: RouteProbe): Promise<void> {
     Object.assign(headers, authHeaders(probe.needsOrganization === true));
   }
 
-  await requestJson(
-    probe.path,
-    omitUndefined({
+  await requestJson({
+    path: probe.path,
+    options: omitUndefined({
       method,
       headers,
       body: probe.body !== undefined ? JSON.stringify(probe.body) : undefined,
       expectedStatus: probe.expectedStatus,
     }),
-  );
+  });
 }
 
 async function setupLogin(): Promise<void> {
-  const { body } = await requestJson(`${API_PREFIX}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...CAPTCHA_BYPASS_HEADERS },
-    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
-    expectedStatus: 200,
+  const { body } = await requestJson({
+    path: `${API_PREFIX}/auth/login`,
+    options: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...CAPTCHA_BYPASS_HEADERS },
+      body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+      expectedStatus: 200,
+    },
   });
   const payload = body as { data?: { access_token?: string } };
   if (!payload.data?.access_token) {
@@ -177,9 +195,12 @@ async function setupLogin(): Promise<void> {
 async function setupOrganization(): Promise<void> {
   // The caller's organizations are listed under `/users/me` — `/tenancy/organizations` is
   // create-only (POST) since the active organization moved to the singular resource.
-  const { body } = await requestJson(`${API_PREFIX}/users/me/organizations`, {
-    headers: authHeaders(false),
-    expectedStatus: 200,
+  const { body } = await requestJson({
+    path: `${API_PREFIX}/users/me/organizations`,
+    options: {
+      headers: authHeaders(false),
+      expectedStatus: 200,
+    },
   });
   const payload = body as { data?: Array<{ id?: string; slug?: string }> };
   const organizations = payload.data ?? [];
@@ -200,11 +221,14 @@ async function setupOrganization(): Promise<void> {
   // do NOT need the switch: an owner carries subscription:read and audit-log:read into a personal
   // workspace.) Switch to the demo TEAM organization and adopt the re-scoped token, exactly as a
   // real client does.
-  const switchResponse = await requestJson(`${API_PREFIX}/auth/switch-to-organization`, {
-    method: 'POST',
-    headers: { ...authHeaders(false), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ organization_id: demoOrganization.id }),
-    expectedStatus: 200,
+  const switchResponse = await requestJson({
+    path: `${API_PREFIX}/auth/switch-to-organization`,
+    options: {
+      method: 'POST',
+      headers: { ...authHeaders(false), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ organization_id: demoOrganization.id }),
+      expectedStatus: 200,
+    },
   });
   const switchPayload = switchResponse.body as { data?: { access_token?: string } };
   if (!switchPayload.data?.access_token) {
@@ -214,9 +238,12 @@ async function setupOrganization(): Promise<void> {
 }
 
 async function setupPlanAndRoleIds(): Promise<void> {
-  const plansResponse = await requestJson(`${API_PREFIX}/billing/plans`, {
-    headers: authHeaders(true),
-    expectedStatus: 200,
+  const plansResponse = await requestJson({
+    path: `${API_PREFIX}/billing/plans`,
+    options: {
+      headers: authHeaders(true),
+      expectedStatus: 200,
+    },
   });
   const plansBody = plansResponse.body as { data?: Array<{ id?: string }> };
   const planId = plansBody.data?.[0]?.id;
@@ -224,9 +251,12 @@ async function setupPlanAndRoleIds(): Promise<void> {
     smokeContext.planId = planId;
   }
 
-  const rolesResponse = await requestJson(`${API_PREFIX}/tenancy/organization/roles`, {
-    headers: authHeaders(true),
-    expectedStatus: 200,
+  const rolesResponse = await requestJson({
+    path: `${API_PREFIX}/tenancy/organization/roles`,
+    options: {
+      headers: authHeaders(true),
+      expectedStatus: 200,
+    },
   });
   const rolesBody = rolesResponse.body as { data?: Array<{ id?: string }> };
   const roleId = rolesBody.data?.[0]?.id;
@@ -487,7 +517,13 @@ function sweepPlaceholderFor(paramName: string): string {
   return entity ? publicIdPlaceholderFor(entity) : 'placeholder';
 }
 
-function sweepExpectedStatus(route: RouteEntry, declaredStatus: number): number[] {
+function sweepExpectedStatus({
+  route,
+  declaredStatus,
+}: {
+  route: RouteEntry;
+  declaredStatus: number;
+}): number[] {
   const override = SWEEP_EXPECTED_OVERRIDES[routeSuccessStatusKey(route)];
   if (override) {
     return override;
@@ -530,7 +566,7 @@ function buildCatalogReadOnlySweepProbes(organizationId: string): RouteProbe[] {
         method: 'GET' as const,
         path: materializedPath,
         ...(usesAuthentication ? { authenticated: true, needsOrganization: true } : {}),
-        expectedStatus: sweepExpectedStatus(route, declaredStatus),
+        expectedStatus: sweepExpectedStatus({ route, declaredStatus }),
       };
     });
 }
@@ -543,7 +579,13 @@ async function main(): Promise<void> {
   let failed = 0;
   const failures: string[] = [];
 
-  const runCase = async (label: string, run: () => Promise<void>): Promise<void> => {
+  const runCase = async ({
+    label,
+    run,
+  }: {
+    label: string;
+    run: () => Promise<void>;
+  }): Promise<void> => {
     try {
       await run();
       console.log(`  ✓ ${label}`);
@@ -557,17 +599,17 @@ async function main(): Promise<void> {
   };
 
   for (const probe of healthProbes) {
-    await runCase(probe.name, () => runProbe(probe));
+    await runCase({ label: probe.name, run: () => runProbe(probe) });
   }
 
-  await runCase('setup: login', setupLogin);
+  await runCase({ label: 'setup: login', run: setupLogin });
   if (!smokeContext.accessToken) {
     console.error('\nSetup failed — run: DEMO_PASSWORD=DemoPassword123! pnpm db:seed:full');
     process.exit(1);
   }
 
-  await runCase('setup: organizations', setupOrganization);
-  await runCase('setup: plan and role ids', setupPlanAndRoleIds);
+  await runCase({ label: 'setup: organizations', run: setupOrganization });
+  await runCase({ label: 'setup: plan and role ids', run: setupPlanAndRoleIds });
 
   if (!smokeContext.organizationId) {
     console.error('\nSetup failed — demo organization missing after seed');
@@ -576,12 +618,12 @@ async function main(): Promise<void> {
 
   const domainProbes = buildDomainProbes();
   for (const probe of domainProbes) {
-    await runCase(probe.name, () => runProbe(probe));
+    await runCase({ label: probe.name, run: () => runProbe(probe) });
   }
 
   const sweepProbes = buildCatalogReadOnlySweepProbes(requireOrganizationId());
   for (const probe of sweepProbes) {
-    await runCase(probe.name, () => runProbe(probe));
+    await runCase({ label: probe.name, run: () => runProbe(probe) });
   }
 
   console.log(

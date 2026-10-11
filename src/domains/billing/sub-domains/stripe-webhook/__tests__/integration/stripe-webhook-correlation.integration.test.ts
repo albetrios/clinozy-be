@@ -59,7 +59,7 @@ describe('stripe-webhook — enqueue correlation id', () => {
       data: { object: {} },
     } as Stripe.Event;
 
-    await enqueueStripeWebhook(event, 'req-stripe-enqueue-correlation');
+    await enqueueStripeWebhook({ event, requestId: 'req-stripe-enqueue-correlation' });
 
     expect(addMock).toHaveBeenCalledWith(
       'process-stripe-webhook',

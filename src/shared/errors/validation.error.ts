@@ -8,6 +8,8 @@ export interface ValidationErrorItem {
   /** When set, error handler uses request.t(messageKey, messageParams) for message. */
   messageKey?: string;
   messageParams?: Record<string, string | number>;
+  /** The message already rendered per response language (a Zod issue); the handler picks one. */
+  localizedMessages?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -16,42 +18,18 @@ export interface ValidationErrorItem {
  * the error handler can localize each entry.
  */
 export class ValidationError extends AppError {
-  readonly details?: Record<string, unknown>;
   /** Paddle-style list for error response */
   readonly errors?: ValidationErrorItem[];
 
   constructor(
     messageKey: string,
     messageParams?: Record<string, string | number>,
-    fallbackMessageOrDetails?: string | Record<string, unknown>,
+    fallbackMessage?: string,
     errors?: ValidationErrorItem[],
   ) {
-    const fallbackMessage =
-      typeof fallbackMessageOrDetails === 'string' ? fallbackMessageOrDetails : messageKey;
-    const details =
-      typeof fallbackMessageOrDetails === 'object' && fallbackMessageOrDetails
-        ? fallbackMessageOrDetails
-        : undefined;
-    super('VALIDATION_ERROR', 400, messageKey, messageParams, fallbackMessage);
-    if (details !== undefined) {
-      this.details = details;
-    }
-    const resolvedErrors = errors ?? (details ? objectToFieldMessages(details) : undefined);
-    if (resolvedErrors !== undefined) {
-      this.errors = resolvedErrors;
+    super('VALIDATION_ERROR', 400, messageKey, messageParams, fallbackMessage ?? messageKey);
+    if (errors !== undefined) {
+      this.errors = errors;
     }
   }
-}
-
-function resolveFieldMessage(value: unknown): string {
-  if (Array.isArray(value)) return value.join(', ');
-  if (typeof value === 'string') return value;
-  return 'Invalid';
-}
-
-function objectToFieldMessages(details: Record<string, unknown>): ValidationErrorItem[] {
-  return Object.entries(details).map(([field, value]) => ({
-    field,
-    message: resolveFieldMessage(value),
-  }));
 }

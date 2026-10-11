@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { sql as drizzleSql } from 'drizzle-orm';
 import { env } from '@/shared/config/env.config.js';
-import { sql } from '@/infrastructure/database/connection.js';
 import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Production hardening item 2: when many concurrent requests use scoped
@@ -23,9 +28,9 @@ describe('Chaos resilience: database pool stays available under bursty scoped-co
     const burstSize = Math.max(poolMax * 2, 20);
 
     const scopedUnitsOfWork = Array.from({ length: burstSize }, (_, index) =>
-      withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
-        async (databaseHandle) => {
+      withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
+        callback: async (databaseHandle) => {
           const rows = await databaseHandle.execute<{ value: number }>(
             drizzleSql`SELECT ${index}::int AS value`,
           );
@@ -34,12 +39,13 @@ describe('Chaos resilience: database pool stays available under bursty scoped-co
             : ((rows as { rows?: { value: number }[] }).rows ?? []);
           return result[0]?.value ?? -1;
         },
-      ),
+      }),
     );
 
-    const autocommitProbes = Array.from(
-      { length: burstSize },
-      (_, index) => sql<{ value: number }[]>`SELECT ${index + 1000}::int AS value`,
+    const autocommitProbes = Array.from({ length: burstSize }, (_, index) =>
+      database
+        .execute(drizzleSql`SELECT ${index + 1000}::int AS value`)
+        .then((result) => rowsOf<{ value: number }>(result)),
     );
 
     const [scopedResults, autocommitResults] = await Promise.all([

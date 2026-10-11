@@ -23,10 +23,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -86,20 +88,22 @@ describe('AuthSessionService', () => {
   });
 
   it('revoke removes session for user', async () => {
-    await service.revoke('user_public', 'session_public');
+    await service.revoke({ userPublicId: 'user_public', sessionPublicId: 'session_public' });
     expect(sessionRepository.revoke).toHaveBeenCalledWith('session_public', user.id);
   });
 
   it('revoke throws when user record is missing', async () => {
     vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue(null as never);
-    await expect(service.revoke('user_public', 'session_public')).rejects.toBeInstanceOf(
-      NotFoundError,
-    );
+    await expect(
+      service.revoke({ userPublicId: 'user_public', sessionPublicId: 'session_public' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('revoke throws when session missing', async () => {
     vi.mocked(sessionRepository.revoke).mockResolvedValue(null);
-    await expect(service.revoke('user_public', 'missing')).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      service.revoke({ userPublicId: 'user_public', sessionPublicId: 'missing' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('revokeAllSessions revokes every session for user', async () => {
@@ -150,11 +154,14 @@ describe('AuthSessionService', () => {
   });
 
   it('createSessionForUser creates session under user database context', async () => {
-    const result = await service.createSessionForUser('user_public', {
-      token_hash: 'hash',
-      ip_address: '127.0.0.1',
-      user_agent: 'vitest',
-      expires_at: new Date('2026-12-31T00:00:00.000Z'),
+    const result = await service.createSessionForUser({
+      userPublicId: 'user_public',
+      data: {
+        token_hash: 'hash',
+        ip_address: '127.0.0.1',
+        user_agent: 'vitest',
+        expires_at: new Date('2026-12-31T00:00:00.000Z'),
+      },
     });
     expect(result.public_id).toBe('session_new');
     expect(sessionRepository.create).toHaveBeenCalled();
@@ -170,11 +177,14 @@ describe('AuthSessionService', () => {
       '@/domains/auth/sub-domains/auth-session/session-token-cache.service.js'
     );
 
-    await service.createSessionForUser('user_public', {
-      token_hash: 'hash',
-      ip_address: '127.0.0.1',
-      user_agent: 'vitest',
-      expires_at: new Date('2026-12-31T00:00:00.000Z'),
+    await service.createSessionForUser({
+      userPublicId: 'user_public',
+      data: {
+        token_hash: 'hash',
+        ip_address: '127.0.0.1',
+        user_agent: 'vitest',
+        expires_at: new Date('2026-12-31T00:00:00.000Z'),
+      },
     });
 
     // Cap enforced under the advisory lock, keeping room (cap - 1) for the new session.
@@ -193,11 +203,14 @@ describe('AuthSessionService', () => {
   it('createSessionForUser throws when user is missing', async () => {
     vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue(null as never);
     await expect(
-      service.createSessionForUser('missing', {
-        token_hash: 'hash',
-        ip_address: '127.0.0.1',
-        user_agent: 'vitest',
-        expires_at: new Date('2026-12-31T00:00:00.000Z'),
+      service.createSessionForUser({
+        userPublicId: 'missing',
+        data: {
+          token_hash: 'hash',
+          ip_address: '127.0.0.1',
+          user_agent: 'vitest',
+          expires_at: new Date('2026-12-31T00:00:00.000Z'),
+        },
       }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
@@ -217,7 +230,10 @@ describe('AuthSessionService', () => {
   it('findActiveSessionByPublicId and rotateSessionTokenHash delegate to repository', async () => {
     const session = await service.findActiveSessionByPublicId('session_public');
     expect(session?.public_id).toBe('session_public');
-    await service.rotateSessionTokenHash('session_public', 'new-hash');
+    await service.rotateSessionTokenHash({
+      sessionPublicId: 'session_public',
+      sessionTokenHash: 'new-hash',
+    });
     expect(sessionRepository.rotateTokenHash).toHaveBeenCalledWith('session_public', 'new-hash');
   });
 
@@ -226,7 +242,10 @@ describe('AuthSessionService', () => {
       '@/domains/auth/sub-domains/auth-session/session-token-cache.service.js'
     );
     vi.mocked(getCachedSessionTokenValid).mockResolvedValueOnce('sess_cached');
-    const result = await service.verifyActiveAccessToken('cached-token', 'user_public');
+    const result = await service.verifyActiveAccessToken({
+      rawToken: 'cached-token',
+      userPublicId: 'user_public',
+    });
     expect(sessionRepository.findActiveByTokenHash).not.toHaveBeenCalled();
     expect(result).toEqual({ sessionPublicId: 'sess_cached' });
   });
@@ -243,7 +262,10 @@ describe('AuthSessionService', () => {
     } as never);
     // sec-new-A2: active user is returned on cache miss so the user status check passes
     vi.mocked(userService.findUserRecordByPublicId).mockResolvedValueOnce(user as never);
-    const result = await service.verifyActiveAccessToken('fresh-token', 'user_public');
+    const result = await service.verifyActiveAccessToken({
+      rawToken: 'fresh-token',
+      userPublicId: 'user_public',
+    });
     expect(sessionRepository.findActiveByTokenHash).toHaveBeenCalled();
     expect(setCachedSessionTokenValid).toHaveBeenCalledWith(
       expect.objectContaining({ sessionExpiresAt, sessionPublicId: 'session_public' }),
@@ -254,7 +276,7 @@ describe('AuthSessionService', () => {
   it('verifyActiveAccessToken throws when session is missing', async () => {
     vi.mocked(sessionRepository.findActiveByTokenHash).mockResolvedValueOnce(null);
     await expect(
-      service.verifyActiveAccessToken('unknown-token', 'user_public'),
+      service.verifyActiveAccessToken({ rawToken: 'unknown-token', userPublicId: 'user_public' }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
@@ -273,7 +295,10 @@ describe('AuthSessionService', () => {
       status: 'SUSPENDED',
     } as never);
     await expect(
-      service.verifyActiveAccessToken('active-session-token', 'suspended_user'),
+      service.verifyActiveAccessToken({
+        rawToken: 'active-session-token',
+        userPublicId: 'suspended_user',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
@@ -291,7 +316,10 @@ describe('AuthSessionService', () => {
       deleted_at: new Date('2026-01-01T00:00:00.000Z'),
     } as never);
     await expect(
-      service.verifyActiveAccessToken('active-session-token', 'deleted_user'),
+      service.verifyActiveAccessToken({
+        rawToken: 'active-session-token',
+        userPublicId: 'deleted_user',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 

@@ -1,8 +1,13 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
-import { buildPostgresOptions, database, sql } from '@/infrastructure/database/connection.js';
+import type pg from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import {
+  buildPostgresOptions,
+  createDatabasePool,
+  database,
+  pool,
+} from '@/infrastructure/database/connection.js';
 
-let operatorSql: ReturnType<typeof postgres> | undefined;
+let operatorPool: pg.Pool | undefined;
 let operatorDatabaseHandle: ReturnType<typeof drizzle> | undefined;
 
 /**
@@ -22,23 +27,25 @@ function distinctOperatorUrl(): string | undefined {
 }
 
 /**
- * Raw postgres.js client on the operator connection, for harness work the application role may
- * not do.
+ * node-postgres pool on the operator connection, for harness work that needs a raw client the
+ * application role may not use (holding a lock across statements, terminating a backend).
  *
  * @remarks
  * A lazily-created pool on a separate URL, built with the same {@link buildPostgresOptions} as
- * `getMaintenanceDatabase()` in `connection.ts`, falling back to the shared {@link sql} when no
- * distinct URL is configured. So outside the RLS lane this returns the existing client and
- * nothing changes. Used for `cleanupDatabase`'s TRUNCATE, which has no
- * Drizzle equivalent.
+ * `getMaintenanceDatabase()` in `connection.ts`, falling back to the shared {@link pool} when no
+ * distinct URL is configured. So outside the RLS lane this returns the existing pool and
+ * nothing changes.
  */
-export function getOperatorSql(): ReturnType<typeof postgres> {
+export function getOperatorPool(): pg.Pool {
   const operatorUrl = distinctOperatorUrl();
-  if (!operatorUrl) return sql;
-  if (operatorSql === undefined) {
-    operatorSql = postgres(operatorUrl, buildPostgresOptions(operatorUrl));
+  if (!operatorUrl) return pool;
+  if (operatorPool === undefined) {
+    operatorPool = createDatabasePool({
+      config: buildPostgresOptions(operatorUrl),
+      poolName: 'operator',
+    });
   }
-  return operatorSql;
+  return operatorPool;
 }
 
 /**
@@ -50,7 +57,8 @@ export function getOperatorSql(): ReturnType<typeof postgres> {
  *   and the harness truncates every table between suites; neither is something the application
  *   role may do. Seed on the operator, assert through the application's own pool.
  * - **Algorithm:** the shared {@link database} when there is no distinct operator URL, otherwise
- *   a lazily-created Drizzle handle over {@link getOperatorSql}.
+ *   a lazily-created Drizzle handle over {@link getOperatorPool}. Raw statements (`cleanupDatabase`'s
+ *   TRUNCATE, a fixture's DELETE) go through its `execute(sql`...`)`.
  * - **Notes:** the two root factories, `user.factory.ts` and `organization.factory.ts`,
  *   deliberately insert through the application's own context instead — for the tables every
  *   other fixture hangs off, "can this row be created the way production creates it" is itself
@@ -59,7 +67,7 @@ export function getOperatorSql(): ReturnType<typeof postgres> {
 export function getOperatorDatabase(): ReturnType<typeof drizzle> {
   if (!distinctOperatorUrl()) return database;
   if (operatorDatabaseHandle === undefined) {
-    operatorDatabaseHandle = drizzle(getOperatorSql());
+    operatorDatabaseHandle = drizzle({ client: getOperatorPool() });
   }
   return operatorDatabaseHandle;
 }

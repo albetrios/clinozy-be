@@ -59,10 +59,16 @@ describe('createUploadController', () => {
   it('getUpload returns upload detail', async () => {
     const reply = mockReply();
     await controller.getUpload(mockRequest({ params: { upload_id: uploadPublicId } }), reply);
-    // The active organization is relayed as a third argument (null in the personal space):
-    // `upload.uploads` has two disjoint RLS arms, and without it the service cannot reach an
-    // organization-scoped row at all.
-    expect(uploadService.getUpload).toHaveBeenCalledWith(uploadPublicId, expect.any(String), null);
+    // The principal carries the active organization (null in the personal space): `upload.uploads`
+    // has two disjoint RLS arms, and without it the service cannot reach an organization-scoped row.
+    expect(uploadService.getUpload).toHaveBeenCalledWith({
+      public_id: uploadPublicId,
+      principal: expect.objectContaining({
+        userPublicId: expect.any(String),
+        organizationPublicId: null,
+        authorizeOrganization: expect.any(Function),
+      }),
+    });
     expect(reply.send).toHaveBeenCalled();
   });
 

@@ -34,7 +34,7 @@ organizations, and how the active organization is carried as a signed token clai
   workspace needs `upload:manage` to set its own logo, and Billing is an **account-level** section
   a personal workspace reaches — so a PERSONAL owner holds those codes too. Billing WRITES stay
   team-only, enforced twice: `subscription:manage` is not granted to a personal owner, and
-  `subscription.service.ts` calls `assertTeamOrganization(…, 'BILLING')` on every write path
+  `subscription.service.ts` calls `assertTeamOrganization({ organization, capability: 'BILLING' })` on every write path
   regardless, so a personal organization is refused with 422 even if the code were somehow held.
 - The `PERSONAL` organization has a **null slug** (never user-facing — its app URL is `/`) and is
   **immutable**: it cannot be deleted or have its ownership transferred (`409

@@ -184,6 +184,7 @@ const OP_NAMES = [
   'patch-organization-settings',
   'mark-all-read',
   'create-org',
+  'step-up',
   'data-export',
   'create-membership',
   'delete-invitation',
@@ -441,7 +442,8 @@ function phaseOrgAdminMisc() {
 
 // Rare/heavy flows — once per VU (first iteration) to cover them without bloat / rate caps.
 function phaseRareOnce(uniq) {
-  // data-export (EXPENSIVE_AUTHED_RATE_LIMIT 5/5min)
+  // data-export (EXPENSIVE_AUTHED_RATE_LIMIT 5/5min) — needs a recent step-up on this session.
+  req('step-up', 'POST', '/auth/step-up', { password: cred.password });
   req('data-export', 'POST', '/users/me/data-export', {});
 
   // avatar upload presign — then delete the pending upload so it never fills the per-user quota.

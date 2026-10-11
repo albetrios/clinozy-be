@@ -120,7 +120,10 @@ async function runOperationWithOptionalRetry<T>(options: {
         !(error instanceof CircuitBreakerOpenError) && isTransientNetworkError(error)),
   }) as RetryWithBackoffOptions;
 
-  return retryWithBackoff(() => operation(createAttemptSignal()), retryOptions);
+  return retryWithBackoff({
+    operation: () => operation(createAttemptSignal()),
+    options: retryOptions,
+  });
 }
 
 /** Tags a third-party error so the circuit breaker counts it as a success (see `countsAsCircuitFailure`). */
@@ -201,7 +204,7 @@ export async function outboundCall<T>(options: OutboundCallOptions<T>): Promise<
     return await executeOnce();
   } catch (error) {
     if (error instanceof CircuitBreakerOpenError || resolved.rethrowIf?.(error)) {
-      const externalError = classifyOutboundError(error, resolved.name);
+      const externalError = classifyOutboundError({ error, integration: resolved.name });
       const durationMs = Date.now() - startedAt;
       logOutboundFailure(
         omitUndefined({
@@ -224,7 +227,7 @@ export async function outboundCall<T>(options: OutboundCallOptions<T>): Promise<
       throw error;
     }
 
-    const externalError = classifyOutboundError(error, resolved.name);
+    const externalError = classifyOutboundError({ error, integration: resolved.name });
     const durationMs = Date.now() - startedAt;
     const transient = isTransientNetworkError(error) || error instanceof CircuitBreakerOpenError;
 

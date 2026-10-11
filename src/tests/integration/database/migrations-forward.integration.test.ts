@@ -1,8 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { sql } from '@/infrastructure/database/connection.js';
 import { execSync } from 'node:child_process';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Verifies all SQL migrations in migrations/ are applied to the test database.
@@ -19,9 +25,11 @@ describe.runIf(runAsApplicationBehaviour)('Integration: migrations forward', () 
       .filter((file) => file.endsWith('.sql'))
       .sort();
 
-    const applied = await sql<{ filename: string }[]>`
+    const applied = rowsOf<{ filename: string }>(
+      await database.execute(sql`
       SELECT filename FROM public.schema_migrations ORDER BY filename ASC
-    `;
+    `),
+    );
     expect(
       allFiles.length,
       'Expected migration files to compare against the ledger',

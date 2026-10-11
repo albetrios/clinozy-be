@@ -4,12 +4,14 @@ import {
 } from '@/shared/constants/project-identity.constants.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const sqlMock = vi.fn();
+const executeMock = vi.fn();
 const maintenanceExecuteMock = vi.fn();
 const getEnvMock = vi.fn();
 
 vi.mock('@/infrastructure/database/connection.js', () => ({
-  sql: (...arguments_: unknown[]) => sqlMock(...arguments_),
+  database: {
+    execute: (...arguments_: unknown[]) => executeMock(...arguments_),
+  },
   getMaintenanceDatabase: () => ({
     execute: (...arguments_: unknown[]) => maintenanceExecuteMock(...arguments_),
   }),
@@ -33,7 +35,7 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 
 describe('assertDatabaseRoleRlsSafety', () => {
   beforeEach(() => {
-    sqlMock.mockReset();
+    executeMock.mockReset();
     getEnvMock.mockReset();
     vi.resetModules();
     getEnvMock.mockReturnValue({
@@ -43,7 +45,7 @@ describe('assertDatabaseRoleRlsSafety', () => {
   });
 
   it('resolves and logs info when the session role is non-superuser without BYPASSRLS', async () => {
-    sqlMock.mockResolvedValue([
+    executeMock.mockResolvedValue([
       { rolname: 'clinozy_be_app_login', rolsuper: false, rolbypassrls: false },
     ]);
     getEnvMock.mockReturnValue({ DATABASE_RLS_SAFETY_ENFORCED: true });
@@ -65,7 +67,7 @@ describe('assertDatabaseRoleRlsSafety', () => {
   });
 
   it('throws when DATABASE_RLS_SAFETY_ENFORCED and the session role is a superuser', async () => {
-    sqlMock.mockResolvedValue([{ rolname: 'postgres', rolsuper: true, rolbypassrls: false }]);
+    executeMock.mockResolvedValue([{ rolname: 'postgres', rolsuper: true, rolbypassrls: false }]);
     getEnvMock.mockReturnValue({ DATABASE_RLS_SAFETY_ENFORCED: true });
 
     const { assertDatabaseRoleRlsSafety } = await import(
@@ -78,7 +80,7 @@ describe('assertDatabaseRoleRlsSafety', () => {
   });
 
   it('throws when DATABASE_RLS_SAFETY_ENFORCED and the session role has BYPASSRLS', async () => {
-    sqlMock.mockResolvedValue([
+    executeMock.mockResolvedValue([
       { rolname: 'replication_role', rolsuper: false, rolbypassrls: true },
     ]);
     getEnvMock.mockReturnValue({ DATABASE_RLS_SAFETY_ENFORCED: true });
@@ -91,7 +93,7 @@ describe('assertDatabaseRoleRlsSafety', () => {
   });
 
   it('warns (without throwing) for superuser when DATABASE_RLS_SAFETY_ENFORCED is false', async () => {
-    sqlMock.mockResolvedValue([{ rolname: 'postgres', rolsuper: true, rolbypassrls: false }]);
+    executeMock.mockResolvedValue([{ rolname: 'postgres', rolsuper: true, rolbypassrls: false }]);
     getEnvMock.mockReturnValue({ DATABASE_RLS_SAFETY_ENFORCED: false });
 
     const { logger } = await import('@/shared/utils/infrastructure/logger.util.js');
@@ -107,7 +109,7 @@ describe('assertDatabaseRoleRlsSafety', () => {
   });
 
   it('warns (without throwing) for BYPASSRLS when the flag is unset (relaxed)', async () => {
-    sqlMock.mockResolvedValue([
+    executeMock.mockResolvedValue([
       { rolname: LOCAL_DATABASE_NAME, rolsuper: false, rolbypassrls: true },
     ]);
     getEnvMock.mockReturnValue({ NODE_ENV: 'development' });
@@ -122,7 +124,7 @@ describe('assertDatabaseRoleRlsSafety', () => {
   });
 
   it('throws when pg_roles returns no row for session_user', async () => {
-    sqlMock.mockResolvedValue([]);
+    executeMock.mockResolvedValue([]);
     getEnvMock.mockReturnValue({ NODE_ENV: 'development' });
 
     const { assertDatabaseRoleRlsSafety } = await import(
@@ -135,7 +137,7 @@ describe('assertDatabaseRoleRlsSafety', () => {
   });
 
   it('throws when DATABASE_URL acts as the maintenance role (the bypass arms would open)', async () => {
-    sqlMock.mockResolvedValue([
+    executeMock.mockResolvedValue([
       {
         rolname: DATABASE_MAINTENANCE_ROLE,
         rolsuper: false,

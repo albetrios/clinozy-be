@@ -17,9 +17,12 @@ const budget = JSON.parse(
 
 describe('env-var-registry DSL', () => {
   it('envVar pairs the inline schema (unchanged) with allowed + description', () => {
-    const spec = envVar(z.coerce.number().int().default(5), {
-      allowed: 'integer',
-      description: 'x',
+    const spec = envVar({
+      schema: z.coerce.number().int().default(5),
+      meta: {
+        allowed: 'integer',
+        description: 'x',
+      },
     });
     expect(spec.allowed).toBe('integer');
     expect(spec.description).toBe('x');
@@ -27,15 +30,26 @@ describe('env-var-registry DSL', () => {
   });
 
   it('toSchemaShape derives the { key: schema } object for z.object()', () => {
-    const registry = { A: envVar(z.string().default('a'), { allowed: 's', description: 'd' }) };
+    const registry = {
+      A: envVar({ schema: z.string().default('a'), meta: { allowed: 's', description: 'd' } }),
+    };
     expect(z.object(toSchemaShape(registry)).parse({}).A).toBe('a');
   });
 
   it('buildEnvCatalog reads default + required back from each Zod field', () => {
     const registry: Record<string, EnvVarSpec> = {
-      WITH_DEFAULT: envVar(z.coerce.number().default(3000), { allowed: 'int', description: 'd' }),
-      REQUIRED: envVar(z.string().min(1), { allowed: 'string', description: 'd' }),
-      OPTIONAL: envVar(z.string().optional(), { allowed: 'string', description: 'd' }),
+      WITH_DEFAULT: envVar({
+        schema: z.coerce.number().default(3000),
+        meta: { allowed: 'int', description: 'd' },
+      }),
+      REQUIRED: envVar({
+        schema: z.string().min(1),
+        meta: { allowed: 'string', description: 'd' },
+      }),
+      OPTIONAL: envVar({
+        schema: z.string().optional(),
+        meta: { allowed: 'string', description: 'd' },
+      }),
     };
     const rows = new Map(buildEnvCatalog(registry).map((row) => [row.name, row]));
     expect(rows.get('WITH_DEFAULT')).toMatchObject({ default: '3000', required: false });

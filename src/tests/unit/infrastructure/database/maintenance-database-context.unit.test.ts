@@ -22,10 +22,10 @@ describe('withMaintenanceDatabaseContext', () => {
       async (callback: (transaction: unknown) => Promise<unknown>) => callback(databaseHandle),
     );
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+    const result = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
       callback,
-    );
+    });
 
     expect(result).toBe('ok');
     expect(executeMock).toHaveBeenCalled();

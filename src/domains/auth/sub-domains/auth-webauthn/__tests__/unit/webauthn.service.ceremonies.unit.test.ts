@@ -52,10 +52,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -90,7 +92,9 @@ function buildService(overrides: { user?: unknown; credential?: unknown; listAct
     updateCounter: vi.fn().mockResolvedValue(undefined),
     acquireCreationQuotaLock: vi.fn().mockResolvedValue(undefined),
     countActiveByUserId: vi.fn().mockResolvedValue(0),
-    createCredential: vi.fn().mockResolvedValue({ credential_id: 'cred-new' }),
+    createCredential: vi
+      .fn()
+      .mockResolvedValue({ credential_id: 'cred-new', public_id: 'wac_aaaaaaaaaaaaaaaaaaaaa' }),
   } as unknown as WebauthnCredentialRepository;
   const service = new WebauthnService(
     userService,
@@ -140,20 +144,19 @@ describe('WebauthnService.verifyAuthentication', () => {
   it('completes the ceremony: verifier gets the STORED credential material, the counter advances, and the session mint receives the user', async () => {
     const { service, credentialRepository } = buildService({});
 
-    const result = await service.verifyAuthentication(
-      authenticationBody(),
-      '203.0.113.7',
-      undefined,
-      'agent/1.0',
-    );
+    const result = await service.verifyAuthentication({
+      body: authenticationBody(),
+      ipAddress: '203.0.113.7',
+      userAgent: 'agent/1.0',
+    });
 
     // The challenge must be consumed from the AUTHENTICATION namespace — a registration
     // challenge replayed here would otherwise mint a session.
-    expect(consumeChallengeMock).toHaveBeenCalledWith(
-      expect.anything(),
-      'a'.repeat(64),
-      'authentication',
-    );
+    expect(consumeChallengeMock).toHaveBeenCalledWith({
+      redis: expect.anything(),
+      challengeToken: 'a'.repeat(64),
+      expectedKind: 'authentication',
+    });
 
     // The verifier is fed the stored credential, not anything client-supplied: decoded
     // public key bytes, the persisted counter, and user verification required.
@@ -192,7 +195,7 @@ describe('WebauthnService.verifyAuthentication', () => {
     const handle = Buffer.from(ACTIVE_USER.public_id, 'utf8').toString('base64url');
 
     await expect(
-      service.verifyAuthentication(authenticationBody(handle), '203.0.113.7'),
+      service.verifyAuthentication({ body: authenticationBody(handle), ipAddress: '203.0.113.7' }),
     ).resolves.toBeDefined();
   });
 
@@ -201,7 +204,10 @@ describe('WebauthnService.verifyAuthentication', () => {
     const foreignHandle = Buffer.from('usr_zzzzzzzzzzzzzzzzzzzzz', 'utf8').toString('base64url');
 
     await expect(
-      service.verifyAuthentication(authenticationBody(foreignHandle), '203.0.113.7'),
+      service.verifyAuthentication({
+        body: authenticationBody(foreignHandle),
+        ipAddress: '203.0.113.7',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(credentialRepository.findActiveByCredentialId).not.toHaveBeenCalled();
     expect(completeFirstFactorAuthMock).not.toHaveBeenCalled();
@@ -211,7 +217,7 @@ describe('WebauthnService.verifyAuthentication', () => {
     const { service } = buildService({ credential: null });
 
     await expect(
-      service.verifyAuthentication(authenticationBody(), '203.0.113.7'),
+      service.verifyAuthentication({ body: authenticationBody(), ipAddress: '203.0.113.7' }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(verifyAuthenticationMock).not.toHaveBeenCalled();
   });
@@ -220,7 +226,7 @@ describe('WebauthnService.verifyAuthentication', () => {
     const { service } = buildService({ credential: { ...STORED_CREDENTIAL, user_id: 999 } });
 
     await expect(
-      service.verifyAuthentication(authenticationBody(), '203.0.113.7'),
+      service.verifyAuthentication({ body: authenticationBody(), ipAddress: '203.0.113.7' }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(verifyAuthenticationMock).not.toHaveBeenCalled();
   });
@@ -229,7 +235,7 @@ describe('WebauthnService.verifyAuthentication', () => {
     const { service } = buildService({ user: { ...ACTIVE_USER, status: 'SUSPENDED' } });
 
     await expect(
-      service.verifyAuthentication(authenticationBody(), '203.0.113.7'),
+      service.verifyAuthentication({ body: authenticationBody(), ipAddress: '203.0.113.7' }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(verifyAuthenticationMock).not.toHaveBeenCalled();
     expect(completeFirstFactorAuthMock).not.toHaveBeenCalled();
@@ -240,7 +246,7 @@ describe('WebauthnService.verifyAuthentication', () => {
     const { service, credentialRepository } = buildService({});
 
     await expect(
-      service.verifyAuthentication(authenticationBody(), '203.0.113.7'),
+      service.verifyAuthentication({ body: authenticationBody(), ipAddress: '203.0.113.7' }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(credentialRepository.updateCounter).not.toHaveBeenCalled();
     expect(completeFirstFactorAuthMock).not.toHaveBeenCalled();
@@ -273,12 +279,12 @@ describe('WebauthnService.generateRegistrationOptions', () => {
     // sec-r4-A2: enrollment must demand UV, matching requireUserVerification at verify time.
     expect(options.authenticatorSelection.userVerification).toBe('required');
 
-    expect(createChallengeMock).toHaveBeenCalledWith(
-      expect.anything(),
-      'registration',
-      ACTIVE_USER.public_id,
-      'reg-challenge',
-    );
+    expect(createChallengeMock).toHaveBeenCalledWith({
+      redis: expect.anything(),
+      kind: 'registration',
+      userPublicId: ACTIVE_USER.public_id,
+      challenge: 'reg-challenge',
+    });
     expect(result.challenge_token).toBe('challenge-token');
   });
 
@@ -321,13 +327,16 @@ describe('WebauthnService.verifyRegistration', () => {
   it('persists the verified credential with base64url key material and reports its id', async () => {
     const { service, credentialRepository } = buildService({});
 
-    const result = await service.verifyRegistration(ACTIVE_USER.public_id, registrationBody);
+    const result = await service.verifyRegistration({
+      userPublicId: ACTIVE_USER.public_id,
+      body: registrationBody,
+    });
 
-    expect(consumeChallengeMock).toHaveBeenCalledWith(
-      expect.anything(),
-      'b'.repeat(64),
-      'registration',
-    );
+    expect(consumeChallengeMock).toHaveBeenCalledWith({
+      redis: expect.anything(),
+      challengeToken: 'b'.repeat(64),
+      expectedKind: 'registration',
+    });
     const created = vi.mocked(credentialRepository.createCredential).mock.calls[0]?.[0] as {
       user_id: number;
       credential_id: string;
@@ -340,7 +349,8 @@ describe('WebauthnService.verifyRegistration', () => {
     expect(Buffer.from(created.public_key, 'base64url').toString('utf8')).toBe('new-public-key');
     expect(created.counter).toBe(0);
     expect(created.backed_up).toBe(true);
-    expect(result).toEqual({ verified: true, credential_id: 'cred-new' });
+    expect(result).toEqual({ verified: true, credential_id: 'wac_aaaaaaaaaaaaaaaaaaaaa' });
+    expect(result.credential_id).not.toBe(created.credential_id);
   });
 
   it('rejects a challenge minted for a different user without touching the verifier', async () => {
@@ -351,7 +361,7 @@ describe('WebauthnService.verifyRegistration', () => {
     const { service, credentialRepository } = buildService({});
 
     await expect(
-      service.verifyRegistration(ACTIVE_USER.public_id, registrationBody),
+      service.verifyRegistration({ userPublicId: ACTIVE_USER.public_id, body: registrationBody }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(verifyRegistrationMock).not.toHaveBeenCalled();
     expect(credentialRepository.createCredential).not.toHaveBeenCalled();
@@ -362,7 +372,7 @@ describe('WebauthnService.verifyRegistration', () => {
     const { service, credentialRepository } = buildService({});
 
     await expect(
-      service.verifyRegistration(ACTIVE_USER.public_id, registrationBody),
+      service.verifyRegistration({ userPublicId: ACTIVE_USER.public_id, body: registrationBody }),
     ).rejects.toBeInstanceOf(ValidationError);
     expect(credentialRepository.createCredential).not.toHaveBeenCalled();
   });
@@ -374,7 +384,7 @@ describe('WebauthnService.verifyRegistration', () => {
     );
 
     await expect(
-      service.verifyRegistration(ACTIVE_USER.public_id, registrationBody),
+      service.verifyRegistration({ userPublicId: ACTIVE_USER.public_id, body: registrationBody }),
     ).rejects.toBeInstanceOf(ConflictError);
   });
 });

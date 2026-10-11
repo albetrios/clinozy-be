@@ -51,11 +51,14 @@ export async function refreshBullMQQueueGauges(): Promise<void> {
       try {
         const queue = getOrCreateQueueClient(queueName);
         const counts = await queue.getJobCounts('waiting', 'active', 'delayed', 'failed');
-        setBullMQQueueCounts(queueName, {
-          waiting: counts.waiting ?? 0,
-          active: counts.active ?? 0,
-          delayed: counts.delayed ?? 0,
-          failed: counts.failed ?? 0,
+        setBullMQQueueCounts({
+          queueName,
+          counts: {
+            waiting: counts.waiting ?? 0,
+            active: counts.active ?? 0,
+            delayed: counts.delayed ?? 0,
+            failed: counts.failed ?? 0,
+          },
         });
       } catch (error) {
         logger.warn({ queueName, error }, 'metrics.bullmq.queue_counts.failed');
@@ -145,7 +148,13 @@ function resolveJobDurationSeconds(job: Job): number | null {
 /**
  * Records job duration histogram samples on worker `completed` events.
  */
-export function attachBullMQJobMetrics(worker: Worker, queueName: string): void {
+export function attachBullMQJobMetrics({
+  worker,
+  queueName,
+}: {
+  worker: Worker;
+  queueName: string;
+}): void {
   if (!isMetricsEnabled()) {
     return;
   }
@@ -157,6 +166,6 @@ export function attachBullMQJobMetrics(worker: Worker, queueName: string): void 
     if (durationSeconds === null) {
       return;
     }
-    recordBullMQJobDuration(queueName, job.name, durationSeconds);
+    recordBullMQJobDuration({ queueName, jobName: job.name, durationSeconds });
   });
 }

@@ -1,7 +1,8 @@
 import http from 'k6/http';
-import { sleep } from 'k6';
+import { check, sleep } from 'k6';
+import { Counter } from 'k6/metrics';
 import { API_PREFIX, THRESHOLDS, SCENARIOS } from '../helpers/config.js';
-import { checkOk, checkStatus } from '../helpers/checks.js';
+import { checkOk, checkStatus, requireData } from '../helpers/checks.js';
 import { authHeaders } from '../helpers/auth.js';
 import { idempotencyKey } from '../helpers/idempotency.js';
 
@@ -12,12 +13,25 @@ import { idempotencyKey } from '../helpers/idempotency.js';
  *
  * Requires: TEST_TOKEN, already scoped to TEST_ORG_ID (tool:load-test-credentials).
  */
+const completed = new Counter('api_key_journeys_completed');
+
+export function setup() {
+  if (!(__ENV.TEST_TOKEN && __ENV.TEST_ORG_ID)) throw new Error('Scoped credentials required');
+}
+
 export const options = {
   scenarios: {
-    load: { ...SCENARIOS.pacedWrites, exec: 'apiKeyLifecycleOps' },
+    load: {
+      ...SCENARIOS.pacedWrites,
+      duration: __ENV.DURATION || '2m',
+      exec: 'apiKeyLifecycleOps',
+    },
   },
   thresholds: {
     ...THRESHOLDS,
+    checks: ['rate==1'],
+    api_key_journeys_completed: [`count>=${Number(__ENV.MIN_COMPLETED || '1')}`],
+    dropped_iterations: ['count==0'],
     'http_req_duration{name:list-api-keys}': ['p(95)<500', 'p(99)<1000'],
     'http_req_duration{name:create-api-key}': ['p(95)<800', 'p(99)<1500'],
     'http_req_duration{name:get-api-key}': ['p(95)<500', 'p(99)<1000'],
@@ -27,9 +41,17 @@ export const options = {
   },
 };
 
+function probeKey(secret, name, status = 200) {
+  return http.get(`${API_PREFIX}/tenancy/organization/settings`, {
+    headers: { Authorization: `ApiKey ${secret}` },
+    tags: { name },
+    responseCallback: http.expectedStatuses(status),
+  });
+}
+
 export function apiKeyLifecycleOps() {
   const token = __ENV.TEST_TOKEN;
-  if (!token) return;
+  if (!token) throw new Error('TEST_TOKEN required');
   // TEST_TOKEN arrives already scoped to TEST_ORG_ID (tool:load-test-credentials). Never switch it
   // here: a switch re-binds the shared session to the new token, which revokes TEST_TOKEN for every
   // other VU and every later scenario.
@@ -51,44 +73,111 @@ export function apiKeyLifecycleOps() {
   );
   checkStatus(createResponse, 200, 'create-api-key');
   if (createResponse.status !== 200) {
-    sleep(1);
-    return;
+    throw new Error('API key creation failed');
   }
   // Create and rotate answer { api_key, raw_key } — the secret is shown once, beside the key.
   const apiKeyId = JSON.parse(createResponse.body).data.api_key.id;
 
-  const getResponse = http.get(`${API_PREFIX}/tenancy/organization/api-keys/${apiKeyId}`, {
-    headers,
-    tags: { name: 'get-api-key' },
-  });
-  checkStatus(getResponse, 200, 'get-api-key');
-
-  const updateResponse = http.patch(
-    `${API_PREFIX}/tenancy/organization/api-keys/${apiKeyId}`,
-    JSON.stringify({ name: `k6 key ${__VU}-${__ITER} renamed` }),
-    { headers, tags: { name: 'update-api-key' } },
+  const originalSecret = createResponse.json('data.raw_key');
+  checkStatus(
+    probeKey(originalSecret, 'created-key-authentication'),
+    200,
+    'created-key-authentication',
   );
-  checkStatus(updateResponse, 200, 'update-api-key');
-
-  const rotateResponse = http.post(
-    `${API_PREFIX}/tenancy/organization/api-keys/${apiKeyId}/rotate`,
-    JSON.stringify({}),
-    { headers, tags: { name: 'rotate-api-key' } },
+  const forbiddenWrite = http.patch(
+    `${API_PREFIX}/tenancy/organization/settings`,
+    JSON.stringify({ is_email_notifications_enabled: true }),
+    {
+      headers: { Authorization: `ApiKey ${originalSecret}`, 'Content-Type': 'application/json' },
+      tags: { name: 'key-scope-denied' },
+      responseCallback: http.expectedStatuses(403),
+    },
   );
-  checkStatus(rotateResponse, 200, 'rotate-api-key');
-  // Rotation may issue the replacement under a new id; delete whichever key is live now.
-  const liveKeyId =
-    rotateResponse.status === 200
-      ? (JSON.parse(rotateResponse.body).data?.api_key?.id ?? apiKeyId)
-      : apiKeyId;
+  checkStatus(forbiddenWrite, 403, 'key-scope-denied');
+  let rotatedSecret;
+  let liveKeyId = apiKeyId;
+  let deleted = false;
+  try {
+    const getResponse = http.get(`${API_PREFIX}/tenancy/organization/api-keys/${apiKeyId}`, {
+      headers,
+      tags: { name: 'get-api-key' },
+    });
+    checkStatus(getResponse, 200, 'get-api-key');
 
-  const deleteResponse = http.del(
-    `${API_PREFIX}/tenancy/organization/api-keys/${liveKeyId}`,
-    null,
-    { headers, tags: { name: 'delete-api-key' } },
-  );
-  checkStatus(deleteResponse, 204, 'delete-api-key');
+    const updateResponse = http.patch(
+      `${API_PREFIX}/tenancy/organization/api-keys/${apiKeyId}`,
+      JSON.stringify({ name: `k6 key ${__VU}-${__ITER} renamed` }),
+      { headers, tags: { name: 'update-api-key' } },
+    );
+    checkStatus(updateResponse, 200, 'update-api-key');
+    const readback = http.get(`${API_PREFIX}/tenancy/organization/api-keys/${apiKeyId}`, {
+      headers,
+      tags: { name: 'updated-api-key' },
+    });
+    check(readback, {
+      'API key rename persisted': (response) =>
+        response.status === 200 &&
+        response.json('data.name') === `k6 key ${__VU}-${__ITER} renamed`,
+      'API key detail excludes raw secret': (response) =>
+        response.status === 200 &&
+        response.json('data.raw_key') === undefined &&
+        response.json('data.key_hash') === undefined,
+    });
 
+    const rotateResponse = http.post(
+      `${API_PREFIX}/tenancy/organization/api-keys/${apiKeyId}/rotate`,
+      JSON.stringify({}),
+      { headers, tags: { name: 'rotate-api-key' } },
+    );
+    const rotated = requireData(rotateResponse, 'rotate-api-key');
+    rotatedSecret = rotated.raw_key;
+    liveKeyId = rotated.api_key.id;
+    check(rotated, {
+      'rotation issues a fresh secret': (value) =>
+        typeof value.raw_key === 'string' && value.raw_key !== originalSecret,
+    });
+    checkStatus(
+      probeKey(originalSecret, 'rotated-old-key-denied', 401),
+      401,
+      'rotated-old-key-denied',
+    );
+    checkStatus(
+      probeKey(rotatedSecret, 'rotated-new-key-authentication'),
+      200,
+      'rotated-new-key-authentication',
+    );
+
+    const deleteResponse = http.del(
+      `${API_PREFIX}/tenancy/organization/api-keys/${liveKeyId}`,
+      null,
+      { headers, tags: { name: 'delete-api-key' } },
+    );
+    checkStatus(deleteResponse, 204, 'delete-api-key');
+    deleted = deleteResponse.status === 204;
+
+    const absent = http.get(`${API_PREFIX}/tenancy/organization/api-keys/${liveKeyId}`, {
+      headers,
+      tags: { name: 'deleted-api-key' },
+      responseCallback: http.expectedStatuses(404),
+    });
+    checkStatus(absent, 404, 'deleted-api-key');
+    checkStatus(probeKey(rotatedSecret, 'deleted-key-denied', 401), 401, 'deleted-key-denied');
+    if (
+      deleteResponse.status === 204 &&
+      absent.status === 404 &&
+      rotateResponse.status === 200 &&
+      updateResponse.status === 200
+    )
+      completed.add(1);
+  } finally {
+    if (!deleted) {
+      const cleanup = http.del(`${API_PREFIX}/tenancy/organization/api-keys/${liveKeyId}`, null, {
+        headers,
+        tags: { name: 'cleanup-api-key' },
+      });
+      checkStatus(cleanup, 204, 'cleanup-api-key');
+    }
+  }
   sleep(1);
 }
 

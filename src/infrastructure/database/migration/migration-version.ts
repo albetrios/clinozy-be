@@ -1,4 +1,5 @@
-import { sql } from '@/infrastructure/database/connection.js';
+import { sql as drizzleSql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
 import { MILLISECONDS_PER_MINUTE } from '@/shared/constants/index.js';
 
 const MIGRATION_VERSION_CACHE_TTL_MILLISECONDS = MILLISECONDS_PER_MINUTE;
@@ -14,9 +15,12 @@ export async function getLatestMigrationVersion(): Promise<string | null> {
     return cachedMigrationVersion.value;
   }
 
-  const rows = await sql<{ filename: string }[]>`
-    select filename from public.schema_migrations order by filename desc limit 1
-  `;
+  const result = await database.execute<{ filename: string }>(
+    drizzleSql`select filename from public.schema_migrations order by filename desc limit 1`,
+  );
+  const rows = Array.isArray(result)
+    ? (result as { filename: string }[])
+    : ((result as { rows?: { filename: string }[] }).rows ?? []);
   const latestFilename = rows[0]?.filename ?? null;
   cachedMigrationVersion = {
     value: latestFilename,

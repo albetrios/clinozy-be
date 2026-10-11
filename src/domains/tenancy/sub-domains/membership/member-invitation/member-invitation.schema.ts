@@ -31,15 +31,18 @@ export const member_invitations = tenancySchema
         .references(() => memberships.id, { onDelete: 'cascade' }),
       email: varchar('email', { length: 255 }).notNull(),
       token_hash: varchar('token_hash', { length: 64 }).notNull(),
-      invited_by_user_id: bigint('invited_by_user_id', { mode: 'number' })
-        .notNull()
-        .references(() => users.id),
+      // Nullable: the invitation outlives an inviter whose account is deleted (SET NULL).
+      invited_by_user_id: bigint('invited_by_user_id', { mode: 'number' }).references(
+        () => users.id,
+        { onDelete: 'set null' },
+      ),
       expires_at: timestamp('expires_at', { withTimezone: true }).notNull(),
       accepted_at: timestamp('accepted_at', { withTimezone: true }),
       revoked_at: timestamp('revoked_at', { withTimezone: true }),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [

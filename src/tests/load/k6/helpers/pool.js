@@ -49,6 +49,16 @@ export const credentialPool = new SharedArray('credential-pool', () => {
       '[pool.js] credential-pool.json is empty or invalid.\n' + 'Re-run: pnpm db:seed:loadtest',
     );
   }
+  const identities = new Set();
+  for (const entry of pool) {
+    if (!(entry.userPublicId && entry.email && entry.password && entry.organizationPublicId)) {
+      throw new Error('Credential pool entry is missing authentication or tenant fields');
+    }
+    if (identities.has(entry.userPublicId)) {
+      throw new Error('Credential pool contains a repeated user identity; regenerate it');
+    }
+    identities.add(entry.userPublicId);
+  }
   return pool;
 });
 

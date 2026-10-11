@@ -39,15 +39,20 @@ describe.runIf(runRedisTests)('Integration: Redis primitives', () => {
       const versionKey = `perm:org:${organizationId}:v`;
       const cacheKey = `perm:0:${userId}:${organizationId}`;
 
-      await setCachedPermissions(userId, organizationId, ['billing:read'], 1);
-      expect(await getCachedPermissions(userId, organizationId)).toEqual(['billing:read']);
+      await setCachedPermissions({
+        userId,
+        organizationId,
+        codes: ['billing:read'],
+        ttlSeconds: 1,
+      });
+      expect(await getCachedPermissions({ userId, organizationId })).toEqual(['billing:read']);
 
       const remainingSeconds = await redisConnection.ttl(cacheKey);
       expect(remainingSeconds).toBeGreaterThan(0);
       await new Promise<void>((resolve) => {
         setTimeout(resolve, (remainingSeconds + 1) * 1_000);
       });
-      expect(await getCachedPermissions(userId, organizationId)).toBeNull();
+      expect(await getCachedPermissions({ userId, organizationId })).toBeNull();
 
       await redisConnection.del(cacheKey, versionKey);
     },
@@ -61,15 +66,28 @@ describe.runIf(runRedisTests)('Integration: Redis primitives', () => {
       const organizationId = `${testKeyPrefix}:lock-org`;
       let recomputeCount = 0;
 
-      const first = await withPermissionCacheRecomputeLock(userId, organizationId, async () => {
-        recomputeCount += 1;
-        await setCachedPermissions(userId, organizationId, ['tenancy:read'], 300);
-        return ['tenancy:read'];
+      const first = await withPermissionCacheRecomputeLock({
+        userId,
+        organizationId,
+        recompute: async () => {
+          recomputeCount += 1;
+          await setCachedPermissions({
+            userId,
+            organizationId,
+            codes: ['tenancy:read'],
+            ttlSeconds: 300,
+          });
+          return ['tenancy:read'];
+        },
       });
 
-      const second = await withPermissionCacheRecomputeLock(userId, organizationId, async () => {
-        recomputeCount += 1;
-        return ['tenancy:read'];
+      const second = await withPermissionCacheRecomputeLock({
+        userId,
+        organizationId,
+        recompute: async () => {
+          recomputeCount += 1;
+          return ['tenancy:read'];
+        },
       });
 
       expect(first).toEqual(['tenancy:read']);
@@ -91,21 +109,34 @@ describe.runIf(runRedisTests)('Integration: Redis primitives', () => {
       const organizationId = `${testKeyPrefix}:stampede-org`;
       let recomputeCount = 0;
 
-      const holder = withPermissionCacheRecomputeLock(userId, organizationId, async () => {
-        recomputeCount += 1;
-        // A non-trivial recompute: the waiter must poll and wait for the cache to
-        // populate rather than falling through to its own uncached recompute.
-        await new Promise<void>((resolve) => setTimeout(resolve, 300));
-        await setCachedPermissions(userId, organizationId, ['member:read'], 300);
-        return ['member:read'];
+      const holder = withPermissionCacheRecomputeLock({
+        userId,
+        organizationId,
+        recompute: async () => {
+          recomputeCount += 1;
+          // A non-trivial recompute: the waiter must poll and wait for the cache to
+          // populate rather than falling through to its own uncached recompute.
+          await new Promise<void>((resolve) => setTimeout(resolve, 300));
+          await setCachedPermissions({
+            userId,
+            organizationId,
+            codes: ['member:read'],
+            ttlSeconds: 300,
+          });
+          return ['member:read'];
+        },
       });
 
       // Let the holder acquire the lock before the waiter starts.
       await new Promise<void>((resolve) => setTimeout(resolve, 25));
 
-      const waiter = withPermissionCacheRecomputeLock(userId, organizationId, async () => {
-        recomputeCount += 1; // must NOT run — the waiter should read the holder's cached value
-        return ['member:read'];
+      const waiter = withPermissionCacheRecomputeLock({
+        userId,
+        organizationId,
+        recompute: async () => {
+          recomputeCount += 1; // must NOT run — the waiter should read the holder's cached value
+          return ['member:read'];
+        },
       });
 
       const [holderResult, waiterResult] = await Promise.all([holder, waiter]);
@@ -128,9 +159,14 @@ describe.runIf(runRedisTests)('Integration: Redis primitives', () => {
       const userId = `${testKeyPrefix}:version-user`;
       const organizationId = `${testKeyPrefix}:version-org`;
 
-      await setCachedPermissions(userId, organizationId, ['billing:read'], 3_600);
+      await setCachedPermissions({
+        userId,
+        organizationId,
+        codes: ['billing:read'],
+        ttlSeconds: 3_600,
+      });
       await invalidateOrganizationPermissions(organizationId);
-      expect(await getCachedPermissions(userId, organizationId)).toBeNull();
+      expect(await getCachedPermissions({ userId, organizationId })).toBeNull();
 
       await redisConnection.del(`perm:org:${organizationId}:v`);
     },
@@ -167,13 +203,17 @@ describe.runIf(runRedisTests)('Integration: Redis primitives', () => {
       const key = `${testKeyPrefix}:counter`;
 
       // First increment → count 1 AND a TTL is set (no INCR-then-EXPIRE gap).
-      expect(await incrementWithExpiryOnFirst(redisConnection, key, 100)).toBe(1);
+      expect(
+        await incrementWithExpiryOnFirst({ redis: redisConnection, key, ttlSeconds: 100 }),
+      ).toBe(1);
       const ttlAfterFirst = await redisConnection.ttl(key);
       expect(ttlAfterFirst).toBeGreaterThan(0);
       expect(ttlAfterFirst).toBeLessThanOrEqual(100);
 
       // Second increment → count 2; the window is anchored to the first hit, not extended.
-      expect(await incrementWithExpiryOnFirst(redisConnection, key, 100)).toBe(2);
+      expect(
+        await incrementWithExpiryOnFirst({ redis: redisConnection, key, ttlSeconds: 100 }),
+      ).toBe(2);
       const ttlAfterSecond = await redisConnection.ttl(key);
       expect(ttlAfterSecond).toBeGreaterThan(0);
       expect(ttlAfterSecond).toBeLessThanOrEqual(ttlAfterFirst);

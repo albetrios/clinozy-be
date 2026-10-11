@@ -1,3 +1,4 @@
+import { seedRecentStepUpForTestUser } from '@/tests/helpers/test-step-up.helper.js';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { env } from '@/shared/config/env.config.js';
@@ -35,9 +36,9 @@ async function persistActiveSessionForToken(
   // The session row itself is written through the repository inside the owner's context —
   // the same shape `AuthSessionService` uses in production, so the fixture exercises the real
   // write path rather than out-privileging the policy that guards it.
-  const session = await withAppDatabaseContext(
-    PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-    () =>
+  const session = await withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+    callback: () =>
       sessionRepository.create({
         user_id: user.id,
         token_hash: tokenHash,
@@ -46,7 +47,7 @@ async function persistActiveSessionForToken(
         user_agent: 'vitest',
         expires_at: expiresAt,
       }),
-  );
+  });
   return session.public_id;
 }
 
@@ -108,6 +109,12 @@ export async function generateTestToken(options: {
   role?: string;
   organizationPublicId?: string;
   authenticationMethods?: string[];
+  /**
+   * Also record a recent step-up on the token's session — for the routes behind
+   * `requireRecentStepUpPreHandler` (account deletion, data export, ownership transfer,
+   * organization deletion, credential changes).
+   */
+  stepUp?: boolean;
 }): Promise<string> {
   const token = await signAccessToken({
     userId: options.userId,
@@ -117,7 +124,13 @@ export async function generateTestToken(options: {
       ? { authenticationMethods: options.authenticationMethods }
       : {}),
   });
-  await persistActiveSessionForToken(options.userId, token);
+  const sessionPublicId = await persistActiveSessionForToken(options.userId, token);
+  if (options.stepUp) {
+    if (!sessionPublicId) {
+      throw new Error(`generateTestToken could not persist a session for user ${options.userId}`);
+    }
+    await seedRecentStepUpForTestUser(options.userId, sessionPublicId);
+  }
   return token;
 }
 
@@ -183,14 +196,14 @@ export async function generateTestTokenWithActiveSession(
   });
   const tokenHash = createHash('sha256').update(token).digest('hex');
   const expiresAt = new Date(Date.now() + env.AUTH_SESSION_MAX_AGE_DAYS * MILLISECONDS_PER_DAY);
-  const session = await application.authDomain.authSessionService.createSessionForUser(
+  const session = await application.authDomain.authSessionService.createSessionForUser({
     userPublicId,
-    {
+    data: {
       token_hash: tokenHash,
       ip_address: '127.0.0.1',
       expires_at: expiresAt,
     },
-  );
+  });
   return { token, sessionPublicId: session.public_id };
 }
 

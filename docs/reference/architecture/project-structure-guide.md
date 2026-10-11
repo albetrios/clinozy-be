@@ -189,7 +189,7 @@ Always use `.js` extensions in import specifiers. CI gate: `src/tests/global/imp
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Controller | Own service(s) from container, own serializer, own validator; `@/shared/utils/http/response.util.js`, `@/shared/utils/http/request.util.js`, `@/shared/errors/index.js`, Fastify types |
 | Service    | Own repositories, own validators, other domains’ **services** (not repositories), `@/shared/errors`, infrastructure (e.g. mail queue, Stripe client, storage) as needed      |
-| Repository | Own schema(s), `@/infrastructure/database/connection.js`; some extend `BaseRepository`. No repository imports another repository class (only schema imports for joins).      |
+| Repository | Own schema(s), `@/infrastructure/database/connection.js`; lists page through `finishKeysetPage`. No repository imports another repository class (only schema imports for joins). |
 
 ### Cross-domain
 
@@ -238,7 +238,7 @@ Always use `.js` extensions in import specifiers. CI gate: `src/tests/global/imp
 | `/api/v1/billing`                   | `billingRoutes(billing)` from `@/domains/billing/billing.routes.js`                              |
 | `/api/v1/notify`                    | `notifyRoutes(notify)` from `@/domains/notify/notify.routes.js`                                  |
 | `/api/v1/uploads`                   | `uploadRoutes(upload.uploadService)` from `@/domains/upload/upload.routes.js`                    |
-| (conditional) `/admin/queues`       | `registerQueueDashboard(app, { auditService })` from `@/infrastructure/queue/queue-dashboard.js` |
+| (conditional) `/admin/queues`       | `registerQueueDashboard({ app, deps: { auditService } })` from `@/infrastructure/queue/queue-dashboard.js` |
 | (conditional) `/api/v1/mcp`, `/mcp` | MCP server from `@/infrastructure/mcp/mcp-server.js`                                             |
 
 **Tenancy sub-routes (registered inside `tenancy.routes.ts`):**

@@ -55,9 +55,11 @@ export const subscriptions = billingSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [
@@ -80,7 +82,6 @@ export const subscriptions = billingSchema
         .where(sql`${table.status} NOT IN ('CANCELED', 'INCOMPLETE_EXPIRED')`),
       index('idx_subscriptions_org_status').on(table.organization_id, table.status),
       index('idx_subscriptions_plan').on(table.plan_id),
-      index('idx_subscriptions_status_period').on(table.status, table.current_period_end),
       // audit-#10: UNIQUE so two local rows can never point at one Stripe
       // subscription id (the resolver previously masked dups with LIMIT 1).
       uniqueIndex('idx_subscriptions_provider_subscription_id_unique')

@@ -29,7 +29,7 @@
  * database is up) and exits — used by the cloud-agent bootstrap (`tooling/setup/agent/bootstrap.sh`).
  *
  * Targeted `.env.local` updates, every run:
- * - Third-party API keys (Stripe, Resend, S3, PostHog, OpenTelemetry — `external-credentials.ts`)
+ * - Third-party API keys (Stripe, Resend, S3, PostHog — `external-credentials.ts`)
  *   still on their `.env.example` placeholder are copied from the hosted development target's env
  *   file, else from the process environment; key names are printed, never values.
  * - `--with-captcha` / `--without-captcha` turn local CAPTCHA on (Cloudflare test keys) or off.
@@ -59,8 +59,9 @@ import {
   planLocalDatabaseLogins,
 } from './local-database-logins.js';
 import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
+import { listProcessTree, signalProcesses } from '@/scripts/ops/process-tree.util.js';
 import dotenv from 'dotenv';
-import postgres from 'postgres';
+import pg from 'pg';
 import {
   resolveDerivedNames,
   resolveSqlIdentifierStem,
@@ -482,7 +483,7 @@ function syncExternalCredentials(reports: StepReport[], options: BootstrapOption
     example: readFileSync(examplePath, 'utf8'),
     sources,
   });
-  const changed = fill.copied.length > 0 || fill.retired.length > 0;
+  const changed = fill.copied.length > 0;
   if (changed && !options.check) writeFileSync(ENV_LOCAL_PATH, fill.content);
 
   const copiedLabel = [
@@ -492,9 +493,6 @@ function syncExternalCredentials(reports: StepReport[], options: BootstrapOption
         ? `${options.check ? 'would copy' : 'copied'} from ${label}: ${keys.join(', ')}`
         : '';
     }),
-    fill.retired.length > 0
-      ? `${options.check ? 'would comment out' : 'commented out'} a stale placeholder: ${fill.retired.join(', ')}`
-      : '',
   ]
     .filter(Boolean)
     .join('; ');
@@ -675,16 +673,20 @@ async function provisionLocalDatabaseLogins(
     return;
   }
   const logins = LOCAL_DATABASE_LOGINS;
-  const superuser = postgres(LOCAL_DATABASE_URL, {
-    max: 1,
-    connect_timeout: 5,
-    onnotice: () => {},
+  const superuser = new pg.Client({
+    connectionString: LOCAL_DATABASE_URL,
+    connectionTimeoutMillis: 5_000,
   });
+  // A dropped connection fails the query in flight; without a listener it would also be uncaught.
+  superuser.on('error', () => undefined);
   try {
     let existingRoles: string[];
     try {
-      const rows = await superuser<{ rolname: string }[]>`
-        select rolname from pg_roles where rolname in ${superuser(logins.map((login) => login.role))}`;
+      await superuser.connect();
+      const { rows } = await superuser.query<{ rolname: string }>(
+        'select rolname from pg_roles where rolname = any($1::text[])',
+        [logins.map((login) => login.role)],
+      );
       existingRoles = rows.map((row) => row.rolname);
     } catch {
       reportStep(
@@ -723,18 +725,25 @@ async function provisionLocalDatabaseLogins(
       );
       return;
     }
-    for (const login of planned) await superuser.unsafe(alterRoleStatement(login));
+    for (const login of planned) await superuser.query(alterRoleStatement(login));
     writeFileSync(
       ENV_LOCAL_PATH,
       applyLocalDatabaseLogins({ envLocal, superuserUrl: LOCAL_DATABASE_URL, planned }),
     );
     for (const login of planned) {
-      const connection = postgres(login.url, { max: 1, connect_timeout: 5, onnotice: () => {} });
+      const connection = new pg.Client({
+        connectionString: login.url,
+        connectionTimeoutMillis: 5_000,
+      });
+      connection.on('error', () => undefined);
       try {
-        const [row] = await connection<{ current_user: string }[]>`select current_user`;
+        await connection.connect();
+        const {
+          rows: [row],
+        } = await connection.query<{ current_user: string }>('select current_user');
         if (row?.current_user !== login.role) throw new Error(`connected as ${row?.current_user}`);
       } finally {
-        await connection.end({ timeout: 2 });
+        await connection.end().catch(() => undefined);
       }
     }
     reportStep(
@@ -761,7 +770,7 @@ async function provisionLocalDatabaseLogins(
       error instanceof Error ? error.message : String(error),
     );
   } finally {
-    await superuser.end({ timeout: 2 });
+    await superuser.end().catch(() => undefined);
   }
 }
 
@@ -1121,16 +1130,24 @@ async function runDevServer(
     detached: false,
   });
 
+  // pnpm runs each script in a process group of its own and ignores a SIGINT sent to it, so
+  // signalling pnpm left the API listening on :3000 and this process waiting for an exit that never
+  // came. Interrupt every process under each child instead.
+  const interruptTree = (child: ChildProcess | null): void => {
+    if (child?.pid !== undefined) {
+      signalProcesses({ processIds: listProcessTree(child.pid), signal: 'SIGINT' });
+    }
+  };
   const cleanup = (): void => {
-    if (worker && !worker.killed) worker.kill('SIGINT');
-    if (!dev.killed) dev.kill('SIGINT');
+    interruptTree(worker);
+    interruptTree(dev);
   };
 
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
   await new Promise<void>((resolveExit) => {
     dev.on('exit', (code) => {
-      if (worker && !worker.killed) worker.kill('SIGINT');
+      interruptTree(worker);
       process.exitCode = code ?? 0;
       resolveExit();
     });

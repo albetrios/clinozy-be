@@ -1,18 +1,23 @@
 import type Stripe from 'stripe';
+import { retrieveStripeSubscriptionSnapshot } from '@/infrastructure/payment/stripe.client.js';
+import type { StripeSubscriptionOrderingState } from '@/domains/billing/sub-domains/subscription/subscription.types.js';
 import type { SubscriptionRepository } from '@/domains/billing/sub-domains/subscription/subscription.repository.js';
-import { createWorkerSubscriptionRepository } from '@/domains/billing/sub-domains/subscription/subscription.repository.js';
+import {
+  createWorkerSubscriptionRepository,
+  INACTIVE_SUBSCRIPTION_STATUSES,
+} from '@/domains/billing/sub-domains/subscription/subscription.repository.js';
 import type { SubscriptionService } from '@/domains/billing/sub-domains/subscription/subscription.service.js';
-import { isPostgresUniqueViolation } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import type { PlanRepository } from '@/domains/billing/sub-domains/plan/plan.repository.js';
 import type {
-  StripeWebhookEventClaimResult,
+  StripeWebhookIngressResult,
   StripeWebhookEventRepository,
 } from './stripe-webhook-event.repository.js';
 import { enqueueStripeWebhook } from './queues/stripe-webhook.queue.js';
 import { runStripeWebhookHandlerWithOrganizationContext } from './stripe-webhook-organization.util.js';
+import { SUBSCRIPTION_EVENT } from '@/domains/billing/sub-domains/subscription/events/subscription.events.js';
 import {
   StripeWebhookEventAbandonedError,
   StripeWebhookPermanentError,
@@ -36,17 +41,50 @@ type MatchedPlanForCreate = Awaited<ReturnType<PlanRepository['findByStripePrice
  * upstream `customer.subscription.updated` handler will reconcile any actual
  * billing-cycle drift on the next event.
  */
-function resolveBillingCycleForStripePrice(
-  stripePriceId: string | undefined,
+function resolveBillingCycleForStripePrice({
+  stripePriceId,
+  plan,
+}: {
+  stripePriceId: string | undefined;
   plan: {
     stripe_price_monthly_id: string | null;
     stripe_price_yearly_id: string | null;
-  },
-): 'monthly' | 'yearly' {
+  };
+}): 'monthly' | 'yearly' {
   if (stripePriceId !== undefined && plan.stripe_price_yearly_id === stripePriceId) {
     return 'yearly';
   }
   return 'monthly';
+}
+
+/** Read current item-level periods, retaining compatibility with older webhook API versions. */
+function resolveStripeSubscriptionPeriod(subscription: Stripe.Subscription): {
+  start: Date;
+  end: Date;
+} {
+  const item = subscription.items?.data?.[0];
+  if (!item) throw new StripeWebhookPermanentError('stripe.webhook.subscription_item_missing');
+  const legacy = subscription as Stripe.Subscription & {
+    current_period_start?: number;
+    current_period_end?: number;
+  };
+  const start = item.current_period_start ?? legacy.current_period_start;
+  const end = item.current_period_end ?? legacy.current_period_end;
+  if (
+    start === undefined ||
+    end === undefined ||
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) ||
+    end <= start // chk_subs_period: end > start
+  ) {
+    throw new StripeWebhookPermanentError('stripe.webhook.subscription_invalid_period_boundaries');
+  }
+  const startDate = new Date(start * 1000),
+    endDate = new Date(end * 1000);
+  if (!(Number.isFinite(startDate.getTime()) && Number.isFinite(endDate.getTime()))) {
+    throw new StripeWebhookPermanentError('stripe.webhook.subscription_invalid_period_boundaries');
+  }
+  return { start: startDate, end: endDate };
 }
 
 /**
@@ -95,27 +133,31 @@ export class StripeWebhookService {
 
   /**
    * HTTP-ingress durability commit for a verified Stripe event. Persists the event to the
-   * Postgres ledger via {@link StripeWebhookEventRepository.tryClaimEvent} BEFORE the caller
-   * ACKs Stripe (sec-B finding #6), then enqueues asynchronous BullMQ processing — but only
-   * when the ledger transition was `claimed` or `reclaimed`. Returns the claim result.
+   * Postgres ledger via {@link StripeWebhookEventRepository.recordAtIngress} BEFORE the caller
+   * ACKs Stripe (sec-B finding #6), then enqueues asynchronous BullMQ processing unless the event
+   * is already terminal. Returns what the ingress found.
    *
    * @remarks
-   * - **Algorithm:** claims the event id under {@link withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER)} (no organization GUC),
-   *   then enqueues on `claimed`/`reclaimed`. `processed_duplicate` (already terminal) and
-   *   `still_processing_within_lease` (an in-flight worker will finish) skip the enqueue and log.
+   * - **Algorithm:** records the event id under {@link withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER)} (no organization GUC)
+   *   without claiming it — the worker claims. `recorded` and `already_recorded` enqueue (the job
+   *   id is the event id, so a redelivery's add is a no-op while the job exists, and re-adds a lost
+   *   one); `processed_duplicate` and `abandoned` skip the enqueue and log.
    * - **Failure modes:** an enqueue failure propagates so the caller returns non-2xx and Stripe
    *   retries the delivery; the ledger row is already durable, and the reclaim cron re-enqueues
    *   stuck rows if the enqueue was lost.
    * - **Side effects:** writes `billing.stripe_webhook_events`; enqueues a `stripe-webhook` job.
    */
-  async ingestEvent(
-    event: Stripe.Event,
-    context?: { requestId?: string },
-  ): Promise<StripeWebhookEventClaimResult> {
-    const claimResult = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
-      () =>
-        this.stripeWebhookEventRepository.tryClaimEvent(
+  async ingestEvent({
+    event,
+    context,
+  }: {
+    event: Stripe.Event;
+    context?: { requestId?: string } | undefined;
+  }): Promise<StripeWebhookIngressResult> {
+    const ingressResult = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      callback: () =>
+        this.stripeWebhookEventRepository.recordAtIngress(
           omitUndefined({
             stripe_event_id: event.id,
             event_type: event.type,
@@ -123,91 +165,151 @@ export class StripeWebhookService {
             request_id: context?.requestId,
           }),
         ),
-    );
+    });
 
-    if (claimResult === 'claimed' || claimResult === 'reclaimed') {
-      await enqueueStripeWebhook(event, context?.requestId);
+    if (ingressResult === 'recorded' || ingressResult === 'already_recorded') {
+      await enqueueStripeWebhook({ event, requestId: context?.requestId });
     } else {
       logger.info(
-        { stripeEventId: event.id, eventType: event.type, claimResult },
+        { stripeEventId: event.id, eventType: event.type, ingressResult },
         'stripe.webhook.ingress.skip_enqueue',
       );
     }
 
-    return claimResult;
+    return ingressResult;
   }
 
   /**
    * Dispatch a Stripe event to the appropriate handler (idempotent by event id).
    */
-  async handleEvent(event: Stripe.Event, context?: { requestId?: string }): Promise<void> {
+  async handleEvent({
+    event,
+    context,
+  }: {
+    event: Stripe.Event;
+    context?: { requestId?: string } | undefined;
+  }): Promise<void> {
     const stripeEventCreatedAt = new Date(event.created * 1000);
 
-    await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, async () => {
-      const claimResult = await this.stripeWebhookEventRepository.tryClaimEvent(
-        omitUndefined({
-          stripe_event_id: event.id,
-          event_type: event.type,
-          stripe_created_at: stripeEventCreatedAt,
-          request_id: context?.requestId,
-        }),
-      );
-
-      if (claimResult === 'processed_duplicate') {
-        logger.info(
-          { eventId: event.id, eventType: event.type },
-          'stripe.webhook.duplicate_skipped',
+    const claimResult = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      callback: async () => {
+        return this.stripeWebhookEventRepository.tryClaimEvent(
+          omitUndefined({
+            stripe_event_id: event.id,
+            event_type: event.type,
+            stripe_created_at: stripeEventCreatedAt,
+            request_id: context?.requestId,
+          }),
         );
-        return;
-      }
-
-      if (claimResult === 'abandoned') {
-        // Given up on — never retried on its own; an operator retries it with the replay tool.
-        logger.warn(
-          { eventId: event.id, eventType: event.type },
-          'stripe.webhook.abandoned_skipped',
-        );
-        return;
-      }
-
-      if (claimResult === 'still_processing_within_lease') {
-        // Another execution holds the event; if it died, the reclaim sweep picks the row up once
-        // the lease passes — so running out of attempts here needs no page.
-        throw new StripeWebhookRetryLaterError(`stripe.webhook.event_in_flight:${event.id}`);
-      }
-
-      if (claimResult === 'reclaimed') {
-        logger.info({ eventId: event.id, eventType: event.type }, 'stripe.webhook.reclaimed');
-      }
-
-      // audit #44 — IDEMPOTENCY BOUNDARY: `markProcessed` (below) runs on a different context than
-      // the business write, so a crash between the two leaves the ledger row `processing` and the
-      // reclaim lease re-runs this dispatch. That is safe ONLY because every side effect here is a
-      // Postgres write guarded by the `last_stripe_event_created_at` watermark + unique-violation
-      // handling (a re-run is a no-op), and there is NO outbound call in this handler. Any NEW side
-      // effect added to `dispatchEvent` MUST be idempotency-keyed or watermark-guarded — do not
-      // assume `markProcessed` is a transactional barrier.
-      try {
-        await runStripeWebhookHandlerWithOrganizationContext(
-          event,
-          this.stripeWebhookEventRepository,
-          async (databaseHandle) => {
-            const workerSubscriptionRepository = createWorkerSubscriptionRepository(databaseHandle);
-            await this.dispatchEvent(event, stripeEventCreatedAt, workerSubscriptionRepository);
-          },
-        );
-        // sec-new-D2: detect no-op writes (ledger row unexpectedly absent)
-        const marked = await this.stripeWebhookEventRepository.markProcessed(event.id);
-        if (!marked) {
-          logger.warn(
-            { eventId: event.id, eventType: event.type },
-            'stripe.webhook.mark_processed.no_row',
-          );
-        }
-      } catch (error) {
-        throw await this.settleFailedEvent(event, error);
-      }
+      },
     });
+
+    if (claimResult === 'processed_duplicate') {
+      logger.info({ eventId: event.id, eventType: event.type }, 'stripe.webhook.duplicate_skipped');
+      return;
+    }
+
+    if (claimResult === 'abandoned') {
+      // Given up on — never retried on its own; an operator retries it with the replay tool.
+      logger.warn({ eventId: event.id, eventType: event.type }, 'stripe.webhook.abandoned_skipped');
+      return;
+    }
+
+    if (claimResult === 'still_processing_within_lease') {
+      // Another execution holds the event; if it died, the reclaim sweep picks the row up once
+      // the lease passes — so running out of attempts here needs no page.
+      throw new StripeWebhookRetryLaterError(`stripe.webhook.event_in_flight:${event.id}`);
+    }
+
+    if (claimResult === 'reclaimed') {
+      logger.info({ eventId: event.id, eventType: event.type }, 'stripe.webhook.reclaimed');
+    }
+
+    // audit #44 — IDEMPOTENCY BOUNDARY: `markProcessed` (below) runs on a different context than
+    // the business write, so a crash between the two leaves the ledger row `processing` and the
+    // reclaim lease re-runs this dispatch. That is safe ONLY because every side effect here is a
+    // Postgres write guarded by the `last_stripe_event_created_at` watermark + unique-violation
+    // handling (a re-run is a no-op), and the only outbound call is an idempotent provider read before the business transaction. Any NEW side
+    // effect added to `dispatchEvent` MUST be idempotency-keyed or watermark-guarded — do not
+    // assume `markProcessed` is a transactional barrier. The subscription events are: they are
+    // emitted only for a row the guarded write changed, so a re-run emits nothing.
+    try {
+      const prepared = await this.prepareEventForDispatch(event);
+      await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+        callback: async () => {
+          await runStripeWebhookHandlerWithOrganizationContext({
+            event: prepared.event,
+            repository: this.stripeWebhookEventRepository,
+            handler: async (databaseHandle) => {
+              const workerSubscriptionRepository =
+                createWorkerSubscriptionRepository(databaseHandle);
+              await this.dispatchEvent({
+                event: prepared.event,
+                stripeEventCreatedAt,
+                subscriptionRepository: workerSubscriptionRepository,
+                reconciliation: prepared.reconciliation,
+              });
+            },
+          });
+          // sec-new-D2: detect no-op writes (ledger row unexpectedly absent)
+          const marked = await this.stripeWebhookEventRepository.markProcessed(event.id);
+          if (!marked) {
+            logger.warn(
+              { eventId: event.id, eventType: event.type },
+              'stripe.webhook.mark_processed.no_row',
+            );
+          }
+        },
+      });
+    } catch (error) {
+      throw await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+        callback: () => this.settleFailedEvent({ event, error }),
+      });
+    }
+  }
+
+  /** Resolve ambiguous second-resolution ordering using a provider read outside SQL contexts. */
+  private async prepareEventForDispatch(event: Stripe.Event): Promise<{
+    event: Stripe.Event;
+    reconciliation?: StripeSubscriptionOrderingState;
+  }> {
+    if (
+      event.type !== 'customer.subscription.created' &&
+      event.type !== 'customer.subscription.updated'
+    )
+      return { event };
+    const ordering = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      callback: () =>
+        runStripeWebhookHandlerWithOrganizationContext({
+          event,
+          repository: this.stripeWebhookEventRepository,
+          handler: async (databaseHandle) =>
+            createWorkerSubscriptionRepository(databaseHandle).findStripeProviderOrderingState(
+              event.data.object.id,
+            ),
+        }),
+    });
+    if (
+      !ordering?.watermark ||
+      new Set<string>(INACTIVE_SUBSCRIPTION_STATUSES).has(ordering.status) ||
+      Math.floor(ordering.watermark.getTime() / 1000) !== event.created
+    )
+      return { event };
+    // Read current provider truth, then apply only to the observed MVCC version.
+    const snapshot = await retrieveStripeSubscriptionSnapshot(event.data.object.id);
+    if (snapshot.id !== event.data.object.id) {
+      throw new StripeWebhookRetryLaterError(
+        'stripe.webhook.subscription_snapshot_identity_mismatch',
+      );
+    }
+    return {
+      event: { ...event, data: { ...event.data, object: snapshot } } as Stripe.Event,
+      reconciliation: ordering,
+    };
   }
 
   /**
@@ -222,7 +324,13 @@ export class StripeWebhookService {
    * - **Failure modes:** a ledger write error propagates (the job retries).
    * - **Side effects:** writes the ledger row's status and failure reason.
    */
-  private async settleFailedEvent(event: Stripe.Event, error: unknown): Promise<Error> {
+  private async settleFailedEvent({
+    event,
+    error,
+  }: {
+    event: Stripe.Event;
+    error: unknown;
+  }): Promise<Error> {
     const failureReason = error instanceof Error ? error.message : String(error);
     const logFields = { eventId: event.id, eventType: event.type, failureReason };
 
@@ -256,33 +364,45 @@ export class StripeWebhookService {
    * sweep stops retrying its ledger row (if one exists).
    */
   async abandonEvent(options: { stripeEventId: string; failureReason: string }): Promise<void> {
-    await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, () =>
-      this.stripeWebhookEventRepository.markAbandoned(options.stripeEventId, options.failureReason),
-    );
+    await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      callback: () =>
+        this.stripeWebhookEventRepository.markAbandoned(
+          options.stripeEventId,
+          options.failureReason,
+        ),
+    });
   }
 
-  private async dispatchEvent(
-    event: Stripe.Event,
-    stripeEventCreatedAt: Date,
-    subscriptionRepository: SubscriptionRepository,
-  ): Promise<void> {
+  private async dispatchEvent({
+    event,
+    stripeEventCreatedAt,
+    subscriptionRepository,
+    reconciliation,
+  }: {
+    event: Stripe.Event;
+    stripeEventCreatedAt: Date;
+    subscriptionRepository: SubscriptionRepository;
+    reconciliation?: StripeSubscriptionOrderingState | undefined;
+  }): Promise<void> {
     switch (event.type) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
-        await this.handleSubscriptionUpdated(
-          event.data.object,
+        await this.handleSubscriptionUpdated({
+          stripeSubscription: event.data.object,
           stripeEventCreatedAt,
           subscriptionRepository,
-          event.type,
-        );
+          eventType: event.type,
+          reconciliation,
+        });
         break;
 
       case 'customer.subscription.deleted':
-        await this.handleSubscriptionDeleted(
-          event.data.object,
+        await this.handleSubscriptionDeleted({
+          stripeSubscription: event.data.object,
           stripeEventCreatedAt,
           subscriptionRepository,
-        );
+        });
         break;
 
       default:
@@ -290,12 +410,19 @@ export class StripeWebhookService {
     }
   }
 
-  private async handleSubscriptionUpdated(
-    stripeSubscription: Stripe.Subscription,
-    stripeEventCreatedAt: Date,
-    subscriptionRepository: SubscriptionRepository,
-    eventType: 'customer.subscription.created' | 'customer.subscription.updated',
-  ): Promise<void> {
+  private async handleSubscriptionUpdated({
+    stripeSubscription,
+    stripeEventCreatedAt,
+    subscriptionRepository,
+    eventType,
+    reconciliation,
+  }: {
+    stripeSubscription: Stripe.Subscription;
+    stripeEventCreatedAt: Date;
+    subscriptionRepository: SubscriptionRepository;
+    eventType: 'customer.subscription.created' | 'customer.subscription.updated';
+    reconciliation?: StripeSubscriptionOrderingState | undefined;
+  }): Promise<void> {
     const providerSubscriptionId = stripeSubscription.id;
 
     const statusMap: Record<string, string> = {
@@ -313,8 +440,8 @@ export class StripeWebhookService {
       statusMap[stripeSubscription.status] ?? stripeSubscription.status.toUpperCase();
 
     const firstItem = stripeSubscription.items.data[0];
-    const periodStart = firstItem ? new Date(firstItem.current_period_start * 1000) : new Date();
-    const periodEnd = firstItem ? new Date(firstItem.current_period_end * 1000) : new Date();
+    const { start: periodStart, end: periodEnd } =
+      resolveStripeSubscriptionPeriod(stripeSubscription);
     // REQ-4: reconcile the purchased seat quantity FROM Stripe (the subscription item quantity).
     // Stripe is the source of truth for `seats`, so a Dashboard-driven quantity change flows here.
     const seats =
@@ -355,21 +482,32 @@ export class StripeWebhookService {
           { providerSubscriptionId, stripePriceId },
           'stripe.webhook.plan_id_resolution_miss',
         );
-        captureMessage('stripe.webhook.plan_id_resolution_miss', {
-          level: 'warning',
-          extra: { providerSubscriptionId, stripePriceId },
+        captureMessage({
+          message: 'stripe.webhook.plan_id_resolution_miss',
+          options: {
+            level: 'warning',
+            extra: { providerSubscriptionId, stripePriceId },
+          },
         });
       }
     }
 
-    const row = await this.subscriptionService.syncFromStripeProviderSubscription(
+    // The customer-visible state before the sync: the same-second reconciliation can re-apply what
+    // an HTTP mutation already wrote (and announced), and that must not emit a second event.
+    const previous = await this.subscriptionService.findStripeSubscriptionPublicState({
       providerSubscriptionId,
-      omitUndefined({
+      repositoryOverride: subscriptionRepository,
+    });
+    const row = await this.subscriptionService.syncFromStripeProviderSubscription({
+      provider_subscription_id: providerSubscriptionId,
+      data: omitUndefined({
         status: mappedStatus,
         cancel_at_period_end: stripeSubscription.cancel_at_period_end,
+        // `null`, not omitted, when Stripe has none: a resumed subscription must not keep its old
+        // cancellation date.
         canceled_at: stripeSubscription.canceled_at
           ? new Date(stripeSubscription.canceled_at * 1000)
-          : undefined,
+          : null,
         current_period_start: periodStart,
         current_period_end: periodEnd,
         plan_id: resolvedPlanId,
@@ -377,16 +515,36 @@ export class StripeWebhookService {
         // seats_total) stays in lockstep with the provider.
         seats,
       }),
-      stripeEventCreatedAt,
-      subscriptionRepository,
-    );
+      stripe_event_created_at: stripeEventCreatedAt,
+      repositoryOverride: subscriptionRepository,
+      reconciliation,
+    });
 
     if (row) {
+      // A Dashboard cancel arrives as `.updated` with status canceled: the subscription ended.
+      await this.subscriptionService.emitSubscriptionEvent({
+        type: row.status === 'CANCELED' ? SUBSCRIPTION_EVENT.CANCELLED : SUBSCRIPTION_EVENT.UPDATED,
+        subscription: row,
+        repositoryOverride: subscriptionRepository,
+        previous,
+        propagateFailure: true,
+      });
+      // Cancelled, expired or paused: back on the Free allowance once this commits.
+      await this.subscriptionService.enforceFreeSeatCeilingAfterCommitIfEntitlementLost({
+        status: row.status,
+        repositoryOverride: subscriptionRepository,
+      });
       logger.info(
         { providerSubscriptionId, status: mappedStatus },
         'stripe.webhook.subscription_synced',
       );
       return;
+    }
+
+    if (reconciliation) {
+      throw new StripeWebhookRetryLaterError(
+        `stripe.webhook.subscription_reconciliation_raced:${providerSubscriptionId}`,
+      );
     }
 
     // BILL-03: if a deletion tombstone at or after this event's timestamp exists, the
@@ -463,7 +621,10 @@ export class StripeWebhookService {
     // tombstone (audit-#1) or a newer watermark already wins (stale). Either way
     // the in-place sync correctly refused — skip without resurrecting.
     if (
-      await this.rowExistsForProviderSubscription(providerSubscriptionId, subscriptionRepository)
+      await this.rowExistsForProviderSubscription({
+        providerSubscriptionId,
+        subscriptionRepository,
+      })
     ) {
       logger.info(
         { providerSubscriptionId, stripeEventCreatedAt, eventType },
@@ -494,7 +655,10 @@ export class StripeWebhookService {
     // the row between the first existence check and the failed fallback — re-check
     // before declaring an orphan so we do not needlessly retry/DLQ.
     if (
-      await this.rowExistsForProviderSubscription(providerSubscriptionId, subscriptionRepository)
+      await this.rowExistsForProviderSubscription({
+        providerSubscriptionId,
+        subscriptionRepository,
+      })
     ) {
       logger.info(
         { providerSubscriptionId, stripeEventCreatedAt, eventType },
@@ -515,14 +679,17 @@ export class StripeWebhookService {
     );
   }
 
-  private async rowExistsForProviderSubscription(
-    providerSubscriptionId: string,
-    subscriptionRepository: SubscriptionRepository,
-  ): Promise<boolean> {
-    return this.subscriptionService.existsByStripeProviderSubscriptionId(
-      providerSubscriptionId,
-      subscriptionRepository,
-    );
+  private async rowExistsForProviderSubscription({
+    providerSubscriptionId,
+    subscriptionRepository,
+  }: {
+    providerSubscriptionId: string;
+    subscriptionRepository: SubscriptionRepository;
+  }): Promise<boolean> {
+    return this.subscriptionService.existsByStripeProviderSubscriptionId({
+      provider_subscription_id: providerSubscriptionId,
+      repositoryOverride: subscriptionRepository,
+    });
   }
 
   /**
@@ -562,65 +729,89 @@ export class StripeWebhookService {
     // ('MONTHLY','YEARLY') by `chk_subs_cycle`; the resolver returns lower-case,
     // so normalise before the INSERT (the prior code inserted 'monthly' and would
     // have failed the CHECK on the real DB).
-    const billingCycle = resolveBillingCycleForStripePrice(
+    const billingCycle = resolveBillingCycleForStripePrice({
       stripePriceId,
-      matchedPlanForCreate,
-    ).toUpperCase();
-    try {
-      const inserted = await this.subscriptionService.createFromStripeWebhookEvent({
-        providerSubscriptionId,
-        providerCustomerId:
-          typeof input.stripeSubscription.customer === 'string'
-            ? input.stripeSubscription.customer
-            : null,
-        planId: resolvedPlanId,
-        status: input.mappedStatus,
-        cancelAtPeriodEnd: input.stripeSubscription.cancel_at_period_end,
-        canceledAt: input.stripeSubscription.canceled_at
-          ? new Date(input.stripeSubscription.canceled_at * 1000)
+      plan: matchedPlanForCreate,
+    }).toUpperCase();
+    const inserted = await this.subscriptionService.createFromStripeWebhookEvent({
+      providerSubscriptionId,
+      providerCustomerId:
+        typeof input.stripeSubscription.customer === 'string'
+          ? input.stripeSubscription.customer
           : null,
-        currentPeriodStart: input.periodStart,
-        currentPeriodEnd: input.periodEnd,
-        billingCycle,
-        stripeEventCreatedAt: input.stripeEventCreatedAt,
-        repositoryOverride: input.subscriptionRepository,
-      });
-      if (!inserted) return false;
-      logger.info(
-        { providerSubscriptionId, planId: resolvedPlanId, billingCycle },
-        'stripe.webhook.subscription_inserted_on_created',
-      );
-      return true;
-    } catch (error) {
-      // A concurrent `.deleted` tombstone or duplicate `.created` won the
-      // `provider_subscription_id` unique race. Treat the now-present row as the
-      // winner; the caller re-checks existence and skips instead of retrying.
-      if (isPostgresUniqueViolation(error)) {
-        logger.info(
-          { providerSubscriptionId },
-          'stripe.webhook.subscription_created_insert_lost_race',
-        );
-        return false;
-      }
-      throw error;
-    }
+      planId: resolvedPlanId,
+      status: input.mappedStatus,
+      cancelAtPeriodEnd: input.stripeSubscription.cancel_at_period_end,
+      canceledAt: input.stripeSubscription.canceled_at
+        ? new Date(input.stripeSubscription.canceled_at * 1000)
+        : null,
+      currentPeriodStart: input.periodStart,
+      currentPeriodEnd: input.periodEnd,
+      billingCycle,
+      stripeEventCreatedAt: input.stripeEventCreatedAt,
+      repositoryOverride: input.subscriptionRepository,
+    });
+    // `null`: a concurrent `.deleted` tombstone or duplicate `.created` wrote the row first; the
+    // caller re-checks existence and skips instead of retrying.
+    if (!inserted) return false;
+    await this.subscriptionService.emitSubscriptionEvent({
+      type: SUBSCRIPTION_EVENT.CREATED,
+      subscription: inserted,
+      repositoryOverride: input.subscriptionRepository,
+      propagateFailure: true,
+    });
+    logger.info(
+      { providerSubscriptionId, planId: resolvedPlanId, billingCycle },
+      'stripe.webhook.subscription_inserted_on_created',
+    );
+    return true;
   }
 
-  private async handleSubscriptionDeleted(
-    stripeSubscription: Stripe.Subscription,
-    stripeEventCreatedAt: Date,
-    subscriptionRepository: SubscriptionRepository,
-  ): Promise<void> {
+  private async handleSubscriptionDeleted({
+    stripeSubscription,
+    stripeEventCreatedAt,
+    subscriptionRepository,
+  }: {
+    stripeSubscription: Stripe.Subscription;
+    stripeEventCreatedAt: Date;
+    subscriptionRepository: SubscriptionRepository;
+  }): Promise<void> {
     const providerSubscriptionId = stripeSubscription.id;
 
-    const row = await this.subscriptionService.markCanceledByStripeProviderSubscriptionId(
-      providerSubscriptionId,
-      stripeEventCreatedAt,
-      subscriptionRepository,
-    );
+    const row = await this.subscriptionService.markCanceledByStripeProviderSubscriptionId({
+      provider_subscription_id: providerSubscriptionId,
+      stripe_event_created_at: stripeEventCreatedAt,
+      repositoryOverride: subscriptionRepository,
+    });
 
     if (row) {
+      await this.subscriptionService.emitSubscriptionEvent({
+        type: SUBSCRIPTION_EVENT.CANCELLED,
+        subscription: row,
+        repositoryOverride: subscriptionRepository,
+        propagateFailure: true,
+      });
+      // Back on the Free allowance: excess members are suspended once this commits.
+      await this.subscriptionService.enforceFreeSeatCeilingAfterCommitIfEntitlementLost({
+        status: row.status,
+        repositoryOverride: subscriptionRepository,
+      });
       logger.info({ providerSubscriptionId }, 'stripe.webhook.subscription_canceled');
+      return;
+    }
+
+    // The row exists but the cancel matched nothing: it is already terminal (cancelled locally
+    // first) or newer than this event. Nothing is left to do — retrying would only page.
+    if (
+      await this.subscriptionService.existsByStripeProviderSubscriptionId({
+        provider_subscription_id: providerSubscriptionId,
+        repositoryOverride: subscriptionRepository,
+      })
+    ) {
+      logger.info(
+        { providerSubscriptionId, stripeEventCreatedAt },
+        'stripe.webhook.subscription_cancel_already_terminal_or_stale',
+      );
       return;
     }
 
@@ -662,12 +853,18 @@ export class StripeWebhookService {
 
     // The tombstone could not be written because a concurrent `.created` inserted
     // the row first (lost the unique race). Re-run the cancel against that row.
-    const recovered = await this.subscriptionService.markCanceledByStripeProviderSubscriptionId(
-      providerSubscriptionId,
-      stripeEventCreatedAt,
-      subscriptionRepository,
-    );
+    const recovered = await this.subscriptionService.markCanceledByStripeProviderSubscriptionId({
+      provider_subscription_id: providerSubscriptionId,
+      stripe_event_created_at: stripeEventCreatedAt,
+      repositoryOverride: subscriptionRepository,
+    });
     if (recovered) {
+      await this.subscriptionService.emitSubscriptionEvent({
+        type: SUBSCRIPTION_EVENT.CANCELLED,
+        subscription: recovered,
+        repositoryOverride: subscriptionRepository,
+        propagateFailure: true,
+      });
       logger.info({ providerSubscriptionId }, 'stripe.webhook.subscription_canceled');
       return;
     }
@@ -732,41 +929,29 @@ export class StripeWebhookService {
       return false;
     }
 
-    const billingCycle = resolveBillingCycleForStripePrice(
+    const billingCycle = resolveBillingCycleForStripePrice({
       stripePriceId,
-      matchedPlan,
-    ).toUpperCase();
+      plan: matchedPlan,
+    }).toUpperCase();
     const periodStart = new Date(firstItem.current_period_start * 1000);
     const periodEnd = new Date(firstItem.current_period_end * 1000);
     const canceledAt = stripeSubscription.canceled_at
       ? new Date(stripeSubscription.canceled_at * 1000)
       : stripeEventCreatedAt;
 
-    try {
-      const inserted = await this.subscriptionService.insertCanceledTombstoneFromStripeWebhookEvent(
-        {
-          providerSubscriptionId,
-          providerCustomerId:
-            typeof stripeSubscription.customer === 'string' ? stripeSubscription.customer : null,
-          planId: matchedPlan.id,
-          billingCycle,
-          currentPeriodStart: periodStart,
-          currentPeriodEnd: periodEnd,
-          canceledAt,
-          stripeEventCreatedAt,
-          repositoryOverride: subscriptionRepository,
-        },
-      );
-      return inserted !== null;
-    } catch (error) {
-      if (isPostgresUniqueViolation(error)) {
-        logger.info(
-          { providerSubscriptionId },
-          'stripe.webhook.subscription_cancel_tombstone_lost_race',
-        );
-        return false;
-      }
-      throw error;
-    }
+    const inserted = await this.subscriptionService.insertCanceledTombstoneFromStripeWebhookEvent({
+      providerSubscriptionId,
+      providerCustomerId:
+        typeof stripeSubscription.customer === 'string' ? stripeSubscription.customer : null,
+      planId: matchedPlan.id,
+      billingCycle,
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      canceledAt,
+      stripeEventCreatedAt,
+      repositoryOverride: subscriptionRepository,
+    });
+    // `null`: a concurrent insert already wrote this provider subscription (lost race).
+    return inserted !== null;
   }
 }

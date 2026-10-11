@@ -1,5 +1,6 @@
-import { Counter, Gauge, Histogram, type Registry } from 'prom-client';
+import { Counter, Gauge, Histogram, type Registry } from '@prometheus-io/client';
 import type { OrganizationRlsCheckoutPath } from '@/infrastructure/database/pool/organization-rls-checkout-counter.js';
+import type { DatabasePoolStatistics } from '@/infrastructure/database/connection.js';
 import {
   getMetricsRegistry,
   isMetricsEnabled,
@@ -20,8 +21,10 @@ let bullmqQueueActive: Gauge<'queue'> | null = null;
 let bullmqQueueDelayed: Gauge<'queue'> | null = null;
 let bullmqQueueFailed: Gauge<'queue'> | null = null;
 let bullmqJobDurationSeconds: Histogram<'queue' | 'job_name'> | null = null;
-let postgresPoolMaxConnections: Gauge | null = null;
+let postgresPoolMaxConnections: Gauge<'pool'> | null = null;
 let postgresPoolMetricsAvailable: Gauge | null = null;
+let postgresPoolConnections: Gauge<'pool' | 'state'> | null = null;
+let postgresPoolWaiting: Gauge<'pool'> | null = null;
 let dbPoolConnections: Gauge<'state'> | null = null;
 let eventLoopLagMilliseconds: Gauge | null = null;
 let stripeWebhookEventsFailed: Gauge | null = null;
@@ -102,19 +105,34 @@ function registerOn(registry: Registry): void {
 
   postgresPoolMaxConnections = new Gauge({
     name: 'postgres_pool_max_connections',
-    help: 'Configured postgres.js pool max connections (DATABASE_POOL_MAX)',
+    help: "Configured size of each of this process's pools (DATABASE_POOL_MAX, DATABASE_MAINTENANCE_POOL_MAX)",
+    labelNames: ['pool'],
     registers: [registry],
   });
 
   postgresPoolMetricsAvailable = new Gauge({
     name: 'postgres_pool_metrics_available',
-    help: '1 when live pool utilization metrics are exported; 0 when only config gauge is available (postgres.js limitation)',
+    help: '1 when this process exports its live pool counts (postgres_pool_connections, postgres_pool_waiting)',
+    registers: [registry],
+  });
+
+  postgresPoolConnections = new Gauge({
+    name: 'postgres_pool_connections',
+    help: "This process's pooled Postgres connections by pool and state (in_use, idle), counted by node-postgres",
+    labelNames: ['pool', 'state'],
+    registers: [registry],
+  });
+
+  postgresPoolWaiting = new Gauge({
+    name: 'postgres_pool_waiting',
+    help: 'Units of work in this process queued for a pooled Postgres connection, by pool',
+    labelNames: ['pool'],
     registers: [registry],
   });
 
   dbPoolConnections = new Gauge({
     name: 'db_pool_connections',
-    help: 'Postgres connections for the current database user sampled from pg_stat_activity',
+    help: 'Server-side connections of the current database role across every process, sampled from pg_stat_activity',
     labelNames: ['state'],
     registers: [registry],
   });
@@ -205,7 +223,13 @@ function bindMetricHandlesFromRegistry(registry: Registry): void {
   bullmqJobDurationSeconds = registry.getSingleMetric('bullmq_job_duration_seconds') as Histogram<
     'queue' | 'job_name'
   >;
-  postgresPoolMaxConnections = registry.getSingleMetric('postgres_pool_max_connections') as Gauge;
+  postgresPoolMaxConnections = registry.getSingleMetric(
+    'postgres_pool_max_connections',
+  ) as Gauge<'pool'>;
+  postgresPoolConnections = registry.getSingleMetric('postgres_pool_connections') as Gauge<
+    'pool' | 'state'
+  >;
+  postgresPoolWaiting = registry.getSingleMetric('postgres_pool_waiting') as Gauge<'pool'>;
   postgresPoolMetricsAvailable = registry.getSingleMetric(
     'postgres_pool_metrics_available',
   ) as Gauge;
@@ -260,12 +284,17 @@ export function ensurePrometheusMetricsRegistered(registry: Registry): void {
  * `http_request_duration_seconds` (histogram) keyed by method/route/status.
  * No-op when metrics are disabled or registration has not yet happened.
  */
-export function recordHttpRequest(
-  method: string,
-  route: string,
-  statusCode: number,
-  durationSeconds: number,
-): void {
+export function recordHttpRequest({
+  method,
+  route,
+  statusCode,
+  durationSeconds,
+}: {
+  method: string;
+  route: string;
+  statusCode: number;
+  durationSeconds: number;
+}): void {
   if (!isMetricsEnabled()) return;
   ensurePrometheusMetricsRegistered(getMetricsRegistry());
   if (!(httpRequestsTotal && httpRequestDurationSeconds)) return;
@@ -284,10 +313,13 @@ export function recordHttpRequest(
  * queue from a freshly read `getJobCounts` payload. Called by
  * {@link refreshBullMQQueueGauges}.
  */
-export function setBullMQQueueCounts(
-  queueName: string,
-  counts: { waiting: number; active: number; delayed: number; failed: number },
-): void {
+export function setBullMQQueueCounts({
+  queueName,
+  counts,
+}: {
+  queueName: string;
+  counts: { waiting: number; active: number; delayed: number; failed: number };
+}): void {
   if (!isMetricsEnabled()) return;
   if (!(bullmqQueueWaiting && bullmqQueueActive && bullmqQueueDelayed && bullmqQueueFailed)) {
     return;
@@ -304,11 +336,15 @@ export function setBullMQQueueCounts(
  * `bullmq_job_duration_seconds` histogram, labelled by queue + job name. Wired
  * to worker `completed` events via `attachBullMQJobMetrics`.
  */
-export function recordBullMQJobDuration(
-  queueName: string,
-  jobName: string,
-  durationSeconds: number,
-): void {
+export function recordBullMQJobDuration({
+  queueName,
+  jobName,
+  durationSeconds,
+}: {
+  queueName: string;
+  jobName: string;
+  durationSeconds: number;
+}): void {
   if (!isMetricsEnabled()) return;
   const histogram =
     bullmqJobDurationSeconds ??
@@ -320,18 +356,33 @@ export function recordBullMQJobDuration(
 }
 
 /**
- * Sets the static pool-configuration gauges: `postgres_pool_max_connections`
- * and `postgres_pool_metrics_available` (1 when `pg_stat_activity` sampling
- * succeeded, 0 when only the configured ceiling is known).
+ * Sets the live pool gauges from node-postgres's own counts, one label set per pool:
+ * `postgres_pool_max_connections{pool}`, `postgres_pool_connections{pool,state}` (`in_use`,
+ * `idle`) and `postgres_pool_waiting{pool}`, plus `postgres_pool_metrics_available` 1.
+ *
+ * @remarks
+ * A pool that is not open yet (the lazy maintenance pool) has no label set rather than zeros, so a
+ * dashboard never reads a pool that does not exist as an idle one.
  */
-export function setPostgresPoolConfigMetrics(options: {
-  maxConnections: number;
-  liveMetricsAvailable: boolean;
-}): void {
+export function setPostgresPoolStatistics(statistics: ReadonlyArray<DatabasePoolStatistics>): void {
   if (!isMetricsEnabled()) return;
-  if (!(postgresPoolMaxConnections && postgresPoolMetricsAvailable)) return;
-  postgresPoolMaxConnections.set(options.maxConnections);
-  postgresPoolMetricsAvailable.set(options.liveMetricsAvailable ? 1 : 0);
+  if (
+    !(
+      postgresPoolMaxConnections &&
+      postgresPoolMetricsAvailable &&
+      postgresPoolConnections &&
+      postgresPoolWaiting
+    )
+  ) {
+    return;
+  }
+  for (const { pool, maxConnections, inUse, idle, waiting } of statistics) {
+    postgresPoolMaxConnections.set({ pool }, maxConnections);
+    postgresPoolConnections.set({ pool, state: 'in_use' }, inUse);
+    postgresPoolConnections.set({ pool, state: 'idle' }, idle);
+    postgresPoolWaiting.set({ pool }, waiting);
+  }
+  postgresPoolMetricsAvailable.set(1);
 }
 
 /**
@@ -398,7 +449,7 @@ export function setBusinessMetricCounts(options: {
 /**
  * Sets the `database_rls_active_checkouts` gauge from the in-process organization-RLS checkout
  * counter. Fed by the pool-metrics scrape refresh so dashboards see how many organization-scoped
- * RLS checkouts are held against `DATABASE_POOL_MAX` before postgres.js starts queuing.
+ * RLS checkouts are held against `DATABASE_POOL_MAX` before the pool starts queuing.
  */
 export function setOrganizationRlsActiveCheckouts(count: number): void {
   if (!isMetricsEnabled()) return;
@@ -410,7 +461,7 @@ export function setOrganizationRlsActiveCheckouts(count: number): void {
  * Observes one completed RLS checkout hold on the `database_rls_checkout_hold_seconds` histogram,
  * labelled by `path` (`scoped_context` | `session_context` | `maintenance_context`). Wired via
  * `registerOrganizationRlsCheckoutHoldObserver` so the hot database-checkout paths stay free of a
- * prom-client import. No-op when metrics are disabled.
+ * `@prometheus-io/client` import. No-op when metrics are disabled.
  */
 export function recordOrganizationRlsCheckoutHold(options: {
   path: OrganizationRlsCheckoutPath;
@@ -473,7 +524,13 @@ export function recordCommitDispatchDurabilityFallback(): void {
  *   label stays bounded — a per-key label would be unbounded cardinality. Without this, a cache is
  *   unfalsifiable: it either helps or quietly costs a round trip per request and nothing says which.
  */
-export function recordReadCacheRequest(cache: string, result: 'hit' | 'miss'): void {
+export function recordReadCacheRequest({
+  cache,
+  result,
+}: {
+  cache: string;
+  result: 'hit' | 'miss';
+}): void {
   if (!isMetricsEnabled()) return;
   ensurePrometheusMetricsRegistered(getMetricsRegistry());
   if (!readCacheRequestsTotal) return;

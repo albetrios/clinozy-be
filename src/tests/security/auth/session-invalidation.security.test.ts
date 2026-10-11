@@ -324,7 +324,10 @@ describe('Security: Session invalidation', () => {
           eq(memberships.organization_id, organizationA.organization.id),
         ),
       );
-    await invalidatePermissions(user.public_id, organizationA.organization.public_id);
+    await invalidatePermissions({
+      userId: user.public_id,
+      organizationId: organizationA.organization.public_id,
+    });
 
     // The SAME token (claim still = organization A) now resolves zero permissions for a non-member →
     // requireOrganizationPermission denies role:read with 403. The token was never re-minted.

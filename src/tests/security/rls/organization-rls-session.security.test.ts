@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { sql as drizzleSql, eq } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
@@ -19,6 +18,11 @@ import type { FastifyInstance } from 'fastify';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
+
 /**
  * RLS session variable + HTTP tenant header alignment (FORCE ROW LEVEL SECURITY migrations).
  */
@@ -26,7 +30,7 @@ describe('Security: Organization RLS session', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    await sql`GRANT clinozy_be_app TO CURRENT_USER`.catch(() => undefined);
+    await database.execute(drizzleSql`GRANT clinozy_be_app TO CURRENT_USER`).catch(() => undefined);
     const testApp = await createTestApp();
     app = testApp.app;
   });
@@ -41,12 +45,14 @@ describe('Security: Organization RLS session', () => {
   });
 
   it('should hide other tenants when app.current_organization_public_id is set in a transaction', async () => {
-    const forceRlsRows = await sql<{ relforcerowsecurity: boolean }[]>`
+    const forceRlsRows = rowsOf<{ relforcerowsecurity: boolean }>(
+      await database.execute(drizzleSql`
       SELECT c.relforcerowsecurity
       FROM pg_class c
       INNER JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'tenancy' AND c.relname = 'organizations'
-    `;
+    `),
+    );
     expect(
       forceRlsRows[0]?.relforcerowsecurity,
       'Apply migrations including 20260516000006_force_row_level_security.sql',
