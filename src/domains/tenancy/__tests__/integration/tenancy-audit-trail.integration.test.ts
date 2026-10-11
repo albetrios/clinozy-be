@@ -101,10 +101,10 @@ async function stagedRows(action: string) {
 
 /** Runs the real drain and asserts every staged row reached `audit.logs` (ids resolved, none failed). */
 async function expectEveryStagedRowToDrain() {
-  const result = await withMaintenanceDatabaseContext(
-    MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
-    (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
-  );
+  const result = await withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+    callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+  });
   expect(result.transientFailed + result.permanentlyFailed).toBe(0);
   const outbox = await getOperatorDatabase().select().from(audit_outbox);
   expect(outbox.filter((row) => row.status !== 'PROCESSED')).toEqual([]);
@@ -292,9 +292,9 @@ describe('tenancy audit trail — organization governance changes reach the audi
       })
       .returning();
     const rawToken = `audit-accept-${randomUUID()}`;
-    const pending = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
-      () =>
+    const pending = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
+      callback: () =>
         new MemberInvitationRepository().create({
           membership_id: inviteeMembership!.id,
           email: invitee.email,
@@ -303,7 +303,7 @@ describe('tenancy audit trail — organization governance changes reach the audi
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
           created_by_user_id: owner.id,
         }),
-    );
+    });
     const accepted = await send({
       token: await generateTestToken({ userId: invitee.public_id }),
       method: 'POST',

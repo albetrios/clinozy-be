@@ -119,9 +119,12 @@ export async function sampleIdempotencyCardinality(): Promise<IdempotencyCardina
       },
       'idempotency.cache.cardinality.critical',
     );
-    captureMessage('idempotency.cache.cardinality.critical', {
-      level: 'error',
-      extra: { observedCount, warnThreshold, criticalThreshold, scanTruncated },
+    captureMessage({
+      message: 'idempotency.cache.cardinality.critical',
+      options: {
+        level: 'error',
+        extra: { observedCount, warnThreshold, criticalThreshold, scanTruncated },
+      },
     });
   } else if (observedCount >= warnThreshold) {
     logger.warn(
@@ -133,9 +136,12 @@ export async function sampleIdempotencyCardinality(): Promise<IdempotencyCardina
       },
       'idempotency.cache.cardinality.high',
     );
-    captureMessage('idempotency.cache.cardinality.high', {
-      level: 'warning',
-      extra: { observedCount, warnThreshold, criticalThreshold, scanTruncated },
+    captureMessage({
+      message: 'idempotency.cache.cardinality.high',
+      options: {
+        level: 'warning',
+        extra: { observedCount, warnThreshold, criticalThreshold, scanTruncated },
+      },
     });
   }
 

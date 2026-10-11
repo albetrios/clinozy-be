@@ -64,7 +64,10 @@ async function onMemberInvitationAcceptedEvent(event: DomainEvent): Promise<void
       );
     }
   }
-  await invalidateRecipientUnreadCounts(payload.recipient_user_ids, event.type);
+  await invalidateRecipientUnreadCounts({
+    recipientUserIds: payload.recipient_user_ids,
+    eventType: event.type,
+  });
 }
 
 /**
@@ -87,10 +90,13 @@ async function onMemberInvitationAcceptedEvent(event: DomainEvent): Promise<void
  *   `CACHE_INVALIDATION_TOMBSTONE_TTL_SECONDS` is sized for. It also means a rolled-back
  *   accept invalidates nothing, which the pre-commit version got wrong.
  */
-async function invalidateRecipientUnreadCounts(
-  recipientUserIds: readonly number[],
-  eventType: string,
-): Promise<void> {
+async function invalidateRecipientUnreadCounts({
+  recipientUserIds,
+  eventType,
+}: {
+  recipientUserIds: readonly number[];
+  eventType: string;
+}): Promise<void> {
   try {
     const recipientPublicIds = await withSavepoint(() =>
       resolveNotificationRecipientPublicIds(recipientUserIds),
@@ -116,5 +122,8 @@ let memberInvitationAcceptedHandlersRegistered = false;
 export function registerMemberInvitationAcceptedNotificationHandlers(): void {
   if (memberInvitationAcceptedHandlersRegistered) return;
   memberInvitationAcceptedHandlersRegistered = true;
-  eventBus.on(MEMBER_INVITATION_EVENT.ACCEPTED, onMemberInvitationAcceptedEvent);
+  eventBus.on({
+    eventType: MEMBER_INVITATION_EVENT.ACCEPTED,
+    handler: onMemberInvitationAcceptedEvent,
+  });
 }

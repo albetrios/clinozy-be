@@ -160,11 +160,11 @@ export class OrganizationRepository {
     // an unknown or soft-deleted user resolves to NULL, both comparisons below fail, and the page
     // comes back empty — the same answer the separate lookup produced with an early return.
     const userId = sql<number>`auth.resolve_user_id_by_public_id(${user_public_id})`;
-    const cursorCondition = buildAscendingCreatedAtIdCursorCondition(
-      organizations.created_at,
-      organizations.id,
-      parseListCursor(after),
-    );
+    const cursorCondition = buildAscendingCreatedAtIdCursorCondition({
+      createdAtColumn: organizations.created_at,
+      idColumn: organizations.id,
+      cursor: parseListCursor(after),
+    });
     // Perf: the page is driven from the user's own organization ids — the ACTIVE memberships
     // (idx_memberships_user_status) UNION the owned organizations (idx_organizations_owner) — joined
     // to `organizations` by primary key and sorted: a few rows, whatever the tenant count. The
@@ -203,7 +203,7 @@ export class OrganizationRepository {
       .where(accessWhere)
       .orderBy(asc(organizations.created_at), asc(organizations.id))
       .limit(limit + 1);
-    return finishKeysetPage(rows, { limit });
+    return finishKeysetPage({ rows, args: { limit } });
   }
 
   /**
@@ -501,7 +501,10 @@ export class OrganizationRepository {
    * create transaction before {@link countActiveOwnedByUser}.
    */
   async acquireOwnedOrganizationQuotaLock(owner_user_id: number): Promise<void> {
-    await acquireResourceQuotaLock(RESOURCE_QUOTA_LOCK_NAMESPACE.OWNED_ORGANIZATION, owner_user_id);
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.OWNED_ORGANIZATION,
+      key: owner_user_id,
+    });
   }
 
   async updateStripeCustomerId(

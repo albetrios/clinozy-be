@@ -67,10 +67,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -684,7 +686,7 @@ describe('MfaService', () => {
 
     const callOrder: string[] = [];
     vi.mocked(withAppDatabaseContext).mockImplementationOnce(
-      async (_scope: unknown, callback: Parameters<typeof withAppDatabaseContext>[1]) => {
+      async ({ callback }: Parameters<typeof withAppDatabaseContext>[0]) => {
         callOrder.push('txn_start');
         await callback(null as never);
         callOrder.push('txn_end');

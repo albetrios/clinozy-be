@@ -37,7 +37,10 @@ function uploadPrincipal(request: FastifyRequest): UploadPrincipal {
       if (targetOrganizationPublicId !== organizationPublicId) {
         throw new ForbiddenError('errors:uploadOrganizationNotActive');
       }
-      await assertOrganizationPermission(request, UPLOAD_PERMISSIONS.UPLOAD_MANAGE);
+      await assertOrganizationPermission({
+        request,
+        permissionCode: UPLOAD_PERMISSIONS.UPLOAD_MANAGE,
+      });
     },
   };
 }
@@ -56,7 +59,9 @@ export function createUploadController(uploadService: UploadService) {
         input,
         principal: uploadPrincipal(request),
       });
-      return reply.status(200).send(successResponse(result, getRequestIdentifier(request)));
+      return reply
+        .status(200)
+        .send(successResponse({ data: result, request_id: getRequestIdentifier(request) }));
     },
 
     getUpload: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -65,7 +70,9 @@ export function createUploadController(uploadService: UploadService) {
         public_id: publicId,
         principal: uploadPrincipal(request),
       });
-      return reply.send(successResponse(result, getRequestIdentifier(request)));
+      return reply.send(
+        successResponse({ data: result, request_id: getRequestIdentifier(request) }),
+      );
     },
 
     confirmUpload: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -74,7 +81,9 @@ export function createUploadController(uploadService: UploadService) {
         public_id: publicId,
         principal: uploadPrincipal(request),
       });
-      return reply.send(successResponse(result, getRequestIdentifier(request)));
+      return reply.send(
+        successResponse({ data: result, request_id: getRequestIdentifier(request) }),
+      );
     },
 
     deleteUpload: async (request: FastifyRequest, reply: FastifyReply) => {

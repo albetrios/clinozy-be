@@ -140,13 +140,13 @@ describe('Security: audit.logs is append-only at the DB layer (sec-U3)', () => {
     const organization = await createTestOrganization({ ownerUserId: owner.id });
     const rowId = await seedAuditRowForOrganization(organization.id);
 
-    await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      async (databaseHandle) => {
+    await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: async (databaseHandle) => {
         await databaseHandle.execute(drizzleSql`DELETE FROM audit.logs WHERE id = ${rowId}`);
       },
-      { useMaintenanceDatabaseRole: true },
-    );
+      options: { useMaintenanceDatabaseRole: true },
+    });
 
     const after = await database.select({ id: logs.id }).from(logs).where(eq(logs.id, rowId));
     expect(after).toHaveLength(0);

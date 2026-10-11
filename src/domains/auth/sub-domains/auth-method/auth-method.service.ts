@@ -103,9 +103,10 @@ export class AuthMethodService {
     if (!user) throw new NotFoundError('User');
     // auth.auth_methods is FORCE RLS (audit #7); pin the owner context so the owner policy authorizes
     // the read for this user's own credentials.
-    return withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }), () =>
-      this.authMethodRepository.listByUserId(user.id),
-    );
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: () => this.authMethodRepository.listByUserId(user.id),
+    });
   }
 
   /**
@@ -126,10 +127,10 @@ export class AuthMethodService {
   async hasLoginCapableMethod(userPublicId: string): Promise<boolean> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
-    const methods = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      () => this.authMethodRepository.listByUserId(user.id),
-    );
+    const methods = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: () => this.authMethodRepository.listByUserId(user.id),
+    });
     return methods.some((method) => LOGIN_CAPABLE_METHOD_TYPES.has(String(method.method_type)));
   }
 
@@ -153,9 +154,9 @@ export class AuthMethodService {
   async hasActiveLoginCredential(userPublicId: string): Promise<boolean> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      async () => {
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: async () => {
         const methods = await this.authMethodRepository.listByUserId(user.id);
         if (methods.some((method) => LOGIN_CAPABLE_METHOD_TYPES.has(String(method.method_type)))) {
           return true;
@@ -163,7 +164,7 @@ export class AuthMethodService {
         const passkeys = await this.webauthnCredentialRepository.listActiveByUserId(user.id);
         return passkeys.length > 0;
       },
-    );
+    });
   }
 
   async create({ userPublicId, body }: { userPublicId: string; body: unknown }) {
@@ -174,9 +175,9 @@ export class AuthMethodService {
     const parsed = validateCreateAuthMethod(body);
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      async () => {
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: async () => {
         // Serialize the count + insert under the same per-user credential-mutation advisory lock the
         // delete guard uses, so concurrent creates cannot both pass the cap check and overshoot
         // MAX_LINKED_AUTH_METHODS_PER_USER. The xact lock auto-releases at commit.
@@ -196,7 +197,7 @@ export class AuthMethodService {
           }),
         );
       },
-    );
+    });
   }
 
   /**
@@ -214,9 +215,9 @@ export class AuthMethodService {
   async delete({ userPublicId, methodPublicId }: { userPublicId: string; methodPublicId: string }) {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
-    await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      async () => {
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: async () => {
         const existing = await this.authMethodRepository.findByPublicIdForUser(
           methodPublicId,
           user.id,
@@ -248,15 +249,16 @@ export class AuthMethodService {
           await this.userService.clearPasswordHash(userPublicId);
         }
       },
-    );
+    });
   }
 
   async revokeAllForUser(userPublicId: string): Promise<void> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
-    await withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }), () =>
-      this.authMethodRepository.revokeAllByUserId(user.id),
-    );
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: () => this.authMethodRepository.revokeAllByUserId(user.id),
+    });
   }
 
   /**
@@ -274,9 +276,10 @@ export class AuthMethodService {
   async invalidateAllVerificationTokensForUser(userPublicId: string): Promise<void> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
-    await withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }), () =>
-      this.verificationTokenRepository.invalidateAllByUser(user.id),
-    );
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: () => this.verificationTokenRepository.invalidateAllByUser(user.id),
+    });
   }
 
   async findByProviderUserId({
@@ -306,9 +309,10 @@ export class AuthMethodService {
       data.provider_user_id,
     );
     if (!existing) {
-      await withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: ownerPublicId }), () =>
-        this.authMethodRepository.create(data),
-      );
+      await withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: ownerPublicId }),
+        callback: () => this.authMethodRepository.create(data),
+      });
     }
   }
 
@@ -341,14 +345,16 @@ export class AuthMethodService {
     userId: number;
     userPublicId: string;
   }): Promise<void> {
-    await withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }), () =>
-      this.authMethodRepository.create({
-        user_id: userId,
-        method_type: AUTH_METHOD_TYPE.EMAIL_CODE,
-        is_primary: true,
-        created_by_user_id: userId,
-      }),
-    );
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: () =>
+        this.authMethodRepository.create({
+          user_id: userId,
+          method_type: AUTH_METHOD_TYPE.EMAIL_CODE,
+          is_primary: true,
+          created_by_user_id: userId,
+        }),
+    });
   }
 
   async updateAuthMethodLastUsedAt({
@@ -446,13 +452,13 @@ export class AuthMethodService {
         // token without its email — so nothing half-done is left; release the cooldown so the
         // user's retry is not refused, and report it.
         logger.error({ err: error }, 'auth.password_reset.issue_failed');
-        captureException(error, { tags: { flow: 'password_reset_request' } });
+        captureException({ error, context: { tags: { flow: 'password_reset_request' } } });
         await this.releasePasswordResetCooldown(cooldownKey);
       }
     }
     // Both branches return the same body; hold them to a common minimum duration so the extra
     // token-issuing writes on the known-account path cannot leak existence via response latency.
-    await enforceMinimumDuration(startedAtMillis);
+    await enforceMinimumDuration({ startedAtMillis });
     return { messageKey: 'success:passwordResetEmailSent' };
   }
 
@@ -482,28 +488,32 @@ export class AuthMethodService {
     // Otherwise a handler/Redis/process failure could invalidate the old link and leave a new
     // valid token that was never delivered — the user has no usable recovery email. Queue dispatch
     // stays post-commit (handler schedules it via scheduleCommitDispatch, backed by the sweeper).
-    await withTransaction((transaction) =>
-      runWithPinnedDatabaseHandle(transaction as RequestScopedPostgresDatabase, async () => {
-        await this.verificationTokenRepository.invalidateAllForUser(user.id, 'PASSWORD_RESET');
-        await this.verificationTokenRepository.create(
-          'PASSWORD_RESET',
-          user.id,
-          user.email,
-          tokenHash,
-          expiresAt,
-        );
-        await eventBus.emitStrict({
-          type: AUTH_EVENT.PASSWORD_RESET_REQUESTED,
-          payload: {
-            email: user.email,
-            reset_token: rawToken,
-            expires_in_minutes: PASSWORD_RESET_EXPIRES_IN_MINUTES,
-            locale,
-          } satisfies PasswordResetEmailPayload,
-          timestamp: new Date(),
-        });
-      }),
-    );
+    await withTransaction({
+      callback: (transaction) =>
+        runWithPinnedDatabaseHandle({
+          databaseHandle: transaction as RequestScopedPostgresDatabase,
+          callback: async () => {
+            await this.verificationTokenRepository.invalidateAllForUser(user.id, 'PASSWORD_RESET');
+            await this.verificationTokenRepository.create(
+              'PASSWORD_RESET',
+              user.id,
+              user.email,
+              tokenHash,
+              expiresAt,
+            );
+            await eventBus.emitStrict({
+              type: AUTH_EVENT.PASSWORD_RESET_REQUESTED,
+              payload: {
+                email: user.email,
+                reset_token: rawToken,
+                expires_in_minutes: PASSWORD_RESET_EXPIRES_IN_MINUTES,
+                locale,
+              } satisfies PasswordResetEmailPayload,
+              timestamp: new Date(),
+            });
+          },
+        }),
+    });
   }
 
   async resetPassword(body: unknown): Promise<UserAuthRecord> {
@@ -521,49 +531,53 @@ export class AuthMethodService {
     // a mid-operation failure rolls the password change back rather than committing it alone.
     // Returns the reset user so the caller (AuthService.resetPassword) can mint a fresh session
     // AFTER this revoke-all-sessions, leaving the resetter's new session as the only live one.
-    return withTransaction((transaction) =>
-      runWithPinnedDatabaseHandle(transaction as RequestScopedPostgresDatabase, async () => {
-        // Atomic UPDATE also prevents two concurrent resets from both succeeding.
-        // sec-r5-L2: the consume is scoped to PASSWORD_RESET, so a token of another flow
-        // is never matched (returns null) rather than burned and then rejected.
-        const record = await this.verificationTokenRepository.consumeIfValid(
-          tokenHash,
-          'PASSWORD_RESET',
-        );
-        if (!record) {
-          throw new UnauthorizedError('errors:invalidOrExpiredResetToken');
-        }
+    return withTransaction({
+      callback: (transaction) =>
+        runWithPinnedDatabaseHandle({
+          databaseHandle: transaction as RequestScopedPostgresDatabase,
+          callback: async () => {
+            // Atomic UPDATE also prevents two concurrent resets from both succeeding.
+            // sec-r5-L2: the consume is scoped to PASSWORD_RESET, so a token of another flow
+            // is never matched (returns null) rather than burned and then rejected.
+            const record = await this.verificationTokenRepository.consumeIfValid(
+              tokenHash,
+              'PASSWORD_RESET',
+            );
+            if (!record) {
+              throw new UnauthorizedError('errors:invalidOrExpiredResetToken');
+            }
 
-        const user = await this.userService.findById(record.user_id);
-        if (!user) throw new NotFoundError('User');
+            const user = await this.userService.findById(record.user_id);
+            if (!user) throw new NotFoundError('User');
 
-        await this.userService.updatePassword({
-          public_id: user.public_id,
-          password_hash: passwordHash,
-        });
-        // Completing a reset proves control of the email (the token was delivered there), so verify
-        // it — parity with email-code / OAuth, and it unblocks an invited user from accepting their
-        // organization invitation after recovering access.
-        await this.userService.updateEmailVerified(user.public_id);
-        // The password just changed, so any prior failed-login lockout is moot — clear the counter +
-        // lock window (mirrors a successful login) so the owner is not held out of the next sign-in.
-        const recovered = await this.userService.updateLoginAttempt({
-          public_id: user.public_id,
-          failed_login_count: 0,
-          account_locked_until: null,
-        });
-        await this.verificationTokenRepository.invalidateAllForUser(user.id, 'PASSWORD_RESET');
+            await this.userService.updatePassword({
+              public_id: user.public_id,
+              password_hash: passwordHash,
+            });
+            // Completing a reset proves control of the email (the token was delivered there), so verify
+            // it — parity with email-code / OAuth, and it unblocks an invited user from accepting their
+            // organization invitation after recovering access.
+            await this.userService.updateEmailVerified(user.public_id);
+            // The password just changed, so any prior failed-login lockout is moot — clear the counter +
+            // lock window (mirrors a successful login) so the owner is not held out of the next sign-in.
+            const recovered = await this.userService.updateLoginAttempt({
+              public_id: user.public_id,
+              failed_login_count: 0,
+              account_locked_until: null,
+            });
+            await this.verificationTokenRepository.invalidateAllForUser(user.id, 'PASSWORD_RESET');
 
-        // A reset is the recovery path for a potentially compromised account, so every existing
-        // session is revoked. The Redis token-cache invalidation inside `revokeAllSessions` is a
-        // sub-millisecond local call; on rollback it merely causes a cache miss, never a leak.
-        await this.authSessionService.revokeAllSessions(user.public_id);
-        // `recovered` carries every in-transaction change (new password, verified flag, cleared
-        // lockout); fall back to the pre-update row only on the soft-deleted edge (guarded UPDATEs
-        // return null), where the caller's assertUserAccountActive then refuses a session anyway.
-        return recovered ?? user;
-      }),
-    );
+            // A reset is the recovery path for a potentially compromised account, so every existing
+            // session is revoked. The Redis token-cache invalidation inside `revokeAllSessions` is a
+            // sub-millisecond local call; on rollback it merely causes a cache miss, never a leak.
+            await this.authSessionService.revokeAllSessions(user.public_id);
+            // `recovered` carries every in-transaction change (new password, verified flag, cleared
+            // lockout); fall back to the pre-update row only on the soft-deleted edge (guarded UPDATEs
+            // return null), where the caller's assertUserAccountActive then refuses a session anyway.
+            return recovered ?? user;
+          },
+        }),
+    });
   }
 
   async changePassword({
@@ -579,7 +593,10 @@ export class AuthMethodService {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
     if (!user.password_hash) throw new UnauthorizedError('errors:passwordAuthNotEnabled');
-    const { valid } = await verifyPassword(parsed.current_password, user.password_hash);
+    const { valid } = await verifyPassword({
+      plaintext: parsed.current_password,
+      storedHash: user.password_hash,
+    });
     if (!valid) throw new UnauthorizedError('errors:currentPasswordIncorrect');
     // Hash BEFORE the transaction: argon2 is CPU-bound (~100 ms) and must not hold a pooled
     // connection open inside the transaction.
@@ -593,27 +610,31 @@ export class AuthMethodService {
     // could believe the account was secured while the stolen bearer token remained usable. The
     // pinned transaction makes nested `withAppDatabaseContext (user scope)` calls reuse it, so a mid-operation
     // failure rolls the password change back rather than committing it alone.
-    await withTransaction((transaction) =>
-      runWithPinnedDatabaseHandle(transaction as RequestScopedPostgresDatabase, async () => {
-        const updatedUser = await this.userService.updatePassword({
-          public_id: user.public_id,
-          password_hash: passwordHash,
-        });
-        if (!updatedUser) throw new NotFoundError('User');
+    await withTransaction({
+      callback: (transaction) =>
+        runWithPinnedDatabaseHandle({
+          databaseHandle: transaction as RequestScopedPostgresDatabase,
+          callback: async () => {
+            const updatedUser = await this.userService.updatePassword({
+              public_id: user.public_id,
+              password_hash: passwordHash,
+            });
+            if (!updatedUser) throw new NotFoundError('User');
 
-        // An authenticated change keeps the caller's current session and terminates
-        // every other device. Without a current token we cannot single one out, so
-        // fall back to revoking all sessions.
-        if (options?.currentAccessToken) {
-          await this.authSessionService.revokeAllSessionsExceptCurrent({
-            userPublicId: user.public_id,
-            currentAccessToken: options.currentAccessToken,
-          });
-        } else {
-          await this.authSessionService.revokeAllSessions(user.public_id);
-        }
-      }),
-    );
+            // An authenticated change keeps the caller's current session and terminates
+            // every other device. Without a current token we cannot single one out, so
+            // fall back to revoking all sessions.
+            if (options?.currentAccessToken) {
+              await this.authSessionService.revokeAllSessionsExceptCurrent({
+                userPublicId: user.public_id,
+                currentAccessToken: options.currentAccessToken,
+              });
+            } else {
+              await this.authSessionService.revokeAllSessions(user.public_id);
+            }
+          },
+        }),
+    });
   }
 
   /**
@@ -642,7 +663,7 @@ export class AuthMethodService {
       throw new ForbiddenError('errors:mfaStepUpRequired');
     }
     if (!user.password_hash) throw new UnauthorizedError('errors:passwordAuthNotEnabled');
-    const { valid } = await verifyPassword(password, user.password_hash);
+    const { valid } = await verifyPassword({ plaintext: password, storedHash: user.password_hash });
     if (!valid) throw new UnauthorizedError('errors:currentPasswordIncorrect');
   }
 }

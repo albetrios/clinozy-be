@@ -110,18 +110,18 @@ describe('billing audit trail — subscription changes reach the audit log', () 
   }
 
   async function expectEveryStagedRowToDrain() {
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
-      (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
-    );
+    const result = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+      callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+    });
     expect(result.transientFailed + result.permanentlyFailed).toBe(0);
     const outbox = await getOperatorDatabase().select().from(audit_outbox);
     expect(outbox.filter((row) => row.status !== 'PROCESSED')).toEqual([]);
     const ledger = await getOperatorDatabase().select().from(logs).orderBy(logs.id);
-    const secondPass = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
-      (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
-    );
+    const secondPass = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+      callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+    });
     expect(secondPass).toEqual({ drained: 0, transientFailed: 0, permanentlyFailed: 0 });
     expect(await getOperatorDatabase().select().from(logs).orderBy(logs.id)).toEqual(ledger);
   }

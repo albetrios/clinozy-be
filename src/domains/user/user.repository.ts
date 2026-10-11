@@ -286,11 +286,11 @@ export class UserRepository {
       filterConditions.push(or(ilike(users.email, pattern), sql`${displayName} ILIKE ${pattern}`)!);
     }
     const countWhere = and(...filterConditions);
-    const cursorCondition = buildAscendingCreatedAtIdCursorCondition(
-      users.created_at,
-      users.id,
-      parseListCursor(after),
-    );
+    const cursorCondition = buildAscendingCreatedAtIdCursorCondition({
+      createdAtColumn: users.created_at,
+      idColumn: users.id,
+      cursor: parseListCursor(after),
+    });
     const where =
       cursorCondition !== undefined ? and(...filterConditions, cursorCondition) : countWhere;
 
@@ -310,7 +310,7 @@ export class UserRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    return finishKeysetPage(fetchedRows, { limit, total });
+    return finishKeysetPage({ rows: fetchedRows, args: { limit, total } });
   }
 
   async adminUpdate(

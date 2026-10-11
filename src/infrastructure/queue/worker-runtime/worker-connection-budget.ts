@@ -67,10 +67,13 @@ export type WorkerPostgresPoolDemandReport = {
  */
 const WORKER_POSTGRES_POOL_SAFETY_MARGIN = 1.25;
 
-function isRegistrationEnabled(
-  definition: WorkerQueueRegistrationDefinition,
-  workerContainers: DomainContainers | undefined,
-): boolean {
+function isRegistrationEnabled({
+  definition,
+  workerContainers,
+}: {
+  definition: WorkerQueueRegistrationDefinition;
+  workerContainers: DomainContainers | undefined;
+}): boolean {
   if (definition.isEnabled === undefined) {
     return true;
   }
@@ -86,10 +89,13 @@ function isRegistrationEnabled(
   return definition.isEnabled(workerContainers);
 }
 
-function resolvePostgresConcurrency(
-  definition: WorkerQueueRegistrationDefinition,
-  workerContainers: DomainContainers | undefined,
-): number {
+function resolvePostgresConcurrency({
+  definition,
+  workerContainers,
+}: {
+  definition: WorkerQueueRegistrationDefinition;
+  workerContainers: DomainContainers | undefined;
+}): number {
   if (!definition.usesPostgres) {
     return 0;
   }
@@ -116,9 +122,12 @@ export function computeWorkerPostgresPoolDemand(
   );
 
   const queues: WorkerPostgresQueueDemandEntry[] = definitions.map((definition) => {
-    const enabled = isRegistrationEnabled(definition, options.workerContainers);
+    const enabled = isRegistrationEnabled({
+      definition,
+      workerContainers: options.workerContainers,
+    });
     const postgresConcurrency = enabled
-      ? resolvePostgresConcurrency(definition, options.workerContainers)
+      ? resolvePostgresConcurrency({ definition, workerContainers: options.workerContainers })
       : 0;
     return {
       queueName: definition.queueName,
@@ -164,7 +173,7 @@ export function resolveActiveWorkerQueueNames(
   const names = new Set<string>();
 
   for (const definition of definitions) {
-    if (isRegistrationEnabled(definition, options.workerContainers)) {
+    if (isRegistrationEnabled({ definition, workerContainers: options.workerContainers })) {
       names.add(definition.queueName);
     }
   }

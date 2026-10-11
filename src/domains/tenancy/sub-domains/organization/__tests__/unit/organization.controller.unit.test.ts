@@ -66,7 +66,7 @@ describe('createOrganizationController', () => {
     }),
   } as unknown as AuditService;
 
-  const controller = createOrganizationController(service, auditService);
+  const controller = createOrganizationController({ service, auditService });
 
   it('getOrganization delegates to service', async () => {
     await controller.getOrganization(mockRequest({ params: {} }), mockReply());
@@ -229,7 +229,7 @@ describe('createOrganizationController', () => {
   });
 
   it('listOrganizationAuditLogs throws when audit service is not configured', async () => {
-    const controllerWithoutAudit = createOrganizationController(service);
+    const controllerWithoutAudit = createOrganizationController({ service });
     await expect(
       controllerWithoutAudit.listOrganizationAuditLogs(mockRequest({ params: {} }), mockReply()),
     ).rejects.toThrow('Audit service not configured');

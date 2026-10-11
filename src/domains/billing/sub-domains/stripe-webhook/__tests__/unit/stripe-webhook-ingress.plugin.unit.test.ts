@@ -130,10 +130,10 @@ describe('stripeWebhookIngressPlugin', () => {
 
     await preHandlerHooks[0]?.(request);
 
-    expect(constructStripeWebhookEventMock).toHaveBeenCalledWith(
-      Buffer.from('{"id":"evt_1"}'),
-      'sig_test',
-    );
+    expect(constructStripeWebhookEventMock).toHaveBeenCalledWith({
+      body: Buffer.from('{"id":"evt_1"}'),
+      signature: 'sig_test',
+    });
     expect(request.stripeWebhookEvent).toEqual(verifiedEvent);
   });
 });

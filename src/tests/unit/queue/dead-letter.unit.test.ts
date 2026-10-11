@@ -150,7 +150,11 @@ describe('dead-letter helpers', () => {
       );
       queueGetWaitingCountMock.mockResolvedValue(DEAD_LETTER_MIRROR_MAX_JOBS - 1);
 
-      await enqueueDeadLetter('mail', terminalJob, new Error('boom'));
+      await enqueueDeadLetter({
+        sourceQueueName: 'mail',
+        job: terminalJob,
+        error: new Error('boom'),
+      });
 
       expect(queueAddMock).toHaveBeenCalledOnce();
     });
@@ -163,7 +167,11 @@ describe('dead-letter helpers', () => {
       const warnSpy = vi.spyOn(logger, 'warn');
       queueGetWaitingCountMock.mockResolvedValue(DEAD_LETTER_MIRROR_MAX_JOBS);
 
-      await enqueueDeadLetter('mail', terminalJob, new Error('boom'));
+      await enqueueDeadLetter({
+        sourceQueueName: 'mail',
+        job: terminalJob,
+        error: new Error('boom'),
+      });
 
       expect(queueAddMock).not.toHaveBeenCalled();
       expect(warnSpy).toHaveBeenCalledWith(
@@ -232,7 +240,7 @@ describe('dead-letter helpers', () => {
         opts: { attempts: 3 },
       } as Job;
 
-      await enqueueDeadLetter('webhook-delivery', job, error);
+      await enqueueDeadLetter({ sourceQueueName: 'webhook-delivery', job, error });
 
       const addCall = queueAddMock.mock.calls.at(-1)!;
       const data = addCall[1] as { failed_reason: string; error_stack: string };
@@ -263,7 +271,7 @@ describe('dead-letter helpers', () => {
         '@/infrastructure/queue/dlq/dead-letter.js'
       );
       const fakeWorker = new EventEmitter() as unknown as Worker;
-      attachDeadLetterAndAlerting(fakeWorker, 'notification');
+      attachDeadLetterAndAlerting({ worker: fakeWorker, queueName: 'notification' });
 
       const job = {
         id: 'job-1',
@@ -288,7 +296,7 @@ describe('dead-letter helpers', () => {
         '@/infrastructure/queue/dlq/dead-letter.js'
       );
       const fakeWorker = new EventEmitter() as unknown as Worker;
-      attachDeadLetterAndAlerting(fakeWorker, 'notification');
+      attachDeadLetterAndAlerting({ worker: fakeWorker, queueName: 'notification' });
 
       const finalError = new Error('permanent');
       const job = {
@@ -329,7 +337,7 @@ describe('dead-letter helpers', () => {
         '@/infrastructure/queue/dlq/dead-letter.js'
       );
       const fakeWorker = new EventEmitter() as unknown as Worker;
-      attachDeadLetterAndAlerting(fakeWorker, 'notification');
+      attachDeadLetterAndAlerting({ worker: fakeWorker, queueName: 'notification' });
 
       const finalError = new Error('permanent');
       const job = {
@@ -358,7 +366,7 @@ describe('dead-letter helpers', () => {
         '@/infrastructure/queue/dlq/dead-letter.js'
       );
       const fakeWorker = new EventEmitter() as unknown as Worker;
-      attachDeadLetterAndAlerting(fakeWorker, 'webhook-delivery');
+      attachDeadLetterAndAlerting({ worker: fakeWorker, queueName: 'webhook-delivery' });
       const job = {
         id: 'wda_9z3rura5kqvcv8zggriym',
         name: 'deliver-webhook',
@@ -451,7 +459,11 @@ describe('dead-letter helpers', () => {
         opts: { attempts: 0 },
       } as unknown as Job;
 
-      await recordDeadLetterFailure('stripe-webhook-event-catchup', job, new Error('boom'));
+      await recordDeadLetterFailure({
+        queueName: 'stripe-webhook-event-catchup',
+        job,
+        error: new Error('boom'),
+      });
 
       expect(insertDeadLetterJobMock).toHaveBeenCalledTimes(1);
       const row = insertDeadLetterJobMock.mock.calls[0]?.[0] as {

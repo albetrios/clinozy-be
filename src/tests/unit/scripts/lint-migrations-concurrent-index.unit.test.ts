@@ -5,7 +5,10 @@ describe('lint-migrations: concurrent_index_requires_non_transactional', () => {
   it('flags CREATE INDEX CONCURRENTLY without a non-transactional header', () => {
     const sql = `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_created ON audit.logs (created_at);
 `;
-    const { violations } = lintMigrationFileContent('20990101000001_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '20990101000001_test.sql',
+      fileContent: sql,
+    });
     const matched = violations.filter(
       (violation) => violation.ruleId === 'concurrent_index_requires_non_transactional',
     );
@@ -17,7 +20,10 @@ describe('lint-migrations: concurrent_index_requires_non_transactional', () => {
     const sql = `-- migration-transaction: none reason="CREATE INDEX CONCURRENTLY cannot run in a transaction"
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_created_id ON auth.users (created_at, id);
 `;
-    const { violations, headerErrors } = lintMigrationFileContent('20990101000002_test.sql', sql);
+    const { violations, headerErrors } = lintMigrationFileContent({
+      filename: '20990101000002_test.sql',
+      fileContent: sql,
+    });
     expect(headerErrors).toEqual([]);
     expect(violations).toEqual([]);
   });
@@ -26,7 +32,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_created_id ON auth.users (crea
     const sql = `-- migration-safety: allow concurrent_index_requires_non_transactional reason="trying to escape"
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_created ON audit.logs (created_at);
 `;
-    const { violations, headerErrors } = lintMigrationFileContent('20990101000003_test.sql', sql);
+    const { violations, headerErrors } = lintMigrationFileContent({
+      filename: '20990101000003_test.sql',
+      fileContent: sql,
+    });
     expect(headerErrors).toEqual([]);
     expect(
       violations.some(
@@ -39,7 +48,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_created ON audit.logs (created_
     const sql = `-- migration-transaction: none
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_created ON audit.logs (created_at);
 `;
-    const { headerErrors } = lintMigrationFileContent('20990101000004_test.sql', sql);
+    const { headerErrors } = lintMigrationFileContent({
+      filename: '20990101000004_test.sql',
+      fileContent: sql,
+    });
     expect(headerErrors.length).toBeGreaterThan(0);
     expect(headerErrors[0]).toContain('migration-transaction');
   });
@@ -48,7 +60,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_logs_created ON audit.logs (created_
     const sql = `-- migration-transaction: none reason="batch of concurrent index builds"
 CREATE INDEX IF NOT EXISTS idx_logs_created ON audit.logs (created_at);
 `;
-    const { violations } = lintMigrationFileContent('20990101000005_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '20990101000005_test.sql',
+      fileContent: sql,
+    });
     expect(
       violations.some((violation) => violation.ruleId === 'create_index_without_concurrently'),
     ).toBe(true);
@@ -66,7 +81,10 @@ describe('lint-migrations: non_transactional_statements_need_breakpoints', () =>
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_a ON audit.logs (a);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_b ON audit.logs (b);
 `;
-    const { violations } = lintMigrationFileContent('20990101000010_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '20990101000010_test.sql',
+      fileContent: sql,
+    });
     const matched = violations.filter(
       (violation) => violation.ruleId === 'non_transactional_statements_need_breakpoints',
     );
@@ -79,7 +97,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_a ON audit.logs (a);
 --> statement-breakpoint
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_b ON audit.logs (b);
 `;
-    const { violations, headerErrors } = lintMigrationFileContent('20990101000011_test.sql', sql);
+    const { violations, headerErrors } = lintMigrationFileContent({
+      filename: '20990101000011_test.sql',
+      fileContent: sql,
+    });
     expect(headerErrors).toEqual([]);
     expect(
       violations.some(
@@ -92,7 +113,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_b ON audit.logs (b);
     const sql = `-- migration-transaction: none reason="single concurrent index build"
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_a ON audit.logs (a);
 `;
-    const { violations } = lintMigrationFileContent('20990101000012_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '20990101000012_test.sql',
+      fileContent: sql,
+    });
     expect(
       violations.some(
         (violation) => violation.ruleId === 'non_transactional_statements_need_breakpoints',
@@ -104,7 +128,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_a ON audit.logs (a);
     const sql = `CREATE TABLE IF NOT EXISTS public.a (id BIGINT);
 CREATE TABLE IF NOT EXISTS public.b (id BIGINT);
 `;
-    const { violations } = lintMigrationFileContent('20990101000013_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '20990101000013_test.sql',
+      fileContent: sql,
+    });
     expect(
       violations.some(
         (violation) => violation.ruleId === 'non_transactional_statements_need_breakpoints',

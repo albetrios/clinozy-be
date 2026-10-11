@@ -29,11 +29,15 @@ vi.mock('@/infrastructure/payment/stripe.client.js', () => ({
 
 vi.mock('@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-organization.util.js', () => ({
   runStripeWebhookHandlerWithOrganizationContext: vi.fn(
-    async (
-      _event: Stripe.Event,
-      _repository: unknown,
-      handler: (databaseHandle: unknown) => Promise<void>,
-    ) => handler({} as never),
+    async ({
+      event: _event,
+      repository: _repository,
+      handler,
+    }: {
+      event: Stripe.Event;
+      repository: unknown;
+      handler: (databaseHandle: unknown) => Promise<void>;
+    }) => handler({} as never),
   ),
 }));
 
@@ -97,7 +101,7 @@ describe('stripe-webhook.processor race', () => {
 
     await Promise.all(
       Array.from({ length: 10 }, (_, index) =>
-        processStripeWebhookJob(jobData, stripeWebhookService, `job-${index}`),
+        processStripeWebhookJob({ jobData, stripeWebhookService, jobId: `job-${index}` }),
       ),
     );
 

@@ -11,50 +11,71 @@ import {
 
 describe('buildIdempotencyCacheKey', () => {
   it('scopes keys by organization and user', () => {
-    const key = buildIdempotencyCacheKey('my-key', {
-      userId: 'user-1',
-      organizationId: 'organization-1',
+    const key = buildIdempotencyCacheKey({
+      idempotencyKey: 'my-key',
+      scope: {
+        userId: 'user-1',
+        organizationId: 'organization-1',
+      },
     });
     expect(key).toBe('idempotency:organization-1:user-1:my-key');
   });
 
   it('uses anonymous when scope is missing', () => {
-    const key = buildIdempotencyCacheKey('my-key', {});
+    const key = buildIdempotencyCacheKey({ idempotencyKey: 'my-key', scope: {} });
     expect(key).toBe('idempotency:none:anonymous:my-key');
   });
 
   it('separates the same idempotency key across different users (no cross-user replay)', () => {
-    const userAKey = buildIdempotencyCacheKey('shared-key', {
-      userId: 'user-a',
-      organizationId: 'organization-1',
+    const userAKey = buildIdempotencyCacheKey({
+      idempotencyKey: 'shared-key',
+      scope: {
+        userId: 'user-a',
+        organizationId: 'organization-1',
+      },
     });
-    const userBKey = buildIdempotencyCacheKey('shared-key', {
-      userId: 'user-b',
-      organizationId: 'organization-1',
+    const userBKey = buildIdempotencyCacheKey({
+      idempotencyKey: 'shared-key',
+      scope: {
+        userId: 'user-b',
+        organizationId: 'organization-1',
+      },
     });
     expect(userAKey).not.toBe(userBKey);
   });
 
   it('separates the same idempotency key across different organizations', () => {
-    const organizationAKey = buildIdempotencyCacheKey('shared-key', {
-      userId: 'user-1',
-      organizationId: 'org-a',
+    const organizationAKey = buildIdempotencyCacheKey({
+      idempotencyKey: 'shared-key',
+      scope: {
+        userId: 'user-1',
+        organizationId: 'org-a',
+      },
     });
-    const organizationBKey = buildIdempotencyCacheKey('shared-key', {
-      userId: 'user-1',
-      organizationId: 'org-b',
+    const organizationBKey = buildIdempotencyCacheKey({
+      idempotencyKey: 'shared-key',
+      scope: {
+        userId: 'user-1',
+        organizationId: 'org-b',
+      },
     });
     expect(organizationAKey).not.toBe(organizationBKey);
   });
 
   it('separates api-key actor from user actor for the same identifier', () => {
-    const userScopedKey = buildIdempotencyCacheKey('shared-key', {
-      userId: 'public-id-abc',
-      organizationId: 'organization-1',
+    const userScopedKey = buildIdempotencyCacheKey({
+      idempotencyKey: 'shared-key',
+      scope: {
+        userId: 'public-id-abc',
+        organizationId: 'organization-1',
+      },
     });
-    const apiKeyScopedKey = buildIdempotencyCacheKey('shared-key', {
-      apiKeyPublicId: 'public-id-abc',
-      organizationId: 'organization-1',
+    const apiKeyScopedKey = buildIdempotencyCacheKey({
+      idempotencyKey: 'shared-key',
+      scope: {
+        apiKeyPublicId: 'public-id-abc',
+        organizationId: 'organization-1',
+      },
     });
     expect(userScopedKey).not.toBe(apiKeyScopedKey);
     expect(apiKeyScopedKey).toBe('idempotency:organization-1:api-key:public-id-abc:shared-key');
@@ -63,28 +84,37 @@ describe('buildIdempotencyCacheKey', () => {
   it('omits the request fingerprint from the key (it is compared via the cache entry instead)', () => {
     // The same key + scope must collide regardless of body so a reuse with a different payload
     // is detected and rejected (422) rather than executing as a second, independent operation.
-    const key = buildIdempotencyCacheKey('my-key', {
-      userId: 'user-1',
-      organizationId: 'organization-1',
+    const key = buildIdempotencyCacheKey({
+      idempotencyKey: 'my-key',
+      scope: {
+        userId: 'user-1',
+        organizationId: 'organization-1',
+      },
     });
     expect(key).toBe('idempotency:organization-1:user-1:my-key');
     expect(key).not.toContain('fingerprint');
   });
 
   it('prefers api-key over user when both are provided', () => {
-    const key = buildIdempotencyCacheKey('my-key', {
-      userId: 'user-1',
-      apiKeyPublicId: 'api-key-1',
-      organizationId: 'organization-1',
+    const key = buildIdempotencyCacheKey({
+      idempotencyKey: 'my-key',
+      scope: {
+        userId: 'user-1',
+        apiKeyPublicId: 'api-key-1',
+        organizationId: 'organization-1',
+      },
     });
     expect(key).toBe('idempotency:organization-1:api-key:api-key-1:my-key');
   });
 
   it('falls back to user when api-key is empty string', () => {
-    const key = buildIdempotencyCacheKey('my-key', {
-      userId: 'user-1',
-      apiKeyPublicId: '',
-      organizationId: 'organization-1',
+    const key = buildIdempotencyCacheKey({
+      idempotencyKey: 'my-key',
+      scope: {
+        userId: 'user-1',
+        apiKeyPublicId: '',
+        organizationId: 'organization-1',
+      },
     });
     expect(key).toBe('idempotency:organization-1:user-1:my-key');
   });

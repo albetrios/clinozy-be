@@ -52,11 +52,15 @@ export type TenancyContainer = {
  * permission, and settings services, which is why instances are created top-
  * down before the membership service.
  */
-export function createTenancyContainer(
-  userService: UserService,
-  objectStorage: ObjectStoragePort,
-  userSettingsService?: UserSettingsService,
-): TenancyContainer {
+export function createTenancyContainer({
+  userService,
+  objectStorage,
+  userSettingsService,
+}: {
+  userService: UserService;
+  objectStorage: ObjectStoragePort;
+  userSettingsService?: UserSettingsService | undefined;
+}): TenancyContainer {
   const organizationRepository = new OrganizationRepository();
   const organizationSettingsRepository = new OrganizationSettingsRepository();
   const organizationNotificationPolicyRepository = new OrganizationNotificationPolicyRepository();
@@ -152,10 +156,10 @@ export function registerTenancyContainer(application: FastifyInstance): void {
   const objectStorage = getDefaultS3ObjectStorageAdapter();
   application.decorate(
     'tenancyDomain',
-    createTenancyContainer(
-      application.userDomain.userService,
+    createTenancyContainer({
+      userService: application.userDomain.userService,
       objectStorage,
-      application.userDomain.userSettingsService,
-    ),
+      userSettingsService: application.userDomain.userSettingsService,
+    }),
   );
 }

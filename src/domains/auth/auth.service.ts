@@ -152,15 +152,18 @@ export class AuthService {
       const key = this.buildIpKey(ipAddress);
       // Atomic INCR + first-increment EXPIRE (route-audit C5) — a crash between a separate INCR and
       // EXPIRE would otherwise leave a no-TTL counter that throttles the IP indefinitely.
-      const count = await incrementWithExpiryOnFirst(
-        this.redis,
+      const count = await incrementWithExpiryOnFirst({
+        redis: this.redis,
         key,
-        IP_FAILED_LOGIN_WINDOW_SECONDS,
-      );
+        ttlSeconds: IP_FAILED_LOGIN_WINDOW_SECONDS,
+      });
       if (count === IP_FAILED_LOGIN_THRESHOLD) {
-        captureMessage('auth.ip_failed_login.threshold_reached', {
-          level: 'warning',
-          extra: { ip_hash: this.buildIpKey(ipAddress), count },
+        captureMessage({
+          message: 'auth.ip_failed_login.threshold_reached',
+          options: {
+            level: 'warning',
+            extra: { ip_hash: this.buildIpKey(ipAddress), count },
+          },
         });
         logger.warn(
           { ip_hash: this.buildIpKey(ipAddress), count },
@@ -205,9 +208,9 @@ export class AuthService {
       // Run a verification against a fixed dummy hash and discard the result so
       // the "unknown email" path takes the same ~argon2 time as a wrong password,
       // preventing user enumeration via response timing.
-      await verifyPassword(parsed.password, DUMMY_ARGON2_HASH);
+      await verifyPassword({ plaintext: parsed.password, storedHash: DUMMY_ARGON2_HASH });
       await this.recordIpFailedLogin(ipAddress);
-      await enforceMinimumDuration(startedAtMillis);
+      await enforceMinimumDuration({ startedAtMillis });
       throw new UnauthorizedError('errors:invalidEmailOrPassword');
     }
 
@@ -220,10 +223,10 @@ export class AuthService {
       user.account_locked_until && new Date(user.account_locked_until) > new Date(),
     );
 
-    const { valid: isValid, needsRehash } = await verifyPassword(
-      parsed.password,
-      user.password_hash,
-    );
+    const { valid: isValid, needsRehash } = await verifyPassword({
+      plaintext: parsed.password,
+      storedHash: user.password_hash,
+    });
 
     if (!isValid) {
       // Atomic SQL increment + conditional lock — never a read-modify-write — so two
@@ -250,7 +253,7 @@ export class AuthService {
       }
       // audit-#15d: same floor as the unknown-email branch so the extra Postgres write
       // above is not observable as a latency difference.
-      await enforceMinimumDuration(startedAtMillis);
+      await enforceMinimumDuration({ startedAtMillis });
       throw new UnauthorizedError('errors:invalidEmailOrPassword');
     }
 
@@ -393,7 +396,10 @@ export class AuthService {
     // never silently move the caller to a different tenant while the UI still shows A.
     const persistedOrganizationPublicId =
       session.organization_id != null
-        ? await findUserActiveOrganizationPublicIdByInternalId(user.id, session.organization_id)
+        ? await findUserActiveOrganizationPublicIdByInternalId({
+            userInternalId: user.id,
+            organizationInternalId: session.organization_id,
+          })
         : undefined;
     const sessionMfaVerified = session.mfa_verified_at != null;
     const organizationPublicId = await this.withoutUnmetOrganizationMfa({
@@ -450,19 +456,19 @@ export class AuthService {
     // `app.current_session_public_id`, a different guc, so it must own its transaction — and
     // nesting it here would hold this checkout open across it, making the request peak at two
     // concurrent connections instead of taking them one after another.
-    const { user, resolved } = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      async () => {
+    const { user, resolved } = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: async () => {
         const record = await this.userService.requireUserRecordByPublicId(userPublicId);
         if (record.status !== 'ACTIVE') throw new UnauthorizedError('errors:accountNotActive');
-        const organization = await findUserActiveOrganizationByPublicId(
-          record.id,
+        const organization = await findUserActiveOrganizationByPublicId({
+          userInternalId: record.id,
           organizationPublicId,
-        );
+        });
         if (!organization) throw new ForbiddenError('errors:insufficientOrganizationPermissions');
         return { user: record, resolved: organization };
       },
-    );
+    });
     return this.mintForActiveOrganization({ user, sessionPublicId, organization: resolved });
   }
 

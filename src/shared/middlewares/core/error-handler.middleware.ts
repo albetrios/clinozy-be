@@ -35,13 +35,19 @@ function getDocsBaseUrl(): string | null {
   return env.API_DOCS_BASE_URL ?? null;
 }
 
-function buildErrorPayload(
-  type: 'request_error' | 'validation_error',
-  code: string,
-  detail: string,
-  errors?: { field: string; message: string }[],
-  reason?: string,
-) {
+function buildErrorPayload({
+  type,
+  code,
+  detail,
+  errors,
+  reason,
+}: {
+  type: 'request_error' | 'validation_error';
+  code: string;
+  detail: string;
+  errors?: { field: string; message: string }[] | undefined;
+  reason?: string | undefined;
+}) {
   const docsBaseUrl = getDocsBaseUrl();
   const payload: {
     type: string;
@@ -62,12 +68,17 @@ function buildErrorPayload(
   return payload;
 }
 
-function translateDetail(
-  request: Pick<FastifyRequest, 't'>,
-  key: string,
-  params?: Record<string, string | number>,
-  fallback: string = key,
-): string {
+function translateDetail({
+  request,
+  key,
+  params,
+  fallback = key,
+}: {
+  request: Pick<FastifyRequest, 't'>;
+  key: string;
+  params?: Record<string, string | number> | undefined;
+  fallback?: string | undefined;
+}): string {
   const options = params ?? {};
   // Prefer the per-request translator (honours the caller's Accept-Language).
   const viaRequest = request.t?.(key, options);
@@ -122,10 +133,13 @@ function isFastifyValidationError(error: unknown): error is FastifyValidationErr
   );
 }
 
-function mapFastifyValidationField(
-  issue: FastifyValidationIssue,
-  validationContext?: string,
-): string {
+function mapFastifyValidationField({
+  issue,
+  validationContext,
+}: {
+  issue: FastifyValidationIssue;
+  validationContext?: string | undefined;
+}): string {
   if (issue.params?.missingProperty) {
     return issue.params.missingProperty;
   }
@@ -141,17 +155,23 @@ function mapFastifyValidationField(
  * resolver as `detail` (per-request t -> i18next singleton -> fallback), so a field message never
  * leaks a raw `errors:*` key; a message already rendered per language is picked.
  */
-function renderFieldMessage(request: FastifyRequest, item: ValidationErrorItem): string {
+function renderFieldMessage({
+  request,
+  item,
+}: {
+  request: FastifyRequest;
+  item: ValidationErrorItem;
+}): string {
   if (item.messageKey) {
-    return translateDetail(
+    return translateDetail({
       request,
-      item.messageKey,
-      item.messageParams,
-      item.message ?? item.messageKey,
-    );
+      key: item.messageKey,
+      params: item.messageParams,
+      fallback: item.message ?? item.messageKey,
+    });
   }
   if (item.localizedMessages !== undefined) {
-    return pickLocalizedMessage(item.localizedMessages, request.language);
+    return pickLocalizedMessage({ messages: item.localizedMessages, language: request.language });
   }
   return item.message ?? 'Invalid';
 }
@@ -168,7 +188,7 @@ function mapFastifyValidationIssue(options: {
   request: FastifyRequest;
 }): Array<{ field: string; message: string }> {
   const { issue, validationContext, request } = options;
-  const field = mapFastifyValidationField(issue, validationContext);
+  const field = mapFastifyValidationField({ issue, validationContext });
   const unknownKeys = issue.params?.keys;
   if (
     issue.keyword === 'unrecognized_keys' &&
@@ -179,12 +199,12 @@ function mapFastifyValidationIssue(options: {
       const key = String(unknownKey);
       return {
         field: `${field}.${key}`,
-        message: translateDetail(
+        message: translateDetail({
           request,
-          'errors:validation.unrecognizedKey',
-          { key },
-          `Unrecognized key: "${key}"`,
-        ),
+          key: 'errors:validation.unrecognizedKey',
+          params: { key },
+          fallback: `Unrecognized key: "${key}"`,
+        }),
       };
     });
   }
@@ -194,7 +214,7 @@ function mapFastifyValidationIssue(options: {
       field,
       message:
         localizedMessages !== undefined
-          ? pickLocalizedMessage(localizedMessages, request.language)
+          ? pickLocalizedMessage({ messages: localizedMessages, language: request.language })
           : (issue.message ?? 'Invalid'),
     },
   ];
@@ -205,18 +225,27 @@ interface ErrorResponseBody {
   meta: { request_id: string };
 }
 
-function buildTimeoutResponse(
-  request: FastifyRequest,
-  requestId: string,
+function buildTimeoutResponse({
+  request,
+  requestId,
+  options,
+}: {
+  request: FastifyRequest;
+  requestId: string;
   options: {
     translationKey: string;
     fallbackMessage: string;
     code: 'request_timeout' | 'gateway_timeout';
-  },
-): ErrorResponseBody {
-  const detail = translateDetail(request, options.translationKey, {}, options.fallbackMessage);
+  };
+}): ErrorResponseBody {
+  const detail = translateDetail({
+    request,
+    key: options.translationKey,
+    params: {},
+    fallback: options.fallbackMessage,
+  });
   return {
-    error: buildErrorPayload('request_error', options.code, detail),
+    error: buildErrorPayload({ type: 'request_error', code: options.code, detail }),
     meta: { request_id: requestId },
   };
 }
@@ -226,26 +255,38 @@ function buildTimeoutResponse(
  * is translated through `errors:resources.<noun>` before the sentence, so a Spanish response does
  * not read "Organization no encontrado". An unlisted noun stays as given.
  */
-function translateResourceNoun(
-  request: Pick<FastifyRequest, 't'>,
-  params: Record<string, string | number> | undefined,
-): Record<string, string | number> | undefined {
+function translateResourceNoun({
+  request,
+  params,
+}: {
+  request: Pick<FastifyRequest, 't'>;
+  params: Record<string, string | number> | undefined;
+}): Record<string, string | number> | undefined {
   const resource = params?.resource;
   if (typeof resource !== 'string') return params;
   return {
     ...params,
-    resource: translateDetail(request, `errors:resources.${resource}`, {}, resource),
+    resource: translateDetail({
+      request,
+      key: `errors:resources.${resource}`,
+      params: {},
+      fallback: resource,
+    }),
   };
 }
 
 /** HTTP status for a dependency that is down or the service shedding load — degraded mode, not a bug. */
 const SERVICE_UNAVAILABLE_STATUS = 503;
 
-function handleAppErrorResponse(
-  error: AppError,
-  request: FastifyRequest,
-  requestId: string,
-): ErrorResponseBody {
+function handleAppErrorResponse({
+  error,
+  request,
+  requestId,
+}: {
+  error: AppError;
+  request: FastifyRequest;
+  requestId: string;
+}): ErrorResponseBody {
   // A 503 is degraded mode the client should retry (a dependency down, a circuit open, load being
   // shed), already signalled where it happens — the circuit opening alerts once. Capturing it per
   // request paged Sentry on every call during an outage, and masking its detail hid the message
@@ -253,14 +294,14 @@ function handleAppErrorResponse(
   // error stays masked and captured.
   const isServerError = error.statusCode >= 500 && error.statusCode !== SERVICE_UNAVAILABLE_STATUS;
   if (isServerError) {
-    captureException(
+    captureException({
       error,
-      omitUndefined({
+      context: omitUndefined({
         requestId,
         userId: request.auth?.kind === 'user' ? request.auth.userId : undefined,
         organizationId: request.auth?.organizationPublicId ?? request.organizationId ?? undefined,
       }),
-    );
+    });
   } else if (error.statusCode === SERVICE_UNAVAILABLE_STATUS) {
     logger.warn(
       omitUndefined({ requestId, messageKey: error.messageKey, reason: error.reason }),
@@ -270,50 +311,60 @@ function handleAppErrorResponse(
   const code = ERROR_CODE_TO_SNAKE[error.code];
   const isValidation = error instanceof ValidationError;
   const detail = isServerError
-    ? translateDetail(request, 'errors:internal', {}, EXTERNAL_ERROR_MESSAGE)
-    : translateDetail(
+    ? translateDetail({
         request,
-        error.messageKey,
-        translateResourceNoun(request, error.messageParams),
-        error.message,
-      );
+        key: 'errors:internal',
+        params: {},
+        fallback: EXTERNAL_ERROR_MESSAGE,
+      })
+    : translateDetail({
+        request,
+        key: error.messageKey,
+        params: translateResourceNoun({ request, params: error.messageParams }),
+        fallback: error.message,
+      });
   const errors =
     isValidation && error.errors
       ? error.errors.map((item) => ({
           field: item.field,
-          message: renderFieldMessage(request, item),
+          message: renderFieldMessage({ request, item }),
         }))
       : undefined;
   return {
-    error: buildErrorPayload(
-      isValidation ? 'validation_error' : 'request_error',
+    error: buildErrorPayload({
+      type: isValidation ? 'validation_error' : 'request_error',
       code,
       detail,
       errors,
-      // Reasons are 4xx sub-codes the client can act on; a 5xx carries none (a 500's detail is
-      // masked, a 503's names the outage).
-      error.statusCode >= 500 ? undefined : error.reason,
-    ),
+      reason: error.statusCode >= 500 ? undefined : error.reason,
+    }),
     meta: { request_id: requestId },
   };
 }
 
-function handleZodErrorResponse(
-  error: ZodError,
-  request: FastifyRequest,
-  requestId: string,
-): ErrorResponseBody {
-  const detail = translateDetail(
+function handleZodErrorResponse({
+  error,
+  request,
+  requestId,
+}: {
+  error: ZodError;
+  request: FastifyRequest;
+  requestId: string;
+}): ErrorResponseBody {
+  const detail = translateDetail({
     request,
-    'errors:invalidFields',
-    {},
-    'Invalid values for fields in request',
-  );
+    key: 'errors:invalidFields',
+    params: {},
+    fallback: 'Invalid values for fields in request',
+  });
   const messagesByField = new Map<string, string[]>();
   for (const issue of error.issues) {
     if (issue.path.length === 0) continue;
     const field = String(issue.path[0]);
-    const message = pickLocalizedMessage(renderZodIssueMessages(issue), request.language);
+    const message = pickLocalizedMessage({
+      messages: renderZodIssueMessages(issue),
+      language: request.language,
+    });
     messagesByField.set(field, [...(messagesByField.get(field) ?? []), message]);
   }
   const errors = [...messagesByField].map(([field, messages]) => ({
@@ -321,44 +372,52 @@ function handleZodErrorResponse(
     message: messages.join(', '),
   }));
   return {
-    error: buildErrorPayload('validation_error', 'invalid_field', detail, errors),
+    error: buildErrorPayload({ type: 'validation_error', code: 'invalid_field', detail, errors }),
     meta: { request_id: requestId },
   };
 }
 
-function handleFastifyValidationErrorResponse(
-  error: FastifyValidationError,
-  request: FastifyRequest,
-  requestId: string,
-): ErrorResponseBody {
-  const detail = translateDetail(
+function handleFastifyValidationErrorResponse({
+  error,
+  request,
+  requestId,
+}: {
+  error: FastifyValidationError;
+  request: FastifyRequest;
+  requestId: string;
+}): ErrorResponseBody {
+  const detail = translateDetail({
     request,
-    'errors:invalidFields',
-    {},
-    'Invalid values for fields in request',
-  );
+    key: 'errors:invalidFields',
+    params: {},
+    fallback: 'Invalid values for fields in request',
+  });
   const errors = error.validation.flatMap((issue) =>
     mapFastifyValidationIssue({ issue, validationContext: error.validationContext, request }),
   );
   return {
-    error: buildErrorPayload('validation_error', 'invalid_field', detail, errors),
+    error: buildErrorPayload({ type: 'validation_error', code: 'invalid_field', detail, errors }),
     meta: { request_id: requestId },
   };
 }
 
-function handleUnhandledErrorResponse(
-  error: unknown,
-  request: FastifyRequest,
-  requestId: string,
-): ErrorResponseBody {
-  captureException(
+function handleUnhandledErrorResponse({
+  error,
+  request,
+  requestId,
+}: {
+  error: unknown;
+  request: FastifyRequest;
+  requestId: string;
+}): ErrorResponseBody {
+  captureException({
     error,
-    omitUndefined({
+    context: omitUndefined({
       requestId,
       userId: request.auth?.kind === 'user' ? request.auth.userId : undefined,
       organizationId: request.organizationId ?? undefined,
     }),
-  );
+  });
   // `error` is serialized by Pino's stdSerializers.err (configured for both `err` and `error`), so
   // it already carries the message + stack as structured fields. Duplicating them as top-level
   // plain strings (errorMessage/errorStack) only added an extra free-text copy that the key-based
@@ -376,9 +435,18 @@ function handleUnhandledErrorResponse(
     },
     'Unhandled error',
   );
-  const internalDetail = translateDetail(request, 'errors:internal', {}, EXTERNAL_ERROR_MESSAGE);
+  const internalDetail = translateDetail({
+    request,
+    key: 'errors:internal',
+    params: {},
+    fallback: EXTERNAL_ERROR_MESSAGE,
+  });
   return {
-    error: buildErrorPayload('request_error', 'internal_error', internalDetail),
+    error: buildErrorPayload({
+      type: 'request_error',
+      code: 'internal_error',
+      detail: internalDetail,
+    }),
     meta: { request_id: requestId },
   };
 }
@@ -423,12 +491,17 @@ function getFastifyClientErrorStatus(error: unknown): number | undefined {
   return undefined;
 }
 
-function handleFastifyClientErrorResponse(
-  error: unknown,
-  request: FastifyRequest,
-  requestId: string,
-  statusCode: number,
-): ErrorResponseBody {
+function handleFastifyClientErrorResponse({
+  error,
+  request,
+  requestId,
+  statusCode,
+}: {
+  error: unknown;
+  request: FastifyRequest;
+  requestId: string;
+  statusCode: number;
+}): ErrorResponseBody {
   // A client error — log at warn (not error) and do NOT capture to Sentry.
   logger.warn(
     { requestId, statusCode, code: (error as { code?: string }).code },
@@ -438,10 +511,19 @@ function handleFastifyClientErrorResponse(
     ? FASTIFY_CLIENT_ERRORS[statusCode]
     : undefined;
   const detail = mapped
-    ? translateDetail(request, mapped.key, {}, mapped.fallback)
-    : translateDetail(request, 'errors:invalidInput', {}, 'Invalid request');
+    ? translateDetail({ request, key: mapped.key, params: {}, fallback: mapped.fallback })
+    : translateDetail({
+        request,
+        key: 'errors:invalidInput',
+        params: {},
+        fallback: 'Invalid request',
+      });
   return {
-    error: buildErrorPayload('request_error', mapped?.code ?? 'invalid_request', detail),
+    error: buildErrorPayload({
+      type: 'request_error',
+      code: mapped?.code ?? 'invalid_request',
+      detail,
+    }),
     meta: { request_id: requestId },
   };
 }
@@ -496,16 +578,21 @@ function replyWithAppError({
   if (appError.retryAfterSeconds !== undefined) {
     reply.header('Retry-After', String(appError.retryAfterSeconds));
   }
-  return handleAppErrorResponse(appError, request, requestId);
+  return handleAppErrorResponse({ error: appError, request, requestId });
 }
 
 const errorHandlerMiddlewarePlugin: FastifyPluginAsync = async (app) => {
   app.setNotFoundHandler(async (request, reply) => {
     const requestId = getRequestId(request as { id?: string });
-    const detail = translateDetail(request, 'errors:routeNotFound', {}, 'Route not found');
+    const detail = translateDetail({
+      request,
+      key: 'errors:routeNotFound',
+      params: {},
+      fallback: 'Route not found',
+    });
     reply.status(404);
     return {
-      error: buildErrorPayload('request_error', 'not_found', detail),
+      error: buildErrorPayload({ type: 'request_error', code: 'not_found', detail }),
       meta: { request_id: requestId },
     };
   });
@@ -516,20 +603,28 @@ const errorHandlerMiddlewarePlugin: FastifyPluginAsync = async (app) => {
     if (isFastifyRequestTimeoutError(error)) {
       logger.warn({ requestId: currentRequestId }, 'request.timeout');
       reply.status(408);
-      return buildTimeoutResponse(request, currentRequestId, {
-        translationKey: 'errors:requestTimeout',
-        fallbackMessage: 'The request took too long to complete',
-        code: 'request_timeout',
+      return buildTimeoutResponse({
+        request,
+        requestId: currentRequestId,
+        options: {
+          translationKey: 'errors:requestTimeout',
+          fallbackMessage: 'The request took too long to complete',
+          code: 'request_timeout',
+        },
       });
     }
 
     if (isPostgresStatementTimeoutError(error)) {
       logger.warn({ requestId: currentRequestId }, 'database.statement_timeout');
       reply.status(504);
-      return buildTimeoutResponse(request, currentRequestId, {
-        translationKey: 'errors:databaseTimeout',
-        fallbackMessage: 'The database operation timed out',
-        code: 'gateway_timeout',
+      return buildTimeoutResponse({
+        request,
+        requestId: currentRequestId,
+        options: {
+          translationKey: 'errors:databaseTimeout',
+          fallbackMessage: 'The database operation timed out',
+          code: 'gateway_timeout',
+        },
       });
     }
 
@@ -554,12 +649,12 @@ const errorHandlerMiddlewarePlugin: FastifyPluginAsync = async (app) => {
 
     if (error instanceof ZodError) {
       reply.status(400);
-      return handleZodErrorResponse(error, request, currentRequestId);
+      return handleZodErrorResponse({ error, request, requestId: currentRequestId });
     }
 
     if (isFastifyValidationError(error)) {
       reply.status(error.statusCode ?? 400);
-      return handleFastifyValidationErrorResponse(error, request, currentRequestId);
+      return handleFastifyValidationErrorResponse({ error, request, requestId: currentRequestId });
     }
 
     // Fastify framework errors that already carry a 4xx status (e.g. body too
@@ -568,16 +663,16 @@ const errorHandlerMiddlewarePlugin: FastifyPluginAsync = async (app) => {
     const fastifyClientErrorStatus = getFastifyClientErrorStatus(error);
     if (fastifyClientErrorStatus !== undefined) {
       reply.status(fastifyClientErrorStatus);
-      return handleFastifyClientErrorResponse(
+      return handleFastifyClientErrorResponse({
         error,
         request,
-        currentRequestId,
-        fastifyClientErrorStatus,
-      );
+        requestId: currentRequestId,
+        statusCode: fastifyClientErrorStatus,
+      });
     }
 
     reply.status(500);
-    return handleUnhandledErrorResponse(error, request, currentRequestId);
+    return handleUnhandledErrorResponse({ error, request, requestId: currentRequestId });
   });
 };
 

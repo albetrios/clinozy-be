@@ -54,7 +54,13 @@ export function getCsrfCookieOptions() {
 }
 
 /** Writes the CSRF cookie on `reply`, generating a fresh token when `csrfToken` is omitted. */
-export function setCsrfCookie(reply: FastifyReply, csrfToken?: string): void {
+export function setCsrfCookie({
+  reply,
+  csrfToken,
+}: {
+  reply: FastifyReply;
+  csrfToken?: string | undefined;
+}): void {
   reply.setCookie(CSRF_COOKIE_NAME, csrfToken ?? generateCsrfToken(), getCsrfCookieOptions());
 }
 
@@ -118,7 +124,13 @@ export function isIssuedRefreshSecret(options: {
 }
 
 /** Builds the opaque session cookie value: `<sessionPublicId>.<refreshSecret>`. */
-export function formatSessionCookieValue(sessionPublicId: string, refreshSecret: string): string {
+export function formatSessionCookieValue({
+  sessionPublicId,
+  refreshSecret,
+}: {
+  sessionPublicId: string;
+  refreshSecret: string;
+}): string {
   return `${sessionPublicId}${SESSION_COOKIE_SEPARATOR}${refreshSecret}`;
 }
 
@@ -139,17 +151,21 @@ export function parseSessionCookieValue(
 }
 
 /** Writes the session cookie carrying `sessionPublicId` and simultaneously refreshes the CSRF cookie. */
-export function setSessionCookie(
-  reply: FastifyReply,
-  sessionPublicId: string,
-  refreshSecret: string,
-): void {
+export function setSessionCookie({
+  reply,
+  sessionPublicId,
+  refreshSecret,
+}: {
+  reply: FastifyReply;
+  sessionPublicId: string;
+  refreshSecret: string;
+}): void {
   reply.setCookie(
     SESSION_COOKIE_NAME,
-    formatSessionCookieValue(sessionPublicId, refreshSecret),
+    formatSessionCookieValue({ sessionPublicId, refreshSecret }),
     getSessionCookieOptions(),
   );
-  setCsrfCookie(reply);
+  setCsrfCookie({ reply });
 }
 
 /** Clears both the session and CSRF cookies (logout flow). */
@@ -190,7 +206,13 @@ export function getOauthNonceCookieOptions() {
 }
 
 /** Writes the OAuth nonce cookie on `reply` so the matching callback can prove same-browser origin. */
-export function setOauthNonceCookie(reply: FastifyReply, nonce: string): void {
+export function setOauthNonceCookie({
+  reply,
+  nonce,
+}: {
+  reply: FastifyReply;
+  nonce: string;
+}): void {
   reply.setCookie(OAUTH_NONCE_COOKIE_NAME, nonce, getOauthNonceCookieOptions());
 }
 
@@ -228,31 +250,38 @@ export function readRequestOrigin(request: FastifyRequest): string | undefined {
 }
 
 /** Maps auth-method service payloads with optional `messageKey` to translated HTTP bodies. */
-export function resolveAuthMessageKeyResponse(
-  request: FastifyRequest,
-  data: MessageKeyPayload | Record<string, unknown>,
-): Record<string, unknown> {
+export function resolveAuthMessageKeyResponse({
+  request,
+  data,
+}: {
+  request: FastifyRequest;
+  data: MessageKeyPayload | Record<string, unknown>;
+}): Record<string, unknown> {
   if (typeof (data as MessageKeyPayload).messageKey === 'string') {
-    return translateMessageKeyPayload(request, data as MessageKeyPayload);
+    return translateMessageKeyPayload({ request, payload: data as MessageKeyPayload });
   }
   return data;
 }
 
 /** Sends a translated 501 response when an OAuth provider has not been wired (used by both the redirect and callback handlers). */
-export function sendOauthProviderNotImplementedResponse(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  requestIdentifier: string,
-) {
+export function sendOauthProviderNotImplementedResponse({
+  request,
+  reply,
+  requestIdentifier,
+}: {
+  request: FastifyRequest;
+  reply: FastifyReply;
+  requestIdentifier: string;
+}) {
   return reply.status(501).send({
     error: {
       type: 'request_error',
       code: 'not_implemented',
-      detail: translateRequestMessage(
+      detail: translateRequestMessage({
         request,
-        'errors:notImplemented',
-        'Please raise a feature request',
-      ),
+        messageKey: 'errors:notImplemented',
+        fallback: 'Please raise a feature request',
+      }),
     },
     meta: { request_id: requestIdentifier },
   });

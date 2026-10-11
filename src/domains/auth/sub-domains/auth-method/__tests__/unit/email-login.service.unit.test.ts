@@ -17,7 +17,9 @@ vi.mock('@/domains/auth/shared/complete-first-factor-auth.js', () => ({
 // sendCode/login wrap their writes in withTransaction + runWithPinnedDatabaseHandle; invoke the
 // callbacks directly so the unit test exercises the flow without a real database/transaction.
 vi.mock('@/infrastructure/database/transaction.js', () => ({
-  withTransaction: vi.fn((callback: (transaction: unknown) => unknown) => callback({})),
+  withTransaction: vi.fn(({ callback }: { callback: (transaction: unknown) => unknown }) =>
+    callback({}),
+  ),
 }));
 
 vi.mock(
@@ -26,7 +28,15 @@ vi.mock(
     const actual = await importOriginal<Record<string, unknown>>();
     return {
       ...actual,
-      runWithPinnedDatabaseHandle: vi.fn((_handle: unknown, callback: () => unknown) => callback()),
+      runWithPinnedDatabaseHandle: vi.fn(
+        ({
+          databaseHandle: _handle,
+          callback,
+        }: {
+          databaseHandle: unknown;
+          callback: () => unknown;
+        }) => callback(),
+      ),
       getRequestDatabase: vi.fn(() => ({})),
     };
   },

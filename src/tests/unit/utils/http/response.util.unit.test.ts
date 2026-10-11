@@ -4,7 +4,7 @@ import { paginatedResponse, successResponse } from '@/shared/utils/http/response
 describe('response.util', () => {
   describe('successResponse', () => {
     it('wraps data with meta.request_id', () => {
-      const response = successResponse({ id: '1' }, 'req-abc');
+      const response = successResponse({ data: { id: '1' }, request_id: 'req-abc' });
       expect(response).toEqual({
         data: { id: '1' },
         meta: { request_id: 'req-abc' },
@@ -14,11 +14,15 @@ describe('response.util', () => {
 
   describe('paginatedResponse', () => {
     it('wraps list data with pagination meta', () => {
-      const response = paginatedResponse([{ id: 'a' }], 'req-xyz', {
-        per_page: 20,
-        next: '/api/v1/items?after=cursor',
-        has_more: true,
-        estimated_total: 100,
+      const response = paginatedResponse({
+        data: [{ id: 'a' }],
+        request_id: 'req-xyz',
+        pagination: {
+          per_page: 20,
+          next: '/api/v1/items?after=cursor',
+          has_more: true,
+          estimated_total: 100,
+        },
       });
       expect(response.data).toEqual([{ id: 'a' }]);
       expect(response.meta.request_id).toBe('req-xyz');
@@ -31,10 +35,14 @@ describe('response.util', () => {
     });
 
     it('omits estimated_total when not provided', () => {
-      const response = paginatedResponse([], 'req-1', {
-        per_page: 10,
-        next: null,
-        has_more: false,
+      const response = paginatedResponse({
+        data: [],
+        request_id: 'req-1',
+        pagination: {
+          per_page: 10,
+          next: null,
+          has_more: false,
+        },
       });
       expect(response.meta.pagination.estimated_total).toBeUndefined();
     });

@@ -21,7 +21,8 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   return {
     ...actual,
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -75,8 +76,11 @@ describe('mail-outbox-sweeper.processor', () => {
     expect(reclaimStaleSendingMailOutboxTokensMock).toHaveBeenCalledOnce();
     expect(findStalePendingMailOutboxTokensMock).toHaveBeenCalledOnce();
     expect(enqueueMailOutboxJobMock).toHaveBeenCalledTimes(2);
-    expect(enqueueMailOutboxJobMock).toHaveBeenCalledWith(STALE_PENDING_TOKEN, {
-      requestId: 'mail-outbox-sweeper',
+    expect(enqueueMailOutboxJobMock).toHaveBeenCalledWith({
+      mailOutboxToken: STALE_PENDING_TOKEN,
+      options: {
+        requestId: 'mail-outbox-sweeper',
+      },
     });
     expect(result).toEqual({
       scannedCount: 2,

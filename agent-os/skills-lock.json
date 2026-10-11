@@ -5,7 +5,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-api-contract-guard/SKILL.md",
-      "computedHash": "272608063a44fd0a7137911323d6141310e15d5e433c86d0c18eae494c78abf8"
+      "computedHash": "c8570e723b7bf87d242c5ace2603cd1a055984cdf4a6a9e6519f3070cbe9f9ca"
     },
     "be-auto-implement": {
       "source": "local",
@@ -95,7 +95,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-domain-generator/SKILL.md",
-      "computedHash": "1736f91947f5060af6e293d4f395288155b6ea0747638ccbf4ac54ac867c6af5"
+      "computedHash": "40d46065a82a33fd531d31c12059594e6304bffe02230dbb6c0903238af0a8ee"
     },
     "be-env-schema-add": {
       "source": "local",
@@ -185,7 +185,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-rls-tenant-isolation-guard/SKILL.md",
-      "computedHash": "41110cfaf0b3d6c6e464c8bc82147519710d7c5e2d5597b42658b2e6e068b8af"
+      "computedHash": "2eaddc7d43e0c12941505c4009f16a20125c8a26cb041842e6dfa43219c04504"
     },
     "be-route-catalog": {
       "source": "local",
@@ -263,7 +263,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-workers-events/SKILL.md",
-      "computedHash": "66aa424a9b2e20f77c3e5d092e6fa07e4050862c8466d823bc5e5165357bdca1"
+      "computedHash": "7c20be703fa0b154cf68bb656c91c9583aaed79267a9805e756f96d3a24b47c9"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",

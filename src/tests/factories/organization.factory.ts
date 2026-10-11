@@ -56,9 +56,9 @@ export async function createTestOrganization(options: CreateOrganizationOptions)
   // `tenancy.organizations` is FORCE RLS. The INSERT runs in the new organization's own context,
   // exactly as `provisionOrganizationWithOwner` does — the user-identity arm is read-only — rather
   // than out-privileging the policy it is meant to respect.
-  const [organization] = await withAppDatabaseContext(
-    PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: publicId }),
-    (databaseHandle) =>
+  const [organization] = await withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: publicId }),
+    callback: (databaseHandle) =>
       (databaseHandle ?? database)
         .insert(organizations)
         .values({
@@ -70,7 +70,7 @@ export async function createTestOrganization(options: CreateOrganizationOptions)
           ...(options.type !== undefined ? { type: options.type } : {}),
         })
         .returning(),
-  );
+  });
 
   return organization!;
 }

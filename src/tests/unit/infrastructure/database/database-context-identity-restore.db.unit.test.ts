@@ -28,61 +28,61 @@ async function currentUserPublicId(databaseHandle: {
  */
 describe('a nested database context restores the outer user identity', () => {
   it('after an organization scope reused for another user', async () => {
-    await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({
         organizationPublicId: ORGANIZATION_PUBLIC_ID,
         userPublicId: OUTER_USER_PUBLIC_ID,
       }),
-      async (outerHandle) => {
-        await withAppDatabaseContext(
-          PRINCIPAL_SCOPE.VERIFIED({
+      callback: async (outerHandle) => {
+        await withAppDatabaseContext({
+          scope: PRINCIPAL_SCOPE.VERIFIED({
             organizationPublicId: ORGANIZATION_PUBLIC_ID,
             userPublicId: INNER_USER_PUBLIC_ID,
           }),
-          async (innerHandle) => {
+          callback: async (innerHandle) => {
             expect(await currentUserPublicId(innerHandle)).toBe(INNER_USER_PUBLIC_ID);
           },
-        );
+        });
         expect(await currentUserPublicId(outerHandle)).toBe(OUTER_USER_PUBLIC_ID);
       },
-    );
+    });
   });
 
   it('after a user-only scope layered on the pinned transaction', async () => {
-    await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({
         organizationPublicId: ORGANIZATION_PUBLIC_ID,
         userPublicId: OUTER_USER_PUBLIC_ID,
       }),
-      async (outerHandle) => {
-        await withAppDatabaseContext(
-          PRINCIPAL_SCOPE.VERIFIED({ userPublicId: INNER_USER_PUBLIC_ID }),
-          async (innerHandle) => {
+      callback: async (outerHandle) => {
+        await withAppDatabaseContext({
+          scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: INNER_USER_PUBLIC_ID }),
+          callback: async (innerHandle) => {
             expect(await currentUserPublicId(innerHandle)).toBe(INNER_USER_PUBLIC_ID);
           },
-        );
+        });
         expect(await currentUserPublicId(outerHandle)).toBe(OUTER_USER_PUBLIC_ID);
       },
-    );
+    });
   });
 
   it('also when the nested unit throws and the outer one carries on', async () => {
-    await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({
         organizationPublicId: ORGANIZATION_PUBLIC_ID,
         userPublicId: OUTER_USER_PUBLIC_ID,
       }),
-      async (outerHandle) => {
+      callback: async (outerHandle) => {
         await expect(
-          withAppDatabaseContext(
-            PRINCIPAL_SCOPE.VERIFIED({ userPublicId: INNER_USER_PUBLIC_ID }),
-            async () => {
+          withAppDatabaseContext({
+            scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: INNER_USER_PUBLIC_ID }),
+            callback: async () => {
               throw new Error('nested failure');
             },
-          ),
+          }),
         ).rejects.toThrow('nested failure');
         expect(await currentUserPublicId(outerHandle)).toBe(OUTER_USER_PUBLIC_ID);
       },
-    );
+    });
   });
 });

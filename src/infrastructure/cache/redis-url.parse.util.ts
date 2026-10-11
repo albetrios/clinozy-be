@@ -103,18 +103,24 @@ function normalizeRedisUrlForComparison(redisUrl: string): string {
 }
 
 /** True when cache and BullMQ URLs resolve to different Redis hosts. */
-export function usesSeparateBullMqRedisHost(
-  cacheRedisUrl: string,
-  bullMqRedisUrl: string,
-): boolean {
+export function usesSeparateBullMqRedisHost({
+  cacheRedisUrl,
+  bullMqRedisUrl,
+}: {
+  cacheRedisUrl: string;
+  bullMqRedisUrl: string;
+}): boolean {
   return resolveRedisHostFromUrl(cacheRedisUrl) !== resolveRedisHostFromUrl(bullMqRedisUrl);
 }
 
 /** True when cache and BullMQ use different logical databases or hosts. */
-export function usesSeparateBullMqRedisEndpoint(
-  cacheRedisUrl: string,
-  bullMqRedisUrl: string,
-): boolean {
+export function usesSeparateBullMqRedisEndpoint({
+  cacheRedisUrl,
+  bullMqRedisUrl,
+}: {
+  cacheRedisUrl: string;
+  bullMqRedisUrl: string;
+}): boolean {
   return (
     normalizeRedisUrlForComparison(cacheRedisUrl) !== normalizeRedisUrlForComparison(bullMqRedisUrl)
   );
@@ -130,10 +136,13 @@ export function usesSeparateBullMqRedisEndpoint(
  * The only constraint is that an override, when present, must be a parseable
  * `redis://` / `rediss://` URL — a different host or logical database is allowed.
  */
-export function validateProductionRedisTopology(
-  _cacheRedisUrl: string,
-  bullMqRedisUrl: string | undefined,
-): boolean {
+export function validateProductionRedisTopology({
+  _cacheRedisUrl,
+  bullMqRedisUrl,
+}: {
+  _cacheRedisUrl: string;
+  bullMqRedisUrl: string | undefined;
+}): boolean {
   if (!bullMqRedisUrl?.trim()) {
     return true;
   }

@@ -9,14 +9,14 @@ import {
 /** Zod schema for the admin `:user_id` path param (get/update/delete/suspend/unsuspend). */
 export const userIdParamsDto = z
   .object({
-    user_id: trimmedStringMinMax(1, 28),
+    user_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
 /** Zod schema for the `:data_export_id` path param (GET /me/data-export/:data_export_id). */
 export const dataExportIdParamsDto = z
   .object({
-    data_export_id: trimmedStringMinMax(1, 28),
+    data_export_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 

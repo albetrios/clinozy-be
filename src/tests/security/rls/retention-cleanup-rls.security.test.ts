@@ -89,7 +89,11 @@ describe('Security: retention cleanup RLS', () => {
     const applicationRoleWithRetentionGuc = await database.transaction(async (transaction) => {
       const databaseHandle = transaction as unknown as RequestScopedPostgresDatabase;
       await setLocalApplicationRole(databaseHandle);
-      await setLocalDatabaseConfig(databaseHandle, 'app.global_retention_cleanup', 'true');
+      await setLocalDatabaseConfig({
+        databaseHandle,
+        key: 'app.global_retention_cleanup',
+        value: 'true',
+      });
       return deleteInBatchesByCondition({
         databaseHandle,
         table: webhooks,
@@ -102,9 +106,9 @@ describe('Security: retention cleanup RLS', () => {
 
     expect(applicationRoleWithRetentionGuc.deletedCount).toBe(0);
 
-    const withRetentionGuc = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      async (databaseHandle) =>
+    const withRetentionGuc = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: async (databaseHandle) =>
         deleteInBatchesByCondition({
           databaseHandle,
           table: webhooks,
@@ -113,8 +117,8 @@ describe('Security: retention cleanup RLS', () => {
           logContext: 'retention-cleanup-rls-test-with-guc',
           tableLabel: 'notify.webhooks',
         }),
-      { useMaintenanceDatabaseRole: true },
-    );
+      options: { useMaintenanceDatabaseRole: true },
+    });
 
     expect(withRetentionGuc.deletedCount).toBe(1);
 

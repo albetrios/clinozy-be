@@ -13,10 +13,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -95,7 +97,10 @@ describe('AuthMethodService.verifyPasswordForStepUp — MFA bypass guard (sec-A1
       service.verifyPasswordForStepUp({ userPublicId: 'user_pub', password: 'correct-password' }),
     ).resolves.toBeUndefined();
 
-    expect(verifyPassword).toHaveBeenCalledWith('correct-password', 'hashed');
+    expect(verifyPassword).toHaveBeenCalledWith({
+      plaintext: 'correct-password',
+      storedHash: 'hashed',
+    });
   });
 
   it('still rejects an incorrect password for a non-MFA user (negative control)', async () => {

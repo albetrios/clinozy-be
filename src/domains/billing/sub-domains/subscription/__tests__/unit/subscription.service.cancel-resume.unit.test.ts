@@ -11,7 +11,9 @@ vi.mock(
 // changePlan serializes per subscription — run the critical section transparently (the lock itself
 // is covered in redis-lock.util.unit.test.ts); here it must not open a real Redis connection.
 vi.mock('@/infrastructure/cache/redis-lock.util.js', () => ({
-  withRedisLock: vi.fn(async (_options: unknown, fn: () => Promise<unknown>) => fn()),
+  withRedisLock: vi.fn(
+    async ({ options: _options, fn }: { options: unknown; fn: () => Promise<unknown> }) => fn(),
+  ),
   RedisLockUnavailableError: class RedisLockUnavailableError extends Error {},
 }));
 
@@ -23,10 +25,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -139,10 +143,10 @@ describe('SubscriptionService cancel / resume / changePlan guards', () => {
 
     await service.cancel({ scope, subscription_public_id: 'sub_public' });
 
-    expect(paymentProvider.cancelSubscriptionAtPeriodEnd).toHaveBeenCalledWith(
-      'sub_provider',
-      undefined,
-    );
+    expect(paymentProvider.cancelSubscriptionAtPeriodEnd).toHaveBeenCalledWith({
+      providerSubscriptionId: 'sub_provider',
+      idempotencyKey: undefined,
+    });
     expect(repository.update).toHaveBeenCalledWith(
       'sub_public',
       organization.id,
@@ -164,10 +168,10 @@ describe('SubscriptionService cancel / resume / changePlan guards', () => {
     await service.cancel({ scope, subscription_public_id: 'sub_public' });
 
     // Immediate Stripe cancel (not at-period-end, which is a no-op on an incomplete sub)...
-    expect(paymentProvider.cancelSubscriptionImmediately).toHaveBeenCalledWith(
-      'sub_provider',
-      undefined,
-    );
+    expect(paymentProvider.cancelSubscriptionImmediately).toHaveBeenCalledWith({
+      providerSubscriptionId: 'sub_provider',
+      idempotencyKey: undefined,
+    });
     expect(paymentProvider.cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
     // ...and the local row is set CANCELED, which releases the per-organization subscription slot.
     expect(repository.update).toHaveBeenCalledWith(
@@ -199,10 +203,10 @@ describe('SubscriptionService cancel / resume / changePlan guards', () => {
 
     // Immediate Stripe cancel (organization is going away — stop billing now, not at period end)
     // with a deterministic idempotency key so an organization-delete retry dedups (audit L1).
-    expect(paymentProvider.cancelSubscriptionImmediately).toHaveBeenCalledWith(
-      'sub_provider',
-      'sub-cancel-offboarding:org_public:sub_provider',
-    );
+    expect(paymentProvider.cancelSubscriptionImmediately).toHaveBeenCalledWith({
+      providerSubscriptionId: 'sub_provider',
+      idempotencyKey: 'sub-cancel-offboarding:org_public:sub_provider',
+    });
     expect(paymentProvider.cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
     // ...and the local row is set CANCELED.
     expect(repository.update).toHaveBeenCalledWith(
@@ -227,7 +231,10 @@ describe('SubscriptionService cancel / resume / changePlan guards', () => {
 
     await service.resume({ scope, subscription_public_id: 'sub_public' });
 
-    expect(paymentProvider.resumeSubscription).toHaveBeenCalledWith('sub_provider', undefined);
+    expect(paymentProvider.resumeSubscription).toHaveBeenCalledWith({
+      providerSubscriptionId: 'sub_provider',
+      idempotencyKey: undefined,
+    });
     expect(repository.update).toHaveBeenCalledWith(
       'sub_public',
       organization.id,

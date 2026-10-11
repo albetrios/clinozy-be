@@ -48,10 +48,10 @@ describe('runStripeWebhookEventRetentionJob (database)', () => {
   }
 
   async function runRetention() {
-    return withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.SYSTEM_TABLE_RETENTION,
-      (databaseHandle) => runStripeWebhookEventRetentionJob(databaseHandle),
-    );
+    return withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_RETENTION,
+      callback: (databaseHandle) => runStripeWebhookEventRetentionJob(databaseHandle),
+    });
   }
 
   beforeEach(async () => {

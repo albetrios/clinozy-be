@@ -22,8 +22,8 @@ function decryptPayload(
 describe('encryption.util', () => {
   it('encrypts plaintext and produces distinct IV per call', () => {
     const plaintext = JSON.stringify({ secret: 'value' });
-    const first = encryptPayload(plaintext, TEST_KEY_HEX);
-    const second = encryptPayload(plaintext, TEST_KEY_HEX);
+    const first = encryptPayload({ plaintext, keyHex: TEST_KEY_HEX });
+    const second = encryptPayload({ plaintext, keyHex: TEST_KEY_HEX });
 
     expect(first.payload).toBeTruthy();
     expect(first.iv).toBeTruthy();
@@ -33,12 +33,12 @@ describe('encryption.util', () => {
   });
 
   it('throws when key hex length is invalid for AES-256', () => {
-    expect(() => encryptPayload('data', 'abcd')).toThrow();
+    expect(() => encryptPayload({ plaintext: 'data', keyHex: 'abcd' })).toThrow();
   });
 
   it('round-trips decryption with AES-256-GCM', () => {
     const plaintext = '{"userId":"abc"}';
-    const encrypted = encryptPayload(plaintext, TEST_KEY_HEX);
+    const encrypted = encryptPayload({ plaintext, keyHex: TEST_KEY_HEX });
     const decrypted = decryptPayload(
       encrypted.payload,
       encrypted.iv,
@@ -49,7 +49,7 @@ describe('encryption.util', () => {
   });
 
   it('fails decryption when the auth tag is wrong (GCM integrity)', () => {
-    const encrypted = encryptPayload('{"a":1}', TEST_KEY_HEX);
+    const encrypted = encryptPayload({ plaintext: '{"a":1}', keyHex: TEST_KEY_HEX });
     const wrongTag = Buffer.alloc(16, 0).toString('base64'); // valid length, wrong tag
     expect(() => decryptPayload(encrypted.payload, encrypted.iv, wrongTag, TEST_KEY_HEX)).toThrow();
   });

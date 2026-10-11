@@ -62,7 +62,13 @@ function buildHeaders(options: {
   return headers;
 }
 
-function isExpectedStatus(status: number, expected: number | number[]): boolean {
+function isExpectedStatus({
+  status,
+  expected,
+}: {
+  status: number;
+  expected: number | number[];
+}): boolean {
   if (Array.isArray(expected)) {
     return expected.includes(status);
   }
@@ -112,7 +118,10 @@ async function runOutboundFetch<T>({
         });
 
         const expectedStatus = fetchOptions.expectedStatus;
-        if (expectedStatus !== undefined && !isExpectedStatus(response.status, expectedStatus)) {
+        if (
+          expectedStatus !== undefined &&
+          !isExpectedStatus({ status: response.status, expected: expectedStatus })
+        ) {
           const body = await readResponseBodyForClassification(response);
           const customError = fetchOptions.classifyResponseError?.(response, body);
           if (customError) {
@@ -137,7 +146,7 @@ async function runOutboundFetch<T>({
     if (error instanceof ExternalServiceError) {
       throw error;
     }
-    throw classifyOutboundError(error, fetchOptions.name);
+    throw classifyOutboundError({ error, integration: fetchOptions.name });
   });
 }
 

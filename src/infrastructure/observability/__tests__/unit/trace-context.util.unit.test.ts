@@ -32,8 +32,12 @@ describe('runWithPropagatedTraceContext — error + tracestate branches', () => 
     await tracer.startActiveSpan('http.request', async (parentSpan) => {
       const carrier = captureTraceContextForPropagation();
       await expect(
-        runWithPropagatedTraceContext(carrier, 'worker.failing-job', async () => {
-          throw boom;
+        runWithPropagatedTraceContext({
+          carrier,
+          spanName: 'worker.failing-job',
+          callback: async () => {
+            throw boom;
+          },
         }),
       ).rejects.toThrow('callback failed');
       parentSpan.end();
@@ -56,9 +60,13 @@ describe('runWithPropagatedTraceContext — error + tracestate branches', () => 
     let sawActiveSpan = false;
     let propagatedTraceState: string | undefined;
 
-    await runWithPropagatedTraceContext(carrier, 'worker.with-tracestate', async () => {
-      sawActiveSpan = trace.getActiveSpan() !== undefined;
-      propagatedTraceState = trace.getActiveSpan()?.spanContext().traceState?.get('vendor');
+    await runWithPropagatedTraceContext({
+      carrier,
+      spanName: 'worker.with-tracestate',
+      callback: async () => {
+        sawActiveSpan = trace.getActiveSpan() !== undefined;
+        propagatedTraceState = trace.getActiveSpan()?.spanContext().traceState?.get('vendor');
+      },
     });
 
     expect(sawActiveSpan).toBe(true);
@@ -98,10 +106,14 @@ describe('trace context propagation (API → mail enqueue → worker)', () => {
       const carrier = captureTraceContextForPropagation();
       expect(carrier.traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-0[1-9a-f]$/);
 
-      await runWithPropagatedTraceContext(carrier, 'mail.send-email', async () => {
-        const activeSpan = trace.getActiveSpan();
-        expect(activeSpan).toBeDefined();
-        expect(activeSpan?.spanContext().traceId).toBe(parentSpan.spanContext().traceId);
+      await runWithPropagatedTraceContext({
+        carrier,
+        spanName: 'mail.send-email',
+        callback: async () => {
+          const activeSpan = trace.getActiveSpan();
+          expect(activeSpan).toBeDefined();
+          expect(activeSpan?.spanContext().traceId).toBe(parentSpan.spanContext().traceId);
+        },
       });
 
       parentSpan.end();
@@ -143,8 +155,11 @@ describe('trace context propagation (API → mail enqueue → worker)', () => {
 
     await tracer.startActiveSpan('http.request', async (parentSpan) => {
       const { enqueueMailOutboxJob } = await import('@/infrastructure/mail/queues/mail.queue.js');
-      await enqueueMailOutboxJob('6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f', {
-        requestId: 'req-trace-test',
+      await enqueueMailOutboxJob({
+        mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f',
+        options: {
+          requestId: 'req-trace-test',
+        },
       });
       parentSpan.end();
     });
@@ -166,9 +181,13 @@ describe('trace context propagation (API → mail enqueue → worker)', () => {
 
   it('runWithPropagatedTraceContext runs without a span when traceparent is absent', async () => {
     let callbackRan = false;
-    await runWithPropagatedTraceContext({}, 'mail.send-email', async () => {
-      callbackRan = true;
-      expect(trace.getActiveSpan()).toBeUndefined();
+    await runWithPropagatedTraceContext({
+      carrier: {},
+      spanName: 'mail.send-email',
+      callback: async () => {
+        callbackRan = true;
+        expect(trace.getActiveSpan()).toBeUndefined();
+      },
     });
     expect(callbackRan).toBe(true);
     expect(spanExporter.getFinishedSpans()).toHaveLength(0);

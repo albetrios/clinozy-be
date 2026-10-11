@@ -15,7 +15,7 @@ import {
  * (cursor pagination only); throws `ValidationError('errors:invalidInput')`.
  */
 export function validateListWebhooksQuery(data: unknown): ListWebhooksQueryInput {
-  return parseWithSchema(listWebhooksQueryDto, data);
+  return parseWithSchema({ schema: listWebhooksQueryDto, data });
 }
 
 /**
@@ -25,7 +25,7 @@ export function validateListWebhooksQuery(data: unknown): ListWebhooksQueryInput
 export function validateListWebhookDeliveryAttemptsQuery(
   data: unknown,
 ): ListWebhookDeliveryAttemptsQueryInput {
-  return parseWithSchema(listWebhookDeliveryAttemptsQueryDto, data);
+  return parseWithSchema({ schema: listWebhookDeliveryAttemptsQueryDto, data });
 }
 
 /**
@@ -33,7 +33,7 @@ export function validateListWebhookDeliveryAttemptsQuery(
  * throws `ValidationError('errors:invalidInput')` with field-level errors on failure.
  */
 export function validateCreateWebhook(data: unknown): CreateWebhookInput {
-  return parseWithSchema(CreateWebhookDto, data);
+  return parseWithSchema({ schema: CreateWebhookDto, data });
 }
 
 /**
@@ -41,5 +41,5 @@ export function validateCreateWebhook(data: unknown): CreateWebhookInput {
  * {@link UpdateWebhookDto}; throws `ValidationError('errors:invalidInput')` on failure.
  */
 export function validateUpdateWebhook(data: unknown): UpdateWebhookInput {
-  return parseWithSchema(UpdateWebhookDto, data);
+  return parseWithSchema({ schema: UpdateWebhookDto, data });
 }

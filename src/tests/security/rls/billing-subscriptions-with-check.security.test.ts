@@ -68,7 +68,9 @@ describe('Security: subscriptions RLS WITH CHECK confines cross-organization wri
   });
 
   it('rejects reassigning an organization-B subscription to organization A under the organization-B tenant context', async () => {
-    const rowIds = fixture.rowIdsByTable.get(tableKey('billing', 'subscriptions'));
+    const rowIds = fixture.rowIdsByTable.get(
+      tableKey({ schemaName: 'billing', tableName: 'subscriptions' }),
+    );
     expect(rowIds, 'fixture seeds a subscriptions row for both orgs').toBeDefined();
 
     let caught: unknown;
@@ -92,20 +94,22 @@ describe('Security: subscriptions RLS WITH CHECK confines cross-organization wri
   });
 
   it('rejects a retention-context write that sets a foreign organization_id (explicit WITH CHECK)', async () => {
-    const rowIds = fixture.rowIdsByTable.get(tableKey('billing', 'subscriptions'))!;
+    const rowIds = fixture.rowIdsByTable.get(
+      tableKey({ schemaName: 'billing', tableName: 'subscriptions' }),
+    )!;
 
     let caught: unknown;
     try {
-      await withMaintenanceDatabaseContext(
-        MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-        async (databaseHandle) =>
+      await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: async (databaseHandle) =>
           databaseHandle.execute(
             drizzleSql.raw(
               `UPDATE "billing"."subscriptions" SET organization_id = ${organizationAInternalId} WHERE id = ${rowIds.organizationB} RETURNING id`,
             ),
           ),
-        { useMaintenanceDatabaseRole: true },
-      );
+        options: { useMaintenanceDatabaseRole: true },
+      });
     } catch (error) {
       caught = error;
     }
@@ -118,11 +122,13 @@ describe('Security: subscriptions RLS WITH CHECK confines cross-organization wri
   });
 
   it('still allows a retention-context DELETE via the USING bypass (positive control)', async () => {
-    const rowIds = fixture.rowIdsByTable.get(tableKey('billing', 'subscriptions'))!;
+    const rowIds = fixture.rowIdsByTable.get(
+      tableKey({ schemaName: 'billing', tableName: 'subscriptions' }),
+    )!;
 
-    const deletedCount = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      async (databaseHandle) => {
+    const deletedCount = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: async (databaseHandle) => {
         const result = await databaseHandle.execute(
           drizzleSql.raw(
             `DELETE FROM "billing"."subscriptions" WHERE id = ${rowIds.organizationB} RETURNING id`,
@@ -131,14 +137,16 @@ describe('Security: subscriptions RLS WITH CHECK confines cross-organization wri
         const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
         return rows.length;
       },
-      { useMaintenanceDatabaseRole: true },
-    );
+      options: { useMaintenanceDatabaseRole: true },
+    });
 
     expect(deletedCount).toBe(1);
   });
 
   it('allows a same-organization reassignment under the matching tenant context (positive control)', async () => {
-    const rowIds = fixture.rowIdsByTable.get(tableKey('billing', 'subscriptions'))!;
+    const rowIds = fixture.rowIdsByTable.get(
+      tableKey({ schemaName: 'billing', tableName: 'subscriptions' }),
+    )!;
 
     const affected = await executeAsClinozyBeAppTenant(
       fixture.organizationBPublicId,

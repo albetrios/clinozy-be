@@ -113,9 +113,12 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
     organizationPublicId: string;
     request: IdempotencySeedRequest;
   }): Promise<void> {
-    const cacheKey = buildIdempotencyCacheKey(options.idempotencyKey, {
-      userId: options.userPublicId,
-      organizationId: options.organizationPublicId,
+    const cacheKey = buildIdempotencyCacheKey({
+      idempotencyKey: options.idempotencyKey,
+      scope: {
+        userId: options.userPublicId,
+        organizationId: options.organizationPublicId,
+      },
     });
     seededCacheKeys.push(cacheKey);
     await redisConnection.set(cacheKey, buildInFlightIdempotencyEntry(options.request), 'EX', 60);
@@ -260,9 +263,12 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
     // `x-idempotency-replay: true` — never 409, and never re-execute the handler.
     const { user, organization, token } = await createBillingContext();
     const idempotencyKey = generatePublicId('subscription');
-    const cacheKey = buildIdempotencyCacheKey(idempotencyKey, {
-      userId: user.public_id,
-      organizationId: organization.public_id,
+    const cacheKey = buildIdempotencyCacheKey({
+      idempotencyKey,
+      scope: {
+        userId: user.public_id,
+        organizationId: organization.public_id,
+      },
     });
     seededCacheKeys.push(cacheKey);
     await redisConnection.set(
@@ -324,9 +330,12 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
     });
 
     seededCacheKeys.push(
-      buildIdempotencyCacheKey(idempotencyKey, {
-        userId: user.public_id,
-        organizationId: organization.public_id,
+      buildIdempotencyCacheKey({
+        idempotencyKey,
+        scope: {
+          userId: user.public_id,
+          organizationId: organization.public_id,
+        },
       }),
     );
     expect(response.statusCode, response.body).toBe(200);

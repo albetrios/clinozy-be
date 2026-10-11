@@ -23,10 +23,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -37,7 +39,9 @@ const redisLockMocks = vi.hoisted(() => {
   class RedisLockUnavailableError extends Error {}
   return {
     RedisLockUnavailableError,
-    withRedisLock: vi.fn(async (_options: unknown, fn: () => Promise<unknown>) => fn()),
+    withRedisLock: vi.fn(
+      async ({ options: _options, fn }: { options: unknown; fn: () => Promise<unknown> }) => fn(),
+    ),
   };
 });
 vi.mock('@/infrastructure/cache/redis-lock.util.js', () => redisLockMocks);
@@ -227,7 +231,7 @@ describe('SubscriptionService', () => {
       created_by_user_public_id: 'user_public',
     });
     expect(redisLockMocks.withRedisLock).toHaveBeenCalledTimes(1);
-    const lockOptions = redisLockMocks.withRedisLock.mock.calls[0]![0] as { key: string };
+    const lockOptions = redisLockMocks.withRedisLock.mock.calls[0]![0].options as { key: string };
     expect(lockOptions.key).toBe('billing:subscription:create:org_public');
   });
 
@@ -343,7 +347,9 @@ describe('SubscriptionService', () => {
       subscription_public_id: 'sub_public',
       body: { plan_id: 'plan_public' },
     });
-    const lockOptions = redisLockMocks.withRedisLock.mock.calls.at(-1)![0] as { key: string };
+    const lockOptions = redisLockMocks.withRedisLock.mock.calls.at(-1)![0].options as {
+      key: string;
+    };
     expect(lockOptions.key).toBe('billing:subscription:change-plan:sub_public');
 
     redisLockMocks.withRedisLock.mockRejectedValueOnce(
@@ -404,7 +410,10 @@ describe('SubscriptionService', () => {
       }),
     ).rejects.toBeInstanceOf(ConflictError);
 
-    expect(stripeMocks.cancelStripeSubscription).toHaveBeenCalledWith('sub_stripe', false);
+    expect(stripeMocks.cancelStripeSubscription).toHaveBeenCalledWith({
+      subscriptionId: 'sub_stripe',
+      cancelAtPeriodEnd: false,
+    });
   });
 
   it('create persists local subscription without Stripe', async () => {
@@ -607,10 +616,12 @@ describe('SubscriptionService', () => {
     });
 
     // audit #3: namespaced by operation + organization before reaching Stripe's account-global key space.
-    expect(stripeMocks.updateStripeSubscription).toHaveBeenCalledWith(
-      'sub_stripe',
-      expect.objectContaining({ idempotencyKey: 'sub-change-plan:org_public:idem-change-key' }),
-    );
+    expect(stripeMocks.updateStripeSubscription).toHaveBeenCalledWith({
+      subscriptionId: 'sub_stripe',
+      options: expect.objectContaining({
+        idempotencyKey: 'sub-change-plan:org_public:idem-change-key',
+      }),
+    });
   });
 
   it('cancel calls Stripe when provider subscription id exists', async () => {
@@ -621,11 +632,11 @@ describe('SubscriptionService', () => {
     } as never);
 
     await service.cancel({ scope, subscription_public_id: 'sub_public' });
-    expect(stripeMocks.cancelStripeSubscription).toHaveBeenCalledWith(
-      'sub_stripe',
-      true,
-      undefined,
-    );
+    expect(stripeMocks.cancelStripeSubscription).toHaveBeenCalledWith({
+      subscriptionId: 'sub_stripe',
+      cancelAtPeriodEnd: true,
+      options: undefined,
+    });
   });
 
   it('resume calls Stripe when provider subscription id exists', async () => {
@@ -636,7 +647,10 @@ describe('SubscriptionService', () => {
     } as never);
 
     await service.resume({ scope, subscription_public_id: 'sub_public' });
-    expect(stripeMocks.resumeStripeSubscription).toHaveBeenCalledWith('sub_stripe', undefined);
+    expect(stripeMocks.resumeStripeSubscription).toHaveBeenCalledWith({
+      subscriptionId: 'sub_stripe',
+      options: undefined,
+    });
   });
 
   it('changePlan updates Stripe subscription when configured', async () => {
@@ -674,7 +688,10 @@ describe('SubscriptionService', () => {
       }),
     ).rejects.toThrow('database unavailable');
 
-    expect(stripeMocks.cancelStripeSubscription).toHaveBeenCalledWith('sub_stripe', false);
+    expect(stripeMocks.cancelStripeSubscription).toHaveBeenCalledWith({
+      subscriptionId: 'sub_stripe',
+      cancelAtPeriodEnd: false,
+    });
   });
 
   it('changePlan reverts Stripe price when local update fails after Stripe update', async () => {
@@ -703,8 +720,11 @@ describe('SubscriptionService', () => {
     ).rejects.toBeInstanceOf(NotFoundError);
 
     expect(stripeMocks.updateStripeSubscription).toHaveBeenCalledTimes(2);
-    expect(stripeMocks.updateStripeSubscription).toHaveBeenLastCalledWith('sub_stripe', {
-      priceId: 'price_old',
+    expect(stripeMocks.updateStripeSubscription).toHaveBeenLastCalledWith({
+      subscriptionId: 'sub_stripe',
+      options: {
+        priceId: 'price_old',
+      },
     });
   });
 
@@ -878,8 +898,11 @@ describe('SubscriptionService', () => {
       }),
     ).rejects.toThrow('database unavailable');
 
-    expect(stripeMocks.updateStripeSubscription).toHaveBeenLastCalledWith('sub_stripe', {
-      priceId: 'price_old_yearly',
+    expect(stripeMocks.updateStripeSubscription).toHaveBeenLastCalledWith({
+      subscriptionId: 'sub_stripe',
+      options: {
+        priceId: 'price_old_yearly',
+      },
     });
   });
 

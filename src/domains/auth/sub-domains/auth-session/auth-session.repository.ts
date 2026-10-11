@@ -264,7 +264,10 @@ export class AuthSessionRepository {
    * cannot each pass the cap check and overshoot {@link MAX_ACTIVE_SESSIONS_PER_USER}.
    */
   async acquireCreationQuotaLock(userId: number): Promise<void> {
-    await acquireResourceQuotaLock(RESOURCE_QUOTA_LOCK_NAMESPACE.AUTH_SESSION, userId);
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.AUTH_SESSION,
+      key: userId,
+    });
   }
 
   /**
@@ -303,22 +306,24 @@ export class AuthSessionRepository {
   }
 
   async create(data: AuthSessionCreateData) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const publicId = generatePublicId('authSession');
-      const rows = await getRequestDatabase()
-        .insert(sessions)
-        .values({
-          public_id: publicId,
-          user_id: data.user_id,
-          token_hash: data.token_hash,
-          refresh_token_hash: data.refresh_token_hash,
-          ip_address: data.ip_address,
-          user_agent: data.user_agent,
-          expires_at: data.expires_at,
-          mfa_verified_at: data.mfa_verified_at,
-        })
-        .returning();
-      return rows[0]!;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const publicId = generatePublicId('authSession');
+        const rows = await getRequestDatabase()
+          .insert(sessions)
+          .values({
+            public_id: publicId,
+            user_id: data.user_id,
+            token_hash: data.token_hash,
+            refresh_token_hash: data.refresh_token_hash,
+            ip_address: data.ip_address,
+            user_agent: data.user_agent,
+            expires_at: data.expires_at,
+            mfa_verified_at: data.mfa_verified_at,
+          })
+          .returning();
+        return rows[0]!;
+      },
     });
   }
 }

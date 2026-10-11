@@ -161,21 +161,24 @@ describe('Security: organization-settings login-time resolvers under FORCE RLS',
       userPublicId: user.public_id,
       organizationPublicId: organization.public_id,
     });
-    await withAppDatabaseContext(scope, async (handle) => {
-      await setLocalApplicationRole(handle);
-      expect(await repository.findDefaultLocaleByOrganizationPublicId(organization.public_id)).toBe(
-        'en',
-      );
-      await handle
-        .update(organization_settings)
-        .set({ default_locale: 'es', security_policy: { mfa_required: true } })
-        .where(eq(organization_settings.organization_id, organization.id));
-      // A second pooled connection would see the old committed en/false values.
-      expect(await repository.findDefaultLocaleByOrganizationPublicId(organization.public_id)).toBe(
-        'es',
-      );
-      expect(await repository.userHasOrganizationRequiringMfa(user.id)).toBe(true);
-      expect(await repository.organizationRequiresMfa(organization.public_id)).toBe(true);
+    await withAppDatabaseContext({
+      scope,
+      callback: async (handle) => {
+        await setLocalApplicationRole(handle);
+        expect(
+          await repository.findDefaultLocaleByOrganizationPublicId(organization.public_id),
+        ).toBe('en');
+        await handle
+          .update(organization_settings)
+          .set({ default_locale: 'es', security_policy: { mfa_required: true } })
+          .where(eq(organization_settings.organization_id, organization.id));
+        // A second pooled connection would see the old committed en/false values.
+        expect(
+          await repository.findDefaultLocaleByOrganizationPublicId(organization.public_id),
+        ).toBe('es');
+        expect(await repository.userHasOrganizationRequiringMfa(user.id)).toBe(true);
+        expect(await repository.organizationRequiresMfa(organization.public_id)).toBe(true);
+      },
     });
   });
 });

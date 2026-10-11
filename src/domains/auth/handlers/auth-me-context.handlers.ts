@@ -21,7 +21,10 @@ export function createAuthMeContextHandlers({
         scope: requireUserScope(request),
         globalRole: auth.role,
       });
-      return successResponse(serializeAuthMeContext(data), getRequestIdentifier(request));
+      return successResponse({
+        data: serializeAuthMeContext(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
   };
 }

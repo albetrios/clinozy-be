@@ -81,7 +81,7 @@ describe('mail.processor', () => {
     findMailOutboxByTokenMock.mockResolvedValue(outboxRow());
     sendEmailMock.mockResolvedValue('msg_new');
 
-    await processMailOutboxJob({ mailOutboxToken: MAIL_OUTBOX_TOKEN });
+    await processMailOutboxJob({ jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN } });
 
     expect(findMailOutboxByTokenMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN);
     expect(tryClaimPendingMailOutboxMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN);
@@ -92,7 +92,7 @@ describe('mail.processor', () => {
     // cannot make it appear and there is nothing for anyone to act on, so the job completes.
     findMailOutboxByTokenMock.mockResolvedValue(null);
 
-    const result = await processMailOutboxJob({ mailOutboxToken: MAIL_OUTBOX_TOKEN });
+    const result = await processMailOutboxJob({ jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN } });
 
     expect(result).toEqual({ outcome: 'skipped', reason: 'not_found' });
     expect(tryClaimPendingMailOutboxMock).not.toHaveBeenCalled();
@@ -106,7 +106,7 @@ describe('mail.processor', () => {
     tryClaimPendingMailOutboxMock.mockResolvedValue('failed');
 
     await expect(
-      processMailOutboxJob({ mailOutboxToken: MAIL_OUTBOX_TOKEN }),
+      processMailOutboxJob({ jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN } }),
     ).rejects.toBeInstanceOf(UnrecoverableError);
     expect(sendEmailMock).not.toHaveBeenCalled();
     expect(markMailOutboxFailedMock).not.toHaveBeenCalled();
@@ -118,7 +118,7 @@ describe('mail.processor', () => {
       outboxRow({ status: 'sent', resend_message_id: 'msg_existing' }),
     );
 
-    const result = await processMailOutboxJob({ mailOutboxToken: MAIL_OUTBOX_TOKEN });
+    const result = await processMailOutboxJob({ jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN } });
 
     expect(result).toEqual({
       outcome: 'skipped',
@@ -133,7 +133,7 @@ describe('mail.processor', () => {
     tryClaimPendingMailOutboxMock.mockResolvedValue('in_flight');
     findMailOutboxByTokenMock.mockResolvedValue(outboxRow());
 
-    const result = await processMailOutboxJob({ mailOutboxToken: MAIL_OUTBOX_TOKEN });
+    const result = await processMailOutboxJob({ jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN } });
 
     expect(result).toEqual({ outcome: 'skipped', reason: 'in_flight' });
     expect(sendEmailMock).not.toHaveBeenCalled();
@@ -145,10 +145,10 @@ describe('mail.processor', () => {
     findMailOutboxByTokenMock.mockResolvedValue(outboxRow());
     sendEmailMock.mockResolvedValue('msg_new');
 
-    const result = await processMailOutboxJob(
-      { mailOutboxToken: MAIL_OUTBOX_TOKEN, requestId: 'req-mail-43' },
-      { jobId: 'job-43', requestId: 'req-mail-43' },
-    );
+    const result = await processMailOutboxJob({
+      jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN, requestId: 'req-mail-43' },
+      options: { jobId: 'job-43', requestId: 'req-mail-43' },
+    });
 
     expect(sendEmailMock).toHaveBeenCalledOnce();
     expect(sendEmailMock).toHaveBeenCalledWith(
@@ -176,15 +176,15 @@ describe('mail.processor', () => {
       .mockResolvedValueOnce('msg_retried');
 
     await expect(
-      processMailOutboxJob(
-        { mailOutboxToken: MAIL_OUTBOX_TOKEN },
-        { jobAttemptNumber: 0, maxJobAttempts: 3 },
-      ),
+      processMailOutboxJob({
+        jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+        options: { jobAttemptNumber: 0, maxJobAttempts: 3 },
+      }),
     ).rejects.toThrow('resend.timeout');
-    await processMailOutboxJob(
-      { mailOutboxToken: MAIL_OUTBOX_TOKEN },
-      { jobAttemptNumber: 1, maxJobAttempts: 3 },
-    );
+    await processMailOutboxJob({
+      jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+      options: { jobAttemptNumber: 1, maxJobAttempts: 3 },
+    });
 
     const [firstAttemptKey, retryAttemptKey] = sendEmailMock.mock.calls.map(
       ([sendOptions]) => sendOptions.idempotencyKey,
@@ -199,10 +199,10 @@ describe('mail.processor', () => {
     sendEmailMock.mockRejectedValue(new Error('resend.down'));
 
     await expect(
-      processMailOutboxJob(
-        { mailOutboxToken: MAIL_OUTBOX_TOKEN },
-        { jobAttemptNumber: 0, maxJobAttempts: 3 },
-      ),
+      processMailOutboxJob({
+        jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+        options: { jobAttemptNumber: 0, maxJobAttempts: 3 },
+      }),
     ).rejects.toThrow('resend.down');
 
     expect(releaseMailOutboxClaimMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN);
@@ -220,10 +220,10 @@ describe('mail.processor', () => {
       }),
     );
 
-    const result = await processMailOutboxJob(
-      { mailOutboxToken: MAIL_OUTBOX_TOKEN },
-      { jobAttemptNumber: 0, maxJobAttempts: 3 },
-    );
+    const result = await processMailOutboxJob({
+      jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+      options: { jobAttemptNumber: 0, maxJobAttempts: 3 },
+    });
 
     expect(result).toEqual({ outcome: 'rejected', statusCode: 422 });
     expect(markMailOutboxFailedMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN);
@@ -241,10 +241,10 @@ describe('mail.processor', () => {
     sendEmailMock.mockRejectedValue(outage);
 
     await expect(
-      processMailOutboxJob(
-        { mailOutboxToken: MAIL_OUTBOX_TOKEN },
-        { jobAttemptNumber: 0, maxJobAttempts: 3 },
-      ),
+      processMailOutboxJob({
+        jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+        options: { jobAttemptNumber: 0, maxJobAttempts: 3 },
+      }),
     ).rejects.toBe(outage);
 
     expect(releaseMailOutboxClaimMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN);
@@ -261,10 +261,13 @@ describe('mail.processor', () => {
     );
     sendEmailMock.mockRejectedValue(circuitOpen);
 
-    const failure = await processMailOutboxJob(
-      { mailOutboxToken: MAIL_OUTBOX_TOKEN },
-      { jobAttemptNumber: MAIL_QUEUE_MAX_ATTEMPTS - 1, maxJobAttempts: MAIL_QUEUE_MAX_ATTEMPTS },
-    ).catch((error: unknown) => error);
+    const failure = await processMailOutboxJob({
+      jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+      options: {
+        jobAttemptNumber: MAIL_QUEUE_MAX_ATTEMPTS - 1,
+        maxJobAttempts: MAIL_QUEUE_MAX_ATTEMPTS,
+      },
+    }).catch((error: unknown) => error);
 
     // The worker reads this as "pause the queue, park the job" — no attempt spent.
     expect(failure).toBeInstanceOf(ProviderOutageError);
@@ -286,10 +289,13 @@ describe('mail.processor', () => {
       }),
     );
 
-    const failure = await processMailOutboxJob(
-      { mailOutboxToken: MAIL_OUTBOX_TOKEN },
-      { jobAttemptNumber: MAIL_QUEUE_MAX_ATTEMPTS - 1, maxJobAttempts: MAIL_QUEUE_MAX_ATTEMPTS },
-    ).catch((error: unknown) => error);
+    const failure = await processMailOutboxJob({
+      jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+      options: {
+        jobAttemptNumber: MAIL_QUEUE_MAX_ATTEMPTS - 1,
+        maxJobAttempts: MAIL_QUEUE_MAX_ATTEMPTS,
+      },
+    }).catch((error: unknown) => error);
 
     // A throttle is not an outage: the worker pauses the queue for 2 s, not five minutes.
     expect(failure).toBeInstanceOf(ProviderOutageError);
@@ -314,10 +320,13 @@ describe('mail.processor', () => {
     );
 
     await expect(
-      processMailOutboxJob(
-        { mailOutboxToken: MAIL_OUTBOX_TOKEN },
-        { jobAttemptNumber: MAIL_QUEUE_MAX_ATTEMPTS - 1, maxJobAttempts: MAIL_QUEUE_MAX_ATTEMPTS },
-      ),
+      processMailOutboxJob({
+        jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+        options: {
+          jobAttemptNumber: MAIL_QUEUE_MAX_ATTEMPTS - 1,
+          maxJobAttempts: MAIL_QUEUE_MAX_ATTEMPTS,
+        },
+      }),
     ).rejects.toBeInstanceOf(ProviderOutageError);
 
     expect(releaseMailOutboxClaimMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN);
@@ -337,7 +346,7 @@ describe('mail.processor', () => {
       findMailOutboxByTokenMock.mockResolvedValue(outboxRow({ to_addresses: toAddresses }));
 
       await expect(
-        processMailOutboxJob({ mailOutboxToken: MAIL_OUTBOX_TOKEN }),
+        processMailOutboxJob({ jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN } }),
       ).rejects.toBeInstanceOf(UnrecoverableError);
 
       expect(sendEmailMock).not.toHaveBeenCalled();
@@ -351,10 +360,10 @@ describe('mail.processor', () => {
     sendEmailMock.mockRejectedValue(new Error('resend.down'));
 
     await expect(
-      processMailOutboxJob(
-        { mailOutboxToken: MAIL_OUTBOX_TOKEN },
-        { jobAttemptNumber: 2, maxJobAttempts: 3 },
-      ),
+      processMailOutboxJob({
+        jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+        options: { jobAttemptNumber: 2, maxJobAttempts: 3 },
+      }),
     ).rejects.toThrow('resend.down');
 
     expect(markMailOutboxFailedMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN);

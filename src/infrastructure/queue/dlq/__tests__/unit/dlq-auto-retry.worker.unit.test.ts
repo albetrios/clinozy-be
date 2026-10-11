@@ -36,7 +36,7 @@ vi.mock('@/infrastructure/queue/worker-runtime/worker-options.js', () => ({
 }));
 
 vi.mock('@/infrastructure/queue/worker-runtime/worker-close.util.js', () => ({
-  buildWorkerHandle: (worker: unknown, queueName: string) => ({
+  buildWorkerHandle: ({ worker, queueName }: { worker: unknown; queueName: string }) => ({
     worker,
     queueName,
     close: async () => undefined,

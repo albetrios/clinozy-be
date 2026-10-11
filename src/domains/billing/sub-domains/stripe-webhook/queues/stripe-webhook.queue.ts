@@ -46,8 +46,14 @@ export function getStripeWebhookQueue(): Queue<StripeWebhookJobData> {
  * Convenience wrapper that enqueues a verified Stripe event by id; the worker
  * re-fetches the full event from Stripe so only the id is persisted in Redis.
  */
-export async function enqueueStripeWebhook(event: Stripe.Event, requestId?: string): Promise<void> {
-  await enqueueStripeWebhookByEventId(event.id, requestId);
+export async function enqueueStripeWebhook({
+  event,
+  requestId,
+}: {
+  event: Stripe.Event;
+  requestId?: string | undefined;
+}): Promise<void> {
+  await enqueueStripeWebhookByEventId({ stripeEventId: event.id, requestId });
 }
 
 /**
@@ -58,20 +64,23 @@ export async function enqueueStripeWebhook(event: Stripe.Event, requestId?: stri
  * Also deduplicated on the event id ({@link stripeEventDeduplication}): while any job for the
  * event — this one or a reclaim — is waiting, delayed or active, another add is a no-op.
  */
-export async function enqueueStripeWebhookByEventId(
-  stripeEventId: string,
-  requestId?: string,
-): Promise<void> {
+export async function enqueueStripeWebhookByEventId({
+  stripeEventId,
+  requestId,
+}: {
+  stripeEventId: string;
+  requestId?: string | undefined;
+}): Promise<void> {
   const queue = getStripeWebhookQueue();
-  const jobData = parseBullMQJobData(
-    stripeWebhookJobDataSchema,
-    omitUndefined({
+  const jobData = parseBullMQJobData({
+    schema: stripeWebhookJobDataSchema,
+    data: omitUndefined({
       stripeEventId,
       requestId,
       ...captureTraceContextForPropagation(),
     }),
-    STRIPE_WEBHOOK_QUEUE_NAME,
-  );
+    queueName: STRIPE_WEBHOOK_QUEUE_NAME,
+  });
   await queue.add('process-stripe-webhook', jobData, {
     jobId: `stripe-event-${stripeEventId}`,
     deduplication: stripeEventDeduplication(stripeEventId),
@@ -115,20 +124,23 @@ function stripeEventDeduplication(stripeEventId: string): { id: string } {
  *   and skip.
  * - **Side effects:** writes a new job to the `stripe-webhook` queue, or none.
  */
-export async function enqueueStripeWebhookByEventIdForReclaim(
-  stripeEventId: string,
-  requestId?: string,
-): Promise<void> {
+export async function enqueueStripeWebhookByEventIdForReclaim({
+  stripeEventId,
+  requestId,
+}: {
+  stripeEventId: string;
+  requestId?: string | undefined;
+}): Promise<void> {
   const queue = getStripeWebhookQueue();
-  const jobData = parseBullMQJobData(
-    stripeWebhookJobDataSchema,
-    omitUndefined({
+  const jobData = parseBullMQJobData({
+    schema: stripeWebhookJobDataSchema,
+    data: omitUndefined({
       stripeEventId,
       requestId,
       ...captureTraceContextForPropagation(),
     }),
-    STRIPE_WEBHOOK_QUEUE_NAME,
-  );
+    queueName: STRIPE_WEBHOOK_QUEUE_NAME,
+  });
   await queue.add('process-stripe-webhook', jobData, {
     jobId: `stripe-event-${stripeEventId}-reclaim-${Date.now()}`,
     deduplication: stripeEventDeduplication(stripeEventId),

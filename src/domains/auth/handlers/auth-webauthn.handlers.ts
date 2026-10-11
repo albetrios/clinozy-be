@@ -24,7 +24,7 @@ export function createAuthWebauthnHandlers({ webauthnService }: AuthWebauthnHand
     webauthnRegisterOptions: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       const data = await webauthnService.generateRegistrationOptions(auth.userId);
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     webauthnRegisterVerify: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
@@ -35,18 +35,21 @@ export function createAuthWebauthnHandlers({ webauthnService }: AuthWebauthnHand
       });
       // Enrolling a new passkey adds a login credential (a takeover-persistence move), so audit it —
       // symmetric with the already-audited passkey revoke.
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'auth.webauthn.register',
-        resource_type: 'webauthn_credential',
-        metadata: { credential_id: data.credential_id },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'auth.webauthn.register',
+          resource_type: 'webauthn_credential',
+          metadata: { credential_id: data.credential_id },
+        },
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     webauthnListCredentials: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       const data = await webauthnService.listCredentials(auth.userId);
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     webauthnRevokeCredential: async (
       request: FastifyRequest<{ Params: { credential_id: string } }>,
@@ -55,17 +58,20 @@ export function createAuthWebauthnHandlers({ webauthnService }: AuthWebauthnHand
       const auth = requireAuth(request);
       const credentialPublicId = validateWebauthnCredentialIdParam(request.params.credential_id);
       await webauthnService.revokeCredential({ userPublicId: auth.userId, credentialPublicId });
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'auth.webauthn.revoke',
-        resource_type: 'webauthn_credential',
-        metadata: { credential_id: credentialPublicId },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'auth.webauthn.revoke',
+          resource_type: 'webauthn_credential',
+          metadata: { credential_id: credentialPublicId },
+        },
       });
       return reply.code(204).send();
     },
     webauthnAuthenticateOptions: async (request: FastifyRequest, _reply: FastifyReply) => {
       const data = await webauthnService.generateAuthenticationOptions(request.body);
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     webauthnAuthenticateVerify: async (request: FastifyRequest, reply: FastifyReply) => {
       let data: Awaited<ReturnType<typeof webauthnService.verifyAuthentication>>;
@@ -78,11 +84,14 @@ export function createAuthWebauthnHandlers({ webauthnService }: AuthWebauthnHand
         });
       } catch (error) {
         // sec-A8 follow-up: record the failure side of the auth.overview.md invariant.
-        await recordLoginFailureAuditEvent(request, 'webauthn', error);
+        await recordLoginFailureAuditEvent({ request, source: 'webauthn', error });
         throw error;
       }
       if ('mfa_required' in data && data.mfa_required === true) {
-        return successResponse(AuthSerializer.mfaRequired(data), getRequestIdentifier(request));
+        return successResponse({
+          data: AuthSerializer.mfaRequired(data),
+          request_id: getRequestIdentifier(request),
+        });
       }
       if (
         'session_public_id' in data &&
@@ -90,21 +99,30 @@ export function createAuthWebauthnHandlers({ webauthnService }: AuthWebauthnHand
         typeof data.session_public_id === 'string' &&
         typeof data.session_refresh_secret === 'string'
       ) {
-        setSessionCookie(reply, data.session_public_id, data.session_refresh_secret);
+        setSessionCookie({
+          reply,
+          sessionPublicId: data.session_public_id,
+          refreshSecret: data.session_refresh_secret,
+        });
         // sec-A8: audit WebAuthn passkey login so the auth.overview.md "every login
         // records a row" invariant holds across every entrypoint.
         if ('access_token' in data && typeof data.access_token === 'string') {
-          await recordLoginAuditEvent(
+          await recordLoginAuditEvent({
             request,
-            { access_token: data.access_token, session_public_id: data.session_public_id },
-            'webauthn',
-          );
+            loginResult: {
+              access_token: data.access_token,
+              session_public_id: data.session_public_id,
+            },
+            source: 'webauthn',
+          });
         }
       }
-      return successResponse(
-        AuthSerializer.accessToken(data as { access_token: string; session_public_id?: string }),
-        getRequestIdentifier(request),
-      );
+      return successResponse({
+        data: AuthSerializer.accessToken(
+          data as { access_token: string; session_public_id?: string },
+        ),
+        request_id: getRequestIdentifier(request),
+      });
     },
   };
 }

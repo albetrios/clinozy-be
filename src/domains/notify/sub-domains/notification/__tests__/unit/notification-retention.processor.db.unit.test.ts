@@ -39,10 +39,10 @@ describe('runNotificationRetentionJob (database)', () => {
   }
 
   async function runRetention() {
-    return withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      (databaseHandle) => runNotificationRetentionJob(databaseHandle),
-    );
+    return withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: (databaseHandle) => runNotificationRetentionJob(databaseHandle),
+    });
   }
 
   beforeEach(async () => {

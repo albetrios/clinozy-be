@@ -18,7 +18,7 @@ import type {
  * with per-field details on failure.
  */
 export function validateCreateMembership(data: unknown): CreateMembershipInput {
-  return parseWithSchema(createMembershipDto, data);
+  return parseWithSchema({ schema: createMembershipDto, data });
 }
 
 /**
@@ -27,7 +27,7 @@ export function validateCreateMembership(data: unknown): CreateMembershipInput {
  * `ValidationError('errors:invalidInput')` on failure.
  */
 export function validateUpdateMembership(data: unknown): UpdateMembershipInput {
-  return parseWithSchema(updateMembershipDto, data);
+  return parseWithSchema({ schema: updateMembershipDto, data });
 }
 
 /**
@@ -35,7 +35,11 @@ export function validateUpdateMembership(data: unknown): UpdateMembershipInput {
  * {@link listMembershipsQueryDto} (cursor pagination only).
  */
 export function validateListMembershipsQuery(data: unknown): ListMembershipsQueryInput {
-  return parseWithSchema(listMembershipsQueryDto, data, 'errors:validation.invalidPagination');
+  return parseWithSchema({
+    schema: listMembershipsQueryDto,
+    data,
+    errorKey: 'errors:validation.invalidPagination',
+  });
 }
 
 /**
@@ -44,5 +48,5 @@ export function validateListMembershipsQuery(data: unknown): ListMembershipsQuer
  * on failure.
  */
 export function validateTransferOwnership(data: unknown): TransferOwnershipInput {
-  return parseWithSchema(transferOwnershipDto, data);
+  return parseWithSchema({ schema: transferOwnershipDto, data });
 }

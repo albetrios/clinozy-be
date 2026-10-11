@@ -102,9 +102,9 @@ describe('Security: audit.logs INSERT RLS rejects privilege-bypass contexts (sec
 
     let caught: unknown;
     try {
-      await withMaintenanceDatabaseContext(
-        MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-        async (databaseHandle) => {
+      await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: async (databaseHandle) => {
           // No app.current_organization_public_id set — only global_retention_cleanup
           // is active. Before the fix this would succeed. After the fix, RLS
           // rejects it.
@@ -113,8 +113,8 @@ describe('Security: audit.logs INSERT RLS rejects privilege-bypass contexts (sec
                        VALUES (${generatePublicId('auditLog')}, ${organization.id}, 'test.d1.retention', 'test', '127.0.0.1', 'vitest', '{}'::jsonb)`,
           );
         },
-        { useMaintenanceDatabaseRole: true },
-      );
+        options: { useMaintenanceDatabaseRole: true },
+      });
     } catch (error) {
       caught = error;
     }

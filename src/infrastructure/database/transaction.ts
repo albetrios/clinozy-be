@@ -27,10 +27,13 @@ export interface TransactionOptions {
  * so the timeout applies only within this transaction's connection. Runs as a pooled unit of work
  * like every database context: counted by the overload guard, bounded by the acquire deadline.
  */
-export async function withTransaction<T>(
-  callback: (transaction: unknown) => Promise<T>,
-  options?: TransactionOptions,
-): Promise<T> {
+export async function withTransaction<T>({
+  callback,
+  options,
+}: {
+  callback: (transaction: unknown) => Promise<T>;
+  options?: TransactionOptions | undefined;
+}): Promise<T> {
   const timeoutMs = options?.timeoutMs ?? TEN_SECONDS_MS;
   const isolationLevel = options?.isolationLevel ?? 'read committed';
 
@@ -78,7 +81,10 @@ export async function withSavepoint<T>(callback: () => Promise<T>): Promise<T> {
   }
   return runInCommitUnit(() =>
     session.databaseHandle.transaction((savepoint) =>
-      runWithPinnedDatabaseHandle(savepoint as unknown as RequestScopedPostgresDatabase, callback),
+      runWithPinnedDatabaseHandle({
+        databaseHandle: savepoint as unknown as RequestScopedPostgresDatabase,
+        callback,
+      }),
     ),
   );
 }

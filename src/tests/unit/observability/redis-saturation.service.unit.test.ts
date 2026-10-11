@@ -62,10 +62,10 @@ describe('redis-saturation service', () => {
     const result = await sampleRedisMemorySaturation();
 
     expect(result.ratio).toBeCloseTo(0.96);
-    expect(mockCaptureMessage).toHaveBeenCalledWith(
-      'redis.memory.saturation.critical',
-      expect.objectContaining({ level: 'error' }),
-    );
+    expect(mockCaptureMessage).toHaveBeenCalledWith({
+      message: 'redis.memory.saturation.critical',
+      options: expect.objectContaining({ level: 'error' }),
+    });
   });
 
   it('raises a warning Sentry alert between warn and critical thresholds', async () => {
@@ -77,10 +77,10 @@ describe('redis-saturation service', () => {
     const result = await sampleRedisMemorySaturation();
 
     expect(result.ratio).toBeCloseTo(0.9);
-    expect(mockCaptureMessage).toHaveBeenCalledWith(
-      'redis.memory.saturation.high',
-      expect.objectContaining({ level: 'warning' }),
-    );
+    expect(mockCaptureMessage).toHaveBeenCalledWith({
+      message: 'redis.memory.saturation.high',
+      options: expect.objectContaining({ level: 'warning' }),
+    });
   });
 
   it('does not alert for an unbounded Redis (maxmemory=0) and returns a null ratio', async () => {
@@ -117,10 +117,10 @@ describe('redis-saturation service', () => {
 
     expect(result.depths.length).toBeGreaterThan(0);
     expect(result.depths[0]?.total).toBe(1500);
-    expect(mockCaptureMessage).toHaveBeenCalledWith(
-      'queue.waiting.depth.high',
-      expect.objectContaining({ level: 'warning' }),
-    );
+    expect(mockCaptureMessage).toHaveBeenCalledWith({
+      message: 'queue.waiting.depth.high',
+      options: expect.objectContaining({ level: 'warning' }),
+    });
     // The client came from the shared pool and MUST be left open: it is the same client the
     // queue-depth gauges and the readiness probe read through, so closing it here would break
     // them until the next process start.

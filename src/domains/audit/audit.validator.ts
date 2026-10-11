@@ -7,5 +7,5 @@ import { ListAuditLogsQueryDto, type ListAuditLogsQuery } from './audit.dto.js';
  * Throws a `ValidationError` with field errors on bad input.
  */
 export function validateListAuditLogsQuery(query: unknown): ListAuditLogsQuery {
-  return parseWithSchema(ListAuditLogsQueryDto, query);
+  return parseWithSchema({ schema: ListAuditLogsQueryDto, data: query });
 }

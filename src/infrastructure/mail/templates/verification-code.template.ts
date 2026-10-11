@@ -27,18 +27,22 @@ export function verificationCodeTemplate(data: VerificationCodeTemplateData): st
 
   return baseTemplate({
     locale,
-    title: translateMailText('verificationCodeHeading', locale),
-    preheader: translateMailText('verificationCodePreheader', locale, {
-      code: data.code,
-      expiresInMinutes,
+    title: translateMailText({ key: 'verificationCodeHeading', locale }),
+    preheader: translateMailText({
+      key: 'verificationCodePreheader',
+      locale,
+      values: {
+        code: data.code,
+        expiresInMinutes,
+      },
     }),
     body: `
-      <h1>${translateMailText('verificationCodeHeading', locale)}</h1>
-      <p>${translateMailText('verificationCodeBody', locale, { expiresInMinutes })}</p>
+      <h1>${translateMailText({ key: 'verificationCodeHeading', locale })}</h1>
+      <p>${translateMailText({ key: 'verificationCodeBody', locale, values: { expiresInMinutes } })}</p>
       <p style="text-align: center; margin: 32px 0;">
         <span style="display: inline-block; font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #111827;">${code}</span>
       </p>
-      <p style="font-size: 13px; color: #6b7280;">${translateMailText('ignoreIfNotRequested', locale)}</p>
+      <p style="font-size: 13px; color: #6b7280;">${translateMailText({ key: 'ignoreIfNotRequested', locale })}</p>
     `,
   });
 }

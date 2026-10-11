@@ -61,17 +61,17 @@ export async function enqueueNotification(options: {
 }): Promise<void> {
   const { notificationPublicId, organizationPublicId, userPublicId, requestId } = options;
   const queue = getNotificationQueue();
-  const jobData = parseBullMQJobData(
-    notificationJobDataSchema,
-    omitUndefined({
+  const jobData = parseBullMQJobData({
+    schema: notificationJobDataSchema,
+    data: omitUndefined({
       notificationPublicId,
       organizationPublicId,
       userPublicId,
       requestId,
       ...captureTraceContextForPropagation(),
     }),
-    NOTIFICATION_QUEUE_NAME,
-  );
+    queueName: NOTIFICATION_QUEUE_NAME,
+  });
   // audit #6: deduplicate per notification. A recovery/redelivery path (post-commit dispatch
   // recovery, an event handler firing twice, or a producer-side retry) that re-enqueues the same
   // persisted notification must not produce a second dispatch — and therefore a second outbound
@@ -101,13 +101,13 @@ export async function discardUndispatchedNotification(notification: {
   notificationPublicId: string;
   userPublicId: string;
 }): Promise<void> {
-  await withAppDatabaseContext(
-    PRINCIPAL_SCOPE.VERIFIED({ userPublicId: notification.userPublicId }),
-    (databaseHandle) =>
+  await withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: notification.userPublicId }),
+    callback: (databaseHandle) =>
       createWorkerNotificationRepository(databaseHandle).deleteByPublicId(
         notification.notificationPublicId,
       ),
-  );
+  });
   await invalidateCachedUnreadNotificationCount(notification.userPublicId);
 }
 

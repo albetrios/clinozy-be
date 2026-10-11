@@ -31,9 +31,9 @@ describe('WebhookRepository creation-quota concurrency (database — audit-#8)',
     const organization = await createTestOrganization({ ownerUserId: user.id });
 
     const attempt = (index: number) =>
-      withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
-        async () => {
+      withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
+        callback: async () => {
           // Mirror the service: lock → count → conditional insert, all in this one transaction.
           await repository.acquireCreationQuotaLock(organization.id);
           const activeCount = await repository.countActiveByOrganization(organization.id);
@@ -49,7 +49,7 @@ describe('WebhookRepository creation-quota concurrency (database — audit-#8)',
             created_by_user_id: user.id,
           });
         },
-      );
+      });
 
     const results = await Promise.allSettled(
       Array.from({ length: CONCURRENT }, (_value, index) => attempt(index)),
@@ -58,10 +58,10 @@ describe('WebhookRepository creation-quota concurrency (database — audit-#8)',
     const fulfilled = results.filter((result) => result.status === 'fulfilled');
     expect(fulfilled).toHaveLength(CAP);
 
-    const finalCount = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
-      () => repository.countActiveByOrganization(organization.id),
-    );
+    const finalCount = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
+      callback: () => repository.countActiveByOrganization(organization.id),
+    });
     expect(finalCount).toBe(CAP);
   });
 });

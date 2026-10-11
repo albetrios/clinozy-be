@@ -46,5 +46,5 @@ export function createUploadPendingSweepWorker(): WorkerHandle {
     logger.warn({ jobId, queue: UPLOAD_PENDING_SWEEP_QUEUE_NAME }, 'upload-pending-sweep.stalled');
   });
 
-  return buildWorkerHandle(worker, UPLOAD_PENDING_SWEEP_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: UPLOAD_PENDING_SWEEP_QUEUE_NAME });
 }

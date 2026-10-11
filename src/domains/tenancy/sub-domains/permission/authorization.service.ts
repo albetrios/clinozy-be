@@ -65,15 +65,15 @@ async function resolvePermissionsFromDatabase({
   userPublicId: string;
   organizationPublicId: string;
 }): Promise<string[]> {
-  return withAppDatabaseContext(
-    PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
-    async (databaseHandle) =>
+  return withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
+    callback: async (databaseHandle) =>
       repository.findPermissionCodesForUserInOrganization(
         userPublicId,
         organizationPublicId,
         databaseHandle as PostgresJsDatabase,
       ),
-  );
+  });
 }
 
 async function resolvePermissionsWithRepository({

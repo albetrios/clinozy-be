@@ -46,7 +46,7 @@ export const stripeWebhookIngressPlugin: FastifyPluginAsync = async (application
     }
 
     try {
-      const stripeWebhookEvent = constructStripeWebhookEvent(rawBody, signature);
+      const stripeWebhookEvent = constructStripeWebhookEvent({ body: rawBody, signature });
       request.stripeWebhookEvent = stripeWebhookEvent;
       logger.info(
         { eventId: stripeWebhookEvent.id, eventType: stripeWebhookEvent.type },

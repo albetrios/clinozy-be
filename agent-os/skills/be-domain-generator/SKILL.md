@@ -118,7 +118,7 @@ import { getRequestIdentifier, requireAuth } from '@/shared/utils/http/request.u
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 
 export function validateCreate<Resource>(data: unknown): Create<Resource>Input {
-  return parseWithSchema(create<Resource>Dto, data);
+  return parseWithSchema({ schema: create<Resource>Dto, data });
 }
 ```
 

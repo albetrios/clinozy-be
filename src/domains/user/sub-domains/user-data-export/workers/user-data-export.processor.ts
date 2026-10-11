@@ -30,47 +30,54 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
  *   GDPR S3 prefix, and emits structured logs for observability.
  * - **Notes:** cross-domain reads delegate to each owning domain's service (see dependency rules).
  */
-export async function runUserDataExportJob(
-  jobData: UserDataExportJobData,
-  userDataExportService: UserDataExportService,
-  options: { isFinalAttempt: boolean } = { isFinalAttempt: true },
-): Promise<void> {
+export async function runUserDataExportJob({
+  jobData,
+  userDataExportService,
+  options = { isFinalAttempt: true },
+}: {
+  jobData: UserDataExportJobData;
+  userDataExportService: UserDataExportService;
+  options?: { isFinalAttempt: boolean } | undefined;
+}): Promise<void> {
   const { exportPublicId, userPublicId } = jobData;
   const ownerScope = PRINCIPAL_SCOPE.JOB({ userPublicId: userPublicId });
 
   try {
-    const userInternalId = await withAppDatabaseContext(ownerScope, async (databaseHandle) => {
-      const ownerInternalId =
-        await userDataExportService.resolveExportOwnerInternalId(userPublicId);
-      if (ownerInternalId === null) {
-        logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
-        return null;
-      }
-      const isCancelled = () =>
-        userDataExportService.isExportJobCancelled({
+    const userInternalId = await withAppDatabaseContext({
+      scope: ownerScope,
+      callback: async (databaseHandle) => {
+        const ownerInternalId =
+          await userDataExportService.resolveExportOwnerInternalId(userPublicId);
+        if (ownerInternalId === null) {
+          logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
+          return null;
+        }
+        const isCancelled = () =>
+          userDataExportService.isExportJobCancelled({
+            exportPublicId,
+            userInternalId: ownerInternalId,
+            userPublicId,
+            databaseHandle,
+          });
+        if (await isCancelled()) {
+          logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
+          return null;
+        }
+
+        await userDataExportService.markProcessing({
           exportPublicId,
           userInternalId: ownerInternalId,
-          userPublicId,
           databaseHandle,
+          userPublicId,
         });
-      if (await isCancelled()) {
-        logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
-        return null;
-      }
 
-      await userDataExportService.markProcessing({
-        exportPublicId,
-        userInternalId: ownerInternalId,
-        databaseHandle,
-        userPublicId,
-      });
+        if (await isCancelled()) {
+          logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
+          return null;
+        }
 
-      if (await isCancelled()) {
-        logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
-        return null;
-      }
-
-      return ownerInternalId;
+        return ownerInternalId;
+      },
     });
 
     if (userInternalId === null) {
@@ -103,16 +110,19 @@ export async function runUserDataExportJob(
       throw error;
     }
     logger.error({ error, exportPublicId, userPublicId }, 'user-data-export.worker.failed');
-    await withAppDatabaseContext(ownerScope, async (databaseHandle) => {
-      const ownerInternalId =
-        await userDataExportService.resolveExportOwnerInternalId(userPublicId);
-      if (ownerInternalId === null) return;
-      await userDataExportService.failExportJob({
-        exportPublicId,
-        userInternalId: ownerInternalId,
-        errorCode: 'export_failed',
-        databaseHandle,
-      });
+    await withAppDatabaseContext({
+      scope: ownerScope,
+      callback: async (databaseHandle) => {
+        const ownerInternalId =
+          await userDataExportService.resolveExportOwnerInternalId(userPublicId);
+        if (ownerInternalId === null) return;
+        await userDataExportService.failExportJob({
+          exportPublicId,
+          userInternalId: ownerInternalId,
+          errorCode: 'export_failed',
+          databaseHandle,
+        });
+      },
     });
     throw error;
   }

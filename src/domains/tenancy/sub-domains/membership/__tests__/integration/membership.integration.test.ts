@@ -501,16 +501,18 @@ describe('Membership Sub-Domain — Integration', () => {
         // organization context: `tenancy.member_invitations` is FORCE RLS with WITH CHECK
         // pinned to the active organization, so a context-free create is rejected the moment
         // the pool under test is RLS-subject.
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
-        () =>
-          invitationRepository.create({
-            membership_id: inviteeMembership!.id,
-            email: invitee.email,
-            token_hash: hashInvitationToken(rawToken),
-            invited_by_user_id: admin.id,
-            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
-            created_by_user_id: admin.id,
-          }),
+        {
+          scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
+          callback: () =>
+            invitationRepository.create({
+              membership_id: inviteeMembership!.id,
+              email: invitee.email,
+              token_hash: hashInvitationToken(rawToken),
+              invited_by_user_id: admin.id,
+              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
+              created_by_user_id: admin.id,
+            }),
+        },
       );
       return {
         organization,
@@ -668,16 +670,18 @@ describe('Membership Sub-Domain — Integration', () => {
         // organization context: `tenancy.member_invitations` is FORCE RLS with WITH CHECK
         // pinned to the active organization, so a context-free create is rejected the moment
         // the pool under test is RLS-subject.
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
-        () =>
-          invitationRepository.create({
-            membership_id: inviteeMembership!.id,
-            email: invitee.email,
-            token_hash: hashInvitationToken(`admin-revoke-token-${randomUUID()}`),
-            invited_by_user_id: admin.id,
-            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
-            created_by_user_id: admin.id,
-          }),
+        {
+          scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
+          callback: () =>
+            invitationRepository.create({
+              membership_id: inviteeMembership!.id,
+              email: invitee.email,
+              token_hash: hashInvitationToken(`admin-revoke-token-${randomUUID()}`),
+              invited_by_user_id: admin.id,
+              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
+              created_by_user_id: admin.id,
+            }),
+        },
       );
       return { organization, adminToken, invitation, inviteeMembership: inviteeMembership! };
     }
@@ -786,16 +790,18 @@ describe('Membership Sub-Domain — Integration', () => {
         // organization context: `tenancy.member_invitations` is FORCE RLS with WITH CHECK
         // pinned to the active organization, so a context-free create is rejected the moment
         // the pool under test is RLS-subject.
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
-        () =>
-          invitationRepository.create({
-            membership_id: inviteeMembership!.id,
-            email: invitee.email,
-            token_hash: originalTokenHash,
-            invited_by_user_id: admin.id,
-            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
-            created_by_user_id: admin.id,
-          }),
+        {
+          scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
+          callback: () =>
+            invitationRepository.create({
+              membership_id: inviteeMembership!.id,
+              email: invitee.email,
+              token_hash: originalTokenHash,
+              invited_by_user_id: admin.id,
+              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
+              created_by_user_id: admin.id,
+            }),
+        },
       );
       return { organization, adminToken, invitation, originalTokenHash };
     }
@@ -1448,7 +1454,7 @@ describe('Membership Sub-Domain — Integration', () => {
     async function setupPersonalOrganizationOwner() {
       await seedOwnerGrantPermissions();
       const owner = await createTestUser();
-      const provisioned = await provisionPersonalOrganization(owner.id);
+      const provisioned = await provisionPersonalOrganization({ ownerUserId: owner.id });
       const token = await generateTestToken({
         userId: owner.public_id,
         organizationPublicId: provisioned.organization.public_id,

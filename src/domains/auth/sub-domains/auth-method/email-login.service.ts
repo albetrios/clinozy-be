@@ -187,7 +187,7 @@ export class EmailLoginService {
         locale: context?.locale ?? DEFAULT_LANGUAGE,
       });
     }
-    await enforceMinimumDuration(startedAtMillis);
+    await enforceMinimumDuration({ startedAtMillis });
     return {
       messageKey: 'success:verificationCodeSent',
       expires_in_minutes: VERIFICATION_CODE_TTL_MINUTES,
@@ -216,18 +216,22 @@ export class EmailLoginService {
   private async createEmailCodeUser(email: string): Promise<UserAuthRecord> {
     let user: UserAuthRecord;
     try {
-      user = await withTransaction((transaction) =>
-        runWithPinnedDatabaseHandle(transaction as RequestScopedPostgresDatabase, async () => {
-          const created = await this.userService.createForEmailCode({
-            email,
-          });
-          await this.authMethodService.createEmailCodeMethod({
-            userId: created.id,
-            userPublicId: created.public_id,
-          });
-          return created;
-        }),
-      );
+      user = await withTransaction({
+        callback: (transaction) =>
+          runWithPinnedDatabaseHandle({
+            databaseHandle: transaction as RequestScopedPostgresDatabase,
+            callback: async () => {
+              const created = await this.userService.createForEmailCode({
+                email,
+              });
+              await this.authMethodService.createEmailCodeMethod({
+                userId: created.id,
+                userPublicId: created.public_id,
+              });
+              return created;
+            },
+          }),
+      });
     } catch (error) {
       // A concurrent send for the same new email won the create race; the unique-email index aborted
       // (and rolled back) this transaction. Re-fetch on a fresh connection and converge on the
@@ -279,33 +283,40 @@ export class EmailLoginService {
       Date.now() + VERIFICATION_CODE_TTL_MINUTES * MILLISECONDS_PER_MINUTE,
     );
 
-    await withTransaction((transaction) =>
-      runWithPinnedDatabaseHandle(transaction as RequestScopedPostgresDatabase, async () => {
-        // Single live code: invalidate the user's prior unused codes so only the newest is redeemable.
-        await this.verificationTokenRepository.invalidateAllForUser(user.id, EMAIL_CODE_TOKEN_TYPE);
-        await this.verificationTokenRepository.create(
-          EMAIL_CODE_TOKEN_TYPE,
-          user.id,
-          user.email,
-          hashVerificationCode({
-            tokenType: EMAIL_CODE_TOKEN_TYPE,
-            userId: user.id,
-            code,
-          }),
-          expiresAt,
-        );
-        await eventBus.emitStrict({
-          type: AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED,
-          payload: {
-            email: user.email,
-            verification_code: code,
-            expires_in_minutes: VERIFICATION_CODE_TTL_MINUTES,
-            locale,
-          } satisfies EmailVerificationCodePayload,
-          timestamp: new Date(),
-        });
-      }),
-    );
+    await withTransaction({
+      callback: (transaction) =>
+        runWithPinnedDatabaseHandle({
+          databaseHandle: transaction as RequestScopedPostgresDatabase,
+          callback: async () => {
+            // Single live code: invalidate the user's prior unused codes so only the newest is redeemable.
+            await this.verificationTokenRepository.invalidateAllForUser(
+              user.id,
+              EMAIL_CODE_TOKEN_TYPE,
+            );
+            await this.verificationTokenRepository.create(
+              EMAIL_CODE_TOKEN_TYPE,
+              user.id,
+              user.email,
+              hashVerificationCode({
+                tokenType: EMAIL_CODE_TOKEN_TYPE,
+                userId: user.id,
+                code,
+              }),
+              expiresAt,
+            );
+            await eventBus.emitStrict({
+              type: AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED,
+              payload: {
+                email: user.email,
+                verification_code: code,
+                expires_in_minutes: VERIFICATION_CODE_TTL_MINUTES,
+                locale,
+              } satisfies EmailVerificationCodePayload,
+              timestamp: new Date(),
+            });
+          },
+        }),
+    });
 
     // A freshly issued code gets a fresh per-user verify budget: clearing the attempt counter here
     // means an attacker who burned the cap cannot keep the legitimate owner locked out — requesting a
@@ -355,18 +366,18 @@ export class EmailLoginService {
     const startedAtMillis = Date.now();
     const user = await this.userService.findByEmail(normalizedEmail);
     if (!user) {
-      await enforceMinimumDuration(startedAtMillis);
+      await enforceMinimumDuration({ startedAtMillis });
       throw new UnauthorizedError('errors:invalidOrExpiredVerificationCode');
     }
 
     const attemptKey = `${EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX}${user.public_id}`;
-    const attempts = await incrementWithExpiryOnFirst(
-      this.redis,
-      attemptKey,
-      VERIFICATION_CODE_TTL_MINUTES * 60,
-    );
+    const attempts = await incrementWithExpiryOnFirst({
+      redis: this.redis,
+      key: attemptKey,
+      ttlSeconds: VERIFICATION_CODE_TTL_MINUTES * 60,
+    });
     if (attempts > VERIFICATION_CODE_MAX_VERIFY_ATTEMPTS) {
-      await enforceMinimumDuration(startedAtMillis);
+      await enforceMinimumDuration({ startedAtMillis });
       throw new UnauthorizedError('errors:invalidOrExpiredVerificationCode');
     }
 
@@ -380,75 +391,82 @@ export class EmailLoginService {
     // (scoped to user_id + EMAIL_CODE) prevents two concurrent logins from both producing a session;
     // on a downstream failure the pinned transaction rolls the consume (and the is_email_verified
     // flip, and the invalidate-others) back, leaving the code redeemable.
-    const result = await withTransaction((transaction) =>
-      runWithPinnedDatabaseHandle(transaction as RequestScopedPostgresDatabase, async () => {
-        // sec-r5-L2 + code scoping: consumeOtpForUser is bound to (user.id, EMAIL_CODE) so a code from
-        // another flow or another user never matches/burns, and its atomic UPDATE prevents two
-        // concurrent logins from both producing a session.
-        // Local escape hatch: while AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED is on, the
-        // well-known STATIC_VERIFICATION_CODE is also accepted, so callers can log in without the
-        // `send-code` round trip. The env schema permits that flag only on the `local` target, so
-        // this branch cannot exist on any deployed runtime (development or production).
-        // Everything protective around it still runs — the user must already exist (resolved
-        // above), the per-user attempt cap has already been charged, and the account-active
-        // assertion below is unchanged. It only skips the stored-code lookup itself.
-        const usedStaticCode =
-          env.AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED &&
-          normalizeVerificationCode(parsed.code) === STATIC_VERIFICATION_CODE;
+    const result = await withTransaction({
+      callback: (transaction) =>
+        runWithPinnedDatabaseHandle({
+          databaseHandle: transaction as RequestScopedPostgresDatabase,
+          callback: async () => {
+            // sec-r5-L2 + code scoping: consumeOtpForUser is bound to (user.id, EMAIL_CODE) so a code from
+            // another flow or another user never matches/burns, and its atomic UPDATE prevents two
+            // concurrent logins from both producing a session.
+            // Local escape hatch: while AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED is on, the
+            // well-known STATIC_VERIFICATION_CODE is also accepted, so callers can log in without the
+            // `send-code` round trip. The env schema permits that flag only on the `local` target, so
+            // this branch cannot exist on any deployed runtime (development or production).
+            // Everything protective around it still runs — the user must already exist (resolved
+            // above), the per-user attempt cap has already been charged, and the account-active
+            // assertion below is unchanged. It only skips the stored-code lookup itself.
+            const usedStaticCode =
+              env.AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED &&
+              normalizeVerificationCode(parsed.code) === STATIC_VERIFICATION_CODE;
 
-        if (!usedStaticCode) {
-          // sec-r5-L2 + code scoping: consumeOtpForUser is bound to (user.id, EMAIL_CODE) so a code from
-          // another flow or another user never matches/burns, and its atomic UPDATE prevents two
-          // concurrent logins from both producing a session.
-          const record = await this.verificationTokenRepository.consumeOtpForUser(
-            user.id,
-            EMAIL_CODE_TOKEN_TYPE,
-            hashVerificationCode({
-              tokenType: EMAIL_CODE_TOKEN_TYPE,
-              userId: user.id,
-              code: parsed.code,
-            }),
-          );
-          if (!record) throw new UnauthorizedError('errors:invalidOrExpiredVerificationCode');
-        }
-        // Single-use across the whole concurrent set: redeeming any one code invalidates the rest
-        // (the just-consumed row already has used_at, so it is excluded by the isNull filter).
-        await this.verificationTokenRepository.invalidateAllForUser(user.id, EMAIL_CODE_TOKEN_TYPE);
-        // sec-U1: reject soft-deleted/suspended users before minting a session (the resolver already
-        // filters soft-deleted; this is belt-and-suspenders against a regression in either layer).
-        assertUserAccountActive({
-          status: user.status,
-          deleted_at: user.deleted_at,
-        });
-        // Completing the code proves the user controls this email, so mark it verified (parity with
-        // OAuth, and the natural completion of email-code auto-signup).
-        if (isFirstVerification) {
-          await this.userService.updateEmailVerified(user.public_id);
-        }
+            if (!usedStaticCode) {
+              // sec-r5-L2 + code scoping: consumeOtpForUser is bound to (user.id, EMAIL_CODE) so a code from
+              // another flow or another user never matches/burns, and its atomic UPDATE prevents two
+              // concurrent logins from both producing a session.
+              const record = await this.verificationTokenRepository.consumeOtpForUser(
+                user.id,
+                EMAIL_CODE_TOKEN_TYPE,
+                hashVerificationCode({
+                  tokenType: EMAIL_CODE_TOKEN_TYPE,
+                  userId: user.id,
+                  code: parsed.code,
+                }),
+              );
+              if (!record) throw new UnauthorizedError('errors:invalidOrExpiredVerificationCode');
+            }
+            // Single-use across the whole concurrent set: redeeming any one code invalidates the rest
+            // (the just-consumed row already has used_at, so it is excluded by the isNull filter).
+            await this.verificationTokenRepository.invalidateAllForUser(
+              user.id,
+              EMAIL_CODE_TOKEN_TYPE,
+            );
+            // sec-U1: reject soft-deleted/suspended users before minting a session (the resolver already
+            // filters soft-deleted; this is belt-and-suspenders against a regression in either layer).
+            assertUserAccountActive({
+              status: user.status,
+              deleted_at: user.deleted_at,
+            });
+            // Completing the code proves the user controls this email, so mark it verified (parity with
+            // OAuth, and the natural completion of email-code auto-signup).
+            if (isFirstVerification) {
+              await this.userService.updateEmailVerified(user.public_id);
+            }
 
-        return completeFirstFactorAuth({
-          user: {
-            id: user.id,
-            public_id: user.public_id,
-            email: user.email,
-            status: user.status,
-            is_email_verified: true,
-            is_mfa_enabled: user.is_mfa_enabled,
+            return completeFirstFactorAuth({
+              user: {
+                id: user.id,
+                public_id: user.public_id,
+                email: user.email,
+                status: user.status,
+                is_email_verified: true,
+                is_mfa_enabled: user.is_mfa_enabled,
+              },
+              ipAddress,
+              userAgent,
+              organizationSettingsService: this.organizationSettingsService,
+              mfaService: this.mfaService,
+              authSessionService: this.authSessionService,
+            });
           },
-          ipAddress,
-          userAgent,
-          organizationSettingsService: this.organizationSettingsService,
-          mfaService: this.mfaService,
-          authSessionService: this.authSessionService,
-        });
-      }),
-    ).catch(async (error: unknown) => {
+        }),
+    }).catch(async (error: unknown) => {
       // Anti-enumeration parity: the known-account failure paths (a wrong/expired code at the
       // `if (!record) throw` above, or a suspended-account rejection) must be timing-indistinguishable
       // from the floored unknown-email and attempt-cap branches — otherwise a fast known-email 401 vs
       // a slow unknown-email 401 leaks account existence (this endpoint's documented guarantee). Floor
       // before re-throwing, outside the transaction so no DB connection is held during the wait.
-      await enforceMinimumDuration(startedAtMillis);
+      await enforceMinimumDuration({ startedAtMillis });
       throw error;
     });
 
@@ -508,11 +526,11 @@ export class EmailLoginService {
     // a guess), not just the route rate limit. Shares the EMAIL_CODE_VERIFY_ATTEMPT counter so login
     // and step-up draw from one budget.
     const attemptKey = `${EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX}${user.public_id}`;
-    const attempts = await incrementWithExpiryOnFirst(
-      this.redis,
-      attemptKey,
-      VERIFICATION_CODE_TTL_MINUTES * 60,
-    );
+    const attempts = await incrementWithExpiryOnFirst({
+      redis: this.redis,
+      key: attemptKey,
+      ttlSeconds: VERIFICATION_CODE_TTL_MINUTES * 60,
+    });
     if (attempts > VERIFICATION_CODE_MAX_VERIFY_ATTEMPTS) {
       throw new UnauthorizedError('errors:invalidOrExpiredVerificationCode');
     }

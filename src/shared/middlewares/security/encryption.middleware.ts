@@ -53,7 +53,7 @@ const encryptionMiddleware: FastifyPluginAsync = async (application) => {
     if (typeof payload !== 'string') return payload;
 
     try {
-      const encrypted = encryptPayload(payload, encryptionKey);
+      const encrypted = encryptPayload({ plaintext: payload, keyHex: encryptionKey });
       return JSON.stringify({
         _encrypted: true,
         kid,

@@ -6,8 +6,9 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     globalRetentionContextMock(callback)) as unknown as (...parameters: unknown[]) => unknown;
   return {
     ...actual,
-    withMaintenanceDatabaseContext: vi.fn((_scope: unknown, ...parameters: unknown[]) =>
-      inner(...parameters),
+    withMaintenanceDatabaseContext: vi.fn(
+      ({ callback, options }: { scope: unknown; callback: unknown; options?: unknown }) =>
+        inner(callback, options),
     ),
   };
 });
@@ -49,7 +50,7 @@ vi.mock('@/infrastructure/queue/worker-runtime/worker-options.js', () => ({
 }));
 
 vi.mock('@/infrastructure/queue/worker-runtime/worker-close.util.js', () => ({
-  buildWorkerHandle: (worker: unknown, queueName: string) => ({
+  buildWorkerHandle: ({ worker, queueName }: { worker: unknown; queueName: string }) => ({
     worker,
     queueName,
     close: async () => undefined,

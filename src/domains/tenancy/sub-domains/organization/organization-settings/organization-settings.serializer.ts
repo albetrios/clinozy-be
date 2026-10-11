@@ -6,16 +6,19 @@ import type { OrganizationSettingsOutput } from './organization-settings.types.j
  * defaults `security_policy` to an empty object, and serialises timestamps
  * as ISO 8601 strings.
  */
-export function serializeOrganizationSettings(
-  organization_public_id: string,
+export function serializeOrganizationSettings({
+  organization_public_id,
+  row,
+}: {
+  organization_public_id: string;
   row: {
     is_email_notifications_enabled: boolean;
     default_locale?: string | null;
     security_policy: unknown;
     created_at: Date;
     updated_at: Date;
-  },
-): OrganizationSettingsOutput {
+  };
+}): OrganizationSettingsOutput {
   const defaultLocale = row.default_locale === 'es' ? 'es' : 'en';
   return {
     organization_id: organization_public_id,

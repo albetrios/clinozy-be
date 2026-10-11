@@ -26,10 +26,13 @@ function sleep(milliseconds: number): Promise<void> {
  * Retries an async operation with exponential backoff and jitter.
  * The full retry loop should run inside a single circuit-breaker `execute()` call.
  */
-export async function retryWithBackoff<T>(
-  operation: () => Promise<T>,
-  options: RetryWithBackoffOptions,
-): Promise<T> {
+export async function retryWithBackoff<T>({
+  operation,
+  options,
+}: {
+  operation: () => Promise<T>;
+  options: RetryWithBackoffOptions;
+}): Promise<T> {
   const {
     maxAttempts,
     baseDelayMs,

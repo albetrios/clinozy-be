@@ -68,9 +68,9 @@ describe('registerDomainWorkers', () => {
     expect(handles).toHaveLength(3);
     for (const queueName of ['test-queue-one', 'test-queue-two']) {
       const worker = { name: queueName };
-      expect(hooks.deadLetter).toHaveBeenCalledWith(worker, queueName);
-      expect(hooks.jobMetrics).toHaveBeenCalledWith(worker, queueName);
-      expect(hooks.heartbeat).toHaveBeenCalledWith(worker, queueName);
+      expect(hooks.deadLetter).toHaveBeenCalledWith({ worker, queueName });
+      expect(hooks.jobMetrics).toHaveBeenCalledWith({ worker, queueName });
+      expect(hooks.heartbeat).toHaveBeenCalledWith({ worker, queueName });
     }
   });
 });

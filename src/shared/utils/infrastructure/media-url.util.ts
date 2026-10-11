@@ -26,11 +26,15 @@ function isAbsoluteHttpUrl(value: string): boolean {
  *   avatars keep working; uploaded media (avatars and organization logos) always stores
  *   the object key.
  */
-export async function resolveStoredMediaReadUrl(
-  objectStorage: ObjectStoragePort,
-  storedValue: string | null,
-  options: { expiresInSeconds?: number } = {},
-): Promise<string | null> {
+export async function resolveStoredMediaReadUrl({
+  objectStorage,
+  storedValue,
+  options = {},
+}: {
+  objectStorage: ObjectStoragePort;
+  storedValue: string | null;
+  options?: { expiresInSeconds?: number } | undefined;
+}): Promise<string | null> {
   if (storedValue === null || storedValue.length === 0) {
     return null;
   }

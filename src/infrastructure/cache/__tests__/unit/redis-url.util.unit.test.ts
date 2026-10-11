@@ -51,22 +51,28 @@ describe('redis-url.parse.util', () => {
 
   it('usesSeparateBullMqRedisHost is false for same host different logical DB', () => {
     expect(
-      usesSeparateBullMqRedisHost('redis://localhost:6379/0', 'redis://localhost:6379/1'),
+      usesSeparateBullMqRedisHost({
+        cacheRedisUrl: 'redis://localhost:6379/0',
+        bullMqRedisUrl: 'redis://localhost:6379/1',
+      }),
     ).toBe(false);
   });
 
   it('usesSeparateBullMqRedisHost is true for different hosts', () => {
     expect(
-      usesSeparateBullMqRedisHost(
-        'redis://cache.example.railway.internal:6379/0',
-        'redis://bullmq.example.railway.internal:6379/0',
-      ),
+      usesSeparateBullMqRedisHost({
+        cacheRedisUrl: 'redis://cache.example.railway.internal:6379/0',
+        bullMqRedisUrl: 'redis://bullmq.example.railway.internal:6379/0',
+      }),
     ).toBe(true);
   });
 
   it('usesSeparateBullMqRedisEndpoint is true for same host different logical DB', () => {
     expect(
-      usesSeparateBullMqRedisEndpoint('redis://localhost:6379/0', 'redis://localhost:6379/1'),
+      usesSeparateBullMqRedisEndpoint({
+        cacheRedisUrl: 'redis://localhost:6379/0',
+        bullMqRedisUrl: 'redis://localhost:6379/1',
+      }),
     ).toBe(true);
   });
 
@@ -94,20 +100,39 @@ describe('redis-url.parse.util', () => {
 
   it('validateProductionRedisTopology allows a dedicated BullMQ endpoint and a shared one', () => {
     // Unset override -> BullMQ shares REDIS_URL (single-instance local dev).
-    expect(validateProductionRedisTopology('redis://cache.example/0', undefined)).toBe(true);
+    expect(
+      validateProductionRedisTopology({
+        _cacheRedisUrl: 'redis://cache.example/0',
+        bullMqRedisUrl: undefined,
+      }),
+    ).toBe(true);
     // Separate logical database on the same host is allowed.
     expect(
-      validateProductionRedisTopology('redis://shared.example/0', 'redis://shared.example/1'),
+      validateProductionRedisTopology({
+        _cacheRedisUrl: 'redis://shared.example/0',
+        bullMqRedisUrl: 'redis://shared.example/1',
+      }),
     ).toBe(true);
     // Dedicated host is allowed (recommended production isolation).
     expect(
-      validateProductionRedisTopology('redis://cache.example/0', 'redis://bullmq.example/0'),
+      validateProductionRedisTopology({
+        _cacheRedisUrl: 'redis://cache.example/0',
+        bullMqRedisUrl: 'redis://bullmq.example/0',
+      }),
     ).toBe(true);
     // Identical endpoint is still valid.
     expect(
-      validateProductionRedisTopology('redis://shared.example/0', 'redis://shared.example/0'),
+      validateProductionRedisTopology({
+        _cacheRedisUrl: 'redis://shared.example/0',
+        bullMqRedisUrl: 'redis://shared.example/0',
+      }),
     ).toBe(true);
     // A non-parseable override is rejected.
-    expect(validateProductionRedisTopology('redis://cache.example/0', 'not a url')).toBe(false);
+    expect(
+      validateProductionRedisTopology({
+        _cacheRedisUrl: 'redis://cache.example/0',
+        bullMqRedisUrl: 'not a url',
+      }),
+    ).toBe(false);
   });
 });

@@ -15,13 +15,17 @@ export function createPermissionController(service: PermissionService) {
       // Already serialized by the service, which memoizes the response shape rather than the raw
       // rows — so a repeat read skips the serialize too, and the memo holds nothing but JSON.
       const data = await service.list();
-      const payload = paginatedResponse(data, getRequestIdentifier(request), {
-        per_page: data.length,
-        next: null,
-        has_more: false,
-        estimated_total: data.length,
+      const payload = paginatedResponse({
+        data,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: data.length,
+          next: null,
+          has_more: false,
+          estimated_total: data.length,
+        },
       });
-      if (applyCatalogCacheHeaders(request, reply, payload)) {
+      if (applyCatalogCacheHeaders({ request, reply, payload })) {
         return reply;
       }
       return payload;

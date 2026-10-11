@@ -52,10 +52,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -150,11 +152,11 @@ describe('WebauthnService.verifyAuthentication', () => {
 
     // The challenge must be consumed from the AUTHENTICATION namespace — a registration
     // challenge replayed here would otherwise mint a session.
-    expect(consumeChallengeMock).toHaveBeenCalledWith(
-      expect.anything(),
-      'a'.repeat(64),
-      'authentication',
-    );
+    expect(consumeChallengeMock).toHaveBeenCalledWith({
+      redis: expect.anything(),
+      challengeToken: 'a'.repeat(64),
+      expectedKind: 'authentication',
+    });
 
     // The verifier is fed the stored credential, not anything client-supplied: decoded
     // public key bytes, the persisted counter, and user verification required.
@@ -277,12 +279,12 @@ describe('WebauthnService.generateRegistrationOptions', () => {
     // sec-r4-A2: enrollment must demand UV, matching requireUserVerification at verify time.
     expect(options.authenticatorSelection.userVerification).toBe('required');
 
-    expect(createChallengeMock).toHaveBeenCalledWith(
-      expect.anything(),
-      'registration',
-      ACTIVE_USER.public_id,
-      'reg-challenge',
-    );
+    expect(createChallengeMock).toHaveBeenCalledWith({
+      redis: expect.anything(),
+      kind: 'registration',
+      userPublicId: ACTIVE_USER.public_id,
+      challenge: 'reg-challenge',
+    });
     expect(result.challenge_token).toBe('challenge-token');
   });
 
@@ -330,11 +332,11 @@ describe('WebauthnService.verifyRegistration', () => {
       body: registrationBody,
     });
 
-    expect(consumeChallengeMock).toHaveBeenCalledWith(
-      expect.anything(),
-      'b'.repeat(64),
-      'registration',
-    );
+    expect(consumeChallengeMock).toHaveBeenCalledWith({
+      redis: expect.anything(),
+      challengeToken: 'b'.repeat(64),
+      expectedKind: 'registration',
+    });
     const created = vi.mocked(credentialRepository.createCredential).mock.calls[0]?.[0] as {
       user_id: number;
       credential_id: string;

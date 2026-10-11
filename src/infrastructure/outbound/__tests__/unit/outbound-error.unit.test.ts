@@ -9,10 +9,10 @@ import {
 
 describe('outbound-error', () => {
   it('classifies CircuitBreakerOpenError as circuit_open with retryAfterMs', () => {
-    const error = classifyOutboundError(
-      new CircuitBreakerOpenError('stripe', 15_000, 'open'),
-      'stripe',
-    );
+    const error = classifyOutboundError({
+      error: new CircuitBreakerOpenError('stripe', 15_000, 'open'),
+      integration: 'stripe',
+    });
     expect(error).toBeInstanceOf(ExternalServiceError);
     expect(error.category).toBe('circuit_open');
     expect(error.retryAfterMs).toBe(15_000);
@@ -21,7 +21,7 @@ describe('outbound-error', () => {
   it('classifies TimeoutError as timeout', () => {
     const timeoutError = new Error('The operation timed out');
     timeoutError.name = 'TimeoutError';
-    const error = classifyOutboundError(timeoutError, 'resend');
+    const error = classifyOutboundError({ error: timeoutError, integration: 'resend' });
     expect(error.category).toBe('timeout');
   });
 
@@ -44,7 +44,10 @@ describe('outbound-error', () => {
   });
 
   it('ExternalServiceError carries Retry-After when the dependency says when to come back', () => {
-    const error = classifyOutboundError(new CircuitBreakerOpenError('s3', 2_400, 'open'), 's3');
+    const error = classifyOutboundError({
+      error: new CircuitBreakerOpenError('s3', 2_400, 'open'),
+      integration: 's3',
+    });
     expect(error.retryAfterSeconds).toBe(3);
   });
 

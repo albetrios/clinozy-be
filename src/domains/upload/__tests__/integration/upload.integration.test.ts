@@ -358,9 +358,12 @@ describe('Upload Domain — Integration', () => {
         file_size: 1024,
       });
       // The storage verdict is checked against what the client declared at create time.
-      expect(objectStorageMock.verifyUploadedObject).toHaveBeenCalledWith(pendingKey, {
-        contentType: 'image/png',
-        contentLength: 1024,
+      expect(objectStorageMock.verifyUploadedObject).toHaveBeenCalledWith({
+        key: pendingKey,
+        expected: {
+          contentType: 'image/png',
+          contentLength: 1024,
+        },
       });
       expect(objectStorageMock.copyObject).toHaveBeenCalledWith(
         expect.objectContaining({ sourceKey: pendingKey, destinationKey: finalKey }),
@@ -467,7 +470,10 @@ describe('Upload Domain — Integration', () => {
       const token = await generateTestToken({ userId: user.public_id });
       const idempotencyKey = `idem-${randomUUID()}`;
       // No organization in the token -> the middleware scopes the key as `none:<userId>`.
-      const cacheKey = buildIdempotencyCacheKey(idempotencyKey, { userId: user.public_id });
+      const cacheKey = buildIdempotencyCacheKey({
+        idempotencyKey,
+        scope: { userId: user.public_id },
+      });
       await redisConnection.set(
         cacheKey,
         buildInFlightIdempotencyEntry({

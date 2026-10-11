@@ -41,10 +41,13 @@ interface SerializeAuthSessionOptions {
 }
 
 /** Maps a raw session row to its safe public shape, deriving device/browser and the current-session flag. */
-export function serializeAuthSession(
-  row: AuthSessionRowLike,
-  options: SerializeAuthSessionOptions,
-): AuthSessionOutput {
+export function serializeAuthSession({
+  row,
+  options,
+}: {
+  row: AuthSessionRowLike;
+  options: SerializeAuthSessionOptions;
+}): AuthSessionOutput {
   const { device, browser } = parseUserAgent(row.user_agent);
   return {
     id: row.public_id,
@@ -60,9 +63,12 @@ export function serializeAuthSession(
 }
 
 /** Maps a list of raw session rows to their safe public shapes. */
-export function serializeAuthSessions(
-  rows: AuthSessionRowLike[],
-  options: SerializeAuthSessionOptions,
-): AuthSessionOutput[] {
-  return rows.map((row) => serializeAuthSession(row, options));
+export function serializeAuthSessions({
+  rows,
+  options,
+}: {
+  rows: AuthSessionRowLike[];
+  options: SerializeAuthSessionOptions;
+}): AuthSessionOutput[] {
+  return rows.map((row) => serializeAuthSession({ row, options }));
 }

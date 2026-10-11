@@ -90,10 +90,10 @@ describe('UploadService pending-quota concurrency (database)', () => {
     }
 
     // Exactly `PENDING_CAP` rows were persisted, and presigned URLs were minted only for them.
-    const pendingCount = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
-      () => repository.countPendingByUserId(user.id),
-    );
+    const pendingCount = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+      callback: () => repository.countPendingByUserId(user.id),
+    });
     expect(pendingCount).toBe(PENDING_CAP);
     expect(objectStorage.createPresignedUploadUrl).toHaveBeenCalledTimes(PENDING_CAP);
   });

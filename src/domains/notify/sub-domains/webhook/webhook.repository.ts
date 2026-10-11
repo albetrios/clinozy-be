@@ -55,11 +55,11 @@ export class WebhookRepository {
       isNull(webhooks.deleted_at),
     ];
     const countWhere = and(...filterConditions);
-    const cursorCondition = buildAscendingCreatedAtIdCursorCondition(
-      webhooks.created_at,
-      webhooks.id,
-      parseListCursor(after),
-    );
+    const cursorCondition = buildAscendingCreatedAtIdCursorCondition({
+      createdAtColumn: webhooks.created_at,
+      idColumn: webhooks.id,
+      cursor: parseListCursor(after),
+    });
     const where =
       cursorCondition !== undefined ? and(...filterConditions, cursorCondition) : countWhere;
 
@@ -82,7 +82,7 @@ export class WebhookRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    return finishKeysetPage(fetchedRows, { limit, total });
+    return finishKeysetPage({ rows: fetchedRows, args: { limit, total } });
   }
 
   /**
@@ -106,7 +106,10 @@ export class WebhookRepository {
    * {@link countActiveByOrganization}.
    */
   async acquireCreationQuotaLock(organization_id: number): Promise<void> {
-    await acquireResourceQuotaLock(RESOURCE_QUOTA_LOCK_NAMESPACE.WEBHOOK, organization_id);
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.WEBHOOK,
+      key: organization_id,
+    });
   }
 
   async listEnabledSubscribedToEvent(
@@ -126,11 +129,11 @@ export class WebhookRepository {
     let after: string | undefined;
 
     while (true) {
-      const cursorCondition = buildAscendingCreatedAtIdCursorCondition(
-        webhooks.created_at,
-        webhooks.id,
-        parseListCursor(after),
-      );
+      const cursorCondition = buildAscendingCreatedAtIdCursorCondition({
+        createdAtColumn: webhooks.created_at,
+        idColumn: webhooks.id,
+        cursor: parseListCursor(after),
+      });
       const where =
         cursorCondition !== undefined
           ? and(...filterConditions, cursorCondition)
@@ -218,36 +221,38 @@ export class WebhookRepository {
   }
 
   async create(data: WebhookCreateData) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('webhook');
-      const rows = await getRequestDatabase()
-        .insert(webhooks)
-        .values({
-          public_id,
-          organization_id: data.organization_id,
-          url: data.url,
-          encrypted_secret: data.encrypted_secret,
-          events: data.events as Record<string, unknown>,
-          is_enabled: data.is_enabled ?? true,
-          created_by_user_id: data.created_by_user_id ?? undefined,
-        })
-        .onConflictDoUpdate({
-          target: [webhooks.organization_id, webhooks.url],
-          set: {
-            deleted_at: null,
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const public_id = generatePublicId('webhook');
+        const rows = await getRequestDatabase()
+          .insert(webhooks)
+          .values({
+            public_id,
+            organization_id: data.organization_id,
+            url: data.url,
             encrypted_secret: data.encrypted_secret,
             events: data.events as Record<string, unknown>,
             is_enabled: data.is_enabled ?? true,
-            // route-audit C3: greatest(created_at, now()) — the revived row's created_at is the
-            // original DB-clock value; a bare JS `new Date()` here could be < created_at under
-            // host/DB clock skew and violate chk_webhooks_updated. Reuses the same expression as
-            // update()/softDelete().
-            updated_at: webhookUpdatedAtTimestamp,
-            updated_by_user_id: data.created_by_user_id ?? undefined,
-          },
-        })
-        .returning();
-      return rows[0]!;
+            created_by_user_id: data.created_by_user_id ?? undefined,
+          })
+          .onConflictDoUpdate({
+            target: [webhooks.organization_id, webhooks.url],
+            set: {
+              deleted_at: null,
+              encrypted_secret: data.encrypted_secret,
+              events: data.events as Record<string, unknown>,
+              is_enabled: data.is_enabled ?? true,
+              // route-audit C3: greatest(created_at, now()) — the revived row's created_at is the
+              // original DB-clock value; a bare JS `new Date()` here could be < created_at under
+              // host/DB clock skew and violate chk_webhooks_updated. Reuses the same expression as
+              // update()/softDelete().
+              updated_at: webhookUpdatedAtTimestamp,
+              updated_by_user_id: data.created_by_user_id ?? undefined,
+            },
+          })
+          .returning();
+        return rows[0]!;
+      },
     });
   }
 

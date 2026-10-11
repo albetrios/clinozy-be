@@ -36,9 +36,9 @@ async function persistActiveSessionForToken(
   // The session row itself is written through the repository inside the owner's context —
   // the same shape `AuthSessionService` uses in production, so the fixture exercises the real
   // write path rather than out-privileging the policy that guards it.
-  const session = await withAppDatabaseContext(
-    PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-    () =>
+  const session = await withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+    callback: () =>
       sessionRepository.create({
         user_id: user.id,
         token_hash: tokenHash,
@@ -47,7 +47,7 @@ async function persistActiveSessionForToken(
         user_agent: 'vitest',
         expires_at: expiresAt,
       }),
-  );
+  });
   return session.public_id;
 }
 

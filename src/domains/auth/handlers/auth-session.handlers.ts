@@ -46,10 +46,13 @@ export function createAuthSessionHandlers({
       await authService.logout(token);
 
       if (actorUserPublicId) {
-        await recordScopedAuditEvent(request, {
-          actorUserPublicId,
-          action: 'auth.logout',
-          resource_type: 'session',
+        await recordScopedAuditEvent({
+          request,
+          input: {
+            actorUserPublicId,
+            action: 'auth.logout',
+            resource_type: 'session',
+          },
         });
       }
 
@@ -60,10 +63,13 @@ export function createAuthSessionHandlers({
     listSessions: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       const data = await authSessionService.list(auth.userId);
-      return successResponse(
-        serializeAuthSessions(data, { currentSessionPublicId: auth.sessionPublicId ?? null }),
-        getRequestIdentifier(request),
-      );
+      return successResponse({
+        data: serializeAuthSessions({
+          rows: data,
+          options: { currentSessionPublicId: auth.sessionPublicId ?? null },
+        }),
+        request_id: getRequestIdentifier(request),
+      });
     },
     revokeSession: async (
       request: FastifyRequest<{ Params: { session_id: string } }>,
@@ -83,11 +89,14 @@ export function createAuthSessionHandlers({
         userPublicId: auth.userId,
         sessionPublicId: request.params.session_id,
       });
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'auth.session.revoke',
-        resource_type: 'session',
-        metadata: { session_public_id: request.params.session_id },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'auth.session.revoke',
+          resource_type: 'session',
+          metadata: { session_public_id: request.params.session_id },
+        },
       });
       return reply.code(204).send();
     },
@@ -103,8 +112,15 @@ export function createAuthSessionHandlers({
         sessionPublicId: parsedSession.sessionPublicId,
         refreshSecret: parsedSession.refreshSecret,
       });
-      setSessionCookie(reply, parsedSession.sessionPublicId, data.refresh_secret);
-      return successResponse(AuthSerializer.accessToken(data), getRequestIdentifier(request));
+      setSessionCookie({
+        reply,
+        sessionPublicId: parsedSession.sessionPublicId,
+        refreshSecret: data.refresh_secret,
+      });
+      return successResponse({
+        data: AuthSerializer.accessToken(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
     switchToPersonalOrganization: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
@@ -125,16 +141,19 @@ export function createAuthSessionHandlers({
       });
       // A switch re-mints the access token with a different `org` claim (tenant-context change), so
       // lateral movement between tenants on one session is traceable.
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'auth.organization.switch',
-        resource_type: 'session',
-        metadata: { session_public_id: auth.sessionPublicId, target: 'personal' },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'auth.organization.switch',
+          resource_type: 'session',
+          metadata: { session_public_id: auth.sessionPublicId, target: 'personal' },
+        },
       });
-      return successResponse(
-        AuthSerializer.accessTokenWithActiveOrganization(data, context),
-        getRequestIdentifier(request),
-      );
+      return successResponse({
+        data: AuthSerializer.accessTokenWithActiveOrganization({ token: data, context }),
+        request_id: getRequestIdentifier(request),
+      });
     },
     switchToOrganization: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
@@ -158,19 +177,22 @@ export function createAuthSessionHandlers({
       });
       // A switch re-mints the access token with a different `org` claim (tenant-context change), so
       // lateral movement between tenants on one session is traceable.
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'auth.organization.switch',
-        resource_type: 'session',
-        metadata: {
-          session_public_id: auth.sessionPublicId,
-          target_organization_id: organizationId,
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'auth.organization.switch',
+          resource_type: 'session',
+          metadata: {
+            session_public_id: auth.sessionPublicId,
+            target_organization_id: organizationId,
+          },
         },
       });
-      return successResponse(
-        AuthSerializer.accessTokenWithActiveOrganization(data, context),
-        getRequestIdentifier(request),
-      );
+      return successResponse({
+        data: AuthSerializer.accessTokenWithActiveOrganization({ token: data, context }),
+        request_id: getRequestIdentifier(request),
+      });
     },
     revokeAllSessions: async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = requireAuth(request);
@@ -184,10 +206,13 @@ export function createAuthSessionHandlers({
         userPublicId: auth.userId,
         currentAccessToken,
       });
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'auth.session.revoke_all',
-        resource_type: 'session',
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'auth.session.revoke_all',
+          resource_type: 'session',
+        },
       });
 
       // sec-r4-A1: do NOT clear the session cookie here. revokeAllSessionsExceptCurrent

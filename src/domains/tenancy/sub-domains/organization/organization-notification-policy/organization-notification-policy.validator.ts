@@ -10,14 +10,14 @@ import {
 export function validateCreateOrganizationNotificationPolicy(
   data: unknown,
 ): CreateOrganizationNotificationPolicyInput {
-  return parseWithSchema(createOrganizationNotificationPolicyDto, data);
+  return parseWithSchema({ schema: createOrganizationNotificationPolicyDto, data });
 }
 
 /** Parses raw `PATCH /organization/notification-policies/:notification_policy_id` body via {@link updateOrganizationNotificationPolicyDto}; throws `ValidationError('errors:invalidInput')` on failure. */
 export function validateUpdateOrganizationNotificationPolicy(
   data: unknown,
 ): UpdateOrganizationNotificationPolicyInput {
-  return parseWithSchema(updateOrganizationNotificationPolicyDto, data);
+  return parseWithSchema({ schema: updateOrganizationNotificationPolicyDto, data });
 }
 
 // sec-T5: `validatePolicyIdParam` (numeric coercion) was removed. The

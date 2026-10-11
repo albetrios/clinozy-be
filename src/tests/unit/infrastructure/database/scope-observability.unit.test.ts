@@ -39,10 +39,10 @@ describe('scope observability enrichments (describe, never decide)', () => {
       .spyOn(trace, 'getActiveSpan')
       .mockReturnValue({ setAttribute } as unknown as ReturnType<typeof trace.getActiveSpan>);
     try {
-      await withMaintenanceDatabaseContext(
-        MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
-        async () => undefined,
-      );
+      await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+        callback: async () => undefined,
+      });
     } catch {
       // The mocked pool may reject deeper in the runtime — attributes are set first.
     }

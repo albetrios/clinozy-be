@@ -20,7 +20,7 @@ function isPublicApiV1Request(url: string): boolean {
 const apiVersioningMiddleware: FastifyPluginAsync = async (application) => {
   application.addHook('onSend', async (request, reply, payload) => {
     if (isPublicApiV1Request(request.url)) {
-      applyPublicApiVersionHeader(reply);
+      applyPublicApiVersionHeader({ reply });
     }
     return payload;
   });

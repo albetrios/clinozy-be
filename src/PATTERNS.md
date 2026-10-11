@@ -15,7 +15,7 @@ Prevent cross-tenant data leaks. Every read and write performed under an organiz
 ### Where it lives
 
 - HTTP layer: [src/shared/middlewares/core/auth.middleware.ts](src/shared/middlewares/core/auth.middleware.ts) — verifies the JWT / API key and eagerly attaches `request.principalScope` (plus the claim-derived `request.organizationId` decoration). The **authoritative** active organization is the signed `org` JWT claim; routes carry no `{organization_id}` path segment and the legacy `X-Organization-Id` header was removed.
-- Database layer: [src/infrastructure/database/contexts/database-context.ts](src/infrastructure/database/contexts/database-context.ts) — `withAppDatabaseContext(scope, …)` opens a Drizzle transaction and sets the identity GUCs (`app.current_organization_public_id` / `app.current_user_public_id`) from the token-minted principal scope in one `set_config` statement. RLS policies on organization-scoped tables read those GUCs.
+- Database layer: [src/infrastructure/database/contexts/database-context.ts](src/infrastructure/database/contexts/database-context.ts) — `withAppDatabaseContext({ scope, callback })` opens a Drizzle transaction and sets the identity GUCs (`app.current_organization_public_id` / `app.current_user_public_id`) from the token-minted principal scope in one `set_config` statement. RLS policies on organization-scoped tables read those GUCs.
 - Worker layer: [src/infrastructure/queue/worker-runtime/worker-processor.util.ts](src/infrastructure/queue/worker-runtime/worker-processor.util.ts) — `runOrganizationScopedWorkerJob` requires `organizationPublicId` in the job payload and wraps the processor body in `withAppDatabaseContext` (with a job-minted principal scope) so RLS sees the same GUC the HTTP layer would have set.
 
 ### Implementation
@@ -32,7 +32,7 @@ sequenceDiagram
   Auth->>Auth: verify JWT; attach request.principalScope
   Ctl->>Ctl: requireOrganizationScope(request) — 403 without an organization
   Ctl->>Svc: service.method(scope, dto)
-  Svc->>Ctx: withAppDatabaseContext(scope, fn)
+  Svc->>Ctx: withAppDatabaseContext({ scope, callback })
   Ctx->>DB: BEGIN; SET LOCAL app.current_organization_public_id
   Ctx->>Svc: pinned databaseHandle (transaction)
   Svc->>DB: SELECT/INSERT/UPDATE (RLS filters by organization)
@@ -44,7 +44,7 @@ The same context is reused if a worker is already running inside one (no nested 
 ### How to apply
 
 - New tenant-scoped repository: scope every query by `organization_id`; a list builds its page with `finishKeysetPage`. Any RLS-eligible table also needs an RLS policy in its migration.
-- New tenant-scoped service method: wrap database I/O in `withAppDatabaseContext(scope, fn)` — the scope is attached by the auth middleware, narrowed at the controller (`requireOrganizationScope(request)`), and relayed through the service. **Network I/O (Stripe, S3, Resend) MUST stay outside** the wrapper to avoid holding a pool checkout across remote round trips — enforced by `pnpm test:global` (`rls-context-network-isolation.global.test.ts`).
+- New tenant-scoped service method: wrap database I/O in `withAppDatabaseContext({ scope, callback })` — the scope is attached by the auth middleware, narrowed at the controller (`requireOrganizationScope(request)`), and relayed through the service. **Network I/O (Stripe, S3, Resend) MUST stay outside** the wrapper to avoid holding a pool checkout across remote round trips — enforced by `pnpm test:global` (`rls-context-network-isolation.global.test.ts`).
 - New worker job: use `runOrganizationScopedWorkerJob`; never call `getRequestDatabase()` from a `*.worker.ts` / `*.processor.ts` (enforced by global tests).
 - Outside a context, `getRequestDatabase()` counts the access (`database_unscoped_query_total`) — a FORCE RLS query with no GUC silently returns zero rows. A query that **cannot** depend on a context — a `SECURITY DEFINER` resolver (`<schema>.resolve_*`) or the `tenancy.permissions` catalog read — uses `getContextFreeDatabase()` instead, so a non-zero counter always means a real missing context. Confined per call site by `context-free-database-usage.policy.unit.test.ts`.
 - New tenant-scoped endpoint: the active organization comes from the `org` JWT claim (no `{organization_id}` path segment); narrow `request.principalScope` with `requireOrganizationScope(request)` at the controller and pass it into `withAppDatabaseContext`.
@@ -58,18 +58,18 @@ Every security- or governance-relevant write stages a row in the `audit.outbox` 
 ### Where it lives
 
 - Domain: [src/domains/audit/](src/domains/audit/) owns the audit write path and the `audit.outbox` → `audit.logs` drain worker.
-- Caller helper: [src/shared/utils/infrastructure/audit-request-context.util.ts](src/shared/utils/infrastructure/audit-request-context.util.ts) — `recordScopedAuditEvent(request, input)` fills in IP / user-agent / actor fields and stages the outbox row. It wraps [audit-record.util.ts](src/shared/utils/infrastructure/audit-record.util.ts)'s `recordAuditEvent`, which swallows + logs failures so callers don't need a try/catch.
+- Caller helper: [src/shared/utils/infrastructure/audit-request-context.util.ts](src/shared/utils/infrastructure/audit-request-context.util.ts) — `recordScopedAuditEvent({ request, input })` fills in IP / user-agent / actor fields and stages the outbox row. It wraps [audit-record.util.ts](src/shared/utils/infrastructure/audit-record.util.ts)'s `recordAuditEvent`, which swallows + logs failures so callers don't need a try/catch.
 
 ### Implementation
 
 1. Handler performs its primary write (e.g. an organization or auth-method mutation).
-2. The handler calls `recordScopedAuditEvent(request, { <actor>, action, resource_type, resource_id, organizationPublicId, severity, metadata })` — network context (IP, user-agent) is filled in by the helper. `<actor>` is exactly one of `actorUserPublicId`, `actorApiKeyPublicId` (spread `buildAuditActorFields(auth)` for a request principal, which may be either) or `anonymousActor: true` (pre-authentication events only, e.g. `auth.login_failure`). The `AuditActor` type makes it required — an actorless call does not compile.
+2. The handler calls `recordScopedAuditEvent({ request, input: { <actor>, action, resource_type, resource_id, organizationPublicId, severity, metadata } })` — network context (IP, user-agent) is filled in by the helper. `<actor>` is exactly one of `actorUserPublicId`, `actorApiKeyPublicId` (spread `buildAuditActorFields(auth)` for a request principal, which may be either) or `anonymousActor: true` (pre-authentication events only, e.g. `auth.login_failure`). The `AuditActor` type makes it required — an actorless call does not compile.
 3. `AuditService.record` stages the row in `audit.outbox` in its own unit of work after the primary write (no synchronous id lookup). The audit drain worker later resolves internal ids and inserts into `audit.logs`.
 4. Errors are caught and logged at `warn`; the originating request still returns success.
 
 ### How to apply
 
-- Adding a security-relevant route: name the action `<domain>.<resource>.<verb>` and add it to the catalog in [docs/reference/security/audit-logs.md](docs/reference/security/audit-logs.md), call `recordScopedAuditEvent(request, {...})` after the primary write, populate `metadata` with the public ids and operation parameters that future investigators will need.
+- Adding a security-relevant route: name the action `<domain>.<resource>.<verb>` and add it to the catalog in [docs/reference/security/audit-logs.md](docs/reference/security/audit-logs.md), call `recordScopedAuditEvent({ request, input: {...} })` after the primary write, populate `metadata` with the public ids and operation parameters that future investigators will need.
 - Severity defaults to `INFO`. Use `WARNING` for failed-but-recorded actions (e.g. permission denied) and `CRITICAL` for global-admin lifecycle events.
 
 ## idempotency
@@ -152,7 +152,7 @@ Postgres Row-Level Security is the **defense-in-depth** layer for tenant isolati
 
 - HTTP requests get RLS per unit of work: `withAppDatabaseContext` opens a short transaction with `SET LOCAL app.current_organization_public_id = $1`.
 - Workers get RLS via `runOrganizationScopedWorkerJob` which **requires** `organizationPublicId` in the job payload and opens its own `withAppDatabaseContext` transaction (job-minted organization scope). Workers are forbidden from importing `database-context-runtime.ts` (enforced by `worker-database-guard.unit.test.ts` and global tests).
-- Global-scope workers (cross-organization sweeps) use `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, …)`, which sets a different GUC that RLS policies recognize as "global retention" — strictly limited to retention/cleanup operations.
+- Global-scope workers (cross-organization sweeps) use `withMaintenanceDatabaseContext({ scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, callback })`, which sets a different GUC that RLS policies recognize as "global retention" — strictly limited to retention/cleanup operations.
 
 ### Each context grants only what a policy names
 
@@ -284,7 +284,7 @@ sequenceDiagram
     R-->>S: value
     S-->>C: 200 (no pool checkout at all)
   else miss, or tombstone, or Redis down
-    S->>PG: withAppDatabaseContext(scope, …)
+    S->>PG: withAppDatabaseContext({ scope, callback })
     PG-->>S: value
     S->>R: SET … EX ttl NX (loses to a racing invalidation)
     S-->>C: 200

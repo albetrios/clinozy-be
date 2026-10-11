@@ -102,7 +102,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
     // table that should be FORCE RLS but is not (or one that is forced but undeclared) fails here
     // instead of silently no-op'ing the worker guard and the matrix below.
     const databaseTables = await listForceRlsTablesFromDatabase();
-    const { missing, extra } = diffForceRlsTables(databaseTables);
+    const { missing, extra } = diffForceRlsTables({ databaseTables });
 
     expect(
       missing,
@@ -130,10 +130,10 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
     const fixture = await seedRlsMatrixFixtures();
 
     const tablesToCheck = [
-      tableKey('tenancy', 'memberships'),
-      tableKey('notify', 'webhooks'),
-      tableKey('billing', 'subscriptions'),
-      tableKey('upload', 'uploads'),
+      tableKey({ schemaName: 'tenancy', tableName: 'memberships' }),
+      tableKey({ schemaName: 'notify', tableName: 'webhooks' }),
+      tableKey({ schemaName: 'billing', tableName: 'subscriptions' }),
+      tableKey({ schemaName: 'upload', tableName: 'uploads' }),
     ];
 
     for (const key of tablesToCheck) {
@@ -146,13 +146,16 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
   });
 
   const crudMatrixTables = EXPECTED_FORCE_RLS_TABLES.filter(
-    (table) => !TENANT_CRUD_EXCLUDED_POLICY_SHAPES.has(tableKey(table.schemaName, table.tableName)),
+    (table) =>
+      !TENANT_CRUD_EXCLUDED_POLICY_SHAPES.has(
+        tableKey({ schemaName: table.schemaName, tableName: table.tableName }),
+      ),
   );
 
   describe.each(crudMatrixTables)(
     'tenant isolation CRUD ($schemaName.$tableName)',
     ({ schemaName, tableName }) => {
-      const key = tableKey(schemaName, tableName);
+      const key = tableKey({ schemaName: schemaName, tableName: tableName });
 
       it('should not read other tenant rows (SELECT count)', async () => {
         const fixture = await seedRlsMatrixFixtures();
@@ -251,17 +254,25 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
       it('returns zero rows when the user context is unset', async () => {
         await seedUserScopedRlsFixtures();
         const count = await countRowsAsUser(schemaName, tableName, null);
-        expect(count, `${tableKey(schemaName, tableName)} with unset user context`).toBe(0);
+        expect(
+          count,
+          `${tableKey({ schemaName: schemaName, tableName: tableName })} with unset user context`,
+        ).toBe(0);
       });
 
       it('shows only the current user rows and none of another user (cross-user denial)', async () => {
         const fixture = await seedUserScopedRlsFixtures();
 
         const visibleForA = await countRowsAsUser(schemaName, tableName, fixture.userAPublicId);
-        expect(visibleForA, `${tableKey(schemaName, tableName)} own rows`).toBe(1);
+        expect(
+          visibleForA,
+          `${tableKey({ schemaName: schemaName, tableName: tableName })} own rows`,
+        ).toBe(1);
 
         // User A must not see user B's row even by primary key.
-        const rowIds = fixture.rowIdsByTable.get(tableKey(schemaName, tableName))!;
+        const rowIds = fixture.rowIdsByTable.get(
+          tableKey({ schemaName: schemaName, tableName: tableName }),
+        )!;
         await executeAsClinozyBeAppUser(fixture.userAPublicId, async (transaction) => {
           const qualified = `"${schemaName}"."${tableName}"`;
           const idColumn = tableName === 'user_settings' ? 'user_id' : 'id';
@@ -273,9 +284,10 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
           const rows = Array.isArray(result)
             ? result
             : ((result as { rows?: { count: number }[] }).rows ?? []);
-          expect(Number(rows[0]?.count ?? 0), `${tableKey(schemaName, tableName)} cross-user`).toBe(
-            0,
-          );
+          expect(
+            Number(rows[0]?.count ?? 0),
+            `${tableKey({ schemaName: schemaName, tableName: tableName })} cross-user`,
+          ).toBe(0);
         });
       });
     },
@@ -295,7 +307,9 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
       const ownCredentials = await countRowsAsUser('auth', 'auth_methods', fixture.userAPublicId);
       expect(ownCredentials).toBe(1);
 
-      const rowIds = fixture.rowIdsByTable.get(tableKey('auth', 'auth_methods'))!;
+      const rowIds = fixture.rowIdsByTable.get(
+        tableKey({ schemaName: 'auth', tableName: 'auth_methods' }),
+      )!;
       await executeAsClinozyBeAppUser(fixture.userAPublicId, async (transaction) => {
         const result = await transaction.execute(
           drizzleSql.raw(

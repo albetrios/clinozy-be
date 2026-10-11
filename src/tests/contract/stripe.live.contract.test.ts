@@ -75,9 +75,9 @@ describe('Stripe sandbox (live)', () => {
     expect(StripeSubscriptionApiResponseContractSchema.parse(subscription).status).toBe(
       'incomplete',
     );
-    expect(await retrieveStripeSubscriptionPaymentClientSecret(subscription.id)).toMatch(
-      /_secret_/,
-    );
+    expect(
+      await retrieveStripeSubscriptionPaymentClientSecret({ subscriptionId: subscription.id }),
+    ).toMatch(/_secret_/);
 
     // Stand in for Stripe.js: pay the first invoice with the test card.
     const invoiceId =
@@ -89,22 +89,29 @@ describe('Stripe sandbox (live)', () => {
     const active = await retrieveStripeSubscriptionSnapshot(subscription.id);
     expect(StripeSubscriptionApiResponseContractSchema.parse(active).status).toBe('active');
 
-    const resized = await updateStripeSubscriptionQuantity(subscription.id, 2, {
-      idempotencyKey: `contract-live-quantity-${runId}`,
+    const resized = await updateStripeSubscriptionQuantity({
+      subscriptionId: subscription.id,
+      quantity: 2,
+      options: {
+        idempotencyKey: `contract-live-quantity-${runId}`,
+      },
     });
     expect(
       StripeSubscriptionApiResponseContractSchema.parse(resized).items?.data[0]?.quantity,
     ).toBe(2);
 
-    const scheduled = await cancelStripeSubscription(subscription.id);
+    const scheduled = await cancelStripeSubscription({ subscriptionId: subscription.id });
     expect(StripeSubscriptionApiResponseContractSchema.parse(scheduled).cancel_at_period_end).toBe(
       true,
     );
-    const resumed = await resumeStripeSubscription(subscription.id);
+    const resumed = await resumeStripeSubscription({ subscriptionId: subscription.id });
     expect(StripeSubscriptionApiResponseContractSchema.parse(resumed).cancel_at_period_end).toBe(
       false,
     );
-    const canceled = await cancelStripeSubscription(subscription.id, false);
+    const canceled = await cancelStripeSubscription({
+      subscriptionId: subscription.id,
+      cancelAtPeriodEnd: false,
+    });
     expect(StripeSubscriptionApiResponseContractSchema.parse(canceled).status).toBe('canceled');
   });
 });

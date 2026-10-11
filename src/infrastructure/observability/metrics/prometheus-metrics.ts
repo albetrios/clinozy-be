@@ -260,12 +260,17 @@ export function ensurePrometheusMetricsRegistered(registry: Registry): void {
  * `http_request_duration_seconds` (histogram) keyed by method/route/status.
  * No-op when metrics are disabled or registration has not yet happened.
  */
-export function recordHttpRequest(
-  method: string,
-  route: string,
-  statusCode: number,
-  durationSeconds: number,
-): void {
+export function recordHttpRequest({
+  method,
+  route,
+  statusCode,
+  durationSeconds,
+}: {
+  method: string;
+  route: string;
+  statusCode: number;
+  durationSeconds: number;
+}): void {
   if (!isMetricsEnabled()) return;
   ensurePrometheusMetricsRegistered(getMetricsRegistry());
   if (!(httpRequestsTotal && httpRequestDurationSeconds)) return;
@@ -284,10 +289,13 @@ export function recordHttpRequest(
  * queue from a freshly read `getJobCounts` payload. Called by
  * {@link refreshBullMQQueueGauges}.
  */
-export function setBullMQQueueCounts(
-  queueName: string,
-  counts: { waiting: number; active: number; delayed: number; failed: number },
-): void {
+export function setBullMQQueueCounts({
+  queueName,
+  counts,
+}: {
+  queueName: string;
+  counts: { waiting: number; active: number; delayed: number; failed: number };
+}): void {
   if (!isMetricsEnabled()) return;
   if (!(bullmqQueueWaiting && bullmqQueueActive && bullmqQueueDelayed && bullmqQueueFailed)) {
     return;
@@ -304,11 +312,15 @@ export function setBullMQQueueCounts(
  * `bullmq_job_duration_seconds` histogram, labelled by queue + job name. Wired
  * to worker `completed` events via `attachBullMQJobMetrics`.
  */
-export function recordBullMQJobDuration(
-  queueName: string,
-  jobName: string,
-  durationSeconds: number,
-): void {
+export function recordBullMQJobDuration({
+  queueName,
+  jobName,
+  durationSeconds,
+}: {
+  queueName: string;
+  jobName: string;
+  durationSeconds: number;
+}): void {
   if (!isMetricsEnabled()) return;
   const histogram =
     bullmqJobDurationSeconds ??
@@ -473,7 +485,13 @@ export function recordCommitDispatchDurabilityFallback(): void {
  *   label stays bounded — a per-key label would be unbounded cardinality. Without this, a cache is
  *   unfalsifiable: it either helps or quietly costs a round trip per request and nothing says which.
  */
-export function recordReadCacheRequest(cache: string, result: 'hit' | 'miss'): void {
+export function recordReadCacheRequest({
+  cache,
+  result,
+}: {
+  cache: string;
+  result: 'hit' | 'miss';
+}): void {
   if (!isMetricsEnabled()) return;
   ensurePrometheusMetricsRegistered(getMetricsRegistry());
   if (!readCacheRequestsTotal) return;

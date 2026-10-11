@@ -102,7 +102,13 @@ function toIsoString(value: Date | string | null | undefined): string | null {
   return value;
 }
 
-function serializeOne<T extends AuditLogRow>(row: T, resolution: AuditLogPublicIdResolution) {
+function serializeOne<T extends AuditLogRow>({
+  row,
+  resolution,
+}: {
+  row: T;
+  resolution: AuditLogPublicIdResolution;
+}) {
   // sec-re-08: strip-only allowlist mirroring sec-T #17. The prior implementation
   // spread the entire Drizzle row through with `...item`, leaking the bigserial `id`,
   // every `*_user_id`/`organization_id`/`resource_id`/`actor_api_key_id` bigint, and
@@ -156,10 +162,13 @@ function serializeOne<T extends AuditLogRow>(row: T, resolution: AuditLogPublicI
  * never the internal id (sec-re-08).
  */
 export const AuditSerializer = {
-  many<T extends AuditLogRow>(
-    items: T[],
-    resolution: AuditLogPublicIdResolution = EMPTY_RESOLUTION,
-  ) {
-    return items.map((item) => serializeOne(item, resolution));
+  many<T extends AuditLogRow>({
+    items,
+    resolution = EMPTY_RESOLUTION,
+  }: {
+    items: T[];
+    resolution?: AuditLogPublicIdResolution | undefined;
+  }) {
+    return items.map((item) => serializeOne({ row: item, resolution }));
   },
 };

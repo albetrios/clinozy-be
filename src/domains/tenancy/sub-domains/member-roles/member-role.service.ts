@@ -65,34 +65,39 @@ export class MemberRoleService {
     pagination: ListMemberRolesQueryInput;
   }) {
     const organization_public_id = scope.organizationPublicId;
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      validateListMemberRolesQuery(pagination);
-      const result = await this.memberRoleRepository.findByOrganizationId(
-        organization.id,
-        omitUndefined({
-          after: pagination.after,
-          limit: pagination.limit,
-          q: pagination.q,
-          sort: pagination.sort,
-          order: pagination.order,
-        }),
-      );
-      // One membership aggregate (GROUP BY role_id) → member_count per role, so the roles-list
-      // projection stays a single extra query instead of an N+1 across the page.
-      const memberCounts = await this.memberRoleRepository.countMembersByRoleForOrganization(
-        organization.id,
-      );
-      return {
-        items: result.items.map((role) =>
-          serializeMemberRole(role, memberCounts.get(role.id) ?? 0),
-        ),
-        limit: result.limit,
-        total: result.total,
-        has_more: result.has_more,
-        next_cursor: result.next_cursor,
-      };
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        validateListMemberRolesQuery(pagination);
+        const result = await this.memberRoleRepository.findByOrganizationId(
+          organization.id,
+          omitUndefined({
+            after: pagination.after,
+            limit: pagination.limit,
+            q: pagination.q,
+            sort: pagination.sort,
+            order: pagination.order,
+          }),
+        );
+        // One membership aggregate (GROUP BY role_id) → member_count per role, so the roles-list
+        // projection stays a single extra query instead of an N+1 across the page.
+        const memberCounts = await this.memberRoleRepository.countMembersByRoleForOrganization(
+          organization.id,
+        );
+        return {
+          items: result.items.map((role) =>
+            serializeMemberRole({ row: role, member_count: memberCounts.get(role.id) ?? 0 }),
+          ),
+          limit: result.limit,
+          total: result.total,
+          has_more: result.has_more,
+          next_cursor: result.next_cursor,
+        };
+      },
     });
   }
 
@@ -161,16 +166,24 @@ export class MemberRoleService {
     role_public_id: string;
   }): Promise<MemberRoleOutput> {
     const organization_public_id = scope.organizationPublicId;
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      const role = await this.memberRoleRepository.findByPublicId(role_public_id, organization.id);
-      if (!role) throw new NotFoundError('Role');
-      const memberCount = await this.memberRoleRepository.countMembersForRole(
-        role.id,
-        organization.id,
-      );
-      return serializeMemberRole(role, memberCount);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        const role = await this.memberRoleRepository.findByPublicId(
+          role_public_id,
+          organization.id,
+        );
+        if (!role) throw new NotFoundError('Role');
+        const memberCount = await this.memberRoleRepository.countMembersForRole(
+          role.id,
+          organization.id,
+        );
+        return serializeMemberRole({ row: role, member_count: memberCount });
+      },
     });
   }
 
@@ -203,75 +216,80 @@ export class MemberRoleService {
   }): Promise<MemberRoleOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateCreateMemberRole(body);
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      // Capability matrix: a PERSONAL organization is single-member by definition, so custom roles
-      // (which exist to grant scoped permissions to OTHER members) are meaningless there. Reject —
-      // role management is a TEAM-organization feature.
-      assertTeamOrganization(organization, 'ROLES');
-      // sec-r5-followup-ratelimit-dos-2 + audit-#8: serialize the per-organization count + insert with a
-      // transaction-scoped advisory lock so concurrent creates cannot both pass the same count
-      // and overshoot MEMBER_ROLE_MAX_PER_ORG. The lock auto-releases at commit.
-      await this.memberRoleRepository.acquireCreationQuotaLock(organization.id);
-      const activeCount = await this.memberRoleRepository.countActiveByOrganization(
-        organization.id,
-      );
-      if (activeCount >= env.MEMBER_ROLE_MAX_PER_ORG) {
-        throw new ConflictError('errors:memberRoleMaxReached', {
-          max: env.MEMBER_ROLE_MAX_PER_ORG,
-        });
-      }
-      const userId =
-        await this.organizationService.resolveUserInternalIdByPublicId(created_by_user_public_id);
-
-      // When an initial permission set is requested, verify the caller may grant every code
-      // BEFORE creating the role. An escalation attempt (a code the caller does not hold) or an
-      // unknown code throws here, and the whole `withAppDatabaseContext` transaction
-      // rolls back — no half-made role. A brand-new role has no current permissions and is never
-      // the owner role, so the owner-protection / removed-codes checks the PUT path runs do not apply.
-      const permissionCodes = parsed.permission_codes ?? [];
-      if (permissionCodes.length > 0) {
-        await assertCallerCanGrantPermissionCodes({
-          authorizationService: this.authorizationService,
-          permissionRepository: this.permissionRepository,
-          callerUserPublicId: created_by_user_public_id,
-          organizationPublicId: organization_public_id,
-          requestedPermissionCodes: permissionCodes,
-        });
-      }
-
-      let created: MemberRoleRow;
-      try {
-        // sec-T3: `is_system` is intentionally omitted — the DTO no longer accepts it
-        // from clients and the repository default is false. Only seeds set it (via a
-        // server-side path that does not go through this service).
-        created = await this.memberRoleRepository.create(
-          omitUndefined({
-            organization_id: organization.id,
-            name: parsed.name,
-            description: parsed.description,
-            created_by_user_id: userId ?? null,
-          }),
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        // Capability matrix: a PERSONAL organization is single-member by definition, so custom roles
+        // (which exist to grant scoped permissions to OTHER members) are meaningless there. Reject —
+        // role management is a TEAM-organization feature.
+        assertTeamOrganization({ organization, capability: 'ROLES' });
+        // sec-r5-followup-ratelimit-dos-2 + audit-#8: serialize the per-organization count + insert with a
+        // transaction-scoped advisory lock so concurrent creates cannot both pass the same count
+        // and overshoot MEMBER_ROLE_MAX_PER_ORG. The lock auto-releases at commit.
+        await this.memberRoleRepository.acquireCreationQuotaLock(organization.id);
+        const activeCount = await this.memberRoleRepository.countActiveByOrganization(
+          organization.id,
         );
-      } catch (error) {
-        throw this.mapRoleNameConflict({ error, name: parsed.name });
-      }
+        if (activeCount >= env.MEMBER_ROLE_MAX_PER_ORG) {
+          throw new ConflictError('errors:memberRoleMaxReached', {
+            max: env.MEMBER_ROLE_MAX_PER_ORG,
+          });
+        }
+        const userId =
+          await this.organizationService.resolveUserInternalIdByPublicId(created_by_user_public_id);
 
-      // Assign the initial permission set in the SAME transaction as the insert (atomic).
-      // No cache invalidation is needed — a brand-new role has no members whose resolved
-      // permissions could be stale.
-      if (permissionCodes.length > 0) {
-        await this.memberRolePermissionRepository.replace(
-          created.id,
-          permissionCodes,
-          userId ?? null,
-        );
-      }
+        // When an initial permission set is requested, verify the caller may grant every code
+        // BEFORE creating the role. An escalation attempt (a code the caller does not hold) or an
+        // unknown code throws here, and the whole `withAppDatabaseContext` transaction
+        // rolls back — no half-made role. A brand-new role has no current permissions and is never
+        // the owner role, so the owner-protection / removed-codes checks the PUT path runs do not apply.
+        const permissionCodes = parsed.permission_codes ?? [];
+        if (permissionCodes.length > 0) {
+          await assertCallerCanGrantPermissionCodes({
+            authorizationService: this.authorizationService,
+            permissionRepository: this.permissionRepository,
+            callerUserPublicId: created_by_user_public_id,
+            organizationPublicId: organization_public_id,
+            requestedPermissionCodes: permissionCodes,
+          });
+        }
 
-      // A brand-new role has no memberships yet (a member cannot be assigned to a role that did
-      // not exist), so member_count is definitionally 0 — no aggregate query needed.
-      return serializeMemberRole(created, 0);
+        let created: MemberRoleRow;
+        try {
+          // sec-T3: `is_system` is intentionally omitted — the DTO no longer accepts it
+          // from clients and the repository default is false. Only seeds set it (via a
+          // server-side path that does not go through this service).
+          created = await this.memberRoleRepository.create(
+            omitUndefined({
+              organization_id: organization.id,
+              name: parsed.name,
+              description: parsed.description,
+              created_by_user_id: userId ?? null,
+            }),
+          );
+        } catch (error) {
+          throw this.mapRoleNameConflict({ error, name: parsed.name });
+        }
+
+        // Assign the initial permission set in the SAME transaction as the insert (atomic).
+        // No cache invalidation is needed — a brand-new role has no members whose resolved
+        // permissions could be stale.
+        if (permissionCodes.length > 0) {
+          await this.memberRolePermissionRepository.replace(
+            created.id,
+            permissionCodes,
+            userId ?? null,
+          );
+        }
+
+        // A brand-new role has no memberships yet (a member cannot be assigned to a role that did
+        // not exist), so member_count is definitionally 0 — no aggregate query needed.
+        return serializeMemberRole({ row: created, member_count: 0 });
+      },
     });
   }
 
@@ -288,34 +306,42 @@ export class MemberRoleService {
   }): Promise<MemberRoleOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateUpdateMemberRole(body);
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      const role = await this.memberRoleRepository.findByPublicId(role_public_id, organization.id);
-      if (!role) throw new NotFoundError('Role');
-      // sec-T3: system roles (Admin/Member) are immutable from the API — same guard as delete.
-      if (role.is_system) {
-        throw new ForbiddenError('errors:cannotModifySystemRole');
-      }
-      const userId =
-        await this.organizationService.resolveUserInternalIdByPublicId(updated_by_user_public_id);
-      let updated: MemberRoleRow | null;
-      try {
-        updated = await this.memberRoleRepository.update(
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        const role = await this.memberRoleRepository.findByPublicId(
           role_public_id,
           organization.id,
-          omitUndefined(parsed),
-          userId ?? null,
         );
-      } catch (error) {
-        throw this.mapRoleNameConflict({ error, name: parsed.name });
-      }
-      if (!updated) throw new NotFoundError('Role');
-      const memberCount = await this.memberRoleRepository.countMembersForRole(
-        updated.id,
-        organization.id,
-      );
-      return serializeMemberRole(updated, memberCount);
+        if (!role) throw new NotFoundError('Role');
+        // sec-T3: system roles (Admin/Member) are immutable from the API — same guard as delete.
+        if (role.is_system) {
+          throw new ForbiddenError('errors:cannotModifySystemRole');
+        }
+        const userId =
+          await this.organizationService.resolveUserInternalIdByPublicId(updated_by_user_public_id);
+        let updated: MemberRoleRow | null;
+        try {
+          updated = await this.memberRoleRepository.update(
+            role_public_id,
+            organization.id,
+            omitUndefined(parsed),
+            userId ?? null,
+          );
+        } catch (error) {
+          throw this.mapRoleNameConflict({ error, name: parsed.name });
+        }
+        if (!updated) throw new NotFoundError('Role');
+        const memberCount = await this.memberRoleRepository.countMembersForRole(
+          updated.id,
+          organization.id,
+        );
+        return serializeMemberRole({ row: updated, member_count: memberCount });
+      },
     });
   }
 
@@ -344,27 +370,35 @@ export class MemberRoleService {
     role_public_id: string;
   }): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
-    await withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      const role = await this.memberRoleRepository.findByPublicId(role_public_id, organization.id);
-      if (!role) throw new NotFoundError('Role');
-      if (role.is_system) {
-        throw new ForbiddenError('errors:cannotDeleteSystemRole');
-      }
-      // Atomic guarded delete: the "no active members?" check and the soft-delete run in ONE
-      // statement (a NOT EXISTS over memberships), so a concurrent member-assignment to this role
-      // cannot interleave a separate count and the delete and leave a member on a deleted role —
-      // which permission resolution would then silently strip of all permissions (route-audit C2).
-      // `role` was found above, so a zero-row result means active members remain (or a concurrent
-      // delete) → surface the actionable conflict rather than NotFound.
-      const deleted = await this.memberRoleRepository.softDeleteIfNoActiveMembers(
-        role_public_id,
-        organization.id,
-      );
-      if (!deleted) {
-        throw new ConflictError('errors:roleHasActiveMembers');
-      }
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        const role = await this.memberRoleRepository.findByPublicId(
+          role_public_id,
+          organization.id,
+        );
+        if (!role) throw new NotFoundError('Role');
+        if (role.is_system) {
+          throw new ForbiddenError('errors:cannotDeleteSystemRole');
+        }
+        // Atomic guarded delete: the "no active members?" check and the soft-delete run in ONE
+        // statement (a NOT EXISTS over memberships), so a concurrent member-assignment to this role
+        // cannot interleave a separate count and the delete and leave a member on a deleted role —
+        // which permission resolution would then silently strip of all permissions (route-audit C2).
+        // `role` was found above, so a zero-row result means active members remain (or a concurrent
+        // delete) → surface the actionable conflict rather than NotFound.
+        const deleted = await this.memberRoleRepository.softDeleteIfNoActiveMembers(
+          role_public_id,
+          organization.id,
+        );
+        if (!deleted) {
+          throw new ConflictError('errors:roleHasActiveMembers');
+        }
+      },
     });
     // sec-R11: invalidate AFTER the write transaction commits so a concurrent permission recompute
     // cannot re-cache the stale (pre-delete) set for members holding the deleted role.

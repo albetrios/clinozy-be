@@ -168,7 +168,7 @@ function redactSensitiveString(value: string): string {
  * — a token in a failing URL must not reach the log just because it arrived inside
  * an Error.
  */
-function redactError(input: Error, context: RedactionContext): Error {
+function redactError({ input, context }: { input: Error; context: RedactionContext }): Error {
   const existingError = context.visited.get(input);
   if (existingError !== undefined) {
     return existingError as Error;
@@ -190,7 +190,7 @@ function redactError(input: Error, context: RedactionContext): Error {
   });
   if (input.cause !== undefined) {
     Object.defineProperty(output, 'cause', {
-      value: redactValue(input.cause, { ...context, depth: context.depth + 1 }),
+      value: redactValue({ input: input.cause, context: { ...context, depth: context.depth + 1 } }),
       writable: true,
       enumerable: false,
       configurable: true,
@@ -226,13 +226,13 @@ function redactError(input: Error, context: RedactionContext): Error {
     // eslint-disable-next-line security/detect-object-injection -- key from Object.entries of the error being redacted; written to a fresh local Error.
     extras[key] = isSensitiveKey(key)
       ? SENSITIVE_REDACTION_PLACEHOLDER
-      : redactValue(value, { ...context, depth: context.depth + 1 });
+      : redactValue({ input: value, context: { ...context, depth: context.depth + 1 } });
   }
 
   return output;
 }
 
-function redactValue<T>(input: T, context: RedactionContext): T {
+function redactValue<T>({ input, context }: { input: T; context: RedactionContext }): T {
   if (input === null || input === undefined) {
     return input;
   }
@@ -250,7 +250,7 @@ function redactValue<T>(input: T, context: RedactionContext): T {
   }
 
   if (input instanceof Error) {
-    return redactError(input, context) as T;
+    return redactError({ input, context }) as T;
   }
 
   if (Array.isArray(input)) {
@@ -262,7 +262,7 @@ function redactValue<T>(input: T, context: RedactionContext): T {
     const output: unknown[] = [];
     context.visited.set(input, output);
     for (const item of input) {
-      output.push(redactValue(item, { ...context, depth: context.depth + 1 }));
+      output.push(redactValue({ input: item, context: { ...context, depth: context.depth + 1 } }));
     }
     return output as T;
   }
@@ -279,7 +279,7 @@ function redactValue<T>(input: T, context: RedactionContext): T {
     // eslint-disable-next-line security/detect-object-injection -- key from Object.entries of the input being redacted; written to a fresh local object.
     output[key] = isSensitiveKey(key)
       ? SENSITIVE_REDACTION_PLACEHOLDER
-      : redactValue(value, { ...context, depth: context.depth + 1 });
+      : redactValue({ input: value, context: { ...context, depth: context.depth + 1 } });
   }
   return output as T;
 }
@@ -304,5 +304,5 @@ export function redactSensitive<T>(input: T): T {
     return input;
   }
 
-  return redactValue(input, { visited: new WeakMap(), depth: 0 });
+  return redactValue({ input, context: { visited: new WeakMap(), depth: 0 } });
 }

@@ -31,22 +31,30 @@ export function invitationTemplate(data: InvitationTemplateData): string {
 
   return baseTemplate({
     locale,
-    title: translateMailText('invitationTitle', locale, {
-      organizationName: data.organizationName,
+    title: translateMailText({
+      key: 'invitationTitle',
+      locale,
+      values: {
+        organizationName: data.organizationName,
+      },
     }),
-    preheader: translateMailText('invitationPreheader', locale, {
-      inviterName: data.inviterName,
-      organizationName: data.organizationName,
+    preheader: translateMailText({
+      key: 'invitationPreheader',
+      locale,
+      values: {
+        inviterName: data.inviterName,
+        organizationName: data.organizationName,
+      },
     }),
     body: `
-      <h1>${translateMailText('invitationHeading', locale)}</h1>
-      <p>${translateMailText('invitationBody', locale, { inviterName, organizationName })}</p>
-      <p>${translateMailText('invitationExpiry', locale, { expiresInDays: data.expiresInDays })}</p>
+      <h1>${translateMailText({ key: 'invitationHeading', locale })}</h1>
+      <p>${translateMailText({ key: 'invitationBody', locale, values: { inviterName, organizationName } })}</p>
+      <p>${translateMailText({ key: 'invitationExpiry', locale, values: { expiresInDays: data.expiresInDays } })}</p>
       <p style="text-align: center; margin: 32px 0;">
-        <a href="${acceptUrl}" class="button">${translateMailText('invitationAccept', locale)}</a>
+        <a href="${acceptUrl}" class="button">${translateMailText({ key: 'invitationAccept', locale })}</a>
       </p>
-      <p style="font-size: 13px; color: #6b7280;">${translateMailText('invitationIgnore', locale)}</p>
-      <p style="font-size: 13px; color: #6b7280;">${translateMailText('copyUrlPrompt', locale)}</p>
+      <p style="font-size: 13px; color: #6b7280;">${translateMailText({ key: 'invitationIgnore', locale })}</p>
+      <p style="font-size: 13px; color: #6b7280;">${translateMailText({ key: 'copyUrlPrompt', locale })}</p>
       <p style="font-size: 12px; color: #9ca3af; word-break: break-all;">${acceptUrl}</p>
     `,
   });

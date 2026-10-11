@@ -23,9 +23,12 @@ export async function executeCommitDispatchTask(task: CommitDispatchTask): Promi
   switch (task.type) {
     case 'mail_outbox':
       if (task.requestId !== undefined) {
-        await dispatchOutboxEmail(task.mailOutboxToken, { requestId: task.requestId });
+        await dispatchOutboxEmail({
+          mailOutboxToken: task.mailOutboxToken,
+          options: { requestId: task.requestId },
+        });
       } else {
-        await dispatchOutboxEmail(task.mailOutboxToken);
+        await dispatchOutboxEmail({ mailOutboxToken: task.mailOutboxToken });
       }
       return;
     case 'notification':

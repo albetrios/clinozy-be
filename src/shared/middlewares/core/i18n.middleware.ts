@@ -33,10 +33,13 @@ const I18N_IGNORE_ROUTES = ['/livez', '/readyz', '/api/v1/mcp'];
  * `Accept-Language` segment, falls back to the organization default locale,
  * then to {@link DEFAULT_LANGUAGE}; only the {@link SUPPORTED_LANGUAGES} are recognized.
  */
-export function resolveRequestLanguageFromHeader(
-  acceptLanguageHeader: string | string[] | undefined,
-  organizationDefaultLocale?: SupportedLanguage | null,
-): SupportedLanguage {
+export function resolveRequestLanguageFromHeader({
+  acceptLanguageHeader,
+  organizationDefaultLocale,
+}: {
+  acceptLanguageHeader: string | string[] | undefined;
+  organizationDefaultLocale?: SupportedLanguage | null | undefined;
+}): SupportedLanguage {
   if (!acceptLanguageHeader) {
     return toSupportedLanguage(organizationDefaultLocale);
   }
@@ -48,11 +51,15 @@ type I18nRequest = {
   t?: (key: string, opts?: object) => string;
 };
 
-function applyResolvedLanguage(
-  request: FastifyRequest,
-  req: I18nRequest,
-  language: SupportedLanguage,
-): void {
+function applyResolvedLanguage({
+  request,
+  req,
+  language,
+}: {
+  request: FastifyRequest;
+  req: I18nRequest;
+  language: SupportedLanguage;
+}): void {
   req.language = language;
   (request as { language?: string }).language = language;
   const requestWithTranslation = request as I18nRequest;
@@ -67,16 +74,20 @@ function applyResolvedLanguage(
  * locale resolved from `Accept-Language` and the organization default locale.
  * Called from i18n middleware hooks; safe to invoke twice (re-applies language).
  */
-export function attachRequestI18nHelpers(
-  request: FastifyRequest,
-  req: I18nRequest,
-  organizationDefaultLocale?: SupportedLanguage | null,
-): void {
-  const language = resolveRequestLanguageFromHeader(
-    request.headers['accept-language'],
+export function attachRequestI18nHelpers({
+  request,
+  req,
+  organizationDefaultLocale,
+}: {
+  request: FastifyRequest;
+  req: I18nRequest;
+  organizationDefaultLocale?: SupportedLanguage | null | undefined;
+}): void {
+  const language = resolveRequestLanguageFromHeader({
+    acceptLanguageHeader: request.headers['accept-language'],
     organizationDefaultLocale,
-  );
-  applyResolvedLanguage(request, req, language);
+  });
+  applyResolvedLanguage({ request, req, language });
 }
 
 /**
@@ -111,7 +122,10 @@ function buildI18nInitOptions(): InitOptions {
     returnEmptyString: false,
     parseMissingKeyHandler: (key, language) => {
       if (env.I18N_REPORT_MISSING_KEYS && language !== DEFAULT_LANGUAGE) {
-        captureMessage(`i18n missing key: ${key} (${language})`, { level: 'warning' });
+        captureMessage({
+          message: `i18n missing key: ${key} (${language})`,
+          options: { level: 'warning' },
+        });
       } else if (!env.I18N_REPORT_MISSING_KEYS) {
         logger.debug({ key, language }, 'i18n.missing_key');
       }
@@ -147,7 +161,7 @@ const i18nMiddleware: FastifyPluginAsync = async (app) => {
     const res = reply;
     handler(req, res, (err?: Error) => {
       if (err) return done(err);
-      attachRequestI18nHelpers(request, req);
+      attachRequestI18nHelpers({ request, req });
       done();
     });
   });

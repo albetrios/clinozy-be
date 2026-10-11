@@ -39,7 +39,7 @@ export interface DlqDepthSampleResult {
  * - **Failure modes:** a Redis error on any queue rejects the whole sample (`Promise.all`);
  *   partial results are not returned. Nothing is closed here — the pooled clients live until
  *   `closeDeadLetterQueues()` at shutdown.
- * - **Side effects:** Sentry `captureMessage('queue.dlq.depth.high', ...)` and structured log
+ * - **Side effects:** Sentry `captureMessage({ message: 'queue.dlq.depth.high', … })` and structured log
  *   when `total >= warnThreshold`; the first call opens one Redis connection per DLQ.
  * - **Notes:** driven by `createDlqDepthWorker`'s repeatable schedule and by every `/metrics`
  *   scrape and verbose `/readyz`. It used to open, query and close a fresh `Queue` per DLQ
@@ -66,9 +66,12 @@ export async function sampleDeadLetterQueueDepths(): Promise<DlqDepthSampleResul
           { deadLetterQueueName, waiting, failed, total, warnThreshold },
           'queue.dlq.depth.high',
         );
-        captureMessage('queue.dlq.depth.high', {
-          level: 'warning',
-          extra: { deadLetterQueueName, waiting, failed, total, warnThreshold },
+        captureMessage({
+          message: 'queue.dlq.depth.high',
+          options: {
+            level: 'warning',
+            extra: { deadLetterQueueName, waiting, failed, total, warnThreshold },
+          },
         });
       }
 

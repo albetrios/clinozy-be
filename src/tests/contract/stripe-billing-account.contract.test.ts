@@ -61,7 +61,10 @@ describe('Stripe billing-account read + setup contract (`stripe.client`)', () =>
       .matchHeader('authorization', /^Bearer /)
       .reply(200, invoicesListFixture);
 
-    const page = await listStripeInvoices(contractCustomerId, { limit: 10 });
+    const page = await listStripeInvoices({
+      customerId: contractCustomerId,
+      options: { limit: 10 },
+    });
 
     // Request shape: the customer filter is mandatory (never a global invoice list) and the
     // limit is forwarded so pagination stays bounded.
@@ -86,7 +89,10 @@ describe('Stripe billing-account read + setup contract (`stripe.client`)', () =>
       })
       .reply(200, invoicesListFixture);
 
-    await listStripeInvoices(contractCustomerId, { limit: 5, startingAfter: 'in_cursor_prev' });
+    await listStripeInvoices({
+      customerId: contractCustomerId,
+      options: { limit: 5, startingAfter: 'in_cursor_prev' },
+    });
 
     expect(capturedQuery?.starting_after).toBe('in_cursor_prev');
     expect(capturedQuery?.limit).toBe('5');
@@ -103,7 +109,7 @@ describe('Stripe billing-account read + setup contract (`stripe.client`)', () =>
       .matchHeader('authorization', /^Bearer /)
       .reply(200, paymentMethodsListFixture);
 
-    const paymentMethods = await listStripePaymentMethods(contractCustomerId);
+    const paymentMethods = await listStripePaymentMethods({ customerId: contractCustomerId });
 
     // type=card is a hard filter — the serializer only renders card brand/last4/exp.
     expect(capturedQuery?.customer).toBe(contractCustomerId);
@@ -121,8 +127,9 @@ describe('Stripe billing-account read + setup contract (`stripe.client`)', () =>
       .matchHeader('authorization', /^Bearer /)
       .reply(200, customerDefaultPaymentMethodFixture);
 
-    const defaultPaymentMethodId =
-      await retrieveStripeCustomerDefaultPaymentMethodId(contractCustomerId);
+    const defaultPaymentMethodId = await retrieveStripeCustomerDefaultPaymentMethodId({
+      customerId: contractCustomerId,
+    });
 
     expect(defaultPaymentMethodId).toBe('pm_1CONTRACTfixtureDEFAULT');
   });
@@ -137,7 +144,7 @@ describe('Stripe billing-account read + setup contract (`stripe.client`)', () =>
       });
 
     await expect(
-      retrieveStripeCustomerDefaultPaymentMethodId(contractCustomerId),
+      retrieveStripeCustomerDefaultPaymentMethodId({ customerId: contractCustomerId }),
     ).resolves.toBeNull();
   });
 
@@ -156,7 +163,7 @@ describe('Stripe billing-account read + setup contract (`stripe.client`)', () =>
       .matchHeader('authorization', /^Bearer /)
       .reply(200, setupIntentCreateFixture);
 
-    const clientSecret = await createStripeSetupIntent(contractCustomerId);
+    const clientSecret = await createStripeSetupIntent({ customerId: contractCustomerId });
 
     StripeSetupIntentResponseContractSchema.parse(setupIntentCreateFixture);
     expect(clientSecret).toBe(setupIntentCreateFixture.client_secret);
@@ -174,7 +181,7 @@ describe('Stripe billing-account read + setup contract (`stripe.client`)', () =>
       .matchHeader('authorization', /^Bearer /)
       .reply(200, subscriptionConfirmationSecretFixture);
 
-    const clientSecret = await retrieveStripeSubscriptionPaymentClientSecret(subscriptionId);
+    const clientSecret = await retrieveStripeSubscriptionPaymentClientSecret({ subscriptionId });
 
     // The expand param is the whole point: without it Stripe omits confirmation_secret and
     // the client would read null. Stripe encodes array params as expand[0]=...
@@ -198,6 +205,8 @@ describe('Stripe billing-account read + setup contract (`stripe.client`)', () =>
         latest_invoice: { id: 'in_no_secret', object: 'invoice' },
       });
 
-    await expect(retrieveStripeSubscriptionPaymentClientSecret(subscriptionId)).resolves.toBeNull();
+    await expect(
+      retrieveStripeSubscriptionPaymentClientSecret({ subscriptionId }),
+    ).resolves.toBeNull();
   });
 });

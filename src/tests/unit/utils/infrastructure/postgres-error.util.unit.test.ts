@@ -29,7 +29,7 @@ describe('postgres-error.util', () => {
       .mockRejectedValueOnce({ code: '23505', constraint_name: 'idx_users_public_id' })
       .mockResolvedValueOnce('ok');
 
-    const result = await runInsertWithPublicIdentifierRetry(insert, 3);
+    const result = await runInsertWithPublicIdentifierRetry({ insert, maxAttempts: 3 });
     expect(result).toBe('ok');
     expect(insert).toHaveBeenCalledTimes(2);
   });
@@ -42,7 +42,7 @@ describe('postgres-error.util', () => {
       })
       .mockResolvedValueOnce('ok');
 
-    const result = await runInsertWithPublicIdentifierRetry(insert, 3);
+    const result = await runInsertWithPublicIdentifierRetry({ insert, maxAttempts: 3 });
     expect(result).toBe('ok');
     expect(insert).toHaveBeenCalledTimes(2);
   });
@@ -53,14 +53,18 @@ describe('postgres-error.util', () => {
     const slugViolation = { code: '23505', constraint_name: 'idx_organizations_slug' };
     const insert = vi.fn().mockRejectedValue(slugViolation);
 
-    await expect(runInsertWithPublicIdentifierRetry(insert, 5)).rejects.toBe(slugViolation);
+    await expect(runInsertWithPublicIdentifierRetry({ insert, maxAttempts: 5 })).rejects.toBe(
+      slugViolation,
+    );
     expect(insert).toHaveBeenCalledTimes(1);
   });
 
   it('throws non-unique errors immediately', async () => {
     await expect(
-      runInsertWithPublicIdentifierRetry(async () => {
-        throw new Error('other');
+      runInsertWithPublicIdentifierRetry({
+        insert: async () => {
+          throw new Error('other');
+        },
       }),
     ).rejects.toThrow('other');
   });
@@ -88,7 +92,7 @@ describe('postgres-error.util', () => {
         .mockRejectedValueOnce({ code: 'ECONNRESET' })
         .mockResolvedValueOnce('row');
 
-      const result = await runReadWithTransientRetry(read, 3);
+      const result = await runReadWithTransientRetry({ read, maxAttempts: 3 });
       expect(result).toBe('row');
       expect(read).toHaveBeenCalledTimes(2);
     });
@@ -97,7 +101,7 @@ describe('postgres-error.util', () => {
       const notFound = { code: '23505' };
       const read = vi.fn().mockRejectedValue(notFound);
 
-      await expect(runReadWithTransientRetry(read, 3)).rejects.toBe(notFound);
+      await expect(runReadWithTransientRetry({ read, maxAttempts: 3 })).rejects.toBe(notFound);
       expect(read).toHaveBeenCalledTimes(1);
     });
 
@@ -105,7 +109,7 @@ describe('postgres-error.util', () => {
       const drop = { cause: { code: '08006' } };
       const read = vi.fn().mockRejectedValue(drop);
 
-      await expect(runReadWithTransientRetry(read, 3)).rejects.toBe(drop);
+      await expect(runReadWithTransientRetry({ read, maxAttempts: 3 })).rejects.toBe(drop);
       expect(read).toHaveBeenCalledTimes(3);
     });
   });

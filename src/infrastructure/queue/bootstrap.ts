@@ -52,16 +52,19 @@ export function stopRssMonitoring(): void {
  * listener, the job-duration histogram, and the queue heartbeat `/readyz` reads to tell a stalled
  * worker from an idle one.
  */
-function pushWorkerWithRuntimeHooks(
-  workers: WorkerHandle[],
-  createWorker: () => WorkerHandle,
-): void {
+function pushWorkerWithRuntimeHooks({
+  workers,
+  createWorker,
+}: {
+  workers: WorkerHandle[];
+  createWorker: () => WorkerHandle;
+}): void {
   const handle = createWorker();
   workers.push(handle);
   if (handle.worker !== undefined && handle.queueName !== undefined) {
-    attachDeadLetterAndAlerting(handle.worker, handle.queueName);
-    attachBullMQJobMetrics(handle.worker, handle.queueName);
-    attachWorkerQueueHeartbeat(handle.worker, handle.queueName);
+    attachDeadLetterAndAlerting({ worker: handle.worker, queueName: handle.queueName });
+    attachBullMQJobMetrics({ worker: handle.worker, queueName: handle.queueName });
+    attachWorkerQueueHeartbeat({ worker: handle.worker, queueName: handle.queueName });
   }
 }
 
@@ -139,7 +142,10 @@ export async function registerDomainWorkers(
       continue;
     }
 
-    pushWorkerWithRuntimeHooks(workers, () => registration.create(workerContainers));
+    pushWorkerWithRuntimeHooks({
+      workers,
+      createWorker: () => registration.create(workerContainers),
+    });
     logger.info({ queueName: registration.queueName }, `Registered ${registration.logLabel}`);
   }
 

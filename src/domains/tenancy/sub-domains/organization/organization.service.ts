@@ -140,7 +140,10 @@ export class OrganizationService {
     const serialized = serializeOrganization(row);
     return {
       ...serialized,
-      logo_url: await resolveStoredMediaReadUrl(this.objectStorage, row.logo_url),
+      logo_url: await resolveStoredMediaReadUrl({
+        objectStorage: this.objectStorage,
+        storedValue: row.logo_url,
+      }),
     };
   }
 
@@ -156,9 +159,12 @@ export class OrganizationService {
     organization: OrganizationOutput;
   }): Promise<void> {
     await eventBus.emit(
-      buildDomainEvent<OrganizationResourceEventPayload>(type, {
-        organization_public_id: organization.id,
-        data: { ...organization },
+      buildDomainEvent<OrganizationResourceEventPayload>({
+        type,
+        payload: {
+          organization_public_id: organization.id,
+          data: { ...organization },
+        },
       }),
     );
   }
@@ -192,9 +198,10 @@ export class OrganizationService {
   }): Promise<void> {
     const public_id = scope.organizationPublicId;
     await this.deleteOwnedOrganizationLogoObject({ public_id, logo_url });
-    const updated = await withAppDatabaseContext(scope, () =>
-      this.repository.update(public_id, { logo_url: null }, null),
-    );
+    const updated = await withAppDatabaseContext({
+      scope,
+      callback: () => this.repository.update(public_id, { logo_url: null }, null),
+    });
     if (!updated) throw new NotFoundError('Organization');
   }
 
@@ -222,9 +229,10 @@ export class OrganizationService {
     userPublicId: string;
     userInternalId: number;
   }): Promise<number> {
-    return withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }), () =>
-      this.repository.countActiveOwnedByUser(userInternalId),
-    );
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: () => this.repository.countActiveOwnedByUser(userInternalId),
+    });
   }
 
   /**
@@ -355,14 +363,14 @@ export class OrganizationService {
   }): Promise<void> {
     // tenancy.organizations is FORCE RLS — persist the Stripe customer id under the organization GUC
     // so the update is not silently dropped when called from the payment provider outside HTTP.
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization_public_id }),
-      async () => {
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization_public_id }),
+      callback: async () => {
         const organization = await this.repository.findByPublicId(organization_public_id);
         if (!organization) throw new NotFoundError('Organization');
         await this.repository.updateStripeCustomerId(organization.id, stripe_customer_id);
       },
-    );
+    });
   }
 
   /**
@@ -424,16 +432,16 @@ export class OrganizationService {
       after: parsed.after,
       limit: parsed.limit,
     });
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
-      async () => {
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
+      callback: async () => {
         const result = await this.repository.findAllForUser(user_public_id, pagination);
         return {
           ...result,
           items: await Promise.all(result.items.map((row) => this.toOrganizationOutput(row))),
         };
       },
-    );
+    });
   }
 
   async getByPublicId({
@@ -443,9 +451,9 @@ export class OrganizationService {
     public_id: string;
     user_public_id: string;
   }): Promise<OrganizationOutput> {
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
-      async () => {
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
+      callback: async () => {
         // One read, not two: the access check hands back the row it fetched.
         const organization = await this.requireAccessibleOrganization({
           user_public_id,
@@ -453,7 +461,7 @@ export class OrganizationService {
         });
         return this.toOrganizationOutput(organization);
       },
-    );
+    });
   }
 
   async getBySlug({
@@ -463,9 +471,9 @@ export class OrganizationService {
     slug: string;
     user_public_id: string;
   }): Promise<OrganizationOutput> {
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
-      async () => {
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
+      callback: async () => {
         const organization = await this.repository.findBySlug(slug);
         if (!organization) throw new NotFoundError('Organization');
         // The row is already in hand from the slug lookup, so check against it rather
@@ -473,7 +481,7 @@ export class OrganizationService {
         await this.assertUserCanAccessLoadedOrganization({ user_public_id, organization });
         return this.toOrganizationOutput(organization);
       },
-    );
+    });
   }
 
   async create({
@@ -496,9 +504,9 @@ export class OrganizationService {
      * (`organizations_user_discovery`, read-only); the INSERT itself runs in the new
      * organization's own context (`provisionOrganizationWithOwner`).
      */
-    const created = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: owner_user_public_id }),
-      async () => {
+    const created = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: owner_user_public_id }),
+      callback: async () => {
         const ownerId = await this.repository.resolveUserIdByPublicId(owner_user_public_id);
         if (ownerId === null) throw new NotFoundError('User');
         // Anti-abuse: cap the number of TEAM organizations a single account may own (personal is
@@ -549,7 +557,7 @@ export class OrganizationService {
           throw error;
         }
       },
-    );
+    });
     // After the create's own context: provisioning committed the organization in its own
     // transaction, and the fan-out reads under the new organization's scope — from inside this
     // user-scoped transaction it would hold a second pooled connection. (A brand-new organization
@@ -569,41 +577,47 @@ export class OrganizationService {
   }): Promise<OrganizationOutput> {
     const public_id = scope.organizationPublicId;
     const parsed = validateUpdateOrganization(body);
-    return withAppDatabaseContext(scope, async () => {
-      const organization = await this.repository.findByPublicId(public_id);
-      if (!organization) throw new NotFoundError('Organization');
-      const userId = await this.repository.resolveUserIdByPublicId(updated_by_user_public_id);
-      if (parsed.slug) {
-        const existing = await this.repository.findBySlug(parsed.slug);
-        if (existing && existing.public_id !== public_id) {
-          throw new ConflictError(
-            'errors:organizationSlugExists',
-            { slug: parsed.slug },
-            `Organization with slug "${parsed.slug}" already exists`,
-          ).withReason('organization_slug_exists');
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization = await this.repository.findByPublicId(public_id);
+        if (!organization) throw new NotFoundError('Organization');
+        const userId = await this.repository.resolveUserIdByPublicId(updated_by_user_public_id);
+        if (parsed.slug) {
+          const existing = await this.repository.findBySlug(parsed.slug);
+          if (existing && existing.public_id !== public_id) {
+            throw new ConflictError(
+              'errors:organizationSlugExists',
+              { slug: parsed.slug },
+              `Organization with slug "${parsed.slug}" already exists`,
+            ).withReason('organization_slug_exists');
+          }
         }
-      }
-      let updated: Awaited<ReturnType<typeof this.repository.update>>;
-      try {
-        updated = await this.repository.update(public_id, omitUndefined(parsed), userId ?? null);
-      } catch (error) {
-        // Two concurrent slug updates (on different organizations, to the same new slug) can both pass
-        // the findBySlug pre-check above; the loser hits the `idx_organizations_slug` unique
-        // index. Map the unique_violation to a 409 instead of letting it surface as a 500 —
-        // mirroring the create path.
-        if (parsed.slug && isPostgresUniqueViolation(error)) {
-          throw new ConflictError(
-            'errors:organizationSlugExists',
-            { slug: parsed.slug },
-            `Organization with slug "${parsed.slug}" already exists`,
-          ).withReason('organization_slug_exists');
+        let updated: Awaited<ReturnType<typeof this.repository.update>>;
+        try {
+          updated = await this.repository.update(public_id, omitUndefined(parsed), userId ?? null);
+        } catch (error) {
+          // Two concurrent slug updates (on different organizations, to the same new slug) can both pass
+          // the findBySlug pre-check above; the loser hits the `idx_organizations_slug` unique
+          // index. Map the unique_violation to a 409 instead of letting it surface as a 500 —
+          // mirroring the create path.
+          if (parsed.slug && isPostgresUniqueViolation(error)) {
+            throw new ConflictError(
+              'errors:organizationSlugExists',
+              { slug: parsed.slug },
+              `Organization with slug "${parsed.slug}" already exists`,
+            ).withReason('organization_slug_exists');
+          }
+          throw error;
         }
-        throw error;
-      }
-      if (!updated) throw new NotFoundError('Organization');
-      const output = await this.toOrganizationOutput(updated);
-      await this.emitOrganizationEvent({ type: ORGANIZATION_EVENT.UPDATED, organization: output });
-      return output;
+        if (!updated) throw new NotFoundError('Organization');
+        const output = await this.toOrganizationOutput(updated);
+        await this.emitOrganizationEvent({
+          type: ORGANIZATION_EVENT.UPDATED,
+          organization: output,
+        });
+        return output;
+      },
     });
   }
 
@@ -642,10 +656,10 @@ export class OrganizationService {
     userInternalId: number;
     userPublicId: string;
   }): Promise<void> {
-    const personalOrganizationPublicId = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      () => this.repository.findPersonalOrganizationPublicId(userInternalId),
-    );
+    const personalOrganizationPublicId = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: () => this.repository.findPersonalOrganizationPublicId(userInternalId),
+    });
     if (personalOrganizationPublicId === null) return;
     await this.offboardOrganization({
       scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: personalOrganizationPublicId }),
@@ -662,17 +676,21 @@ export class OrganizationService {
     options: { personalAllowed: boolean };
   }): Promise<void> {
     const public_id = scope.organizationPublicId;
-    const organization = await withAppDatabaseContext(scope, async () => {
-      const found = await this.repository.findByPublicId(public_id);
-      if (!found) throw new NotFoundError('Organization');
-      // A PERSONAL organization is the user's own account-level workspace — it is never
-      // deletable on its own; it goes only with the account (offboardPersonalOrganization).
-      if (!options.personalAllowed) assertTeamOrganization(found, 'MUTATION');
-      const marked = await this.repository.markDeletionStarted(public_id);
-      if (!(marked || found.deletion_started_at)) {
-        throw new NotFoundError('Organization');
-      }
-      return found;
+    const organization = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const found = await this.repository.findByPublicId(public_id);
+        if (!found) throw new NotFoundError('Organization');
+        // A PERSONAL organization is the user's own account-level workspace — it is never
+        // deletable on its own; it goes only with the account (offboardPersonalOrganization).
+        if (!options.personalAllowed)
+          assertTeamOrganization({ organization: found, capability: 'MUTATION' });
+        const marked = await this.repository.markDeletionStarted(public_id);
+        if (!(marked || found.deletion_started_at)) {
+          throw new NotFoundError('Organization');
+        }
+        return found;
+      },
     });
     // External I/O (S3) and the upload-service tombstone run outside the deletion transaction.
     await this.clearOrganizationLogoStorage({ scope, logo_url: organization.logo_url });
@@ -692,10 +710,10 @@ export class OrganizationService {
     // NEW row to stay SELECT-visible — under the plain organization scope the soft-delete is
     // RLS-rejected (42501) AFTER Stripe cancellation already ran. The retention arm
     // covers USING, WITH CHECK, and new-row visibility; identity columns are unchanged.
-    const deleted = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      () => this.repository.softDelete(public_id),
-    );
+    const deleted = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: () => this.repository.softDelete(public_id),
+    });
     if (!deleted) throw new NotFoundError('Organization');
     // Purge every member's cached permissions for this organization so access stops
     // immediately on soft-delete rather than lingering until the cache TTL.
@@ -724,13 +742,16 @@ export class OrganizationService {
     }
     // The database first: the key is caller-supplied, and only a confirmed upload of THIS
     // organization may cost a storage call. The type checked is the one verified at confirm.
-    const { mimeType } = await withAppDatabaseContext(scope, async () => {
-      const organization = await this.repository.findByPublicId(public_id);
-      if (!organization) throw new NotFoundError('Organization');
-      return this.offboardingUploadService!.assertKeyConfirmedForOwner({
-        fileKey: parsed.key,
-        organizationInternalId: organization.id,
-      });
+    const { mimeType } = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization = await this.repository.findByPublicId(public_id);
+        if (!organization) throw new NotFoundError('Organization');
+        return this.offboardingUploadService!.assertKeyConfirmedForOwner({
+          fileKey: parsed.key,
+          organizationInternalId: organization.id,
+        });
+      },
     });
     if (isSvgContentType(mimeType)) {
       throw new ValidationError('errors:validation.svgLogoNotAllowed', undefined, undefined, [
@@ -747,26 +768,32 @@ export class OrganizationService {
     // TEN-07: store the object KEY (private bucket + signed-on-read), not a permanent
     // unsigned public URL. Reads mint a short-lived signed URL via toOrganizationOutput.
     const logoStorageKey = parsed.key;
-    const { serialized, previousLogoUrl } = await withAppDatabaseContext(scope, async () => {
-      const organization = await this.repository.findByPublicId(public_id);
-      if (!organization) throw new NotFoundError('Organization');
-      // Re-bound in the writing transaction (route-audit L2) — not only via the key prefix, and
-      // not only before the storage call — so the upload cannot be deleted between check and write.
-      await this.offboardingUploadService!.assertKeyConfirmedForOwner({
-        fileKey: parsed.key,
-        organizationInternalId: organization.id,
-      });
-      const previous = organization.logo_url;
-      const userId = await this.repository.resolveUserIdByPublicId(updated_by_user_public_id);
-      const result = await this.repository.update(
-        public_id,
-        { logo_url: logoStorageKey },
-        userId ?? null,
-      );
-      if (!result) throw new NotFoundError('Organization');
-      const output = await this.toOrganizationOutput(result);
-      await this.emitOrganizationEvent({ type: ORGANIZATION_EVENT.UPDATED, organization: output });
-      return { serialized: output, previousLogoUrl: previous };
+    const { serialized, previousLogoUrl } = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization = await this.repository.findByPublicId(public_id);
+        if (!organization) throw new NotFoundError('Organization');
+        // Re-bound in the writing transaction (route-audit L2) — not only via the key prefix, and
+        // not only before the storage call — so the upload cannot be deleted between check and write.
+        await this.offboardingUploadService!.assertKeyConfirmedForOwner({
+          fileKey: parsed.key,
+          organizationInternalId: organization.id,
+        });
+        const previous = organization.logo_url;
+        const userId = await this.repository.resolveUserIdByPublicId(updated_by_user_public_id);
+        const result = await this.repository.update(
+          public_id,
+          { logo_url: logoStorageKey },
+          userId ?? null,
+        );
+        if (!result) throw new NotFoundError('Organization');
+        const output = await this.toOrganizationOutput(result);
+        await this.emitOrganizationEvent({
+          type: ORGANIZATION_EVENT.UPDATED,
+          organization: output,
+        });
+        return { serialized: output, previousLogoUrl: previous };
+      },
     });
     // Reclaim the PREVIOUS owned logo object outside the DB context — replacing a logo previously
     // orphaned the old S3 object (storage leak). Best-effort + prefix-guarded.
@@ -784,22 +811,31 @@ export class OrganizationService {
     updated_by_user_public_id: string | undefined;
   }): Promise<OrganizationOutput> {
     const public_id = scope.organizationPublicId;
-    const organization = await withAppDatabaseContext(scope, async () => {
-      const found = await this.repository.findByPublicId(public_id);
-      if (!found) throw new NotFoundError('Organization');
-      return found;
+    const organization = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const found = await this.repository.findByPublicId(public_id);
+        if (!found) throw new NotFoundError('Organization');
+        return found;
+      },
     });
     // Reclaim the backing S3 object before clearing the column (prefix-guarded; external URLs are
     // left untouched) — previously DELETE left the object orphaned in the bucket (storage leak).
     // External I/O (S3) runs outside the DB context; best-effort, so a missing object still clears.
     await this.deleteOwnedOrganizationLogoObject({ public_id, logo_url: organization.logo_url });
-    return withAppDatabaseContext(scope, async () => {
-      const userId = await this.repository.resolveUserIdByPublicId(updated_by_user_public_id);
-      const updated = await this.repository.update(public_id, { logo_url: null }, userId ?? null);
-      if (!updated) throw new NotFoundError('Organization');
-      const output = await this.toOrganizationOutput(updated);
-      await this.emitOrganizationEvent({ type: ORGANIZATION_EVENT.UPDATED, organization: output });
-      return output;
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const userId = await this.repository.resolveUserIdByPublicId(updated_by_user_public_id);
+        const updated = await this.repository.update(public_id, { logo_url: null }, userId ?? null);
+        if (!updated) throw new NotFoundError('Organization');
+        const output = await this.toOrganizationOutput(updated);
+        await this.emitOrganizationEvent({
+          type: ORGANIZATION_EVENT.UPDATED,
+          organization: output,
+        });
+        return output;
+      },
     });
   }
 }

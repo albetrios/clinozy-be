@@ -158,15 +158,15 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       .matchHeader('authorization', /^Bearer /)
       .reply(200, subscriptionUpdateFixtureResponse);
 
-    const patchedStripeSubscriptionOutbound = await updateStripeSubscription(
-      subscriptionFixtureIdentifierOutbound,
-      {
+    const patchedStripeSubscriptionOutbound = await updateStripeSubscription({
+      subscriptionId: subscriptionFixtureIdentifierOutbound,
+      options: {
         priceId: subscriptionUpdateFixtureRequestSubset['items[0][price]'],
         metadata: {
           next_sync: subscriptionUpdateFixtureRequestSubset['metadata[next_sync]'],
         },
       },
-    );
+    });
 
     StripeSubscriptionApiResponseContractSchema.parse(patchedStripeSubscriptionOutbound);
     expect(patchedStripeSubscriptionOutbound.id).toBe(subscriptionRetrieveFixtureResponse.id);
@@ -204,11 +204,11 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       .matchHeader('idempotency-key', outboundIdempotencyKeyForQuantitySync)
       .reply(200, subscriptionUpdateFixtureResponse);
 
-    const patchedStripeSubscriptionOutbound = await updateStripeSubscriptionQuantity(
-      subscriptionFixtureIdentifierOutbound,
-      7,
-      { idempotencyKey: outboundIdempotencyKeyForQuantitySync },
-    );
+    const patchedStripeSubscriptionOutbound = await updateStripeSubscriptionQuantity({
+      subscriptionId: subscriptionFixtureIdentifierOutbound,
+      quantity: 7,
+      options: { idempotencyKey: outboundIdempotencyKeyForQuantitySync },
+    });
 
     StripeSubscriptionApiResponseContractSchema.parse(patchedStripeSubscriptionOutbound);
     expect(patchedStripeSubscriptionOutbound.id).toBe(subscriptionRetrieveFixtureResponse.id);
@@ -231,10 +231,10 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       .matchHeader('authorization', /^Bearer /)
       .reply(200, subscriptionUpdateCancelFixtureResponse);
 
-    const canceledStripeSubscriptionOutbound = await cancelStripeSubscription(
-      subscriptionFixtureIdentifierOutbound,
-      true,
-    );
+    const canceledStripeSubscriptionOutbound = await cancelStripeSubscription({
+      subscriptionId: subscriptionFixtureIdentifierOutbound,
+      cancelAtPeriodEnd: true,
+    });
 
     StripeSubscriptionApiResponseContractSchema.parse(canceledStripeSubscriptionOutbound);
     expect(canceledStripeSubscriptionOutbound.cancel_at_period_end).toBe(true);
@@ -257,9 +257,9 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       .matchHeader('authorization', /^Bearer /)
       .reply(200, subscriptionResumeFixtureResponse);
 
-    const resumedStripeSubscriptionOutbound = await resumeStripeSubscription(
-      subscriptionFixtureIdentifierOutbound,
-    );
+    const resumedStripeSubscriptionOutbound = await resumeStripeSubscription({
+      subscriptionId: subscriptionFixtureIdentifierOutbound,
+    });
 
     StripeSubscriptionApiResponseContractSchema.parse(resumedStripeSubscriptionOutbound);
     expect(resumedStripeSubscriptionOutbound.cancel_at_period_end).toBe(false);
@@ -273,10 +273,10 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       .matchHeader('authorization', /^Bearer /)
       .reply(200, subscriptionCancelFixtureResponse);
 
-    const immediateCanceledStripeSubscriptionOutbound = await cancelStripeSubscription(
-      subscriptionFixtureIdentifierOutbound,
-      false,
-    );
+    const immediateCanceledStripeSubscriptionOutbound = await cancelStripeSubscription({
+      subscriptionId: subscriptionFixtureIdentifierOutbound,
+      cancelAtPeriodEnd: false,
+    });
 
     StripeSubscriptionApiResponseContractSchema.parse(immediateCanceledStripeSubscriptionOutbound);
     expect(immediateCanceledStripeSubscriptionOutbound.status).toBe('canceled');
@@ -328,7 +328,7 @@ describe('Stripe outbound SDK contract (`stripe.client`)', () => {
       });
 
     for (let lookup = 0; lookup < lookupCount; lookup += 1) {
-      await expect(getStripeCustomer('cus_missing')).resolves.toBeNull();
+      await expect(getStripeCustomer({ customerId: 'cus_missing' })).resolves.toBeNull();
     }
     expect(await stripeCircuit.getState()).toBe('CLOSED');
   });

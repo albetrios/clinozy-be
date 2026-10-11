@@ -5,7 +5,7 @@ import { trimmedString, trimmedStringMinMax } from '@/shared/utils/validation/va
 /** Zod schema for the `:role_id` path param (get/update/delete role + list/replace role permissions). */
 export const roleIdParamsDto = z
   .object({
-    role_id: trimmedStringMinMax(1, 28),
+    role_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
@@ -26,9 +26,12 @@ export const roleIdParamsDto = z
  */
 export const createMemberRoleDto = z
   .object({
-    name: trimmedStringMinMax(1, 100),
+    name: trimmedStringMinMax({ min: 1, max: 100 }),
     description: trimmedString().max(500).nullable().optional(),
-    permission_codes: z.array(trimmedStringMinMax(1, 100)).max(200).optional(),
+    permission_codes: z
+      .array(trimmedStringMinMax({ min: 1, max: 100 }))
+      .max(200)
+      .optional(),
   })
   .strict();
 
@@ -39,7 +42,7 @@ export const createMemberRoleDto = z
  */
 export const updateMemberRoleDto = z
   .object({
-    name: trimmedStringMinMax(1, 100).optional(),
+    name: trimmedStringMinMax({ min: 1, max: 100 }).optional(),
     description: trimmedString().max(500).nullable().optional(),
   })
   .strict();

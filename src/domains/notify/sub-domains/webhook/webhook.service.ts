@@ -123,21 +123,24 @@ export class WebhookService {
   async list(options: WebhookListOptions) {
     const { scope } = options;
     const organization_public_id = scope.organizationPublicId;
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationByPublicId(organization_public_id);
-      const result = await this.webhookRepository.listByOrganization(
-        organization.id,
-        omitUndefined({
-          after: options.after,
-          limit: options.limit ?? PAGINATION.DEFAULT_LIMIT,
-          include_total: options.include_total,
-        }),
-      );
-      return {
-        ...result,
-        items: WebhookSerializer.many(result.items),
-      };
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationByPublicId(organization_public_id);
+        const result = await this.webhookRepository.listByOrganization(
+          organization.id,
+          omitUndefined({
+            after: options.after,
+            limit: options.limit ?? PAGINATION.DEFAULT_LIMIT,
+            include_total: options.include_total,
+          }),
+        );
+        return {
+          ...result,
+          items: WebhookSerializer.many(result.items),
+        };
+      },
     });
   }
 
@@ -149,15 +152,18 @@ export class WebhookService {
     webhook_public_id: string;
   }) {
     const organization_public_id = scope.organizationPublicId;
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationByPublicId(organization_public_id);
-      const webhook = await this.webhookRepository.findByPublicId(
-        webhook_public_id,
-        organization.id,
-      );
-      if (!webhook) throw new NotFoundError('Webhook');
-      return WebhookSerializer.one(webhook);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationByPublicId(organization_public_id);
+        const webhook = await this.webhookRepository.findByPublicId(
+          webhook_public_id,
+          organization.id,
+        );
+        if (!webhook) throw new NotFoundError('Webhook');
+        return WebhookSerializer.one(webhook);
+      },
     });
   }
 
@@ -173,38 +179,41 @@ export class WebhookService {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateCreateWebhook(body);
     await resolveAndPinWebhookUrl(parsed.url);
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationByPublicId(organization_public_id);
-      // sec-N4: enforce the per-organization webhook cap before insert. Race-
-      // audit-#8: serialize the per-organization count + insert with a transaction-scoped advisory lock
-      // so concurrent creates cannot both pass the same count and overshoot WEBHOOK_MAX_PER_ORG.
-      // The lock auto-releases at commit.
-      await this.webhookRepository.acquireCreationQuotaLock(organization.id);
-      const activeCount = await this.webhookRepository.countActiveByOrganization(organization.id);
-      if (activeCount >= env.WEBHOOK_MAX_PER_ORG) {
-        throw new ConflictError('errors:webhookMaxReached', {
-          max: env.WEBHOOK_MAX_PER_ORG,
-        });
-      }
-      const userId =
-        await this.organizationService.resolveUserInternalIdByPublicId(created_by_user_public_id);
-      // sec-UP #8: never persist an empty webhook secret. The DTO already refuses
-      // empty/short strings at the boundary; when the caller omits `secret`
-      // entirely (the "let the platform pick one" UX), generate a 256-bit CSPRNG
-      // value so the worker's HMAC always has a real key.
-      const effectiveSecret = parsed.secret ?? generateWebhookSigningSecret();
-      const row = await this.webhookRepository.create(
-        omitUndefined({
-          organization_id: organization.id,
-          url: parsed.url,
-          encrypted_secret: encryptFieldSecret(effectiveSecret),
-          events: parsed.events,
-          is_enabled: parsed.is_enabled,
-          created_by_user_id: userId ?? undefined,
-        }),
-      );
-      return WebhookSerializer.one(row);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationByPublicId(organization_public_id);
+        // sec-N4: enforce the per-organization webhook cap before insert. Race-
+        // audit-#8: serialize the per-organization count + insert with a transaction-scoped advisory lock
+        // so concurrent creates cannot both pass the same count and overshoot WEBHOOK_MAX_PER_ORG.
+        // The lock auto-releases at commit.
+        await this.webhookRepository.acquireCreationQuotaLock(organization.id);
+        const activeCount = await this.webhookRepository.countActiveByOrganization(organization.id);
+        if (activeCount >= env.WEBHOOK_MAX_PER_ORG) {
+          throw new ConflictError('errors:webhookMaxReached', {
+            max: env.WEBHOOK_MAX_PER_ORG,
+          });
+        }
+        const userId =
+          await this.organizationService.resolveUserInternalIdByPublicId(created_by_user_public_id);
+        // sec-UP #8: never persist an empty webhook secret. The DTO already refuses
+        // empty/short strings at the boundary; when the caller omits `secret`
+        // entirely (the "let the platform pick one" UX), generate a 256-bit CSPRNG
+        // value so the worker's HMAC always has a real key.
+        const effectiveSecret = parsed.secret ?? generateWebhookSigningSecret();
+        const row = await this.webhookRepository.create(
+          omitUndefined({
+            organization_id: organization.id,
+            url: parsed.url,
+            encrypted_secret: encryptFieldSecret(effectiveSecret),
+            events: parsed.events,
+            is_enabled: parsed.is_enabled,
+            created_by_user_id: userId ?? undefined,
+          }),
+        );
+        return WebhookSerializer.one(row);
+      },
     });
   }
 
@@ -224,67 +233,70 @@ export class WebhookService {
     if (parsed.url !== undefined) {
       await resolveAndPinWebhookUrl(parsed.url);
     }
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationByPublicId(organization_public_id);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationByPublicId(organization_public_id);
 
-      const overlapWindowMs = env.WEBHOOK_SECRET_ROTATION_OVERLAP_HOURS * MILLISECONDS_PER_HOUR;
-      const rotatingSecret = parsed.secret !== undefined;
-      if (rotatingSecret) {
-        await this.assertSecretRotationEligible({
-          webhook_public_id,
-          organizationId: organization.id,
-          overlapWindowMs,
-        });
-      }
-
-      const userId =
-        await this.organizationService.resolveUserInternalIdByPublicId(updated_by_user_public_id);
-      const updatePayload = omitUndefined({
-        url: parsed.url,
-        events: parsed.events,
-        is_enabled: parsed.is_enabled,
-        encrypted_secret: rotatingSecret ? encryptFieldSecret(parsed.secret!) : undefined,
-      });
-      // audit-#9: the eligibility cutoff is ALSO enforced in the repository UPDATE predicate so a
-      // rotation that slipped past the pre-check above (concurrent rotation) cannot clobber the
-      // single previous-secret slot. `now - overlapWindow`: a row is eligible only when its last
-      // rotation is null or older than the overlap window.
-      const secretRotationOverlapCutoff = rotatingSecret
-        ? new Date(Date.now() - overlapWindowMs)
-        : undefined;
-      let updated: Awaited<ReturnType<WebhookRepository['update']>>;
-      try {
-        updated = await this.webhookRepository.update(
-          webhook_public_id,
-          organization.id,
-          updatePayload,
-          userId ?? undefined,
-          omitUndefined({ secretRotationOverlapCutoff }),
-        );
-      } catch (error) {
-        // A URL change that collides with another webhook in the same organization
-        // hits idx_webhooks_organization_id_url_unique — surface it as a clean 409.
-        if (isPostgresUniqueViolation(error)) {
-          throw new ConflictError(
-            'errors:webhookUrlExists',
-            parsed.url ? { url: parsed.url } : undefined,
-          );
+        const overlapWindowMs = env.WEBHOOK_SECRET_ROTATION_OVERLAP_HOURS * MILLISECONDS_PER_HOUR;
+        const rotatingSecret = parsed.secret !== undefined;
+        if (rotatingSecret) {
+          await this.assertSecretRotationEligible({
+            webhook_public_id,
+            organizationId: organization.id,
+            overlapWindowMs,
+          });
         }
-        throw error;
-      }
-      if (!updated) {
-        throw await this.buildUnmatchedWebhookUpdateError({
-          webhook_public_id,
-          organizationId: organization.id,
-          rotatingSecret,
-          overlapWindowMs,
+
+        const userId =
+          await this.organizationService.resolveUserInternalIdByPublicId(updated_by_user_public_id);
+        const updatePayload = omitUndefined({
+          url: parsed.url,
+          events: parsed.events,
+          is_enabled: parsed.is_enabled,
+          encrypted_secret: rotatingSecret ? encryptFieldSecret(parsed.secret!) : undefined,
         });
-      }
-      // Best-effort: drop any cached breaker so a URL/secret change does not reuse stale state.
-      // Cross-process delivery workers fall back to the breaker cache's idle TTL.
-      invalidateWebhookOutboundCircuit(webhook_public_id);
-      return WebhookSerializer.one(updated);
+        // audit-#9: the eligibility cutoff is ALSO enforced in the repository UPDATE predicate so a
+        // rotation that slipped past the pre-check above (concurrent rotation) cannot clobber the
+        // single previous-secret slot. `now - overlapWindow`: a row is eligible only when its last
+        // rotation is null or older than the overlap window.
+        const secretRotationOverlapCutoff = rotatingSecret
+          ? new Date(Date.now() - overlapWindowMs)
+          : undefined;
+        let updated: Awaited<ReturnType<WebhookRepository['update']>>;
+        try {
+          updated = await this.webhookRepository.update(
+            webhook_public_id,
+            organization.id,
+            updatePayload,
+            userId ?? undefined,
+            omitUndefined({ secretRotationOverlapCutoff }),
+          );
+        } catch (error) {
+          // A URL change that collides with another webhook in the same organization
+          // hits idx_webhooks_organization_id_url_unique — surface it as a clean 409.
+          if (isPostgresUniqueViolation(error)) {
+            throw new ConflictError(
+              'errors:webhookUrlExists',
+              parsed.url ? { url: parsed.url } : undefined,
+            );
+          }
+          throw error;
+        }
+        if (!updated) {
+          throw await this.buildUnmatchedWebhookUpdateError({
+            webhook_public_id,
+            organizationId: organization.id,
+            rotatingSecret,
+            overlapWindowMs,
+          });
+        }
+        // Best-effort: drop any cached breaker so a URL/secret change does not reuse stale state.
+        // Cross-process delivery workers fall back to the breaker cache's idle TTL.
+        invalidateWebhookOutboundCircuit(webhook_public_id);
+        return WebhookSerializer.one(updated);
+      },
     });
   }
 
@@ -365,9 +377,9 @@ export class WebhookService {
     organizationPublicIds: readonly string[];
   }): Promise<void> {
     for (const organizationPublicId of options.organizationPublicIds) {
-      await withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
-        async () => {
+      await withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
+        callback: async () => {
           const organization =
             await this.organizationService.findOrganizationByPublicId(organizationPublicId);
           if (!organization) return;
@@ -376,7 +388,7 @@ export class WebhookService {
             userPublicId: options.userPublicId,
           });
         },
-      );
+      });
     }
   }
 
@@ -388,13 +400,16 @@ export class WebhookService {
     webhook_public_id: string;
   }) {
     const organization_public_id = scope.organizationPublicId;
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationByPublicId(organization_public_id);
-      const deleted = await this.webhookRepository.softDelete(webhook_public_id, organization.id);
-      if (!deleted) throw new NotFoundError('Webhook');
-      // Best-effort: drop any cached breaker for the removed webhook (idle TTL covers other processes).
-      invalidateWebhookOutboundCircuit(webhook_public_id);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationByPublicId(organization_public_id);
+        const deleted = await this.webhookRepository.softDelete(webhook_public_id, organization.id);
+        if (!deleted) throw new NotFoundError('Webhook');
+        // Best-effort: drop any cached breaker for the removed webhook (idle TTL covers other processes).
+        invalidateWebhookOutboundCircuit(webhook_public_id);
+      },
     });
   }
 
@@ -434,9 +449,9 @@ export class WebhookService {
     data: Record<string, unknown>;
   }): Promise<void> {
     const { organizationPublicId, eventType } = options;
-    await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
-      () =>
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
+      callback: () =>
         withSavepoint(async () => {
           const organization =
             await this.organizationService.requireOrganizationByPublicId(organizationPublicId);
@@ -478,28 +493,31 @@ export class WebhookService {
             );
           }
         }),
-    );
+    });
   }
 
   async listDeliveryAttempts(options: WebhookDeliveryAttemptListOptions) {
     const { scope, webhook_public_id } = options;
     const organization_public_id = scope.organizationPublicId;
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationByPublicId(organization_public_id);
-      const webhookId = await this.deliveryAttemptRepository.getWebhookId(
-        webhook_public_id,
-        organization.id,
-      );
-      if (webhookId === null || webhookId === undefined) throw new NotFoundError('Webhook');
-      return this.deliveryAttemptRepository.listByWebhook(
-        webhookId,
-        omitUndefined({
-          after: options.after,
-          limit: options.limit ?? PAGINATION.DEFAULT_LIMIT,
-          include_total: options.include_total,
-        }),
-      );
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationByPublicId(organization_public_id);
+        const webhookId = await this.deliveryAttemptRepository.getWebhookId(
+          webhook_public_id,
+          organization.id,
+        );
+        if (webhookId === null || webhookId === undefined) throw new NotFoundError('Webhook');
+        return this.deliveryAttemptRepository.listByWebhook(
+          webhookId,
+          omitUndefined({
+            after: options.after,
+            limit: options.limit ?? PAGINATION.DEFAULT_LIMIT,
+            include_total: options.include_total,
+          }),
+        );
+      },
     });
   }
 
@@ -511,13 +529,19 @@ export class WebhookService {
     scope: OrganizationPrincipalDatabaseScope;
     webhook_public_id: string;
   }) {
-    return withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationService.requireOrganizationByPublicId(
-        scope.organizationPublicId,
-      );
-      const found = await this.webhookRepository.findByPublicId(webhook_public_id, organization.id);
-      if (!found) throw new NotFoundError('Webhook');
-      return found;
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization = await this.organizationService.requireOrganizationByPublicId(
+          scope.organizationPublicId,
+        );
+        const found = await this.webhookRepository.findByPublicId(
+          webhook_public_id,
+          organization.id,
+        );
+        if (!found) throw new NotFoundError('Webhook');
+        return found;
+      },
     });
   }
 
@@ -553,11 +577,14 @@ export class WebhookService {
     // at the misconfigured row; users get a 500 telling them to rotate the secret.
     const signingSecret = decryptFieldSecret(webhook.encrypted_secret);
     if (signingSecret.length === 0) {
-      captureMessage('webhook.test.empty_signing_secret', {
-        level: 'error',
-        extra: {
-          webhookPublicId: webhook.public_id,
-          organizationPublicId: scope.organizationPublicId,
+      captureMessage({
+        message: 'webhook.test.empty_signing_secret',
+        options: {
+          level: 'error',
+          extra: {
+            webhookPublicId: webhook.public_id,
+            organizationPublicId: scope.organizationPublicId,
+          },
         },
       });
       logger.error(
@@ -568,11 +595,11 @@ export class WebhookService {
         `Webhook ${webhook.public_id} has an empty signing secret; rotate it before test delivery.`,
       );
     }
-    const signatureHeader = buildWebhookSignatureHeader(
-      signingSecret,
-      payloadString,
-      signatureTimestamp,
-    );
+    const signatureHeader = buildWebhookSignatureHeader({
+      secret: signingSecret,
+      payload: payloadString,
+      timestamp: signatureTimestamp,
+    });
 
     const sentAt = new Date();
     let statusCode: number | null = null;
@@ -638,17 +665,20 @@ export class WebhookService {
         : responseBody;
 
     // Phase 2 (DB context): record the delivery attempt under RLS scope (network already done).
-    await withAppDatabaseContext(scope, async () => {
-      await this.deliveryAttemptRepository.create({
-        webhook_id: webhook.id,
-        event_type: 'webhook.test',
-        payload: testPayload,
-        status: success ? 'SENT' : 'FAILED',
-        http_status_code: statusCode,
-        response_body: storedResponseBody,
-        sent_at: sentAt,
-        attempt_count: 1,
-      });
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        await this.deliveryAttemptRepository.create({
+          webhook_id: webhook.id,
+          event_type: 'webhook.test',
+          payload: testPayload,
+          status: success ? 'SENT' : 'FAILED',
+          http_status_code: statusCode,
+          response_body: storedResponseBody,
+          sent_at: sentAt,
+          attempt_count: 1,
+        });
+      },
     });
 
     const truncatedBody =

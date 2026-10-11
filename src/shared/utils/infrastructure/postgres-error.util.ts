@@ -39,7 +39,7 @@ const TRANSIENT_RETRY_BASE_DELAY_MS = 25;
  * the SQLSTATE) in `error.cause`, so a top-level-only check misses the code and
  * a concurrent unique-violation loser would surface as a 500 instead of a 409.
  */
-function hasPostgresErrorCode(error: unknown, code: string): boolean {
+function hasPostgresErrorCode({ error, code }: { error: unknown; code: string }): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
     if (typeof current !== 'object' || current === null) return false;
@@ -51,7 +51,7 @@ function hasPostgresErrorCode(error: unknown, code: string): boolean {
 
 /** Returns true when `error` is a Postgres `unique_violation` (SQLSTATE 23505). */
 export function isPostgresUniqueViolation(error: unknown): boolean {
-  return hasPostgresErrorCode(error, POSTGRES_UNIQUE_VIOLATION);
+  return hasPostgresErrorCode({ error, code: POSTGRES_UNIQUE_VIOLATION });
 }
 
 /**
@@ -66,12 +66,12 @@ export function isPostgresUniqueViolation(error: unknown): boolean {
  * succeeds, which is why the caller maps it to 409 rather than 500.
  */
 export function isPostgresLockTimeout(error: unknown): boolean {
-  return hasPostgresErrorCode(error, POSTGRES_LOCK_NOT_AVAILABLE);
+  return hasPostgresErrorCode({ error, code: POSTGRES_LOCK_NOT_AVAILABLE });
 }
 
 /** Returns true when `error` is a Postgres `foreign_key_violation` (SQLSTATE 23503). */
 export function isPostgresForeignKeyViolation(error: unknown): boolean {
-  return hasPostgresErrorCode(error, POSTGRES_FOREIGN_KEY_VIOLATION);
+  return hasPostgresErrorCode({ error, code: POSTGRES_FOREIGN_KEY_VIOLATION });
 }
 
 /**
@@ -123,10 +123,13 @@ export function isTransientConnectionError(error: unknown): boolean {
  *   aborts the whole transaction, so re-issuing only the read would run on an aborted handle. Use
  *   only on standalone autocommit reads (e.g. pre-handler auth lookups).
  */
-export async function runReadWithTransientRetry<T>(
-  read: () => Promise<T>,
+export async function runReadWithTransientRetry<T>({
+  read,
   maxAttempts = DEFAULT_TRANSIENT_RETRY_ATTEMPTS,
-): Promise<T> {
+}: {
+  read: () => Promise<T>;
+  maxAttempts?: number | undefined;
+}): Promise<T> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
@@ -151,10 +154,13 @@ export async function runReadWithTransientRetry<T>(
  * to a 409 and the transaction rolls back cleanly. The callback must generate a new
  * `public_id` on each attempt (call inside the callback).
  */
-export async function runInsertWithPublicIdentifierRetry<T>(
-  insert: () => Promise<T>,
+export async function runInsertWithPublicIdentifierRetry<T>({
+  insert,
   maxAttempts = 5,
-): Promise<T> {
+}: {
+  insert: () => Promise<T>;
+  maxAttempts?: number | undefined;
+}): Promise<T> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {

@@ -110,7 +110,10 @@ describe('auth.http.util — session cookie options', () => {
 
 describe('auth.http.util — session cookie value encoding', () => {
   it('round-trips a formatted value back to its two halves', () => {
-    const raw = formatSessionCookieValue('sess_abc123', 'refresh-secret-value');
+    const raw = formatSessionCookieValue({
+      sessionPublicId: 'sess_abc123',
+      refreshSecret: 'refresh-secret-value',
+    });
     expect(raw).toBe('sess_abc123.refresh-secret-value');
     expect(parseSessionCookieValue(raw)).toEqual({
       sessionPublicId: 'sess_abc123',
@@ -215,7 +218,11 @@ describe('auth.http.util — refresh-secret issuance proof', () => {
 describe('auth.http.util — cookie writes', () => {
   it('setSessionCookie writes the encoded session value AND refreshes the CSRF cookie', () => {
     const reply = mockReply();
-    setSessionCookie(reply, 'sess_abc123', 'refresh-secret-value');
+    setSessionCookie({
+      reply,
+      sessionPublicId: 'sess_abc123',
+      refreshSecret: 'refresh-secret-value',
+    });
 
     expect(reply.setCookie).toHaveBeenCalledWith(
       SESSION_COOKIE_NAME,
@@ -257,7 +264,7 @@ describe('auth.http.util — OAuth nonce cookie', () => {
 
   it('writes the nonce httpOnly, sameSite=lax, scoped to the callback path and the state TTL', () => {
     const reply = mockReply();
-    setOauthNonceCookie(reply, 'nonce-value');
+    setOauthNonceCookie({ reply, nonce: 'nonce-value' });
     // sameSite=lax (not strict) so the cookie survives the top-level navigation back from the
     // provider; the TTL matches the Redis `state` so a stale nonce cannot outlive its state.
     expect(reply.setCookie).toHaveBeenCalledWith(OAUTH_NONCE_COOKIE_NAME, 'nonce-value', {

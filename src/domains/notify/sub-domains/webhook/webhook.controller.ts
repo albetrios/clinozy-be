@@ -57,11 +57,11 @@ function createListWebhooksHandler(service: WebhookService) {
         include_total: parsed.include_total === 'true',
       }),
     );
-    return paginatedResponse(
-      result.items,
-      getRequestIdentifier(request),
-      buildCursorPaginationMetadata(result),
-    );
+    return paginatedResponse({
+      data: result.items,
+      request_id: getRequestIdentifier(request),
+      pagination: buildCursorPaginationMetadata(result),
+    });
   };
 }
 
@@ -76,17 +76,20 @@ function createListDeliveryAttemptsHandler(service: WebhookService) {
       omitUndefined({
         scope,
         // sec-new-N1: reject malformed webhookId before reaching the service layer.
-        webhook_public_id: validatePublicIdParam(request.params.webhook_id, 'webhook_id'),
+        webhook_public_id: validatePublicIdParam({
+          value: request.params.webhook_id,
+          fieldName: 'webhook_id',
+        }),
         after: parsed.after,
         limit: parsed.limit,
         include_total: parsed.include_total === 'true',
       }),
     );
-    return paginatedResponse(
-      WebhookDeliveryAttemptSerializer.many(result.items),
-      getRequestIdentifier(request),
-      buildCursorPaginationMetadata(result),
-    );
+    return paginatedResponse({
+      data: WebhookDeliveryAttemptSerializer.many(result.items),
+      request_id: getRequestIdentifier(request),
+      pagination: buildCursorPaginationMetadata(result),
+    });
   };
 }
 
@@ -105,12 +108,15 @@ export function createWebhookController(service: WebhookService) {
       // sec-new-N1: reject malformed webhookId before reaching the service layer.
       const data = await service.get({
         scope: requireOrganizationScope(request),
-        webhook_public_id: validatePublicIdParam(request.params.webhook_id, 'webhook_id'),
+        webhook_public_id: validatePublicIdParam({
+          value: request.params.webhook_id,
+          fieldName: 'webhook_id',
+        }),
       });
       // sec-T #17: service already returns the serialized public shape (id, url,
       // events, is_enabled, ...). Re-running WebhookSerializer.one over it would
       // double-serialize and (with the typed projection) reject the input shape.
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     createWebhook: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
@@ -121,15 +127,18 @@ export function createWebhookController(service: WebhookService) {
         created_by_user_public_id: getActingUserPublicId(auth),
       });
       // A new outbound destination for the organization's events — recorded at WARNING.
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'notify.webhook.create',
-        resource_type: 'webhook',
-        organizationPublicId: scope.organizationPublicId,
-        severity: 'WARNING',
-        metadata: { webhook_public_id: data.id, url_origin: webhookUrlOrigin(data.url) },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'notify.webhook.create',
+          resource_type: 'webhook',
+          organizationPublicId: scope.organizationPublicId,
+          severity: 'WARNING',
+          metadata: { webhook_public_id: data.id, url_origin: webhookUrlOrigin(data.url) },
+        },
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     updateWebhook: async (
       request: FastifyRequest<{ Params: { webhook_id: string } }>,
@@ -138,7 +147,10 @@ export function createWebhookController(service: WebhookService) {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       // sec-new-N1: reject malformed webhookId before reaching the service layer.
-      const webhookId = validatePublicIdParam(request.params.webhook_id, 'webhook_id');
+      const webhookId = validatePublicIdParam({
+        value: request.params.webhook_id,
+        fieldName: 'webhook_id',
+      });
       const data = await service.update({
         scope,
         webhook_public_id: webhookId,
@@ -148,19 +160,22 @@ export function createWebhookController(service: WebhookService) {
       const changedFields = listBodyFieldNames(request.body);
       // A URL change is a new outbound destination — recorded at WARNING with its origin.
       const destinationChanged = changedFields.includes('url');
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'notify.webhook.update',
-        resource_type: 'webhook',
-        organizationPublicId: scope.organizationPublicId,
-        severity: destinationChanged ? 'WARNING' : 'INFO',
-        metadata: {
-          webhook_public_id: webhookId,
-          changed_fields: changedFields,
-          ...(destinationChanged ? { url_origin: webhookUrlOrigin(data.url) } : {}),
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'notify.webhook.update',
+          resource_type: 'webhook',
+          organizationPublicId: scope.organizationPublicId,
+          severity: destinationChanged ? 'WARNING' : 'INFO',
+          metadata: {
+            webhook_public_id: webhookId,
+            changed_fields: changedFields,
+            ...(destinationChanged ? { url_origin: webhookUrlOrigin(data.url) } : {}),
+          },
         },
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     deleteWebhook: async (
       request: FastifyRequest<{ Params: { webhook_id: string } }>,
@@ -169,14 +184,20 @@ export function createWebhookController(service: WebhookService) {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       // sec-new-N1: reject malformed webhookId before reaching the service layer.
-      const webhookId = validatePublicIdParam(request.params.webhook_id, 'webhook_id');
+      const webhookId = validatePublicIdParam({
+        value: request.params.webhook_id,
+        fieldName: 'webhook_id',
+      });
       await service.delete({ scope, webhook_public_id: webhookId });
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'notify.webhook.delete',
-        resource_type: 'webhook',
-        organizationPublicId: scope.organizationPublicId,
-        metadata: { webhook_public_id: webhookId },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'notify.webhook.delete',
+          resource_type: 'webhook',
+          organizationPublicId: scope.organizationPublicId,
+          metadata: { webhook_public_id: webhookId },
+        },
       });
       return reply.code(204).send();
     },
@@ -188,13 +209,16 @@ export function createWebhookController(service: WebhookService) {
       // sec-new-N1: reject malformed webhookId before reaching the service layer.
       const data = await service.testWebhook({
         scope: requireOrganizationScope(request),
-        webhook_public_id: validatePublicIdParam(request.params.webhook_id, 'webhook_id'),
+        webhook_public_id: validatePublicIdParam({
+          value: request.params.webhook_id,
+          fieldName: 'webhook_id',
+        }),
         requestId: getRequestIdentifier(request),
       });
       // sec-T #17: testWebhook returns its own shape (success/status_code/delivered_at/
       // response_body), NOT a webhook row — return it directly without re-running
       // WebhookSerializer.one over it.
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

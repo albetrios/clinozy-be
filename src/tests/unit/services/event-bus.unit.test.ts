@@ -46,8 +46,11 @@ describe('EventBus.emit', () => {
   it('invokes registered handlers', async () => {
     const bus = new EventBus();
     let called = 0;
-    bus.on('x', async () => {
-      called += 1;
+    bus.on({
+      eventType: 'x',
+      handler: async () => {
+        called += 1;
+      },
     });
 
     await bus.emit({ type: 'x', payload: { ok: true }, timestamp: new Date() });
@@ -56,8 +59,11 @@ describe('EventBus.emit', () => {
 
   it('does not throw when a handler rejects (errors are swallowed and logged)', async () => {
     const bus = new EventBus();
-    bus.on('boom', async () => {
-      throw new Error('handler-failed');
+    bus.on({
+      eventType: 'boom',
+      handler: async () => {
+        throw new Error('handler-failed');
+      },
     });
 
     await expect(
@@ -68,14 +74,23 @@ describe('EventBus.emit', () => {
   it('runs all handlers even when one of them fails', async () => {
     const bus = new EventBus();
     const calls: string[] = [];
-    bus.on('multi', async () => {
-      calls.push('first');
+    bus.on({
+      eventType: 'multi',
+      handler: async () => {
+        calls.push('first');
+      },
     });
-    bus.on('multi', async () => {
-      throw new Error('second-failed');
+    bus.on({
+      eventType: 'multi',
+      handler: async () => {
+        throw new Error('second-failed');
+      },
     });
-    bus.on('multi', async () => {
-      calls.push('third');
+    bus.on({
+      eventType: 'multi',
+      handler: async () => {
+        calls.push('third');
+      },
     });
 
     await bus.emit({ type: 'multi', payload: {}, timestamp: new Date() });
@@ -95,8 +110,11 @@ describe('EventBus.emit', () => {
     const { logger } = await import('@/shared/utils/infrastructure/logger.util.js');
     const bus = new EventBus();
     const handlerError = new Error('handler-x-failed');
-    bus.on('log-event', async () => {
-      throw handlerError;
+    bus.on({
+      eventType: 'log-event',
+      handler: async () => {
+        throw handlerError;
+      },
     });
 
     await bus.emit({ type: 'log-event', payload: {}, timestamp: new Date() });
@@ -110,8 +128,11 @@ describe('EventBus.emit', () => {
   it('increments the per-event failure metric when a best-effort handler throws (EX-15)', async () => {
     recordEventBusHandlerFailureMock.mockClear();
     const bus = new EventBus();
-    bus.on('metric-event', async () => {
-      throw new Error('handler-failed');
+    bus.on({
+      eventType: 'metric-event',
+      handler: async () => {
+        throw new Error('handler-failed');
+      },
     });
 
     await bus.emit({ type: 'metric-event', payload: {}, timestamp: new Date() });
@@ -285,7 +306,7 @@ describe('runEnqueueAfterCommit', () => {
 
 describe('buildDomainEvent', () => {
   it('builds an event with a default timestamp', () => {
-    const event = buildDomainEvent('domain.foo', { a: 1 });
+    const event = buildDomainEvent({ type: 'domain.foo', payload: { a: 1 } });
     expect(event.type).toBe('domain.foo');
     expect(event.payload).toEqual({ a: 1 });
     expect(event.timestamp).toBeInstanceOf(Date);
@@ -293,18 +314,26 @@ describe('buildDomainEvent', () => {
   });
 
   it('includes requestId only when provided', () => {
-    const event = buildDomainEvent('domain.foo', { a: 1 }, { requestId: 'req-1' });
+    const event = buildDomainEvent({
+      type: 'domain.foo',
+      payload: { a: 1 },
+      options: { requestId: 'req-1' },
+    });
     expect(event.requestId).toBe('req-1');
   });
 
   it('does not assign requestId when options omit requestId', () => {
-    const event = buildDomainEvent('domain.foo', { a: 1 }, {});
+    const event = buildDomainEvent({ type: 'domain.foo', payload: { a: 1 }, options: {} });
     expect('requestId' in event).toBe(false);
   });
 
   it('uses the provided timestamp when given', () => {
     const fixedTime = new Date('2026-01-01T00:00:00Z');
-    const event = buildDomainEvent('domain.bar', {}, { timestamp: fixedTime });
+    const event = buildDomainEvent({
+      type: 'domain.bar',
+      payload: {},
+      options: { timestamp: fixedTime },
+    });
     expect(event.timestamp).toBe(fixedTime);
   });
 });
@@ -319,7 +348,7 @@ describe('EventBus.clearCommitDispatchMarker (commit-dispatch marker leak guard)
   });
 
   it('flushOnCommit consumes durable tasks while the marker is present (control)', async () => {
-    await scheduleCommitDispatch(task, { requestId: 'req-present' });
+    await scheduleCommitDispatch({ task, options: { requestId: 'req-present' } });
 
     await eventBus.flushOnCommit({ requestId: 'req-present' });
 
@@ -334,15 +363,15 @@ describe('EventBus.clearCommitDispatchMarker (commit-dispatch marker leak guard)
 
     // Must not throw — the request still succeeds, but durability degrades to the in-memory path.
     await expect(
-      scheduleCommitDispatch(task, { requestId: 'req-redis-down' }),
+      scheduleCommitDispatch({ task, options: { requestId: 'req-redis-down' } }),
     ).resolves.toBeUndefined();
 
-    expect(captureExceptionMock).toHaveBeenCalledWith(
-      appendError,
-      expect.objectContaining({
+    expect(captureExceptionMock).toHaveBeenCalledWith({
+      error: appendError,
+      context: expect.objectContaining({
         tags: expect.objectContaining({ source: 'event-bus.commit-dispatch' }),
       }),
-    );
+    });
     expect(recordCommitDispatchDurabilityFallbackMock).toHaveBeenCalledTimes(1);
   });
 });

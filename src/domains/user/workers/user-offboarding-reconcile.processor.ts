@@ -61,14 +61,14 @@ export async function runUserOffboardingReconcileJob(
     Date.now() - USER_OFFBOARDING_STUCK_AFTER_MINUTES * MILLISECONDS_PER_MINUTE,
   );
 
-  const stuck = await withMaintenanceDatabaseContext(
-    MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-    (databaseHandle) =>
+  const stuck = await withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+    callback: (databaseHandle) =>
       findUsersStuckInOffboarding(databaseHandle, {
         startedBefore: cutoff,
         limit: USER_OFFBOARDING_RECONCILE_BATCH,
       }),
-  );
+  });
 
   let resumed = 0;
   let failed = 0;
@@ -79,9 +79,12 @@ export async function runUserOffboardingReconcileJob(
     } catch (error) {
       failed += 1;
       logger.warn({ error, publicId: public_id }, 'user-offboarding-reconcile.resume_failed');
-      captureException(error, {
-        userId: public_id,
-        tags: { source: 'user-offboarding-reconcile' },
+      captureException({
+        error,
+        context: {
+          userId: public_id,
+          tags: { source: 'user-offboarding-reconcile' },
+        },
       });
     }
   }

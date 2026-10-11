@@ -36,9 +36,11 @@ export function createOrganizationNotificationPolicyTombstoneRetentionWorker(): 
   const worker = new Worker(
     ORGANIZATION_NOTIFICATION_POLICY_TOMBSTONE_RETENTION_QUEUE_NAME,
     async () =>
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, (databaseHandle) =>
-        runOrganizationNotificationPolicyTombstoneRetentionJob(databaseHandle),
-      ),
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: (databaseHandle) =>
+          runOrganizationNotificationPolicyTombstoneRetentionJob(databaseHandle),
+      }),
     {
       connection: getBullMQConnectionOptions(),
       prefix: getBullMQKeyPrefix(),
@@ -54,5 +56,8 @@ export function createOrganizationNotificationPolicyTombstoneRetentionWorker(): 
     );
   });
 
-  return buildWorkerHandle(worker, ORGANIZATION_NOTIFICATION_POLICY_TOMBSTONE_RETENTION_QUEUE_NAME);
+  return buildWorkerHandle({
+    worker,
+    queueName: ORGANIZATION_NOTIFICATION_POLICY_TOMBSTONE_RETENTION_QUEUE_NAME,
+  });
 }

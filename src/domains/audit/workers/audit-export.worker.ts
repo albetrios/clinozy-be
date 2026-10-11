@@ -39,5 +39,5 @@ export function createAuditExportWorker(): WorkerHandle {
     logger.warn({ jobId, queue: AUDIT_EXPORT_QUEUE_NAME }, 'audit-export.stalled');
   });
 
-  return buildWorkerHandle(worker, AUDIT_EXPORT_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: AUDIT_EXPORT_QUEUE_NAME });
 }

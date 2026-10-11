@@ -25,7 +25,10 @@ export type PaymentProviderCreateResult =
 export interface PaymentProvider {
   isConfigured(): boolean;
 
-  getProviderPriceId(plan: PlanRecord, billingCycle: 'monthly' | 'yearly'): string | null;
+  getProviderPriceId(options: {
+    plan: PlanRecord;
+    billingCycle: 'monthly' | 'yearly';
+  }): string | null;
 
   createSubscription(input: {
     organization: OrganizationBillingContext;
@@ -37,42 +40,45 @@ export interface PaymentProvider {
     idempotencyKey?: string;
   }): Promise<PaymentProviderCreateResult>;
 
-  cancelSubscriptionAtPeriodEnd(
-    providerSubscriptionId: string,
-    idempotencyKey?: string,
-  ): Promise<void>;
+  cancelSubscriptionAtPeriodEnd(options: {
+    providerSubscriptionId: string;
+    idempotencyKey?: string | undefined;
+  }): Promise<void>;
 
   /**
    * Cancels the subscription immediately (reaudit-#6). Used for never-activated `INCOMPLETE`
    * subscriptions where `cancel_at_period_end` is a no-op — the organization needs the slot freed now.
    */
-  cancelSubscriptionImmediately(
-    providerSubscriptionId: string,
-    idempotencyKey?: string,
-  ): Promise<void>;
+  cancelSubscriptionImmediately(options: {
+    providerSubscriptionId: string;
+    idempotencyKey?: string | undefined;
+  }): Promise<void>;
 
-  resumeSubscription(providerSubscriptionId: string, idempotencyKey?: string): Promise<void>;
+  resumeSubscription(options: {
+    providerSubscriptionId: string;
+    idempotencyKey?: string | undefined;
+  }): Promise<void>;
 
-  updateSubscriptionPrice(
-    providerSubscriptionId: string,
-    providerPriceId: string,
-    idempotencyKey?: string,
-  ): Promise<void>;
+  updateSubscriptionPrice(options: {
+    providerSubscriptionId: string;
+    providerPriceId: string;
+    idempotencyKey?: string | undefined;
+  }): Promise<void>;
 
   /**
    * Sets the purchased seat quantity on the subscription (REQ-4). Synced out-of-band from the
    * organization's member count by the seat-quantity-sync worker; idempotent via `idempotencyKey`.
    */
-  updateSubscriptionQuantity(
-    providerSubscriptionId: string,
-    quantity: number,
-    idempotencyKey?: string,
-  ): Promise<void>;
+  updateSubscriptionQuantity(options: {
+    providerSubscriptionId: string;
+    quantity: number;
+    idempotencyKey?: string | undefined;
+  }): Promise<void>;
 
   compensateFailedCreate(providerSubscriptionId: string): Promise<void>;
 
-  compensatePlanChange(
-    providerSubscriptionId: string,
-    previousProviderPriceId: string,
-  ): Promise<void>;
+  compensatePlanChange(options: {
+    providerSubscriptionId: string;
+    previousProviderPriceId: string;
+  }): Promise<void>;
 }

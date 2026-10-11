@@ -34,7 +34,13 @@ function hashApiKey(rawKey: string): string {
   return createHash('sha256').update(rawKey, 'utf8').digest('hex');
 }
 
-function hashesMatch(storedHash: string, candidateHash: string): boolean {
+function hashesMatch({
+  storedHash,
+  candidateHash,
+}: {
+  storedHash: string;
+  candidateHash: string;
+}): boolean {
   const storedBuffer = Buffer.from(storedHash, 'hex');
   const candidateBuffer = Buffer.from(candidateHash, 'hex');
   if (storedBuffer.length !== candidateBuffer.length) return false;

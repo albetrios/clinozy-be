@@ -38,12 +38,15 @@ describe('S3 object storage (live)', () => {
     expect(upload.status, await upload.text()).toBe(204);
 
     expect(
-      await storage.verifyUploadedObject(pendingKey, {
-        contentType: 'text/plain',
-        contentLength: body.length,
+      await storage.verifyUploadedObject({
+        key: pendingKey,
+        expected: {
+          contentType: 'text/plain',
+          contentLength: body.length,
+        },
       }),
     ).toMatchObject({ kind: 'verified' });
-    const head = await storage.getObjectFirstBytes(pendingKey, 8);
+    const head = await storage.getObjectFirstBytes({ key: pendingKey, byteCount: 8 });
     expect(head?.body.toString()).toBe('contract');
 
     expect(

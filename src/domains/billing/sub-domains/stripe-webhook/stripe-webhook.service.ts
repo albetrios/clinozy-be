@@ -154,9 +154,9 @@ export class StripeWebhookService {
     event: Stripe.Event;
     context?: { requestId?: string } | undefined;
   }): Promise<StripeWebhookIngressResult> {
-    const ingressResult = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
-      () =>
+    const ingressResult = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      callback: () =>
         this.stripeWebhookEventRepository.recordAtIngress(
           omitUndefined({
             stripe_event_id: event.id,
@@ -165,10 +165,10 @@ export class StripeWebhookService {
             request_id: context?.requestId,
           }),
         ),
-    );
+    });
 
     if (ingressResult === 'recorded' || ingressResult === 'already_recorded') {
-      await enqueueStripeWebhook(event, context?.requestId);
+      await enqueueStripeWebhook({ event, requestId: context?.requestId });
     } else {
       logger.info(
         { stripeEventId: event.id, eventType: event.type, ingressResult },
@@ -191,9 +191,9 @@ export class StripeWebhookService {
   }): Promise<void> {
     const stripeEventCreatedAt = new Date(event.created * 1000);
 
-    const claimResult = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
-      async () => {
+    const claimResult = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      callback: async () => {
         return this.stripeWebhookEventRepository.tryClaimEvent(
           omitUndefined({
             stripe_event_id: event.id,
@@ -203,7 +203,7 @@ export class StripeWebhookService {
           }),
         );
       },
-    );
+    });
 
     if (claimResult === 'processed_duplicate') {
       logger.info({ eventId: event.id, eventType: event.type }, 'stripe.webhook.duplicate_skipped');
@@ -236,33 +236,38 @@ export class StripeWebhookService {
     // emitted only for a row the guarded write changed, so a re-run emits nothing.
     try {
       const prepared = await this.prepareEventForDispatch(event);
-      await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, async () => {
-        await runStripeWebhookHandlerWithOrganizationContext(
-          prepared.event,
-          this.stripeWebhookEventRepository,
-          async (databaseHandle) => {
-            const workerSubscriptionRepository = createWorkerSubscriptionRepository(databaseHandle);
-            await this.dispatchEvent({
-              event: prepared.event,
-              stripeEventCreatedAt,
-              subscriptionRepository: workerSubscriptionRepository,
-              reconciliation: prepared.reconciliation,
-            });
-          },
-        );
-        // sec-new-D2: detect no-op writes (ledger row unexpectedly absent)
-        const marked = await this.stripeWebhookEventRepository.markProcessed(event.id);
-        if (!marked) {
-          logger.warn(
-            { eventId: event.id, eventType: event.type },
-            'stripe.webhook.mark_processed.no_row',
-          );
-        }
+      await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+        callback: async () => {
+          await runStripeWebhookHandlerWithOrganizationContext({
+            event: prepared.event,
+            repository: this.stripeWebhookEventRepository,
+            handler: async (databaseHandle) => {
+              const workerSubscriptionRepository =
+                createWorkerSubscriptionRepository(databaseHandle);
+              await this.dispatchEvent({
+                event: prepared.event,
+                stripeEventCreatedAt,
+                subscriptionRepository: workerSubscriptionRepository,
+                reconciliation: prepared.reconciliation,
+              });
+            },
+          });
+          // sec-new-D2: detect no-op writes (ledger row unexpectedly absent)
+          const marked = await this.stripeWebhookEventRepository.markProcessed(event.id);
+          if (!marked) {
+            logger.warn(
+              { eventId: event.id, eventType: event.type },
+              'stripe.webhook.mark_processed.no_row',
+            );
+          }
+        },
       });
     } catch (error) {
-      throw await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, () =>
-        this.settleFailedEvent({ event, error }),
-      );
+      throw await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+        callback: () => this.settleFailedEvent({ event, error }),
+      });
     }
   }
 
@@ -276,18 +281,18 @@ export class StripeWebhookService {
       event.type !== 'customer.subscription.updated'
     )
       return { event };
-    const ordering = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
-      () =>
-        runStripeWebhookHandlerWithOrganizationContext(
+    const ordering = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      callback: () =>
+        runStripeWebhookHandlerWithOrganizationContext({
           event,
-          this.stripeWebhookEventRepository,
-          async (databaseHandle) =>
+          repository: this.stripeWebhookEventRepository,
+          handler: async (databaseHandle) =>
             createWorkerSubscriptionRepository(databaseHandle).findStripeProviderOrderingState(
               event.data.object.id,
             ),
-        ),
-    );
+        }),
+    });
     if (
       !ordering?.watermark ||
       new Set<string>(INACTIVE_SUBSCRIPTION_STATUSES).has(ordering.status) ||
@@ -359,9 +364,14 @@ export class StripeWebhookService {
    * sweep stops retrying its ledger row (if one exists).
    */
   async abandonEvent(options: { stripeEventId: string; failureReason: string }): Promise<void> {
-    await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, () =>
-      this.stripeWebhookEventRepository.markAbandoned(options.stripeEventId, options.failureReason),
-    );
+    await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      callback: () =>
+        this.stripeWebhookEventRepository.markAbandoned(
+          options.stripeEventId,
+          options.failureReason,
+        ),
+    });
   }
 
   private async dispatchEvent({
@@ -472,9 +482,12 @@ export class StripeWebhookService {
           { providerSubscriptionId, stripePriceId },
           'stripe.webhook.plan_id_resolution_miss',
         );
-        captureMessage('stripe.webhook.plan_id_resolution_miss', {
-          level: 'warning',
-          extra: { providerSubscriptionId, stripePriceId },
+        captureMessage({
+          message: 'stripe.webhook.plan_id_resolution_miss',
+          options: {
+            level: 'warning',
+            extra: { providerSubscriptionId, stripePriceId },
+          },
         });
       }
     }

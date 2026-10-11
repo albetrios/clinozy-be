@@ -62,7 +62,11 @@ async function main(): Promise<void> {
   }
 
   const permissionCodes = SYSTEM_PERMISSIONS.map((permission) => permission.code);
-  await seedRolePermissions(adminRole.id, permissionCodes, demoUser.id);
+  await seedRolePermissions({
+    roleId: adminRole.id,
+    permissionCodes,
+    createdByUserId: demoUser.id,
+  });
   await invalidateOrganizationPermissions(demoOrganization.public_id);
 
   logger.info(

@@ -25,7 +25,10 @@ import type { MembershipActionOptions } from './membership.types.js';
  */
 function readMembershipIdParam(request: FastifyRequest): string {
   const rawParams = (request.params as { membership_id?: string }) ?? {};
-  return validatePublicIdParam(rawParams.membership_id ?? '', 'membership_id');
+  return validatePublicIdParam({
+    value: rawParams.membership_id ?? '',
+    fieldName: 'membership_id',
+  });
 }
 
 /** The read handlers: list, get, and a membership's resolved permissions. */
@@ -35,11 +38,15 @@ function createMembershipReadHandlers(service: MembershipService) {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const result = await service.list({ scope, query: request.query });
-      return paginatedResponse(result.items, getRequestIdentifier(request), {
-        per_page: result.limit,
-        next: result.next_cursor,
-        has_more: result.has_more,
-        ...(result.total !== null ? { estimated_total: result.total } : {}),
+      return paginatedResponse({
+        data: result.items,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: result.limit,
+          next: result.next_cursor,
+          has_more: result.has_more,
+          ...(result.total !== null ? { estimated_total: result.total } : {}),
+        },
       });
     },
     getMembership: async (request: FastifyRequest, _reply: FastifyReply) => {
@@ -47,14 +54,14 @@ function createMembershipReadHandlers(service: MembershipService) {
       const _organizationId = scope.organizationPublicId;
       const membershipId = readMembershipIdParam(request);
       const data = await service.getByPublicId({ scope, membership_public_id: membershipId });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     getMembershipPermissions: async (request: FastifyRequest, _reply: FastifyReply) => {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const membershipId = readMembershipIdParam(request);
       const data = await service.getPermissions({ scope, membership_public_id: membershipId });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }
@@ -76,19 +83,22 @@ function createMembershipWriteHandlers(service: MembershipService) {
           requestId: getRequestIdentifier(request),
         },
       });
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.membership.create',
-        resource_type: 'membership',
-        organizationPublicId: scope.organizationPublicId,
-        target_user_public_id: data.user_id,
-        metadata: {
-          membership_public_id: data.id,
-          role_public_id: data.role_id,
-          invitation_public_id: data.invitation?.id ?? null,
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.membership.create',
+          resource_type: 'membership',
+          organizationPublicId: scope.organizationPublicId,
+          target_user_public_id: data.user_id,
+          metadata: {
+            membership_public_id: data.id,
+            role_public_id: data.role_id,
+            invitation_public_id: data.invitation?.id ?? null,
+          },
         },
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     updateMembership: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
@@ -102,19 +112,22 @@ function createMembershipWriteHandlers(service: MembershipService) {
         updated_by_user_public_id: getActingUserPublicId(auth),
         options: membershipActionOptions(auth),
       });
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.membership.update',
-        resource_type: 'membership',
-        organizationPublicId: scope.organizationPublicId,
-        target_user_public_id: data.user_id,
-        metadata: {
-          membership_public_id: membershipId,
-          role_public_id: data.role_id,
-          changed_fields: listBodyFieldNames(request.body),
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.membership.update',
+          resource_type: 'membership',
+          organizationPublicId: scope.organizationPublicId,
+          target_user_public_id: data.user_id,
+          metadata: {
+            membership_public_id: membershipId,
+            role_public_id: data.role_id,
+            changed_fields: listBodyFieldNames(request.body),
+          },
         },
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     deleteMembership: async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = requirePrincipal(request);
@@ -126,12 +139,15 @@ function createMembershipWriteHandlers(service: MembershipService) {
         membership_public_id: membershipId,
         options: membershipActionOptions(auth),
       });
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.membership.delete',
-        resource_type: 'membership',
-        organizationPublicId: scope.organizationPublicId,
-        metadata: { membership_public_id: membershipId },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.membership.delete',
+          resource_type: 'membership',
+          organizationPublicId: scope.organizationPublicId,
+          metadata: { membership_public_id: membershipId },
+        },
       });
       return reply.code(204).send();
     },
@@ -140,11 +156,14 @@ function createMembershipWriteHandlers(service: MembershipService) {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       await service.leaveOrganization({ scope, user_public_id: auth.userId });
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'tenancy.membership.leave',
-        resource_type: 'membership',
-        organizationPublicId: scope.organizationPublicId,
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'tenancy.membership.leave',
+          resource_type: 'membership',
+          organizationPublicId: scope.organizationPublicId,
+        },
       });
       return reply.code(204).send();
     },
@@ -157,16 +176,19 @@ function createMembershipWriteHandlers(service: MembershipService) {
         body: request.body,
         current_user_public_id: auth.userId,
       });
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'tenancy.membership.transfer_ownership',
-        resource_type: 'organization',
-        organizationPublicId: scope.organizationPublicId,
-        target_user_public_id: data.user_id,
-        severity: 'WARNING',
-        metadata: { membership_public_id: data.id },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'tenancy.membership.transfer_ownership',
+          resource_type: 'organization',
+          organizationPublicId: scope.organizationPublicId,
+          target_user_public_id: data.user_id,
+          severity: 'WARNING',
+          metadata: { membership_public_id: data.id },
+        },
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

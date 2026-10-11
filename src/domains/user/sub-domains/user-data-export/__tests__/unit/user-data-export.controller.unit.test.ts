@@ -142,15 +142,15 @@ describe('createUserDataExportController', () => {
       mockReply(),
     );
 
-    expect(recordScopedAuditEventSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
+    expect(recordScopedAuditEventSpy).toHaveBeenCalledWith({
+      request: expect.anything(),
+      input: expect.objectContaining({
         actorUserPublicId: userPublicId,
         action: 'user.data_export.url_minted',
         resource_type: 'user_data_export',
         metadata: expect.objectContaining({ export_public_id: exportId }),
       }),
-    );
+    });
   });
 
   it('does NOT record an audit event when no download_url is returned (status != COMPLETED)', async () => {

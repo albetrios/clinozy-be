@@ -85,10 +85,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -289,7 +291,10 @@ describe('AuthService', () => {
         ipAddress: '127.0.0.1',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
-    expect(verifyPassword).toHaveBeenCalledWith('WrongPassword1!', DUMMY_ARGON2_HASH);
+    expect(verifyPassword).toHaveBeenCalledWith({
+      plaintext: 'WrongPassword1!',
+      storedHash: DUMMY_ARGON2_HASH,
+    });
   });
 
   it('applies the timing floor on both login failure branches (audit-#15d)', async () => {
@@ -461,7 +466,10 @@ describe('AuthService', () => {
     });
 
     // The selected organization is re-validated by internal id and reused for the token claim.
-    expect(resolve.findUserActiveOrganizationPublicIdByInternalId).toHaveBeenCalledWith(1, 42);
+    expect(resolve.findUserActiveOrganizationPublicIdByInternalId).toHaveBeenCalledWith({
+      userInternalId: 1,
+      organizationInternalId: 42,
+    });
     expect(resolve.resolveDefaultActiveOrganizationPublicId).not.toHaveBeenCalled();
     expect(jwt.signAccessToken).toHaveBeenCalledWith(
       expect.objectContaining({ organizationPublicId: 'org_selected' }),
@@ -679,7 +687,7 @@ describe('AuthService', () => {
     vi.mocked(databaseContext.withAppDatabaseContext).mockImplementation(
       // The real signature hands the callback a pinned database handle; the mock never touches
       // it, so it is passed through as `never` rather than fabricating a fake handle.
-      (async (_scope: unknown, callback: (handle: never) => Promise<unknown>) => {
+      (async ({ callback }: { scope: unknown; callback: (handle: never) => Promise<unknown> }) => {
         order.push('context:open');
         const result = await callback(undefined as never);
         order.push('context:close');

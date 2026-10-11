@@ -187,9 +187,12 @@ describe('Security: Idempotency', () => {
 
   it('should not persist an idempotency Redis entry when write is unauthenticated', async () => {
     const key = uniqueKey('unauth-idem');
-    const cacheKey = buildIdempotencyCacheKey(key, {
-      userId: 'anonymous',
-      organizationId: 'none',
+    const cacheKey = buildIdempotencyCacheKey({
+      idempotencyKey: key,
+      scope: {
+        userId: 'anonymous',
+        organizationId: 'none',
+      },
     });
     await redisConnection.del(cacheKey);
 

@@ -49,7 +49,7 @@ describe('worker shutdown integration', () => {
       },
     });
 
-    const handle = buildWorkerHandle(worker, queueName);
+    const handle = buildWorkerHandle({ worker, queueName });
     await worker.waitUntilReady();
     await queue.waitUntilReady();
     await queue.add('drain', {});

@@ -239,18 +239,18 @@ async function runWithLayeredUserIdentity<T>(options: {
     return options.callback();
   }
   if (original !== undefined) original.identityChanged = true;
-  const previousUserPublicId = await exchangeLocalDatabaseConfig(
-    options.databaseHandle,
-    'app.current_user_public_id',
-    options.userPublicId,
-  );
+  const previousUserPublicId = await exchangeLocalDatabaseConfig({
+    databaseHandle: options.databaseHandle,
+    key: 'app.current_user_public_id',
+    value: options.userPublicId,
+  });
   if (previousUserPublicId === options.userPublicId) return options.callback();
   const restoreOuterIdentity = () =>
-    setLocalDatabaseConfig(
-      options.databaseHandle,
-      'app.current_user_public_id',
-      previousUserPublicId ?? '',
-    );
+    setLocalDatabaseConfig({
+      databaseHandle: options.databaseHandle,
+      key: 'app.current_user_public_id',
+      value: previousUserPublicId ?? '',
+    });
   let result: T;
   try {
     result = await options.callback();
@@ -340,10 +340,13 @@ export async function runPooledUnitOfWork<T>(options: {
   }
 }
 
-async function runPrincipalDatabaseContext<T>(
-  scope: PrincipalDatabaseScope,
-  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>,
-): Promise<T> {
+async function runPrincipalDatabaseContext<T>({
+  scope,
+  callback,
+}: {
+  scope: PrincipalDatabaseScope;
+  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>;
+}): Promise<T> {
   const { userPublicId, organizationPublicId } = scope;
   const workerContext =
     organizationPublicId !== undefined
@@ -356,15 +359,18 @@ async function runPrincipalDatabaseContext<T>(
     organizationPublicId !== undefined &&
     activeSession.organizationPublicId === organizationPublicId
   ) {
-    return runWithWorkerDatabaseContext(workerContext, () => {
-      const run = () => callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle));
-      return userPublicId === undefined
-        ? run()
-        : runWithLayeredUserIdentity({
-            databaseHandle: activeSession.databaseHandle,
-            userPublicId,
-            callback: run,
-          });
+    return runWithWorkerDatabaseContext({
+      context: workerContext,
+      callback: () => {
+        const run = () => callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle));
+        return userPublicId === undefined
+          ? run()
+          : runWithLayeredUserIdentity({
+              databaseHandle: activeSession.databaseHandle,
+              userPublicId,
+              callback: run,
+            });
+      },
     });
   }
 
@@ -379,28 +385,32 @@ async function runPrincipalDatabaseContext<T>(
     organizationPublicId === undefined &&
     userPublicId !== undefined
   ) {
-    return runWithWorkerDatabaseContext(workerContext, () =>
-      runWithLayeredUserIdentity({
-        databaseHandle: activeSession.databaseHandle,
-        userPublicId,
-        callback: () => callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle)),
-      }),
-    );
+    return runWithWorkerDatabaseContext({
+      context: workerContext,
+      callback: () =>
+        runWithLayeredUserIdentity({
+          databaseHandle: activeSession.databaseHandle,
+          userPublicId,
+          callback: () => callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle)),
+        }),
+    });
   }
 
   return runPooledUnitOfWork({
     path: 'scoped_context',
     openTransaction: (claimConnection) =>
-      runWithWorkerDatabaseContext(workerContext, () =>
-        database.transaction((transaction) =>
-          runPrincipalTransaction({
-            databaseHandle: transaction as unknown as RequestScopedPostgresDatabase,
-            claimConnection,
-            scope,
-            callback,
-          }),
-        ),
-      ),
+      runWithWorkerDatabaseContext({
+        context: workerContext,
+        callback: () =>
+          database.transaction((transaction) =>
+            runPrincipalTransaction({
+              databaseHandle: transaction as unknown as RequestScopedPostgresDatabase,
+              claimConnection,
+              scope,
+              callback,
+            }),
+          ),
+      }),
   });
 }
 
@@ -435,8 +445,12 @@ async function runPrincipalTransaction<T>(options: {
     );
   try {
     return await (organizationPublicId !== undefined
-      ? runWithPinnedOrganizationDatabaseSession(organizationPublicId, databaseHandle, runCallback)
-      : runWithPinnedDatabaseHandle(databaseHandle, runCallback));
+      ? runWithPinnedOrganizationDatabaseSession({
+          organizationPublicId,
+          databaseHandle,
+          callback: runCallback,
+        })
+      : runWithPinnedDatabaseHandle({ databaseHandle, callback: runCallback }));
   } finally {
     originalIdentity.identityChanged = true;
   }
@@ -536,10 +550,13 @@ export const SESSION_SCOPE: {
 // The session branch of withAppDatabaseContext: exactly one session-artifact
 // GUC (the field present names it), always a fresh transaction (pre-auth flows
 // never nest), HTTP timeouts kept. Only reachable through the exported app wrapper.
-async function runSessionDatabaseContext<T>(
-  scope: SessionDatabaseScope,
-  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>,
-): Promise<T> {
+async function runSessionDatabaseContext<T>({
+  scope,
+  callback,
+}: {
+  scope: SessionDatabaseScope;
+  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>;
+}): Promise<T> {
   const armed =
     scope.sessionPublicId !== undefined
       ? { guc: SESSION_CONTEXTS.sessionPublicId.guc, value: scope.sessionPublicId }
@@ -550,10 +567,11 @@ async function runSessionDatabaseContext<T>(
       database.transaction(async (transaction) => {
         claimConnection();
         const databaseHandle = transaction as unknown as RequestScopedPostgresDatabase;
-        await setLocalDatabaseConfig(databaseHandle, armed.guc, armed.value);
-        return runWithPinnedDatabaseHandle(databaseHandle, () =>
-          callback(brandWorkerContextDatabaseHandle(databaseHandle)),
-        );
+        await setLocalDatabaseConfig({ databaseHandle, key: armed.guc, value: armed.value });
+        return runWithPinnedDatabaseHandle({
+          databaseHandle,
+          callback: () => callback(brandWorkerContextDatabaseHandle(databaseHandle)),
+        });
       }),
   });
 }
@@ -656,14 +674,17 @@ function recordScopeOnActiveSpan(
  * source and runs under the session context. The scope is recorded on the active span before
  * either arm runs, so a query's tenancy stays visible in the trace even when the callback throws.
  */
-export async function withAppDatabaseContext<T>(
-  scope: AppDatabaseScope,
-  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>,
-): Promise<T> {
+export async function withAppDatabaseContext<T>({
+  scope,
+  callback,
+}: {
+  scope: AppDatabaseScope;
+  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>;
+}): Promise<T> {
   recordScopeOnActiveSpan(scope);
   return 'source' in scope
-    ? runPrincipalDatabaseContext(scope, callback)
-    : runSessionDatabaseContext(scope, callback);
+    ? runPrincipalDatabaseContext({ scope, callback })
+    : runSessionDatabaseContext({ scope, callback });
 }
 
 /** One row of the maintenance-context registry — the GUC it arms and how its transaction is tuned. */
@@ -815,11 +836,15 @@ export type MaintenanceDatabaseContextOptions = {
  *   processors, admin-authorized routes, and trusted system flows. Never enter
  *   from a self-service request path.
  */
-export async function withMaintenanceDatabaseContext<T>(
-  scope: MaintenanceDatabaseScope,
-  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>,
-  options?: MaintenanceDatabaseContextOptions,
-): Promise<T> {
+export async function withMaintenanceDatabaseContext<T>({
+  scope,
+  callback,
+  options,
+}: {
+  scope: MaintenanceDatabaseScope;
+  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>;
+  options?: MaintenanceDatabaseContextOptions | undefined;
+}): Promise<T> {
   recordScopeOnActiveSpan(scope);
   const definition = MAINTENANCE_CONTEXTS[scope.kind];
   if (!definition.opensTransaction) {
@@ -837,30 +862,36 @@ export async function withMaintenanceDatabaseContext<T>(
         ),
       );
     }
-    return runWithWorkerDatabaseContext({ kind: definition.workerContextKind }, () =>
-      runWithPinnedDatabaseHandle(maintenancePool as unknown as RequestScopedPostgresDatabase, () =>
-        callback(
-          brandWorkerContextDatabaseHandle(
-            maintenancePool as unknown as RequestScopedPostgresDatabase,
-          ),
-        ),
-      ),
-    );
+    return runWithWorkerDatabaseContext({
+      context: { kind: definition.workerContextKind },
+      callback: () =>
+        runWithPinnedDatabaseHandle({
+          databaseHandle: maintenancePool as unknown as RequestScopedPostgresDatabase,
+          callback: () =>
+            callback(
+              brandWorkerContextDatabaseHandle(
+                maintenancePool as unknown as RequestScopedPostgresDatabase,
+              ),
+            ),
+        }),
+    });
   }
   return runPooledUnitOfWork({
     path: 'maintenance_context',
     openTransaction: (claimConnection) =>
-      runWithWorkerDatabaseContext({ kind: definition.workerContextKind }, () =>
-        resolveMaintenancePool().transaction((transaction) =>
-          runMaintenanceTransaction({
-            databaseHandle: transaction as unknown as RequestScopedPostgresDatabase,
-            claimConnection,
-            definition,
-            useMaintenanceDatabaseRole: options?.useMaintenanceDatabaseRole === true,
-            callback,
-          }),
-        ),
-      ),
+      runWithWorkerDatabaseContext({
+        context: { kind: definition.workerContextKind },
+        callback: () =>
+          resolveMaintenancePool().transaction((transaction) =>
+            runMaintenanceTransaction({
+              databaseHandle: transaction as unknown as RequestScopedPostgresDatabase,
+              claimConnection,
+              definition,
+              useMaintenanceDatabaseRole: options?.useMaintenanceDatabaseRole === true,
+              callback,
+            }),
+          ),
+      }),
   });
 }
 
@@ -885,9 +916,10 @@ async function runMaintenanceTransaction<T>(options: {
     await applyWorkerStatementTimeout(databaseHandle);
   }
   if (definition.guc !== null) {
-    await setLocalDatabaseConfig(databaseHandle, definition.guc, 'true');
+    await setLocalDatabaseConfig({ databaseHandle, key: definition.guc, value: 'true' });
   }
-  return runWithPinnedDatabaseHandle(databaseHandle, () =>
-    callback(brandWorkerContextDatabaseHandle(databaseHandle)),
-  );
+  return runWithPinnedDatabaseHandle({
+    databaseHandle,
+    callback: () => callback(brandWorkerContextDatabaseHandle(databaseHandle)),
+  });
 }

@@ -65,7 +65,7 @@ Event handler failure must **not** fail the HTTP request (log and continue).
 HTTP handlers pass `getRequestIdentifier(request)` into services as `context.requestId`. Services attach it when emitting:
 
 ```typescript
-await eventBus.emit(buildDomainEvent(EVENT_TYPE, payload, { requestId: context?.requestId }));
+await eventBus.emit(buildDomainEvent({ type: EVENT_TYPE, payload, options: { requestId: context?.requestId } }));
 ```
 
 Event handlers read `event.requestId` and pass it to `recordOutboxEmail()`, `enqueueNotification()`, `enqueueWebhookDelivery()`, etc. Job payloads store `requestId` (Zod-validated); workers log it on `mail.worker.processing` and **`email.sent`** so worker logs correlate with API `request.complete` (`requestId` field).

@@ -238,7 +238,7 @@ Always use `.js` extensions in import specifiers. CI gate: `src/tests/global/imp
 | `/api/v1/billing`                   | `billingRoutes(billing)` from `@/domains/billing/billing.routes.js`                              |
 | `/api/v1/notify`                    | `notifyRoutes(notify)` from `@/domains/notify/notify.routes.js`                                  |
 | `/api/v1/uploads`                   | `uploadRoutes(upload.uploadService)` from `@/domains/upload/upload.routes.js`                    |
-| (conditional) `/admin/queues`       | `registerQueueDashboard(app, { auditService })` from `@/infrastructure/queue/queue-dashboard.js` |
+| (conditional) `/admin/queues`       | `registerQueueDashboard({ app, deps: { auditService } })` from `@/infrastructure/queue/queue-dashboard.js` |
 | (conditional) `/api/v1/mcp`, `/mcp` | MCP server from `@/infrastructure/mcp/mcp-server.js`                                             |
 
 **Tenancy sub-routes (registered inside `tenancy.routes.ts`):**

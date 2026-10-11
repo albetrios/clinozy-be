@@ -101,9 +101,9 @@ async function dispatchNotificationEmail(options: {
   // back the existing row), closing the duplicate-email window the Redis marker alone left
   // open. The Redis marker below is now just a fast-path to skip the DB insert on retry. Keyed by
   // the notification's public id: a bigserial restarts after a restore and would collide.
-  const mailOutboxToken = await withMaintenanceDatabaseContext(
-    MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
-    () =>
+  const mailOutboxToken = await withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+    callback: () =>
       recordOutboxEmail({
         to: email,
         subject,
@@ -111,7 +111,7 @@ async function dispatchNotificationEmail(options: {
         tags: [{ name: 'category', value: `notification-${type}` }],
         dedupeKey: `notification:${notificationPublicId}:email:${email.toLowerCase()}`,
       }),
-  );
+  });
 
   // Fast-path marker so a plain BullMQ retry skips re-touching the row. Correctness no
   // longer depends on it (the DB dedupe_key is the authority); a crash before this mark
@@ -122,9 +122,12 @@ async function dispatchNotificationEmail(options: {
   let dispatchSucceeded = false;
   try {
     // Notification email is fan-out: the bulk lane keeps sign-in codes and resets ahead of it.
-    await dispatchOutboxEmail(mailOutboxToken, {
-      lane: 'bulk',
-      ...(requestId ? { requestId } : {}),
+    await dispatchOutboxEmail({
+      mailOutboxToken,
+      options: {
+        lane: 'bulk',
+        ...(requestId ? { requestId } : {}),
+      },
     });
     dispatchSucceeded = true;
   } catch (dispatchError) {
@@ -273,8 +276,8 @@ export async function processNotificationJob(options: {
       notificationRepository: createWorkerNotificationRepository(databaseHandle),
     });
   return organizationPublicId === null
-    ? runUserScopedWorkerJob({ userPublicId }, dispatchInScope)
-    : runOrganizationScopedWorkerJob({ organizationPublicId }, dispatchInScope);
+    ? runUserScopedWorkerJob({ job: { userPublicId }, processor: dispatchInScope })
+    : runOrganizationScopedWorkerJob({ job: { organizationPublicId }, processor: dispatchInScope });
 }
 
 /**
@@ -300,11 +303,11 @@ export function createNotificationWorker(): WorkerHandle {
         job,
         queueName: NOTIFICATION_QUEUE_NAME,
       });
-      return runWithPropagatedTraceContext(
-        { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
-        job.name,
-        () => processNotificationJob(omitUndefined({ jobData, jobId: job.id })),
-      );
+      return runWithPropagatedTraceContext({
+        carrier: { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
+        spanName: job.name,
+        callback: () => processNotificationJob(omitUndefined({ jobData, jobId: job.id })),
+      });
     },
     {
       connection: getBullMQConnectionOptions(),
@@ -322,5 +325,5 @@ export function createNotificationWorker(): WorkerHandle {
     logger.info({ jobId: job?.id }, 'notification.worker.completed');
   });
 
-  return buildWorkerHandle(worker, NOTIFICATION_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: NOTIFICATION_QUEUE_NAME });
 }

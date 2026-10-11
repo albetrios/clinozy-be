@@ -42,13 +42,19 @@ const organizationRepository = new OrganizationRepository();
  * on a self-service login path (the same objection recorded in `provisionOrganization`) and cost a
  * second transaction on every login, refresh, and `getMe`. The resolver needs neither.
  */
-async function withUserContextForInternalId<T>(
-  userInternalId: number,
-  callback: () => Promise<T>,
-): Promise<T | undefined> {
+async function withUserContextForInternalId<T>({
+  userInternalId,
+  callback,
+}: {
+  userInternalId: number;
+  callback: () => Promise<T>;
+}): Promise<T | undefined> {
   const userPublicId = await organizationRepository.resolveUserPublicIdByInternalId(userInternalId);
   if (userPublicId === null) return undefined;
-  return withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }), callback);
+  return withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+    callback,
+  });
 }
 
 /**
@@ -60,12 +66,14 @@ async function withUserContextForInternalId<T>(
 export async function resolveDefaultActiveOrganizationPublicId(
   userInternalId: number,
 ): Promise<string | undefined> {
-  const resolved = await withUserContextForInternalId(userInternalId, () =>
-    organizationRepository.findDefaultActiveOrganizationPublicId(
-      userInternalId,
-      env.PERSONAL_ORGANIZATION_ENABLED,
-    ),
-  );
+  const resolved = await withUserContextForInternalId({
+    userInternalId,
+    callback: () =>
+      organizationRepository.findDefaultActiveOrganizationPublicId(
+        userInternalId,
+        env.PERSONAL_ORGANIZATION_ENABLED,
+      ),
+  });
   return resolved ?? undefined;
 }
 
@@ -81,16 +89,21 @@ export async function resolveDefaultActiveOrganizationPublicId(
  * - **Side effects:** none (read-only). Returns `undefined` when no such active
  *   membership exists (caller maps to 403, or falls back to a default organization).
  */
-export async function findUserActiveOrganizationByPublicId(
-  userInternalId: number,
-  organizationPublicId: string,
-): Promise<{ id: number; public_id: string } | undefined> {
-  const resolved = await withUserContextForInternalId(userInternalId, () =>
-    organizationRepository.findActiveMembershipOrganizationByPublicId(
-      userInternalId,
-      organizationPublicId,
-    ),
-  );
+export async function findUserActiveOrganizationByPublicId({
+  userInternalId,
+  organizationPublicId,
+}: {
+  userInternalId: number;
+  organizationPublicId: string;
+}): Promise<{ id: number; public_id: string } | undefined> {
+  const resolved = await withUserContextForInternalId({
+    userInternalId,
+    callback: () =>
+      organizationRepository.findActiveMembershipOrganizationByPublicId(
+        userInternalId,
+        organizationPublicId,
+      ),
+  });
   return resolved ?? undefined;
 }
 
@@ -101,11 +114,14 @@ export async function findUserActiveOrganizationByPublicId(
  * user RLS context (no organization context at switch time) so the tenancy discovery policies match,
  * and the query is additionally constrained to the caller's own `user_id`.
  */
-export async function findUserActiveOrganizationPublicId(
-  userInternalId: number,
-  organizationPublicId: string,
-): Promise<string | undefined> {
-  return (await findUserActiveOrganizationByPublicId(userInternalId, organizationPublicId))
+export async function findUserActiveOrganizationPublicId({
+  userInternalId,
+  organizationPublicId,
+}: {
+  userInternalId: number;
+  organizationPublicId: string;
+}): Promise<string | undefined> {
+  return (await findUserActiveOrganizationByPublicId({ userInternalId, organizationPublicId }))
     ?.public_id;
 }
 
@@ -117,16 +133,21 @@ export async function findUserActiveOrganizationPublicId(
  * active organization. Constrained to the caller's own `user_id` under that same
  * user RLS context (no organization context at refresh time).
  */
-export async function findUserActiveOrganizationPublicIdByInternalId(
-  userInternalId: number,
-  organizationInternalId: number,
-): Promise<string | undefined> {
-  const resolved = await withUserContextForInternalId(userInternalId, () =>
-    organizationRepository.findActiveMembershipOrganizationPublicIdByInternalId(
-      userInternalId,
-      organizationInternalId,
-    ),
-  );
+export async function findUserActiveOrganizationPublicIdByInternalId({
+  userInternalId,
+  organizationInternalId,
+}: {
+  userInternalId: number;
+  organizationInternalId: number;
+}): Promise<string | undefined> {
+  const resolved = await withUserContextForInternalId({
+    userInternalId,
+    callback: () =>
+      organizationRepository.findActiveMembershipOrganizationPublicIdByInternalId(
+        userInternalId,
+        organizationInternalId,
+      ),
+  });
   return resolved ?? undefined;
 }
 
@@ -144,10 +165,11 @@ export async function resolvePersonalOrganizationPublicId(options: {
   if (options.userPublicId !== undefined) {
     // Profile reads already resolved the user. Keep the caller's own RLS scope while
     // avoiding another SECURITY DEFINER lookup of the same internal/public identity pair.
-    const publicId = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
-      () => organizationRepository.findPersonalOrganizationPublicId(options.ownerUserInternalId),
-    );
+    const publicId = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
+      callback: () =>
+        organizationRepository.findPersonalOrganizationPublicId(options.ownerUserInternalId),
+    });
     return publicId ?? undefined;
   }
   return (await resolvePersonalOrganization(options.ownerUserInternalId))?.public_id;
@@ -161,9 +183,10 @@ export async function resolvePersonalOrganizationPublicId(options: {
 export async function resolvePersonalOrganization(
   ownerUserInternalId: number,
 ): Promise<{ id: number; public_id: string } | undefined> {
-  const resolved = await withUserContextForInternalId(ownerUserInternalId, () =>
-    organizationRepository.findPersonalOrganization(ownerUserInternalId),
-  );
+  const resolved = await withUserContextForInternalId({
+    userInternalId: ownerUserInternalId,
+    callback: () => organizationRepository.findPersonalOrganization(ownerUserInternalId),
+  });
   return resolved ?? undefined;
 }
 
@@ -210,7 +233,7 @@ export async function ensurePersonalOrganization(
   if (!env.PERSONAL_ORGANIZATION_ENABLED) return undefined;
 
   try {
-    const provisioned = await provisionPersonalOrganization(owner.id);
+    const provisioned = await provisionPersonalOrganization({ ownerUserId: owner.id });
     logger.info(
       {
         userPublicId: owner.public_id,

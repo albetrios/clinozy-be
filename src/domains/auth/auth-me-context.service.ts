@@ -57,15 +57,18 @@ export class AuthMeContextService {
     // (`app.current_organization_public_id`), so it must keep its own transaction and
     // can still overlap with the block below.
     const [userScoped, myPermissions] = await Promise.all([
-      withAppDatabaseContext(scope, async () => ({
-        user: await this.userService.getMe(scope),
-        activeOrganization: activeOrganizationPublicId
-          ? await this.organizationService.getByPublicId({
-              public_id: activeOrganizationPublicId,
-              user_public_id: userPublicId,
-            })
-          : null,
-      })),
+      withAppDatabaseContext({
+        scope,
+        callback: async () => ({
+          user: await this.userService.getMe(scope),
+          activeOrganization: activeOrganizationPublicId
+            ? await this.organizationService.getByPublicId({
+                public_id: activeOrganizationPublicId,
+                user_public_id: userPublicId,
+              })
+            : null,
+        }),
+      }),
       activeOrganizationPublicId
         ? this.authorizationService.resolveUserOrganizationPermissions({
             userPublicId,

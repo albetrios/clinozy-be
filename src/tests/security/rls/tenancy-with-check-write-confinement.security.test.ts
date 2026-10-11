@@ -87,7 +87,9 @@ describe('Security: tenancy RLS WITH CHECK confines cross-organization writes', 
   it.each(TENANCY_ORG_SCOPED_TABLES)(
     'rejects reassigning a $tableName row from organization B to organization A (WITH CHECK)',
     async ({ schemaName, tableName }) => {
-      const rowIds = fixture.rowIdsByTable.get(tableKey(schemaName, tableName));
+      const rowIds = fixture.rowIdsByTable.get(
+        tableKey({ schemaName: schemaName, tableName: tableName }),
+      );
       expect(rowIds, `fixture seeds a ${tableName} row for both orgs`).toBeDefined();
 
       let caught: unknown;
@@ -109,7 +111,9 @@ describe('Security: tenancy RLS WITH CHECK confines cross-organization writes', 
   );
 
   it('allows a same-organization reassignment under the matching tenant context (positive control)', async () => {
-    const rowIds = fixture.rowIdsByTable.get(tableKey('tenancy', 'memberships'))!;
+    const rowIds = fixture.rowIdsByTable.get(
+      tableKey({ schemaName: 'tenancy', tableName: 'memberships' }),
+    )!;
 
     // Re-asserting the row to its own organization passes the predicate and updates exactly one row —
     // proving the rejections above are the organization WITH CHECK, not a blanket permission denial.

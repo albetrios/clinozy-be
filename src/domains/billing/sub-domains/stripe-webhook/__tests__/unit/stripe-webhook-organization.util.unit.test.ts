@@ -9,11 +9,17 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
     withAppDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: (handle: unknown) => Promise<unknown>) =>
-        callback({ tag: 'pinned-handle' }),
+      async ({
+        scope: _scope,
+        callback,
+      }: {
+        scope: unknown;
+        callback: (handle: unknown) => Promise<unknown>;
+      }) => callback({ tag: 'pinned-handle' }),
     ),
   };
 });
@@ -79,11 +85,11 @@ describe('runStripeWebhookHandlerWithOrganizationContext', () => {
     const handler = vi.fn();
 
     await expect(
-      stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext(
-        buildSubscriptionEvent({ customer: 'cus_unmapped' }),
+      stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext({
+        event: buildSubscriptionEvent({ customer: 'cus_unmapped' }),
         repository,
         handler,
-      ),
+      }),
     ).rejects.toThrow(/requires organization context/);
     expect(handler).not.toHaveBeenCalled();
   });
@@ -100,15 +106,15 @@ describe('runStripeWebhookHandlerWithOrganizationContext', () => {
     const handler = vi.fn().mockResolvedValue('ok');
 
     await expect(
-      stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext(
-        buildSubscriptionEvent({
+      stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext({
+        event: buildSubscriptionEvent({
           type: 'customer.subscription.created',
           metadata: { organization_id: 'org_dashboard_origin' },
           customer: 'cus_unmapped',
         }),
         repository,
         handler,
-      ),
+      }),
     ).resolves.toBe('ok');
     expect(handler).toHaveBeenCalledWith({ tag: 'pinned-handle' });
   });
@@ -124,15 +130,15 @@ describe('runStripeWebhookHandlerWithOrganizationContext', () => {
     const handler = vi.fn();
 
     await expect(
-      stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext(
-        buildSubscriptionEvent({
+      stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext({
+        event: buildSubscriptionEvent({
           type: 'customer.subscription.created',
           metadata: { organization_id: 'org_victim' },
           customer: 'cus_real',
         }),
         repository,
         handler,
-      ),
+      }),
     ).rejects.toThrow(/mismatched organization metadata/);
     expect(handler).not.toHaveBeenCalled();
   });
@@ -144,11 +150,11 @@ describe('runStripeWebhookHandlerWithOrganizationContext', () => {
     const handler = vi.fn();
 
     await expect(
-      stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext(
-        buildSubscriptionEvent({ metadata: { organization_id: 'org_from_metadata' } }),
+      stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext({
+        event: buildSubscriptionEvent({ metadata: { organization_id: 'org_from_metadata' } }),
         repository,
         handler,
-      ),
+      }),
     ).rejects.toThrow(/mismatched organization metadata/);
     expect(handler).not.toHaveBeenCalled();
   });
@@ -163,15 +169,15 @@ describe('runStripeWebhookHandlerWithOrganizationContext', () => {
     const handler = vi.fn().mockResolvedValue('ok');
 
     await expect(
-      stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext(
-        buildSubscriptionEvent({
+      stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext({
+        event: buildSubscriptionEvent({
           type: 'customer.subscription.created',
           metadata: { organization_id: 'org_from_customer' },
           customer: 'cus_real',
         }),
         repository,
         handler,
-      ),
+      }),
     ).resolves.toBe('ok');
     expect(handler).toHaveBeenCalledWith({ tag: 'pinned-handle' });
   });
@@ -184,11 +190,11 @@ describe('runStripeWebhookHandlerWithOrganizationContext', () => {
     const handler = vi.fn().mockResolvedValue('ok');
 
     await expect(
-      stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext(
-        buildSubscriptionEvent({ customer: 'cus_real' }),
+      stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext({
+        event: buildSubscriptionEvent({ customer: 'cus_real' }),
         repository,
         handler,
-      ),
+      }),
     ).resolves.toBe('ok');
     // The customer resolver is skipped entirely once the subscription resolves.
     expect(repository.resolveOrganizationPublicIdByStripeCustomerId).not.toHaveBeenCalled();
@@ -206,11 +212,11 @@ describe('runStripeWebhookHandlerWithOrganizationContext', () => {
     } as unknown as Stripe.Event;
 
     const result =
-      await stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext(
+      await stripeWebhookOrganizationUtil.runStripeWebhookHandlerWithOrganizationContext({
         event,
         repository,
         handler,
-      );
+      });
     expect(result).toBeUndefined();
     expect(handler).not.toHaveBeenCalled();
     expect(repository.resolveOrganizationPublicIdByProviderSubscriptionId).not.toHaveBeenCalled();

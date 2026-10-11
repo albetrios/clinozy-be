@@ -64,9 +64,10 @@ export async function runDlqAutoRetryJob(): Promise<DlqAutoRetryJobResult> {
     };
   }
 
-  return withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, () =>
-    runDlqAutoRetryJobInner(),
-  );
+  return withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+    callback: () => runDlqAutoRetryJobInner(),
+  });
 }
 
 async function listSourceQueuesWithClosedCircuit(): Promise<string[]> {

@@ -30,12 +30,17 @@ function isWebauthnChallengePayload(payload: unknown): payload is WebauthnChalle
 }
 
 /** Mints a 32-byte hex challenge handle, stores `{kind, user_public_id, challenge}` in Redis with {@link WEBAUTHN_CHALLENGE_TTL_SECONDS} TTL, and returns the handle for the client to echo back during verify. */
-export async function createWebauthnChallenge(
-  redis: Redis,
-  kind: WebauthnChallengeKind,
-  userPublicId: string,
-  challenge: string,
-): Promise<string> {
+export async function createWebauthnChallenge({
+  redis,
+  kind,
+  userPublicId,
+  challenge,
+}: {
+  redis: Redis;
+  kind: WebauthnChallengeKind;
+  userPublicId: string;
+  challenge: string;
+}): Promise<string> {
   const challengeToken = randomBytes(32).toString('hex');
   const payload: WebauthnChallengePayload = {
     kind,
@@ -52,11 +57,15 @@ export async function createWebauthnChallenge(
 }
 
 /** Single-use lookup of a WebAuthn challenge: atomically reads-and-deletes the Redis entry (`GETDEL`), parses the JSON payload, and verifies the ceremony kind matches; throws `UnauthorizedError` (`errors:webauthnInvalidChallenge`) on any mismatch. The atomic consume guarantees only one of two concurrent verifies can read a non-null value, preventing challenge replay in a GET-then-DEL race. */
-export async function consumeWebauthnChallenge(
-  redis: Redis,
-  challengeToken: string,
-  expectedKind: WebauthnChallengeKind,
-): Promise<WebauthnChallengePayload> {
+export async function consumeWebauthnChallenge({
+  redis,
+  challengeToken,
+  expectedKind,
+}: {
+  redis: Redis;
+  challengeToken: string;
+  expectedKind: WebauthnChallengeKind;
+}): Promise<WebauthnChallengePayload> {
   if (!challengeToken || challengeToken.length === 0) {
     throw new UnauthorizedError('errors:webauthnInvalidChallenge');
   }

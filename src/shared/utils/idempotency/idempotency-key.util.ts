@@ -113,7 +113,13 @@ export function selectIdempotencyClaimCounterShardKey(): string {
  * key for a *different* payload collides here and is rejected with a 422 rather than silently
  * executing as a second, independent operation (Stripe-style key-reuse semantics).
  */
-export function buildIdempotencyCacheKey(idempotencyKey: string, scope: IdempotencyScope): string {
+export function buildIdempotencyCacheKey({
+  idempotencyKey,
+  scope,
+}: {
+  idempotencyKey: string;
+  scope: IdempotencyScope;
+}): string {
   let actorSegment: string;
   if (scope.apiKeyPublicId && scope.apiKeyPublicId.length > 0) {
     actorSegment = `api-key:${scope.apiKeyPublicId}`;

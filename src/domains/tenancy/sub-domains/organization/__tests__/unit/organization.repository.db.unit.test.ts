@@ -43,12 +43,12 @@ describe('OrganizationRepository (database)', () => {
     actors.push({ user: await createTestUser(), allowed: false });
     for (const { user, allowed } of actors) {
       for (const includeTenantClaim of [false, true]) {
-        await withAppDatabaseContext(
-          PRINCIPAL_SCOPE.VERIFIED({
+        await withAppDatabaseContext({
+          scope: PRINCIPAL_SCOPE.VERIFIED({
             userPublicId: user.public_id,
             ...(includeTenantClaim ? { organizationPublicId: organization.public_id } : {}),
           }),
-          async (handle) => {
+          callback: async (handle) => {
             await setLocalApplicationRole(handle);
             const result = await repository.userCanAccessOrganization(
               user.public_id,
@@ -59,7 +59,7 @@ describe('OrganizationRepository (database)', () => {
               await repository.userCanAccessOrganization('usr_missing', organization.public_id),
             ).toBeNull();
           },
-        );
+        });
       }
     }
     await repository.markDeletionStarted(organization.public_id);

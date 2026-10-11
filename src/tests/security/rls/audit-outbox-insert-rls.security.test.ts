@@ -132,11 +132,11 @@ describe('Security: audit.outbox INSERT RLS (audit R10)', () => {
   it('R10 FIX: the system-audit-insert context (clinozy_be_maintenance) CAN INSERT the tenantless outbox row', async () => {
     let caught: unknown;
     try {
-      await withMaintenanceDatabaseContext(
-        MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
-        (databaseHandle) => databaseHandle.execute(outboxInsertSql(null)),
-        { useMaintenanceDatabaseRole: true },
-      );
+      await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
+        callback: (databaseHandle) => databaseHandle.execute(outboxInsertSql(null)),
+        options: { useMaintenanceDatabaseRole: true },
+      });
     } catch (error) {
       caught = error;
     }

@@ -41,7 +41,10 @@ describe('registerNotifyEventHandlers', () => {
 
     registerNotifyEventHandlers();
 
-    expect(onSpy).toHaveBeenCalledWith(WEBHOOK_DELIVERY_REQUESTED, expect.any(Function));
+    expect(onSpy).toHaveBeenCalledWith({
+      eventType: WEBHOOK_DELIVERY_REQUESTED,
+      handler: expect.any(Function),
+    });
   });
 
   it('subscribes the cross-domain member-invitation-accepted handler', async () => {
@@ -50,7 +53,10 @@ describe('registerNotifyEventHandlers', () => {
 
     registerNotifyEventHandlers();
 
-    expect(onSpy).toHaveBeenCalledWith(MEMBER_INVITATION_ACCEPTED, expect.any(Function));
+    expect(onSpy).toHaveBeenCalledWith({
+      eventType: MEMBER_INVITATION_ACCEPTED,
+      handler: expect.any(Function),
+    });
   });
 
   it('subscribes every advertised webhook event type to the webhook fan-out', async () => {
@@ -62,7 +68,7 @@ describe('registerNotifyEventHandlers', () => {
 
     registerNotifyEventHandlers();
 
-    const subscribedTypes = onSpy.mock.calls.map(([eventType]) => eventType);
+    const subscribedTypes = onSpy.mock.calls.map(([{ eventType }]) => eventType);
     expect(WEBHOOK_EVENT_TYPES).toEqual([
       'organization.created',
       'organization.updated',
@@ -87,7 +93,7 @@ describe('registerNotifyEventHandlers', () => {
     registerNotifyEventHandlers();
     registerNotifyEventHandlers();
 
-    const subscribedTypes = onSpy.mock.calls.map(([eventType]) => eventType);
+    const subscribedTypes = onSpy.mock.calls.map(([{ eventType }]) => eventType);
     expect(subscribedTypes.filter((type) => type === WEBHOOK_DELIVERY_REQUESTED)).toHaveLength(1);
     expect(subscribedTypes.filter((type) => type === MEMBER_INVITATION_ACCEPTED)).toHaveLength(1);
   });

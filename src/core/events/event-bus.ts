@@ -32,11 +32,15 @@ export interface DomainEvent<TPayload = unknown> {
 }
 
 /** Builds a domain event without assigning `undefined` to optional fields. */
-export function buildDomainEvent<TPayload>(
-  type: string,
-  payload: TPayload,
-  options?: { timestamp?: Date; requestId?: string },
-): DomainEvent<TPayload> {
+export function buildDomainEvent<TPayload>({
+  type,
+  payload,
+  options,
+}: {
+  type: string;
+  payload: TPayload;
+  options?: { timestamp?: Date; requestId?: string } | undefined;
+}): DomainEvent<TPayload> {
   const event: DomainEvent<TPayload> = {
     type,
     payload,
@@ -73,7 +77,7 @@ const pendingCommitDispatchRequestIds = new Set<string>();
 export class EventBus {
   private readonly handlers: Map<string, EventHandler[]> = new Map();
 
-  on(eventType: string, handler: EventHandler): void {
+  on({ eventType, handler }: { eventType: string; handler: EventHandler }): void {
     const existing = this.handlers.get(eventType) ?? [];
     existing.push(handler);
     this.handlers.set(eventType, existing);
@@ -110,7 +114,10 @@ export class EventBus {
             await acknowledgeCommitDispatchTask({ requestId, raw });
           } catch (error) {
             logger.error({ error, requestId, task }, 'event-bus.commit-dispatch.task.failed');
-            captureException(error, { requestId, tags: { source: 'event-bus.commit-dispatch' } });
+            captureException({
+              error,
+              context: { requestId, tags: { source: 'event-bus.commit-dispatch' } },
+            });
           }
         }
       } catch (error) {
@@ -134,7 +141,7 @@ export class EventBus {
           await task();
         } catch (error) {
           logger.error({ error }, 'event-bus.on-commit.task.failed');
-          captureException(error, { tags: { source: 'event-bus.on-commit' } });
+          captureException({ error, context: { tags: { source: 'event-bus.on-commit' } } });
         }
       }
     };
@@ -152,7 +159,10 @@ export class EventBus {
           await handler(event);
         } catch (error) {
           logger.error({ eventType: event.type, error }, 'Domain event handler failed');
-          captureException(error, { tags: { source: 'event-bus.emit', eventType: event.type } });
+          captureException({
+            error,
+            context: { tags: { source: 'event-bus.emit', eventType: event.type } },
+          });
           // Per-event failure counter: emit swallows handler errors by design (a failed email must
           // not fail the HTTP request), so this metric is the only rate signal for a handler that
           // fails persistently. Critical side effects use emitStrict instead (propagates the error).
@@ -215,10 +225,13 @@ export interface ScheduleCommitDispatchOptions {
  * - **Side effects:** may write Redis keys; execution deferred until {@link EventBus.flushOnCommit}.
  * - **Notes:** task payloads must stay secret-free — identifiers only.
  */
-export async function scheduleCommitDispatch(
-  task: CommitDispatchTask,
-  options?: ScheduleCommitDispatchOptions,
-): Promise<void> {
+export async function scheduleCommitDispatch({
+  task,
+  options,
+}: {
+  task: CommitDispatchTask;
+  options?: ScheduleCommitDispatchOptions | undefined;
+}): Promise<void> {
   const requestId = options?.requestId;
   if (requestId !== undefined) {
     try {
@@ -231,8 +244,11 @@ export async function scheduleCommitDispatch(
         { error, requestId, taskType: task.type },
         'commit-dispatch.append_failed.fallback_to_memory',
       );
-      captureException(error, {
-        tags: { source: 'event-bus.commit-dispatch', taskType: task.type },
+      captureException({
+        error,
+        context: {
+          tags: { source: 'event-bus.commit-dispatch', taskType: task.type },
+        },
       });
       recordCommitDispatchDurabilityFallback();
     }

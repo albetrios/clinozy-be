@@ -40,10 +40,13 @@ function getBearerToken(request: FastifyRequest): string {
  * grant. Middleware test harnesses that exercise a privileged claim inject a stub `userService`
  * (see `auth.middleware.super-admin-rederive.unit.test.ts`) — dependency injection, not an env flag.
  */
-async function rederiveSuperAdminRole(
-  request: FastifyRequest,
-  userPublicId: string,
-): Promise<GlobalRole | undefined> {
+async function rederiveSuperAdminRole({
+  request,
+  userPublicId,
+}: {
+  request: FastifyRequest;
+  userPublicId: string;
+}): Promise<GlobalRole | undefined> {
   const userService = request.server.userDomain?.userService;
   if (!userService) {
     throw new ConfigurationError(
@@ -115,7 +118,7 @@ async function authenticateWithBearerToken(request: FastifyRequest): Promise<voi
     // fails closed: an unrecognised role is re-derived against live state like any other.
     const isPrivilegedClaim = claimedRole !== undefined && claimedRole !== GLOBAL_ROLES.USER;
     const effectiveRole = isPrivilegedClaim
-      ? await rederiveSuperAdminRole(request, payload.userId)
+      ? await rederiveSuperAdminRole({ request, userPublicId: payload.userId })
       : claimedRole;
 
     request.auth = omitUndefined({
@@ -192,11 +195,11 @@ async function applyOrganizationDefaultLocale(request: FastifyRequest): Promise<
   if (!organizationSettingsService) return; // minimal entrypoints / unit harnesses without tenancy wiring
   const organizationDefaultLocale =
     await organizationSettingsService.resolveDefaultLocaleForOrganization(organizationPublicId);
-  attachRequestI18nHelpers(
+  attachRequestI18nHelpers({
     request,
-    request as unknown as Parameters<typeof attachRequestI18nHelpers>[1],
+    req: request as unknown as Parameters<typeof attachRequestI18nHelpers>[0]['req'],
     organizationDefaultLocale,
-  );
+  });
 }
 
 const authMiddleware: FastifyPluginAsync = async (app) => {

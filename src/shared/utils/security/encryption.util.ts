@@ -29,7 +29,13 @@ export interface EncryptedPayload {
  * JSON.parse(new TextDecoder().decode(plain));
  * ```
  */
-export function encryptPayload(plaintext: string, keyHex: string): EncryptedPayload {
+export function encryptPayload({
+  plaintext,
+  keyHex,
+}: {
+  plaintext: string;
+  keyHex: string;
+}): EncryptedPayload {
   const key = Buffer.from(keyHex, 'hex');
   const iv = randomBytes(AES_GCM_IV_LENGTH);
 

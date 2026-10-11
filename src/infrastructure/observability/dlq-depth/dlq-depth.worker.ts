@@ -65,5 +65,5 @@ export function createDlqDepthWorker(): WorkerHandle {
     logger.warn({ jobId, queueName: DLQ_DEPTH_QUEUE_NAME }, 'queue.dlq.depth.stalled');
   });
 
-  return buildWorkerHandle(worker, DLQ_DEPTH_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: DLQ_DEPTH_QUEUE_NAME });
 }

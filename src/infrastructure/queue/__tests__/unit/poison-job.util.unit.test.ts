@@ -50,13 +50,11 @@ describe('parseJobDataOrDeadLetter', () => {
     );
 
     expect(recordDeadLetterFailureMock).toHaveBeenCalledTimes(1);
-    expect(recordDeadLetterFailureMock).toHaveBeenCalledWith(
-      'mail',
+    expect(recordDeadLetterFailureMock).toHaveBeenCalledWith({
+      queueName: 'mail',
       job,
-      // An UnrecoverableError, so BullMQ skips the remaining attempts; the recorded marker tells
-      // the failed listener the record is already written.
-      expect.any(UnrecoverableError),
-    );
+      error: expect.any(UnrecoverableError),
+    });
     expect(loggerErrorMock).toHaveBeenCalledTimes(1);
   });
 });

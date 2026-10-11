@@ -20,7 +20,7 @@ What this suite covers:
 - Serializer response leak guard — no credential-shaped output keys (`password`, `*_hash`, `secret`, `encrypted`) and no whole-row spreads in `*.serializer.ts` (`serializer-response-leak.global.test.ts`).
 - Event wiring parity — every `*_EVENT` key has an emitter and an `eventBus.on` handler; event string values are globally unique (`event-wiring-parity.global.test.ts`).
 - Import path policy — no parent-relative `../` in `src/` or `tooling/` TypeScript (`import-paths.global.test.ts`).
-- Service-layer object params — no `*.service.ts` method, function or port signature takes two or more positional parameters; constructors and Fastify handlers are exempt (`service-object-params.global.test.ts`).
+- Object params — no method, function or port signature under `src/` (tests and repositories aside) takes two or more positional parameters; constructors, Fastify handlers and the allowlisted framework-dictated signatures are exempt (`object-params.global.test.ts`).
 - RLS database context network isolation — no outbound I/O inside `withAppDatabaseContext` callbacks in domain code.
 
 What it does **not** cover: API behavior (see integration / e2e), worker per-job behavior (see integration).
@@ -49,6 +49,6 @@ None — these tests read source files directly.
 ## Failure modes
 
 - **New cross-domain repository or schema import in a service** → `service-cross-domain-boundary.global.test.ts` prints the offending file; refactor through the owning domain's service.
-- **New service method with two positional parameters** → `service-object-params.global.test.ts` prints `file:line name(params)`; take one options object (`be-object-params.mdc`).
+- **New function with two positional parameters** → `object-params.global.test.ts` prints `file:line name(params)`; take one options object (`be-object-params.mdc`), or — only when a library calls it positionally — add it to the test's `FRAMEWORK_DICTATED` allowlist.
 - **New worker file forgets to register its DLQ** → the readiness scan flags it; wire through [src/infrastructure/queue/dlq/dead-letter.ts](src/infrastructure/queue/dlq/dead-letter.ts).
 - **Route added without `schema` block** → catalog drift caught by sibling `routes:catalog:check`.

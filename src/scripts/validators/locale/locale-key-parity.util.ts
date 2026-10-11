@@ -26,7 +26,15 @@ export type LocaleParityFile = (typeof LOCALE_PARITY_FILES)[number];
  * appends them to `keys`. Non-object values (and empty objects) become a leaf
  * at the caller-supplied `prefix`.
  */
-export function collectLeafKeys(value: unknown, prefix: string, keys: Set<string>): void {
+export function collectLeafKeys({
+  value,
+  prefix,
+  keys,
+}: {
+  value: unknown;
+  prefix: string;
+  keys: Set<string>;
+}): void {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     if (prefix) keys.add(prefix);
     return;
@@ -40,7 +48,7 @@ export function collectLeafKeys(value: unknown, prefix: string, keys: Set<string
   for (const [key, nested] of entries) {
     const path = prefix ? `${prefix}.${key}` : key;
     if (nested !== null && typeof nested === 'object' && !Array.isArray(nested)) {
-      collectLeafKeys(nested, path, keys);
+      collectLeafKeys({ value: nested, prefix: path, keys });
     } else {
       keys.add(path);
     }
@@ -48,11 +56,17 @@ export function collectLeafKeys(value: unknown, prefix: string, keys: Set<string
 }
 
 /** Reads and flattens a single locale JSON file into the set of dotted leaf keys it declares. */
-export function loadLocaleLeafKeys(locale: string, fileName: LocaleParityFile): Set<string> {
+export function loadLocaleLeafKeys({
+  locale,
+  fileName,
+}: {
+  locale: string;
+  fileName: LocaleParityFile;
+}): Set<string> {
   const path = join(LOCALES_ROOT, locale, fileName);
   const parsed = JSON.parse(readFileSync(path, 'utf-8')) as unknown;
   const keys = new Set<string>();
-  collectLeafKeys(parsed, '', keys);
+  collectLeafKeys({ value: parsed, prefix: '', keys });
   return keys;
 }
 
@@ -74,10 +88,10 @@ export function findLocaleParityMismatches(): LocaleParityMismatch[] {
   const mismatches: LocaleParityMismatch[] = [];
 
   for (const fileName of LOCALE_PARITY_FILES) {
-    const baseKeys = loadLocaleLeafKeys(BASE_LOCALE, fileName);
+    const baseKeys = loadLocaleLeafKeys({ locale: BASE_LOCALE, fileName });
 
     for (const locale of OTHER_LOCALES) {
-      const localeKeys = loadLocaleLeafKeys(locale, fileName);
+      const localeKeys = loadLocaleLeafKeys({ locale, fileName });
       const missingInLocale = [...baseKeys]
         .filter((key) => !localeKeys.has(key))
         .sort((a, b) => a.localeCompare(b));

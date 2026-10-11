@@ -90,10 +90,10 @@ export class OrganizationApiKeyRepository {
    * {@link countActiveByOrganization}.
    */
   async acquireCreationQuotaLock(organization_id: number): Promise<void> {
-    await acquireResourceQuotaLock(
-      RESOURCE_QUOTA_LOCK_NAMESPACE.ORGANIZATION_API_KEY,
-      organization_id,
-    );
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.ORGANIZATION_API_KEY,
+      key: organization_id,
+    });
   }
 
   async findByOrganizationId(
@@ -117,7 +117,7 @@ export class OrganizationApiKeyRepository {
     const where = and(
       eq(api_keys.organization_id, organization_id),
       isNull(api_keys.deleted_at),
-      buildSearchCondition([api_keys.name], q),
+      buildSearchCondition({ columns: [api_keys.name], q }),
       cursorCondition,
     );
     const rows = (await getRequestDatabase()
@@ -129,7 +129,7 @@ export class OrganizationApiKeyRepository {
       .where(where)
       .orderBy(...orderBy)
       .limit(limit + 1)) as (OrganizationApiKeyRow & CursorTimestampRow)[];
-    return finishKeysetPage(rows, { limit, sortValueFor, filterFingerprint });
+    return finishKeysetPage({ rows, args: { limit, sortValueFor, filterFingerprint } });
   }
 
   async findByPublicId(
@@ -159,25 +159,27 @@ export class OrganizationApiKeyRepository {
     expires_at?: Date | null;
     created_by_user_id?: number | null;
   }) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('organizationApiKey');
-      const row = {
-        public_id,
-        organization_id: data.organization_id,
-        name: data.name,
-        key_hash: data.key_hash,
-        key_prefix: data.key_prefix,
-        scopes: data.scopes,
-        expires_at: data.expires_at ?? undefined,
-        created_by_user_id: data.created_by_user_id ?? undefined,
-        updated_by_user_id: data.created_by_user_id ?? undefined,
-      };
-      const rows = await getRequestDatabase().insert(api_keys).values(row).returning();
-      const inserted = rows[0]!;
-      return {
-        ...(inserted as OrganizationApiKeyRow),
-        scopes: parseScopesColumn((inserted as { scopes?: unknown }).scopes),
-      };
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const public_id = generatePublicId('organizationApiKey');
+        const row = {
+          public_id,
+          organization_id: data.organization_id,
+          name: data.name,
+          key_hash: data.key_hash,
+          key_prefix: data.key_prefix,
+          scopes: data.scopes,
+          expires_at: data.expires_at ?? undefined,
+          created_by_user_id: data.created_by_user_id ?? undefined,
+          updated_by_user_id: data.created_by_user_id ?? undefined,
+        };
+        const rows = await getRequestDatabase().insert(api_keys).values(row).returning();
+        const inserted = rows[0]!;
+        return {
+          ...(inserted as OrganizationApiKeyRow),
+          scopes: parseScopesColumn((inserted as { scopes?: unknown }).scopes),
+        };
+      },
     });
   }
 

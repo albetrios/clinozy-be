@@ -164,10 +164,13 @@ function buildRouteUrlRegex(route: RouteEntry): RegExp {
   return new RegExp(`/${escaped.join('/')}(?=[\\s'"\`?,)\\\\]|$)`, 'g');
 }
 
-function findCoverageHits(
-  route: RouteEntry,
-  testFiles: { path: string; content: string }[],
-): CoverageHit[] {
+function findCoverageHits({
+  route,
+  testFiles,
+}: {
+  route: RouteEntry;
+  testFiles: { path: string; content: string }[];
+}): CoverageHit[] {
   const matcher = buildRouteUrlRegex(route);
   const hits: CoverageHit[] = [];
   for (const { path, content } of testFiles) {
@@ -223,7 +226,7 @@ async function main(): Promise<void> {
   console.log('Computing per-route coverage…');
   const coverages: RouteCoverage[] = [];
   for (const route of routes) {
-    const hits = findCoverageHits(route, testFiles);
+    const hits = findCoverageHits({ route, testFiles });
     let status: RouteCoverage['status'];
     if (hits.length === 0) status = 'gap';
     else if (hitIsSmokeOnly(hits)) status = 'smoke-only';

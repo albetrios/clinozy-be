@@ -11,7 +11,9 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 function requireOpsBearerToken(authorizationHeader: string | undefined): void {
   const bearerToken = getEnv().METRICS_SCRAPE_TOKEN;
-  if (!(bearerToken && isBearerTokenValid(authorizationHeader, bearerToken))) {
+  if (
+    !(bearerToken && isBearerTokenValid({ authorizationHeader, expectedBearerToken: bearerToken }))
+  ) {
     throw new UnauthorizedError('errors:invalidMetricsToken');
   }
 }
@@ -19,7 +21,9 @@ function requireOpsBearerToken(authorizationHeader: string | undefined): void {
 /** The operator write needs `OPS_ADMIN_TOKEN`; unset, the route refuses every request. */
 function requireOpsAdminBearerToken(authorizationHeader: string | undefined): void {
   const bearerToken = getEnv().OPS_ADMIN_TOKEN;
-  if (!(bearerToken && isBearerTokenValid(authorizationHeader, bearerToken))) {
+  if (
+    !(bearerToken && isBearerTokenValid({ authorizationHeader, expectedBearerToken: bearerToken }))
+  ) {
     throw new UnauthorizedError('errors:invalidMetricsToken');
   }
 }

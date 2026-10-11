@@ -48,7 +48,9 @@ describe('exchangeGitHubOAuthCode', () => {
   });
 
   it('builds an authorize URL carrying the PKCE S256 code_challenge', () => {
-    const url = new URL(buildGitHubOAuthRedirectUrl('state-token', 'the-code-challenge'));
+    const url = new URL(
+      buildGitHubOAuthRedirectUrl({ state: 'state-token', codeChallenge: 'the-code-challenge' }),
+    );
     expect(url.searchParams.get('state')).toBe('state-token');
     expect(url.searchParams.get('code_challenge')).toBe('the-code-challenge');
     expect(url.searchParams.get('code_challenge_method')).toBe('S256');

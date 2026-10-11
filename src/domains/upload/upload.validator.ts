@@ -23,7 +23,11 @@ import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js'
  * {@link UPLOAD_PURPOSE_CONFIG}. Throws {@link ValidationError} on any failure.
  */
 export function validateCreateUpload(data: unknown): CreateUploadInput {
-  const input = parseWithSchema(createUploadDto, data, 'errors:invalidUploadInput');
+  const input = parseWithSchema({
+    schema: createUploadDto,
+    data,
+    errorKey: 'errors:invalidUploadInput',
+  });
   const config = UPLOAD_PURPOSE_CONFIG[input.purpose];
   const allowedTypes = getAllowedContentTypesForPurpose(input.purpose);
 
@@ -55,7 +59,7 @@ export function validateCreateUpload(data: unknown): CreateUploadInput {
   // char id; arbitrary 1-255-char strings are rejected with ValidationError
   // before any downstream side effect.
   if (input.organization_id !== undefined) {
-    validatePublicIdParam(input.organization_id, 'organization_id');
+    validatePublicIdParam({ value: input.organization_id, fieldName: 'organization_id' });
   }
 
   // Content type validation
@@ -157,6 +161,9 @@ export function validateCreateUpload(data: unknown): CreateUploadInput {
  * and the shared public-id format check; returns the normalized public id.
  */
 export function validateUploadPublicIdParam(public_id: string): string {
-  const parsed = parseWithSchema(uploadPublicIdParamDto, { upload_id: public_id });
-  return validatePublicIdParam(parsed.upload_id, 'upload_id');
+  const parsed = parseWithSchema({
+    schema: uploadPublicIdParamDto,
+    data: { upload_id: public_id },
+  });
+  return validatePublicIdParam({ value: parsed.upload_id, fieldName: 'upload_id' });
 }

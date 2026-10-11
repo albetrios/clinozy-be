@@ -68,8 +68,8 @@ describe('renderZodIssueMessages', () => {
 describe('pickLocalizedMessage', () => {
   it('picks the language, English for an unknown one or none', () => {
     const messages = { en: 'Hello', es: 'Hola' };
-    expect(pickLocalizedMessage(messages, 'es')).toBe('Hola');
-    expect(pickLocalizedMessage(messages, 'fr')).toBe('Hello');
-    expect(pickLocalizedMessage(messages, undefined)).toBe('Hello');
+    expect(pickLocalizedMessage({ messages, language: 'es' })).toBe('Hola');
+    expect(pickLocalizedMessage({ messages, language: 'fr' })).toBe('Hello');
+    expect(pickLocalizedMessage({ messages, language: undefined })).toBe('Hello');
   });
 });

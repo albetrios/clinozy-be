@@ -57,7 +57,13 @@ vi.mock('@/shared/config/worker-concurrency.util.js', () => ({
 }));
 
 vi.mock('@/infrastructure/queue/worker-runtime/worker-close.util.js', () => ({
-  buildWorkerHandle: (worker: { close: () => Promise<void> }, queueName: string) => ({
+  buildWorkerHandle: ({
+    worker,
+    queueName,
+  }: {
+    worker: { close: () => Promise<void> };
+    queueName: string;
+  }) => ({
     worker,
     queueName,
     close: () => worker.close(),
@@ -92,16 +98,16 @@ describe('stripe-webhook.worker', () => {
     } as Stripe.Event;
     vi.mocked(retrieveStripeEvent).mockResolvedValue(eventPayload);
 
-    await processStripeWebhookJob(
-      {
+    await processStripeWebhookJob({
+      jobData: {
         stripeEventId: 'evt_123',
         requestId: 'req-1',
       },
       stripeWebhookService,
-      'job-1',
-    );
+      jobId: 'job-1',
+    });
 
-    expect(retrieveStripeEvent).toHaveBeenCalledWith('evt_123');
+    expect(retrieveStripeEvent).toHaveBeenCalledWith({ stripeEventId: 'evt_123' });
     expect(handleEvent).toHaveBeenCalledOnce();
     expect(handleEvent).toHaveBeenCalledWith({
       event: eventPayload,

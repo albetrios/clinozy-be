@@ -31,7 +31,10 @@ describe('Integration: idempotency in-flight returns 409', () => {
     const idempotencyKey = `test-in-flight-${Date.now()}`;
     const requestUrl = testApiPath('/tenancy/organizations');
     const payload = { name: 'Org', slug: `org-${Date.now()}` };
-    const cacheKey = buildIdempotencyCacheKey(idempotencyKey, { userId: user.public_id });
+    const cacheKey = buildIdempotencyCacheKey({
+      idempotencyKey,
+      scope: { userId: user.public_id },
+    });
     await redisConnection.set(
       cacheKey,
       JSON.stringify({ statusCode: 202, body: '{}', headers: {} }),
@@ -65,7 +68,10 @@ describe('Integration: idempotency in-flight returns 409', () => {
     const idempotencyKey = `test-in-flight-explicit-${Date.now()}`;
     const requestUrl = testApiPath('/tenancy/organizations');
     const payload = { name: 'Org 2', slug: `org2-${Date.now()}` };
-    const cacheKey = buildIdempotencyCacheKey(idempotencyKey, { userId: user.public_id });
+    const cacheKey = buildIdempotencyCacheKey({
+      idempotencyKey,
+      scope: { userId: user.public_id },
+    });
     await redisConnection.set(
       cacheKey,
       buildInFlightIdempotencyEntry({

@@ -18,9 +18,10 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 const ACTOR_PUBLIC_ID = 'usr_auditoutboxdrain00001';
 
 async function pendingOutboxCount(): Promise<number> {
-  return withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN, (databaseHandle) =>
-    countPendingAuditOutboxRows(databaseHandle),
-  );
+  return withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+    callback: (databaseHandle) => countPendingAuditOutboxRows(databaseHandle),
+  });
 }
 
 describe('Integration: audit transactional outbox drain', () => {
@@ -48,10 +49,10 @@ describe('Integration: audit transactional outbox drain', () => {
 
     expect(await pendingOutboxCount()).toBe(1);
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
-      (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
-    );
+    const result = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+      callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+    });
 
     // The drain actually emptied the queue — the assertion the unused
     // countPendingAuditOutboxRows seam was written for.
@@ -83,10 +84,10 @@ describe('Integration: audit transactional outbox drain', () => {
       resource_type: 'user',
     });
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
-      (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
-    );
+    const result = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+      callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+    });
 
     expect(result).toEqual({ drained: 0, transientFailed: 0, permanentlyFailed: 1 });
     expect(await pendingOutboxCount()).toBe(0);
@@ -113,10 +114,10 @@ describe('Integration: audit transactional outbox drain', () => {
         metadata: { source: 'password', actor_kind: 'anonymous' },
       });
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
-      (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
-    );
+    const result = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+      callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+    });
 
     expect(result).toEqual({ drained: 1, transientFailed: 0, permanentlyFailed: 0 });
     const auditRows = await getOperatorDatabase()
@@ -149,9 +150,10 @@ describe('Integration: audit transactional outbox drain', () => {
         { ...row, status: 'FAILED', created_at: twoDaysAgo },
       ]);
 
-    await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN, (databaseHandle) =>
-      runAuditOutboxDrainJob(databaseHandle),
-    );
+    await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+      callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+    });
 
     const remaining = await getOperatorDatabase()
       .select({ status: audit_outbox.status, created_at: audit_outbox.created_at })
@@ -214,12 +216,14 @@ describe('Integration: audit transactional outbox drain', () => {
 
     // Two independent drain contexts (two worker replicas) racing the same backlog.
     const [resultA, resultB] = await Promise.all([
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN, (databaseHandle) =>
-        runAuditOutboxDrainJob(databaseHandle),
-      ),
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN, (databaseHandle) =>
-        runAuditOutboxDrainJob(databaseHandle),
-      ),
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+        callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+      }),
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+        callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+      }),
     ]);
 
     // No row drained twice: the two runs together drain exactly ROW_COUNT, with no overlap.
@@ -258,13 +262,17 @@ describe('Integration: audit transactional outbox drain', () => {
       .from(users)
       .where(eq(users.public_id, ACTOR_PUBLIC_ID));
 
-    const failedThenRecovered = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
-      async (databaseHandle) => {
+    const failedThenRecovered = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+      callback: async (databaseHandle) => {
         let failed = false;
         try {
           await databaseHandle.transaction(async (savepoint) => {
-            await setLocalDatabaseConfig(savepoint, 'app.system_audit_insert', 'true');
+            await setLocalDatabaseConfig({
+              databaseHandle: savepoint,
+              key: 'app.system_audit_insert',
+              value: 'true',
+            });
             await savepoint.insert(logs).values({
               public_id: generatePublicId('auditLog'),
               actor_user_id: actor!.id,
@@ -281,7 +289,11 @@ describe('Integration: audit transactional outbox drain', () => {
         }
 
         // The outer batch transaction must still be usable: this VALID insert commits.
-        await setLocalDatabaseConfig(databaseHandle, 'app.system_audit_insert', 'true');
+        await setLocalDatabaseConfig({
+          databaseHandle,
+          key: 'app.system_audit_insert',
+          value: 'true',
+        });
         await databaseHandle.insert(logs).values({
           public_id: generatePublicId('auditLog'),
           actor_user_id: actor!.id,
@@ -293,7 +305,7 @@ describe('Integration: audit transactional outbox drain', () => {
         });
         return failed;
       },
-    );
+    });
 
     expect(failedThenRecovered).toBe(true);
     // The valid row committed despite the earlier failed statement → savepoint isolation works.

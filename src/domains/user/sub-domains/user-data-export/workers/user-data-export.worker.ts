@@ -46,14 +46,18 @@ export function createUserDataExportWorker(
         job,
         queueName: USER_DATA_EXPORT_QUEUE_NAME,
       });
-      await runWithPropagatedTraceContext(
-        { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
-        job.name,
-        () =>
-          runUserDataExportJob(jobData, userDataExportService, {
-            isFinalAttempt: job.attemptsMade + 1 >= Math.max(1, job.opts.attempts ?? 1),
+      await runWithPropagatedTraceContext({
+        carrier: { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
+        spanName: job.name,
+        callback: () =>
+          runUserDataExportJob({
+            jobData,
+            userDataExportService,
+            options: {
+              isFinalAttempt: job.attemptsMade + 1 >= Math.max(1, job.opts.attempts ?? 1),
+            },
           }),
-      );
+      });
     },
     workerOptions: {
       connection: getBullMQConnectionOptions(),
@@ -66,5 +70,5 @@ export function createUserDataExportWorker(
     logger.warn({ jobId, queue: USER_DATA_EXPORT_QUEUE_NAME }, 'user-data-export.worker.stalled');
   });
 
-  return buildWorkerHandle(worker, USER_DATA_EXPORT_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: USER_DATA_EXPORT_QUEUE_NAME });
 }

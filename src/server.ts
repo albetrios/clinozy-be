@@ -36,7 +36,7 @@ initSentry();
 initPostHog();
 
 process.on('uncaughtException', (error) => {
-  captureException(error, { tags: { source: 'uncaughtException' } });
+  captureException({ error, context: { tags: { source: 'uncaughtException' } } });
   logger.fatal({ error }, 'uncaughtException');
   void flushSentry().finally(() => process.exit(1));
 });
@@ -102,7 +102,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  captureException(error, { tags: { source: 'server_startup' } });
+  captureException({ error, context: { tags: { source: 'server_startup' } } });
   const message = error instanceof Error ? error.message : String(error);
   const stack = error instanceof Error ? error.stack : undefined;
   logger.error({ error: message, stack }, 'Server failed to start');

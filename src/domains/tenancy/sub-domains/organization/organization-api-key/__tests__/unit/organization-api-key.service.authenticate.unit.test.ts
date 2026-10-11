@@ -21,10 +21,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -83,7 +85,10 @@ describe('OrganizationApiKeyService.authenticate', () => {
       organization_public_id: 'org_public_abc',
       scopes: ['read'],
     });
-    expect(hashCompare).toHaveBeenCalledWith('stored-hash', 'candidate-hash');
+    expect(hashCompare).toHaveBeenCalledWith({
+      storedHash: 'stored-hash',
+      candidateHash: 'candidate-hash',
+    });
     expect(apiKeyRepository.touchLastUsedAt).toHaveBeenCalledWith('apikey_public_abc');
     // The resolver already returned the organization public id, so we never read it back via the repo.
     expect(organizationRepository.findById).not.toHaveBeenCalled();

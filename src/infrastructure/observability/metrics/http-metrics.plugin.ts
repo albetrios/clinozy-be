@@ -44,7 +44,12 @@ const httpMetricsPlugin: FastifyPluginAsync = async (application) => {
     const elapsedNanoseconds = process.hrtime.bigint() - startedAt;
     const durationSeconds = Number(elapsedNanoseconds) / 1_000_000_000;
     const routeLabel = resolveRouteLabel(request.routeOptions?.url);
-    recordHttpRequest(request.method, routeLabel, reply.statusCode, durationSeconds);
+    recordHttpRequest({
+      method: request.method,
+      route: routeLabel,
+      statusCode: reply.statusCode,
+      durationSeconds,
+    });
   });
 };
 

@@ -71,15 +71,21 @@ class RedisFallbackRateLimitStore {
 
   incr(key: string, callback: RateLimitIncrCallback, timeWindow: number, _max: number): void {
     const fullKey = `${this.keyPrefix}${key}`;
-    this.incrInRedis(fullKey, timeWindow)
+    this.incrInRedis({ fullKey, timeWindow })
       .then((result) => callback(null, result))
       .catch((error) => {
         logRedisFailover(error);
-        callback(null, this.incrInMemory(fullKey, timeWindow));
+        callback(null, this.incrInMemory({ fullKey, timeWindow }));
       });
   }
 
-  private async incrInRedis(fullKey: string, timeWindow: number): Promise<RateLimitIncrResult> {
+  private async incrInRedis({
+    fullKey,
+    timeWindow,
+  }: {
+    fullKey: string;
+    timeWindow: number;
+  }): Promise<RateLimitIncrResult> {
     const result = (await this.redis.eval(
       RATE_LIMIT_INCR_SCRIPT,
       1,
@@ -90,7 +96,13 @@ class RedisFallbackRateLimitStore {
     return { current, ttl };
   }
 
-  private incrInMemory(fullKey: string, timeWindow: number): RateLimitIncrResult {
+  private incrInMemory({
+    fullKey,
+    timeWindow,
+  }: {
+    fullKey: string;
+    timeWindow: number;
+  }): RateLimitIncrResult {
     const now = Date.now();
     const existing = this.localCounters.get(fullKey);
     if (!existing || existing.expiresAtMs <= now) {

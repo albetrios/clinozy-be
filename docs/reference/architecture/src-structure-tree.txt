@@ -1819,6 +1819,7 @@ src/
     │   ├── no-global-admin-in-tenancy.global.test.ts
     │   ├── no-nodeenv-branching.global.test.ts
     │   ├── no-stripe-shaped-literals.global.test.ts
+    │   ├── object-params.global.test.ts
     │   ├── openapi-completeness.global.test.ts
     │   ├── openapi-cursor-pagination.global.test.ts
     │   ├── openapi-mcp.global.test.ts
@@ -1831,7 +1832,6 @@ src/
     │   ├── seed-public-id-entity.global.test.ts
     │   ├── serializer-response-leak.global.test.ts
     │   ├── service-cross-domain-boundary.global.test.ts
-    │   ├── service-object-params.global.test.ts
     │   ├── stryker-mutate-paths.global.test.ts
     │   ├── system-validation.global.test.ts
     │   ├── test-hygiene.global.test.ts

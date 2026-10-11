@@ -29,12 +29,12 @@ describe('MemberInvitationRepository transaction-bound public lookup', () => {
   it('resolves a newly inserted invitation before its caller transaction commits', async () => {
     const { owner, organization, membership } = await setupOrganizationWithMembership();
     const repository = new MemberInvitationRepository();
-    await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({
         userPublicId: owner.public_id,
         organizationPublicId: organization.public_id,
       }),
-      async () => {
+      callback: async () => {
         const invitation = await repository.create({
           membership_id: membership.id,
           email: 'transaction-invitation@test.com',
@@ -53,7 +53,7 @@ describe('MemberInvitationRepository transaction-bound public lookup', () => {
           membership_id: membership.id,
         });
       },
-    );
+    });
     expect(await repository.lookupOrganizationByInvitationPublicId('inv_missing')).toBeNull();
   });
 });

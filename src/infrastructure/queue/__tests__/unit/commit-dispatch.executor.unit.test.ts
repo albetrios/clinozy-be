@@ -24,7 +24,13 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   return {
     ...actual,
     withAppDatabaseContext: vi.fn(
-      async (scope: unknown, callback: (handle: unknown) => Promise<unknown>) => {
+      async ({
+        scope,
+        callback,
+      }: {
+        scope: unknown;
+        callback: (handle: unknown) => Promise<unknown>;
+      }) => {
         appContextScopes.push(scope);
         return callback({});
       },
@@ -86,7 +92,10 @@ describe('executeCommitDispatchTask', () => {
 
   it('dispatches mail outbox jobs by the row token', async () => {
     await execute({ type: 'mail_outbox', mailOutboxToken: MAIL_OUTBOX_TOKEN, requestId: 'req-1' });
-    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN, { requestId: 'req-1' });
+    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith({
+      mailOutboxToken: MAIL_OUTBOX_TOKEN,
+      options: { requestId: 'req-1' },
+    });
   });
 
   it('enqueues a notification with its public ids only', async () => {

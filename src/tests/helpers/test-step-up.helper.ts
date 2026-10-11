@@ -14,5 +14,5 @@ export async function seedRecentStepUpForTestUser(
   sessionPublicId: string,
   factor: StepUpFactor = 'password',
 ): Promise<void> {
-  await recordRecentStepUp(redisConnection, userPublicId, sessionPublicId, factor);
+  await recordRecentStepUp({ redis: redisConnection, userPublicId, sessionPublicId, factor });
 }

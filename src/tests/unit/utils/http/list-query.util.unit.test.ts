@@ -61,11 +61,11 @@ describe('list-query.util', () => {
 
   describe('buildSearchCondition', () => {
     it('is undefined for empty q or no columns', () => {
-      expect(buildSearchCondition([roles.name], undefined)).toBeUndefined();
-      expect(buildSearchCondition([], 'x')).toBeUndefined();
+      expect(buildSearchCondition({ columns: [roles.name], q: undefined })).toBeUndefined();
+      expect(buildSearchCondition({ columns: [], q: 'x' })).toBeUndefined();
     });
     it('builds a condition when q + columns are present', () => {
-      expect(buildSearchCondition([roles.name], 'ann')).toBeDefined();
+      expect(buildSearchCondition({ columns: [roles.name], q: 'ann' })).toBeDefined();
     });
   });
 
@@ -113,14 +113,17 @@ describe('list-query.util', () => {
 
     it('ignores a cursor minted under a different sort/filter (resets to first page)', () => {
       // Mint a cursor under sort=name asc.
-      const page = finishKeysetPage([row(), row({ id: 2, name: 'beta' })], {
-        limit: 1,
-        sortValueFor: (r) => r.name,
-        filterFingerprint: computeListFilterFingerprint({
-          q: undefined,
-          sort: 'name',
-          order: 'asc',
-        }),
+      const page = finishKeysetPage({
+        rows: [row(), row({ id: 2, name: 'beta' })],
+        args: {
+          limit: 1,
+          sortValueFor: (r) => r.name,
+          filterFingerprint: computeListFilterFingerprint({
+            q: undefined,
+            sort: 'name',
+            order: 'asc',
+          }),
+        },
       });
       const cursor = page.next_cursor!;
       expect(parseListCursor(cursor)?.sort_value).toBe('alpha');
@@ -152,10 +155,13 @@ describe('list-query.util', () => {
   describe('finishKeysetPage', () => {
     it('slices to limit, flags has_more, and mints a cursor carrying sort_value + fingerprint', () => {
       const fingerprint = computeListFilterFingerprint({ q: 'a', sort: 'name', order: 'asc' });
-      const page = finishKeysetPage([row(), row({ id: 2, name: 'beta' })], {
-        limit: 1,
-        sortValueFor: (r) => r.name,
-        filterFingerprint: fingerprint,
+      const page = finishKeysetPage({
+        rows: [row(), row({ id: 2, name: 'beta' })],
+        args: {
+          limit: 1,
+          sortValueFor: (r) => r.name,
+          filterFingerprint: fingerprint,
+        },
       });
       expect(page.items).toHaveLength(1);
       expect(page.has_more).toBe(true);
@@ -166,9 +172,12 @@ describe('list-query.util', () => {
 
     it('pages a plain (created_at, id) list: total passed through, cursor without sort or filter', () => {
       // The page builder every keyset list uses — the plain lists pass only the limit and a total.
-      const page = finishKeysetPage([row(), row({ id: 2 }), row({ id: 3 })], {
-        limit: 2,
-        total: 3,
+      const page = finishKeysetPage({
+        rows: [row(), row({ id: 2 }), row({ id: 3 })],
+        args: {
+          limit: 2,
+          total: 3,
+        },
       });
 
       expect(page).toMatchObject({ limit: 2, total: 3, has_more: true });
@@ -177,14 +186,17 @@ describe('list-query.util', () => {
       expect(decoded).toMatchObject({ id: 2, public_id: 'role_a' });
       expect(decoded?.sort_value).toBeUndefined();
       expect(decoded?.filter_fingerprint).toBeUndefined();
-      expect(finishKeysetPage([row()], { limit: 2 }).total).toBeNull();
+      expect(finishKeysetPage({ rows: [row()], args: { limit: 2 } }).total).toBeNull();
     });
 
     it('returns no cursor when there is no next page', () => {
-      const page = finishKeysetPage([row()], {
-        limit: 5,
-        sortValueFor: () => undefined,
-        filterFingerprint: 'x',
+      const page = finishKeysetPage({
+        rows: [row()],
+        args: {
+          limit: 5,
+          sortValueFor: () => undefined,
+          filterFingerprint: 'x',
+        },
       });
       expect(page.has_more).toBe(false);
       expect(page.next_cursor).toBeNull();

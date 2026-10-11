@@ -76,18 +76,18 @@ async function readInFlight(queues: Queue[]): Promise<InFlightSnapshot> {
 }
 
 async function main(): Promise<void> {
-  const timeoutMilliseconds = parsePositiveIntegerEnv(
-    process.env.SETTLE_CHECK_TIMEOUT_MS,
-    DEFAULT_TIMEOUT_MILLISECONDS,
-  );
-  const pollIntervalMilliseconds = parsePositiveIntegerEnv(
-    process.env.SETTLE_CHECK_POLL_INTERVAL_MS,
-    DEFAULT_POLL_INTERVAL_MILLISECONDS,
-  );
-  const queueNames = resolveQueueNames(
-    process.env.SETTLE_CHECK_QUEUES,
-    WORKER_THROUGHPUT_QUEUE_NAMES,
-  );
+  const timeoutMilliseconds = parsePositiveIntegerEnv({
+    rawValue: process.env.SETTLE_CHECK_TIMEOUT_MS,
+    fallback: DEFAULT_TIMEOUT_MILLISECONDS,
+  });
+  const pollIntervalMilliseconds = parsePositiveIntegerEnv({
+    rawValue: process.env.SETTLE_CHECK_POLL_INTERVAL_MS,
+    fallback: DEFAULT_POLL_INTERVAL_MILLISECONDS,
+  });
+  const queueNames = resolveQueueNames({
+    override: process.env.SETTLE_CHECK_QUEUES,
+    defaults: WORKER_THROUGHPUT_QUEUE_NAMES,
+  });
 
   let queues: Queue[] = [];
   try {

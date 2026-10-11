@@ -30,19 +30,29 @@ export function createAuthLoginHandlers({ authService }: AuthLoginHandlersDepend
         // ("every login (success or failure) records a row"). The helper is
         // best-effort and never throws — we always re-raise the original error
         // so the global error handler maps it to the right HTTP status.
-        await recordLoginFailureAuditEvent(request, 'password', error);
+        await recordLoginFailureAuditEvent({ request, source: 'password', error });
         throw error;
       }
 
       if ('mfa_required' in data) {
-        return successResponse(AuthSerializer.mfaRequired(data), getRequestIdentifier(request));
+        return successResponse({
+          data: AuthSerializer.mfaRequired(data),
+          request_id: getRequestIdentifier(request),
+        });
       }
 
-      setSessionCookie(reply, data.session_public_id, data.session_refresh_secret);
+      setSessionCookie({
+        reply,
+        sessionPublicId: data.session_public_id,
+        refreshSecret: data.session_refresh_secret,
+      });
 
-      await recordLoginAuditEvent(request, data, 'password');
+      await recordLoginAuditEvent({ request, loginResult: data, source: 'password' });
 
-      return successResponse(AuthSerializer.accessToken(data), getRequestIdentifier(request));
+      return successResponse({
+        data: AuthSerializer.accessToken(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
   };
 }

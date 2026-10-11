@@ -52,7 +52,10 @@ function requireWebhookEventReadPermissions(
     if (webhookService !== undefined && webhookPublicId !== undefined) {
       const stored = await webhookService.get({
         scope: requireOrganizationScope(request),
-        webhook_public_id: validatePublicIdParam(webhookPublicId, 'webhook_id'),
+        webhook_public_id: validatePublicIdParam({
+          value: webhookPublicId,
+          fieldName: 'webhook_id',
+        }),
       });
       for (const eventType of stored.events as readonly string[]) deliveredEvents.add(eventType);
     }
@@ -62,7 +65,7 @@ function requireWebhookEventReadPermissions(
       if (typeof permissionCode === 'string') permissionCodes.add(permissionCode);
     }
     for (const permissionCode of permissionCodes) {
-      await assertOrganizationPermission(request, permissionCode);
+      await assertOrganizationPermission({ request, permissionCode });
     }
   };
 }
@@ -72,10 +75,13 @@ function requireWebhookEventReadPermissions(
  * list, get, create, update, delete, delivery attempts, test) plus their permission preHandlers
  * (`webhook:read` / `webhook:manage`) and rate-limit presets.
  */
-export function webhookRoutes(
-  webhookService: WebhookService,
-  webhookEventService: WebhookEventService,
-): FastifyPluginAsync {
+export function webhookRoutes({
+  webhookService,
+  webhookEventService,
+}: {
+  webhookService: WebhookService;
+  webhookEventService: WebhookEventService;
+}): FastifyPluginAsync {
   const webhookController = createWebhookController(webhookService);
   const webhookEventController = createWebhookEventController(webhookEventService);
 

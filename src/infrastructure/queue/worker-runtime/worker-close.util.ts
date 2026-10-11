@@ -6,7 +6,10 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 /** Bounded close for bootstrap handles; falls back to handle.close() for scheduler-only handles. */
 export async function closeWorkerHandle(handle: WorkerHandle): Promise<void> {
   if (handle.worker !== undefined && handle.queueName !== undefined) {
-    await closeWorkerWithTimeout(handle.worker, { queueName: handle.queueName });
+    await closeWorkerWithTimeout({
+      worker: handle.worker,
+      options: { queueName: handle.queueName },
+    });
     return;
   }
   await handle.close();
@@ -20,10 +23,13 @@ export async function closeWorkerHandle(handle: WorkerHandle): Promise<void> {
  * force-exit. The pending timeout handle is always cleared in `finally` to avoid leaking
  * timers.
  */
-export async function closeWorkerWithTimeout(
-  worker: Worker,
-  options?: { timeoutMs?: number; queueName?: string },
-): Promise<void> {
+export async function closeWorkerWithTimeout({
+  worker,
+  options,
+}: {
+  worker: Worker;
+  options?: { timeoutMs?: number; queueName?: string } | undefined;
+}): Promise<void> {
   const timeoutMs = options?.timeoutMs ?? getRemainingShutdownBudgetMs();
   const queueName = options?.queueName ?? worker.name;
 
@@ -57,10 +63,16 @@ export async function closeWorkerWithTimeout(
  * that bootstrap returns: `close()` delegates to {@link closeWorkerWithTimeout} so every
  * domain worker shuts down with the same bounded drain semantics.
  */
-export function buildWorkerHandle(worker: Worker, queueName: string): WorkerHandle {
+export function buildWorkerHandle({
+  worker,
+  queueName,
+}: {
+  worker: Worker;
+  queueName: string;
+}): WorkerHandle {
   return {
     worker,
     queueName,
-    close: async () => closeWorkerWithTimeout(worker, { queueName }),
+    close: async () => closeWorkerWithTimeout({ worker, options: { queueName } }),
   };
 }

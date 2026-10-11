@@ -17,10 +17,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -136,9 +138,12 @@ describe('SubscriptionService.listInvoices — fail-open read', () => {
 
     const page = await service.listInvoices({ scope, query: { limit: 2, after: 'in_prev' } });
 
-    expect(stripeMocks.listStripeInvoices).toHaveBeenCalledWith('cus_live', {
-      limit: 2,
-      startingAfter: 'in_prev',
+    expect(stripeMocks.listStripeInvoices).toHaveBeenCalledWith({
+      customerId: 'cus_live',
+      options: {
+        limit: 2,
+        startingAfter: 'in_prev',
+      },
     });
     expect(page.items.map((invoice) => invoice.id)).toEqual(['in_a', 'in_b']);
     expect(page.has_more).toBe(true);
@@ -226,9 +231,8 @@ describe('SubscriptionService.createPaymentMethodSetup — fail-closed write', (
       idempotencyKey: 'client-key-1',
     });
 
-    const [customerId, options] = stripeMocks.createStripeSetupIntent.mock.calls[0] as [
-      string,
-      { idempotencyKey?: string },
+    const [{ customerId, options }] = stripeMocks.createStripeSetupIntent.mock.calls[0] as [
+      { customerId: string; options: { idempotencyKey?: string } },
     ];
     expect(customerId).toBe('cus_live');
     // pm-setup namespace + organization + client key — a raw client key forwarded verbatim could collide
@@ -244,10 +248,9 @@ describe('SubscriptionService.createPaymentMethodSetup — fail-closed write', (
 
     await service.createPaymentMethodSetup({ scope });
 
-    const options = stripeMocks.createStripeSetupIntent.mock.calls[0]?.[1] as Record<
-      string,
-      unknown
-    >;
+    const options = (
+      stripeMocks.createStripeSetupIntent.mock.calls[0]![0] as { options: Record<string, unknown> }
+    ).options;
     expect('idempotencyKey' in options).toBe(false);
   });
 });
@@ -299,8 +302,8 @@ describe('SubscriptionService.getPaymentSetup', () => {
     ).resolves.toEqual({
       client_secret: 'pi_secret_456',
     });
-    expect(stripeMocks.retrieveStripeSubscriptionPaymentClientSecret).toHaveBeenCalledWith(
-      'sub_live',
-    );
+    expect(stripeMocks.retrieveStripeSubscriptionPaymentClientSecret).toHaveBeenCalledWith({
+      subscriptionId: 'sub_live',
+    });
   });
 });

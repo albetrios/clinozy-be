@@ -3,19 +3,47 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Service-layer functions take one options object (rule: `be-object-params.mdc`).
+ * Functions take one options object once they have two or more parameters (rule:
+ * `be-object-params.mdc`).
  *
- * A service method is called from controllers, other domains' services, workers and tests;
- * positional arguments of the same type (`revoke(userPublicId, sessionPublicId)`) swap without a
- * compiler error. Every `*.service.ts` method, function and port signature with two or more
- * parameters takes a single options object instead. Exempt: constructors (dependency injection,
- * wired once in the containers) and Fastify handlers (`request`, `reply`).
+ * Positional arguments of the same type (`revoke(userPublicId, sessionPublicId)`) swap without a
+ * compiler error. Every method, function and port signature under `src/` — tests and
+ * `*.repository.ts` aside — with two or more parameters takes a single options object instead.
+ * Exempt: constructors (dependency injection, wired once in the containers), the exact Fastify
+ * handler shapes ({@link FASTIFY_SHAPES}) and the signatures a third party calls positionally
+ * ({@link FRAMEWORK_DICTATED}).
  *
  * The scan finds each declaration — a method or function name at the start of a line followed by
  * a parameter list and then `{` or a `:` return type (a call statement is followed by neither), or
  * a `const name = (...) =>` — and counts its top-level parameters.
  */
-describe('Global: service-layer functions take one options object', () => {
+/**
+ * `file#name` of the signatures a library calls with positional arguments, so they keep its shape.
+ * Anonymous callbacks (i18next's `t`, Fastify's `trustProxy`, a fetch-compatible `(input, init)`)
+ * are not declarations and never reach the scan.
+ */
+const FRAMEWORK_DICTATED = new Set([
+  // BullMQ backoff strategy: (attemptsMade, type, error, job)
+  'src/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook-backoff.util.ts#stripeWebhookBackoffStrategy',
+  'src/infrastructure/mail/queues/mail-backoff.util.ts#mailBackoffStrategy',
+  // @fastify/rate-limit store: incr(key, callback, timeWindow, max)
+  'src/shared/middlewares/rate-limit/rate-limit-fallback-store.ts#incr',
+  // ioredis custom Lua command: positional KEYS / ARGV
+  'src/infrastructure/resilience/circuit-breaker.ts#circuitMutate',
+  // BullMQ Worker's `on(event, listener)`, typed structurally
+  'src/infrastructure/queue/worker-runtime/worker-queue-heartbeat.ts#on',
+  // Fastify onSend hooks registered by reference: (request, reply, payload)
+  'src/shared/middlewares/core/idempotency.middleware.ts#idempotencyOnSend',
+  'src/shared/middlewares/core/request-lifecycle.middleware.ts#finalizeWhenTheClientLeaves',
+  // @fastify/rate-limit onExceeded(request, key)
+  'src/shared/middlewares/rate-limit/rate-limit-presets.constants.ts#recordRouteRateLimitExceeded',
+  'src/shared/middlewares/rate-limit/rate-limit.middleware.ts#recordGlobalRateLimitExceeded',
+]);
+
+/** Exactly the shapes Fastify calls: route handlers, hooks with `done`, the error handler. */
+const FASTIFY_SHAPES = new Set(['request,reply', 'request,reply,done', 'error,request,reply']);
+
+describe('Global: functions take one options object', () => {
   const NOT_DECLARATIONS = new Set([
     'if',
     'for',
@@ -33,15 +61,16 @@ describe('Global: service-layer functions take one options object', () => {
   const ARROW_START =
     /^[ \t]*(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*(?:async\s*)?\(/gm;
 
-  async function listServiceFiles(directory: string): Promise<string[]> {
+  async function listSourceFiles(directory: string): Promise<string[]> {
     const entries = await fs.readdir(directory, { withFileTypes: true });
     const files: string[] = [];
     for (const entry of entries) {
       const path = join(directory, entry.name);
       if (entry.isDirectory()) {
         if (entry.name === '__tests__' || entry.name === 'node_modules') continue;
-        files.push(...(await listServiceFiles(path)));
-      } else if (entry.name.endsWith('.service.ts')) {
+        if (path === join(process.cwd(), 'src', 'tests')) continue;
+        files.push(...(await listSourceFiles(path)));
+      } else if (entry.name.endsWith('.ts') && !/\.(test|repository|d)\.ts$/.test(entry.name)) {
         files.push(path);
       }
     }
@@ -102,7 +131,10 @@ describe('Global: service-layer functions take one options object', () => {
         (parameter) => !/^this\s*:/.test(parameter),
       );
       if (parameters.length < 2) return;
-      if (parameters.some((parameter) => /^_?(request|reply)\b/.test(parameter))) return;
+      const shape = parameters
+        .map((parameter) => (parameter.match(/^[\w$]+/)?.[0] ?? '').replace(/^_+/, ''))
+        .join(',');
+      if (FASTIFY_SHAPES.has(shape)) return;
       const line = withoutComments.slice(0, match.index).split('\n').length;
       violations.push({ name, line, parameters });
     };
@@ -134,17 +166,19 @@ describe('Global: service-layer functions take one options object', () => {
       '  }',
       '  async list(scope: Scope): Promise<Row[]> { return []; }',
       '  handle(request: FastifyRequest, reply: FastifyReply) {}',
+      '  hook(request: FastifyRequest, reply: FastifyReply, done: () => void) {}',
       '}',
     ].join('\n');
     expect(findViolations(accepted)).toEqual([]);
   });
 
-  it('no *.service.ts function takes two or more positional parameters', async () => {
+  it('no source function takes two or more positional parameters', async () => {
     const root = process.cwd();
     const offenders: string[] = [];
-    for (const file of await listServiceFiles(join(root, 'src'))) {
+    for (const file of await listSourceFiles(join(root, 'src'))) {
       const source = await fs.readFile(file, 'utf8');
       for (const violation of findViolations(source)) {
+        if (FRAMEWORK_DICTATED.has(`${relative(root, file)}#${violation.name}`)) continue;
         offenders.push(
           `${relative(root, file)}:${violation.line} ${violation.name}(${violation.parameters
             .map((parameter) => parameter.split(/[:=?]/)[0]?.trim())

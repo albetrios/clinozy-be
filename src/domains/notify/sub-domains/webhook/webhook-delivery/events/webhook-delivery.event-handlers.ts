@@ -50,5 +50,8 @@ let webhookDeliveryEventHandlersRegistered = false;
 export function registerWebhookDeliveryEventHandlers(): void {
   if (webhookDeliveryEventHandlersRegistered) return;
   webhookDeliveryEventHandlersRegistered = true;
-  eventBus.on(NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED, onWebhookDeliveryRequestedEvent);
+  eventBus.on({
+    eventType: NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED,
+    handler: onWebhookDeliveryRequestedEvent,
+  });
 }

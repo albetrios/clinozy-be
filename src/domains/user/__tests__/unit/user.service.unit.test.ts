@@ -22,10 +22,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   return {
     ...actual,
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -40,7 +42,11 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
  */
 
 vi.mock('@/shared/utils/infrastructure/postgres-error.util.js', () => ({
-  runInsertWithPublicIdentifierRetry: async (operation: () => Promise<unknown>) => operation(),
+  runInsertWithPublicIdentifierRetry: async ({
+    insert: operation,
+  }: {
+    insert: () => Promise<unknown>;
+  }) => operation(),
 }));
 
 // getMe resolves the caller's personal organization via this tenancy helper (its own DB context);

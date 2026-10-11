@@ -16,10 +16,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -267,11 +269,11 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
 
     // The Stripe key is the stable base token scoped by the resolved quantity, so a retry of the
     // SAME job (same quantity) reuses ONE key (Stripe dedups → no duplicate proration).
-    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenCalledWith(
-      'sub_x',
-      4,
-      'idem-1:qty:4',
-    );
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenCalledWith({
+      providerSubscriptionId: 'sub_x',
+      quantity: 4,
+      idempotencyKey: 'idem-1:qty:4',
+    });
     expect(repository.update).toHaveBeenCalledWith('sub_public', 1, { seats: 4 });
   });
 
@@ -289,18 +291,16 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     });
 
     expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenCalledTimes(2);
-    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(
-      1,
-      'sub_x',
-      1,
-      'zero-seat-retry:qty:1',
-    );
-    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(
-      2,
-      'sub_x',
-      1,
-      'zero-seat-retry:qty:1',
-    );
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(1, {
+      providerSubscriptionId: 'sub_x',
+      quantity: 1,
+      idempotencyKey: 'zero-seat-retry:qty:1',
+    });
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(2, {
+      providerSubscriptionId: 'sub_x',
+      quantity: 1,
+      idempotencyKey: 'zero-seat-retry:qty:1',
+    });
     expect(repository.update).toHaveBeenCalledTimes(2);
     expect(repository.update).toHaveBeenCalledWith('sub_public', 1, { seats: 1 });
   });
@@ -319,18 +319,16 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
       idempotencyKey: 'tok-A',
     });
 
-    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(
-      1,
-      'sub_x',
-      6,
-      'tok-A:qty:6',
-    );
-    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(
-      2,
-      'sub_x',
-      5,
-      'tok-A:qty:5',
-    );
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(1, {
+      providerSubscriptionId: 'sub_x',
+      quantity: 6,
+      idempotencyKey: 'tok-A:qty:6',
+    });
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(2, {
+      providerSubscriptionId: 'sub_x',
+      quantity: 5,
+      idempotencyKey: 'tok-A:qty:5',
+    });
   });
 
   it('enqueueSeatQuantitySync stamps a stable per-enqueue token when the hot path passes none (audit #1)', () => {

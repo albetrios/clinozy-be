@@ -39,10 +39,13 @@ interface NotificationInsert {
  * Builds one bulk notification row for a user, deriving read-state from the row index so each
  * user gets a deterministic unread/read spread (roughly every third row is marked read).
  */
-function buildNotification(
-  context: SeedContext,
-  options: { userId: number; organizationId: number | null; index: number },
-): NotificationInsert {
+function buildNotification({
+  context,
+  options,
+}: {
+  context: SeedContext;
+  options: { userId: number; organizationId: number | null; index: number };
+}): NotificationInsert {
   const content = generateBulkNotification(context.faker);
   const isRead = options.index % 3 === 0;
   return {
@@ -90,7 +93,9 @@ export async function seedNotificationsBulk(context: SeedContext): Promise<void>
 
     const pending: NotificationInsert[] = [];
     for (let index = have; index < target; index += 1) {
-      pending.push(buildNotification(context, { userId: user.id, organizationId, index }));
+      pending.push(
+        buildNotification({ context, options: { userId: user.id, organizationId, index } }),
+      );
     }
 
     for (let offset = 0; offset < pending.length; offset += INSERT_BATCH_SIZE) {

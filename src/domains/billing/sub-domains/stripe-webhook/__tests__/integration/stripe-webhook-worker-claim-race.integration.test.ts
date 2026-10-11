@@ -59,16 +59,16 @@ describe('Stripe webhook execution claims against PostgreSQL', () => {
     // Reserve exactly as HTTP ingress does, before any worker is allowed to execute.
     // attempt_count=0 is a durable reservation, not the execution claim.
     const ledgerRepository = new StripeWebhookEventRepository();
-    const ingressClaim = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
-      () =>
+    const ingressClaim = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      callback: () =>
         ledgerRepository.tryClaimEvent({
           stripe_event_id: event.id,
           event_type: event.type,
           stripe_created_at: new Date(event.created * 1000),
           request_id: 'req-claim-race',
         }),
-    );
+    });
     expect(ingressClaim).toBe('claimed');
 
     // Observation only: spy delegates to the real SQL implementation; no claim outcomes are mocked.

@@ -10,12 +10,12 @@ import {
 
 /** Parses raw `POST /organization/api-keys` body via {@link createOrganizationApiKeyDto}; throws `ValidationError('errors:invalidInput')` on failure. */
 export function validateCreateOrganizationApiKey(data: unknown): CreateOrganizationApiKeyInput {
-  return parseWithSchema(createOrganizationApiKeyDto, data);
+  return parseWithSchema({ schema: createOrganizationApiKeyDto, data });
 }
 
 /** Parses raw `PATCH /organization/api-keys/:api_key_id` body via {@link updateOrganizationApiKeyDto}; throws `ValidationError('errors:invalidInput')` on failure. */
 export function validateUpdateOrganizationApiKey(data: unknown): UpdateOrganizationApiKeyInput {
-  return parseWithSchema(updateOrganizationApiKeyDto, data);
+  return parseWithSchema({ schema: updateOrganizationApiKeyDto, data });
 }
 
 /**
@@ -26,9 +26,9 @@ export function validateUpdateOrganizationApiKey(data: unknown): UpdateOrganizat
 export function validateListOrganizationApiKeysQuery(
   data: unknown,
 ): ListOrganizationApiKeysQueryInput {
-  return parseWithSchema(
-    listOrganizationApiKeysQueryDto,
+  return parseWithSchema({
+    schema: listOrganizationApiKeysQueryDto,
     data,
-    'errors:validation.invalidPagination',
-  );
+    errorKey: 'errors:validation.invalidPagination',
+  });
 }

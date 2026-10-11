@@ -8,10 +8,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -174,7 +176,10 @@ describe('OrganizationSettingsService', () => {
 
       await service.resolveDefaultLocaleForOrganization('org_public_abc');
 
-      expect(i18nLocaleCacheSpies.set).toHaveBeenCalledWith('org_public_abc', 'es');
+      expect(i18nLocaleCacheSpies.set).toHaveBeenCalledWith({
+        organizationPublicId: 'org_public_abc',
+        locale: 'es',
+      });
     });
 
     it('caches the "en" fallback so unknown organization ids stop hitting the DB after the first lookup', async () => {
@@ -188,7 +193,10 @@ describe('OrganizationSettingsService', () => {
       // The negative cache stops the existence-oracle path: every subsequent
       // request for the same unknown organization returns 'en' from Redis without
       // ever touching the SECURITY DEFINER function.
-      expect(i18nLocaleCacheSpies.set).toHaveBeenCalledWith('org_unknown', 'en');
+      expect(i18nLocaleCacheSpies.set).toHaveBeenCalledWith({
+        organizationPublicId: 'org_unknown',
+        locale: 'en',
+      });
     });
   });
 

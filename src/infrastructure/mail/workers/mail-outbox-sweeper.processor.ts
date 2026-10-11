@@ -68,9 +68,10 @@ export type MailOutboxSweeperJobResult = {
  *   run concurrently with the mail worker because the claim transition is atomic.
  */
 export async function runMailOutboxSweeperJob(): Promise<MailOutboxSweeperJobResult> {
-  return withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, () =>
-    runMailOutboxSweeperJobInner(),
-  );
+  return withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+    callback: () => runMailOutboxSweeperJobInner(),
+  });
 }
 
 async function runMailOutboxSweeperJobInner(): Promise<MailOutboxSweeperJobResult> {
@@ -100,7 +101,10 @@ async function runMailOutboxSweeperJobInner(): Promise<MailOutboxSweeperJobResul
 
   for (const mailOutboxToken of staleMailOutboxTokens) {
     try {
-      await enqueueMailOutboxJob(mailOutboxToken, { requestId: 'mail-outbox-sweeper' });
+      await enqueueMailOutboxJob({
+        mailOutboxToken,
+        options: { requestId: 'mail-outbox-sweeper' },
+      });
       reEnqueuedCount += 1;
     } catch (error) {
       logger.warn({ error, mailOutboxToken }, 'mail-outbox-sweeper.re_enqueue.failed');

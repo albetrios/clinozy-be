@@ -38,9 +38,12 @@ describe('withAppDatabaseContext checkout accounting (organization scopes)', () 
   });
 
   it('pins ALS so getRequestDatabase returns the same handle passed to the callback', async () => {
-    await withAppDatabaseContext(asOrgScope('org_public_test'), async (databaseHandle) => {
-      expect(getRequestDatabase()).toBe(databaseHandle);
-      expect(databaseHandle).toBe(mockTransactionHandle);
+    await withAppDatabaseContext({
+      scope: asOrgScope('org_public_test'),
+      callback: async (databaseHandle) => {
+        expect(getRequestDatabase()).toBe(databaseHandle);
+        expect(databaseHandle).toBe(mockTransactionHandle);
+      },
     });
 
     expect(mockExecute).toHaveBeenCalled();
@@ -50,20 +53,29 @@ describe('withAppDatabaseContext checkout accounting (organization scopes)', () 
   it('counts a pooled checkout for the unit of work and releases it afterwards', async () => {
     expect(getActiveOrganizationRlsCheckoutCount()).toBe(0);
 
-    await withAppDatabaseContext(asOrgScope('org_public_checkout'), async () => {
-      expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+    await withAppDatabaseContext({
+      scope: asOrgScope('org_public_checkout'),
+      callback: async () => {
+        expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+      },
     });
 
     expect(getActiveOrganizationRlsCheckoutCount()).toBe(0);
   });
 
   it('does not open a second checkout when the same organization is reused in a nested context', async () => {
-    await withAppDatabaseContext(asOrgScope('org_public_nested'), async () => {
-      expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
-      await withAppDatabaseContext(asOrgScope('org_public_nested'), async () => {
+    await withAppDatabaseContext({
+      scope: asOrgScope('org_public_nested'),
+      callback: async () => {
         expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
-      });
-      expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+        await withAppDatabaseContext({
+          scope: asOrgScope('org_public_nested'),
+          callback: async () => {
+            expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+          },
+        });
+        expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+      },
     });
 
     expect(getActiveOrganizationRlsCheckoutCount()).toBe(0);
@@ -75,7 +87,10 @@ describe('withAppDatabaseContext checkout accounting (organization scopes)', () 
       samples.push(sample);
     });
 
-    await withAppDatabaseContext(asOrgScope('org_public_hold'), async () => undefined);
+    await withAppDatabaseContext({
+      scope: asOrgScope('org_public_hold'),
+      callback: async () => undefined,
+    });
 
     expect(samples).toHaveLength(1);
     expect(samples[0]?.path).toBe('scoped_context');
@@ -89,8 +104,11 @@ describe('withAppDatabaseContext checkout accounting (organization scopes)', () 
     });
 
     await expect(
-      withAppDatabaseContext(asOrgScope('org_public_throw'), async () => {
-        throw new Error('unit-of-work failed');
+      withAppDatabaseContext({
+        scope: asOrgScope('org_public_throw'),
+        callback: async () => {
+          throw new Error('unit-of-work failed');
+        },
       }),
     ).rejects.toThrow('unit-of-work failed');
 
@@ -100,12 +118,12 @@ describe('withAppDatabaseContext checkout accounting (organization scopes)', () 
   });
 
   it('counts a user-only unit of work too — it holds a pooled connection all the same', async () => {
-    await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_public_checkout' }),
-      async () => {
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_public_checkout' }),
+      callback: async () => {
         expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
       },
-    );
+    });
 
     expect(getActiveOrganizationRlsCheckoutCount()).toBe(0);
   });
@@ -116,8 +134,10 @@ describe('withAppDatabaseContext checkout accounting (organization scopes)', () 
       samples.push(sample);
     });
 
-    await withTransaction(async () => {
-      expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+    await withTransaction({
+      callback: async () => {
+        expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+      },
     });
 
     expect(getActiveOrganizationRlsCheckoutCount()).toBe(0);
@@ -136,9 +156,12 @@ describe('withAppDatabaseContext checkout accounting (organization scopes)', () 
     });
     const now = vi.spyOn(performance, 'now').mockReturnValue(1_000);
 
-    const unitOfWork = withAppDatabaseContext(asOrgScope('org_public_waiting'), async () => {
-      // Claimed: no longer a waiter.
-      expect(getOldestConnectionWaitMs()).toBe(0);
+    const unitOfWork = withAppDatabaseContext({
+      scope: asOrgScope('org_public_waiting'),
+      callback: async () => {
+        // Claimed: no longer a waiter.
+        expect(getOldestConnectionWaitMs()).toBe(0);
+      },
     });
     now.mockReturnValue(1_750);
     expect(getOldestConnectionWaitMs()).toBe(750);

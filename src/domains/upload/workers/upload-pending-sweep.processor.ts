@@ -100,7 +100,7 @@ export async function runUploadPendingSweepJob(
   const idsToHardDelete: number[] = [];
 
   for (const row of rows) {
-    const verdict = await resolvePendingUploadVerdict(row, objectStorage);
+    const verdict = await resolvePendingUploadVerdict({ row, objectStorage });
     switch (verdict.kind) {
       case 'auto_confirm': {
         const published = await publishPendingUpload({ row, objectStorage, verdict });
@@ -204,10 +204,13 @@ async function publishPendingUpload(options: {
   return true;
 }
 
-async function resolvePendingUploadVerdict(
-  row: PendingUploadSweepRow,
-  objectStorage: ObjectStoragePort,
-): Promise<PendingUploadVerdict> {
+async function resolvePendingUploadVerdict({
+  row,
+  objectStorage,
+}: {
+  row: PendingUploadSweepRow;
+  objectStorage: ObjectStoragePort;
+}): Promise<PendingUploadVerdict> {
   // sec-UP finding #20: refuse rows whose `file_key` is not prefixed with the pending namespace —
   // such a row bypassed the whole publish ceremony, and auto-confirming it would launder it into
   // UPLOADED. The HTTP confirm path makes the same assertion (sec-UP1).
@@ -238,7 +241,10 @@ async function resolvePendingUploadVerdict(
 
   let leadingBytes: Awaited<ReturnType<ObjectStoragePort['getObjectFirstBytes']>>;
   try {
-    leadingBytes = await objectStorage.getObjectFirstBytes(row.file_key, MAGIC_BYTE_PREFIX_LENGTH);
+    leadingBytes = await objectStorage.getObjectFirstBytes({
+      key: row.file_key,
+      byteCount: MAGIC_BYTE_PREFIX_LENGTH,
+    });
   } catch (error) {
     // The read failed — that says nothing about the bytes. Leave the row for the next sweep.
     logger.warn(
@@ -248,6 +254,7 @@ async function resolvePendingUploadVerdict(
     return { kind: 'transient' };
   }
   if (leadingBytes === null) return { kind: 'orphan' };
-  if (!verifyFileMagicBytes(leadingBytes.body, row.mime_type)) return { kind: 'fail' };
+  if (!verifyFileMagicBytes({ buffer: leadingBytes.body, contentType: row.mime_type }))
+    return { kind: 'fail' };
   return { kind: 'auto_confirm', sourceETag: leadingBytes.eTag };
 }

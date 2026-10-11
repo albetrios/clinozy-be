@@ -37,9 +37,12 @@ describe('Telemetry sinks (live)', () => {
       responses.push(response?.statusCode);
     });
 
-    captureMessage(`contract live check ${runId}`, {
-      level: 'info',
-      extra: { purpose: 'contract-live' },
+    captureMessage({
+      message: `contract live check ${runId}`,
+      options: {
+        level: 'info',
+        extra: { purpose: 'contract-live' },
+      },
     });
     await flushSentry(10_000);
 

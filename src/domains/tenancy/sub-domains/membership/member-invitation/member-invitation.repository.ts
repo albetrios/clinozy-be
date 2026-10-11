@@ -67,11 +67,11 @@ export class MemberInvitationRepository {
       isNull(memberships.deleted_at),
     ];
     const countWhere = and(...filterConditions);
-    const cursorCondition = buildAscendingCreatedAtIdCursorCondition(
-      member_invitations.created_at,
-      member_invitations.id,
-      parseListCursor(after),
-    );
+    const cursorCondition = buildAscendingCreatedAtIdCursorCondition({
+      createdAtColumn: member_invitations.created_at,
+      idColumn: member_invitations.id,
+      cursor: parseListCursor(after),
+    });
     const where =
       cursorCondition !== undefined ? and(...filterConditions, cursorCondition) : countWhere;
 
@@ -102,7 +102,7 @@ export class MemberInvitationRepository {
       cursor_created_at: row.cursor_created_at,
       membership_public_id: row.membership_public_id,
     }));
-    return finishKeysetPage(rows, { limit, total });
+    return finishKeysetPage({ rows, args: { limit, total } });
   }
 
   async findByPublicId(public_id: string): Promise<MemberInvitationRow | null> {
@@ -144,10 +144,10 @@ export class MemberInvitationRepository {
    * {@link MemberInvitationRepository.countPendingByOrganization}.
    */
   async acquireCreationQuotaLock(organization_id: number): Promise<void> {
-    await acquireResourceQuotaLock(
-      RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBER_INVITATION,
-      organization_id,
-    );
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBER_INVITATION,
+      key: organization_id,
+    });
   }
 
   /**
@@ -183,24 +183,26 @@ export class MemberInvitationRepository {
     expires_at: Date;
     created_by_user_id?: number | null;
   }) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('memberInvitation');
-      const rows = await getRequestDatabase()
-        .insert(member_invitations)
-        .values({
-          public_id,
-          membership_id: data.membership_id,
-          email: data.email,
-          token_hash: data.token_hash,
-          invited_by_user_id: data.invited_by_user_id,
-          expires_at: data.expires_at,
-          ...(data.created_by_user_id !== undefined &&
-            data.created_by_user_id !== null && {
-              created_by_user_id: data.created_by_user_id,
-            }),
-        })
-        .returning();
-      return rows[0]! as MemberInvitationRow;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const public_id = generatePublicId('memberInvitation');
+        const rows = await getRequestDatabase()
+          .insert(member_invitations)
+          .values({
+            public_id,
+            membership_id: data.membership_id,
+            email: data.email,
+            token_hash: data.token_hash,
+            invited_by_user_id: data.invited_by_user_id,
+            expires_at: data.expires_at,
+            ...(data.created_by_user_id !== undefined &&
+              data.created_by_user_id !== null && {
+                created_by_user_id: data.created_by_user_id,
+              }),
+          })
+          .returning();
+        return rows[0]! as MemberInvitationRow;
+      },
     });
   }
 

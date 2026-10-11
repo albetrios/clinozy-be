@@ -43,7 +43,13 @@ function getGoogleRedirectUri(): string {
  * first-time consent, or several signed-in accounts to choose between — and otherwise completes
  * on HTTP redirects, which add no history entry.
  */
-export function buildGoogleOAuthRedirectUrl(state: string, codeChallenge: string): string {
+export function buildGoogleOAuthRedirectUrl({
+  state,
+  codeChallenge,
+}: {
+  state: string;
+  codeChallenge: string;
+}): string {
   const clientId = env.OAUTH_GOOGLE_CLIENT_ID;
   if (!clientId) {
     throw new NotImplementedError('errors:googleOAuthNotConfigured');

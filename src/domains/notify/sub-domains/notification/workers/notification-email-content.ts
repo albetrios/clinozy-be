@@ -50,7 +50,7 @@ export function buildNotificationEmailHtml(notification: {
     body: `
                 <h1>${safeTitle}</h1>
                 <p>${safeMessage}</p>
-                ${safeActionUrl ? `<p style="text-align: center; margin: 32px 0;"><a href="${safeActionUrl}" class="button">${translateMailText('notificationViewDetails', locale)}</a></p>` : ''}
+                ${safeActionUrl ? `<p style="text-align: center; margin: 32px 0;"><a href="${safeActionUrl}" class="button">${translateMailText({ key: 'notificationViewDetails', locale })}</a></p>` : ''}
               `,
   });
 

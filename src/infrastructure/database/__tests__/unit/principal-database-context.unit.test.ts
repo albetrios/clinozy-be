@@ -43,7 +43,7 @@ describe('withAppDatabaseContext', () => {
       organizationPublicId: 'org_x',
     });
 
-    await withAppDatabaseContext(scope, async () => undefined);
+    await withAppDatabaseContext({ scope, callback: async () => undefined });
 
     expect(mockExecute).toHaveBeenCalledTimes(1);
     const [sqlText] = executedSqlTexts();
@@ -56,7 +56,7 @@ describe('withAppDatabaseContext', () => {
       organizationPublicId: 'org_x',
     });
 
-    await withAppDatabaseContext(scope, async () => undefined);
+    await withAppDatabaseContext({ scope, callback: async () => undefined });
 
     const [sqlText] = executedSqlTexts();
     expect(sqlText).toContain('app.current_organization_public_id');
@@ -66,7 +66,7 @@ describe('withAppDatabaseContext', () => {
   it('sets only the user GUC for a user-only scope', async () => {
     const scope = PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_a' });
 
-    await withAppDatabaseContext(scope, async () => undefined);
+    await withAppDatabaseContext({ scope, callback: async () => undefined });
 
     const [sqlText] = executedSqlTexts();
     expect(sqlText).toContain('app.current_user_public_id');
@@ -79,9 +79,12 @@ describe('withAppDatabaseContext', () => {
       organizationPublicId: 'org_x',
     });
 
-    await withAppDatabaseContext(scope, async (handle) => {
-      // Only the wrapper's own set_config is inspected — the callback issues none.
-      void handle;
+    await withAppDatabaseContext({
+      scope,
+      callback: async (handle) => {
+        // Only the wrapper's own set_config is inspected — the callback issues none.
+        void handle;
+      },
     });
 
     for (const sqlText of executedSqlTexts()) {
@@ -97,7 +100,7 @@ describe('withAppDatabaseContext', () => {
       organizationPublicId: 'org_x',
     });
 
-    await withAppDatabaseContext(scope, async () => undefined);
+    await withAppDatabaseContext({ scope, callback: async () => undefined });
 
     for (const sqlText of executedSqlTexts()) {
       expect(sqlText).not.toMatch(/statement_timeout|lock_timeout/);
@@ -108,7 +111,7 @@ describe('withAppDatabaseContext', () => {
     process.env.CLINOZY_BE_RUNTIME = 'worker';
     try {
       const scope = PRINCIPAL_SCOPE.JOB({ organizationPublicId: 'org_x' });
-      await withAppDatabaseContext(scope, async () => undefined);
+      await withAppDatabaseContext({ scope, callback: async () => undefined });
       const combined = executedSqlTexts().join(' ');
       expect(combined).toMatch(/statement_timeout/);
       expect(combined).toMatch(/lock_timeout/);
@@ -122,8 +125,11 @@ describe('withAppDatabaseContext', () => {
       organizationPublicId: 'org_x',
     });
 
-    await withAppDatabaseContext(scope, async (databaseHandle) => {
-      expect(getRequestDatabase()).toBe(databaseHandle);
+    await withAppDatabaseContext({
+      scope,
+      callback: async (databaseHandle) => {
+        expect(getRequestDatabase()).toBe(databaseHandle);
+      },
     });
   });
 
@@ -136,24 +142,30 @@ describe('withAppDatabaseContext', () => {
     const outerScope = PRINCIPAL_SCOPE.REQUEST({
       organizationPublicId: 'org_x',
     });
-    await withAppDatabaseContext(outerScope, async (outerHandle) => {
-      mockExecute.mockClear();
-      expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
-
-      await withAppDatabaseContext(scope, async (innerHandle) => {
-        expect(innerHandle).toBe(outerHandle);
-        // no second checkout — the pinned transaction is shared
+    await withAppDatabaseContext({
+      scope: outerScope,
+      callback: async (outerHandle) => {
+        mockExecute.mockClear();
         expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
-      });
 
-      // two extra statements: layering app.current_user_public_id onto the outer handle, and
-      // restoring the outer identity when the nested unit ends
-      const sqlTexts = executedSqlTexts();
-      expect(sqlTexts).toHaveLength(2);
-      expect(sqlTexts[0]).toContain('app.current_user_public_id');
-      expect(sqlTexts[0]).toContain('usr_a');
-      expect(sqlTexts[1]).toContain('app.current_user_public_id');
-      expect(sqlTexts[1]).not.toContain('usr_a');
+        await withAppDatabaseContext({
+          scope,
+          callback: async (innerHandle) => {
+            expect(innerHandle).toBe(outerHandle);
+            // no second checkout — the pinned transaction is shared
+            expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+          },
+        });
+
+        // two extra statements: layering app.current_user_public_id onto the outer handle, and
+        // restoring the outer identity when the nested unit ends
+        const sqlTexts = executedSqlTexts();
+        expect(sqlTexts).toHaveLength(2);
+        expect(sqlTexts[0]).toContain('app.current_user_public_id');
+        expect(sqlTexts[0]).toContain('usr_a');
+        expect(sqlTexts[1]).toContain('app.current_user_public_id');
+        expect(sqlTexts[1]).not.toContain('usr_a');
+      },
     });
   });
 
@@ -165,46 +177,61 @@ describe('withAppDatabaseContext', () => {
       userPublicId: 'usr_a',
     });
 
-    await withAppDatabaseContext(organizationScope, async (outerHandle) => {
-      mockExecute.mockClear();
-      await withAppDatabaseContext(userOnly, async (innerHandle) => {
-        // Same transaction handle — no second pool checkout, atomic with the outer trx.
-        expect(innerHandle).toBe(outerHandle);
-      });
-      // Layer, then restore — both touch only the user GUC.
-      const sqlTexts = executedSqlTexts();
-      expect(sqlTexts).toHaveLength(2);
-      for (const sqlText of sqlTexts) {
-        expect(sqlText).toContain('app.current_user_public_id');
-        // The pinned session's organization GUC is never rewritten by a user-only scope.
-        expect(sqlText).not.toContain('app.current_organization_public_id');
-      }
+    await withAppDatabaseContext({
+      scope: organizationScope,
+      callback: async (outerHandle) => {
+        mockExecute.mockClear();
+        await withAppDatabaseContext({
+          scope: userOnly,
+          callback: async (innerHandle) => {
+            // Same transaction handle — no second pool checkout, atomic with the outer trx.
+            expect(innerHandle).toBe(outerHandle);
+          },
+        });
+        // Layer, then restore — both touch only the user GUC.
+        const sqlTexts = executedSqlTexts();
+        expect(sqlTexts).toHaveLength(2);
+        for (const sqlText of sqlTexts) {
+          expect(sqlText).toContain('app.current_user_public_id');
+          // The pinned session's organization GUC is never rewritten by a user-only scope.
+          expect(sqlText).not.toContain('app.current_organization_public_id');
+        }
+      },
     });
   });
 
   it('does not re-arm the unchanged original user in nested principal scopes', async () => {
     const scope = PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_a', organizationPublicId: 'org_x' });
-    await withAppDatabaseContext(scope, async (outerHandle) => {
-      await withAppDatabaseContext(scope, async (innerHandle) => {
-        expect(innerHandle).toBe(outerHandle);
-      });
-      await withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'usr_a' }),
-        async () => undefined,
-      );
+    await withAppDatabaseContext({
+      scope,
+      callback: async (outerHandle) => {
+        await withAppDatabaseContext({
+          scope,
+          callback: async (innerHandle) => {
+            expect(innerHandle).toBe(outerHandle);
+          },
+        });
+        await withAppDatabaseContext({
+          scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'usr_a' }),
+          callback: async () => undefined,
+        });
+      },
     });
     expect(mockExecute).toHaveBeenCalledTimes(1);
   });
 
   it('always re-arms identities after any different user has been requested', async () => {
     const scope = PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_a', organizationPublicId: 'org_x' });
-    await withAppDatabaseContext(scope, async () => {
-      await withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'usr_b' }),
-        async () => undefined,
-      );
-      await withAppDatabaseContext(scope, async () => undefined);
-      await withAppDatabaseContext(scope, async () => undefined);
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        await withAppDatabaseContext({
+          scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'usr_b' }),
+          callback: async () => undefined,
+        });
+        await withAppDatabaseContext({ scope, callback: async () => undefined });
+        await withAppDatabaseContext({ scope, callback: async () => undefined });
+      },
     });
     // Arm usr_a; layer usr_b + restore; then usr_a is layered (+ restored) each time — the mock
     // never reports the current value, so no layering is skipped.
@@ -216,19 +243,22 @@ describe('withAppDatabaseContext', () => {
 
   it('invalidates original-user reuse before a concurrent identity write completes', async () => {
     const scope = PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_a', organizationPublicId: 'org_x' });
-    await withAppDatabaseContext(scope, async () => {
-      let release!: () => void;
-      const pending = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      mockExecute.mockImplementationOnce(() => pending);
-      const other = withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'usr_b' }),
-        async () => undefined,
-      );
-      await withAppDatabaseContext(scope, async () => undefined);
-      release();
-      await other;
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        let release!: () => void;
+        const pending = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        mockExecute.mockImplementationOnce(() => pending);
+        const other = withAppDatabaseContext({
+          scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'usr_b' }),
+          callback: async () => undefined,
+        });
+        await withAppDatabaseContext({ scope, callback: async () => undefined });
+        release();
+        await other;
+      },
     });
     // Arm; usr_b's pending layer; usr_a re-layered + restored; usr_b's restore.
     expect(mockExecute).toHaveBeenCalledTimes(5);
@@ -236,15 +266,18 @@ describe('withAppDatabaseContext', () => {
 
   it('does not reuse original-user knowledge after a failed identity write', async () => {
     const scope = PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_a', organizationPublicId: 'org_x' });
-    await withAppDatabaseContext(scope, async () => {
-      mockExecute.mockRejectedValueOnce(new Error('identity write failed'));
-      await expect(
-        withAppDatabaseContext(
-          PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'usr_b' }),
-          async () => undefined,
-        ),
-      ).rejects.toThrow('identity write failed');
-      await withAppDatabaseContext(scope, async () => undefined);
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        mockExecute.mockRejectedValueOnce(new Error('identity write failed'));
+        await expect(
+          withAppDatabaseContext({
+            scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'usr_b' }),
+            callback: async () => undefined,
+          }),
+        ).rejects.toThrow('identity write failed');
+        await withAppDatabaseContext({ scope, callback: async () => undefined });
+      },
     });
     // Arm; the failed usr_b layer (nothing to restore); usr_a re-layered + restored.
     expect(mockExecute).toHaveBeenCalledTimes(4);
@@ -253,11 +286,14 @@ describe('withAppDatabaseContext', () => {
   it('arms a new transaction even if a previous callback failed on the same mock handle', async () => {
     const scope = PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_a', organizationPublicId: 'org_x' });
     await expect(
-      withAppDatabaseContext(scope, async () => {
-        throw new Error('rollback');
+      withAppDatabaseContext({
+        scope,
+        callback: async () => {
+          throw new Error('rollback');
+        },
       }),
     ).rejects.toThrow('rollback');
-    await withAppDatabaseContext(scope, async () => undefined);
+    await withAppDatabaseContext({ scope, callback: async () => undefined });
     expect(mockExecute).toHaveBeenCalledTimes(2);
   });
 
@@ -269,13 +305,19 @@ describe('withAppDatabaseContext', () => {
       organizationPublicId: 'org_y',
     });
 
-    await withAppDatabaseContext(organizationScope, async () => {
-      expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
-      await withAppDatabaseContext(otherOrg, async () => {
-        // Cross-organization nesting must NOT reuse — a fresh transaction takes a second checkout.
-        expect(getActiveOrganizationRlsCheckoutCount()).toBe(2);
-      });
-      expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+    await withAppDatabaseContext({
+      scope: organizationScope,
+      callback: async () => {
+        expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+        await withAppDatabaseContext({
+          scope: otherOrg,
+          callback: async () => {
+            // Cross-organization nesting must NOT reuse — a fresh transaction takes a second checkout.
+            expect(getActiveOrganizationRlsCheckoutCount()).toBe(2);
+          },
+        });
+        expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+      },
     });
   });
 
@@ -284,8 +326,11 @@ describe('withAppDatabaseContext', () => {
       organizationPublicId: 'org_x',
     });
 
-    await withAppDatabaseContext(scope, async () => {
-      expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
+      },
     });
     expect(getActiveOrganizationRlsCheckoutCount()).toBe(0);
   });
@@ -296,8 +341,11 @@ describe('withAppDatabaseContext', () => {
     });
 
     await expect(
-      withAppDatabaseContext(scope, async () => {
-        throw new Error('unit-of-work failed');
+      withAppDatabaseContext({
+        scope,
+        callback: async () => {
+          throw new Error('unit-of-work failed');
+        },
       }),
     ).rejects.toThrow('unit-of-work failed');
     expect(getActiveOrganizationRlsCheckoutCount()).toBe(0);

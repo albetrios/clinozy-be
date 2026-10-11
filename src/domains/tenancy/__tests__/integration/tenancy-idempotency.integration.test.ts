@@ -308,9 +308,12 @@ describe('Tenancy idempotency contract — Integration', () => {
       organizationPublicId: string;
       request: IdempotencySeedRequest;
     }): Promise<void> {
-      const cacheKey = buildIdempotencyCacheKey(options.idempotencyKey, {
-        userId: options.userPublicId,
-        organizationId: options.organizationPublicId,
+      const cacheKey = buildIdempotencyCacheKey({
+        idempotencyKey: options.idempotencyKey,
+        scope: {
+          userId: options.userPublicId,
+          organizationId: options.organizationPublicId,
+        },
       });
       seededCacheKeys.push(cacheKey);
       await redisConnection.set(cacheKey, buildInFlightIdempotencyEntry(options.request), 'EX', 60);

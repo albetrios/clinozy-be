@@ -120,7 +120,7 @@ const ARCHIVE_FILE_SUFFIX = '-archive.md';
 /** Placeholder / glob / prose markers that mean a token is not a literal path. */
 const NON_LITERAL_TOKEN = /[*?<>{}|,()\s€£§]|\.{3}|…/;
 
-function collectMarkdownFiles(path: string, out: string[]): void {
+function collectMarkdownFiles({ path, out }: { path: string; out: string[] }): void {
   if (!statSync(path, { throwIfNoEntry: false })?.isDirectory()) {
     if (path.endsWith('.md') || path.endsWith('.mdc')) out.push(path);
     return;
@@ -129,7 +129,7 @@ function collectMarkdownFiles(path: string, out: string[]): void {
     if (SKIP_DIR_NAMES.has(entry)) continue;
     const full = join(path, entry);
     const stat = statSync(full);
-    if (stat.isDirectory()) collectMarkdownFiles(full, out);
+    if (stat.isDirectory()) collectMarkdownFiles({ path: full, out });
     else if (entry.endsWith('.md') || entry.endsWith('.mdc')) out.push(full);
   }
 }
@@ -176,7 +176,13 @@ function isExternalOrAnchor(target: string): boolean {
   return false;
 }
 
-function resolveMarkdownTarget(fromFile: string, target: string): string | null {
+function resolveMarkdownTarget({
+  fromFile,
+  target,
+}: {
+  fromFile: string;
+  target: string;
+}): string | null {
   const withoutAnchor = target.split('#')[0]?.trim() ?? '';
   if (!withoutAnchor) return fromFile;
   // Docs use two href conventions: relative to the file, and repo-root-relative
@@ -190,7 +196,13 @@ function resolveMarkdownTarget(fromFile: string, target: string): string | null 
 }
 
 /** Repo-root-relative form of a markdown link target, whether or not it exists on disk. */
-function markdownTargetRepoPath(fromFile: string, target: string): string {
+function markdownTargetRepoPath({
+  fromFile,
+  target,
+}: {
+  fromFile: string;
+  target: string;
+}): string {
   const withoutAnchor = target.split('#')[0]?.trim() ?? '';
   const absolute = resolve(dirname(fromFile), withoutAnchor);
   return absolute.startsWith(REPO_ROOT) ? absolute.slice(REPO_ROOT.length + 1) : absolute;
@@ -228,7 +240,7 @@ function main(): void {
   const collected: string[] = [];
   for (const root of SCAN_ROOTS) {
     try {
-      collectMarkdownFiles(root, collected);
+      collectMarkdownFiles({ path: root, out: collected });
     } catch {
       // optional path missing
     }
@@ -258,8 +270,8 @@ function main(): void {
     for (const match of content.matchAll(MARKDOWN_LINK)) {
       const target = match[1];
       if (!target || isExternalOrAnchor(target)) continue;
-      if (!resolveMarkdownTarget(file, target)) {
-        if (IGNORED_LINK_TARGETS.has(markdownTargetRepoPath(file, target))) continue;
+      if (!resolveMarkdownTarget({ fromFile: file, target })) {
+        if (IGNORED_LINK_TARGETS.has(markdownTargetRepoPath({ fromFile: file, target }))) continue;
         brokenLinks.push(`${relativeFile}: broken link (${target})`);
       }
     }

@@ -395,18 +395,21 @@ describe('Integration: organization resource events reach subscribed webhooks', 
     const { organization, webhook } = await createSubscribedOrganization();
 
     await expect(
-      withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
-        async () => {
+      withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
+        callback: async () => {
           await eventBus.emit(
-            buildDomainEvent('organization.updated', {
-              organization_public_id: organization.public_id,
-              data: { id: organization.public_id },
+            buildDomainEvent({
+              type: 'organization.updated',
+              payload: {
+                organization_public_id: organization.public_id,
+                data: { id: organization.public_id },
+              },
             }),
           );
           throw new Error('write failed after the event');
         },
-      ),
+      }),
     ).rejects.toThrow('write failed after the event');
 
     expect(await envelopes(webhook.id, 'organization.updated')).toEqual([]);

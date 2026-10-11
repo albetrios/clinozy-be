@@ -163,20 +163,23 @@ export class UserDataExportService {
     // One context for the id lookup AND the pending check: the lookup used to open its own
     // transaction first, holding a second pooled checkout for a value this request already has the
     // public id for (see UserService.resolveInternalIdByPublicId).
-    const { userInternalId, existingPending } = await withAppDatabaseContext(scope, async () => {
-      const resolvedUserId = await this.requireUserIdInContext(userPublicId);
-      return {
-        userInternalId: resolvedUserId,
-        existingPending:
-          await this.exportRepository.findPendingOrProcessingByUserId(resolvedUserId),
-      };
+    const { userInternalId, existingPending } = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const resolvedUserId = await this.requireUserIdInContext(userPublicId);
+        return {
+          userInternalId: resolvedUserId,
+          existingPending:
+            await this.exportRepository.findPendingOrProcessingByUserId(resolvedUserId),
+        };
+      },
     });
     if (existingPending) {
       logger.info(
         { userPublicId, exportPublicId: existingPending.public_id },
         'user-data-export.existing_pending_returned',
       );
-      return serializeUserDataExport(existingPending);
+      return serializeUserDataExport({ row: existingPending });
     }
 
     const exportPublicId = generatePublicId('userDataExport');
@@ -187,44 +190,47 @@ export class UserDataExportService {
     // context so the row passes the owner-access policy.
     let row: Awaited<ReturnType<UserDataExportRepository['create']>>;
     try {
-      row = await withAppDatabaseContext(scope, () =>
-        this.exportRepository.create({
-          public_id: exportPublicId,
-          user_id: userInternalId,
-          status: USER_DATA_EXPORT_STATUSES.PENDING,
-          s3_key: s3Key,
-          expires_at: expiresAt,
-        }),
-      );
+      row = await withAppDatabaseContext({
+        scope,
+        callback: () =>
+          this.exportRepository.create({
+            public_id: exportPublicId,
+            user_id: userInternalId,
+            status: USER_DATA_EXPORT_STATUSES.PENDING,
+            s3_key: s3Key,
+            expires_at: expiresAt,
+          }),
+      });
     } catch (error) {
       if (!isPostgresUniqueViolation(error)) {
         throw error;
       }
-      const existingAfterRace = await withAppDatabaseContext(scope, () =>
-        this.exportRepository.findPendingOrProcessingByUserId(userInternalId),
-      );
+      const existingAfterRace = await withAppDatabaseContext({
+        scope,
+        callback: () => this.exportRepository.findPendingOrProcessingByUserId(userInternalId),
+      });
       if (existingAfterRace) {
         logger.info(
           { userPublicId, exportPublicId: existingAfterRace.public_id },
           'user-data-export.concurrent_pending_returned',
         );
-        return serializeUserDataExport(existingAfterRace);
+        return serializeUserDataExport({ row: existingAfterRace });
       }
       throw error;
     }
 
-    await scheduleCommitDispatch(
-      {
+    await scheduleCommitDispatch({
+      task: {
         type: 'user_data_export',
         exportPublicId,
         userPublicId,
       },
-      options?.requestId !== undefined ? { requestId: options.requestId } : undefined,
-    );
+      options: options?.requestId !== undefined ? { requestId: options.requestId } : undefined,
+    });
 
     logger.info({ userPublicId, exportPublicId }, 'user-data-export.requested');
 
-    return serializeUserDataExport(row);
+    return serializeUserDataExport({ row });
   }
 
   async getExportStatus({
@@ -235,12 +241,14 @@ export class UserDataExportService {
     exportPublicId: string;
   }): Promise<UserDataExportOutput> {
     const userPublicId = scope.userPublicId;
-    const row = await withAppDatabaseContext(scope, async () =>
-      this.exportRepository.findByPublicIdAndUserId(
-        exportPublicId,
-        await this.requireUserIdInContext(userPublicId),
-      ),
-    );
+    const row = await withAppDatabaseContext({
+      scope,
+      callback: async () =>
+        this.exportRepository.findByPublicIdAndUserId(
+          exportPublicId,
+          await this.requireUserIdInContext(userPublicId),
+        ),
+    });
     if (!row) throw new NotFoundError('User data export');
 
     let downloadUrl: string | null = null;
@@ -259,7 +267,7 @@ export class UserDataExportService {
       });
     }
 
-    return serializeUserDataExport(row, { download_url: downloadUrl });
+    return serializeUserDataExport({ row, options: { download_url: downloadUrl } });
   }
 
   /**
@@ -331,9 +339,9 @@ export class UserDataExportService {
     userPublicId: string;
     body: Buffer;
   }): Promise<void> {
-    const s3Key = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
-      async (scopedDatabaseHandle) =>
+    const s3Key = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
+      callback: async (scopedDatabaseHandle) =>
         this.resolveExportArtifactS3Key({
           options: {
             exportPublicId: options.exportPublicId,
@@ -342,7 +350,7 @@ export class UserDataExportService {
           },
           databaseHandle: scopedDatabaseHandle,
         }),
-    );
+    });
 
     await this.objectStorage.putObject({
       key: s3Key,
@@ -355,9 +363,9 @@ export class UserDataExportService {
     });
 
     try {
-      await withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
-        async (scopedDatabaseHandle) => {
+      await withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
+        callback: async (scopedDatabaseHandle) => {
           await this.finalizeExportAfterUpload({
             options: {
               exportPublicId: options.exportPublicId,
@@ -367,7 +375,7 @@ export class UserDataExportService {
             databaseHandle: scopedDatabaseHandle,
           });
         },
-      );
+      });
     } catch (error) {
       await this.bestEffortDeleteUploadedExportArtifact({
         s3Key,
@@ -502,15 +510,15 @@ export class UserDataExportService {
     // domain's `tombstoneAllByUserId` offboarding pattern.
     let afterId = 0;
     for (;;) {
-      const rows = await withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-        () =>
+      const rows = await withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+        callback: () =>
           this.exportRepository.findS3KeysByUserIdAfter(
             userInternalId,
             afterId,
             USER_DATA_EXPORT_OFFBOARDING_DELETE_BATCH_SIZE,
           ),
-      );
+      });
       if (rows.length === 0) {
         break;
       }
@@ -523,10 +531,10 @@ export class UserDataExportService {
         break;
       }
     }
-    const deletedCount = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      () => this.exportRepository.deleteAllByUserId(userInternalId),
-    );
+    const deletedCount = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: () => this.exportRepository.deleteAllByUserId(userInternalId),
+    });
     if (deletedCount > 0) {
       logger.info({ userPublicId, deletedCount }, 'user-data-export.offboarding.deleted');
     }

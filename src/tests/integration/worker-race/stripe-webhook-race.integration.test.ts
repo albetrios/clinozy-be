@@ -56,11 +56,11 @@ describe('Integration: stripe-webhook worker concurrency race', () => {
 
     const results = await Promise.allSettled(
       Array.from({ length: PARALLEL_WORKER_COUNT }, (_, index) =>
-        processStripeWebhookJob(
-          { stripeEventId, requestId: `req-race-${String(index)}` },
+        processStripeWebhookJob({
+          jobData: { stripeEventId, requestId: `req-race-${String(index)}` },
           stripeWebhookService,
-          `job-race-${String(index)}`,
-        ),
+          jobId: `job-race-${String(index)}`,
+        }),
       ),
     );
 
@@ -71,7 +71,11 @@ describe('Integration: stripe-webhook worker concurrency race', () => {
       }
     }
     // Once the winning execution completes, duplicate executions must finish without error.
-    await processStripeWebhookJob({ stripeEventId }, stripeWebhookService, 'job-after-race');
+    await processStripeWebhookJob({
+      jobData: { stripeEventId },
+      stripeWebhookService,
+      jobId: 'job-after-race',
+    });
 
     const processedCountRows = await sql<{ count: string }[]>`
       SELECT COUNT(*)::text AS count

@@ -46,15 +46,21 @@ function isExcluded(filePath: string): boolean {
   return EXCLUDED_PATH_PATTERNS.some((pattern) => pattern.test(filePath));
 }
 
-function lineNumberAt(content: string, index: number): number {
+function lineNumberAt({ content, index }: { content: string; index: number }): number {
   return content.slice(0, index).split('\n').length;
 }
 
-function collectTypeScriptFiles(directory: string, collected: string[] = []): string[] {
+function collectTypeScriptFiles({
+  directory,
+  collected = [],
+}: {
+  directory: string;
+  collected?: string[] | undefined;
+}): string[] {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const absolutePath = join(directory, entry.name);
     if (entry.isDirectory()) {
-      collectTypeScriptFiles(absolutePath, collected);
+      collectTypeScriptFiles({ directory: absolutePath, collected });
     } else if (entry.name.endsWith('.ts')) {
       collected.push(absolutePath);
     }
@@ -71,7 +77,7 @@ function collectTypeScriptFiles(directory: string, collected: string[] = []): st
  */
 export function findHardcodedFallbackViolations(): HardcodedFallbackViolation[] {
   const violations: HardcodedFallbackViolation[] = [];
-  const files = collectTypeScriptFiles(SRC_ROOT);
+  const files = collectTypeScriptFiles({ directory: SRC_ROOT });
 
   for (const absolutePath of files) {
     const relativePath = relative(process.cwd(), absolutePath);
@@ -85,7 +91,7 @@ export function findHardcodedFallbackViolations(): HardcodedFallbackViolation[] 
         if (!messageKey) continue;
         violations.push({
           file: relativePath,
-          line: lineNumberAt(content, match.index ?? 0),
+          line: lineNumberAt({ content, index: match.index ?? 0 }),
           kind: 'raw_message_key',
           detail: `messageKey must use errors:/success:/common:/mail: namespace, got "${messageKey}"`,
         });
@@ -97,7 +103,7 @@ export function findHardcodedFallbackViolations(): HardcodedFallbackViolation[] 
       if (!resource || NOT_FOUND_RESOURCE_PATTERN.test(resource)) continue;
       violations.push({
         file: relativePath,
-        line: lineNumberAt(content, match.index ?? 0),
+        line: lineNumberAt({ content, index: match.index ?? 0 }),
         kind: 'raw_message_key',
         detail: `NotFoundError resource looks like a sentence; add an errors: key instead of "${resource}"`,
       });
@@ -113,7 +119,7 @@ export function findHardcodedFallbackViolations(): HardcodedFallbackViolation[] 
       if (!fallback || MESSAGE_KEY_PREFIX.test(fallback)) continue;
       violations.push({
         file: relativePath,
-        line: lineNumberAt(content, matchIndex),
+        line: lineNumberAt({ content, index: matchIndex }),
         kind: 'redundant_fallback',
         detail: `remove hardcoded fallback "${fallback}"; use messageKey + request.t() only`,
       });

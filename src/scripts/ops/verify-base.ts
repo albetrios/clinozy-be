@@ -87,7 +87,13 @@ function registerSignalHandlersForTeardown(): void {
   });
 }
 
-function runPnpmStep(stepName: string, pnpmArguments: string[]): Promise<void> {
+function runPnpmStep({
+  stepName,
+  pnpmArguments,
+}: {
+  stepName: string;
+  pnpmArguments: string[];
+}): Promise<void> {
   const startedAt = performance.now();
   logger.info({ stepName, pnpmArguments }, 'verify.base: step start');
   return new Promise((resolve, reject) => {
@@ -205,18 +211,21 @@ async function main(): Promise<void> {
   const gateStartedAt = performance.now();
 
   try {
-    await runPnpmStep('db:migrate', ['db:migrate']);
+    await runPnpmStep({ stepName: 'db:migrate', pnpmArguments: ['db:migrate'] });
     // The migrations create the role logins NOLOGIN; turn them on before anything connects.
-    await runPnpmStep('database logins', ['setup:local', '--only-env']);
-    await runPnpmStep('db:seed', ['db:seed']);
-    await runPnpmStep('db:seed:full', ['db:seed:full']);
+    await runPnpmStep({
+      stepName: 'database logins',
+      pnpmArguments: ['setup:local', '--only-env'],
+    });
+    await runPnpmStep({ stepName: 'db:seed', pnpmArguments: ['db:seed'] });
+    await runPnpmStep({ stepName: 'db:seed:full', pnpmArguments: ['db:seed:full'] });
     await ensureServerRunning();
-    await runPnpmStep('test:api-smoke', ['test:api-smoke']);
+    await runPnpmStep({ stepName: 'test:api-smoke', pnpmArguments: ['test:api-smoke'] });
   } finally {
     await teardownSpawnedProcesses();
   }
 
-  await runPnpmStep('validate', ['validate']);
+  await runPnpmStep({ stepName: 'validate', pnpmArguments: ['validate'] });
 
   logger.info(
     { durationMs: Math.round(performance.now() - gateStartedAt) },

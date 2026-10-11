@@ -123,7 +123,7 @@ describe('Billing Subscription Mutations — Integration', () => {
 
   /**
    * Same shape as {@link createBillingMutationContext} but on a **PERSONAL** organization, which
-   * `assertTeamOrganization(organization, 'BILLING')` rejects with 422. Every branch of that
+   * `assertTeamOrganization({ organization, capability: 'BILLING' })` rejects with 422. Every branch of that
    * guard was covered at the service layer (`subscription.service.billing-guard.unit.test.ts`)
    * with a stubbed organization service; nothing confirmed the guard is still *wired* behind the
    * HTTP routes. A refactor that moved billing reads off the guarded `resolveStripeCustomerId`

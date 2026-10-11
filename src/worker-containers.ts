@@ -39,28 +39,33 @@ export function createDomainContainers(
   objectStorage: ObjectStoragePort = getDefaultS3ObjectStorageAdapter(),
 ): DomainContainers {
   const userBase = createUserContainerBase(objectStorage);
-  const tenancyDomain = createTenancyContainer(userBase.userService, objectStorage);
-  const authDomain = createAuthContainer(
-    userBase.userService,
-    tenancyDomain.organizationSettingsService,
-    tenancyDomain.organizationService,
-    tenancyDomain.authorizationService,
-  );
-  const auditDomain = createAuditContainer(tenancyDomain.organizationService, userBase.userService);
-  const billingDomain = createBillingContainer(
-    tenancyDomain.organizationService,
-    // REQ-4: tenancy membership service supplies seats_used + the seat-sync worker's member count.
-    tenancyDomain.membershipService,
-  );
-  const notifyDomain = createNotifyContainer(
-    tenancyDomain.organizationService,
-    userBase.userService,
-  );
-  const uploadDomain = createUploadContainer(
-    userBase.userService,
-    tenancyDomain.organizationService,
+  const tenancyDomain = createTenancyContainer({
+    userService: userBase.userService,
     objectStorage,
-  );
+  });
+  const authDomain = createAuthContainer({
+    userService: userBase.userService,
+    organizationSettingsService: tenancyDomain.organizationSettingsService,
+    organizationService: tenancyDomain.organizationService,
+    authorizationService: tenancyDomain.authorizationService,
+  });
+  const auditDomain = createAuditContainer({
+    organizationService: tenancyDomain.organizationService,
+    userService: userBase.userService,
+  });
+  const billingDomain = createBillingContainer({
+    organizationService: tenancyDomain.organizationService,
+    membershipSeatUsage: tenancyDomain.membershipService,
+  });
+  const notifyDomain = createNotifyContainer({
+    organizationService: tenancyDomain.organizationService,
+    userService: userBase.userService,
+  });
+  const uploadDomain = createUploadContainer({
+    userService: userBase.userService,
+    organizationService: tenancyDomain.organizationService,
+    objectStorage,
+  });
 
   const userDataExportRepository = new UserDataExportRepository();
   const userDataExportService = new UserDataExportService(
@@ -68,7 +73,7 @@ export function createDomainContainers(
     userDataExportRepository,
     objectStorage,
   );
-  const userDomainWithRepository = completeUserContainer(userBase, userDataExportService);
+  const userDomainWithRepository = completeUserContainer({ base: userBase, userDataExportService });
   const userDomain: UserContainer = {
     userService: userDomainWithRepository.userService,
     userSettingsService: userDomainWithRepository.userSettingsService,

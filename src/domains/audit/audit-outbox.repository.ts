@@ -99,7 +99,7 @@ export function createDrainAuditOutboxRepository(databaseHandle: RequestScopedPo
      * Increments `attempt_count` so a row that fails repeatedly is bounded.
      */
     async claimPendingBatch(limit: number): Promise<AuditOutboxRow[]> {
-      await assertWorkerRlsGucSet(databaseHandle, 'audit_outbox_drain');
+      await assertWorkerRlsGucSet({ databaseHandle, expectedKind: 'audit_outbox_drain' });
       // Drizzle has no first-class FOR UPDATE SKIP LOCKED on `select()`, so use a
       // raw SQL UPDATE..FROM..RETURNING which is both atomic and skip-locked.
       // The locking SELECT lives in a MATERIALIZED CTE deliberately: as a plain

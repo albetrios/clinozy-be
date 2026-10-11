@@ -8,13 +8,19 @@ import { dirname, join, normalize, relative, resolve } from 'node:path';
 const PROJECT_ROOT = process.cwd();
 const SCAN_ROOTS = ['src', 'tooling'] as const;
 
-function collectTypeScriptFiles(directory: string, files: string[] = []): string[] {
+function collectTypeScriptFiles({
+  directory,
+  files = [],
+}: {
+  directory: string;
+  files?: string[] | undefined;
+}): string[] {
   for (const entry of readdirSync(directory)) {
     const fullPath = join(directory, entry);
     if (entry === 'node_modules' || entry === 'dist') continue;
     const stats = statSync(fullPath);
     if (stats.isDirectory()) {
-      collectTypeScriptFiles(fullPath, files);
+      collectTypeScriptFiles({ directory: fullPath, files });
     } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts')) {
       files.push(fullPath);
     }
@@ -22,7 +28,13 @@ function collectTypeScriptFiles(directory: string, files: string[] = []): string
   return files;
 }
 
-function resolveToAlias(filePath: string, importPath: string): string {
+function resolveToAlias({
+  filePath,
+  importPath,
+}: {
+  filePath: string;
+  importPath: string;
+}): string {
   const fileDirectory = dirname(filePath);
   const absoluteTarget = normalize(resolve(fileDirectory, importPath));
   const relativeToRoot = relative(PROJECT_ROOT, absoluteTarget);
@@ -47,7 +59,7 @@ function rewriteFile(filePath: string): boolean {
       if (!importPath.startsWith('../')) {
         return match;
       }
-      const alias = resolveToAlias(filePath, importPath);
+      const alias = resolveToAlias({ filePath, importPath });
       changed = true;
       return match.replace(importPath, alias);
     },
@@ -64,7 +76,7 @@ function main(): void {
 
   for (const root of SCAN_ROOTS) {
     const rootPath = join(PROJECT_ROOT, root);
-    for (const filePath of collectTypeScriptFiles(rootPath)) {
+    for (const filePath of collectTypeScriptFiles({ directory: rootPath })) {
       if (rewriteFile(filePath)) {
         changedFiles.push(relative(PROJECT_ROOT, filePath));
       }

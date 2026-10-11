@@ -95,16 +95,16 @@ export async function enqueueSubscriptionSeatSync(options: {
   idempotencyKey?: string;
 }): Promise<void> {
   const queue = getSubscriptionSeatSyncQueue();
-  const jobData = parseBullMQJobData(
-    subscriptionSeatSyncJobDataSchema,
-    omitUndefined({
+  const jobData = parseBullMQJobData({
+    schema: subscriptionSeatSyncJobDataSchema,
+    data: omitUndefined({
       organizationPublicId: options.organizationPublicId,
       requestId: options.requestId,
       idempotencyKey: options.idempotencyKey,
       ...captureTraceContextForPropagation(),
     }),
-    SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME,
-  );
+    queueName: SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME,
+  });
   await queue.add('sync-subscription-seats', jobData, {
     jobId: `seat-sync-${options.organizationPublicId}-${randomUUID()}`,
     deduplication: subscriptionSeatSyncDeduplication(options.organizationPublicId),

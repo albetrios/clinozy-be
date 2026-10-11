@@ -9,5 +9,5 @@ const ERROR_KEY_INVALID_INPUT = 'errors:invalidInput';
  * missing or longer than the public-id allowance.
  */
 export function validateDataExportIdParam(data: unknown): { data_export_id: string } {
-  return parseWithSchema(dataExportIdParamDto, data, ERROR_KEY_INVALID_INPUT);
+  return parseWithSchema({ schema: dataExportIdParamDto, data, errorKey: ERROR_KEY_INVALID_INPUT });
 }

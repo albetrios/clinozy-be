@@ -79,11 +79,14 @@ function collectAuditOutboxPublicIds(batch: readonly AuditOutboxRow[]): {
  * - **Side effects:** `SET LOCAL app.global_admin = 'true'` for the duration of the
  *   drain transaction; one SELECT per resolved table.
  */
-async function buildResolutionMaps(
-  databaseHandle: RequestScopedPostgresDatabase,
-  batch: readonly AuditOutboxRow[],
-): Promise<ResolutionMaps> {
-  await setLocalDatabaseConfig(databaseHandle, 'app.global_admin', 'true');
+async function buildResolutionMaps({
+  databaseHandle,
+  batch,
+}: {
+  databaseHandle: RequestScopedPostgresDatabase;
+  batch: readonly AuditOutboxRow[];
+}): Promise<ResolutionMaps> {
+  await setLocalDatabaseConfig({ databaseHandle, key: 'app.global_admin', value: 'true' });
 
   const { userPublicIds, organizationPublicIds, apiKeyPublicIds } =
     collectAuditOutboxPublicIds(batch);
@@ -118,10 +121,13 @@ interface ResolvedAuditLogInsertRow {
   metadata: Record<string, unknown>;
 }
 
-function resolveRowInserts(
-  row: AuditOutboxRow,
-  maps: ResolutionMaps,
-): { row: ResolvedAuditLogInsertRow } | { error: string } {
+function resolveRowInserts({
+  row,
+  maps,
+}: {
+  row: AuditOutboxRow;
+  maps: ResolutionMaps;
+}): { row: ResolvedAuditLogInsertRow } | { error: string } {
   const actor_user_id = row.actor_user_public_id
     ? (maps.userIdsByPublicId.get(row.actor_user_public_id) ?? null)
     : null;
@@ -189,7 +195,7 @@ async function drainOutboxRow(options: {
   maxAttempts: number;
 }): Promise<DrainOutboxRowOutcome> {
   const { databaseHandle, drainRepository, row, maps, maxAttempts } = options;
-  const resolution = resolveRowInserts(row, maps);
+  const resolution = resolveRowInserts({ row, maps });
   if ('error' in resolution) {
     await drainRepository.markPermanentlyFailed(row.id, resolution.error);
     logger.warn(
@@ -223,18 +229,18 @@ async function drainOutboxRow(options: {
       // arm on the row's `organization_id` COLUMN rather than on the GUC; one edit to either the
       // policy or this branch turns it into a cross-tenant insert. Writing both values every
       // iteration makes each row's RLS identity total, so nothing is inherited.
-      await setLocalDatabaseConfig(
-        savepointHandle,
-        'app.current_organization_public_id',
-        row.organization_public_id ?? '',
-      );
+      await setLocalDatabaseConfig({
+        databaseHandle: savepointHandle,
+        key: 'app.current_organization_public_id',
+        value: row.organization_public_id ?? '',
+      });
       // Tenantless audit (system events) need the system arm; `resolveRowInserts` guarantees such
       // rows carry `organization_id IS NULL`, which the policy's system arm also requires.
-      await setLocalDatabaseConfig(
-        savepointHandle,
-        'app.system_audit_insert',
-        row.organization_public_id === null ? 'true' : 'false',
-      );
+      await setLocalDatabaseConfig({
+        databaseHandle: savepointHandle,
+        key: 'app.system_audit_insert',
+        value: row.organization_public_id === null ? 'true' : 'false',
+      });
       await createAuditOutboxResolutionRepository(savepointHandle).insertAuditLog(resolution.row);
     });
     return { kind: 'success', id: row.id };
@@ -319,7 +325,7 @@ export async function runAuditOutboxDrainJob(
     return { drained: 0, transientFailed: 0, permanentlyFailed: 0 };
   }
 
-  const maps = await buildResolutionMaps(databaseHandle, batch);
+  const maps = await buildResolutionMaps({ databaseHandle, batch });
 
   const successIds: number[] = [];
   let transientFailed = 0;

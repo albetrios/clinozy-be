@@ -54,8 +54,11 @@ describe('Chaos resilience: cold pool under a connect-time fault', () => {
       CHAOS_POSTGRES_PROXY_NAME,
       RESET_PEER,
       async () => {
-        unitOfWork = withAppDatabaseContext(scope, async () => {
-          ran = true;
+        unitOfWork = withAppDatabaseContext({
+          scope,
+          callback: async () => {
+            ran = true;
+          },
         });
         void unitOfWork.then(
           () => {
@@ -87,8 +90,11 @@ describe('Chaos resilience: cold pool under a connect-time fault', () => {
       async () => {
         const startedAt = Date.now();
         await expect(
-          withAppDatabaseContext(scope, async () => {
-            ran = true;
+          withAppDatabaseContext({
+            scope,
+            callback: async () => {
+              ran = true;
+            },
           }),
         ).rejects.toMatchObject({ statusCode: 503, retryAfterSeconds: 5 });
         const elapsedMilliseconds = Date.now() - startedAt;
@@ -101,7 +107,9 @@ describe('Chaos resilience: cold pool under a connect-time fault', () => {
     await sleep(3_000);
     expect(ran, 'an abandoned unit of work must roll back unrun').toBe(false);
     // And the pool serves new work again.
-    await expect(withAppDatabaseContext(scope, async () => 'served')).resolves.toBe('served');
+    await expect(withAppDatabaseContext({ scope, callback: async () => 'served' })).resolves.toBe(
+      'served',
+    );
     await closeDatabase();
   });
 });

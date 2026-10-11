@@ -24,7 +24,7 @@ function baseRow(metadata: Record<string, unknown>) {
 }
 
 function serializedMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
-  const [entry] = AuditSerializer.many([baseRow(metadata)]);
+  const [entry] = AuditSerializer.many({ items: [baseRow(metadata)] });
   return (entry as { metadata: Record<string, unknown> }).metadata;
 }
 
@@ -113,7 +113,7 @@ describe('audit metadata sanitizer (property)', () => {
           fc.array(fc.string({ maxLength: 8 }), { maxLength: 4 }),
         ),
         (metadata) => {
-          const [entry] = AuditSerializer.many([baseRow(metadata as never)]);
+          const [entry] = AuditSerializer.many({ items: [baseRow(metadata as never)] });
           expect((entry as { metadata: unknown }).metadata).toEqual(metadata);
         },
       ),

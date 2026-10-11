@@ -30,9 +30,9 @@ describe('Integration: mail delivery lanes', () => {
     const bulkTokens = [randomUUID(), randomUUID(), randomUUID()];
     const transactionalToken = randomUUID();
     for (const token of bulkTokens) {
-      await enqueueMailOutboxJob(token, { lane: 'bulk' });
+      await enqueueMailOutboxJob({ mailOutboxToken: token, options: { lane: 'bulk' } });
     }
-    await enqueueMailOutboxJob(transactionalToken);
+    await enqueueMailOutboxJob({ mailOutboxToken: transactionalToken });
 
     const ours = new Set([...bulkTokens, transactionalToken]);
     const enqueueOrder = [...bulkTokens, transactionalToken];

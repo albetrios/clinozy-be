@@ -25,10 +25,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -378,9 +380,12 @@ describe('UploadService', () => {
 
     const result = await service.confirmUpload({ public_id: uploadPublicId, principal });
 
-    expect(objectStorage.verifyUploadedObject).toHaveBeenCalledWith(pendingKey, {
-      contentType: 'image/png',
-      contentLength: 1024,
+    expect(objectStorage.verifyUploadedObject).toHaveBeenCalledWith({
+      key: pendingKey,
+      expected: {
+        contentType: 'image/png',
+        contentLength: 1024,
+      },
     });
     // Row is repointed at the immutable final key (pending key is then deleted).
     expect(repository.markConfirmedByPublicId).toHaveBeenCalledWith(uploadPublicId, finalKey);
@@ -416,7 +421,10 @@ describe('UploadService', () => {
     const result = await service.confirmUpload({ public_id: uploadPublicId, principal });
 
     // Verified against the pending object, then server-side copied to the final key (no re-upload).
-    expect(objectStorage.verifyUploadedObject).toHaveBeenCalledWith(pendingKey, expect.anything());
+    expect(objectStorage.verifyUploadedObject).toHaveBeenCalledWith({
+      key: pendingKey,
+      expected: expect.anything(),
+    });
     // sec-re-10: COPY pins the source ETag captured at HEAD so a replayed
     // PUT between verify and copy fails the COPY with PreconditionFailed.
     expect(objectStorage.copyObject).toHaveBeenCalledWith({
@@ -899,10 +907,13 @@ describe('UploadService', () => {
         '@/infrastructure/database/contexts/database-context.js'
       );
       let activeScope: { organizationPublicId?: string } | undefined;
-      vi.mocked(withAppDatabaseContext).mockImplementation((async (
-        scope: unknown,
-        callback: (handle: unknown) => Promise<unknown>,
-      ) => {
+      vi.mocked(withAppDatabaseContext).mockImplementation((async ({
+        scope,
+        callback,
+      }: {
+        scope: unknown;
+        callback: (handle: unknown) => Promise<unknown>;
+      }) => {
         const previous = activeScope;
         activeScope = scope as { organizationPublicId?: string };
         try {

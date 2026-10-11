@@ -45,7 +45,7 @@ A job has no request, so the language travels in the event or job payload as `lo
 | Sign-in code, password reset | The request's (`toSupportedLanguage(request.language)`) |
 | Member invitation, invitation accepted | The organization's `default_locale` |
 
-Templates translate through `translateMailText(key, locale, values)` (`src/infrastructure/mail/templates/base.template.ts`), which leaves escaping to the template (`escapeHtml` on every value) and sets `<html lang>`. The worker process loads the locale files once at start with `initializeI18nextForBackgroundWork()`; a unit test that renders copy calls the same function in `beforeAll`.
+Templates translate through `translateMailText({ key, locale, values })` (`src/infrastructure/mail/templates/base.template.ts`), which leaves escaping to the template (`escapeHtml` on every value) and sets `<html lang>`. The worker process loads the locale files once at start with `initializeI18nextForBackgroundWork()`; a unit test that renders copy calls the same function in `beforeAll`.
 
 ## Conventions
 

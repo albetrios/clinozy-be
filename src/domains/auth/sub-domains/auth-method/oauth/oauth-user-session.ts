@@ -96,68 +96,72 @@ export async function completeOAuthUserSession(parameters: {
   // repository call shares the checkout), so a failed auth-method link rolls the freshly created user
   // back instead of leaving a verified orphan. Provisioning + session minting run AFTER the commit
   // (below) — they cannot run correctly inside this transaction.
-  const { user, isNewUser, claimedBareAccount } = await withTransaction((transaction) =>
-    runWithPinnedDatabaseHandle(transaction as RequestScopedPostgresDatabase, async () => {
-      let resolvedUser = await userService.findByEmail(normalizedEmail);
-      let createdNow = false;
-      let claimedBare = false;
-      if (!resolvedUser) {
-        if (isDisposableEmailBlocked(normalizedEmail)) {
-          throw new ForbiddenError('errors:disposableEmail').withReason('disposable_email');
-        }
-        const nameParts = profile.name?.split(' ') ?? [];
-        resolvedUser = await userService.createFromOAuth(
-          omitUndefined({
-            email: normalizedEmail,
-            first_name: nameParts[0],
-            last_name: nameParts.slice(1).join(' ') || undefined,
-            avatar_url: profile.avatar_url,
-            is_email_verified: true,
-          }),
-        );
-        createdNow = true;
-        logger.info({ email: normalizedEmail, provider }, 'oauth.user.created');
-      } else {
-        // Pre-existing account: enforce the takeover guard and, for a bare invited placeholder, claim
-        // it (verify its email). Extracted to keep this function under the complexity budget.
-        const resolved = await resolveExistingOAuthAccount({
-          authMethodService,
-          userService,
-          existingUser: resolvedUser,
-          provider,
-          profile,
-        });
-        resolvedUser = resolved.user;
-        claimedBare = resolved.claimedBareAccount;
-      }
+  const { user, isNewUser, claimedBareAccount } = await withTransaction({
+    callback: (transaction) =>
+      runWithPinnedDatabaseHandle({
+        databaseHandle: transaction as RequestScopedPostgresDatabase,
+        callback: async () => {
+          let resolvedUser = await userService.findByEmail(normalizedEmail);
+          let createdNow = false;
+          let claimedBare = false;
+          if (!resolvedUser) {
+            if (isDisposableEmailBlocked(normalizedEmail)) {
+              throw new ForbiddenError('errors:disposableEmail').withReason('disposable_email');
+            }
+            const nameParts = profile.name?.split(' ') ?? [];
+            resolvedUser = await userService.createFromOAuth(
+              omitUndefined({
+                email: normalizedEmail,
+                first_name: nameParts[0],
+                last_name: nameParts.slice(1).join(' ') || undefined,
+                avatar_url: profile.avatar_url,
+                is_email_verified: true,
+              }),
+            );
+            createdNow = true;
+            logger.info({ email: normalizedEmail, provider }, 'oauth.user.created');
+          } else {
+            // Pre-existing account: enforce the takeover guard and, for a bare invited placeholder, claim
+            // it (verify its email). Extracted to keep this function under the complexity budget.
+            const resolved = await resolveExistingOAuthAccount({
+              authMethodService,
+              userService,
+              existingUser: resolvedUser,
+              provider,
+              profile,
+            });
+            resolvedUser = resolved.user;
+            claimedBare = resolved.claimedBareAccount;
+          }
 
-      await authMethodService.linkOAuthProviderIfMissing({
-        ownerPublicId: resolvedUser.public_id,
-        data: {
-          user_id: resolvedUser.id,
-          method_type: AUTH_METHOD_TYPE.OAUTH,
-          provider,
-          provider_user_id: profile.provider_user_id,
-          is_primary: false,
-          created_by_user_id: resolvedUser.id,
+          await authMethodService.linkOAuthProviderIfMissing({
+            ownerPublicId: resolvedUser.public_id,
+            data: {
+              user_id: resolvedUser.id,
+              method_type: AUTH_METHOD_TYPE.OAUTH,
+              provider,
+              provider_user_id: profile.provider_user_id,
+              is_primary: false,
+              created_by_user_id: resolvedUser.id,
+            },
+          });
+
+          // A pre-existing account may have been suspended/locked/soft-deleted since signup; never mint a
+          // session for it via the OAuth callback. Passing the row (not just `status`) also rejects
+          // soft-deleted users (sec-U1 defense in depth).
+          assertUserAccountActive({
+            status: resolvedUser.status,
+            deleted_at: resolvedUser.deleted_at,
+          });
+
+          return {
+            user: resolvedUser,
+            isNewUser: createdNow,
+            claimedBareAccount: claimedBare,
+          };
         },
-      });
-
-      // A pre-existing account may have been suspended/locked/soft-deleted since signup; never mint a
-      // session for it via the OAuth callback. Passing the row (not just `status`) also rejects
-      // soft-deleted users (sec-U1 defense in depth).
-      assertUserAccountActive({
-        status: resolvedUser.status,
-        deleted_at: resolvedUser.deleted_at,
-      });
-
-      return {
-        user: resolvedUser,
-        isNewUser: createdNow,
-        claimedBareAccount: claimedBare,
-      };
-    }),
-  );
+      }),
+  });
 
   // Account-level personal organization for a first-time onboard — a brand-new OAuth user OR a
   // freshly-claimed bare invited placeholder (which `findOrCreateInvitedByEmail` created without one,

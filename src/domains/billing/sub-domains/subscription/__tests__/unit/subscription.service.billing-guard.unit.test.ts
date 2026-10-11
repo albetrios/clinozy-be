@@ -15,10 +15,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -26,7 +28,9 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
 // audit-#B4: run the create critical section transparently — the lock itself is covered in
 // redis-lock.util.unit.test.ts; here it must not open a real Redis connection.
 vi.mock('@/infrastructure/cache/redis-lock.util.js', () => ({
-  withRedisLock: vi.fn(async (_options: unknown, fn: () => Promise<unknown>) => fn()),
+  withRedisLock: vi.fn(
+    async ({ options: _options, fn }: { options: unknown; fn: () => Promise<unknown> }) => fn(),
+  ),
   RedisLockUnavailableError: class RedisLockUnavailableError extends Error {},
 }));
 
@@ -41,7 +45,7 @@ import type { SubscriptionRepository } from '@/domains/billing/sub-domains/subsc
 import type { PaymentProvider } from '@/domains/billing/sub-domains/subscription/payment-provider.port.js';
 
 // A PERSONAL organization cannot manage billing; the subscription mutations must reject it
-// with 422 via `assertTeamOrganization(organization, 'BILLING')` BEFORE any plan lookup, subscription
+// with 422 via `assertTeamOrganization({ organization, capability: 'BILLING' })` BEFORE any plan lookup, subscription
 // lookup, or Stripe call (defense-in-depth for what the frontend already hides via the organization `type`).
 const personalOrganization = {
   id: 1,

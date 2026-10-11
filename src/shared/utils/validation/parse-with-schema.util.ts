@@ -25,11 +25,15 @@ export const DEFAULT_INVALID_INPUT_ERROR_KEY = 'errors:invalidInput';
  * The parse reports the input so Zod's catalogs can name the received type; the input itself is
  * never kept on the error.
  */
-export function parseWithSchema<T>(
-  schema: ZodType<T>,
-  data: unknown,
-  errorKey: string = DEFAULT_INVALID_INPUT_ERROR_KEY,
-): T {
+export function parseWithSchema<T>({
+  schema,
+  data,
+  errorKey = DEFAULT_INVALID_INPUT_ERROR_KEY,
+}: {
+  schema: ZodType<T>;
+  data: unknown;
+  errorKey?: string | undefined;
+}): T {
   const result = schema.safeParse(data, { reportInput: true });
   if (!result.success) {
     throw new ValidationError(errorKey, undefined, undefined, toFieldErrors(result.error.issues));

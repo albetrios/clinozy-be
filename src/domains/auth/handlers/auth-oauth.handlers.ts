@@ -36,15 +36,15 @@ export function createAuthOauthHandlers({ oauthService }: AuthOauthHandlersDepen
         // Bind the upcoming callback to this browser: the nonce is stored (hashed) with the
         // Redis state and echoed back via this httpOnly cookie so a forged state+code from a
         // different browser cannot complete the flow (login-CSRF defence).
-        setOauthNonceCookie(reply, nonce);
-        return successResponse(data, getRequestIdentifier(request));
+        setOauthNonceCookie({ reply, nonce });
+        return successResponse({ data, request_id: getRequestIdentifier(request) });
       } catch (error) {
         if (isOauthProviderNotImplementedError(error)) {
-          return sendOauthProviderNotImplementedResponse(
+          return sendOauthProviderNotImplementedResponse({
             request,
             reply,
-            getRequestIdentifier(request),
-          );
+            requestIdentifier: getRequestIdentifier(request),
+          });
         }
         throw error;
       }
@@ -80,12 +80,19 @@ export function createAuthOauthHandlers({ oauthService }: AuthOauthHandlersDepen
         // sec-A8 follow-up: record the failure side. Provider id is embedded
         // in the source so incident-response can filter by the IdP that
         // rejected (e.g. "every google-OAuth failure in the last hour").
-        await recordLoginFailureAuditEvent(request, `oauth_${request.params.provider}`, error);
+        await recordLoginFailureAuditEvent({
+          request,
+          source: `oauth_${request.params.provider}`,
+          error,
+        });
         throw error;
       }
 
       if ('mfa_required' in data) {
-        return successResponse(AuthSerializer.mfaRequired(data), getRequestIdentifier(request));
+        return successResponse({
+          data: AuthSerializer.mfaRequired(data),
+          request_id: getRequestIdentifier(request),
+        });
       }
 
       if (
@@ -94,24 +101,37 @@ export function createAuthOauthHandlers({ oauthService }: AuthOauthHandlersDepen
         'session_refresh_secret' in data &&
         typeof data.session_refresh_secret === 'string'
       ) {
-        setSessionCookie(reply, data.session_public_id, data.session_refresh_secret);
+        setSessionCookie({
+          reply,
+          sessionPublicId: data.session_public_id,
+          refreshSecret: data.session_refresh_secret,
+        });
         // sec-A8: audit OAuth success; provider is embedded in the source so an
         // incident-response query can correlate "every super_admin issued via
         // OAuth Google in the last 24h" without a separate metadata column.
         if ('access_token' in data && typeof data.access_token === 'string') {
-          await recordLoginAuditEvent(
+          await recordLoginAuditEvent({
             request,
-            { access_token: data.access_token, session_public_id: data.session_public_id },
-            `oauth_${request.params.provider}`,
-          );
+            loginResult: {
+              access_token: data.access_token,
+              session_public_id: data.session_public_id,
+            },
+            source: `oauth_${request.params.provider}`,
+          });
         }
       }
 
-      return successResponse(AuthSerializer.accessToken(data), getRequestIdentifier(request));
+      return successResponse({
+        data: AuthSerializer.accessToken(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
     listOauthProviders: async (request: FastifyRequest, _reply: FastifyReply) => {
       const data = oauthService.listProviders();
-      return successResponse(AuthSerializer.oauthProviders(data), getRequestIdentifier(request));
+      return successResponse({
+        data: AuthSerializer.oauthProviders(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
   };
 }

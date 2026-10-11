@@ -403,10 +403,13 @@ export async function invalidatePermissions({
     // must not block on cache), but surface it to Sentry so the operational risk is VISIBLE, not
     // buried in a warn log.
     logger.warn({ error }, 'permission-cache.invalidate.failed');
-    captureException(error, {
-      userId,
-      organizationId,
-      tags: { subsystem: 'permission-cache', operation: 'invalidate' },
+    captureException({
+      error,
+      context: {
+        userId,
+        organizationId,
+        tags: { subsystem: 'permission-cache', operation: 'invalidate' },
+      },
     });
     // Backstop (audit-#T1): we could not target the user's key (version read or DEL failed, e.g.
     // a transient blip that returned a wrong/`0` version). Best-effort bump the organization version so
@@ -449,9 +452,12 @@ export async function invalidateOrganizationPermissions(organizationId: string):
     // Same privilege-retention risk as invalidatePermissions, organization-wide: a failed version bump
     // leaves every user's cached permission set live until TTL. Surface to Sentry.
     logger.warn({ error }, 'permission-cache.invalidate-organization.failed');
-    captureException(error, {
-      organizationId,
-      tags: { subsystem: 'permission-cache', operation: 'invalidate-organization' },
+    captureException({
+      error,
+      context: {
+        organizationId,
+        tags: { subsystem: 'permission-cache', operation: 'invalidate-organization' },
+      },
     });
   }
 }

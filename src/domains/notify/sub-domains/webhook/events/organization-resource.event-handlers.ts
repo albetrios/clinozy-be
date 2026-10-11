@@ -34,12 +34,12 @@ export function registerOrganizationResourceEventHandlers(webhookService: Webhoo
       data: payload.data,
     });
   };
-  eventBus.on(ORGANIZATION_EVENT.CREATED, onOrganizationResourceEvent);
-  eventBus.on(ORGANIZATION_EVENT.UPDATED, onOrganizationResourceEvent);
-  eventBus.on(MEMBERSHIP_EVENT.CREATED, onOrganizationResourceEvent);
-  eventBus.on(MEMBERSHIP_EVENT.UPDATED, onOrganizationResourceEvent);
-  eventBus.on(MEMBERSHIP_EVENT.DELETED, onOrganizationResourceEvent);
-  eventBus.on(SUBSCRIPTION_EVENT.CREATED, onOrganizationResourceEvent);
-  eventBus.on(SUBSCRIPTION_EVENT.UPDATED, onOrganizationResourceEvent);
-  eventBus.on(SUBSCRIPTION_EVENT.CANCELLED, onOrganizationResourceEvent);
+  eventBus.on({ eventType: ORGANIZATION_EVENT.CREATED, handler: onOrganizationResourceEvent });
+  eventBus.on({ eventType: ORGANIZATION_EVENT.UPDATED, handler: onOrganizationResourceEvent });
+  eventBus.on({ eventType: MEMBERSHIP_EVENT.CREATED, handler: onOrganizationResourceEvent });
+  eventBus.on({ eventType: MEMBERSHIP_EVENT.UPDATED, handler: onOrganizationResourceEvent });
+  eventBus.on({ eventType: MEMBERSHIP_EVENT.DELETED, handler: onOrganizationResourceEvent });
+  eventBus.on({ eventType: SUBSCRIPTION_EVENT.CREATED, handler: onOrganizationResourceEvent });
+  eventBus.on({ eventType: SUBSCRIPTION_EVENT.UPDATED, handler: onOrganizationResourceEvent });
+  eventBus.on({ eventType: SUBSCRIPTION_EVENT.CANCELLED, handler: onOrganizationResourceEvent });
 }

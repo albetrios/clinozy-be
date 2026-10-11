@@ -25,13 +25,22 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
  *   `sslrootcert`) so both the certificate chain and hostname are validated.
  */
 export function assertDatabaseTlsVerification(): void {
-  assertUrlTlsVerification('DATABASE_URL', env.DATABASE_URL);
+  assertUrlTlsVerification({ label: 'DATABASE_URL', databaseUrl: env.DATABASE_URL });
   // The maintenance pool carries the bypass-context traffic and must meet the same TLS bar —
   // checked here (not in a separate boot step) so the two URLs can never drift in posture.
-  assertUrlTlsVerification('DATABASE_MAINTENANCE_URL', env.DATABASE_MAINTENANCE_URL);
+  assertUrlTlsVerification({
+    label: 'DATABASE_MAINTENANCE_URL',
+    databaseUrl: env.DATABASE_MAINTENANCE_URL,
+  });
 }
 
-function assertUrlTlsVerification(label: string, databaseUrl: string): void {
+function assertUrlTlsVerification({
+  label,
+  databaseUrl,
+}: {
+  label: string;
+  databaseUrl: string;
+}): void {
   const sslMode = parseSslMode(databaseUrl);
   const strictVerification = isStrictDatabaseTlsVerification({
     databaseUrl,

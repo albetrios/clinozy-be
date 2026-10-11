@@ -49,7 +49,7 @@ export function createUnhandledRejectionHandler({
 
   return (reason: unknown): void => {
     recordUnhandledRejection(processLabel);
-    captureException(reason, { tags: { source: sentrySource } });
+    captureException({ error: reason, context: { tags: { source: sentrySource } } });
     logger.error({ reason }, 'unhandledRejection');
 
     const now = Date.now();

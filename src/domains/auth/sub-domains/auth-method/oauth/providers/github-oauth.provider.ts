@@ -44,7 +44,13 @@ function getGitHubRedirectUri(): string {
 }
 
 /** Builds the GitHub authorize URL (`https://github.com/login/oauth/authorize?...`) with the configured client id, callback URI, scopes (`read:user user:email`), CSRF `state`, and the PKCE S256 `code_challenge`. Throws `NotImplementedError` when `OAUTH_GITHUB_CLIENT_ID` is unset. */
-export function buildGitHubOAuthRedirectUrl(state: string, codeChallenge: string): string {
+export function buildGitHubOAuthRedirectUrl({
+  state,
+  codeChallenge,
+}: {
+  state: string;
+  codeChallenge: string;
+}): string {
   const clientId = env.OAUTH_GITHUB_CLIENT_ID;
   if (!clientId) {
     throw new NotImplementedError('errors:githubOAuthNotConfigured');

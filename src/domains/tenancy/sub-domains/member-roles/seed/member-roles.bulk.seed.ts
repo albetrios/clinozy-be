@@ -68,8 +68,15 @@ export async function seedMemberRolesBulk(context: SeedContext): Promise<void> {
         created_by_user_id: organization.ownerUserId,
       });
       if (!role) continue;
-      const codes = generateBulkRolePermissionCodes(context.faker, GRANTABLE_PERMISSION_CODES);
-      await seedRolePermissions(role.id, codes, organization.ownerUserId);
+      const codes = generateBulkRolePermissionCodes({
+        faker: context.faker,
+        allCodes: GRANTABLE_PERMISSION_CODES,
+      });
+      await seedRolePermissions({
+        roleId: role.id,
+        permissionCodes: codes,
+        createdByUserId: organization.ownerUserId,
+      });
       createdRoles += 1;
     }
   }

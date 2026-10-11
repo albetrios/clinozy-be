@@ -62,7 +62,7 @@ export async function runFullSeed(): Promise<void> {
   logger.info('seed.full: plans seeded');
 
   const demoPassword = getDemoPassword();
-  const demoUser = await seedDemoUser(DEMO_EMAIL, demoPassword);
+  const demoUser = await seedDemoUser({ email: DEMO_EMAIL, password: demoPassword });
   if (!demoUser) throw new Error('seed.full: failed to create demo user');
   logger.info({ userId: demoUser.public_id }, 'seed.full: demo user created');
 
@@ -85,7 +85,11 @@ export async function runFullSeed(): Promise<void> {
   });
   if (!adminRole) throw new Error('seed.full: failed to create admin role');
 
-  await seedRolePermissions(adminRole.id, ADMIN_PERMISSION_CODES, demoUser.id);
+  await seedRolePermissions({
+    roleId: adminRole.id,
+    permissionCodes: ADMIN_PERMISSION_CODES,
+    createdByUserId: demoUser.id,
+  });
   logger.info('seed.full: admin role permissions assigned');
 
   await seedMembership({

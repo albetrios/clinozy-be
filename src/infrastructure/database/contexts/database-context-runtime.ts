@@ -113,10 +113,13 @@ export function getWorkerDatabaseContext(): WorkerDatabaseContext | undefined {
  * build on top of this primitive — application code should call the wrappers
  * directly rather than this raw helper.
  */
-export function runWithWorkerDatabaseContext<T>(
-  context: WorkerDatabaseContext,
-  callback: () => Promise<T>,
-): Promise<T> {
+export function runWithWorkerDatabaseContext<T>({
+  context,
+  callback,
+}: {
+  context: WorkerDatabaseContext;
+  callback: () => Promise<T>;
+}): Promise<T> {
   return workerDatabaseContextStorage.run(context, callback);
 }
 
@@ -154,7 +157,7 @@ export function assertWorkerForceRlsTableAccess(tableRef: ForceRlsTableRef): voi
     return;
   }
 
-  if (!isForceRlsTable(tableRef.schemaName, tableRef.tableName)) {
+  if (!isForceRlsTable({ schemaName: tableRef.schemaName, tableName: tableRef.tableName })) {
     return;
   }
 
@@ -290,21 +293,28 @@ export function getOrganizationRequestDatabaseSession():
  * Pins `databaseHandle` in ALS so `getRequestDatabase()` returns the same checkout for
  * tenant-scoped worker and HTTP organization RLS transactions.
  */
-export function runWithPinnedOrganizationDatabaseSession<T>(
-  organizationPublicId: string,
-  databaseHandle: RequestScopedPostgresDatabase,
-  callback: () => Promise<T>,
-): Promise<T> {
+export function runWithPinnedOrganizationDatabaseSession<T>({
+  organizationPublicId,
+  databaseHandle,
+  callback,
+}: {
+  organizationPublicId: string;
+  databaseHandle: RequestScopedPostgresDatabase;
+  callback: () => Promise<T>;
+}): Promise<T> {
   return organizationRequestDatabaseStorage.run({ databaseHandle, organizationPublicId }, callback);
 }
 
 /**
  * Pins `databaseHandle` in ALS for retention/session workers without a tenant public id.
  */
-export function runWithPinnedDatabaseHandle<T>(
-  databaseHandle: RequestScopedPostgresDatabase,
-  callback: () => Promise<T>,
-): Promise<T> {
+export function runWithPinnedDatabaseHandle<T>({
+  databaseHandle,
+  callback,
+}: {
+  databaseHandle: RequestScopedPostgresDatabase;
+  callback: () => Promise<T>;
+}): Promise<T> {
   const existingSession = getOrganizationRequestDatabaseSession();
   return organizationRequestDatabaseStorage.run(
     {
@@ -321,11 +331,15 @@ export function runWithPinnedDatabaseHandle<T>(
  * `app.current_organization_public_id` and `app.global_retention_cleanup` for the
  * duration of the surrounding transaction.
  */
-export async function setLocalDatabaseConfig(
-  databaseHandle: RequestScopedPostgresDatabase,
-  key: string,
-  value: string,
-): Promise<void> {
+export async function setLocalDatabaseConfig({
+  databaseHandle,
+  key,
+  value,
+}: {
+  databaseHandle: RequestScopedPostgresDatabase;
+  key: string;
+  value: string;
+}): Promise<void> {
   await databaseHandle.execute(drizzleSql`SELECT set_config(${key}, ${value}, true)`);
 }
 
@@ -333,11 +347,15 @@ export async function setLocalDatabaseConfig(
  * Sets a transaction-local session setting and returns its previous value (`null` when unset), in
  * one round trip: the materialized CTE reads the old value before `set_config` runs.
  */
-export async function exchangeLocalDatabaseConfig(
-  databaseHandle: RequestScopedPostgresDatabase,
-  key: string,
-  value: string,
-): Promise<string | null> {
+export async function exchangeLocalDatabaseConfig({
+  databaseHandle,
+  key,
+  value,
+}: {
+  databaseHandle: RequestScopedPostgresDatabase;
+  key: string;
+  value: string;
+}): Promise<string | null> {
   const result = await databaseHandle.execute<{ previous: string | null }>(
     drizzleSql`WITH previous AS MATERIALIZED (SELECT current_setting(${key}, true) AS value)
       SELECT previous.value AS previous, set_config(${key}, ${value}, true) FROM previous`,
@@ -466,10 +484,13 @@ export function resolveRepositoryDatabaseHandle(
  * Verifies the Postgres session GUC for the active worker context kind is set (non-empty).
  * Call from createWorker*Repository factories before tenant-scoped queries.
  */
-export async function assertWorkerRlsGucSet(
-  databaseHandle: RequestScopedPostgresDatabase,
-  expectedKind: Exclude<WorkerDatabaseContextKind, 'system_table'>,
-): Promise<void> {
+export async function assertWorkerRlsGucSet({
+  databaseHandle,
+  expectedKind,
+}: {
+  databaseHandle: RequestScopedPostgresDatabase;
+  expectedKind: Exclude<WorkerDatabaseContextKind, 'system_table'>;
+}): Promise<void> {
   if (!isWorkerRuntime()) {
     return;
   }

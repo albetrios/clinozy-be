@@ -6,7 +6,7 @@ import { WEBHOOK_EVENT_TYPES } from './webhook-event/webhook-event.constants.js'
 /** Zod schema for webhook `:webhook_id` path params (get/update/delete/delivery-attempts/test). */
 export const webhookIdParamsDto = z
   .object({
-    webhook_id: trimmedStringMinMax(1, 28),
+    webhook_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 

@@ -104,7 +104,7 @@ export function hashVerificationCode(options: {
 }
 
 /** Constant-time comparison of two hex digests of equal length (defence-in-depth for hash matching). */
-export function verificationHashesEqual(left: string, right: string): boolean {
+export function verificationHashesEqual({ left, right }: { left: string; right: string }): boolean {
   if (left.length !== right.length) return false;
   return timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
 }

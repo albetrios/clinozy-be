@@ -4,15 +4,22 @@ import { webhookSubscribesToEvent } from '@/domains/notify/sub-domains/webhook/w
 describe('webhookSubscribesToEvent', () => {
   it('returns true when event type is in the list', () => {
     expect(
-      webhookSubscribesToEvent(
-        ['billing.subscription.updated', 'user.created'],
-        'billing.subscription.updated',
-      ),
+      webhookSubscribesToEvent({
+        events: ['billing.subscription.updated', 'user.created'],
+        event_type: 'billing.subscription.updated',
+      }),
     ).toBe(true);
   });
 
   it('returns false when event type is missing or events is not an array', () => {
-    expect(webhookSubscribesToEvent(['user.created'], 'billing.subscription.updated')).toBe(false);
-    expect(webhookSubscribesToEvent(null, 'billing.subscription.updated')).toBe(false);
+    expect(
+      webhookSubscribesToEvent({
+        events: ['user.created'],
+        event_type: 'billing.subscription.updated',
+      }),
+    ).toBe(false);
+    expect(
+      webhookSubscribesToEvent({ events: null, event_type: 'billing.subscription.updated' }),
+    ).toBe(false);
   });
 });

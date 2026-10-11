@@ -32,11 +32,15 @@ export function captureTraceContextForPropagation(): TraceContextCarrier {
  * Runs work as a consumer span linked to a propagated parent (e.g. mail worker).
  * When `traceparent` is absent, runs the callback without creating a span.
  */
-export async function runWithPropagatedTraceContext<T>(
-  carrier: TraceContextCarrier,
-  spanName: string,
-  callback: () => T | Promise<T>,
-): Promise<T> {
+export async function runWithPropagatedTraceContext<T>({
+  carrier,
+  spanName,
+  callback,
+}: {
+  carrier: TraceContextCarrier;
+  spanName: string;
+  callback: () => T | Promise<T>;
+}): Promise<T> {
   if (!carrier.traceparent) {
     return callback();
   }

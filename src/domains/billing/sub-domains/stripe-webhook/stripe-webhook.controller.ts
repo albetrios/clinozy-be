@@ -36,10 +36,10 @@ export function createStripeWebhookController(stripeWebhookService: StripeWebhoo
       });
 
       reply.status(200);
-      return successResponse(
-        serializeStripeWebhookAcknowledgement(),
-        getRequestIdentifier(request),
-      );
+      return successResponse({
+        data: serializeStripeWebhookAcknowledgement(),
+        request_id: getRequestIdentifier(request),
+      });
     },
   };
 }

@@ -5,7 +5,7 @@ import { NOTIFICATION_CHANNELS, NOTIFICATION_TYPES } from '@/shared/constants/in
 /** Zod schema for the `:notification_policy_id` path param (get/update/delete policy). */
 export const notificationPolicyIdParamsDto = z
   .object({
-    notification_policy_id: trimmedStringMinMax(1, 28),
+    notification_policy_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 

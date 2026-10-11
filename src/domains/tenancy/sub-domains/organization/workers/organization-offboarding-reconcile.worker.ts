@@ -52,5 +52,5 @@ export function createOrganizationOffboardingReconcileWorker(
     );
   });
 
-  return buildWorkerHandle(worker, ORGANIZATION_OFFBOARDING_RECONCILE_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: ORGANIZATION_OFFBOARDING_RECONCILE_QUEUE_NAME });
 }

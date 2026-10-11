@@ -141,10 +141,10 @@ describe('notify audit trail — webhook changes reach the audit log', () => {
     const everyRow = JSON.stringify(await getOperatorDatabase().select().from(audit_outbox));
     expect(everyRow).not.toContain('do-not-log');
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
-      (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
-    );
+    const result = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+      callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+    });
     expect(result.transientFailed + result.permanentlyFailed).toBe(0);
   });
 });

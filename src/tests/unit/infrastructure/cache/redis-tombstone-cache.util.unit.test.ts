@@ -30,25 +30,25 @@ describe('redis-tombstone-cache — read', () => {
   it('returns the stored value on a hit', async () => {
     redisGet.mockResolvedValueOnce('41');
     const { readTombstonedCacheEntry } = await importUtil();
-    await expect(readTombstonedCacheEntry(KEY, METRIC)).resolves.toBe('41');
+    await expect(readTombstonedCacheEntry({ key: KEY, metricName: METRIC })).resolves.toBe('41');
   });
 
   it('reads an invalidation tombstone as a miss', async () => {
     redisGet.mockResolvedValueOnce('__invalidated__');
     const { readTombstonedCacheEntry } = await importUtil();
-    await expect(readTombstonedCacheEntry(KEY, METRIC)).resolves.toBeNull();
+    await expect(readTombstonedCacheEntry({ key: KEY, metricName: METRIC })).resolves.toBeNull();
   });
 
   it('reads an empty string as a miss rather than as a value', async () => {
     redisGet.mockResolvedValueOnce('');
     const { readTombstonedCacheEntry } = await importUtil();
-    await expect(readTombstonedCacheEntry(KEY, METRIC)).resolves.toBeNull();
+    await expect(readTombstonedCacheEntry({ key: KEY, metricName: METRIC })).resolves.toBeNull();
   });
 
   it('degrades to a miss when Redis is unreachable, and says so in the log', async () => {
     redisGet.mockRejectedValueOnce(new Error('ECONNREFUSED'));
     const { readTombstonedCacheEntry } = await importUtil();
-    await expect(readTombstonedCacheEntry(KEY, METRIC)).resolves.toBeNull();
+    await expect(readTombstonedCacheEntry({ key: KEY, metricName: METRIC })).resolves.toBeNull();
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({ key: KEY }),
       'thing_cache.cache.get.failed',
@@ -139,7 +139,7 @@ describe('redis-tombstone-cache — invalidate', () => {
     });
 
     expect(store.get(KEY)).toBe('__invalidated__');
-    await expect(readTombstonedCacheEntry(KEY, METRIC)).resolves.toBeNull();
+    await expect(readTombstonedCacheEntry({ key: KEY, metricName: METRIC })).resolves.toBeNull();
   });
 
   it('swallows a Redis failure — staleness stays bounded by the TTL', async () => {

@@ -16,12 +16,16 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: async (
-      _scope: unknown,
-      callback: (databaseHandle: unknown) => Promise<unknown>,
-    ) => callback(fakeDatabaseHandle),
+    withAppDatabaseContext: async ({
+      scope: _scope,
+      callback,
+    }: {
+      scope: unknown;
+      callback: (databaseHandle: unknown) => Promise<unknown>;
+    }) => callback(fakeDatabaseHandle),
   };
 });
 
@@ -65,7 +69,7 @@ describe('user-data-export.processor', () => {
     service.buildExportPayload.mockResolvedValue({ user: { id: jobData.userPublicId } });
     service.completeExportJob.mockResolvedValue(undefined);
 
-    await runUserDataExportJob(jobData, service as never);
+    await runUserDataExportJob({ jobData, userDataExportService: service as never });
 
     expect(service.resolveExportOwnerInternalId).toHaveBeenCalledWith(jobData.userPublicId);
     expect(service.isExportJobCancelled).toHaveBeenCalledTimes(2);
@@ -103,7 +107,9 @@ describe('user-data-export.processor', () => {
     const service = createServiceMock();
     service.resolveExportOwnerInternalId.mockResolvedValue(null);
 
-    await expect(runUserDataExportJob(jobData, service as never)).resolves.toBeUndefined();
+    await expect(
+      runUserDataExportJob({ jobData, userDataExportService: service as never }),
+    ).resolves.toBeUndefined();
 
     expect(service.isExportJobCancelled).not.toHaveBeenCalled();
     expect(service.markProcessing).not.toHaveBeenCalled();
@@ -114,7 +120,9 @@ describe('user-data-export.processor', () => {
     const service = createServiceMock();
     service.isExportJobCancelled.mockResolvedValueOnce(true);
 
-    await expect(runUserDataExportJob(jobData, service as never)).resolves.toBeUndefined();
+    await expect(
+      runUserDataExportJob({ jobData, userDataExportService: service as never }),
+    ).resolves.toBeUndefined();
 
     expect(service.markProcessing).not.toHaveBeenCalled();
     expect(service.buildExportPayload).not.toHaveBeenCalled();
@@ -127,7 +135,9 @@ describe('user-data-export.processor', () => {
     service.isExportJobCancelled.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     service.markProcessing.mockResolvedValue(undefined);
 
-    await expect(runUserDataExportJob(jobData, service as never)).resolves.toBeUndefined();
+    await expect(
+      runUserDataExportJob({ jobData, userDataExportService: service as never }),
+    ).resolves.toBeUndefined();
 
     expect(service.markProcessing).toHaveBeenCalledOnce();
     expect(service.buildExportPayload).not.toHaveBeenCalled();
@@ -140,7 +150,9 @@ describe('user-data-export.processor', () => {
     service.isExportJobCancelled.mockResolvedValue(false);
     service.markProcessing.mockRejectedValue(new UserDataExportCancelledError());
 
-    await expect(runUserDataExportJob(jobData, service as never)).resolves.toBeUndefined();
+    await expect(
+      runUserDataExportJob({ jobData, userDataExportService: service as never }),
+    ).resolves.toBeUndefined();
 
     expect(service.failExportJob).not.toHaveBeenCalled();
   });
@@ -153,7 +165,9 @@ describe('user-data-export.processor', () => {
     service.buildExportPayload.mockRejectedValue(failure);
     service.failExportJob.mockResolvedValue(undefined);
 
-    await expect(runUserDataExportJob(jobData, service as never)).rejects.toBe(failure);
+    await expect(
+      runUserDataExportJob({ jobData, userDataExportService: service as never }),
+    ).rejects.toBe(failure);
 
     expect(service.failExportJob).toHaveBeenCalledWith({
       exportPublicId: jobData.exportPublicId,
@@ -172,7 +186,11 @@ describe('user-data-export.processor', () => {
     service.buildExportPayload.mockRejectedValue(failure);
 
     await expect(
-      runUserDataExportJob(jobData, service as never, { isFinalAttempt: false }),
+      runUserDataExportJob({
+        jobData,
+        userDataExportService: service as never,
+        options: { isFinalAttempt: false },
+      }),
     ).rejects.toBe(failure);
 
     expect(service.failExportJob).not.toHaveBeenCalled();
@@ -189,7 +207,11 @@ describe('user-data-export.processor', () => {
     service.completeExportJob.mockRejectedValue(outage);
 
     await expect(
-      runUserDataExportJob(jobData, service as never, { isFinalAttempt: true }),
+      runUserDataExportJob({
+        jobData,
+        userDataExportService: service as never,
+        options: { isFinalAttempt: true },
+      }),
     ).rejects.toBe(outage);
 
     expect(service.failExportJob).not.toHaveBeenCalled();

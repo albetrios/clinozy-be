@@ -14,7 +14,8 @@ vi.mock('@/shared/utils/security/jwt.util.js', () => ({
 // Run the signup flow without a real database: invoke the transaction callback
 // directly and pass through the pinned-handle wrapper.
 vi.mock('@/infrastructure/database/transaction.js', () => ({
-  withTransaction: (callback: (transaction: unknown) => Promise<unknown>) => callback({}),
+  withTransaction: ({ callback }: { callback: (transaction: unknown) => Promise<unknown> }) =>
+    callback({}),
 }));
 
 vi.mock(
@@ -23,8 +24,13 @@ vi.mock(
     const actual = await importOriginal<Record<string, unknown>>();
     return {
       ...actual,
-      runWithPinnedDatabaseHandle: (_handle: unknown, callback: () => Promise<unknown>) =>
-        callback(),
+      runWithPinnedDatabaseHandle: ({
+        databaseHandle: _handle,
+        callback,
+      }: {
+        databaseHandle: unknown;
+        callback: () => Promise<unknown>;
+      }) => callback(),
     };
   },
 );

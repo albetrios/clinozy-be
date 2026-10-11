@@ -65,7 +65,13 @@ export interface ResolvedConfig {
   counts: ResolvedCounts;
 }
 
-function positiveIntegerFromEnvironment(value: string | undefined, fallback: number): number {
+function positiveIntegerFromEnvironment({
+  value,
+  fallback,
+}: {
+  value: string | undefined;
+  fallback: number;
+}): number {
   if (value === undefined) return fallback;
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed < 0) {
@@ -92,26 +98,29 @@ export function resolveCounts(environment: NodeJS.ProcessEnv): ResolvedConfig {
     );
   }
 
-  const scale = positiveIntegerFromEnvironment(environment.SCALE, 1) || 1;
+  const scale = positiveIntegerFromEnvironment({ value: environment.SCALE, fallback: 1 }) || 1;
 
   const counts: ResolvedCounts = {
     ...base,
-    organizations: positiveIntegerFromEnvironment(
-      environment.BULK_ORGS,
-      base.organizations * scale,
-    ),
-    auditMonths: positiveIntegerFromEnvironment(environment.BULK_AUDIT_MONTHS, base.auditMonths),
-    auditPerOrgPerMonth: positiveIntegerFromEnvironment(
-      environment.BULK_AUDIT_PER_ORG_PER_MONTH,
-      base.auditPerOrgPerMonth * scale,
-    ),
+    organizations: positiveIntegerFromEnvironment({
+      value: environment.BULK_ORGS,
+      fallback: base.organizations * scale,
+    }),
+    auditMonths: positiveIntegerFromEnvironment({
+      value: environment.BULK_AUDIT_MONTHS,
+      fallback: base.auditMonths,
+    }),
+    auditPerOrgPerMonth: positiveIntegerFromEnvironment({
+      value: environment.BULK_AUDIT_PER_ORG_PER_MONTH,
+      fallback: base.auditPerOrgPerMonth * scale,
+    }),
   };
 
   if (environment.BULK_USERS_PER_ORG !== undefined) {
-    const usersPerOrg = positiveIntegerFromEnvironment(
-      environment.BULK_USERS_PER_ORG,
-      base.usersPerOrg.max,
-    );
+    const usersPerOrg = positiveIntegerFromEnvironment({
+      value: environment.BULK_USERS_PER_ORG,
+      fallback: base.usersPerOrg.max,
+    });
     counts.usersPerOrg = { min: usersPerOrg, max: usersPerOrg };
   }
 

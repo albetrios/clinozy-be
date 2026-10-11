@@ -67,10 +67,13 @@ export function buildContainsLikePattern(term: string): string {
  * Case-insensitive `ILIKE '%term%'` across `columns` (OR-combined). Returns `undefined` when `q` is
  * empty so callers can spread it into `and(...)` unconditionally.
  */
-export function buildSearchCondition(
-  columns: readonly AnyColumn[],
-  q: string | undefined,
-): SQL | undefined {
+export function buildSearchCondition({
+  columns,
+  q,
+}: {
+  columns: readonly AnyColumn[];
+  q: string | undefined;
+}): SQL | undefined {
   if (!q || columns.length === 0) {
     return undefined;
   }
@@ -149,14 +152,22 @@ export function resolveKeysetSort<Row>(args: {
       ? {
           sortField,
           orderBy: [desc(column), desc(args.idColumn)],
-          cursorCondition: buildDescendingCreatedAtIdCursorCondition(column, args.idColumn, cursor),
+          cursorCondition: buildDescendingCreatedAtIdCursorCondition({
+            createdAtColumn: column,
+            idColumn: args.idColumn,
+            cursor,
+          }),
           sortValueFor,
           filterFingerprint,
         }
       : {
           sortField,
           orderBy: [asc(column), idAsc],
-          cursorCondition: buildAscendingCreatedAtIdCursorCondition(column, args.idColumn, cursor),
+          cursorCondition: buildAscendingCreatedAtIdCursorCondition({
+            createdAtColumn: column,
+            idColumn: args.idColumn,
+            cursor,
+          }),
           sortValueFor,
           filterFingerprint,
         };
@@ -167,14 +178,22 @@ export function resolveKeysetSort<Row>(args: {
     ? {
         sortField,
         orderBy: [desc(column), idAsc],
-        cursorCondition: buildDescendingTextIdCursorCondition(column, args.idColumn, cursor),
+        cursorCondition: buildDescendingTextIdCursorCondition({
+          textColumn: column,
+          idColumn: args.idColumn,
+          cursor,
+        }),
         sortValueFor,
         filterFingerprint,
       }
     : {
         sortField,
         orderBy: [asc(column), idAsc],
-        cursorCondition: buildAscendingTextIdCursorCondition(column, args.idColumn, cursor),
+        cursorCondition: buildAscendingTextIdCursorCondition({
+          textColumn: column,
+          idColumn: args.idColumn,
+          cursor,
+        }),
         sortValueFor,
         filterFingerprint,
       };
@@ -189,15 +208,18 @@ export function resolveKeysetSort<Row>(args: {
  */
 export function finishKeysetPage<
   Row extends CursorTimestampRow & { id: number; public_id?: string },
->(
-  rows: Row[],
+>({
+  rows,
+  args,
+}: {
+  rows: Row[];
   args: {
     limit: number;
     total?: number | null;
     sortValueFor?: (row: Row) => string | undefined;
     filterFingerprint?: string;
-  },
-): {
+  };
+}): {
   items: Row[];
   total: number | null;
   limit: number;

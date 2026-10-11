@@ -167,10 +167,10 @@ describe('error-handler.middleware status + body mapping', () => {
       expect(response.statusCode).toBe(500);
       expect(mockedCaptureException).toHaveBeenCalledTimes(1);
       // The capture context object carries the request id (not an empty object).
-      expect(mockedCaptureException).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ requestId: expect.any(String) }),
-      );
+      expect(mockedCaptureException).toHaveBeenCalledWith({
+        error: expect.anything(),
+        context: expect.objectContaining({ requestId: expect.any(String) }),
+      });
       // 5xx detail is masked to the generic internal message, never the raw thrown text.
       expect(body.error.detail).toBe('translated:errors:internal');
       expect(body.error.detail).not.toContain('boom');

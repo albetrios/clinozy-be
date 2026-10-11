@@ -129,11 +129,11 @@ export class NotificationRepository {
     const includeTotal = pagination.include_total === true;
     const filterConditions: SQL[] = [eq(notifications.user_id, user_id)];
     const countWhere = and(...filterConditions);
-    const cursorCondition = buildDescendingCreatedAtIdCursorCondition(
-      notifications.created_at,
-      notifications.id,
-      parseListCursor(after),
-    );
+    const cursorCondition = buildDescendingCreatedAtIdCursorCondition({
+      createdAtColumn: notifications.created_at,
+      idColumn: notifications.id,
+      cursor: parseListCursor(after),
+    });
     const where =
       cursorCondition !== undefined ? and(...filterConditions, cursorCondition) : countWhere;
 
@@ -153,7 +153,7 @@ export class NotificationRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    return finishKeysetPage(fetchedRows, { limit, total });
+    return finishKeysetPage({ rows: fetchedRows, args: { limit, total } });
   }
 
   async listForUserDataExport(

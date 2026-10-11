@@ -73,15 +73,15 @@ export function createNotificationDispatch(
         throw new NotFoundError('User');
       }
       const notification = await notificationRepository.create(input);
-      await scheduleCommitDispatch(
-        {
+      await scheduleCommitDispatch({
+        task: {
           type: 'notification',
           notificationPublicId: notification.publicId,
           organizationPublicId: organization_public_id,
           userPublicId: user_public_id,
         },
-        options?.requestId !== undefined ? { requestId: options.requestId } : undefined,
-      );
+        options: options?.requestId !== undefined ? { requestId: options.requestId } : undefined,
+      });
     },
 
     async resolveRecipientPublicIds(userInternalIds: readonly number[]): Promise<string[]> {

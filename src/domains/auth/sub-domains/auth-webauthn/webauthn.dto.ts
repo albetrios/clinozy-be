@@ -11,7 +11,7 @@ import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.j
  */
 export const webauthnAuthenticateOptionsDto = z
   .object({
-    email: trimmedStringMinMax(3, 320).pipe(z.email()),
+    email: trimmedStringMinMax({ min: 3, max: 320 }).pipe(z.email()),
   })
   .strict();
 
@@ -78,7 +78,7 @@ const assertionResponseSchema = z.object({
  */
 export const webauthnRegisterVerifyDto = z
   .object({
-    challenge_token: trimmedStringMinMax(64, 128),
+    challenge_token: trimmedStringMinMax({ min: 64, max: 128 }),
     response: z.object({
       id: base64URLString,
       rawId: base64URLString,
@@ -98,7 +98,7 @@ export const webauthnRegisterVerifyDto = z
  */
 export const webauthnAuthenticateVerifyDto = z
   .object({
-    challenge_token: trimmedStringMinMax(64, 128),
+    challenge_token: trimmedStringMinMax({ min: 64, max: 128 }),
     response: z.object({
       id: base64URLString,
       rawId: base64URLString,

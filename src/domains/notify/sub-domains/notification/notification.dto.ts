@@ -5,14 +5,14 @@ import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.j
 /** Zod schema for `GET /notifications/:notification_id` and `PATCH /notifications/:notification_id/read` path params. */
 export const getNotificationParamsDto = z
   .object({
-    notification_id: trimmedStringMinMax(1, 28),
+    notification_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
 /** Zod schema for `DELETE /notifications/:notification_id` path params. */
 export const deleteNotificationParamsDto = z
   .object({
-    notification_id: trimmedStringMinMax(1, 28),
+    notification_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 

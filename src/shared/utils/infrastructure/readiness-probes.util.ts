@@ -40,13 +40,20 @@ function isSuccessfulProbeOutcome(
   return 'latencyMilliseconds' in outcome;
 }
 
-async function runReadinessProbe(
-  readinessComponentName: ReadinessComponentName,
-  probe: () => Promise<void>,
-): Promise<SuccessfulProbeOutcome | FailedProbeOutcome> {
+async function runReadinessProbe({
+  readinessComponentName,
+  probe,
+}: {
+  readinessComponentName: ReadinessComponentName;
+  probe: () => Promise<void>;
+}): Promise<SuccessfulProbeOutcome | FailedProbeOutcome> {
   const startedAtMilliseconds = performance.now();
   try {
-    await readinessProbeTimeout(probe(), HEALTH_READINESS_PROBE_TIMEOUT_MS, readinessComponentName);
+    await readinessProbeTimeout({
+      incomingPromise: probe(),
+      timeoutMilliseconds: HEALTH_READINESS_PROBE_TIMEOUT_MS,
+      probeLabelForErrors: readinessComponentName,
+    });
     return {
       readinessComponentName,
       latencyMilliseconds: Math.round(performance.now() - startedAtMilliseconds),
@@ -99,22 +106,33 @@ let inFlightReadinessProbe: Promise<ReadinessProbeSummary> | null = null;
  */
 export async function runDependencyReadinessProbes(): Promise<ReadinessProbeSummary> {
   const [databaseOutcome, redisOutcome, bullMqOutcome] = await Promise.all([
-    runReadinessProbe('database', async () => {
-      await sql`select 1`;
+    runReadinessProbe({
+      readinessComponentName: 'database',
+      probe: async () => {
+        await sql`select 1`;
+      },
     }),
-    runReadinessProbe('redis', async () => {
-      const pongMessage = await redisConnection.ping();
-      if (pongMessage !== 'PONG') {
-        throw new Error('redis_ping_unexpected_response');
-      }
-      if (usesSeparateBullMqRedisEndpoint(env.REDIS_URL, resolveBullMqRedisUrl())) {
-        const bullMqPongMessage = await bullmqRedisConnection.ping();
-        if (bullMqPongMessage !== 'PONG') {
-          throw new Error('redis_bullmq_ping_unexpected_response');
+    runReadinessProbe({
+      readinessComponentName: 'redis',
+      probe: async () => {
+        const pongMessage = await redisConnection.ping();
+        if (pongMessage !== 'PONG') {
+          throw new Error('redis_ping_unexpected_response');
         }
-      }
+        if (
+          usesSeparateBullMqRedisEndpoint({
+            cacheRedisUrl: env.REDIS_URL,
+            bullMqRedisUrl: resolveBullMqRedisUrl(),
+          })
+        ) {
+          const bullMqPongMessage = await bullmqRedisConnection.ping();
+          if (bullMqPongMessage !== 'PONG') {
+            throw new Error('redis_bullmq_ping_unexpected_response');
+          }
+        }
+      },
     }),
-    runReadinessProbe('bullmq', pingBullMQ),
+    runReadinessProbe({ readinessComponentName: 'bullmq', probe: pingBullMQ }),
   ]);
 
   const databaseProbeSummary = summarizeReadinessProbeOutcome(databaseOutcome);

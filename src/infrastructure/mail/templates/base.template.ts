@@ -10,11 +10,15 @@ import { escapeHtml } from './escape-html.util.js';
  * {@link escapeHtml} first when the line lands in HTML. Plain-text lines (a subject, the title and
  * preheader the base template escapes itself) take raw values.
  */
-export function translateMailText(
-  key: string,
-  locale: SupportedLanguage,
-  values: Record<string, string | number> = {},
-): string {
+export function translateMailText({
+  key,
+  locale,
+  values = {},
+}: {
+  key: string;
+  locale: SupportedLanguage;
+  values?: Record<string, string | number> | undefined;
+}): string {
   return i18next.t(`mail:${key}`, {
     lng: locale,
     ...values,
@@ -48,7 +52,9 @@ export function baseTemplate(options: {
 
   const safeTitle = escapeHtml(title);
   const safePreheader = preheader !== undefined ? escapeHtml(preheader) : undefined;
-  const safeFooterText = escapeHtml(footerText ?? translateMailText('automatedFooter', locale));
+  const safeFooterText = escapeHtml(
+    footerText ?? translateMailText({ key: 'automatedFooter', locale }),
+  );
 
   return `<!DOCTYPE html>
 <html lang="${locale}">

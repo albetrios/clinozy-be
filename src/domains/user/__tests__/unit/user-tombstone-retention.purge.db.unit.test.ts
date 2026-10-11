@@ -85,10 +85,10 @@ describe('user tombstone retention purges a deleted account other rows still ref
       })
       .where(eq(users.id, departed.id));
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      (databaseHandle) => runUserTombstoneRetentionJob(databaseHandle),
-    );
+    const result = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: (databaseHandle) => runUserTombstoneRetentionJob(databaseHandle),
+    });
 
     expect(result.blockedCount).toBe(0);
     expect(await operator.select().from(users).where(eq(users.id, departed.id))).toEqual([]);

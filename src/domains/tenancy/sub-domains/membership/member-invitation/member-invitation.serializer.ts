@@ -5,7 +5,10 @@ import type { MemberInvitationOutput } from './member-invitation.types.js';
  * the external membership public id for the internal numeric `membership_id`
  * and converts timestamps to ISO-8601; the raw `token_hash` is never exposed.
  */
-export function serializeMemberInvitation(
+export function serializeMemberInvitation({
+  row,
+  membership_public_id,
+}: {
   row: {
     public_id: string;
     membership_id: number;
@@ -14,9 +17,9 @@ export function serializeMemberInvitation(
     accepted_at: Date | null;
     revoked_at: Date | null;
     created_at: Date;
-  },
-  membership_public_id: string,
-): MemberInvitationOutput {
+  };
+  membership_public_id: string;
+}): MemberInvitationOutput {
   return {
     id: row.public_id,
     membership_id: membership_public_id,

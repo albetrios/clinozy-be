@@ -73,24 +73,24 @@ export type RlsUserFixture = {
 
 /** Tables excluded from generic UPDATE/DELETE matrix (policy shape or parent FK setup). */
 export const RLS_MATRIX_SKIP_CRUD_TABLES = new Set([
-  tableKey('tenancy', 'organizations'),
-  tableKey('tenancy', 'member_invitations'),
-  tableKey('tenancy', 'role_permissions'),
-  tableKey('tenancy', 'organization_settings'),
-  tableKey('notify', 'webhook_delivery_attempts'),
-  tableKey('auth', 'verification_tokens'),
+  tableKey({ schemaName: 'tenancy', tableName: 'organizations' }),
+  tableKey({ schemaName: 'tenancy', tableName: 'member_invitations' }),
+  tableKey({ schemaName: 'tenancy', tableName: 'role_permissions' }),
+  tableKey({ schemaName: 'tenancy', tableName: 'organization_settings' }),
+  tableKey({ schemaName: 'notify', tableName: 'webhook_delivery_attempts' }),
+  tableKey({ schemaName: 'auth', tableName: 'verification_tokens' }),
   // sec-U3: audit.logs is append-only — REVOKE UPDATE causes UPDATE to throw
   // `permission denied` (instead of silently affecting 0 rows), and DELETE
   // outside the retention context silently affects 0 rows but the matrix's
   // SELECT-then-UPDATE-then-DELETE shape doesn't fit. The audit-append-only
   // dedicated test file (audit-append-only.security.test.ts) covers both
   // semantics precisely.
-  tableKey('audit', 'logs'),
+  tableKey({ schemaName: 'audit', tableName: 'logs' }),
   // audit.outbox has no generic tenant SELECT policy — reads require the `app.audit_outbox_drain`
   // GUC (drain worker) and writes are organization-scoped INSERT-only / drain-gated, so the generic organization CRUD
   // matrix does not fit. Its dedicated test (audit-outbox-insert-rls.security.test.ts) covers the
   // INSERT isolation precisely; FORCE/drift coverage comes from EXPECTED_FORCE_RLS_TABLES.
-  tableKey('audit', 'outbox'),
+  tableKey({ schemaName: 'audit', tableName: 'outbox' }),
 ]);
 
 export async function grantClinozyBeAppRoleForTests(): Promise<void> {
@@ -306,15 +306,15 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
 
   const rowIdsByTable = new Map<string, { organizationA: number; organizationB: number }>();
 
-  rowIdsByTable.set(tableKey('tenancy', 'organizations'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'tenancy', tableName: 'organizations' }), {
     organizationA: organizationA.id,
     organizationB: organizationB.id,
   });
-  rowIdsByTable.set(tableKey('tenancy', 'memberships'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'tenancy', tableName: 'memberships' }), {
     organizationA: membershipA.id,
     organizationB: membershipB.id,
   });
-  rowIdsByTable.set(tableKey('tenancy', 'roles'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'tenancy', tableName: 'roles' }), {
     organizationA: roleA.id,
     organizationB: roleB.id,
   });
@@ -340,10 +340,13 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
       channel: 'EMAIL',
     })
     .returning();
-  rowIdsByTable.set(tableKey('tenancy', 'organization_notification_policies'), {
-    organizationA: policyA!.id,
-    organizationB: policyB!.id,
-  });
+  rowIdsByTable.set(
+    tableKey({ schemaName: 'tenancy', tableName: 'organization_notification_policies' }),
+    {
+      organizationA: policyA!.id,
+      organizationB: policyB!.id,
+    },
+  );
 
   const [apiKeyA] = await database
     .insert(api_keys)
@@ -367,14 +370,14 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
       created_by_user_id: ownerB.id,
     })
     .returning();
-  rowIdsByTable.set(tableKey('tenancy', 'api_keys'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'tenancy', tableName: 'api_keys' }), {
     organizationA: apiKeyA!.id,
     organizationB: apiKeyB!.id,
   });
 
   const webhookA = await createTestWebhook({ organizationId: organizationA.id });
   const webhookB = await createTestWebhook({ organizationId: organizationB.id });
-  rowIdsByTable.set(tableKey('notify', 'webhooks'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'notify', tableName: 'webhooks' }), {
     organizationA: webhookA.id,
     organizationB: webhookB.id,
   });
@@ -401,7 +404,7 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
       message: 'body',
     })
     .returning();
-  rowIdsByTable.set(tableKey('notify', 'notifications'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'notify', tableName: 'notifications' }), {
     organizationA: notificationA!.id,
     organizationB: notificationB!.id,
   });
@@ -430,7 +433,7 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
       current_period_end: periodEnd,
     })
     .returning();
-  rowIdsByTable.set(tableKey('billing', 'subscriptions'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'billing', tableName: 'subscriptions' }), {
     organizationA: subscriptionA!.id,
     organizationB: subscriptionB!.id,
   });
@@ -455,7 +458,7 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
       resource_type: 'organization',
     })
     .returning();
-  rowIdsByTable.set(tableKey('audit', 'logs'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'audit', tableName: 'logs' }), {
     organizationA: auditA!.id,
     organizationB: auditB!.id,
   });
@@ -490,7 +493,7 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
       status: 'PENDING',
     })
     .returning();
-  rowIdsByTable.set(tableKey('upload', 'uploads'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'upload', tableName: 'uploads' }), {
     organizationA: uploadA!.id,
     organizationB: uploadB!.id,
   });
@@ -519,7 +522,10 @@ export async function seedUserScopedRlsFixtures(): Promise<RlsUserFixture> {
 
   // auth.users: the two seeded user rows are themselves the isolation subjects (audit #7). Keyed by
   // public_id in the owner policy, but recorded by internal id so the generic matrix can probe by id.
-  rowIdsByTable.set(tableKey('auth', 'users'), { userA: userA.id, userB: userB.id });
+  rowIdsByTable.set(tableKey({ schemaName: 'auth', tableName: 'users' }), {
+    userA: userA.id,
+    userB: userB.id,
+  });
 
   const oauthProvider = 'google';
   const oauthProviderUserId = `rls-google-${userA.id}`;
@@ -543,7 +549,7 @@ export async function seedUserScopedRlsFixtures(): Promise<RlsUserFixture> {
       is_primary: true,
     })
     .returning();
-  rowIdsByTable.set(tableKey('auth', 'auth_methods'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'auth', tableName: 'auth_methods' }), {
     userA: authMethodA!.id,
     userB: authMethodB!.id,
   });
@@ -551,7 +557,10 @@ export async function seedUserScopedRlsFixtures(): Promise<RlsUserFixture> {
   await database.insert(user_settings).values({ user_id: userA.id });
   await database.insert(user_settings).values({ user_id: userB.id });
   // user_settings PK is user_id, so isolation is keyed by the user row id itself.
-  rowIdsByTable.set(tableKey('auth', 'user_settings'), { userA: userA.id, userB: userB.id });
+  rowIdsByTable.set(tableKey({ schemaName: 'auth', tableName: 'user_settings' }), {
+    userA: userA.id,
+    userB: userB.id,
+  });
 
   const [exportA] = await database
     .insert(user_data_exports)
@@ -561,7 +570,7 @@ export async function seedUserScopedRlsFixtures(): Promise<RlsUserFixture> {
     .insert(user_data_exports)
     .values({ public_id: generatePublicId('organization'), user_id: userB.id, status: 'pending' })
     .returning();
-  rowIdsByTable.set(tableKey('auth', 'user_data_exports'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'auth', tableName: 'user_data_exports' }), {
     userA: exportA!.id,
     userB: exportB!.id,
   });
@@ -584,7 +593,7 @@ export async function seedUserScopedRlsFixtures(): Promise<RlsUserFixture> {
       public_key: 'key-b',
     })
     .returning();
-  rowIdsByTable.set(tableKey('auth', 'webauthn_credentials'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'auth', tableName: 'webauthn_credentials' }), {
     userA: credentialA!.id,
     userB: credentialB!.id,
   });
@@ -597,7 +606,7 @@ export async function seedUserScopedRlsFixtures(): Promise<RlsUserFixture> {
     .insert(mfa_recovery_codes)
     .values({ user_id: userB.id, code_hash: 'hash-b' })
     .returning();
-  rowIdsByTable.set(tableKey('auth', 'mfa_recovery_codes'), {
+  rowIdsByTable.set(tableKey({ schemaName: 'auth', tableName: 'mfa_recovery_codes' }), {
     userA: recoveryA!.id,
     userB: recoveryB!.id,
   });
@@ -610,7 +619,10 @@ export async function seedUserScopedRlsFixtures(): Promise<RlsUserFixture> {
     .insert(mfa_methods)
     .values({ public_id: generatePublicId('organization'), user_id: userB.id, method_type: 'TOTP' })
     .returning();
-  rowIdsByTable.set(tableKey('auth', 'mfa_methods'), { userA: methodA!.id, userB: methodB!.id });
+  rowIdsByTable.set(tableKey({ schemaName: 'auth', tableName: 'mfa_methods' }), {
+    userA: methodA!.id,
+    userB: methodB!.id,
+  });
 
   return {
     userAPublicId: userA.public_id,

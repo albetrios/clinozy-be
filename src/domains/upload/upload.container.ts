@@ -16,11 +16,15 @@ export type UploadContainer = {
  * organization services) and a pluggable {@link ObjectStoragePort} so tests
  * can substitute an in-memory storage adapter for the real S3 client.
  */
-export function createUploadContainer(
-  userService: UserService,
-  organizationService: OrganizationService,
-  objectStorage: ObjectStoragePort,
-): UploadContainer {
+export function createUploadContainer({
+  userService,
+  organizationService,
+  objectStorage,
+}: {
+  userService: UserService;
+  organizationService: OrganizationService;
+  objectStorage: ObjectStoragePort;
+}): UploadContainer {
   const uploadRepository = new UploadRepository();
   const uploadService = new UploadService(
     uploadRepository,
@@ -41,6 +45,10 @@ export function registerUploadContainer(application: FastifyInstance): void {
   const { organizationService } = application.tenancyDomain;
   application.decorate(
     'uploadDomain',
-    createUploadContainer(userService, organizationService, getDefaultS3ObjectStorageAdapter()),
+    createUploadContainer({
+      userService,
+      organizationService,
+      objectStorage: getDefaultS3ObjectStorageAdapter(),
+    }),
   );
 }

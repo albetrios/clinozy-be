@@ -56,5 +56,5 @@ export function createIdempotencyCardinalityWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, IDEMPOTENCY_CARDINALITY_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: IDEMPOTENCY_CARDINALITY_QUEUE_NAME });
 }

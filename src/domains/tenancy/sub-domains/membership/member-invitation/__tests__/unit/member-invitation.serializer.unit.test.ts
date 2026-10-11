@@ -7,8 +7,8 @@ describe('member-invitation serializer', () => {
   it('serializeMemberInvitation maps invitation row', () => {
     const expiresAt = new Date('2026-02-01T00:00:00.000Z');
     expect(
-      serializeMemberInvitation(
-        {
+      serializeMemberInvitation({
+        row: {
           public_id: 'inv-public',
           membership_id: 5,
           email: 'invite@example.com',
@@ -17,8 +17,8 @@ describe('member-invitation serializer', () => {
           revoked_at: null,
           created_at: createdAt,
         },
-        'mem-public',
-      ),
+        membership_public_id: 'mem-public',
+      }),
     ).toEqual({
       id: 'inv-public',
       membership_id: 'mem-public',

@@ -39,7 +39,10 @@ function buildKey(organizationPublicId: string): string {
 export async function getCachedOrganizationDefaultLocale(
   organizationPublicId: string,
 ): Promise<string | null> {
-  return readTombstonedCacheEntry(buildKey(organizationPublicId), I18N_LOCALE_METRIC);
+  return readTombstonedCacheEntry({
+    key: buildKey(organizationPublicId),
+    metricName: I18N_LOCALE_METRIC,
+  });
 }
 
 /**
@@ -48,10 +51,13 @@ export async function getCachedOrganizationDefaultLocale(
  * committed cannot reinstall it. Best-effort: a Redis outage logs at `warn` and does NOT propagate,
  * so the resolution path returns the freshly-computed value regardless.
  */
-export async function setCachedOrganizationDefaultLocale(
-  organizationPublicId: string,
-  locale: string,
-): Promise<void> {
+export async function setCachedOrganizationDefaultLocale({
+  organizationPublicId,
+  locale,
+}: {
+  organizationPublicId: string;
+  locale: string;
+}): Promise<void> {
   await populateTombstonedCacheEntry({
     key: buildKey(organizationPublicId),
     value: locale,

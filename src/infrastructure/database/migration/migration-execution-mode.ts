@@ -58,7 +58,10 @@ export function parseMigrationExecutionMode(fileContent: string): MigrationExecu
   let reason: string | null = null;
 
   for (let lineIndex = 0; lineIndex < headerLineCount; lineIndex += 1) {
-    const result = parseMigrationHeaderLine((lines[lineIndex] ?? '').trim(), lineIndex + 1);
+    const result = parseMigrationHeaderLine({
+      trimmed: (lines[lineIndex] ?? '').trim(),
+      lineNumber: lineIndex + 1,
+    });
     if (result.kind === 'error') {
       headerErrors.push(result.error);
     } else if (result.kind === 'directive') {
@@ -76,7 +79,13 @@ type MigrationHeaderLineResult =
   | { kind: 'directive'; reason: string };
 
 /** Classifies one trimmed migration header line as skip / error / a valid `none` directive. */
-function parseMigrationHeaderLine(trimmed: string, lineNumber: number): MigrationHeaderLineResult {
+function parseMigrationHeaderLine({
+  trimmed,
+  lineNumber,
+}: {
+  trimmed: string;
+  lineNumber: number;
+}): MigrationHeaderLineResult {
   if (!trimmed.startsWith('--')) return { kind: 'skip' };
   if (!trimmed.toLowerCase().includes('migration-transaction:')) return { kind: 'skip' };
 

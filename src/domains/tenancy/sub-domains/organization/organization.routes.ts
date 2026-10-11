@@ -59,10 +59,10 @@ export interface OrganizationRoutesDeps {
  * schemas (which the OpenAPI generator consumes for tags and summaries).
  */
 export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginAsync {
-  const organizationController = createOrganizationController(
-    deps.organizationService,
-    deps.auditService,
-  );
+  const organizationController = createOrganizationController({
+    service: deps.organizationService,
+    auditService: deps.auditService,
+  });
   const settingsController = createOrganizationSettingsController(deps.organizationSettingsService);
   const notificationPolicyController = createOrganizationNotificationPolicyController(
     deps.organizationNotificationPolicyService,

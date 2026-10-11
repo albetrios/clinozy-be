@@ -35,11 +35,15 @@ export type WorkerQueueHeartbeat = {
  * True when every recorded throughput heartbeat is older than `stallTimeoutMs`.
  * Returns false when no jobs have completed yet (cold start / idle before first job).
  */
-export function isWorkerThroughputStalled(
-  heartbeats: readonly WorkerQueueHeartbeat[],
-  stallTimeoutMs: number,
-  nowMilliseconds: number = Date.now(),
-): boolean {
+export function isWorkerThroughputStalled({
+  heartbeats,
+  stallTimeoutMs,
+  nowMilliseconds = Date.now(),
+}: {
+  heartbeats: readonly WorkerQueueHeartbeat[];
+  stallTimeoutMs: number;
+  nowMilliseconds?: number | undefined;
+}): boolean {
   const recorded = heartbeats.filter((heartbeat) => heartbeat.last_job_at !== null);
   if (recorded.length === 0) {
     return false;
@@ -105,11 +109,15 @@ export const WORKER_QUEUE_HEARTBEAT_MIN_INTERVAL_MS = 5_000;
  * {@link WORKER_QUEUE_HEARTBEAT_MIN_INTERVAL_MS}. Heartbeat write failures are
  * intentionally swallowed so a transient Redis blip cannot poison job completion.
  */
-export function attachWorkerQueueHeartbeat(
-  worker: { on(event: 'completed', listener: () => void): void },
-  queueName: string,
-  nowMilliseconds: () => number = Date.now,
-): void {
+export function attachWorkerQueueHeartbeat({
+  worker,
+  queueName,
+  nowMilliseconds = Date.now,
+}: {
+  worker: { on(event: 'completed', listener: () => void): void };
+  queueName: string;
+  nowMilliseconds?: (() => number) | undefined;
+}): void {
   let lastWrittenAt = Number.NEGATIVE_INFINITY;
   worker.on('completed', () => {
     const now = nowMilliseconds();

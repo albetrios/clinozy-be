@@ -7,10 +7,18 @@ import { UnprocessableEntityError } from '@/shared/errors/index.js';
 
 describe('assertTeamOrganization', () => {
   it('is a no-op for a TEAM organization across every capability', () => {
-    expect(() => assertTeamOrganization({ type: 'TEAM' }, 'MEMBERS')).not.toThrow();
-    expect(() => assertTeamOrganization({ type: 'TEAM' }, 'ROLES')).not.toThrow();
-    expect(() => assertTeamOrganization({ type: 'TEAM' }, 'MUTATION')).not.toThrow();
-    expect(() => assertTeamOrganization({ type: 'TEAM' }, 'BILLING')).not.toThrow();
+    expect(() =>
+      assertTeamOrganization({ organization: { type: 'TEAM' }, capability: 'MEMBERS' }),
+    ).not.toThrow();
+    expect(() =>
+      assertTeamOrganization({ organization: { type: 'TEAM' }, capability: 'ROLES' }),
+    ).not.toThrow();
+    expect(() =>
+      assertTeamOrganization({ organization: { type: 'TEAM' }, capability: 'MUTATION' }),
+    ).not.toThrow();
+    expect(() =>
+      assertTeamOrganization({ organization: { type: 'TEAM' }, capability: 'BILLING' }),
+    ).not.toThrow();
   });
 
   it.each<[OrganizationCapability, string]>([
@@ -21,7 +29,7 @@ describe('assertTeamOrganization', () => {
   ])('rejects %s on a PERSONAL organization with 422 and key %s', (capability, messageKey) => {
     let caught: unknown;
     try {
-      assertTeamOrganization({ type: 'PERSONAL' }, capability);
+      assertTeamOrganization({ organization: { type: 'PERSONAL' }, capability });
     } catch (error) {
       caught = error;
     }

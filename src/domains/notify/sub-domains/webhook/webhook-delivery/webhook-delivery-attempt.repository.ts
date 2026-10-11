@@ -70,11 +70,11 @@ export class WebhookDeliveryAttemptRepository {
     const includeTotal = pagination.include_total === true;
     const filterConditions: SQL[] = [eq(webhook_delivery_attempts.webhook_id, webhook_id)];
     const countWhere = and(...filterConditions);
-    const cursorCondition = buildDescendingCreatedAtIdCursorCondition(
-      webhook_delivery_attempts.created_at,
-      webhook_delivery_attempts.id,
-      parseListCursor(after),
-    );
+    const cursorCondition = buildDescendingCreatedAtIdCursorCondition({
+      createdAtColumn: webhook_delivery_attempts.created_at,
+      idColumn: webhook_delivery_attempts.id,
+      cursor: parseListCursor(after),
+    });
     const where =
       cursorCondition !== undefined ? and(...filterConditions, cursorCondition) : countWhere;
 
@@ -112,7 +112,7 @@ export class WebhookDeliveryAttemptRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    return finishKeysetPage(fetchedRows, { limit, total });
+    return finishKeysetPage({ rows: fetchedRows, args: { limit, total } });
   }
 
   /** Resolve webhook public_id + organization_id to internal webhook_id for auth */

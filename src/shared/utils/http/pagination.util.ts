@@ -199,10 +199,13 @@ export function resolveAscendingIdAfter(cursor: ParsedListCursor | null): number
 }
 
 /** Builds a Drizzle `WHERE` clause for ascending-by-id pagination; returns `undefined` for the first page. */
-export function buildAscendingIdCursorCondition(
-  idColumn: AnyColumn,
-  cursor: ParsedListCursor | null,
-): SQL | undefined {
+export function buildAscendingIdCursorCondition({
+  idColumn,
+  cursor,
+}: {
+  idColumn: AnyColumn;
+  cursor: ParsedListCursor | null;
+}): SQL | undefined {
   const afterId = resolveAscendingIdAfter(cursor);
   if (afterId === undefined) {
     return undefined;
@@ -215,11 +218,15 @@ export function buildAscendingIdCursorCondition(
  * `(created_at, id)`. Compares the full ISO timestamp retained by the opaque
  * cursor, including PostgreSQL microseconds, with the id as an exact tie-breaker.
  */
-export function buildAscendingCreatedAtIdCursorCondition(
-  createdAtColumn: AnyColumn,
-  idColumn: AnyColumn,
-  cursor: ParsedListCursor | null,
-): SQL | undefined {
+export function buildAscendingCreatedAtIdCursorCondition({
+  createdAtColumn,
+  idColumn,
+  cursor,
+}: {
+  createdAtColumn: AnyColumn;
+  idColumn: AnyColumn;
+  cursor: ParsedListCursor | null;
+}): SQL | undefined {
   if (cursor === null) {
     return undefined;
   }
@@ -239,11 +246,15 @@ export function buildAscendingCreatedAtIdCursorCondition(
  * `(text_column, id)`, e.g. sort by name then id. Requires `sort_value` and
  * `id` to be present in the cursor.
  */
-export function buildAscendingTextIdCursorCondition(
-  textColumn: AnyColumn,
-  idColumn: AnyColumn,
-  cursor: ParsedListCursor | null,
-): SQL | undefined {
+export function buildAscendingTextIdCursorCondition({
+  textColumn,
+  idColumn,
+  cursor,
+}: {
+  textColumn: AnyColumn;
+  idColumn: AnyColumn;
+  cursor: ParsedListCursor | null;
+}): SQL | undefined {
   if (cursor === null) {
     return undefined;
   }
@@ -259,11 +270,15 @@ export function buildAscendingTextIdCursorCondition(
  * `(created_at, id)`. Mirrors {@link buildAscendingCreatedAtIdCursorCondition}
  * but uses `<` so newer rows come first.
  */
-export function buildDescendingCreatedAtIdCursorCondition(
-  createdAtColumn: AnyColumn,
-  idColumn: AnyColumn,
-  cursor: ParsedListCursor | null,
-): SQL | undefined {
+export function buildDescendingCreatedAtIdCursorCondition({
+  createdAtColumn,
+  idColumn,
+  cursor,
+}: {
+  createdAtColumn: AnyColumn;
+  idColumn: AnyColumn;
+  cursor: ParsedListCursor | null;
+}): SQL | undefined {
   if (cursor === null) {
     return undefined;
   }
@@ -283,11 +298,15 @@ export function buildDescendingCreatedAtIdCursorCondition(
  * Mirrors {@link buildAscendingTextIdCursorCondition} but uses `<` (id still tie-breaks
  * ascending, matching a `ORDER BY text DESC, id ASC` page). Requires `sort_value` + `id`.
  */
-export function buildDescendingTextIdCursorCondition(
-  textColumn: AnyColumn,
-  idColumn: AnyColumn,
-  cursor: ParsedListCursor | null,
-): SQL | undefined {
+export function buildDescendingTextIdCursorCondition({
+  textColumn,
+  idColumn,
+  cursor,
+}: {
+  textColumn: AnyColumn;
+  idColumn: AnyColumn;
+  cursor: ParsedListCursor | null;
+}): SQL | undefined {
   if (cursor === null) {
     return undefined;
   }

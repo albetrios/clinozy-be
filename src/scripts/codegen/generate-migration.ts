@@ -91,7 +91,7 @@ async function main(): Promise<void> {
   );
 
   const now = new Date();
-  const { currentMax, nextPrefix } = suggestNextMigrationPrefix(upMigrationFilenames, now);
+  const { currentMax, nextPrefix } = suggestNextMigrationPrefix({ upMigrationFilenames, now });
   const filename = `${nextPrefix}_${slug}.sql`;
   const fullPath = resolve(migrationsFolder, filename);
 

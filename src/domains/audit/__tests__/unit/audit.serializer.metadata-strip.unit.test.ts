@@ -28,21 +28,23 @@ function baseRow(overrides: Record<string, unknown> = {}) {
  */
 describe('AuditSerializer — metadata identifier stripping (denylist)', () => {
   it('strips only known internal-id keys; public-id keys flow through', () => {
-    const items = AuditSerializer.many([
-      baseRow({
-        metadata: {
-          // Internal numeric surrogates — must be stripped.
-          auth_method_id: 99,
-          mfa_method_id: 17,
-          // Public ids the writers actually persist — must survive.
-          session_public_id: 'sess_pub_xyz',
-          role_public_id: 'role_pub_abc',
-          organization_id: 'org_pub_def',
-          // Free-form context — must survive.
-          action_detail: 'role changed',
-        },
-      }),
-    ]);
+    const items = AuditSerializer.many({
+      items: [
+        baseRow({
+          metadata: {
+            // Internal numeric surrogates — must be stripped.
+            auth_method_id: 99,
+            mfa_method_id: 17,
+            // Public ids the writers actually persist — must survive.
+            session_public_id: 'sess_pub_xyz',
+            role_public_id: 'role_pub_abc',
+            organization_id: 'org_pub_def',
+            // Free-form context — must survive.
+            action_detail: 'role changed',
+          },
+        }),
+      ],
+    });
 
     expect(items[0]?.metadata).toEqual({
       session_public_id: 'sess_pub_xyz',
@@ -53,9 +55,9 @@ describe('AuditSerializer — metadata identifier stripping (denylist)', () => {
   });
 
   it('keeps non-identifier metadata fields untouched', () => {
-    const items = AuditSerializer.many([
-      baseRow({ metadata: { channel: 'email', severity: 'info' } }),
-    ]);
+    const items = AuditSerializer.many({
+      items: [baseRow({ metadata: { channel: 'email', severity: 'info' } })],
+    });
 
     expect(items[0]?.metadata).toEqual({ channel: 'email', severity: 'info' });
   });
@@ -65,20 +67,22 @@ describe('AuditSerializer — metadata identifier stripping (denylist)', () => {
     // leak it through the admin/organization-audit response. The key stays (so the field is visible);
     // the value is redacted. Public-id keys — even ones that brush the pattern, like
     // `api_key_public_id` — and ordinary context must flow through untouched.
-    const items = AuditSerializer.many([
-      baseRow({
-        metadata: {
-          password: 'hunter2',
-          api_key: 'sk_live_abc',
-          access_token: 'tok_xyz',
-          authorization: 'Bearer abc',
-          refresh_secret: 'rt_123',
-          api_key_public_id: 'apikey_pub_123',
-          session_public_id: 'sess_pub_xyz',
-          action_detail: 'rotated key',
-        },
-      }),
-    ]);
+    const items = AuditSerializer.many({
+      items: [
+        baseRow({
+          metadata: {
+            password: 'hunter2',
+            api_key: 'sk_live_abc',
+            access_token: 'tok_xyz',
+            authorization: 'Bearer abc',
+            refresh_secret: 'rt_123',
+            api_key_public_id: 'apikey_pub_123',
+            session_public_id: 'sess_pub_xyz',
+            action_detail: 'rotated key',
+          },
+        }),
+      ],
+    });
 
     expect(items[0]?.metadata).toEqual({
       password: '[REDACTED]',
@@ -93,13 +97,13 @@ describe('AuditSerializer — metadata identifier stripping (denylist)', () => {
   });
 
   it('returns null metadata unchanged', () => {
-    const items = AuditSerializer.many([baseRow({ metadata: null })]);
+    const items = AuditSerializer.many({ items: [baseRow({ metadata: null })] });
     expect(items[0]?.metadata).toBeNull();
   });
 
   it('returns array metadata unchanged (not object-shaped)', () => {
     const metadata = [{ user_id: 1 }];
-    const items = AuditSerializer.many([baseRow({ metadata })]);
+    const items = AuditSerializer.many({ items: [baseRow({ metadata })] });
     expect(items[0]?.metadata).toEqual(metadata);
   });
 });

@@ -84,13 +84,13 @@ describe('UserDataExportRepository (database)', () => {
     const user = await createTestUser();
     const created = await repository.create(exportRow(user.id));
 
-    const found = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
-      async (databaseHandle) => {
+    const found = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+      callback: async (databaseHandle) => {
         const workerRepository = createWorkerUserDataExportRepository(databaseHandle);
         return workerRepository.findByPublicIdAndUserId(created.public_id, user.id);
       },
-    );
+    });
 
     expect(found?.public_id).toBe(created.public_id);
   });

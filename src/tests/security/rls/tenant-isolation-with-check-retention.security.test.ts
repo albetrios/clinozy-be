@@ -71,21 +71,23 @@ describe('Security: tenant-isolation WITH CHECK propagation confines cross-organ
   it.each(ORG_SCOPED_TABLES)(
     'rejects a retention-context write that sets a foreign organization_id on $tableName (explicit WITH CHECK)',
     async ({ schemaName, tableName }) => {
-      const rowIds = fixture.rowIdsByTable.get(tableKey(schemaName, tableName));
+      const rowIds = fixture.rowIdsByTable.get(
+        tableKey({ schemaName: schemaName, tableName: tableName }),
+      );
       expect(rowIds, `fixture seeds a ${tableName} row for both orgs`).toBeDefined();
 
       let caught: unknown;
       try {
-        await withMaintenanceDatabaseContext(
-          MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-          async (databaseHandle) =>
+        await withMaintenanceDatabaseContext({
+          scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+          callback: async (databaseHandle) =>
             databaseHandle.execute(
               drizzleSql.raw(
                 `UPDATE "${schemaName}"."${tableName}" SET organization_id = ${organizationAInternalId} WHERE id = ${rowIds!.organizationB} RETURNING id`,
               ),
             ),
-          { useMaintenanceDatabaseRole: true },
-        );
+          options: { useMaintenanceDatabaseRole: true },
+        });
       } catch (error) {
         caught = error;
       }
@@ -101,7 +103,9 @@ describe('Security: tenant-isolation WITH CHECK propagation confines cross-organ
   it.each(ORG_SCOPED_TABLES)(
     'rejects reassigning an organization-B $tableName row to organization A under the organization-B tenant context',
     async ({ schemaName, tableName }) => {
-      const rowIds = fixture.rowIdsByTable.get(tableKey(schemaName, tableName))!;
+      const rowIds = fixture.rowIdsByTable.get(
+        tableKey({ schemaName: schemaName, tableName: tableName }),
+      )!;
 
       let caught: unknown;
       try {
@@ -125,11 +129,13 @@ describe('Security: tenant-isolation WITH CHECK propagation confines cross-organ
   );
 
   it('still allows a retention-context DELETE via the USING bypass (positive control)', async () => {
-    const rowIds = fixture.rowIdsByTable.get(tableKey('tenancy', 'api_keys'))!;
+    const rowIds = fixture.rowIdsByTable.get(
+      tableKey({ schemaName: 'tenancy', tableName: 'api_keys' }),
+    )!;
 
-    const deletedCount = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      async (databaseHandle) => {
+    const deletedCount = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: async (databaseHandle) => {
         const result = await databaseHandle.execute(
           drizzleSql.raw(
             `DELETE FROM "tenancy"."api_keys" WHERE id = ${rowIds.organizationB} RETURNING id`,
@@ -138,14 +144,16 @@ describe('Security: tenant-isolation WITH CHECK propagation confines cross-organ
         const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
         return rows.length;
       },
-      { useMaintenanceDatabaseRole: true },
-    );
+      options: { useMaintenanceDatabaseRole: true },
+    });
 
     expect(deletedCount).toBe(1);
   });
 
   it('allows a same-organization reassignment under the matching tenant context (positive control)', async () => {
-    const rowIds = fixture.rowIdsByTable.get(tableKey('tenancy', 'memberships'))!;
+    const rowIds = fixture.rowIdsByTable.get(
+      tableKey({ schemaName: 'tenancy', tableName: 'memberships' }),
+    )!;
 
     const affected = await executeAsClinozyBeAppTenant(
       fixture.organizationBPublicId,

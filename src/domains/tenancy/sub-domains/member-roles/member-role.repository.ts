@@ -70,7 +70,10 @@ export class MemberRoleRepository {
    * {@link countActiveByOrganization}.
    */
   async acquireCreationQuotaLock(organization_id: number): Promise<void> {
-    await acquireResourceQuotaLock(RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBER_ROLE, organization_id);
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBER_ROLE,
+      key: organization_id,
+    });
   }
 
   async findByOrganizationId(organization_id: number, pagination: MemberRoleListPagination) {
@@ -91,7 +94,7 @@ export class MemberRoleRepository {
     const where = and(
       eq(roles.organization_id, organization_id),
       isNull(roles.deleted_at),
-      buildSearchCondition([roles.name], q),
+      buildSearchCondition({ columns: [roles.name], q }),
       cursorCondition,
     );
     const rows = (await getRequestDatabase()
@@ -103,7 +106,7 @@ export class MemberRoleRepository {
       .where(where)
       .orderBy(...orderBy)
       .limit(limit + 1)) as (MemberRoleRow & CursorTimestampRow)[];
-    return finishKeysetPage(rows, { limit, sortValueFor, filterFingerprint });
+    return finishKeysetPage({ rows, args: { limit, sortValueFor, filterFingerprint } });
   }
 
   /**
@@ -201,19 +204,21 @@ export class MemberRoleRepository {
     is_system?: boolean;
     created_by_user_id?: number | null;
   }) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('memberRole');
-      const row = {
-        public_id,
-        organization_id: data.organization_id,
-        name: data.name,
-        description: data.description ?? null,
-        is_system: data.is_system ?? false,
-        created_by_user_id: data.created_by_user_id ?? undefined,
-        updated_by_user_id: data.created_by_user_id ?? undefined,
-      };
-      const rows = await getRequestDatabase().insert(roles).values(row).returning();
-      return rows[0]! as MemberRoleRow;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const public_id = generatePublicId('memberRole');
+        const row = {
+          public_id,
+          organization_id: data.organization_id,
+          name: data.name,
+          description: data.description ?? null,
+          is_system: data.is_system ?? false,
+          created_by_user_id: data.created_by_user_id ?? undefined,
+          updated_by_user_id: data.created_by_user_id ?? undefined,
+        };
+        const rows = await getRequestDatabase().insert(roles).values(row).returning();
+        return rows[0]! as MemberRoleRow;
+      },
     });
   }
 

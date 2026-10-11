@@ -13,7 +13,7 @@ export function trimmedString(): z.ZodString {
 /**
  * Trimmed string with length bounds. Use .min(1) to reject whitespace-only input.
  */
-export function trimmedStringMinMax(min: number, max: number): z.ZodString {
+export function trimmedStringMinMax({ min, max }: { min: number; max: number }): z.ZodString {
   return z.string().trim().min(min).max(max) as unknown as z.ZodString;
 }
 

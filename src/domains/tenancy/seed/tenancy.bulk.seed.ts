@@ -34,7 +34,7 @@ async function seedPersonalOrganizations(pool: readonly SeededUser[]): Promise<v
     .where(and(eq(organizations.type, 'PERSONAL'), isNull(organizations.deleted_at)));
   const ownerIds = new Set(owners.map((owner) => owner.owner_user_id));
   for (const user of pool) {
-    if (!ownerIds.has(user.id)) await provisionPersonalOrganization(user.id);
+    if (!ownerIds.has(user.id)) await provisionPersonalOrganization({ ownerUserId: user.id });
   }
 }
 
@@ -85,7 +85,11 @@ export async function seedOrganizationsBulk(context: SeedContext): Promise<void>
       created_by_user_id: owner.id,
     });
     if (!adminRole) continue;
-    await seedRolePermissions(adminRole.id, ADMIN_PERMISSION_CODES, owner.id);
+    await seedRolePermissions({
+      roleId: adminRole.id,
+      permissionCodes: ADMIN_PERMISSION_CODES,
+      createdByUserId: owner.id,
+    });
 
     const memberIds = new Set<number>();
     const memberCount = Math.max(1, context.faker.number.int(usersPerOrg));

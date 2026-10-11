@@ -200,7 +200,7 @@ export class MembershipRepository {
       )
       .orderBy(...orderBy)
       .limit(limit + 1)) as (MembershipRow & CursorTimestampRow)[];
-    return finishKeysetPage(rows, { limit, sortValueFor, filterFingerprint });
+    return finishKeysetPage({ rows, args: { limit, sortValueFor, filterFingerprint } });
   }
 
   /**
@@ -252,10 +252,13 @@ export class MembershipRepository {
     const rows = idsInOrder
       .map((id) => rowsById.get(id))
       .filter((row): row is MembershipRow & CursorTimestampRow => row !== undefined);
-    return finishKeysetPage(rows, {
-      limit,
-      sortValueFor: (row) => sortValueById.get(row.id),
-      filterFingerprint,
+    return finishKeysetPage({
+      rows,
+      args: {
+        limit,
+        sortValueFor: (row) => sortValueById.get(row.id),
+        filterFingerprint,
+      },
     });
   }
 
@@ -605,20 +608,22 @@ export class MembershipRepository {
     invited_by_user_id?: number | null;
     created_by_user_id?: number | null;
   }) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('membership');
-      const row = {
-        public_id,
-        organization_id: data.organization_id,
-        user_id: data.user_id,
-        role_id: data.role_id,
-        status: data.status ?? 'INVITED',
-        invited_by_user_id: data.invited_by_user_id ?? undefined,
-        created_by_user_id: data.created_by_user_id ?? undefined,
-        updated_by_user_id: data.created_by_user_id ?? undefined,
-      };
-      const rows = await getRequestDatabase().insert(memberships).values(row).returning();
-      return rows[0]! as MembershipRow;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const public_id = generatePublicId('membership');
+        const row = {
+          public_id,
+          organization_id: data.organization_id,
+          user_id: data.user_id,
+          role_id: data.role_id,
+          status: data.status ?? 'INVITED',
+          invited_by_user_id: data.invited_by_user_id ?? undefined,
+          created_by_user_id: data.created_by_user_id ?? undefined,
+          updated_by_user_id: data.created_by_user_id ?? undefined,
+        };
+        const rows = await getRequestDatabase().insert(memberships).values(row).returning();
+        return rows[0]! as MembershipRow;
+      },
     });
   }
 

@@ -23,9 +23,9 @@ describe('Chaos resilience: database pool stays available under bursty scoped-co
     const burstSize = Math.max(poolMax * 2, 20);
 
     const scopedUnitsOfWork = Array.from({ length: burstSize }, (_, index) =>
-      withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
-        async (databaseHandle) => {
+      withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
+        callback: async (databaseHandle) => {
           const rows = await databaseHandle.execute<{ value: number }>(
             drizzleSql`SELECT ${index}::int AS value`,
           );
@@ -34,7 +34,7 @@ describe('Chaos resilience: database pool stays available under bursty scoped-co
             : ((rows as { rows?: { value: number }[] }).rows ?? []);
           return result[0]?.value ?? -1;
         },
-      ),
+      }),
     );
 
     const autocommitProbes = Array.from(

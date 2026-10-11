@@ -58,7 +58,7 @@ initSentry();
 initPostHog();
 
 process.on('uncaughtException', (error) => {
-  captureException(error, { tags: { source: 'worker_uncaughtException' } });
+  captureException({ error, context: { tags: { source: 'worker_uncaughtException' } } });
   logger.fatal({ error }, 'uncaughtException');
   void flushSentry().finally(() => process.exit(1));
 });
@@ -164,7 +164,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  captureException(error, { tags: { source: 'worker_startup' } });
+  captureException({ error, context: { tags: { source: 'worker_startup' } } });
   // sec-r5-runtime: explicit message/stack/name fields are required because
   // pino's default behaviour serialises `Error` objects as `{}` (non-enumerable
   // properties). Without these, the worker startup error in production logs

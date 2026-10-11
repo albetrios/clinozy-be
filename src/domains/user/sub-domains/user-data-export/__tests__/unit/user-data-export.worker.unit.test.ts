@@ -69,7 +69,7 @@ vi.mock('@/shared/config/worker-concurrency.util.js', () => ({
 }));
 
 vi.mock('@/infrastructure/queue/worker-runtime/worker-close.util.js', () => ({
-  buildWorkerHandle: (worker: unknown, queueName: string) => ({
+  buildWorkerHandle: ({ worker, queueName }: { worker: unknown; queueName: string }) => ({
     worker,
     queueName,
     close: async () => undefined,
@@ -134,7 +134,15 @@ describe('user-data-export.worker', () => {
     // Faithful stand-in: run the callback so the assertions below observe the real
     // call order (parse → trace context → job) instead of a short-circuited stub.
     runWithPropagatedTraceContextMock.mockImplementation(
-      async (_carrier: unknown, _name: string, callback: () => Promise<unknown>) => callback(),
+      async ({
+        carrier: _carrier,
+        spanName: _name,
+        callback,
+      }: {
+        carrier: unknown;
+        spanName: string;
+        callback: () => Promise<unknown>;
+      }) => callback(),
     );
   });
 
@@ -175,14 +183,18 @@ describe('user-data-export.worker', () => {
     expect(parseJobDataOrDeadLetterMock).toHaveBeenCalledWith(
       expect.objectContaining({ job, queueName: 'user-data-export' }),
     );
-    expect(runWithPropagatedTraceContextMock).toHaveBeenCalledWith(
-      { traceparent: JOB_DATA.traceparent, tracestate: JOB_DATA.tracestate },
-      'process-user-data-export',
-      expect.any(Function),
-    );
+    expect(runWithPropagatedTraceContextMock).toHaveBeenCalledWith({
+      carrier: { traceparent: JOB_DATA.traceparent, tracestate: JOB_DATA.tracestate },
+      spanName: 'process-user-data-export',
+      callback: expect.any(Function),
+    });
     // Not the last of three attempts: a failure leaves the export processing for the retry.
-    expect(runUserDataExportJobMock).toHaveBeenCalledWith(JOB_DATA, service, {
-      isFinalAttempt: false,
+    expect(runUserDataExportJobMock).toHaveBeenCalledWith({
+      jobData: JOB_DATA,
+      userDataExportService: service,
+      options: {
+        isFinalAttempt: false,
+      },
     });
   });
 
@@ -197,8 +209,12 @@ describe('user-data-export.worker', () => {
       opts: { attempts: 3 },
     });
 
-    expect(runUserDataExportJobMock).toHaveBeenCalledWith(JOB_DATA, service, {
-      isFinalAttempt: true,
+    expect(runUserDataExportJobMock).toHaveBeenCalledWith({
+      jobData: JOB_DATA,
+      userDataExportService: service,
+      options: {
+        isFinalAttempt: true,
+      },
     });
   });
 

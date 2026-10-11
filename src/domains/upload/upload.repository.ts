@@ -53,25 +53,27 @@ export interface UploadCreateData {
  */
 export class UploadRepository {
   async create(data: UploadCreateData): Promise<UploadRow> {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('upload');
-      const rows = await getRequestDatabase()
-        .insert(uploads)
-        .values({
-          public_id,
-          user_id: data.user_id,
-          organization_id: data.organization_id ?? null,
-          file_name: data.file_name,
-          file_key: data.file_key,
-          mime_type: data.mime_type,
-          file_size: data.file_size,
-          storage_provider: data.storage_provider,
-          bucket: data.bucket,
-          status: data.status ?? 'PENDING',
-          created_by_user_id: data.created_by_user_id ?? data.user_id,
-        })
-        .returning();
-      return rows[0]!;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const public_id = generatePublicId('upload');
+        const rows = await getRequestDatabase()
+          .insert(uploads)
+          .values({
+            public_id,
+            user_id: data.user_id,
+            organization_id: data.organization_id ?? null,
+            file_name: data.file_name,
+            file_key: data.file_key,
+            mime_type: data.mime_type,
+            file_size: data.file_size,
+            storage_provider: data.storage_provider,
+            bucket: data.bucket,
+            status: data.status ?? 'PENDING',
+            created_by_user_id: data.created_by_user_id ?? data.user_id,
+          })
+          .returning();
+        return rows[0]!;
+      },
     });
   }
 

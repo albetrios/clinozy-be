@@ -15,10 +15,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -27,7 +29,7 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
 vi.mock(
   '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.serializer.js',
   () => ({
-    serializeOrganizationApiKey: (row: { public_id: string }) => ({
+    serializeOrganizationApiKey: ({ row }: { row: { public_id: string } }) => ({
       id: row.public_id,
       ...row,
     }),

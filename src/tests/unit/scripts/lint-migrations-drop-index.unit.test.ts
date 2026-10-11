@@ -12,7 +12,10 @@ describe('lint-migrations: drop_index_without_concurrently', () => {
   it('flags plain DROP INDEX in a transactional migration', () => {
     const sql = `DROP INDEX IF EXISTS auth.idx_some_dead_index;
 `;
-    const { violations } = lintMigrationFileContent('29990101000001_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '29990101000001_test.sql',
+      fileContent: sql,
+    });
     const matched = violations.filter(
       (violation) => violation.ruleId === 'drop_index_without_concurrently',
     );
@@ -24,7 +27,10 @@ describe('lint-migrations: drop_index_without_concurrently', () => {
     const sql = `-- migration-transaction: none reason="DROP INDEX CONCURRENTLY cannot run inside a transaction"
 DROP INDEX CONCURRENTLY IF EXISTS auth.idx_some_dead_index;
 `;
-    const { violations, headerErrors } = lintMigrationFileContent('29990101000002_test.sql', sql);
+    const { violations, headerErrors } = lintMigrationFileContent({
+      filename: '29990101000002_test.sql',
+      fileContent: sql,
+    });
     expect(headerErrors).toEqual([]);
     expect(
       violations.some((violation) => violation.ruleId === 'drop_index_without_concurrently'),
@@ -38,7 +44,10 @@ DROP INDEX CONCURRENTLY IF EXISTS auth.idx_some_dead_index;
     const sql = `-- migration-transaction: none reason="catalog drops are short and independent"
 DROP INDEX IF EXISTS auth.idx_some_dead_index;
 `;
-    const { violations } = lintMigrationFileContent('29990101000003_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '29990101000003_test.sql',
+      fileContent: sql,
+    });
     expect(
       violations.some((violation) => violation.ruleId === 'drop_index_without_concurrently'),
     ).toBe(false);
@@ -48,7 +57,10 @@ DROP INDEX IF EXISTS auth.idx_some_dead_index;
     const sql = `-- migration-safety: allow drop_index_without_concurrently reason="documented exception"
 DROP INDEX IF EXISTS auth.idx_some_dead_index;
 `;
-    const { violations, usedAllowRules } = lintMigrationFileContent('29990101000004_test.sql', sql);
+    const { violations, usedAllowRules } = lintMigrationFileContent({
+      filename: '29990101000004_test.sql',
+      fileContent: sql,
+    });
     expect(
       violations.some((violation) => violation.ruleId === 'drop_index_without_concurrently'),
     ).toBe(false);

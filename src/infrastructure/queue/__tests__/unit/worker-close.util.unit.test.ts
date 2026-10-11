@@ -46,7 +46,7 @@ describe('worker-close.util', () => {
       close: vi.fn(() => new Promise<void>(() => {})),
     } as unknown as Worker;
 
-    const closePromise = closeWorkerWithTimeout(worker, { queueName: 'mail' });
+    const closePromise = closeWorkerWithTimeout({ worker, options: { queueName: 'mail' } });
     const assertion = expect(closePromise).rejects.toThrow(/exceeded 100ms/);
     await vi.advanceTimersByTimeAsync(150);
     await assertion;
@@ -58,7 +58,7 @@ describe('worker-close.util', () => {
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as Worker;
 
-    await closeWorkerWithTimeout(worker, { timeoutMs: 1_000, queueName: 'mail' });
+    await closeWorkerWithTimeout({ worker, options: { timeoutMs: 1_000, queueName: 'mail' } });
 
     expect(worker.close).toHaveBeenCalledOnce();
   });
@@ -69,7 +69,10 @@ describe('worker-close.util', () => {
       close: vi.fn(() => new Promise<void>(() => {})),
     } as unknown as Worker;
 
-    const closePromise = closeWorkerWithTimeout(worker, { timeoutMs: 100, queueName: 'mail' });
+    const closePromise = closeWorkerWithTimeout({
+      worker,
+      options: { timeoutMs: 100, queueName: 'mail' },
+    });
     const assertion = expect(closePromise).rejects.toThrow(/exceeded 100ms/);
     await vi.advanceTimersByTimeAsync(150);
     await assertion;

@@ -194,13 +194,16 @@ describe('webhook-delivery.repository (database)', () => {
 
   it('findStalePendingDeliveryAttempts refuses an organization-scoped worker context, where RLS would hide every other tenant', async () => {
     process.env.CLINOZY_BE_RUNTIME = 'worker';
-    await runWithWorkerDatabaseContext({ kind: 'organization' }, async () => {
-      await expect(
-        findStalePendingDeliveryAttempts({} as WorkerDatabaseHandle, {
-          createdBefore: new Date(),
-          limit: 1,
-        }),
-      ).rejects.toThrow(WorkerDatabaseContextError);
+    await runWithWorkerDatabaseContext({
+      context: { kind: 'organization' },
+      callback: async () => {
+        await expect(
+          findStalePendingDeliveryAttempts({} as WorkerDatabaseHandle, {
+            createdBefore: new Date(),
+            limit: 1,
+          }),
+        ).rejects.toThrow(WorkerDatabaseContextError);
+      },
     });
   });
 

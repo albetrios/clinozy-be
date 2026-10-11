@@ -109,10 +109,10 @@ describe('UploadService organization pending-quota concurrency (database)', () =
       expect(result.reason).toBeInstanceOf(ValidationError);
     }
 
-    const organizationPendingCount = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: owner.public_id }),
-      () => repository.countPendingByOrganizationId(organization.id),
-    );
+    const organizationPendingCount = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: owner.public_id }),
+      callback: () => repository.countPendingByOrganizationId(organization.id),
+    });
     expect(organizationPendingCount).toBe(ORG_CAP);
     expect(objectStorage.createPresignedUploadUrl).toHaveBeenCalledTimes(ORG_CAP);
   });

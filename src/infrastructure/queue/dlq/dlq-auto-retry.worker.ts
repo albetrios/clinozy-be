@@ -34,5 +34,5 @@ export function createDlqAutoRetryWorker(): WorkerHandle {
     logger.warn({ jobId, queue: DLQ_AUTO_RETRY_QUEUE_NAME }, 'dlq-auto-retry.stalled');
   });
 
-  return buildWorkerHandle(worker, DLQ_AUTO_RETRY_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: DLQ_AUTO_RETRY_QUEUE_NAME });
 }

@@ -53,11 +53,11 @@ type TableDefinition = {
 
 const tables = new Map<string, TableDefinition>();
 
-function qualifiedTableKey(schema: string, table: string): string {
+function qualifiedTableKey({ schema, table }: { schema: string; table: string }): string {
   return `${schema}.${table}`;
 }
 
-function tableDbmlName(schema: string, table: string): string {
+function tableDbmlName({ schema, table }: { schema: string; table: string }): string {
   return `${schema}.${table}`;
 }
 
@@ -168,8 +168,8 @@ function parseColumnDefinitionLine(line: string): {
   return result;
 }
 
-function getOrCreateTable(schema: string, table: string): TableDefinition {
-  const key = qualifiedTableKey(schema, table);
+function getOrCreateTable({ schema, table }: { schema: string; table: string }): TableDefinition {
+  const key = qualifiedTableKey({ schema, table });
   let existing = tables.get(key);
   if (!existing) {
     existing = {
@@ -193,8 +193,16 @@ function parseColumnNameList(rawList: string): string[] {
     .filter(Boolean);
 }
 
-function applyCreateTableBody(schema: string, table: string, body: string): void {
-  const tableDefinition = getOrCreateTable(schema, table);
+function applyCreateTableBody({
+  schema,
+  table,
+  body,
+}: {
+  schema: string;
+  table: string;
+  body: string;
+}): void {
+  const tableDefinition = getOrCreateTable({ schema, table });
   for (const line of body.split('\n')) {
     const parsed = parseColumnDefinitionLine(line);
     if (!parsed) continue;
@@ -269,14 +277,14 @@ function extractCreateTableStatements(
 
 function processMigrationSql(sql: string): void {
   for (const { schema, table, body } of extractCreateTableStatements(sql)) {
-    applyCreateTableBody(schema, table, body);
+    applyCreateTableBody({ schema, table, body });
   }
 
   const dropPattern =
     /drop\s+table\s+(?:if\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?/gi;
   for (const dropMatch of sql.matchAll(dropPattern)) {
     if (dropMatch[1] && dropMatch[2]) {
-      tables.delete(qualifiedTableKey(dropMatch[1], dropMatch[2]));
+      tables.delete(qualifiedTableKey({ schema: dropMatch[1], table: dropMatch[2] }));
     }
   }
 
@@ -288,7 +296,10 @@ function processMigrationSql(sql: string): void {
       `${addColumnMatch[3] ?? ''} ${(addColumnMatch[4] ?? '').replace(/\s+/g, ' ')}`,
     );
     if (!(parsed && addColumnMatch[1] && addColumnMatch[2])) continue;
-    const tableDefinition = getOrCreateTable(addColumnMatch[1], addColumnMatch[2]);
+    const tableDefinition = getOrCreateTable({
+      schema: addColumnMatch[1],
+      table: addColumnMatch[2],
+    });
     tableDefinition.columns.set(parsed.column.name, parsed.column);
     if (parsed.foreignKey) {
       tableDefinition.foreignKeys.push({
@@ -304,7 +315,7 @@ function processMigrationSql(sql: string): void {
   for (const dropColumnMatch of sql.matchAll(dropColumnPattern)) {
     const [, schema, table, column] = dropColumnMatch;
     if (!(schema && table && column)) continue;
-    const tableDefinition = tables.get(qualifiedTableKey(schema, table));
+    const tableDefinition = tables.get(qualifiedTableKey({ schema, table }));
     if (!tableDefinition) continue;
     tableDefinition.columns.delete(column);
     tableDefinition.foreignKeys = tableDefinition.foreignKeys.filter(
@@ -322,10 +333,10 @@ function processMigrationSql(sql: string): void {
     ) {
       continue;
     }
-    const tableDefinition = getOrCreateTable(
-      compositePrimaryKeyMatch[1],
-      compositePrimaryKeyMatch[2],
-    );
+    const tableDefinition = getOrCreateTable({
+      schema: compositePrimaryKeyMatch[1],
+      table: compositePrimaryKeyMatch[2],
+    });
     tableDefinition.compositePrimaryKey = parseColumnNameList(compositePrimaryKeyMatch[3]);
   }
 
@@ -354,7 +365,7 @@ function processMigrationSql(sql: string): void {
     if (onDeleteMatch?.[1]) {
       reference.onDelete = onDeleteMatch[1].toLowerCase().replace(/\s+/g, ' ').trim();
     }
-    const tableDefinition = getOrCreateTable(sourceSchema, sourceTable);
+    const tableDefinition = getOrCreateTable({ schema: sourceSchema, table: sourceTable });
     const isDuplicate = tableDefinition.foreignKeys.some(
       (existing) =>
         existing.column === sourceColumn &&
@@ -371,21 +382,25 @@ function processMigrationSql(sql: string): void {
     /create\s+table\s+(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?[\s\S]*?\)\s+partition\s+by\s+range\s*\(\s*"?([a-z_][a-z0-9_]*)"?\s*\)/gi;
   for (const partitionMatch of sql.matchAll(partitionPattern)) {
     if (!(partitionMatch[1] && partitionMatch[2] && partitionMatch[3])) continue;
-    getOrCreateTable(partitionMatch[1], partitionMatch[2]).partitionedBy = partitionMatch[3];
+    getOrCreateTable({ schema: partitionMatch[1], table: partitionMatch[2] }).partitionedBy =
+      partitionMatch[3];
   }
 
   const enableRlsPattern =
     /alter\s+table\s+"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?\s+enable\s+row\s+level\s+security/gi;
   for (const enableRlsMatch of sql.matchAll(enableRlsPattern)) {
     if (!(enableRlsMatch[1] && enableRlsMatch[2])) continue;
-    getOrCreateTable(enableRlsMatch[1], enableRlsMatch[2]).rowLevelSecurityEnabled = true;
+    getOrCreateTable({
+      schema: enableRlsMatch[1],
+      table: enableRlsMatch[2],
+    }).rowLevelSecurityEnabled = true;
   }
 
   const forceRlsPattern =
     /alter\s+table\s+"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?\s+force\s+row\s+level\s+security/gi;
   for (const forceRlsMatch of sql.matchAll(forceRlsPattern)) {
     if (!(forceRlsMatch[1] && forceRlsMatch[2])) continue;
-    const tableDefinition = getOrCreateTable(forceRlsMatch[1], forceRlsMatch[2]);
+    const tableDefinition = getOrCreateTable({ schema: forceRlsMatch[1], table: forceRlsMatch[2] });
     tableDefinition.rowLevelSecurityEnabled = true;
     if (!tableDefinition.tableNotes.includes('FORCE ROW LEVEL SECURITY')) {
       tableDefinition.tableNotes.push('FORCE ROW LEVEL SECURITY');
@@ -400,12 +415,12 @@ function processMigrationSql(sql: string): void {
     const [, verb, policyName, schema, table] = policyMatch;
     if (!(verb && policyName && schema && table)) continue;
     if (verb.toLowerCase() === 'drop') {
-      const policies = tables.get(qualifiedTableKey(schema, table))?.rowLevelSecurityPolicies;
+      const policies = tables.get(qualifiedTableKey({ schema, table }))?.rowLevelSecurityPolicies;
       const index = policies?.indexOf(policyName) ?? -1;
       if (policies && index >= 0) policies.splice(index, 1);
       continue;
     }
-    const tableDefinition = getOrCreateTable(schema, table);
+    const tableDefinition = getOrCreateTable({ schema, table });
     if (!tableDefinition.rowLevelSecurityPolicies.includes(policyName)) {
       tableDefinition.rowLevelSecurityPolicies.push(policyName);
     }
@@ -413,13 +428,13 @@ function processMigrationSql(sql: string): void {
   }
 
   if (/stripe_webhook_events[\s\S]*no\s+tenant\s+rls/i.test(sql)) {
-    const tableDefinition = getOrCreateTable('billing', 'stripe_webhook_events');
+    const tableDefinition = getOrCreateTable({ schema: 'billing', table: 'stripe_webhook_events' });
     tableDefinition.tableNotes.push('System table — no tenant RLS');
     tableDefinition.rowLevelSecurityEnabled = false;
   }
 
   if (/mail_outbox[\s\S]*no\s+tenant\s+rls/i.test(sql)) {
-    const tableDefinition = getOrCreateTable('auth', 'mail_outbox');
+    const tableDefinition = getOrCreateTable({ schema: 'auth', table: 'mail_outbox' });
     tableDefinition.tableNotes.push('System table — no tenant RLS');
     tableDefinition.rowLevelSecurityEnabled = false;
   }
@@ -434,12 +449,17 @@ function columnSettings(column: ColumnDefinition): string {
   return settings.length > 0 ? ` [${settings.join(', ')}]` : '';
 }
 
-function renderRelationshipLine(
-  sourceSchema: string,
-  sourceTable: string,
-  sourceColumn: string,
-  reference: ForeignKeyReference,
-): string {
+function renderRelationshipLine({
+  sourceSchema,
+  sourceTable,
+  sourceColumn,
+  reference,
+}: {
+  sourceSchema: string;
+  sourceTable: string;
+  sourceColumn: string;
+  reference: ForeignKeyReference;
+}): string {
   const source = `${sourceSchema}.${sourceTable}.${sourceColumn}`;
   const target = `${reference.targetSchema}.${reference.targetTable}.${reference.targetColumn}`;
   const deleteSetting = reference.onDelete ? ` [delete: ${reference.onDelete}]` : '';
@@ -467,7 +487,7 @@ function renderDbml(): string {
     for (const table of [...tables.values()]
       .filter((table) => table.schema === schemaName)
       .sort((left, right) => left.name.localeCompare(right.name))) {
-      lines.push(`  ${tableDbmlName(table.schema, table.name)}`);
+      lines.push(`  ${tableDbmlName({ schema: table.schema, table: table.name })}`);
     }
     lines.push('}');
     lines.push('');
@@ -479,7 +499,7 @@ function renderDbml(): string {
   });
 
   for (const table of sortedTables) {
-    const tableIdentifier = tableDbmlName(table.schema, table.name);
+    const tableIdentifier = tableDbmlName({ schema: table.schema, table: table.name });
     lines.push(`Table ${tableIdentifier} {`);
 
     const columns = [...table.columns.values()].sort((left, right) =>
@@ -531,7 +551,12 @@ function renderDbml(): string {
   for (const table of sortedTables) {
     for (const foreignKey of table.foreignKeys) {
       relationshipLines.add(
-        renderRelationshipLine(table.schema, table.name, foreignKey.column, foreignKey.reference),
+        renderRelationshipLine({
+          sourceSchema: table.schema,
+          sourceTable: table.name,
+          sourceColumn: foreignKey.column,
+          reference: foreignKey.reference,
+        }),
       );
     }
   }

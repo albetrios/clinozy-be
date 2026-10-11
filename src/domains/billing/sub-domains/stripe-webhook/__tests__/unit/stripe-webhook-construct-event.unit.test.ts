@@ -84,7 +84,7 @@ describe('constructStripeWebhookEvent — key rotation (sec-new-B3)', () => {
       '@/infrastructure/payment/stripe.client.js'
     );
     const sig = signPayload(SECRET_A);
-    const event = constructStripeWebhookEvent(Buffer.from(PAYLOAD), sig);
+    const event = constructStripeWebhookEvent({ body: Buffer.from(PAYLOAD), signature: sig });
     expect(event.id).toBe('evt_test_001');
   });
 
@@ -94,7 +94,7 @@ describe('constructStripeWebhookEvent — key rotation (sec-new-B3)', () => {
       '@/infrastructure/payment/stripe.client.js'
     );
     const sig = signPayload(SECRET_A);
-    const event = constructStripeWebhookEvent(Buffer.from(PAYLOAD), sig);
+    const event = constructStripeWebhookEvent({ body: Buffer.from(PAYLOAD), signature: sig });
     expect(event.id).toBe('evt_test_001');
   });
 
@@ -105,7 +105,7 @@ describe('constructStripeWebhookEvent — key rotation (sec-new-B3)', () => {
     );
     // Stripe Dashboard has already rotated to SECRET_B; SECRET_A is still in the list.
     const sig = signPayload(SECRET_B);
-    const event = constructStripeWebhookEvent(Buffer.from(PAYLOAD), sig);
+    const event = constructStripeWebhookEvent({ body: Buffer.from(PAYLOAD), signature: sig });
     expect(event.id).toBe('evt_test_001');
   });
 
@@ -115,7 +115,9 @@ describe('constructStripeWebhookEvent — key rotation (sec-new-B3)', () => {
       '@/infrastructure/payment/stripe.client.js'
     );
     const sig = signPayload(SECRET_C);
-    expect(() => constructStripeWebhookEvent(Buffer.from(PAYLOAD), sig)).toThrow();
+    expect(() =>
+      constructStripeWebhookEvent({ body: Buffer.from(PAYLOAD), signature: sig }),
+    ).toThrow();
   });
 
   it('sec-new-B3: ignores whitespace and trailing commas in the secret list', async () => {
@@ -126,8 +128,12 @@ describe('constructStripeWebhookEvent — key rotation (sec-new-B3)', () => {
     );
     const sigA = signPayload(SECRET_A);
     const sigB = signPayload(SECRET_B);
-    expect(constructStripeWebhookEvent(Buffer.from(PAYLOAD), sigA).id).toBe('evt_test_001');
-    expect(constructStripeWebhookEvent(Buffer.from(PAYLOAD), sigB).id).toBe('evt_test_001');
+    expect(constructStripeWebhookEvent({ body: Buffer.from(PAYLOAD), signature: sigA }).id).toBe(
+      'evt_test_001',
+    );
+    expect(constructStripeWebhookEvent({ body: Buffer.from(PAYLOAD), signature: sigB }).id).toBe(
+      'evt_test_001',
+    );
   });
 
   it('throws "not configured" when STRIPE_WEBHOOK_SECRET is absent', async () => {
@@ -135,9 +141,9 @@ describe('constructStripeWebhookEvent — key rotation (sec-new-B3)', () => {
     const { constructStripeWebhookEvent } = await import(
       '@/infrastructure/payment/stripe.client.js'
     );
-    expect(() => constructStripeWebhookEvent(Buffer.from(PAYLOAD), 'sig')).toThrow(
-      'STRIPE_WEBHOOK_SECRET is not configured',
-    );
+    expect(() =>
+      constructStripeWebhookEvent({ body: Buffer.from(PAYLOAD), signature: 'sig' }),
+    ).toThrow('STRIPE_WEBHOOK_SECRET is not configured');
   });
 });
 
@@ -166,7 +172,9 @@ describe('constructStripeWebhookEvent — timestamp tolerance (EX-01: STRIPE_WEB
       secret: SECRET_A,
       timestamp,
     });
-    expect(constructStripeWebhookEvent(Buffer.from(PAYLOAD), sig).id).toBe('evt_test_001');
+    expect(constructStripeWebhookEvent({ body: Buffer.from(PAYLOAD), signature: sig }).id).toBe(
+      'evt_test_001',
+    );
   });
 
   it('rejects an event whose timestamp is older than the configured tolerance window', async () => {
@@ -180,6 +188,8 @@ describe('constructStripeWebhookEvent — timestamp tolerance (EX-01: STRIPE_WEB
       secret: SECRET_A,
       timestamp,
     });
-    expect(() => constructStripeWebhookEvent(Buffer.from(PAYLOAD), sig)).toThrow();
+    expect(() =>
+      constructStripeWebhookEvent({ body: Buffer.from(PAYLOAD), signature: sig }),
+    ).toThrow();
   });
 });

@@ -26,7 +26,7 @@ const MIN_JWT_RSA_MODULUS_BITS = 2048;
  * truncated PEM or an accidental sub-2048-bit / non-RSA key fails fast instead of
  * issuing forgeable tokens or failing opaquely at first sign/verify (audit #8).
  */
-const isStrongRsaPem = (pem: string, kind: 'private' | 'public'): boolean => {
+const isStrongRsaPem = ({ pem, kind }: { pem: string; kind: 'private' | 'public' }): boolean => {
   try {
     const key = kind === 'private' ? createPrivateKey(pem) : createPublicKey(pem);
     return (
@@ -125,104 +125,132 @@ const trustProxyHopCountSchema = z
  * registry drives `pnpm env:catalog`. Migrating a field is a mechanical wrap — the Zod is untouched.
  */
 const SERVER_VARS = {
-  PORT: envVar(z.coerce.number().int().min(1).max(65535).default(3000), {
-    allowed: 'integer 1–65535',
-    description: 'HTTP port the API server binds to.',
+  PORT: envVar({
+    schema: z.coerce.number().int().min(1).max(65535).default(3000),
+    meta: {
+      allowed: 'integer 1–65535',
+      description: 'HTTP port the API server binds to.',
+    },
   }),
-  HTTP_BIND_HOST: envVar(z.string().min(1).default('0.0.0.0'), {
-    allowed: 'non-empty string (host or IP)',
-    description: 'Fastify HTTP bind address (the worker health server also binds here).',
+  HTTP_BIND_HOST: envVar({
+    schema: z.string().min(1).default('0.0.0.0'),
+    meta: {
+      allowed: 'non-empty string (host or IP)',
+      description: 'Fastify HTTP bind address (the worker health server also binds here).',
+    },
   }),
-  NODE_ENV: envVar(nodeEnvSchema, {
-    allowed: 'local | development | production',
-    description:
-      'Runtime environment name; names the .env file and gates the production-only refines.',
+  NODE_ENV: envVar({
+    schema: nodeEnvSchema,
+    meta: {
+      allowed: 'local | development | production',
+      description:
+        'Runtime environment name; names the .env file and gates the production-only refines.',
+    },
   }),
   // sec-C9: enum-constrained so a typo (`info ` with trailing whitespace, `dbug`) fails at boot
   // instead of silently degrading pino. Default `info`; a `debug` template value would 10–100x log
   // volume in any environment scaffolded from it — including production.
-  LOG_LEVEL: envVar(
-    z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
-    {
+  LOG_LEVEL: envVar({
+    schema: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+    meta: {
       allowed: 'fatal | error | warn | info | debug | trace | silent',
       description:
         'Pino log level. Enum-constrained so a typo fails at boot instead of silently degrading.',
     },
-  ),
-  TRUST_PROXY: envVar(trustProxyHopCountSchema, {
-    allowed: 'false | 0, or integer 1–10',
-    description: 'Number of reverse-proxy hops Fastify may trust for X-Forwarded-* headers.',
   }),
-  FASTIFY_KEEP_ALIVE_TIMEOUT_MS: envVar(
-    z.coerce.number().int().min(1_000).max(600_000).optional(),
-    {
+  TRUST_PROXY: envVar({
+    schema: trustProxyHopCountSchema,
+    meta: {
+      allowed: 'false | 0, or integer 1–10',
+      description: 'Number of reverse-proxy hops Fastify may trust for X-Forwarded-* headers.',
+    },
+  }),
+  FASTIFY_KEEP_ALIVE_TIMEOUT_MS: envVar({
+    schema: z.coerce.number().int().min(1_000).max(600_000).optional(),
+    meta: {
       allowed: 'integer 1000–600000 (optional)',
       description: 'Fastify keep-alive timeout in milliseconds.',
     },
-  ),
-  FASTIFY_HEADERS_TIMEOUT_MS: envVar(z.coerce.number().int().min(1_000).max(600_000).optional(), {
-    allowed: 'integer 1000–600000 (optional)',
-    description: 'Fastify headers timeout in milliseconds.',
   }),
-  FASTIFY_REQUEST_TIMEOUT_MS: envVar(z.coerce.number().int().min(1_000).max(600_000).optional(), {
-    allowed: 'integer 1000–600000 (optional)',
-    description: 'Fastify request timeout in milliseconds.',
+  FASTIFY_HEADERS_TIMEOUT_MS: envVar({
+    schema: z.coerce.number().int().min(1_000).max(600_000).optional(),
+    meta: {
+      allowed: 'integer 1000–600000 (optional)',
+      description: 'Fastify headers timeout in milliseconds.',
+    },
+  }),
+  FASTIFY_REQUEST_TIMEOUT_MS: envVar({
+    schema: z.coerce.number().int().min(1_000).max(600_000).optional(),
+    meta: {
+      allowed: 'integer 1000–600000 (optional)',
+      description: 'Fastify request timeout in milliseconds.',
+    },
   }),
   // Node's socket INACTIVITY timeout (`server.timeout`), not an accept timeout: a socket with no
   // bytes in or out for this long is destroyed — a handler waiting on the database or Stripe
   // included, so its 503 + Retry-After never arrives. Off by default (Fastify's own default):
   // requestTimeout / headersTimeout bound slow clients and keepAliveTimeout reaps idle sockets.
-  FASTIFY_CONNECTION_TIMEOUT_MS: envVar(z.coerce.number().int().min(0).max(600_000).optional(), {
-    allowed: 'integer 0–600000 (optional; unset or 0 disables)',
-    description:
-      'Socket inactivity timeout in milliseconds; when set, at least DATABASE_POOL_ACQUIRE_TIMEOUT_MS + STRIPE_HTTP_TIMEOUT_MS.',
+  FASTIFY_CONNECTION_TIMEOUT_MS: envVar({
+    schema: z.coerce.number().int().min(0).max(600_000).optional(),
+    meta: {
+      allowed: 'integer 0–600000 (optional; unset or 0 disables)',
+      description:
+        'Socket inactivity timeout in milliseconds; when set, at least DATABASE_POOL_ACQUIRE_TIMEOUT_MS + STRIPE_HTTP_TIMEOUT_MS.',
+    },
   }),
   // Network-independent latency for load tools (k6, curl) and browser devtools without scraping
   // /metrics. Default on; set false to suppress the header (it is coarsened in production).
-  HTTP_SERVER_TIMING_ENABLED: envVar(booleanString('true'), {
-    allowed: 'true | false (or 1 | 0)',
-    description: 'Emit a Server-Timing response header carrying total server-side processing time.',
+  HTTP_SERVER_TIMING_ENABLED: envVar({
+    schema: booleanString('true'),
+    meta: {
+      allowed: 'true | false (or 1 | 0)',
+      description:
+        'Emit a Server-Timing response header carrying total server-side processing time.',
+    },
   }),
   // Dormant until the loop truly stalls (a long sync op / GC pause), since 250 ms is well above the
   // tens-of-ms of normal load. Lower to shed sooner; raise to tolerate longer stalls.
-  OVERLOAD_MAX_EVENT_LOOP_DELAY_MS: envVar(
-    z.coerce.number().int().min(1).max(60_000).default(250),
-    {
+  OVERLOAD_MAX_EVENT_LOOP_DELAY_MS: envVar({
+    schema: z.coerce.number().int().min(1).max(60_000).default(250),
+    meta: {
       allowed: 'integer 1–60000',
       description:
         'Overload-guard shed threshold: p99 event-loop delay (ms) above which requests get a 503.',
     },
-  ),
+  }),
   // DB-pool exhaustion shows as awaiting-promise time (the loop stays idle), so the event-loop valve
   // never trips on it; shedding at pool saturation bounds that tail. The gauge counts units of work
   // still waiting for a connection too, so a ratio above 1 lets a bounded queue form first: 10 sheds at
   // ten times the pool (the pool busy plus a queue nine times its size — a synchronized 240-user burst
   // on the default pool of 30 queues, bounded by DATABASE_POOL_ACQUIRE_TIMEOUT_MS, instead of failing
   // fast). Set 0 to disable (loop valve stays on).
-  OVERLOAD_DB_POOL_SHED_RATIO: envVar(z.coerce.number().min(0).max(10).default(10), {
-    allowed: 'number 0–10',
-    description:
-      'Multiple of DATABASE_POOL_MAX in-flight units of work (running plus waiting for a connection) at which the overload guard sheds requests; above 1 lets a bounded queue form.',
+  OVERLOAD_DB_POOL_SHED_RATIO: envVar({
+    schema: z.coerce.number().min(0).max(10).default(10),
+    meta: {
+      allowed: 'number 0–10',
+      description:
+        'Multiple of DATABASE_POOL_MAX in-flight units of work (running plus waiting for a connection) at which the overload guard sheds requests; above 1 lets a bounded queue form.',
+    },
   }),
   // A slow database keeps the queue short but undrained, so the ratio above never trips while every
   // waiter runs into DATABASE_POOL_ACQUIRE_TIMEOUT_MS: shed new requests once the oldest unit of work
   // has waited this long. A burst the pool drains is served — its waiters are milliseconds old.
-  OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS: envVar(
-    z.coerce.number().int().min(0).max(60_000).default(2_000),
-    {
+  OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS: envVar({
+    schema: z.coerce.number().int().min(0).max(60_000).default(2_000),
+    meta: {
       allowed: 'integer 0–60000 (ms; 0 disables)',
       description:
         'Overload-guard shed threshold: how long the oldest unit of work may wait for a pooled connection before new requests get a 503.',
     },
-  ),
-  DATABASE_POOL_ACQUIRE_TIMEOUT_MS: envVar(
-    z.coerce.number().int().min(0).max(60_000).default(10_000),
-    {
+  }),
+  DATABASE_POOL_ACQUIRE_TIMEOUT_MS: envVar({
+    schema: z.coerce.number().int().min(0).max(60_000).default(10_000),
+    meta: {
       allowed: 'integer 0–60000 (ms; 0 disables)',
       description:
         'Deadline for a unit of work to get a pooled connection. Past it the caller gets 503 + Retry-After, and a connection that arrives later rolls the transaction back unrun.',
     },
-  ),
+  }),
 } satisfies Record<string, EnvVarSpec>;
 
 const envSchemaBase = z.object({
@@ -1330,7 +1358,10 @@ export const envSchema = envSchemaBase
   )
   .refine(
     (data) => {
-      return validateProductionRedisTopology(data.REDIS_URL, data.REDIS_BULLMQ_URL);
+      return validateProductionRedisTopology({
+        _cacheRedisUrl: data.REDIS_URL,
+        bullMqRedisUrl: data.REDIS_BULLMQ_URL,
+      });
     },
     {
       message:
@@ -1915,14 +1946,18 @@ export const envSchema = envSchemaBase
   // PEMs of adequate modulus in DEPLOYED runtimes (production) — mirroring the entropy
   // floor already gated on SECRETS_ENCRYPTION_KEY. local/development/test use ephemeral keys.
   .refine(
-    (data) => data.NODE_ENV !== 'production' || isStrongRsaPem(data.JWT_PRIVATE_KEY, 'private'),
+    (data) =>
+      data.NODE_ENV !== 'production' ||
+      isStrongRsaPem({ pem: data.JWT_PRIVATE_KEY, kind: 'private' }),
     {
       message: `JWT_PRIVATE_KEY must be a valid RSA private-key PEM of at least ${MIN_JWT_RSA_MODULUS_BITS} bits.`,
       path: ['JWT_PRIVATE_KEY'],
     },
   )
   .refine(
-    (data) => data.NODE_ENV !== 'production' || isStrongRsaPem(data.JWT_PUBLIC_KEY, 'public'),
+    (data) =>
+      data.NODE_ENV !== 'production' ||
+      isStrongRsaPem({ pem: data.JWT_PUBLIC_KEY, kind: 'public' }),
     {
       message: `JWT_PUBLIC_KEY must be a valid RSA public-key PEM of at least ${MIN_JWT_RSA_MODULUS_BITS} bits.`,
       path: ['JWT_PUBLIC_KEY'],

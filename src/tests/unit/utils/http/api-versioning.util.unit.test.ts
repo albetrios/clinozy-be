@@ -17,7 +17,7 @@ describe('api-versioning.util', () => {
   it('applyPublicApiVersionHeader sets API-Version', () => {
     const header = vi.fn();
     const reply = { header } as unknown as FastifyReply;
-    applyPublicApiVersionHeader(reply);
+    applyPublicApiVersionHeader({ reply });
     expect(header).toHaveBeenCalledWith(PUBLIC_API_VERSION_HEADER, PUBLIC_API_VERSION_VALUE_V1);
   });
 });

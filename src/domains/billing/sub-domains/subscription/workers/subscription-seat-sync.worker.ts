@@ -75,11 +75,11 @@ export function createSubscriptionSeatSyncWorker(
         { jobId: job.id, organizationPublicId, requestId },
         'subscription.seat_sync.processing',
       );
-      await runWithPropagatedTraceContext(
-        { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
-        job.name,
-        () => processSubscriptionSeatSyncJob(jobData, subscriptionService),
-      );
+      await runWithPropagatedTraceContext({
+        carrier: { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
+        spanName: job.name,
+        callback: () => processSubscriptionSeatSyncJob({ jobData, service: subscriptionService }),
+      });
     },
     workerOptions: {
       connection: getBullMQConnectionOptions(),
@@ -95,5 +95,5 @@ export function createSubscriptionSeatSyncWorker(
     );
   });
 
-  return buildWorkerHandle(worker, SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME });
 }

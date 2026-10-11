@@ -111,10 +111,13 @@ function resolveProcessCount(counts: ResolvedDeploymentCounts): number {
   return counts.apiProcessCount + counts.workerProcessCount;
 }
 
-function computeRequiredPoolConnections(
-  counts: ResolvedDeploymentCounts,
-  perProcessConnections: number,
-): number {
+function computeRequiredPoolConnections({
+  counts,
+  perProcessConnections,
+}: {
+  counts: ResolvedDeploymentCounts;
+  perProcessConnections: number;
+}): number {
   return resolveProcessCount(counts) * perProcessConnections;
 }
 
@@ -254,10 +257,10 @@ export async function assertPostgresConnectionBudget(
   const deploymentCounts = resolveDeploymentCounts();
 
   if (deploymentCounts !== undefined) {
-    const requiredConnections = computeRequiredPoolConnections(
-      deploymentCounts,
-      poolMaxConnections + maintenancePoolMaxConnections,
-    );
+    const requiredConnections = computeRequiredPoolConnections({
+      counts: deploymentCounts,
+      perProcessConnections: poolMaxConnections + maintenancePoolMaxConnections,
+    });
     if (requiredConnections > allowedApplicationConnections) {
       throw new Error(
         buildDeploymentBudgetErrorMessage({

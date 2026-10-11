@@ -281,12 +281,14 @@ export class SubscriptionRepository {
   }
 
   async create(data: SubscriptionCreateData) {
-    const inserted = await runInsertWithPublicIdentifierRetry(async () => {
-      const rows = await this.db()
-        .insert(subscriptions)
-        .values(buildSubscriptionInsertValues(data))
-        .returning();
-      return rows[0]!;
+    const inserted = await runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const rows = await this.db()
+          .insert(subscriptions)
+          .values(buildSubscriptionInsertValues(data))
+          .returning();
+        return rows[0]!;
+      },
     });
     return this.reloadInsertedSubscription(inserted.public_id, data.organization_id);
   }
@@ -298,16 +300,18 @@ export class SubscriptionRepository {
    * caught unique violation would have aborted it), and any other violation still throws.
    */
   async createUnlessProviderSubscriptionExists(data: SubscriptionCreateData) {
-    const inserted = await runInsertWithPublicIdentifierRetry(async () => {
-      const rows = await this.db()
-        .insert(subscriptions)
-        .values(buildSubscriptionInsertValues(data))
-        .onConflictDoNothing({
-          target: subscriptions.provider_subscription_id,
-          where: sql`${subscriptions.provider_subscription_id} IS NOT NULL`,
-        })
-        .returning();
-      return rows[0] ?? null;
+    const inserted = await runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const rows = await this.db()
+          .insert(subscriptions)
+          .values(buildSubscriptionInsertValues(data))
+          .onConflictDoNothing({
+            target: subscriptions.provider_subscription_id,
+            where: sql`${subscriptions.provider_subscription_id} IS NOT NULL`,
+          })
+          .returning();
+        return rows[0] ?? null;
+      },
     });
     return inserted === null
       ? null

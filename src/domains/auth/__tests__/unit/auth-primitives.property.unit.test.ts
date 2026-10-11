@@ -33,7 +33,9 @@ describe('session cookie value (property)', () => {
   it('round-trips format → parse for any id/secret pair, even when the secret contains dots', () => {
     fc.assert(
       fc.property(sessionPublicId, refreshSecret, (id, secret) => {
-        const parsed = parseSessionCookieValue(formatSessionCookieValue(id, secret));
+        const parsed = parseSessionCookieValue(
+          formatSessionCookieValue({ sessionPublicId: id, refreshSecret: secret }),
+        );
         expect(parsed).toEqual({ sessionPublicId: id, refreshSecret: secret });
       }),
       propertyOptions,
@@ -49,7 +51,12 @@ describe('session cookie value (property)', () => {
           // credential into the session lookup instead of refusing the cookie outright.
           expect(parsed.sessionPublicId.length).toBeGreaterThan(0);
           expect(parsed.refreshSecret.length).toBeGreaterThan(0);
-          expect(raw).toBe(formatSessionCookieValue(parsed.sessionPublicId, parsed.refreshSecret));
+          expect(raw).toBe(
+            formatSessionCookieValue({
+              sessionPublicId: parsed.sessionPublicId,
+              refreshSecret: parsed.refreshSecret,
+            }),
+          );
         }
       }),
       propertyOptions,

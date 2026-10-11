@@ -25,8 +25,14 @@ vi.mock('@/infrastructure/mail/queues/mail.queue.js', () => ({
   MAIL_QUEUE_NAME: 'mail',
   MAIL_QUEUE_MAX_ATTEMPTS: 8,
   recordOutboxEmail: vi.fn().mockResolvedValue(MAIL_OUTBOX_TOKEN),
-  dispatchOutboxEmail: async (mailOutboxToken: string, options?: { requestId?: string }) => {
-    await enqueueMailOutboxJobMock(mailOutboxToken, options);
+  dispatchOutboxEmail: async ({
+    mailOutboxToken,
+    options,
+  }: {
+    mailOutboxToken: string;
+    options?: { requestId?: string };
+  }) => {
+    await enqueueMailOutboxJobMock({ mailOutboxToken, options });
   },
   enqueueMailOutboxJob: (...arguments_: unknown[]) => enqueueMailOutboxJobMock(...arguments_),
 }));
@@ -93,15 +99,15 @@ describe('Request id event-bus to mail worker contract', () => {
     });
     await eventBus.flushOnCommit();
 
-    expect(enqueueMailOutboxJobMock).toHaveBeenCalledWith(
-      MAIL_OUTBOX_TOKEN,
-      expect.objectContaining({ requestId: correlationRequestId }),
-    );
+    expect(enqueueMailOutboxJobMock).toHaveBeenCalledWith({
+      mailOutboxToken: MAIL_OUTBOX_TOKEN,
+      options: expect.objectContaining({ requestId: correlationRequestId }),
+    });
 
-    await processMailOutboxJob(
-      { mailOutboxToken: MAIL_OUTBOX_TOKEN, requestId: correlationRequestId },
-      { jobId: 'job-mail-correlation', requestId: correlationRequestId },
-    );
+    await processMailOutboxJob({
+      jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN, requestId: correlationRequestId },
+      options: { jobId: 'job-mail-correlation', requestId: correlationRequestId },
+    });
 
     expect(loggerInfoSpy).toHaveBeenCalledWith(
       expect.objectContaining({

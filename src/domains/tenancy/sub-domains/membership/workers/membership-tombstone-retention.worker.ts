@@ -39,9 +39,10 @@ export function createMembershipTombstoneRetentionWorker(): WorkerHandle {
   const worker = new Worker(
     MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME,
     async () =>
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, (databaseHandle) =>
-        runMembershipTombstoneRetentionJob(databaseHandle),
-      ),
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: (databaseHandle) => runMembershipTombstoneRetentionJob(databaseHandle),
+      }),
     {
       connection: getBullMQConnectionOptions(),
       prefix: getBullMQKeyPrefix(),
@@ -57,5 +58,5 @@ export function createMembershipTombstoneRetentionWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME });
 }

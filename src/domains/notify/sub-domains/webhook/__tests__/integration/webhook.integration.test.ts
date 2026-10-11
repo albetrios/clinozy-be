@@ -209,18 +209,20 @@ describe('Webhook Sub-Domain — Integration', () => {
       for (let index = 0; index < 3; index += 1) {
         const attempt = await runWithPinnedDatabaseHandle(
           // Seeded on the operator connection: a fixture, not the behaviour under test.
-          getOperatorDatabase() as unknown as RequestScopedPostgresDatabase,
-          () =>
-            attemptRepository.create({
-              webhook_id: webhook.id,
-              event_type: 'subscription.updated',
-              payload: { id: `evt_${index}` },
-              status: 'SENT',
-              http_status_code: 200,
-              response_body: 'ok',
-              sent_at: new Date(),
-              attempt_count: 1,
-            }),
+          {
+            databaseHandle: getOperatorDatabase() as unknown as RequestScopedPostgresDatabase,
+            callback: () =>
+              attemptRepository.create({
+                webhook_id: webhook.id,
+                event_type: 'subscription.updated',
+                payload: { id: `evt_${index}` },
+                status: 'SENT',
+                http_status_code: 200,
+                response_body: 'ok',
+                sent_at: new Date(),
+                attempt_count: 1,
+              }),
+          },
         );
         await getOperatorDatabase()
           .update(webhook_delivery_attempts)
@@ -558,9 +560,12 @@ describe('Webhook Sub-Domain — Integration', () => {
       // racing two real requests would be inherently flaky. Same approach as
       // `src/tests/integration/runtime/idempotency-in-flight-409.integration.test.ts`.
       // The cache key is scoped by the active organization (the signed `org` JWT claim), not just the user.
-      const cacheKey = buildIdempotencyCacheKey(idempotencyKey, {
-        userId: user.public_id,
-        organizationId: organization.public_id,
+      const cacheKey = buildIdempotencyCacheKey({
+        idempotencyKey,
+        scope: {
+          userId: user.public_id,
+          organizationId: organization.public_id,
+        },
       });
       const payload = {
         url: 'https://example.com/idem-in-flight',

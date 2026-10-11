@@ -47,7 +47,7 @@ const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'DemoPassword123!';
 export async function ensureDemoAdmin(): Promise<void> {
   await seedPermissions();
 
-  const demoUser = await seedDemoUser(DEMO_EMAIL, DEMO_PASSWORD);
+  const demoUser = await seedDemoUser({ email: DEMO_EMAIL, password: DEMO_PASSWORD });
   if (!demoUser) throw new Error('ensure-demo-admin: failed to upsert demo user');
 
   const demoOrganization = await seedOrganization({
@@ -65,11 +65,11 @@ export async function ensureDemoAdmin(): Promise<void> {
   });
   if (!adminRole) throw new Error('ensure-demo-admin: failed to upsert admin role');
 
-  await seedRolePermissions(
-    adminRole.id,
-    SYSTEM_PERMISSIONS.map((permission) => permission.code),
-    demoUser.id,
-  );
+  await seedRolePermissions({
+    roleId: adminRole.id,
+    permissionCodes: SYSTEM_PERMISSIONS.map((permission) => permission.code),
+    createdByUserId: demoUser.id,
+  });
 
   await seedMembership({
     user_id: demoUser.id,

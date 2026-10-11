@@ -47,9 +47,11 @@ export class UserSettingsService {
   async get(scope: UserPrincipalDatabaseScope): Promise<UserSettingsOutput> {
     const user_public_id = scope.userPublicId;
     // auth.user_settings is FORCE RLS keyed on app.current_user_public_id — read inside the user context.
-    const settings = await withAppDatabaseContext(scope, async () =>
-      this.repository.getByUserId(await this.requireUserIdInContext(user_public_id)),
-    );
+    const settings = await withAppDatabaseContext({
+      scope,
+      callback: async () =>
+        this.repository.getByUserId(await this.requireUserIdInContext(user_public_id)),
+    });
     return serializeUserSettings(settings);
   }
 
@@ -63,12 +65,14 @@ export class UserSettingsService {
     const user_public_id = scope.userPublicId;
     const parsed = validateUpdateUserSettings(body);
     // auth.user_settings is FORCE RLS keyed on app.current_user_public_id — upsert inside the user context.
-    const result = await withAppDatabaseContext(scope, async () =>
-      this.repository.upsert(
-        await this.requireUserIdInContext(user_public_id),
-        omitUndefined(parsed),
-      ),
-    );
+    const result = await withAppDatabaseContext({
+      scope,
+      callback: async () =>
+        this.repository.upsert(
+          await this.requireUserIdInContext(user_public_id),
+          omitUndefined(parsed),
+        ),
+    });
     return serializeUserSettings(result);
   }
 
@@ -80,10 +84,11 @@ export class UserSettingsService {
    * (Phase 6b of the principal campaign).
    */
   async getForInvitedUser(user_public_id: string): Promise<UserSettingsOutput> {
-    const settings = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
-      async () => this.repository.getByUserId(await this.requireUserIdInContext(user_public_id)),
-    );
+    const settings = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
+      callback: async () =>
+        this.repository.getByUserId(await this.requireUserIdInContext(user_public_id)),
+    });
     return serializeUserSettings(settings);
   }
 
@@ -100,14 +105,14 @@ export class UserSettingsService {
     body: unknown;
   }): Promise<UserSettingsOutput> {
     const parsed = validateUpdateUserSettings(body);
-    const result = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
-      async () =>
+    const result = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
+      callback: async () =>
         this.repository.upsert(
           await this.requireUserIdInContext(user_public_id),
           omitUndefined(parsed),
         ),
-    );
+    });
     return serializeUserSettings(result);
   }
 }

@@ -59,11 +59,11 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
       role: 'USER',
     });
 
-    await recordLoginAuditEvent(request, sessionResult, 'email_code');
+    await recordLoginAuditEvent({ request, loginResult: sessionResult, source: 'email_code' });
 
-    expect(recordScopedAuditEventSpy).toHaveBeenCalledWith(
+    expect(recordScopedAuditEventSpy).toHaveBeenCalledWith({
       request,
-      expect.objectContaining({
+      input: expect.objectContaining({
         actorUserPublicId: 'user_alice',
         action: 'auth.login',
         resource_type: 'session',
@@ -72,7 +72,7 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
           source: 'email_code',
         }),
       }),
-    );
+    });
   });
 
   it('also records super_admin.token_issued (WARNING) when role is SUPER_ADMIN', async () => {
@@ -81,15 +81,14 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
       role: GLOBAL_ROLES.SUPER_ADMIN,
     });
 
-    await recordLoginAuditEvent(request, sessionResult, 'oauth_google');
+    await recordLoginAuditEvent({ request, loginResult: sessionResult, source: 'oauth_google' });
 
     // Every platform super_admin token issuance is a break-glass moment and
     // must be visible alongside the auth.login row.
     expect(recordScopedAuditEventSpy).toHaveBeenCalledTimes(2);
-    expect(recordScopedAuditEventSpy).toHaveBeenNthCalledWith(
-      2,
+    expect(recordScopedAuditEventSpy).toHaveBeenNthCalledWith(2, {
       request,
-      expect.objectContaining({
+      input: expect.objectContaining({
         actorUserPublicId: 'user_admin',
         action: 'auth.super_admin.token_issued',
         resource_type: 'session',
@@ -99,7 +98,7 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
           source: 'oauth_google',
         }),
       }),
-    );
+    });
   });
 
   it('does NOT emit the super_admin event for non-admin roles (control case)', async () => {
@@ -108,11 +107,11 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
       role: 'USER',
     });
 
-    await recordLoginAuditEvent(request, sessionResult, 'webauthn');
+    await recordLoginAuditEvent({ request, loginResult: sessionResult, source: 'webauthn' });
 
     expect(recordScopedAuditEventSpy).toHaveBeenCalledTimes(1);
     const calls = recordScopedAuditEventSpy.mock.calls;
-    expect(calls.every(([, payload]) => payload.action !== 'auth.super_admin.token_issued')).toBe(
+    expect(calls.every(([{ input }]) => input.action !== 'auth.super_admin.token_issued')).toBe(
       true,
     );
   });
@@ -120,26 +119,29 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
   it('records auth.mfa.recovery_code_used (WARNING), attributed to the user, for a recovery-code login', async () => {
     verifyAccessTokenSpy.mockResolvedValueOnce({ userId: 'user_carol', role: 'USER' });
 
-    await recordLoginAuditEvent(request, sessionResult, 'mfa_recovery_code');
+    await recordLoginAuditEvent({
+      request,
+      loginResult: sessionResult,
+      source: 'mfa_recovery_code',
+    });
 
     expect(recordScopedAuditEventSpy).toHaveBeenCalledTimes(2);
-    expect(recordScopedAuditEventSpy).toHaveBeenNthCalledWith(
-      2,
+    expect(recordScopedAuditEventSpy).toHaveBeenNthCalledWith(2, {
       request,
-      expect.objectContaining({
+      input: expect.objectContaining({
         actorUserPublicId: 'user_carol',
         action: 'auth.mfa.recovery_code_used',
         resource_type: 'mfa_method',
         severity: 'WARNING',
         metadata: { session_public_id: 'sess_public_test' },
       }),
-    );
+    });
   });
 
   it('does NOT emit the recovery-code event for a TOTP second factor (control case)', async () => {
     verifyAccessTokenSpy.mockResolvedValueOnce({ userId: 'user_dave', role: 'USER' });
 
-    await recordLoginAuditEvent(request, sessionResult, 'mfa_totp');
+    await recordLoginAuditEvent({ request, loginResult: sessionResult, source: 'mfa_totp' });
 
     expect(recordScopedAuditEventSpy).toHaveBeenCalledTimes(1);
   });
@@ -148,7 +150,9 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
     verifyAccessTokenSpy.mockResolvedValueOnce({ userId: 'user_e', role: 'USER' });
     recordScopedAuditEventSpy.mockRejectedValueOnce(new Error('audit write failed'));
 
-    await expect(recordLoginAuditEvent(request, sessionResult, 'password')).resolves.not.toThrow();
+    await expect(
+      recordLoginAuditEvent({ request, loginResult: sessionResult, source: 'password' }),
+    ).resolves.not.toThrow();
     // The failure path logs but does NOT propagate (login UX is not held hostage
     // by an audit-store outage).
     expect(loggerWarnSpy).toHaveBeenCalledWith(
@@ -160,7 +164,9 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
   it('swallows JWT-verify errors (token already present in cookie / body remains valid)', async () => {
     verifyAccessTokenSpy.mockRejectedValueOnce(new Error('verify failed'));
 
-    await expect(recordLoginAuditEvent(request, sessionResult, 'password')).resolves.not.toThrow();
+    await expect(
+      recordLoginAuditEvent({ request, loginResult: sessionResult, source: 'password' }),
+    ).resolves.not.toThrow();
     expect(recordScopedAuditEventSpy).not.toHaveBeenCalled();
     expect(loggerWarnSpy).toHaveBeenCalled();
   });
@@ -181,11 +187,15 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
         }
       }
 
-      await recordLoginFailureAuditEvent(request, 'password', new FakeAppError());
-
-      expect(recordScopedAuditEventSpy).toHaveBeenCalledWith(
+      await recordLoginFailureAuditEvent({
         request,
-        expect.objectContaining({
+        source: 'password',
+        error: new FakeAppError(),
+      });
+
+      expect(recordScopedAuditEventSpy).toHaveBeenCalledWith({
+        request,
+        input: expect.objectContaining({
           action: 'auth.login_failure',
           resource_type: 'session',
           severity: 'INFO',
@@ -194,10 +204,10 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
             error_code: 'errors:invalidEmailOrPassword',
           }),
         }),
-      );
+      });
       // CRITICAL: failure rows must NOT name an actor — we don't trust the
       // attacker's claim of identity, and naming a victim would leak existence.
-      const [, payload] = recordScopedAuditEventSpy.mock.calls.at(-1) ?? [];
+      const payload = recordScopedAuditEventSpy.mock.calls.at(-1)?.[0]?.input;
       expect((payload as { actorUserPublicId?: string })?.actorUserPublicId).toBeUndefined();
       // ...and must declare that, or the audit service drops the row (it used to drop every one).
       expect((payload as { anonymousActor?: true })?.anonymousActor).toBe(true);
@@ -206,9 +216,9 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
     it('falls back to error.name when no messageKey is present (plain Error)', async () => {
       const plainError = new Error('boom');
 
-      await recordLoginFailureAuditEvent(request, 'oauth_google', plainError);
+      await recordLoginFailureAuditEvent({ request, source: 'oauth_google', error: plainError });
 
-      const [, payload] = recordScopedAuditEventSpy.mock.calls.at(-1) ?? [];
+      const payload = recordScopedAuditEventSpy.mock.calls.at(-1)?.[0]?.input;
       expect((payload as { metadata?: { error_code?: string } })?.metadata?.error_code).toBe(
         'Error',
       );
@@ -218,9 +228,13 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
     });
 
     it('falls back to "unknown" error_code when error is a non-Error throw value', async () => {
-      await recordLoginFailureAuditEvent(request, 'webauthn', 'some-string-thrown');
+      await recordLoginFailureAuditEvent({
+        request,
+        source: 'webauthn',
+        error: 'some-string-thrown',
+      });
 
-      const [, payload] = recordScopedAuditEventSpy.mock.calls.at(-1) ?? [];
+      const payload = recordScopedAuditEventSpy.mock.calls.at(-1)?.[0]?.input;
       expect((payload as { metadata?: { error_code?: string } })?.metadata?.error_code).toBe(
         'unknown',
       );
@@ -230,7 +244,7 @@ describe('recordLoginAuditEvent (sec-A8)', () => {
       recordScopedAuditEventSpy.mockRejectedValueOnce(new Error('audit pipeline down'));
 
       await expect(
-        recordLoginFailureAuditEvent(request, 'email_code', new Error('boom')),
+        recordLoginFailureAuditEvent({ request, source: 'email_code', error: new Error('boom') }),
       ).resolves.not.toThrow();
       expect(loggerWarnSpy).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.any(Error) }),

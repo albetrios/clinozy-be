@@ -6,5 +6,5 @@ import { UpdateUserSettingsDto, type UpdateUserSettingsInput } from './user-sett
  * Throws `ValidationError` (`errors:invalidInput`) with flattened field errors on failure.
  */
 export function validateUpdateUserSettings(body: unknown): UpdateUserSettingsInput {
-  return parseWithSchema(UpdateUserSettingsDto, body);
+  return parseWithSchema({ schema: UpdateUserSettingsDto, data: body });
 }

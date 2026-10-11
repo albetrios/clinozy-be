@@ -48,7 +48,9 @@ describe('exchangeGoogleOAuthCode', () => {
   });
 
   it('builds an authorize URL carrying the PKCE S256 code_challenge', () => {
-    const url = new URL(buildGoogleOAuthRedirectUrl('state-token', 'the-code-challenge'));
+    const url = new URL(
+      buildGoogleOAuthRedirectUrl({ state: 'state-token', codeChallenge: 'the-code-challenge' }),
+    );
     expect(url.searchParams.get('state')).toBe('state-token');
     expect(url.searchParams.get('code_challenge')).toBe('the-code-challenge');
     expect(url.searchParams.get('code_challenge_method')).toBe('S256');
@@ -62,7 +64,9 @@ describe('exchangeGoogleOAuthCode', () => {
   // a forced prompt, Google shows UI only when it must (first consent, several signed-in accounts)
   // and otherwise completes on HTTP redirects, which leave no history entry.
   it('does not force a consent screen or request offline access', () => {
-    const url = new URL(buildGoogleOAuthRedirectUrl('state-token', 'the-code-challenge'));
+    const url = new URL(
+      buildGoogleOAuthRedirectUrl({ state: 'state-token', codeChallenge: 'the-code-challenge' }),
+    );
     expect(url.searchParams.has('prompt')).toBe(false);
     expect(url.searchParams.has('access_type')).toBe(false);
     // Identity scopes only — the reason offline access was never needed.

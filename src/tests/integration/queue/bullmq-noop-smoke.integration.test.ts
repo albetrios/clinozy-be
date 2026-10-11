@@ -89,7 +89,7 @@ describe('Integration: BullMQ runtime under burst, retry and dead-letter', () =>
       concurrency: 10,
       ...getDefaultWorkerOptions(),
     });
-    attachDeadLetterAndAlerting(worker, queueName);
+    attachDeadLetterAndAlerting({ worker, queueName });
     cleanups.push(async () => {
       // Worker first, so nothing is active; then remove every key the case wrote — its queue and
       // its dead-letter queue — so repeated runs leave Redis as they found it.

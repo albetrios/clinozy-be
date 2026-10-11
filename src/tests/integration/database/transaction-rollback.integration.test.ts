@@ -33,10 +33,12 @@ describe.runIf(runAsApplicationBehaviour)('Integration: transaction rollback on 
     await createTestUser({ email: seedEmail });
 
     await expect(
-      withTransaction(async (transaction) => {
-        const databaseHandle = transaction as typeof database;
-        await databaseHandle.insert(users).values(buildUserInsert(rolledBackEmail));
-        throw new Error('Simulated failure');
+      withTransaction({
+        callback: async (transaction) => {
+          const databaseHandle = transaction as typeof database;
+          await databaseHandle.insert(users).values(buildUserInsert(rolledBackEmail));
+          throw new Error('Simulated failure');
+        },
       }),
     ).rejects.toThrow('Simulated failure');
 
@@ -56,9 +58,11 @@ describe.runIf(runAsApplicationBehaviour)('Integration: transaction rollback on 
   it('commits writes when the callback completes successfully', async () => {
     const committedEmail = 'rollback-commit@example.com';
 
-    await withTransaction(async (transaction) => {
-      const databaseHandle = transaction as typeof database;
-      await databaseHandle.insert(users).values(buildUserInsert(committedEmail));
+    await withTransaction({
+      callback: async (transaction) => {
+        const databaseHandle = transaction as typeof database;
+        await databaseHandle.insert(users).values(buildUserInsert(committedEmail));
+      },
     });
 
     const committedRows = await getOperatorDatabase()

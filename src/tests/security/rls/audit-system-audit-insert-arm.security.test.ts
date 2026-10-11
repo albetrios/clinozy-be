@@ -65,16 +65,16 @@ describe('Security: audit.logs INSERT system-audit arm (sec-r5-async-queue-1)', 
 
     let caught: unknown;
     try {
-      await withMaintenanceDatabaseContext(
-        MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
-        async (databaseHandle) => {
+      await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
+        callback: async (databaseHandle) => {
           await databaseHandle.execute(
             drizzleSql`INSERT INTO audit.logs (public_id, organization_id, actor_user_id, action, resource_type, metadata, severity)
                        VALUES (${generatePublicId('auditLog')}, NULL, NULL, 'test.r5.system_audit', 'test', '{}'::jsonb, 'INFO')`,
           );
         },
-        { useMaintenanceDatabaseRole: true },
-      );
+        options: { useMaintenanceDatabaseRole: true },
+      });
     } catch (error) {
       caught = error;
     }
@@ -98,9 +98,9 @@ describe('Security: audit.logs INSERT system-audit arm (sec-r5-async-queue-1)', 
 
     let caught: unknown;
     try {
-      await withMaintenanceDatabaseContext(
-        MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
-        async (databaseHandle) => {
+      await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
+        callback: async (databaseHandle) => {
           // Attempt to pin a real tenant on the row while only the
           // system-audit-insert GUC is active. The new arm requires
           // organization_id IS NULL — RLS must reject this.
@@ -109,8 +109,8 @@ describe('Security: audit.logs INSERT system-audit arm (sec-r5-async-queue-1)', 
                        VALUES (${generatePublicId('auditLog')}, ${organization.id}, NULL, 'test.r5.impersonate', 'test', '{}'::jsonb, 'INFO')`,
           );
         },
-        { useMaintenanceDatabaseRole: true },
-      );
+        options: { useMaintenanceDatabaseRole: true },
+      });
     } catch (error) {
       caught = error;
     }

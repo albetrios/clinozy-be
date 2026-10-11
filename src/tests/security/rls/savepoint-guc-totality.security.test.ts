@@ -132,12 +132,18 @@ describe('Security: original principal identity reuse', () => {
     const user = await createTestUser();
     const foreign = await createTestUser();
     const scope = PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id });
-    await withAppDatabaseContext(scope, async (handle) => {
-      await setLocalApplicationRole(handle);
-      await withAppDatabaseContext(scope, async () => {
-        expect(await visibleUserPublicIds()).toEqual([user.public_id]);
-        expect(await visibleUserPublicIds()).not.toContain(foreign.public_id);
-      });
+    await withAppDatabaseContext({
+      scope,
+      callback: async (handle) => {
+        await setLocalApplicationRole(handle);
+        await withAppDatabaseContext({
+          scope,
+          callback: async () => {
+            expect(await visibleUserPublicIds()).toEqual([user.public_id]);
+            expect(await visibleUserPublicIds()).not.toContain(foreign.public_id);
+          },
+        });
+      },
     });
   });
 
@@ -146,21 +152,33 @@ describe('Security: original principal identity reuse', () => {
     const foreign = await createTestUser();
     const original = PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id });
     const changed = PRINCIPAL_SCOPE.VERIFIED({ userPublicId: foreign.public_id });
-    await withAppDatabaseContext(original, async (handle) => {
-      await setLocalApplicationRole(handle);
-      await handle.execute(drizzleSql`SAVEPOINT principal_identity`);
-      await withAppDatabaseContext(changed, async () => {
-        expect(await visibleUserPublicIds()).toEqual([foreign.public_id]);
-      });
-      await handle.execute(drizzleSql`ROLLBACK TO SAVEPOINT principal_identity`);
-      expect(await visibleUserPublicIds()).toEqual([user.public_id]);
-      await withAppDatabaseContext(changed, async () => {
-        expect(await visibleUserPublicIds()).toEqual([foreign.public_id]);
-      });
-      await withAppDatabaseContext(original, async () => {
+    await withAppDatabaseContext({
+      scope: original,
+      callback: async (handle) => {
+        await setLocalApplicationRole(handle);
+        await handle.execute(drizzleSql`SAVEPOINT principal_identity`);
+        await withAppDatabaseContext({
+          scope: changed,
+          callback: async () => {
+            expect(await visibleUserPublicIds()).toEqual([foreign.public_id]);
+          },
+        });
+        await handle.execute(drizzleSql`ROLLBACK TO SAVEPOINT principal_identity`);
         expect(await visibleUserPublicIds()).toEqual([user.public_id]);
-      });
-      await handle.execute(drizzleSql`RELEASE SAVEPOINT principal_identity`);
+        await withAppDatabaseContext({
+          scope: changed,
+          callback: async () => {
+            expect(await visibleUserPublicIds()).toEqual([foreign.public_id]);
+          },
+        });
+        await withAppDatabaseContext({
+          scope: original,
+          callback: async () => {
+            expect(await visibleUserPublicIds()).toEqual([user.public_id]);
+          },
+        });
+        await handle.execute(drizzleSql`RELEASE SAVEPOINT principal_identity`);
+      },
     });
   });
 
@@ -168,23 +186,32 @@ describe('Security: original principal identity reuse', () => {
     const user = await createTestUser();
     const foreign = await createTestUser();
     const original = PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id });
-    await withAppDatabaseContext(original, async (handle) => {
-      await setLocalApplicationRole(handle);
-      await handle.transaction((savepoint) =>
-        runWithPinnedDatabaseHandle(savepoint, async () => {
-          await withAppDatabaseContext(
-            PRINCIPAL_SCOPE.VERIFIED({ userPublicId: foreign.public_id }),
-            async () => {
-              expect(await visibleUserPublicIds()).toEqual([foreign.public_id]);
+    await withAppDatabaseContext({
+      scope: original,
+      callback: async (handle) => {
+        await setLocalApplicationRole(handle);
+        await handle.transaction((savepoint) =>
+          runWithPinnedDatabaseHandle({
+            databaseHandle: savepoint,
+            callback: async () => {
+              await withAppDatabaseContext({
+                scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: foreign.public_id }),
+                callback: async () => {
+                  expect(await visibleUserPublicIds()).toEqual([foreign.public_id]);
+                },
+              });
             },
-          );
-        }),
-      );
-      // The nested unit's identity ends with it: the outer user is back.
-      expect(await visibleUserPublicIds()).toEqual([user.public_id]);
-      await withAppDatabaseContext(original, async () => {
+          }),
+        );
+        // The nested unit's identity ends with it: the outer user is back.
         expect(await visibleUserPublicIds()).toEqual([user.public_id]);
-      });
+        await withAppDatabaseContext({
+          scope: original,
+          callback: async () => {
+            expect(await visibleUserPublicIds()).toEqual([user.public_id]);
+          },
+        });
+      },
     });
   });
 
@@ -192,21 +219,21 @@ describe('Security: original principal identity reuse', () => {
     const user = await createTestUser();
     const foreign = await createTestUser();
     await expect(
-      withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
-        async (handle) => {
+      withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+        callback: async (handle) => {
           await setLocalApplicationRole(handle);
           expect(await visibleUserPublicIds()).toEqual([user.public_id]);
           throw new Error('rollback principal transaction');
         },
-      ),
+      }),
     ).rejects.toThrow('rollback principal transaction');
-    await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: foreign.public_id }),
-      async (handle) => {
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: foreign.public_id }),
+      callback: async (handle) => {
         await setLocalApplicationRole(handle);
         expect(await visibleUserPublicIds()).toEqual([foreign.public_id]);
       },
-    );
+    });
   });
 });

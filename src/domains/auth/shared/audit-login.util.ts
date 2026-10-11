@@ -47,45 +47,58 @@ export interface LoginAuditEventInput {
  * `await` is intentional so the caller can guarantee best-effort recording
  * completes before the handler returns its response.
  */
-export async function recordLoginAuditEvent(
-  request: FastifyRequest,
-  loginResult: LoginAuditEventInput,
-  source: LoginAuditSource,
-): Promise<void> {
+export async function recordLoginAuditEvent({
+  request,
+  loginResult,
+  source,
+}: {
+  request: FastifyRequest;
+  loginResult: LoginAuditEventInput;
+  source: LoginAuditSource;
+}): Promise<void> {
   try {
     const payload = await verifyAccessToken(loginResult.access_token);
-    await recordScopedAuditEvent(request, {
-      actorUserPublicId: payload.userId,
-      action: 'auth.login',
-      resource_type: 'session',
-      metadata: {
-        session_public_id: loginResult.session_public_id,
-        source,
+    await recordScopedAuditEvent({
+      request,
+      input: {
+        actorUserPublicId: payload.userId,
+        action: 'auth.login',
+        resource_type: 'session',
+        metadata: {
+          session_public_id: loginResult.session_public_id,
+          source,
+        },
       },
     });
     if (source === 'mfa_recovery_code') {
       // Break-glass visibility: a recovery code bypasses TOTP, so an incident responder must be
       // able to find each use on its own. Attributed like the login it completed (the handler
       // used to record it with no actor, and the audit service dropped every one).
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: payload.userId,
-        action: 'auth.mfa.recovery_code_used',
-        resource_type: 'mfa_method',
-        severity: 'WARNING',
-        metadata: { session_public_id: loginResult.session_public_id },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: payload.userId,
+          action: 'auth.mfa.recovery_code_used',
+          resource_type: 'mfa_method',
+          severity: 'WARNING',
+          metadata: { session_public_id: loginResult.session_public_id },
+        },
       });
     }
     if (payload.role === GLOBAL_ROLES.SUPER_ADMIN) {
       // Break-glass visibility: every platform super_admin token issuance is a
       // high-severity event regardless of the login surface that minted it.
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: payload.userId,
-        action: 'auth.super_admin.token_issued',
-        resource_type: 'session',
-        severity: 'WARNING',
-        metadata: {
-          session_public_id: loginResult.session_public_id,
-          source,
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: payload.userId,
+          action: 'auth.super_admin.token_issued',
+          resource_type: 'session',
+          severity: 'WARNING',
+          metadata: {
+            session_public_id: loginResult.session_public_id,
+            source,
+          },
         },
       });
     }
@@ -131,25 +144,32 @@ function extractLoginFailureErrorCode(error: unknown): unknown {
  * downstream re-throw — callers always `await recordLoginFailureAuditEvent`
  * and then rethrow the original error.
  */
-export async function recordLoginFailureAuditEvent(
-  request: FastifyRequest,
-  source: LoginAuditSource,
-  error: unknown,
-): Promise<void> {
+export async function recordLoginFailureAuditEvent({
+  request,
+  source,
+  error,
+}: {
+  request: FastifyRequest;
+  source: LoginAuditSource;
+  error: unknown;
+}): Promise<void> {
   try {
     // Capture the i18n message key (when present on a typed AppError) as the
     // error_code so audit rows are consistent across calls — far more useful
     // than the raw stringified message which carries the user's locale.
     const errorCode = extractLoginFailureErrorCode(error);
-    await recordScopedAuditEvent(request, {
-      // No actor by design (see above) — declared, so the row is kept instead of dropped.
-      anonymousActor: true,
-      action: 'auth.login_failure',
-      resource_type: 'session',
-      severity: 'INFO',
-      metadata: {
-        source,
-        error_code: typeof errorCode === 'string' ? errorCode : 'unknown',
+    await recordScopedAuditEvent({
+      request,
+      input: {
+        // No actor by design (see above) — declared, so the row is kept instead of dropped.
+        anonymousActor: true,
+        action: 'auth.login_failure',
+        resource_type: 'session',
+        severity: 'INFO',
+        metadata: {
+          source,
+          error_code: typeof errorCode === 'string' ? errorCode : 'unknown',
+        },
       },
     });
   } catch (recordingError) {

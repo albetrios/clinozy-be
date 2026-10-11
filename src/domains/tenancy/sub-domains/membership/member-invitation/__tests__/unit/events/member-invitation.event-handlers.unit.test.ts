@@ -63,7 +63,7 @@ describe('tenancy member-invitation event handlers', () => {
       }),
     );
     expect(dispatchOutboxEmailMock).toHaveBeenCalledOnce();
-    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith(99);
+    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith({ mailOutboxToken: 99 });
   });
 
   it('links the invitation to the frontend accept page, not the API route', async () => {

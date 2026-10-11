@@ -120,12 +120,15 @@ export class AuditService {
     // matching context here the bare-pool INSERT is rejected under the production clinozy_be_app role
     // and the row is silently dropped by `recordAuditEvent`. Open the right context per row.
     if (input.organization_public_id) {
-      await withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: input.organization_public_id }),
-        insert,
-      );
+      await withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: input.organization_public_id }),
+        callback: insert,
+      });
     } else {
-      await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT, insert);
+      await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
+        callback: insert,
+      });
     }
   }
 
@@ -158,10 +161,10 @@ export class AuditService {
     organization_public_id: string;
     query: Record<string, unknown>;
   }) {
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization_public_id }),
-      () => this.list(query),
-    );
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization_public_id }),
+      callback: () => this.list(query),
+    });
   }
 
   /**
@@ -185,7 +188,10 @@ export class AuditService {
    * isolation and must never be reachable without that gate.
    */
   async listForAdmin(query: Record<string, unknown>) {
-    return withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_ADMIN, () => this.list(query));
+    return withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_ADMIN,
+      callback: () => this.list(query),
+    });
   }
 
   async list(query: Record<string, unknown>) {
@@ -265,9 +271,10 @@ export class AuditService {
    */
   async listActivityForUserDataExport(options: { userPublicId: string; limit: number }) {
     const user = await this.userService.requireUserRecordByPublicId(options.userPublicId);
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
-      (_databaseHandle) => this.repository.listActivityForUserDataExport(user.id, options.limit),
-    );
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
+      callback: (_databaseHandle) =>
+        this.repository.listActivityForUserDataExport(user.id, options.limit),
+    });
   }
 }

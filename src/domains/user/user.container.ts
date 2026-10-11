@@ -54,10 +54,13 @@ export function createUserContainerBase(objectStorage: ObjectStoragePort): UserC
 }
 
 /** Attach a constructed {@link UserDataExportService} to a base container produced by {@link createUserContainerBase}. */
-export function completeUserContainer(
-  base: UserContainerBase,
-  userDataExportService: UserDataExportService,
-): UserContainerWithRepository {
+export function completeUserContainer({
+  base,
+  userDataExportService,
+}: {
+  base: UserContainerBase;
+  userDataExportService: UserDataExportService;
+}): UserContainerWithRepository {
   return { ...base, userDataExportService };
 }
 
@@ -74,7 +77,7 @@ export function createUserContainer(objectStorage: ObjectStoragePort): UserConta
     userDataExportRepository,
     objectStorage,
   );
-  const withRepository = completeUserContainer(base, userDataExportService);
+  const withRepository = completeUserContainer({ base, userDataExportService });
   return {
     userService: withRepository.userService,
     userSettingsService: withRepository.userSettingsService,

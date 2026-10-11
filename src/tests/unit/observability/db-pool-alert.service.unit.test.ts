@@ -75,10 +75,10 @@ describe('db-pool-alert.service', () => {
       clusterActiveConnections: 0,
       allowedApplicationConnections: 100,
     });
-    expect(captureMessage).toHaveBeenCalledWith(
-      'database.pool.exhaustion.critical',
-      expect.objectContaining({ level: 'error' }),
-    );
+    expect(captureMessage).toHaveBeenCalledWith({
+      message: 'database.pool.exhaustion.critical',
+      options: expect.objectContaining({ level: 'error' }),
+    });
   });
 
   it('resets consecutive poll counter when pressure drops', () => {

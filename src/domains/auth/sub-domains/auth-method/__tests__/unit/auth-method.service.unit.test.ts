@@ -43,7 +43,9 @@ vi.mock('@/shared/utils/security/anti-enumeration.util.js', () => ({
 // resetPassword now runs inside withTransaction + runWithPinnedDatabaseHandle; invoke the
 // callbacks directly so the unit test exercises the flow without a real database/transaction.
 vi.mock('@/infrastructure/database/transaction.js', () => ({
-  withTransaction: vi.fn((callback: (transaction: unknown) => unknown) => callback({})),
+  withTransaction: vi.fn(({ callback }: { callback: (transaction: unknown) => unknown }) =>
+    callback({}),
+  ),
 }));
 
 vi.mock(
@@ -52,7 +54,15 @@ vi.mock(
     const actual = await importOriginal<Record<string, unknown>>();
     return {
       ...actual,
-      runWithPinnedDatabaseHandle: vi.fn((_handle: unknown, callback: () => unknown) => callback()),
+      runWithPinnedDatabaseHandle: vi.fn(
+        ({
+          databaseHandle: _handle,
+          callback,
+        }: {
+          databaseHandle: unknown;
+          callback: () => unknown;
+        }) => callback(),
+      ),
       getRequestDatabase: vi.fn(() => ({})),
       setLocalDatabaseConfig: vi.fn().mockResolvedValue(undefined),
     };
@@ -67,10 +77,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });

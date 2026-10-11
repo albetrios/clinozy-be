@@ -41,5 +41,5 @@ export function createCommitDispatchRecoveryWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, COMMIT_DISPATCH_RECOVERY_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: COMMIT_DISPATCH_RECOVERY_QUEUE_NAME });
 }

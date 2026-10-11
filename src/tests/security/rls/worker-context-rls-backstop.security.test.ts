@@ -62,30 +62,30 @@ describe('Security: worker context RLS backstop (wrong-organization context cann
     const notificationId = await seedOrganizationNotification(organizationA.id, user.id);
 
     // Wrong context: a worker scoped to organization B raw-queries organization A's row.
-    const visibleUnderB = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationB.public_id }),
-      async (handle) => {
+    const visibleUnderB = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationB.public_id }),
+      callback: async (handle) => {
         await setLocalApplicationRole(handle);
         return handle
           .select({ id: notifications.id })
           .from(notifications)
           .where(eq(notifications.id, notificationId));
       },
-    );
+    });
     expect(visibleUnderB).toHaveLength(0);
 
     // Correct context: a worker scoped to organization A sees its own row — proves the wrapper actually
     // set the organization GUC (so the empty result above is RLS isolation, not a broken query).
-    const visibleUnderA = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationA.public_id }),
-      async (handle) => {
+    const visibleUnderA = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationA.public_id }),
+      callback: async (handle) => {
         await setLocalApplicationRole(handle);
         return handle
           .select({ id: notifications.id })
           .from(notifications)
           .where(eq(notifications.id, notificationId));
       },
-    );
+    });
     expect(visibleUnderA).toHaveLength(1);
   });
 
@@ -95,9 +95,9 @@ describe('Security: worker context RLS backstop (wrong-organization context cann
     const organizationB = await createTestOrganization({ ownerUserId: user.id });
     const notificationId = await seedOrganizationNotification(organizationA.id, user.id);
 
-    await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationB.public_id }),
-      async (handle) => {
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationB.public_id }),
+      callback: async (handle) => {
         await setLocalApplicationRole(handle);
         // The read state: the only columns the application role may update at all.
         await handle
@@ -105,7 +105,7 @@ describe('Security: worker context RLS backstop (wrong-organization context cann
           .set({ is_read: true, read_at: new Date() })
           .where(eq(notifications.id, notificationId));
       },
-    );
+    });
 
     // Re-read as the RLS-exempt superuser: organization A's row is untouched (RLS USING blocked the UPDATE).
     const [row] = await database

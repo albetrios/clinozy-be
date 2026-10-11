@@ -136,11 +136,11 @@ export class AuditRepository {
     }
 
     const conditions = [...filterConditions];
-    const cursorCondition = buildDescendingCreatedAtIdCursorCondition(
-      logs.created_at,
-      logs.id,
-      parsedCursor,
-    );
+    const cursorCondition = buildDescendingCreatedAtIdCursorCondition({
+      createdAtColumn: logs.created_at,
+      idColumn: logs.id,
+      cursor: parsedCursor,
+    });
     if (cursorCondition !== undefined) conditions.push(cursorCondition);
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -160,7 +160,7 @@ export class AuditRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    const page = finishKeysetPage(fetchedRows, { limit, filterFingerprint });
+    const page = finishKeysetPage({ rows: fetchedRows, args: { limit, filterFingerprint } });
     return { items: page.items, total, hasMore: page.has_more, nextCursor: page.next_cursor };
   }
 

@@ -33,10 +33,13 @@ export type SubscriptionSeatSyncService = {
  * - **Notes:** the job carries `organizationPublicId`; the service (not this processor) establishes
  *   the organization RLS context, so no worker repository handle is threaded here.
  */
-export async function processSubscriptionSeatSyncJob(
-  jobData: SubscriptionSeatSyncJobData,
-  service: SubscriptionSeatSyncService,
-): Promise<void> {
+export async function processSubscriptionSeatSyncJob({
+  jobData,
+  service,
+}: {
+  jobData: SubscriptionSeatSyncJobData;
+  service: SubscriptionSeatSyncService;
+}): Promise<void> {
   const { organizationPublicId, idempotencyKey } = jobData;
   await service.syncSeatQuantityForOrganization({
     organization_public_id: organizationPublicId,

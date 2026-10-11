@@ -45,16 +45,19 @@ export type UserScopedWorkerJob<TJob> = TJob & {
 /**
  * Runs a tenant-scoped BullMQ job handler with RLS organization context and a pinned database handle.
  */
-export async function runOrganizationScopedWorkerJob<TJob, TResult>(
-  job: TenantScopedWorkerJob<TJob>,
-  processor: (databaseHandle: WorkerDatabaseHandle, job: TJob) => Promise<TResult>,
-): Promise<TResult> {
+export async function runOrganizationScopedWorkerJob<TJob, TResult>({
+  job,
+  processor,
+}: {
+  job: TenantScopedWorkerJob<TJob>;
+  processor: (databaseHandle: WorkerDatabaseHandle, job: TJob) => Promise<TResult>;
+}): Promise<TResult> {
   const { organizationPublicId, ...jobPayload } = job;
-  return withAppDatabaseContext(
-    PRINCIPAL_SCOPE.JOB({ organizationPublicId: organizationPublicId }),
-    (databaseHandle) =>
+  return withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.JOB({ organizationPublicId: organizationPublicId }),
+    callback: (databaseHandle) =>
       processor(brandWorkerContextDatabaseHandle(databaseHandle), jobPayload as TJob),
-  );
+  });
 }
 
 /**
@@ -63,47 +66,54 @@ export async function runOrganizationScopedWorkerJob<TJob, TResult>(
 export async function runGlobalRetentionWorkerJob<TResult>(
   processor: (databaseHandle: WorkerDatabaseHandle) => Promise<TResult>,
 ): Promise<TResult> {
-  return withMaintenanceDatabaseContext(
-    MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-    (databaseHandle) => processor(brandWorkerContextDatabaseHandle(databaseHandle)),
-  );
+  return withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+    callback: (databaseHandle) => processor(brandWorkerContextDatabaseHandle(databaseHandle)),
+  });
 }
 
 /**
  * Runs a user-scoped worker job with `app.current_user_public_id` set (GDPR export, etc.).
  */
-export async function runUserScopedWorkerJob<TJob, TResult>(
-  job: UserScopedWorkerJob<TJob>,
-  processor: (databaseHandle: WorkerDatabaseHandle, job: TJob) => Promise<TResult>,
-): Promise<TResult> {
+export async function runUserScopedWorkerJob<TJob, TResult>({
+  job,
+  processor,
+}: {
+  job: UserScopedWorkerJob<TJob>;
+  processor: (databaseHandle: WorkerDatabaseHandle, job: TJob) => Promise<TResult>;
+}): Promise<TResult> {
   const { userPublicId, ...jobPayload } = job;
-  return withAppDatabaseContext(
-    PRINCIPAL_SCOPE.JOB({ userPublicId: userPublicId }),
-    (databaseHandle) =>
+  return withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.JOB({ userPublicId: userPublicId }),
+    callback: (databaseHandle) =>
       processor(brandWorkerContextDatabaseHandle(databaseHandle), jobPayload as TJob),
-  );
+  });
 }
 
 /**
  * BullMQ worker factory for jobs that include `organizationPublicId` in the payload.
  * Runs each job inside `withAppDatabaseContext` and passes a pinned `databaseHandle` to the handler.
  */
-export function createTenantScopedBullMQWorker<TJobData extends OrganizationScopedJobData>(
-  queueName: string,
-  handler: (databaseHandle: WorkerDatabaseHandle, job: Job<TJobData>) => Promise<unknown>,
-  workerOptions: WorkerOptions,
-): WorkerHandle {
+export function createTenantScopedBullMQWorker<TJobData extends OrganizationScopedJobData>({
+  queueName,
+  handler,
+  workerOptions,
+}: {
+  queueName: string;
+  handler: (databaseHandle: WorkerDatabaseHandle, job: Job<TJobData>) => Promise<unknown>;
+  workerOptions: WorkerOptions;
+}): WorkerHandle {
   const worker = new Worker<TJobData>(
     queueName,
     async (job) => {
       const { organizationPublicId, ...jobPayload } = job.data;
-      return runOrganizationScopedWorkerJob(
-        { organizationPublicId, ...jobPayload },
-        (databaseHandle) => handler(databaseHandle, job),
-      );
+      return runOrganizationScopedWorkerJob({
+        job: { organizationPublicId, ...jobPayload },
+        processor: (databaseHandle) => handler(databaseHandle, job),
+      });
     },
     // The environment's BullMQ key namespace is not the caller's choice — see getBullMQKeyPrefix.
     { ...workerOptions, prefix: getBullMQKeyPrefix() },
   );
-  return buildWorkerHandle(worker, queueName);
+  return buildWorkerHandle({ worker, queueName });
 }

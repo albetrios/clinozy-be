@@ -42,11 +42,15 @@ vi.mock('@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queu
 
 vi.mock('@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-organization.util.js', () => ({
   runStripeWebhookHandlerWithOrganizationContext: vi.fn(
-    async (
-      _event: Stripe.Event,
-      _repository: unknown,
-      handler: (databaseHandle: unknown) => Promise<void>,
-    ) => handler({} as never),
+    async ({
+      event: _event,
+      repository: _repository,
+      handler,
+    }: {
+      event: Stripe.Event;
+      repository: unknown;
+      handler: (databaseHandle: unknown) => Promise<void>;
+    }) => handler({} as never),
   ),
 }));
 
@@ -668,13 +672,13 @@ describe('StripeWebhookService', () => {
       expect((payload as Record<string, unknown>).plan_id).toBeUndefined();
       // audit-#13: the drift is surfaced as a Sentry alert with the offending ids,
       // not just a log line, so operators can reconcile the catalog.
-      expect(vi.mocked(captureMessage)).toHaveBeenCalledWith(
-        'stripe.webhook.plan_id_resolution_miss',
-        expect.objectContaining({
+      expect(vi.mocked(captureMessage)).toHaveBeenCalledWith({
+        message: 'stripe.webhook.plan_id_resolution_miss',
+        options: expect.objectContaining({
           level: 'warning',
           extra: expect.objectContaining({ stripePriceId: 'price_unknown' }),
         }),
-      );
+      });
     });
 
     it('does not resolve a plan or write a subscription for an empty item list', async () => {
@@ -1129,7 +1133,7 @@ describe('StripeWebhookService.ingestEvent', () => {
       stripe_created_at: new Date(1_750_000_000 * 1000),
       request_id: 'req-1',
     });
-    expect(queueMocks.enqueueStripeWebhook).toHaveBeenCalledWith(event, 'req-1');
+    expect(queueMocks.enqueueStripeWebhook).toHaveBeenCalledWith({ event, requestId: 'req-1' });
     expect(recordAtIngress.mock.invocationCallOrder[0]!).toBeLessThan(
       queueMocks.enqueueStripeWebhook.mock.invocationCallOrder[0]!,
     );
@@ -1189,13 +1193,16 @@ describe('StripeWebhookService.ingestEvent', () => {
   it('forwards the request id to the queue helper for replay correlation', async () => {
     const event = buildIngressEvent({ id: 'evt_corr' });
     await service.ingestEvent({ event, context: { requestId: 'correlate-me' } });
-    expect(queueMocks.enqueueStripeWebhook).toHaveBeenCalledWith(event, 'correlate-me');
+    expect(queueMocks.enqueueStripeWebhook).toHaveBeenCalledWith({
+      event,
+      requestId: 'correlate-me',
+    });
   });
 
   it('passes the verified event through to the queue without mutation', async () => {
     const event = buildIngressEvent({ id: 'evt_identity', type: 'customer.subscription.deleted' });
     await service.ingestEvent({ event, context: { requestId: 'req-6' } });
-    const [passedEvent] = queueMocks.enqueueStripeWebhook.mock.calls[0]!;
+    const [{ event: passedEvent }] = queueMocks.enqueueStripeWebhook.mock.calls[0]!;
     expect(passedEvent).toBe(event);
   });
 });

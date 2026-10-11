@@ -26,9 +26,9 @@ export const createUploadDto = z
       UPLOAD_PURPOSES.ORGANIZATION_FILE,
     ]),
     for: z.enum([UPLOAD_TARGETS.USER, UPLOAD_TARGETS.ORGANIZATION]),
-    organization_id: trimmedStringMinMax(1, 255).optional(),
-    content_type: trimmedStringMinMax(1, 100),
-    file_name: trimmedStringMinMax(1, 255),
+    organization_id: trimmedStringMinMax({ min: 1, max: 255 }).optional(),
+    content_type: trimmedStringMinMax({ min: 1, max: 100 }),
+    file_name: trimmedStringMinMax({ min: 1, max: 255 }),
     // sec-r4-I4: hard ceiling at the highest per-purpose cap. The validator
     // still applies the per-purpose maxSize below this (avatars are smaller
     // than user files, etc.); this `.max()` is a defense-in-depth gate so the
@@ -40,5 +40,5 @@ export const createUploadDto = z
 
 /** Zod schema for the `:upload_id` URL param shared by the get/confirm/delete routes. */
 export const uploadPublicIdParamDto = z.object({
-  upload_id: trimmedStringMinMax(24, 28),
+  upload_id: trimmedStringMinMax({ min: 24, max: 28 }),
 });

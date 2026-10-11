@@ -103,7 +103,13 @@ export type McpTransportInstance = InstanceType<McpSdk['StreamableHTTPServerTran
  * Creates and configures the MCP server with a routes resource and call_api tool.
  * Does not connect to a transport; caller must call server.connect(transport).
  */
-export function createMcpServer(options: CreateMcpServerOptions, sdk: McpSdk): McpServerInstance {
+export function createMcpServer({
+  options,
+  sdk,
+}: {
+  options: CreateMcpServerOptions;
+  sdk: McpSdk;
+}): McpServerInstance {
   const { name, version, inject } = options;
   const { McpServer } = sdk;
   const routesCatalog = loadRoutesCatalog();
@@ -288,11 +294,14 @@ export type McpTransportAndServer = {
  * Creates the MCP server and Streamable HTTP transport (stateless, JSON response).
  * Caller must register the transport's handleRequest with Fastify and then connect the server to the transport.
  */
-export function createMcpTransportAndServer(
-  options: CreateMcpServerOptions,
-  sdk: McpSdk,
-): McpTransportAndServer {
-  const server = createMcpServer(options, sdk);
+export function createMcpTransportAndServer({
+  options,
+  sdk,
+}: {
+  options: CreateMcpServerOptions;
+  sdk: McpSdk;
+}): McpTransportAndServer {
+  const server = createMcpServer({ options, sdk });
   const transport = new sdk.StreamableHTTPServerTransport({
     enableJsonResponse: true,
   });
@@ -313,10 +322,13 @@ type McpRouteOptions = {
  * Stateless mode (sessionIdGenerator: undefined) requires a new transport per request;
  * the SDK rejects reuse. So we create a new transport and server per request.
  */
-export async function registerMcpRouteHandlers(
-  app: FastifyInstance,
-  options: McpRouteOptions,
-): Promise<void> {
+export async function registerMcpRouteHandlers({
+  app,
+  options,
+}: {
+  app: FastifyInstance;
+  options: McpRouteOptions;
+}): Promise<void> {
   const sdk = await loadMcpSdk();
 
   const inject = async (opts: {
@@ -357,12 +369,17 @@ export async function registerMcpRouteHandlers(
     };
   };
 
-  async function handleMcpRequest(
-    nodeRequest: IncomingMessage,
-    nodeResponse: ServerResponse,
-    parsedBody: unknown,
-    callerToken: string | undefined,
-  ): Promise<void> {
+  async function handleMcpRequest({
+    nodeRequest,
+    nodeResponse,
+    parsedBody,
+    callerToken,
+  }: {
+    nodeRequest: IncomingMessage;
+    nodeResponse: ServerResponse;
+    parsedBody: unknown;
+    callerToken: string | undefined;
+  }): Promise<void> {
     // Forward the verified MCP caller's JWT into every sub-request so that
     // downstream route handlers authenticate as the MCP principal — without
     // this the sub-request would arrive unauthenticated (the outer BLOCKED_HEADERS
@@ -377,13 +394,13 @@ export async function registerMcpRouteHandlers(
         },
       });
 
-    const { transport, server } = createMcpTransportAndServer(
-      {
+    const { transport, server } = createMcpTransportAndServer({
+      options: {
         ...options,
         inject: requestInject,
       },
       sdk,
-    );
+    });
     await server.connect(transport as Parameters<McpServerInstance['connect']>[0]);
     await transport.handleRequest(nodeRequest, nodeResponse, parsedBody);
   }
@@ -400,7 +417,12 @@ export async function registerMcpRouteHandlers(
     },
     async (request, reply) => {
       reply.hijack();
-      await handleMcpRequest(request.raw, reply.raw, undefined, request.headers.authorization);
+      await handleMcpRequest({
+        nodeRequest: request.raw,
+        nodeResponse: reply.raw,
+        callerToken: request.headers.authorization,
+        parsedBody: undefined,
+      });
     },
   );
 
@@ -417,7 +439,12 @@ export async function registerMcpRouteHandlers(
     },
     async (request, reply) => {
       reply.hijack();
-      await handleMcpRequest(request.raw, reply.raw, request.body, request.headers.authorization);
+      await handleMcpRequest({
+        nodeRequest: request.raw,
+        nodeResponse: reply.raw,
+        parsedBody: request.body,
+        callerToken: request.headers.authorization,
+      });
     },
   );
 }
@@ -426,10 +453,13 @@ export async function registerMcpRouteHandlers(
  * Registers the MCP endpoint with JWT authentication and admin role required.
  * MCP can proxy arbitrary API calls — must not be exposed without authentication.
  */
-export async function registerMcpRoute(
-  app: FastifyInstance,
-  options: { name: string; version: string },
-): Promise<void> {
+export async function registerMcpRoute({
+  app,
+  options,
+}: {
+  app: FastifyInstance;
+  options: { name: string; version: string };
+}): Promise<void> {
   if (!app.authenticate) {
     throw new Error('MCP routes require Fastify authenticate decorator');
   }
@@ -443,7 +473,7 @@ export async function registerMcpRoute(
           await handler.call(scope, request, reply);
         }
       });
-      await registerMcpRouteHandlers(scope, options);
+      await registerMcpRouteHandlers({ app: scope, options });
     },
     { prefix: '' },
   );

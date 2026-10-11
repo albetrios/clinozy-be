@@ -20,11 +20,16 @@ vi.mock('@/infrastructure/database/connection.js', () => ({
 
 vi.mock('@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-organization.util.js', () => ({
   runStripeWebhookHandlerWithOrganizationContext: vi.fn(
-    async (
-      _event: unknown,
-      _repository: unknown,
-      handler: (databaseHandle: unknown) => Promise<void>,
-    ) => handler({ update: drizzleOutboundWebhookDatabaseUpdateSpy, select: stripeOrderingSelect }),
+    async ({
+      event: _event,
+      repository: _repository,
+      handler,
+    }: {
+      event: unknown;
+      repository: unknown;
+      handler: (databaseHandle: unknown) => Promise<void>;
+    }) =>
+      handler({ update: drizzleOutboundWebhookDatabaseUpdateSpy, select: stripeOrderingSelect }),
   ),
 }));
 
@@ -135,10 +140,10 @@ describe('Stripe webhook ingestion contract (`constructStripeWebhookEvent` + Str
       return createFluentDrizzleUpdateMockBuilderReturningRowsOutbound([{ synced: true }]);
     });
 
-    const verifiedStripeEventOutbound = constructStripeWebhookEvent(
-      webhookRawPayloadOutboundUtf8,
-      stripeSignatureHeaderOutbound,
-    );
+    const verifiedStripeEventOutbound = constructStripeWebhookEvent({
+      body: webhookRawPayloadOutboundUtf8,
+      signature: stripeSignatureHeaderOutbound,
+    });
 
     await webhookEventHandlerServiceOutbound.handleEvent({ event: verifiedStripeEventOutbound });
 
@@ -190,10 +195,10 @@ describe('Stripe webhook ingestion contract (`constructStripeWebhookEvent` + Str
       return createFluentDrizzleUpdateMockBuilderReturningRowsOutbound([{ synced: true }]);
     });
 
-    const verifiedStripeEventOutbound = constructStripeWebhookEvent(
-      Buffer.from(webhookRawPayloadOutboundUtf8),
-      stripeSignatureHeaderOutbound,
-    );
+    const verifiedStripeEventOutbound = constructStripeWebhookEvent({
+      body: Buffer.from(webhookRawPayloadOutboundUtf8),
+      signature: stripeSignatureHeaderOutbound,
+    });
 
     await webhookEventHandlerServiceOutbound.handleEvent({ event: verifiedStripeEventOutbound });
     expect(drizzleOutboundWebhookDatabaseUpdateSpy).toHaveBeenCalled();
@@ -219,10 +224,10 @@ describe('Stripe webhook ingestion contract (`constructStripeWebhookEvent` + Str
       return createFluentDrizzleUpdateMockBuilderReturningRowsOutbound([{ canceled: true }]);
     });
 
-    const verifiedStripeEventOutbound = constructStripeWebhookEvent(
-      webhookRawPayloadOutboundUtf8,
-      stripeSignatureHeaderOutbound,
-    );
+    const verifiedStripeEventOutbound = constructStripeWebhookEvent({
+      body: webhookRawPayloadOutboundUtf8,
+      signature: stripeSignatureHeaderOutbound,
+    });
     await webhookEventHandlerServiceOutbound.handleEvent({ event: verifiedStripeEventOutbound });
 
     expect(drizzleOutboundWebhookDatabaseUpdateSpy).toHaveBeenCalledOnce();

@@ -200,28 +200,25 @@ describe('runAuditOutboxDrainJob', () => {
 
     expect(result).toEqual({ drained: 1, transientFailed: 0, permanentlyFailed: 0 });
     // First setLocalDatabaseConfig is the global-admin lift for resolution.
-    expect(setLocalDatabaseConfigMock).toHaveBeenNthCalledWith(
-      1,
+    expect(setLocalDatabaseConfigMock).toHaveBeenNthCalledWith(1, {
       databaseHandle,
-      'app.global_admin',
-      'true',
-    );
+      key: 'app.global_admin',
+      value: 'true',
+    });
     // Per-row organization GUC for the audit.logs INSERT RLS.
-    expect(setLocalDatabaseConfigMock).toHaveBeenNthCalledWith(
-      2,
+    expect(setLocalDatabaseConfigMock).toHaveBeenNthCalledWith(2, {
       databaseHandle,
-      'app.current_organization_public_id',
-      'org_a',
-    );
+      key: 'app.current_organization_public_id',
+      value: 'org_a',
+    });
     // …and the system arm is explicitly turned OFF for a tenanted row. Savepoints do NOT restore
     // settings on RELEASE, so leaving it unset would inherit `'true'` from any earlier tenantless
     // row in the same batch and widen `audit_logs_tenant_isolation_insert` for the remainder.
-    expect(setLocalDatabaseConfigMock).toHaveBeenNthCalledWith(
-      3,
+    expect(setLocalDatabaseConfigMock).toHaveBeenNthCalledWith(3, {
       databaseHandle,
-      'app.system_audit_insert',
-      'false',
-    );
+      key: 'app.system_audit_insert',
+      value: 'false',
+    });
     expect(databaseHandle.insert).toHaveBeenCalledTimes(1);
     expect(drainRepositoryMock.markProcessed).toHaveBeenCalledExactlyOnceWith([100]);
   });
@@ -238,19 +235,19 @@ describe('runAuditOutboxDrainJob', () => {
     const result = await runAuditOutboxDrainJob(databaseHandle as never);
 
     expect(result.drained).toBe(1);
-    expect(setLocalDatabaseConfigMock).toHaveBeenCalledWith(
+    expect(setLocalDatabaseConfigMock).toHaveBeenCalledWith({
       databaseHandle,
-      'app.system_audit_insert',
-      'true',
-    );
+      key: 'app.system_audit_insert',
+      value: 'true',
+    });
     // Both identity GUCs are written on EVERY row, never just the one this row needs:
     // `RELEASE SAVEPOINT` keeps whatever the savepoint set, so a one-GUC-per-branch loop
     // inherits the previous row's value and widens the insert policy for the rest of the batch.
-    expect(setLocalDatabaseConfigMock).toHaveBeenCalledWith(
+    expect(setLocalDatabaseConfigMock).toHaveBeenCalledWith({
       databaseHandle,
-      'app.current_organization_public_id',
-      '',
-    );
+      key: 'app.current_organization_public_id',
+      value: '',
+    });
   });
 
   it('marks a row permanently FAILED when the actor public_id no longer resolves', async () => {

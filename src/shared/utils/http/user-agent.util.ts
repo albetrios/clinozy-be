@@ -29,10 +29,13 @@ const BROWSER_MATCHERS: ReadonlyArray<readonly [RegExp, string]> = [
 ];
 
 /** Returns the label of the first matcher whose pattern is present in `userAgent`, or null. */
-function matchFirst(
-  userAgent: string,
-  matchers: ReadonlyArray<readonly [RegExp, string]>,
-): string | null {
+function matchFirst({
+  userAgent,
+  matchers,
+}: {
+  userAgent: string;
+  matchers: ReadonlyArray<readonly [RegExp, string]>;
+}): string | null {
   for (const [pattern, label] of matchers) {
     if (pattern.test(userAgent)) {
       return label;
@@ -58,8 +61,8 @@ export function parseUserAgent(userAgent: string | null | undefined): ParsedUser
     return { device: null, browser: null };
   }
   return {
-    device: matchFirst(userAgent, DEVICE_MATCHERS),
-    browser: matchFirst(userAgent, BROWSER_MATCHERS),
+    device: matchFirst({ userAgent, matchers: DEVICE_MATCHERS }),
+    browser: matchFirst({ userAgent, matchers: BROWSER_MATCHERS }),
   };
 }
 

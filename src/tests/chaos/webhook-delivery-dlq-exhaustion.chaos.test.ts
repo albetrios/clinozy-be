@@ -79,7 +79,10 @@ describe('Chaos resilience: webhook delivery dead-letters after retry exhaustion
     }
     // The production bootstrap attaches this hook to every worker; the chaos harness
     // builds the worker directly, so attach the same hook the same way.
-    attachDeadLetterAndAlerting(workerReferenceForDlqAttachment, WEBHOOK_DELIVERY_QUEUE_NAME);
+    attachDeadLetterAndAlerting({
+      worker: workerReferenceForDlqAttachment,
+      queueName: WEBHOOK_DELIVERY_QUEUE_NAME,
+    });
     await workerReferenceForDlqAttachment.waitUntilReady();
 
     enqueueQueueAwaitingExhaustion = new Queue(WEBHOOK_DELIVERY_QUEUE_NAME, {

@@ -34,67 +34,67 @@ import {
 
 /** Validates the `POST /api/v1/auth/login` request body against {@link LoginDto}; throws {@link ValidationError} with field errors on failure. */
 export function validateLogin(body: unknown): LoginInput {
-  return parseWithSchema(LoginDto, body);
+  return parseWithSchema({ schema: LoginDto, data: body });
 }
 
 /** Validates the `POST /api/v1/auth/email/send-code` request body against {@link EmailSendCodeDto}. */
 export function validateEmailSendCode(body: unknown): EmailSendCodeInput {
-  return parseWithSchema(EmailSendCodeDto, body);
+  return parseWithSchema({ schema: EmailSendCodeDto, data: body });
 }
 
 /** Validates the `POST /api/v1/auth/email/login` request body against {@link EmailLoginDto}. */
 export function validateEmailLogin(body: unknown): EmailLoginInput {
-  return parseWithSchema(EmailLoginDto, body);
+  return parseWithSchema({ schema: EmailLoginDto, data: body });
 }
 
 /** Validates the `POST /api/v1/auth/me/mfa/verify` request body against {@link MfaVerifyDto}. */
 export function validateMfaVerify(body: unknown): MfaVerifyInput {
-  return parseWithSchema(MfaVerifyDto, body);
+  return parseWithSchema({ schema: MfaVerifyDto, data: body });
 }
 
 /** Validates the `POST /api/v1/auth/me/auth-methods` request body against {@link CreateAuthMethodDto}. */
 export function validateCreateAuthMethod(body: unknown): CreateAuthMethodInput {
-  return parseWithSchema(CreateAuthMethodDto, body);
+  return parseWithSchema({ schema: CreateAuthMethodDto, data: body });
 }
 
 /** Validates the `POST /api/v1/auth/password/forgot` request body against {@link ForgotPasswordDto}. */
 export function validateForgotPassword(body: unknown): ForgotPasswordInput {
-  return parseWithSchema(ForgotPasswordDto, body);
+  return parseWithSchema({ schema: ForgotPasswordDto, data: body });
 }
 
 /** Validates the `POST /api/v1/auth/password/reset` request body against {@link ResetPasswordDto}. */
 export function validateResetPassword(body: unknown): ResetPasswordInput {
-  return parseWithSchema(ResetPasswordDto, body);
+  return parseWithSchema({ schema: ResetPasswordDto, data: body });
 }
 
 /** Validates the authenticated `POST /api/v1/auth/password/change` request body against {@link ChangePasswordDto}. */
 export function validateChangePassword(body: unknown): ChangePasswordInput {
-  return parseWithSchema(ChangePasswordDto, body);
+  return parseWithSchema({ schema: ChangePasswordDto, data: body });
 }
 
 /** Validates the authenticated `POST /api/v1/auth/step-up` request body against {@link StepUpVerifyDto}. */
 export function validateStepUpVerify(body: unknown): StepUpVerifyInput {
-  return parseWithSchema(StepUpVerifyDto, body);
+  return parseWithSchema({ schema: StepUpVerifyDto, data: body });
 }
 
 /** Validates the authenticated `POST /api/v1/auth/me/mfa/enroll` request body against {@link MfaEnrollDto}. */
 export function validateMfaEnroll(body: unknown): MfaEnrollInput {
-  return parseWithSchema(MfaEnrollDto, body);
+  return parseWithSchema({ schema: MfaEnrollDto, data: body });
 }
 
 /** Validates the authenticated `POST /api/v1/auth/me/mfa/enroll/confirm` request body against {@link MfaEnrollConfirmDto}. */
 export function validateMfaEnrollConfirm(body: unknown): MfaEnrollConfirmInput {
-  return parseWithSchema(MfaEnrollConfirmDto, body);
+  return parseWithSchema({ schema: MfaEnrollConfirmDto, data: body });
 }
 
 /** Validates the public login-flow MFA step body against {@link MfaLoginVerifyDto} (one of `totp_code` / `recovery_code` required). */
 export function validateMfaLoginVerify(body: unknown): MfaLoginVerifyInput {
-  return parseWithSchema(MfaLoginVerifyDto, body);
+  return parseWithSchema({ schema: MfaLoginVerifyDto, data: body });
 }
 
 /** Validates the OAuth callback querystring (`code` + `state`) against {@link OauthCallbackQueryDto}. */
 export function validateOauthCallbackQuery(query: unknown): OauthCallbackQueryInput {
-  return parseWithSchema(OauthCallbackQueryDto, query);
+  return parseWithSchema({ schema: OauthCallbackQueryDto, data: query });
 }
 
 /**
@@ -116,7 +116,7 @@ export function validateAuthMethodPublicIdParam(authMethodPublicId: string): str
  * throws {@link ValidationError} otherwise.
  */
 export function validateMfaMethodIdParam(mfaMethodId: string): string {
-  return validatePublicIdParam(mfaMethodId, 'mfa_method_id');
+  return validatePublicIdParam({ value: mfaMethodId, fieldName: 'mfa_method_id' });
 }
 
 // Note: validateRefreshToken removed — refresh is now session-based via httpOnly cookie.

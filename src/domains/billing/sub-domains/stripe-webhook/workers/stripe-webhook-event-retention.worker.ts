@@ -41,9 +41,10 @@ export function createStripeWebhookEventRetentionWorker(): WorkerHandle {
   const worker = new Worker(
     STRIPE_WEBHOOK_EVENT_RETENTION_QUEUE_NAME,
     async () =>
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_RETENTION, (databaseHandle) =>
-        runStripeWebhookEventRetentionJob(databaseHandle),
-      ),
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_RETENTION,
+        callback: (databaseHandle) => runStripeWebhookEventRetentionJob(databaseHandle),
+      }),
     {
       connection: getBullMQConnectionOptions(),
       prefix: getBullMQKeyPrefix(),
@@ -59,5 +60,5 @@ export function createStripeWebhookEventRetentionWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, STRIPE_WEBHOOK_EVENT_RETENTION_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: STRIPE_WEBHOOK_EVENT_RETENTION_QUEUE_NAME });
 }

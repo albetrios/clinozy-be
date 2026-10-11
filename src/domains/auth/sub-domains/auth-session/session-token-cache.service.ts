@@ -35,10 +35,10 @@ function buildSessionTokenCacheKey(sessionTokenHash: string): string {
 export async function getCachedSessionTokenValid(sessionTokenHash: string): Promise<string | null> {
   // A revocation tombstone reads as a MISS so the caller re-checks Postgres (which denies the
   // revoked session) instead of trusting a value a racing populate might otherwise have set.
-  return readTombstonedCacheEntry(
-    buildSessionTokenCacheKey(sessionTokenHash),
-    SESSION_TOKEN_CACHE_METRIC_NAME,
-  );
+  return readTombstonedCacheEntry({
+    key: buildSessionTokenCacheKey(sessionTokenHash),
+    metricName: SESSION_TOKEN_CACHE_METRIC_NAME,
+  });
 }
 
 /**

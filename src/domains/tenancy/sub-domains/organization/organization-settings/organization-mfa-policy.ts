@@ -35,7 +35,10 @@ function buildKey(organizationPublicId: string): string {
  */
 export async function organizationRequiresMfa(organizationPublicId: string): Promise<boolean> {
   const key = buildKey(organizationPublicId);
-  const cached = await readTombstonedCacheEntry(key, ORGANIZATION_MFA_POLICY_METRIC);
+  const cached = await readTombstonedCacheEntry({
+    key,
+    metricName: ORGANIZATION_MFA_POLICY_METRIC,
+  });
   if (cached === 'true' || cached === 'false') return cached === 'true';
   const requiresMfa =
     await organizationSettingsRepository.organizationRequiresMfa(organizationPublicId);

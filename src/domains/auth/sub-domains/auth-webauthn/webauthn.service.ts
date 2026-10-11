@@ -121,10 +121,10 @@ export class WebauthnService {
     // pre-hijacking, Trojan-credential variant).
     assertEmailVerifiedForCredentialEnrollment(user);
 
-    const existingCredentials = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
-      () => this.credentialRepository.listActiveByUserId(user.id),
-    );
+    const existingCredentials = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+      callback: () => this.credentialRepository.listActiveByUserId(user.id),
+    });
     const relyingPartyId = resolveWebauthnRelyingPartyId();
     const options = await generateRegistrationOptions({
       rpName: resolveWebauthnRelyingPartyName(),
@@ -152,12 +152,12 @@ export class WebauthnService {
       },
     });
 
-    const challengeToken = await createWebauthnChallenge(
-      this.redis,
-      'registration',
-      user.public_id,
-      options.challenge,
-    );
+    const challengeToken = await createWebauthnChallenge({
+      redis: this.redis,
+      kind: 'registration',
+      userPublicId: user.public_id,
+      challenge: options.challenge,
+    });
 
     return { options, challenge_token: challengeToken };
   }
@@ -172,11 +172,11 @@ export class WebauthnService {
     requestOrigin?: string | undefined;
   }): Promise<{ verified: boolean; credential_id: string }> {
     const parsed = validateWebauthnRegisterVerify(body);
-    const challenge = await consumeWebauthnChallenge(
-      this.redis,
-      parsed.challenge_token,
-      'registration',
-    );
+    const challenge = await consumeWebauthnChallenge({
+      redis: this.redis,
+      challengeToken: parsed.challenge_token,
+      expectedKind: 'registration',
+    });
     if (challenge.user_public_id !== userPublicId) {
       throw new UnauthorizedError('errors:webauthnInvalidChallenge');
     }
@@ -206,9 +206,9 @@ export class WebauthnService {
     const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
     let created: Awaited<ReturnType<WebauthnCredentialRepository['createCredential']>>;
     try {
-      created = await withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
-        async () => {
+      created = await withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+        callback: async () => {
           // Serialize the count + insert under a per-user advisory lock so concurrent registrations
           // cannot both pass the cap check and overshoot MAX_WEBAUTHN_CREDENTIALS_PER_USER. The xact
           // lock auto-releases at commit.
@@ -229,7 +229,7 @@ export class WebauthnService {
             transports: credential.transports ?? [],
           });
         },
-      );
+      });
     } catch (error) {
       // This passkey is already enrolled (webauthn_credentials_credential_id_unique).
       // excludeCredentials is only a client-side hint, so a replayed/forced registration
@@ -254,10 +254,10 @@ export class WebauthnService {
     // `user_id = 0` filter return zero rows), so the DB work matches.
     const lookupUserPublicId = user?.public_id ?? `decoy:${generatePublicId('authMethod')}`;
     const lookupUserId = user?.id ?? 0;
-    const credentials = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: lookupUserPublicId }),
-      () => this.credentialRepository.listActiveByUserId(lookupUserId),
-    );
+    const credentials = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: lookupUserPublicId }),
+      callback: () => this.credentialRepository.listActiveByUserId(lookupUserId),
+    });
 
     // Anti-enumeration: the options carry NO per-account data. Listing the account's credentials
     // (allowCredentials) leaked enrollment — a real account returned every stored credential with
@@ -277,12 +277,12 @@ export class WebauthnService {
 
     const challengeOwnerPublicId =
       user && credentials.length > 0 ? user.public_id : `decoy:${generatePublicId('authMethod')}`;
-    const challengeToken = await createWebauthnChallenge(
-      this.redis,
-      'authentication',
-      challengeOwnerPublicId,
-      options.challenge,
-    );
+    const challengeToken = await createWebauthnChallenge({
+      redis: this.redis,
+      kind: 'authentication',
+      userPublicId: challengeOwnerPublicId,
+      challenge: options.challenge,
+    });
 
     return { options, challenge_token: challengeToken };
   }
@@ -299,11 +299,11 @@ export class WebauthnService {
     userAgent?: string | undefined;
   }): Promise<FirstFactorAuthResult> {
     const parsed = validateWebauthnAuthenticateVerify(body);
-    const challenge = await consumeWebauthnChallenge(
-      this.redis,
-      parsed.challenge_token,
-      'authentication',
-    );
+    const challenge = await consumeWebauthnChallenge({
+      redis: this.redis,
+      challengeToken: parsed.challenge_token,
+      expectedKind: 'authentication',
+    });
 
     const response = parsed.response as AuthenticationResponseJSON;
     // Defense-in-depth: when the authenticator returns a `userHandle` (resident/discoverable
@@ -320,10 +320,10 @@ export class WebauthnService {
     }
     // The challenge binds this assertion to a user; auth.webauthn_credentials is FORCE RLS keyed on
     // app.current_user_public_id, so look the credential up inside that user's context.
-    const storedCredential = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: challenge.user_public_id }),
-      () => this.credentialRepository.findActiveByCredentialId(response.id),
-    );
+    const storedCredential = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: challenge.user_public_id }),
+      callback: () => this.credentialRepository.findActiveByCredentialId(response.id),
+    });
     if (storedCredential?.user_id === undefined) {
       throw new UnauthorizedError('errors:webauthnCredentialNotFound');
     }
@@ -359,9 +359,11 @@ export class WebauthnService {
     }
 
     const { newCounter } = verification.authenticationInfo;
-    await withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }), () =>
-      this.credentialRepository.updateCounter(storedCredential.credential_id, newCounter),
-    );
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+      callback: () =>
+        this.credentialRepository.updateCounter(storedCredential.credential_id, newCounter),
+    });
 
     return completeFirstFactorAuth({
       user: {
@@ -398,10 +400,10 @@ export class WebauthnService {
     if (!user) {
       throw new UnauthorizedError('errors:userNotFound');
     }
-    const rows = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
-      () => this.credentialRepository.listActiveByUserId(user.id),
-    );
+    const rows = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+      callback: () => this.credentialRepository.listActiveByUserId(user.id),
+    });
     return serializeWebauthnCredentialList(rows);
   }
 
@@ -435,9 +437,9 @@ export class WebauthnService {
     if (!user) {
       throw new UnauthorizedError('errors:userNotFound');
     }
-    await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
-      async () => {
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+      callback: async () => {
         // Serialize concurrent credential mutations for this user so the "is this the last
         // login credential?" check + revoke cannot interleave with a sibling passkey/MFA delete.
         await this.authMethodService.acquireCredentialMutationLock(user.id);
@@ -456,6 +458,6 @@ export class WebauthnService {
         }
         await this.credentialRepository.revokeByUserId(user.id, target.id);
       },
-    );
+    });
   }
 }

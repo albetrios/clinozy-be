@@ -194,7 +194,7 @@ Same as single resource; response body is the created entity with `data` + `meta
 
 No body, or empty body. No `data`/`meta` required for 204.
 
-**Implementation:** Add/update helpers in `src/shared/utils/http/response.util.ts` (e.g. `successResponse(data, requestId)`, `paginatedResponse(data, meta)`) and ensure every response includes `request_id` (e.g. from `request.id` or generated per request). Remove `success: true` from responses.
+**Implementation:** Add/update helpers in `src/shared/utils/http/response.util.ts` (e.g. `successResponse({ data, request_id })`, `paginatedResponse({ data, request_id, pagination })`) and ensure every response includes `request_id` (e.g. from `request.id` or generated per request). Remove `success: true` from responses.
 
 ---
 
@@ -291,7 +291,7 @@ An organization has an immutable `type` — `PERSONAL` (single-owner workspace) 
 
 - **No `capabilities` object** — the organization `type` (`PERSONAL` / `TEAM`) is the sole signal. A client gates a team-only action on `type === 'TEAM'` **and** the caller's permission (e.g. `subscription:manage`); permissions/roles govern what the caller may do, separately. (A redundant type-derived `capabilities` object was removed; reintroduce a purpose-built `features`/`entitlements` object only if availability ever stops being purely type-derived.)
 - **The 9 team-only routes** (reject a personal organization with **HTTP 422** `unprocessable_entity`): the four tenancy mutations `DELETE /api/v1/tenancy/organization`, `POST /api/v1/tenancy/organization/memberships`, `POST /api/v1/tenancy/organization/transfer-ownership`, `POST /api/v1/tenancy/organization/roles`, and the five billing mutations `POST /api/v1/billing/payment-methods/setup`, `POST /api/v1/billing/subscriptions`, `POST /api/v1/billing/subscriptions/{subscription_id}/change-plan`, `POST /api/v1/billing/subscriptions/{subscription_id}/cancel`, `POST /api/v1/billing/subscriptions/{subscription_id}/resume`.
-- **Backstop guard** — `assertTeamOrganization(organization, capability)` (capability buckets `MEMBERS | ROLES | MUTATION | BILLING`) is the single point of enforcement shared by those routes. It returns 422 (not 409) because the organization `type` is immutable, so an identical retry can never succeed. See **[response-codes.md](../api/response-codes.md)** (`409 vs 422`) and **[route-consistency-and-organization-model.md](../api/route-consistency-and-organization-model.md)**.
+- **Backstop guard** — `assertTeamOrganization({ organization, capability })` (capability buckets `MEMBERS | ROLES | MUTATION | BILLING`) is the single point of enforcement shared by those routes. It returns 422 (not 409) because the organization `type` is immutable, so an identical retry can never succeed. See **[response-codes.md](../api/response-codes.md)** (`409 vs 422`) and **[route-consistency-and-organization-model.md](../api/route-consistency-and-organization-model.md)**.
 
 ### 4.3 billing — sub-domains: plans, subscriptions
 

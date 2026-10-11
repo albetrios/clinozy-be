@@ -59,7 +59,7 @@ sequenceDiagram
     R-->>S: value
     S-->>C: 200 (no pool checkout at all)
   else miss, tombstone, or Redis down
-    S->>PG: withAppDatabaseContext(scope, …)
+    S->>PG: withAppDatabaseContext({ scope, callback })
     PG-->>S: value
     S->>R: SET … EX ttl NX
     S-->>C: 200

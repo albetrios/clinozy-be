@@ -45,5 +45,5 @@ export function createUserDataExportRetentionWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, USER_DATA_EXPORT_RETENTION_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: USER_DATA_EXPORT_RETENTION_QUEUE_NAME });
 }

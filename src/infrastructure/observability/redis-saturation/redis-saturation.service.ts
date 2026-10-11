@@ -96,18 +96,24 @@ export async function sampleRedisMemorySaturation(): Promise<RedisMemorySaturati
       { usedMemory, maxMemory, ratio, warnRatio, criticalRatio },
       'redis.memory.saturation.critical',
     );
-    captureMessage('redis.memory.saturation.critical', {
-      level: 'error',
-      extra: { usedMemory, maxMemory, ratio, warnRatio, criticalRatio },
+    captureMessage({
+      message: 'redis.memory.saturation.critical',
+      options: {
+        level: 'error',
+        extra: { usedMemory, maxMemory, ratio, warnRatio, criticalRatio },
+      },
     });
   } else if (ratio >= warnRatio) {
     logger.warn(
       { usedMemory, maxMemory, ratio, warnRatio, criticalRatio },
       'redis.memory.saturation.high',
     );
-    captureMessage('redis.memory.saturation.high', {
-      level: 'warning',
-      extra: { usedMemory, maxMemory, ratio, warnRatio, criticalRatio },
+    captureMessage({
+      message: 'redis.memory.saturation.high',
+      options: {
+        level: 'warning',
+        extra: { usedMemory, maxMemory, ratio, warnRatio, criticalRatio },
+      },
     });
   }
 
@@ -148,7 +154,7 @@ export interface QueueWaitingDepthSampleResult {
  * - **Failure modes:** a per-queue error is logged at warn and counted as `0`; the queue
  *   client is always closed in `finally`. The function never throws.
  * - **Side effects:** transient BullMQ `Queue` open/close; Sentry
- *   `captureMessage('queue.waiting.depth.high', ...)` and a structured log over threshold.
+ *   `captureMessage({ message: 'queue.waiting.depth.high', … })` and a structured log over threshold.
  * - **Notes:** runs from the observability worker tick alongside DLQ depth sampling.
  */
 export async function sampleBullMqSourceQueueWaitingDepth(): Promise<QueueWaitingDepthSampleResult> {
@@ -180,9 +186,12 @@ export async function sampleBullMqSourceQueueWaitingDepth(): Promise<QueueWaitin
     depths.push(depth);
     if (depth.total >= warnThreshold) {
       logger.warn({ ...depth, warnThreshold }, 'queue.waiting.depth.high');
-      captureMessage('queue.waiting.depth.high', {
-        level: 'warning',
-        extra: { ...depth, warnThreshold },
+      captureMessage({
+        message: 'queue.waiting.depth.high',
+        options: {
+          level: 'warning',
+          extra: { ...depth, warnThreshold },
+        },
       });
     }
   }

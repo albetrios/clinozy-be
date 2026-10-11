@@ -57,12 +57,19 @@ export class MemberRolePermissionService {
     role_public_id: string;
   }) {
     const organization_public_id = scope.organizationPublicId;
-    return withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationRepository.findByPublicId(organization_public_id);
-      if (!organization) throw new NotFoundError('Organization');
-      const role = await this.memberRoleRepository.findByPublicId(role_public_id, organization.id);
-      if (!role) throw new NotFoundError('Role');
-      return this.memberRolePermissionRepository.findByRoleId(role.id);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationRepository.findByPublicId(organization_public_id);
+        if (!organization) throw new NotFoundError('Organization');
+        const role = await this.memberRoleRepository.findByPublicId(
+          role_public_id,
+          organization.id,
+        );
+        if (!role) throw new NotFoundError('Role');
+        return this.memberRolePermissionRepository.findByRoleId(role.id);
+      },
     });
   }
 
@@ -79,65 +86,72 @@ export class MemberRolePermissionService {
   }) {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validatePutMemberRolePermissions(body);
-    const result = await withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationRepository.findByPublicId(organization_public_id);
-      if (!organization) throw new NotFoundError('Organization');
-      const role = await this.memberRoleRepository.findByPublicId(role_public_id, organization.id);
-      if (!role) throw new NotFoundError('Role');
-      /**
-       * Owner-role protection (sec-T2): a `ROLE_MANAGE` holder must not be able to alter
-       * the permission set on the role currently assigned to the organization owner — that
-       * would strip every permission for everyone holding the role (including the owner)
-       * and lock them out of every PERM-gated route until `/transfer-ownership` is invoked.
-       * Owner-role permission changes belong to a separate elevated path (admin tooling /
-       * future "owner survival" guarantee), not the generic PUT.
-       */
-      const ownerMembership = await this.membershipRepository.findByUserAndOrganization(
-        organization.owner_user_id,
-        organization.id,
-      );
-      if (!ownerMembership) {
-        throw new NotFoundError('Owner membership');
-      }
-      if (ownerMembership.role_id === role.id) {
-        throw new ForbiddenError('errors:cannotModifyOwnerRolePermissions');
-      }
-      /**
-       * Held-permissions-on-remove (sec-T2): an empty-array PUT (or partial replacement)
-       * is *also* a permission *wipe* — the diff between the role's current set and the
-       * requested set is exactly the set of codes being removed. The grant-guard must
-       * therefore verify the caller holds every code being **added** AND every code being
-       * **removed**, not just the new set. Without this, a delegated `ROLE_MANAGE` holder
-       * who does not themselves possess `subscription:manage` could still PUT a smaller
-       * set that strips `subscription:manage` from a finance role — a downgrade attack
-       * the guard would have refused for the equivalent grant. The previous behavior
-       * passed only `parsed.permission_codes` and let an empty-array PUT wipe a non-owner
-       * role's permissions entirely.
-       */
-      const currentRolePermissionRows = await this.memberRolePermissionRepository.findByRoleId(
-        role.id,
-      );
-      const affectedCodes = Array.from(
-        new Set([
-          ...parsed.permission_codes,
-          ...currentRolePermissionRows.map((row) => row.permission_code),
-        ]),
-      );
-      await assertCallerCanGrantPermissionCodes({
-        authorizationService: this.authorizationService,
-        permissionRepository: this.permissionRepository,
-        callerUserPublicId: created_by_user_public_id,
-        organizationPublicId: organization_public_id,
-        requestedPermissionCodes: affectedCodes,
-      });
-      const userId = created_by_user_public_id
-        ? await this.organizationRepository.resolveUserIdByPublicId(created_by_user_public_id)
-        : null;
-      return this.memberRolePermissionRepository.replace(
-        role.id,
-        parsed.permission_codes,
-        userId ?? null,
-      );
+    const result = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationRepository.findByPublicId(organization_public_id);
+        if (!organization) throw new NotFoundError('Organization');
+        const role = await this.memberRoleRepository.findByPublicId(
+          role_public_id,
+          organization.id,
+        );
+        if (!role) throw new NotFoundError('Role');
+        /**
+         * Owner-role protection (sec-T2): a `ROLE_MANAGE` holder must not be able to alter
+         * the permission set on the role currently assigned to the organization owner — that
+         * would strip every permission for everyone holding the role (including the owner)
+         * and lock them out of every PERM-gated route until `/transfer-ownership` is invoked.
+         * Owner-role permission changes belong to a separate elevated path (admin tooling /
+         * future "owner survival" guarantee), not the generic PUT.
+         */
+        const ownerMembership = await this.membershipRepository.findByUserAndOrganization(
+          organization.owner_user_id,
+          organization.id,
+        );
+        if (!ownerMembership) {
+          throw new NotFoundError('Owner membership');
+        }
+        if (ownerMembership.role_id === role.id) {
+          throw new ForbiddenError('errors:cannotModifyOwnerRolePermissions');
+        }
+        /**
+         * Held-permissions-on-remove (sec-T2): an empty-array PUT (or partial replacement)
+         * is *also* a permission *wipe* — the diff between the role's current set and the
+         * requested set is exactly the set of codes being removed. The grant-guard must
+         * therefore verify the caller holds every code being **added** AND every code being
+         * **removed**, not just the new set. Without this, a delegated `ROLE_MANAGE` holder
+         * who does not themselves possess `subscription:manage` could still PUT a smaller
+         * set that strips `subscription:manage` from a finance role — a downgrade attack
+         * the guard would have refused for the equivalent grant. The previous behavior
+         * passed only `parsed.permission_codes` and let an empty-array PUT wipe a non-owner
+         * role's permissions entirely.
+         */
+        const currentRolePermissionRows = await this.memberRolePermissionRepository.findByRoleId(
+          role.id,
+        );
+        const affectedCodes = Array.from(
+          new Set([
+            ...parsed.permission_codes,
+            ...currentRolePermissionRows.map((row) => row.permission_code),
+          ]),
+        );
+        await assertCallerCanGrantPermissionCodes({
+          authorizationService: this.authorizationService,
+          permissionRepository: this.permissionRepository,
+          callerUserPublicId: created_by_user_public_id,
+          organizationPublicId: organization_public_id,
+          requestedPermissionCodes: affectedCodes,
+        });
+        const userId = created_by_user_public_id
+          ? await this.organizationRepository.resolveUserIdByPublicId(created_by_user_public_id)
+          : null;
+        return this.memberRolePermissionRepository.replace(
+          role.id,
+          parsed.permission_codes,
+          userId ?? null,
+        );
+      },
     });
     // sec-R11: invalidate AFTER the write transaction commits. Doing it inside the transaction
     // (pre-commit) left a race where a concurrent permission recompute read the old committed set

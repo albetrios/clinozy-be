@@ -161,9 +161,12 @@ function emitPoolExhaustionAlert(parameters: {
   } else {
     logger.warn(parameters.extra, parameters.message);
   }
-  captureMessage(parameters.message, {
-    level: parameters.level,
-    extra: parameters.extra,
+  captureMessage({
+    message: parameters.message,
+    options: {
+      level: parameters.level,
+      extra: parameters.extra,
+    },
   });
 }
 

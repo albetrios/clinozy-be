@@ -6,5 +6,5 @@ import { getPlanParamsDto, type GetPlanParamsInput } from './plan.dto.js';
  * `ValidationError` with field-level details on failure.
  */
 export function validateGetPlanParams(params: unknown): GetPlanParamsInput {
-  return parseWithSchema(getPlanParamsDto, params);
+  return parseWithSchema({ schema: getPlanParamsDto, data: params });
 }

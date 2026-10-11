@@ -14,10 +14,13 @@ const ZOD_MESSAGE_CATALOGS: Record<SupportedLanguage, z.core.$ZodErrorMap> = {
 /** One validation message, rendered in every {@link SupportedLanguage}. */
 export type LocalizedMessages = Record<SupportedLanguage, string>;
 
-function renderWithCatalog(
-  catalog: z.core.$ZodErrorMap,
-  issue: z.core.$ZodIssue,
-): string | undefined {
+function renderWithCatalog({
+  catalog,
+  issue,
+}: {
+  catalog: z.core.$ZodErrorMap;
+  issue: z.core.$ZodIssue;
+}): string | undefined {
   const rendered = catalog(issue as unknown as Parameters<z.core.$ZodErrorMap>[0]);
   return typeof rendered === 'string' ? rendered : rendered?.message;
 }
@@ -35,12 +38,13 @@ function renderWithCatalog(
  *   with `reportInput: true`; the input is used here and never stored on the error.
  */
 export function renderZodIssueMessages(issue: z.core.$ZodIssue): LocalizedMessages {
-  const zodWroteIt = renderWithCatalog(ZOD_MESSAGE_CATALOGS.en, issue) === issue.message;
+  const zodWroteIt =
+    renderWithCatalog({ catalog: ZOD_MESSAGE_CATALOGS.en, issue }) === issue.message;
   const rendered = {} as LocalizedMessages;
   for (const language of SUPPORTED_LANGUAGES) {
     if (zodWroteIt && (issue.code !== 'invalid_type' || 'input' in issue)) {
       rendered[language] =
-        renderWithCatalog(ZOD_MESSAGE_CATALOGS[language], issue) ?? issue.message;
+        renderWithCatalog({ catalog: ZOD_MESSAGE_CATALOGS[language], issue }) ?? issue.message;
     } else if (issue.message.startsWith('errors:') && i18next.isInitialized) {
       rendered[language] = i18next.t(issue.message, { lng: language });
     } else {
@@ -51,9 +55,12 @@ export function renderZodIssueMessages(issue: z.core.$ZodIssue): LocalizedMessag
 }
 
 /** The entry of `messages` for `language`, English for any other (or when it has none). */
-export function pickLocalizedMessage(
-  messages: Readonly<Record<string, string>>,
-  language: string | undefined,
-): string {
+export function pickLocalizedMessage({
+  messages,
+  language,
+}: {
+  messages: Readonly<Record<string, string>>;
+  language: string | undefined;
+}): string {
   return (language !== undefined ? messages[language] : undefined) ?? messages.en ?? '';
 }
