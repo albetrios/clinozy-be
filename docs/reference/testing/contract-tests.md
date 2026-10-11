@@ -1,6 +1,6 @@
 # Outbound contract tests (Stripe, Resend, S3)
 
-Vitest specs under **`src/tests/contract/`** assert our wrappers stay aligned with third-party HTTP behavior using **nock 14** and **curated JSON fixtures**—no real network in CI. Every Vitest run, not just this slice, refuses non-loopback hosts (`src/tests/helpers/harness-provider-env.ts`); the opt-in live provider run (`pnpm test:contract:live`, below) is the one mode that reaches the network.
+Vitest specs under **`src/tests/contract/`** assert our wrappers stay aligned with third-party HTTP behavior using **nock 15** and **curated JSON fixtures**—no real network in CI. Every Vitest run, not just this slice, refuses non-loopback hosts (`src/tests/helpers/harness-provider-env.ts`); the opt-in live provider run (`pnpm test:contract:live`, below) is the one mode that reaches the network.
 
 ## Commands
 
@@ -30,7 +30,7 @@ flowchart LR
 ```
 
 - **`CONTRACT_TESTS_ENABLED=true`** (set by the npm script): `src/tests/setup.ts` pins placeholder keys and bucket names; `src/tests/global-setup.ts` skips DB provisioning when only contracts run.
-- **`stripe.client`**: Under contract-only test runs, the Stripe SDK uses **`Stripe.createFetchHttpClient`** so requests go through **fetch / undici**, which nock intercepts reliably. The default Node `http` client can **hang** with nock 14 / `@mswjs/interceptors` (upstream: stripe-node#2211, nock#2785).
+- **`stripe.client`**: Under contract-only test runs, the Stripe SDK uses **`Stripe.createFetchHttpClient`** so requests go through **fetch / undici**, which nock intercepts faithfully. Through the default Node `http` client, nock 15 hands an intercepted connection error back raw (`ERR_NOCK_NO_MATCH`, not a `StripeConnectionError`), and nock 14 could **hang** it (upstream: stripe-node#2211, nock#2785).
 - **Body matchers**: nock passes **`querystring.parse` objects** for `application/x-www-form-urlencoded` bodies; helpers in **`helpers/stripe-form.ts`** decode strings, buffers, and parsed objects.
 
 ## Live provider checks

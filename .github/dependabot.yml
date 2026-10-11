@@ -40,12 +40,6 @@ updates:
       - dependency-name: '@types/node'
         update-types:
           - 'version-update:semver-major'
-      # nock 15 (2026-10) breaks every database-bound test: with net connect allowed for loopback,
-      # its pass-through socket corrupts the Postgres handshake ("expected SASL response, got message
-      # type 0", 08P01). Stay on 14 until a 15.x passes `pnpm ci:local`, then drop this entry.
-      - dependency-name: 'nock'
-        update-types:
-          - 'version-update:semver-major'
     groups:
       # Low risk: patch + minor across production and development dependencies.
       # Auto-merged (after approval) by dependabot-auto-merge.yml.
