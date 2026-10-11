@@ -185,10 +185,10 @@ describe('AuthService', () => {
       ...user,
       is_mfa_enabled: true,
     } as never);
-    const result = await service.login(
-      { email: user.email, password: 'ValidPassword12!' },
-      '127.0.0.1',
-    );
+    const result = await service.login({
+      body: { email: user.email, password: 'ValidPassword12!' },
+      ipAddress: '127.0.0.1',
+    });
     expect(result).toEqual({
       mfa_required: true,
       mfa_session_token: 'mfa_session_token',
@@ -199,10 +199,10 @@ describe('AuthService', () => {
 
   it('login returns mfa_required when an organization requires MFA', async () => {
     vi.mocked(organizationSettingsService.userHasOrganizationRequiringMfa).mockResolvedValue(true);
-    const result = await service.login(
-      { email: user.email, password: 'ValidPassword12!' },
-      '127.0.0.1',
-    );
+    const result = await service.login({
+      body: { email: user.email, password: 'ValidPassword12!' },
+      ipAddress: '127.0.0.1',
+    });
     expect(result).toEqual({
       mfa_required: true,
       mfa_session_token: 'mfa_session_token',
@@ -210,11 +210,11 @@ describe('AuthService', () => {
   });
 
   it('login returns access token and session id', async () => {
-    const result = await service.login(
-      { email: user.email, password: 'ValidPassword12!' },
-      '127.0.0.1',
-      'agent',
-    );
+    const result = await service.login({
+      body: { email: user.email, password: 'ValidPassword12!' },
+      ipAddress: '127.0.0.1',
+      userAgent: 'agent',
+    });
     expect('access_token' in result && result.access_token).toBe('jwt-access-token');
     expect(authSessionService.createSessionForUser).toHaveBeenCalled();
   });
@@ -227,11 +227,11 @@ describe('AuthService', () => {
 
     it('logs the user straight in (access token + session) after a successful reset', async () => {
       vi.mocked(authMethodService.resetPassword).mockResolvedValue(user as never);
-      const { userPublicId, loginResult } = await service.resetPassword(
-        resetBody,
-        '127.0.0.1',
-        'agent',
-      );
+      const { userPublicId, loginResult } = await service.resetPassword({
+        body: resetBody,
+        ipAddress: '127.0.0.1',
+        userAgent: 'agent',
+      });
       expect(authMethodService.resetPassword).toHaveBeenCalledWith(resetBody);
       expect('access_token' in loginResult && loginResult.access_token).toBe('jwt-access-token');
       // The reset is audited against this user (the controller cannot read it from an MFA challenge).
@@ -244,7 +244,10 @@ describe('AuthService', () => {
         ...user,
         is_mfa_enabled: true,
       } as never);
-      const { userPublicId, loginResult } = await service.resetPassword(resetBody, '127.0.0.1');
+      const { userPublicId, loginResult } = await service.resetPassword({
+        body: resetBody,
+        ipAddress: '127.0.0.1',
+      });
       expect(loginResult).toEqual({
         mfa_required: true,
         mfa_session_token: 'mfa_session_token',
@@ -258,9 +261,9 @@ describe('AuthService', () => {
         ...user,
         status: 'SUSPENDED',
       } as never);
-      await expect(service.resetPassword(resetBody, '127.0.0.1')).rejects.toBeInstanceOf(
-        UnauthorizedError,
-      );
+      await expect(
+        service.resetPassword({ body: resetBody, ipAddress: '127.0.0.1' }),
+      ).rejects.toBeInstanceOf(UnauthorizedError);
       expect(authSessionService.createSessionForUser).not.toHaveBeenCalled();
     });
   });
@@ -268,7 +271,10 @@ describe('AuthService', () => {
   it('login rejects unknown user', async () => {
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
     await expect(
-      service.login({ email: 'x@y.com', password: 'WrongPassword1!' }, '127.0.0.1'),
+      service.login({
+        body: { email: 'x@y.com', password: 'WrongPassword1!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
@@ -278,7 +284,10 @@ describe('AuthService', () => {
     );
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
     await expect(
-      service.login({ email: 'unknown@example.com', password: 'WrongPassword1!' }, '127.0.0.1'),
+      service.login({
+        body: { email: 'unknown@example.com', password: 'WrongPassword1!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(verifyPassword).toHaveBeenCalledWith('WrongPassword1!', DUMMY_ARGON2_HASH);
   });
@@ -293,7 +302,10 @@ describe('AuthService', () => {
     vi.mocked(enforceMinimumDuration).mockClear();
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
     await expect(
-      service.login({ email: 'unknown@example.com', password: 'WrongPassword1!' }, '127.0.0.1'),
+      service.login({
+        body: { email: 'unknown@example.com', password: 'WrongPassword1!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
 
@@ -305,7 +317,10 @@ describe('AuthService', () => {
       needsRehash: false,
     });
     await expect(
-      service.login({ email: user.email, password: 'WrongPassword1!' }, '127.0.0.1'),
+      service.login({
+        body: { email: user.email, password: 'WrongPassword1!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
   });
@@ -321,7 +336,10 @@ describe('AuthService', () => {
       needsRehash: false,
     });
     await expect(
-      service.login({ email: user.email, password: 'WrongPassword1!' }, '127.0.0.1'),
+      service.login({
+        body: { email: user.email, password: 'WrongPassword1!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
@@ -336,7 +354,10 @@ describe('AuthService', () => {
     // Unknown email → invalidEmailOrPassword
     vi.mocked(userService.findByEmail).mockResolvedValueOnce(null as never);
     await expect(
-      service.login({ email: 'unknown@example.com', password: 'WrongPassword1!' }, '127.0.0.1'),
+      service.login({
+        body: { email: 'unknown@example.com', password: 'WrongPassword1!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toMatchObject({ messageKey: 'errors:invalidEmailOrPassword' });
 
     // Real email, wrong password, NO lockout → invalidEmailOrPassword
@@ -349,7 +370,10 @@ describe('AuthService', () => {
       needsRehash: false,
     });
     await expect(
-      service.login({ email: user.email, password: 'WrongPassword1!' }, '127.0.0.1'),
+      service.login({
+        body: { email: user.email, password: 'WrongPassword1!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toMatchObject({ messageKey: 'errors:invalidEmailOrPassword' });
 
     // Real email, wrong password, ACTIVE lockout → invalidEmailOrPassword (no oracle)
@@ -362,7 +386,10 @@ describe('AuthService', () => {
       needsRehash: false,
     });
     await expect(
-      service.login({ email: user.email, password: 'WrongPassword1!' }, '127.0.0.1'),
+      service.login({
+        body: { email: user.email, password: 'WrongPassword1!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toMatchObject({ messageKey: 'errors:invalidEmailOrPassword' });
   });
 
@@ -372,13 +399,17 @@ describe('AuthService', () => {
       failed_login_count: 10,
       account_locked_until: new Date(Date.now() + 60_000),
     } as never);
-    const result = await service.login(
-      { email: user.email, password: 'ValidPassword12!' },
-      '127.0.0.1',
-    );
+    const result = await service.login({
+      body: { email: user.email, password: 'ValidPassword12!' },
+      ipAddress: '127.0.0.1',
+    });
     expect('access_token' in result && result.access_token).toBe('jwt-access-token');
     // The successful login lifts the lock and clears the failure counter for the owner.
-    expect(userService.updateLoginAttempt).toHaveBeenCalledWith(user.public_id, 0, null);
+    expect(userService.updateLoginAttempt).toHaveBeenCalledWith({
+      public_id: user.public_id,
+      failed_login_count: 0,
+      account_locked_until: null,
+    });
   });
 
   it('allows login when account lock has expired', async () => {
@@ -386,10 +417,10 @@ describe('AuthService', () => {
       ...user,
       account_locked_until: new Date(Date.now() - 60_000),
     } as never);
-    const result = await service.login(
-      { email: user.email, password: 'ValidPassword12!' },
-      '127.0.0.1',
-    );
+    const result = await service.login({
+      body: { email: user.email, password: 'ValidPassword12!' },
+      ipAddress: '127.0.0.1',
+    });
     expect('access_token' in result && result.access_token).toBe('jwt-access-token');
   });
 
@@ -724,13 +755,19 @@ describe('AuthService', () => {
     });
 
     await expect(
-      service.login({ email: user.email, password: 'WrongPassword1!' }, '127.0.0.1'),
+      service.login({
+        body: { email: user.email, password: 'WrongPassword1!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     // The +1 and the lockout threshold are now evaluated atomically in the database, so the
     // service delegates the policy rather than computing the next count itself.
-    expect(userService.registerFailedLoginAttempt).toHaveBeenCalledWith(user.public_id, {
-      maxAttempts: MAX_FAILED_LOGIN_ATTEMPTS,
-      lockoutMinutes: ACCOUNT_LOCKOUT_MINUTES,
+    expect(userService.registerFailedLoginAttempt).toHaveBeenCalledWith({
+      public_id: user.public_id,
+      options: {
+        maxAttempts: MAX_FAILED_LOGIN_ATTEMPTS,
+        lockoutMinutes: ACCOUNT_LOCKOUT_MINUTES,
+      },
     });
     expect(userService.updateLoginAttempt).not.toHaveBeenCalled();
   });
@@ -742,7 +779,10 @@ describe('AuthService', () => {
       needsRehash: false,
     });
     await expect(
-      service.login({ email: user.email, password: 'WrongPassword1!' }, '127.0.0.1'),
+      service.login({
+        body: { email: user.email, password: 'WrongPassword1!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(userService.registerFailedLoginAttempt).toHaveBeenCalled();
   });
@@ -836,7 +876,11 @@ describe('AuthService', () => {
       valid: true,
       needsRehash: true,
     });
-    await service.login({ email: user.email, password: 'ValidPassword12!' }, '127.0.0.1', 'agent');
+    await service.login({
+      body: { email: user.email, password: 'ValidPassword12!' },
+      ipAddress: '127.0.0.1',
+      userAgent: 'agent',
+    });
     expect(userService.updatePassword).toHaveBeenCalled();
   });
 
@@ -852,14 +896,20 @@ describe('AuthService', () => {
     });
 
     await expect(
-      service.login({ email: user.email, password: 'WrongPassword1!' }, '127.0.0.1'),
+      service.login({
+        body: { email: user.email, password: 'WrongPassword1!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     // The threshold check (count + 1 >= max → lock) is applied atomically in SQL; the service
     // simply hands the policy to the increment. The lockout behaviour itself is exercised against
     // a real database in user.repository.db.unit.test.ts.
-    expect(userService.registerFailedLoginAttempt).toHaveBeenCalledWith(user.public_id, {
-      maxAttempts: MAX_FAILED_LOGIN_ATTEMPTS,
-      lockoutMinutes: ACCOUNT_LOCKOUT_MINUTES,
+    expect(userService.registerFailedLoginAttempt).toHaveBeenCalledWith({
+      public_id: user.public_id,
+      options: {
+        maxAttempts: MAX_FAILED_LOGIN_ATTEMPTS,
+        lockoutMinutes: ACCOUNT_LOCKOUT_MINUTES,
+      },
     });
   });
 
@@ -867,7 +917,10 @@ describe('AuthService', () => {
     const emailUtil = await import('@/shared/utils/text/email.util.js');
     vi.mocked(emailUtil.isDisposableEmailBlocked).mockReturnValueOnce(true);
     await expect(
-      service.login({ email: 'temp@mailinator.com', password: 'ValidPassword12!' }, '127.0.0.1'),
+      service.login({
+        body: { email: 'temp@mailinator.com', password: 'ValidPassword12!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
@@ -875,7 +928,10 @@ describe('AuthService', () => {
     vi.mocked(redis.get).mockResolvedValueOnce(String(IP_FAILED_LOGIN_THRESHOLD));
     vi.mocked(redis.ttl).mockResolvedValueOnce(742);
     const error = await service
-      .login({ email: user.email, password: 'ValidPassword12!' }, '192.168.1.1')
+      .login({
+        body: { email: user.email, password: 'ValidPassword12!' },
+        ipAddress: '192.168.1.1',
+      })
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(RateLimitedError);
     expect(error).toMatchObject({
@@ -892,7 +948,7 @@ describe('AuthService', () => {
     const { verifyPassword } = await import('@/shared/utils/security/password.util.js');
     vi.mocked(verifyPassword).mockResolvedValueOnce({ valid: false, needsRehash: false });
     const error = await service
-      .login({ email: user.email, password: 'WrongPassword1!' }, '192.168.1.2')
+      .login({ body: { email: user.email, password: 'WrongPassword1!' }, ipAddress: '192.168.1.2' })
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(UnauthorizedError);
     expect(error).toMatchObject({ messageKey: 'errors:invalidEmailOrPassword' });
@@ -906,17 +962,20 @@ describe('AuthService', () => {
     vi.mocked(redis.get).mockResolvedValueOnce(String(IP_FAILED_LOGIN_THRESHOLD + 5));
     vi.mocked(redis.ttl).mockResolvedValueOnce(remaining);
     await expect(
-      service.login({ email: user.email, password: 'ValidPassword12!' }, '192.168.1.3'),
+      service.login({
+        body: { email: user.email, password: 'ValidPassword12!' },
+        ipAddress: '192.168.1.3',
+      }),
     ).rejects.toMatchObject({ statusCode: 429, retryAfterSeconds: retryAfter });
   });
 
   it('login fails open when Redis errors while reading the throttle window', async () => {
     vi.mocked(redis.get).mockResolvedValueOnce(String(IP_FAILED_LOGIN_THRESHOLD));
     vi.mocked(redis.ttl).mockRejectedValueOnce(new Error('redis connection reset'));
-    const result = await service.login(
-      { email: user.email, password: 'ValidPassword12!' },
-      '127.0.0.1',
-    );
+    const result = await service.login({
+      body: { email: user.email, password: 'ValidPassword12!' },
+      ipAddress: '127.0.0.1',
+    });
     expect('access_token' in result && result.access_token).toBe('jwt-access-token');
   });
 
@@ -927,7 +986,10 @@ describe('AuthService', () => {
       needsRehash: false,
     });
     await expect(
-      service.login({ email: user.email, password: 'WrongPassword1!' }, '10.0.0.1'),
+      service.login({
+        body: { email: user.email, password: 'WrongPassword1!' },
+        ipAddress: '10.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(redis.eval).toHaveBeenCalled();
   });
@@ -935,17 +997,20 @@ describe('AuthService', () => {
   it('login increments the per-IP counter when the email is not found', async () => {
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
     await expect(
-      service.login({ email: 'nobody@example.com', password: 'WrongPassword1!' }, '10.0.0.2'),
+      service.login({
+        body: { email: 'nobody@example.com', password: 'WrongPassword1!' },
+        ipAddress: '10.0.0.2',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(redis.eval).toHaveBeenCalled();
   });
 
   it('login fails open on Redis error during IP check (does not block legitimate user)', async () => {
     vi.mocked(redis.get).mockRejectedValueOnce(new Error('redis connection refused'));
-    const result = await service.login(
-      { email: user.email, password: 'ValidPassword12!' },
-      '127.0.0.1',
-    );
+    const result = await service.login({
+      body: { email: user.email, password: 'ValidPassword12!' },
+      ipAddress: '127.0.0.1',
+    });
     expect('access_token' in result && result.access_token).toBe('jwt-access-token');
   });
 
@@ -961,7 +1026,10 @@ describe('AuthService', () => {
       ...user,
       failed_login_count: 0,
     } as never);
-    await service.login({ email: user.email, password: 'ValidPassword12!' }, '127.0.0.1');
+    await service.login({
+      body: { email: user.email, password: 'ValidPassword12!' },
+      ipAddress: '127.0.0.1',
+    });
     expect(userService.updateLoginAttempt).not.toHaveBeenCalled();
   });
 
@@ -971,7 +1039,10 @@ describe('AuthService', () => {
       status: 'SUSPENDED',
     } as never);
     await expect(
-      service.login({ email: user.email, password: 'ValidPassword12!' }, '127.0.0.1'),
+      service.login({
+        body: { email: user.email, password: 'ValidPassword12!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(authSessionService.createSessionForUser).not.toHaveBeenCalled();
     expect(mfaService.createMfaSession).not.toHaveBeenCalled();
@@ -984,7 +1055,10 @@ describe('AuthService', () => {
       is_mfa_enabled: true,
     } as never);
     await expect(
-      service.login({ email: user.email, password: 'ValidPassword12!' }, '127.0.0.1'),
+      service.login({
+        body: { email: user.email, password: 'ValidPassword12!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(mfaService.createMfaSession).not.toHaveBeenCalled();
   });
@@ -995,7 +1069,10 @@ describe('AuthService', () => {
       password_hash: null,
     } as never);
     await expect(
-      service.login({ email: user.email, password: 'ValidPassword12!' }, '127.0.0.1'),
+      service.login({
+        body: { email: user.email, password: 'ValidPassword12!' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
@@ -1014,7 +1091,14 @@ describe('AuthService', () => {
       ...user,
       failed_login_count: 4,
     } as never);
-    await service.login({ email: user.email, password: 'ValidPassword12!' }, '127.0.0.1');
-    expect(userService.updateLoginAttempt).toHaveBeenCalledWith(user.public_id, 0, null);
+    await service.login({
+      body: { email: user.email, password: 'ValidPassword12!' },
+      ipAddress: '127.0.0.1',
+    });
+    expect(userService.updateLoginAttempt).toHaveBeenCalledWith({
+      public_id: user.public_id,
+      failed_login_count: 0,
+      account_locked_until: null,
+    });
   });
 });

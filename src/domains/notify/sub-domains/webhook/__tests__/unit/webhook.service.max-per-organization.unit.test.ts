@@ -104,30 +104,30 @@ describe('WebhookService.create — per-organization cap (sec-N4)', () => {
 
   it('allows create when the organization is below the cap', async () => {
     vi.mocked(webhookRepository.countActiveByOrganization).mockResolvedValue(5);
-    await service.create(
+    await service.create({
       scope,
-      {
+      body: {
         url: 'https://example.com/hook',
         events: ['subscription.updated'],
         secret: 'sixteenCharSecret',
       },
-      'user_public',
-    );
+      created_by_user_public_id: 'user_public',
+    });
     expect(webhookRepository.create).toHaveBeenCalledTimes(1);
   });
 
   it('rejects create when the organization is at the cap (default 25)', async () => {
     vi.mocked(webhookRepository.countActiveByOrganization).mockResolvedValue(25);
     await expect(
-      service.create(
+      service.create({
         scope,
-        {
+        body: {
           url: 'https://example.com/hook',
           events: ['subscription.updated'],
           secret: 'sixteenCharSecret',
         },
-        'user_public',
-      ),
+        created_by_user_public_id: 'user_public',
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
     expect(webhookRepository.create).not.toHaveBeenCalled();
   });
@@ -135,15 +135,15 @@ describe('WebhookService.create — per-organization cap (sec-N4)', () => {
   it('rejects create when the organization is over the cap (defensive)', async () => {
     vi.mocked(webhookRepository.countActiveByOrganization).mockResolvedValue(30);
     await expect(
-      service.create(
+      service.create({
         scope,
-        {
+        body: {
           url: 'https://example.com/hook',
           events: ['subscription.updated'],
           secret: 'sixteenCharSecret',
         },
-        'user_public',
-      ),
+        created_by_user_public_id: 'user_public',
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
   });
 });

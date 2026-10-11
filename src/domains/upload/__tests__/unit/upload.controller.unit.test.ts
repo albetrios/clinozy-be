@@ -61,14 +61,14 @@ describe('createUploadController', () => {
     await controller.getUpload(mockRequest({ params: { upload_id: uploadPublicId } }), reply);
     // The principal carries the active organization (null in the personal space): `upload.uploads`
     // has two disjoint RLS arms, and without it the service cannot reach an organization-scoped row.
-    expect(uploadService.getUpload).toHaveBeenCalledWith(
-      uploadPublicId,
-      expect.objectContaining({
+    expect(uploadService.getUpload).toHaveBeenCalledWith({
+      public_id: uploadPublicId,
+      principal: expect.objectContaining({
         userPublicId: expect.any(String),
         organizationPublicId: null,
         authorizeOrganization: expect.any(Function),
       }),
-    );
+    });
     expect(reply.send).toHaveBeenCalled();
   });
 

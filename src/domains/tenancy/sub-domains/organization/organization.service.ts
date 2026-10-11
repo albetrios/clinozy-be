@@ -117,10 +117,13 @@ export class OrganizationService {
     private readonly objectStorage: ObjectStoragePort,
   ) {}
 
-  wireOffboardingUploadService(
-    uploadService: UploadService,
-    subscriptionService?: OrganizationSubscriptionOffboardingPort,
-  ): void {
+  wireOffboardingUploadService({
+    uploadService,
+    subscriptionService,
+  }: {
+    uploadService: UploadService;
+    subscriptionService?: OrganizationSubscriptionOffboardingPort | undefined;
+  }): void {
     this.offboardingDependencies = { uploadService, subscriptionService };
     this.offboardingUploadService = uploadService;
   }
@@ -145,10 +148,13 @@ export class OrganizationService {
    * Emits an organization resource event with the organization's public JSON. Called inside the
    * write's database context so the webhook fan-out joins its transaction.
    */
-  private async emitOrganizationEvent(
-    type: OrganizationEventType,
-    organization: OrganizationOutput,
-  ): Promise<void> {
+  private async emitOrganizationEvent({
+    type,
+    organization,
+  }: {
+    type: OrganizationEventType;
+    organization: OrganizationOutput;
+  }): Promise<void> {
     await eventBus.emit(
       buildDomainEvent<OrganizationResourceEventPayload>(type, {
         organization_public_id: organization.id,
@@ -163,10 +169,13 @@ export class OrganizationService {
    * object outside this organization's logo prefix. Does NOT mutate the column — callers decide
    * what to write — so it is reused by per-asset delete, logo replacement, and offboarding.
    */
-  private async deleteOwnedOrganizationLogoObject(
-    public_id: string,
-    logo_url: string | null,
-  ): Promise<void> {
+  private async deleteOwnedOrganizationLogoObject({
+    public_id,
+    logo_url,
+  }: {
+    public_id: string;
+    logo_url: string | null;
+  }): Promise<void> {
     if (!logo_url?.startsWith(buildOrganizationLogoKeyPrefix(public_id))) return;
     const objectDelete = await this.objectStorage.deleteObject(logo_url);
     if (objectDelete.kind !== 'deleted') {
@@ -174,12 +183,15 @@ export class OrganizationService {
     }
   }
 
-  private async clearOrganizationLogoStorage(
-    scope: OrganizationPrincipalDatabaseScope,
-    logo_url: string | null,
-  ): Promise<void> {
+  private async clearOrganizationLogoStorage({
+    scope,
+    logo_url,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    logo_url: string | null;
+  }): Promise<void> {
     const public_id = scope.organizationPublicId;
-    await this.deleteOwnedOrganizationLogoObject(public_id, logo_url);
+    await this.deleteOwnedOrganizationLogoObject({ public_id, logo_url });
     const updated = await withAppDatabaseContext(scope, () =>
       this.repository.update(public_id, { logo_url: null }, null),
     );
@@ -203,10 +215,13 @@ export class OrganizationService {
    * discovery context so the `organizations_user_discovery` RLS policy resolves the owned rows; used
    * by user offboarding to block deleting a user who still owns organizations.
    */
-  async countOrganizationsOwnedByUser(
-    userPublicId: string,
-    userInternalId: number,
-  ): Promise<number> {
+  async countOrganizationsOwnedByUser({
+    userPublicId,
+    userInternalId,
+  }: {
+    userPublicId: string;
+    userInternalId: number;
+  }): Promise<number> {
     return withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }), () =>
       this.repository.countActiveOwnedByUser(userInternalId),
     );
@@ -243,10 +258,13 @@ export class OrganizationService {
     };
   }
 
-  async transferOrganizationOwnership(
-    organization_public_id: string,
-    new_owner_user_id: number,
-  ): Promise<OrganizationMembershipContext> {
+  async transferOrganizationOwnership({
+    organization_public_id,
+    new_owner_user_id,
+  }: {
+    organization_public_id: string;
+    new_owner_user_id: number;
+  }): Promise<OrganizationMembershipContext> {
     const updated = await this.repository.updateOwner(organization_public_id, new_owner_user_id);
     if (!updated) {
       // updateOwner only writes when the target is still an active member (atomic EXISTS guard);
@@ -328,10 +346,13 @@ export class OrganizationService {
     return this.repository.resolveUserPublicIdsByInternalIds(user_internal_ids);
   }
 
-  async updateStripeCustomerIdForOrganization(
-    organization_public_id: string,
-    stripe_customer_id: string,
-  ): Promise<void> {
+  async updateStripeCustomerIdForOrganization({
+    organization_public_id,
+    stripe_customer_id,
+  }: {
+    organization_public_id: string;
+    stripe_customer_id: string;
+  }): Promise<void> {
     // tenancy.organizations is FORCE RLS — persist the Stripe customer id under the organization GUC
     // so the update is not silently dropped when called from the payment provider outside HTTP.
     return withAppDatabaseContext(
@@ -357,10 +378,13 @@ export class OrganizationService {
    * or as an empty row set one query later. A real cross-tenant admin view needs a SECURITY DEFINER
    * resolver and a role-guarded route, not a branch here.
    */
-  private async requireAccessibleOrganization(
-    user_public_id: string,
-    organization_public_id: string,
-  ): Promise<Organization> {
+  private async requireAccessibleOrganization({
+    user_public_id,
+    organization_public_id,
+  }: {
+    user_public_id: string;
+    organization_public_id: string;
+  }): Promise<Organization> {
     const organization = await this.repository.userCanAccessOrganization(
       user_public_id,
       organization_public_id,
@@ -371,10 +395,13 @@ export class OrganizationService {
     return organization;
   }
 
-  private async assertUserCanAccessLoadedOrganization(
-    user_public_id: string,
-    organization: Organization,
-  ): Promise<void> {
+  private async assertUserCanAccessLoadedOrganization({
+    user_public_id,
+    organization,
+  }: {
+    user_public_id: string;
+    organization: Organization;
+  }): Promise<void> {
     const canAccess = await this.repository.userCanAccessLoadedOrganization(
       user_public_id,
       organization,
@@ -391,7 +418,7 @@ export class OrganizationService {
    * `20260520000004_organization_discovery_and_invitation_lookup_rls.sql`). Without
    * this wrap the call returns empty.
    */
-  async listForUser(query: unknown, user_public_id: string) {
+  async listForUser({ query, user_public_id }: { query: unknown; user_public_id: string }) {
     const parsed = validateListOrganizationsQuery(query);
     const pagination = omitUndefined({
       after: parsed.after,
@@ -409,18 +436,33 @@ export class OrganizationService {
     );
   }
 
-  async getByPublicId(public_id: string, user_public_id: string): Promise<OrganizationOutput> {
+  async getByPublicId({
+    public_id,
+    user_public_id,
+  }: {
+    public_id: string;
+    user_public_id: string;
+  }): Promise<OrganizationOutput> {
     return withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
       async () => {
         // One read, not two: the access check hands back the row it fetched.
-        const organization = await this.requireAccessibleOrganization(user_public_id, public_id);
+        const organization = await this.requireAccessibleOrganization({
+          user_public_id,
+          organization_public_id: public_id,
+        });
         return this.toOrganizationOutput(organization);
       },
     );
   }
 
-  async getBySlug(slug: string, user_public_id: string): Promise<OrganizationOutput> {
+  async getBySlug({
+    slug,
+    user_public_id,
+  }: {
+    slug: string;
+    user_public_id: string;
+  }): Promise<OrganizationOutput> {
     return withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
       async () => {
@@ -428,13 +470,19 @@ export class OrganizationService {
         if (!organization) throw new NotFoundError('Organization');
         // The row is already in hand from the slug lookup, so check against it rather
         // than re-reading the same organization by public id.
-        await this.assertUserCanAccessLoadedOrganization(user_public_id, organization);
+        await this.assertUserCanAccessLoadedOrganization({ user_public_id, organization });
         return this.toOrganizationOutput(organization);
       },
     );
   }
 
-  async create(body: unknown, owner_user_public_id: string): Promise<OrganizationOutput> {
+  async create({
+    body,
+    owner_user_public_id,
+  }: {
+    body: unknown;
+    owner_user_public_id: string;
+  }): Promise<OrganizationOutput> {
     // Capability gate: this endpoint only ever provisions a TEAM organization (personal organizations are
     // auto-provisioned, never created here). Enforce what `/users/me` advertises — in a
     // personal-only deployment (TEAM_ORGANIZATION_ENABLED=false) team-organization creation is rejected
@@ -506,15 +554,19 @@ export class OrganizationService {
     // transaction, and the fan-out reads under the new organization's scope — from inside this
     // user-scoped transaction it would hold a second pooled connection. (A brand-new organization
     // has no webhooks yet, so this reaches none; it is emitted for completeness.)
-    await this.emitOrganizationEvent(ORGANIZATION_EVENT.CREATED, created);
+    await this.emitOrganizationEvent({ type: ORGANIZATION_EVENT.CREATED, organization: created });
     return created;
   }
 
-  async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    updated_by_user_public_id: string | undefined,
-  ): Promise<OrganizationOutput> {
+  async update({
+    scope,
+    body,
+    updated_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    updated_by_user_public_id: string | undefined;
+  }): Promise<OrganizationOutput> {
     const public_id = scope.organizationPublicId;
     const parsed = validateUpdateOrganization(body);
     return withAppDatabaseContext(scope, async () => {
@@ -550,7 +602,7 @@ export class OrganizationService {
       }
       if (!updated) throw new NotFoundError('Organization');
       const output = await this.toOrganizationOutput(updated);
-      await this.emitOrganizationEvent(ORGANIZATION_EVENT.UPDATED, output);
+      await this.emitOrganizationEvent({ type: ORGANIZATION_EVENT.UPDATED, organization: output });
       return output;
     });
   }
@@ -575,7 +627,7 @@ export class OrganizationService {
   }
 
   async delete(scope: OrganizationPrincipalDatabaseScope): Promise<void> {
-    await this.offboardOrganization(scope, { personalAllowed: false });
+    await this.offboardOrganization({ scope, options: { personalAllowed: false } });
   }
 
   /**
@@ -583,23 +635,32 @@ export class OrganizationService {
    * PERSONAL organization is ever deleted. Same steps as {@link delete}: logo and uploads removed,
    * subscription cancelled, soft-deleted, permissions purged. No-op when it is already gone.
    */
-  async offboardPersonalOrganization(userInternalId: number, userPublicId: string): Promise<void> {
+  async offboardPersonalOrganization({
+    userInternalId,
+    userPublicId,
+  }: {
+    userInternalId: number;
+    userPublicId: string;
+  }): Promise<void> {
     const personalOrganizationPublicId = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
       () => this.repository.findPersonalOrganizationPublicId(userInternalId),
     );
     if (personalOrganizationPublicId === null) return;
-    await this.offboardOrganization(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: personalOrganizationPublicId }),
-      { personalAllowed: true },
-    );
+    await this.offboardOrganization({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: personalOrganizationPublicId }),
+      options: { personalAllowed: true },
+    });
   }
 
   /** The deletion sequence behind {@link delete} and {@link offboardPersonalOrganization}. */
-  private async offboardOrganization(
-    scope: OrganizationPrincipalDatabaseScope,
-    options: { personalAllowed: boolean },
-  ): Promise<void> {
+  private async offboardOrganization({
+    scope,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    options: { personalAllowed: boolean };
+  }): Promise<void> {
     const public_id = scope.organizationPublicId;
     const organization = await withAppDatabaseContext(scope, async () => {
       const found = await this.repository.findByPublicId(public_id);
@@ -614,7 +675,7 @@ export class OrganizationService {
       return found;
     });
     // External I/O (S3) and the upload-service tombstone run outside the deletion transaction.
-    await this.clearOrganizationLogoStorage(scope, organization.logo_url);
+    await this.clearOrganizationLogoStorage({ scope, logo_url: organization.logo_url });
     if (this.offboardingDependencies) {
       await this.offboardingDependencies.uploadService.tombstoneAllByOrganizationId(
         organization.id,
@@ -641,11 +702,15 @@ export class OrganizationService {
     await invalidateOrganizationPermissions(public_id);
   }
 
-  async uploadLogo(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    updated_by_user_public_id: string | undefined,
-  ): Promise<OrganizationOutput> {
+  async uploadLogo({
+    scope,
+    body,
+    updated_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    updated_by_user_public_id: string | undefined;
+  }): Promise<OrganizationOutput> {
     const public_id = scope.organizationPublicId;
     const parsed = validateUploadLogo(body);
     const expectedPrefix = buildOrganizationLogoKeyPrefix(public_id);
@@ -700,21 +765,24 @@ export class OrganizationService {
       );
       if (!result) throw new NotFoundError('Organization');
       const output = await this.toOrganizationOutput(result);
-      await this.emitOrganizationEvent(ORGANIZATION_EVENT.UPDATED, output);
+      await this.emitOrganizationEvent({ type: ORGANIZATION_EVENT.UPDATED, organization: output });
       return { serialized: output, previousLogoUrl: previous };
     });
     // Reclaim the PREVIOUS owned logo object outside the DB context — replacing a logo previously
     // orphaned the old S3 object (storage leak). Best-effort + prefix-guarded.
     if (previousLogoUrl && previousLogoUrl !== logoStorageKey) {
-      await this.deleteOwnedOrganizationLogoObject(public_id, previousLogoUrl);
+      await this.deleteOwnedOrganizationLogoObject({ public_id, logo_url: previousLogoUrl });
     }
     return serialized;
   }
 
-  async deleteLogo(
-    scope: OrganizationPrincipalDatabaseScope,
-    updated_by_user_public_id: string | undefined,
-  ): Promise<OrganizationOutput> {
+  async deleteLogo({
+    scope,
+    updated_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    updated_by_user_public_id: string | undefined;
+  }): Promise<OrganizationOutput> {
     const public_id = scope.organizationPublicId;
     const organization = await withAppDatabaseContext(scope, async () => {
       const found = await this.repository.findByPublicId(public_id);
@@ -724,13 +792,13 @@ export class OrganizationService {
     // Reclaim the backing S3 object before clearing the column (prefix-guarded; external URLs are
     // left untouched) — previously DELETE left the object orphaned in the bucket (storage leak).
     // External I/O (S3) runs outside the DB context; best-effort, so a missing object still clears.
-    await this.deleteOwnedOrganizationLogoObject(public_id, organization.logo_url);
+    await this.deleteOwnedOrganizationLogoObject({ public_id, logo_url: organization.logo_url });
     return withAppDatabaseContext(scope, async () => {
       const userId = await this.repository.resolveUserIdByPublicId(updated_by_user_public_id);
       const updated = await this.repository.update(public_id, { logo_url: null }, userId ?? null);
       if (!updated) throw new NotFoundError('Organization');
       const output = await this.toOrganizationOutput(updated);
-      await this.emitOrganizationEvent(ORGANIZATION_EVENT.UPDATED, output);
+      await this.emitOrganizationEvent({ type: ORGANIZATION_EVENT.UPDATED, organization: output });
       return output;
     });
   }

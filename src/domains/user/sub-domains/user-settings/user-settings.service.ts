@@ -53,7 +53,13 @@ export class UserSettingsService {
     return serializeUserSettings(settings);
   }
 
-  async update(scope: UserPrincipalDatabaseScope, body: unknown): Promise<UserSettingsOutput> {
+  async update({
+    scope,
+    body,
+  }: {
+    scope: UserPrincipalDatabaseScope;
+    body: unknown;
+  }): Promise<UserSettingsOutput> {
     const user_public_id = scope.userPublicId;
     const parsed = validateUpdateUserSettings(body);
     // auth.user_settings is FORCE RLS keyed on app.current_user_public_id — upsert inside the user context.
@@ -86,7 +92,13 @@ export class UserSettingsService {
    * see {@link UserSettingsService.getForInvitedUser} for why this cross-user
    * write cannot carry a token scope (absorbed in Phase 6b).
    */
-  async updateForInvitedUser(user_public_id: string, body: unknown): Promise<UserSettingsOutput> {
+  async updateForInvitedUser({
+    user_public_id,
+    body,
+  }: {
+    user_public_id: string;
+    body: unknown;
+  }): Promise<UserSettingsOutput> {
     const parsed = validateUpdateUserSettings(body);
     const result = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),

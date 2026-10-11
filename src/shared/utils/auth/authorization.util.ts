@@ -79,7 +79,7 @@ function resolveOrganizationPermissionsForRequest(
   if (existing) {
     return existing;
   }
-  const resolved = resolveUserOrganizationPermissions(userPublicId, organizationPublicId);
+  const resolved = resolveUserOrganizationPermissions({ userPublicId, organizationPublicId });
   requestMemo.set(memoKey, resolved);
   return resolved;
 }

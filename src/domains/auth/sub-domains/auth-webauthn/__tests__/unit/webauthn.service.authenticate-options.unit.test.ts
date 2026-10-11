@@ -61,7 +61,9 @@ describe('WebauthnService.generateAuthenticationOptions', () => {
   });
 
   it('rejects a missing email with ValidationError before querying any account', async () => {
-    await expect(service.generateAuthenticationOptions({})).rejects.toBeInstanceOf(ValidationError);
+    await expect(service.generateAuthenticationOptions(undefined)).rejects.toBeInstanceOf(
+      ValidationError,
+    );
     expect(userService.findByEmail).not.toHaveBeenCalled();
     expect(credentialRepository.listActiveByUserId).not.toHaveBeenCalled();
   });

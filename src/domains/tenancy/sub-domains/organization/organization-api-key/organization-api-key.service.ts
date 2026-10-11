@@ -71,7 +71,7 @@ export class OrganizationApiKeyService {
     private readonly permissionRepository: PermissionRepository,
   ) {}
 
-  async list(scope: OrganizationPrincipalDatabaseScope, query: unknown) {
+  async list({ scope, query }: { scope: OrganizationPrincipalDatabaseScope; query: unknown }) {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateListOrganizationApiKeysQuery(query);
     return withAppDatabaseContext(scope, async () => {
@@ -94,10 +94,13 @@ export class OrganizationApiKeyService {
     });
   }
 
-  async getByPublicId(
-    scope: OrganizationPrincipalDatabaseScope,
-    api_key_public_id: string,
-  ): Promise<OrganizationApiKeyOutput> {
+  async getByPublicId({
+    scope,
+    api_key_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    api_key_public_id: string;
+  }): Promise<OrganizationApiKeyOutput> {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext(scope, async () => {
       const organization = await this.organizationRepository.findByPublicId(organization_public_id);
@@ -108,12 +111,17 @@ export class OrganizationApiKeyService {
     });
   }
 
-  async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    created_by_user_public_id: string,
-    options?: { expiresAtOverride?: Date | null },
-  ): Promise<CreateOrganizationApiKeyResult> {
+  async create({
+    scope,
+    body,
+    created_by_user_public_id,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    created_by_user_public_id: string;
+    options?: { expiresAtOverride?: Date | null } | undefined;
+  }): Promise<CreateOrganizationApiKeyResult> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateCreateOrganizationApiKey(body);
     await assertCallerCanGrantPermissionCodes({
@@ -167,12 +175,17 @@ export class OrganizationApiKeyService {
     });
   }
 
-  async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    api_key_public_id: string,
-    body: unknown,
-    updated_by_user_public_id: string | undefined,
-  ): Promise<OrganizationApiKeyOutput> {
+  async update({
+    scope,
+    api_key_public_id,
+    body,
+    updated_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    api_key_public_id: string;
+    body: unknown;
+    updated_by_user_public_id: string | undefined;
+  }): Promise<OrganizationApiKeyOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateUpdateOrganizationApiKey(body);
     return withAppDatabaseContext(scope, async () => {
@@ -226,10 +239,13 @@ export class OrganizationApiKeyService {
     });
   }
 
-  async delete(
-    scope: OrganizationPrincipalDatabaseScope,
-    api_key_public_id: string,
-  ): Promise<void> {
+  async delete({
+    scope,
+    api_key_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    api_key_public_id: string;
+  }): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext(scope, async () => {
       const organization = await this.organizationRepository.findByPublicId(organization_public_id);
@@ -239,11 +255,15 @@ export class OrganizationApiKeyService {
     });
   }
 
-  async authenticate(
-    key_prefix: string,
-    key_hash: string,
-    hashCompare: (storedHash: string, candidateHash: string) => boolean,
-  ): Promise<OrganizationApiKeyAuthMatch | null> {
+  async authenticate({
+    key_prefix,
+    key_hash,
+    hashCompare,
+  }: {
+    key_prefix: string;
+    key_hash: string;
+    hashCompare: (storedHash: string, candidateHash: string) => boolean;
+  }): Promise<OrganizationApiKeyAuthMatch | null> {
     const candidates = await this.apiKeyRepository.findActiveByKeyPrefix(key_prefix);
     const now = new Date();
     for (const candidate of candidates) {
@@ -271,11 +291,15 @@ export class OrganizationApiKeyService {
     return null;
   }
 
-  async rotate(
-    scope: OrganizationPrincipalDatabaseScope,
-    api_key_public_id: string,
-    created_by_user_public_id: string,
-  ): Promise<CreateOrganizationApiKeyResult> {
+  async rotate({
+    scope,
+    api_key_public_id,
+    created_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    api_key_public_id: string;
+    created_by_user_public_id: string;
+  }): Promise<CreateOrganizationApiKeyResult> {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext(scope, async () => {
       const organization = await this.organizationRepository.findByPublicId(organization_public_id);
@@ -293,13 +317,12 @@ export class OrganizationApiKeyService {
       if (!retired) {
         throw new ConflictError('errors:apiKeyRotationConflict');
       }
-      return this.create(
+      return this.create({
         scope,
-        { name: existing.name, scopes: existing.scopes },
+        body: { name: existing.name, scopes: existing.scopes },
         created_by_user_public_id,
-        // Carry the replaced key's expiry forward so rotation preserves the original time-box.
-        { expiresAtOverride: existing.expires_at },
-      );
+        options: { expiresAtOverride: existing.expires_at },
+      });
     });
   }
 }

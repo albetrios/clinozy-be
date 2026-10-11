@@ -28,8 +28,11 @@ export function createStripeWebhookController(stripeWebhookService: StripeWebhoo
       // sec-B finding #6: the service performs the durability commit to Postgres BEFORE this
       // handler returns 200, so a Redis hiccup between ingress and worker pickup cannot drop the
       // event. The reclaim cron sweeps stuck ledger rows back into BullMQ if the enqueue is lost.
-      await stripeWebhookService.ingestEvent(event, {
-        requestId: getRequestIdentifier(request),
+      await stripeWebhookService.ingestEvent({
+        event,
+        context: {
+          requestId: getRequestIdentifier(request),
+        },
       });
 
       reply.status(200);

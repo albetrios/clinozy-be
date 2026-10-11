@@ -44,15 +44,17 @@ async function onMemberInvitationAcceptedEvent(event: DomainEvent): Promise<void
       // abort it, and postgres.js would fail the accept at COMMIT even though this catch ran.
       await withSavepoint(() =>
         createAndDispatchNotification({
-          user_id: recipientUserId,
-          organization_id: payload.organization_id,
-          type: INVITE_ACCEPTED_NOTIFICATION_TYPE,
-          title,
-          message,
-          action_url: INVITE_ACCEPTED_ACTION_URL,
-          // In-app inbox item + an email to the manager (IN_APP is the persisted row itself; the
-          // worker delivers the email channel).
-          data: { channels: ['in_app', 'email'], locale: payload.locale },
+          input: {
+            user_id: recipientUserId,
+            organization_id: payload.organization_id,
+            type: INVITE_ACCEPTED_NOTIFICATION_TYPE,
+            title,
+            message,
+            action_url: INVITE_ACCEPTED_ACTION_URL,
+            // In-app inbox item + an email to the manager (IN_APP is the persisted row itself; the
+            // worker delivers the email channel).
+            data: { channels: ['in_app', 'email'], locale: payload.locale },
+          },
         }),
       );
     } catch (error) {

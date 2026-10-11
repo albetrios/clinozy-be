@@ -59,11 +59,11 @@ describe('createMemberInvitationController — invitationId path-param validatio
       mockUserRequest({ invitation_id: invitationPublicId }),
       mockReply(),
     );
-    expect(service.accept).toHaveBeenCalledWith(
-      invitationPublicId,
-      expect.anything(),
-      expect.any(String),
-    );
+    expect(service.accept).toHaveBeenCalledWith({
+      invitation_public_id: invitationPublicId,
+      body: expect.anything(),
+      actingUserPublicId: expect.any(String),
+    });
   });
 
   it('revokeMemberInvitation rejects a malformed invitationId (sec-new-T2)', async () => {
@@ -84,10 +84,10 @@ describe('createMemberInvitationController — invitationId path-param validatio
       mockUserRequest({ organization_id: organizationPublicId, invitation_id: invitationPublicId }),
       mockReply(),
     );
-    expect(service.revoke).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      invitationPublicId,
-    );
+    expect(service.revoke).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      invitation_public_id: invitationPublicId,
+    });
   });
 
   it('resendInvitation rejects a malformed invitationId (sec-new-T2)', async () => {
@@ -105,11 +105,11 @@ describe('createMemberInvitationController — invitationId path-param validatio
       mockUserRequest({ organization_id: organizationPublicId, invitation_id: invitationPublicId }),
       mockReply(),
     );
-    expect(service.resend).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      invitationPublicId,
-      expect.anything(),
-      expect.objectContaining({ requestId: expect.any(String) }),
-    );
+    expect(service.resend).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      invitation_public_id: invitationPublicId,
+      body: expect.anything(),
+      options: expect.objectContaining({ requestId: expect.any(String) }),
+    });
   });
 });

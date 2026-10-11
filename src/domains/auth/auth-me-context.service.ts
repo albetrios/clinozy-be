@@ -60,14 +60,17 @@ export class AuthMeContextService {
       withAppDatabaseContext(scope, async () => ({
         user: await this.userService.getMe(scope),
         activeOrganization: activeOrganizationPublicId
-          ? await this.organizationService.getByPublicId(activeOrganizationPublicId, userPublicId)
+          ? await this.organizationService.getByPublicId({
+              public_id: activeOrganizationPublicId,
+              user_public_id: userPublicId,
+            })
           : null,
       })),
       activeOrganizationPublicId
-        ? this.authorizationService.resolveUserOrganizationPermissions(
+        ? this.authorizationService.resolveUserOrganizationPermissions({
             userPublicId,
-            activeOrganizationPublicId,
-          )
+            organizationPublicId: activeOrganizationPublicId,
+          })
         : Promise.resolve<string[]>([]),
     ]);
     const { user, activeOrganization } = userScoped;
@@ -111,11 +114,14 @@ export class AuthMeContextService {
     // Independent of each other — both read from `options` only — so they go out together
     // rather than one after the other. This runs inline on every organization switch.
     const [activeOrganization, myPermissions] = await Promise.all([
-      this.organizationService.getByPublicId(organizationPublicId, userPublicId),
-      this.authorizationService.resolveUserOrganizationPermissions(
+      this.organizationService.getByPublicId({
+        public_id: organizationPublicId,
+        user_public_id: userPublicId,
+      }),
+      this.authorizationService.resolveUserOrganizationPermissions({
         userPublicId,
         organizationPublicId,
-      ),
+      }),
     ]);
     return {
       active_organization: activeOrganization,

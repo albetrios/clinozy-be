@@ -20,7 +20,11 @@ export function createAuthLoginHandlers({ authService }: AuthLoginHandlersDepend
       const userAgent = getUserAgent(request);
       let data: Awaited<ReturnType<typeof authService.login>>;
       try {
-        data = await authService.login(request.body, ipAddress, userAgent ?? undefined);
+        data = await authService.login({
+          body: request.body,
+          ipAddress,
+          userAgent: userAgent ?? undefined,
+        });
       } catch (error) {
         // sec-A8 follow-up: record the failure side of the auth.overview.md invariant
         // ("every login (success or failure) records a row"). The helper is

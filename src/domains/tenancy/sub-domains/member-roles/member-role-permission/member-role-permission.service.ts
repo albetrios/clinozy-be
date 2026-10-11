@@ -49,7 +49,13 @@ export class MemberRolePermissionService {
     return rows.map((row) => row.permission_code);
   }
 
-  async list(scope: OrganizationPrincipalDatabaseScope, role_public_id: string) {
+  async list({
+    scope,
+    role_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    role_public_id: string;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext(scope, async () => {
       const organization = await this.organizationRepository.findByPublicId(organization_public_id);
@@ -60,12 +66,17 @@ export class MemberRolePermissionService {
     });
   }
 
-  async put(
-    scope: OrganizationPrincipalDatabaseScope,
-    role_public_id: string,
-    body: unknown,
-    created_by_user_public_id: string | undefined,
-  ) {
+  async put({
+    scope,
+    role_public_id,
+    body,
+    created_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    role_public_id: string;
+    body: unknown;
+    created_by_user_public_id: string | undefined;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validatePutMemberRolePermissions(body);
     const result = await withAppDatabaseContext(scope, async () => {

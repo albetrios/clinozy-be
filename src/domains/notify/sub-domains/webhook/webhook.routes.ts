@@ -50,10 +50,10 @@ function requireWebhookEventReadPermissions(
     const deliveredEvents = new Set<string>(events ?? []);
     const { webhook_id: webhookPublicId } = (request.params ?? {}) as { webhook_id?: string };
     if (webhookService !== undefined && webhookPublicId !== undefined) {
-      const stored = await webhookService.get(
-        requireOrganizationScope(request),
-        validatePublicIdParam(webhookPublicId, 'webhook_id'),
-      );
+      const stored = await webhookService.get({
+        scope: requireOrganizationScope(request),
+        webhook_public_id: validatePublicIdParam(webhookPublicId, 'webhook_id'),
+      });
       for (const eventType of stored.events as readonly string[]) deliveredEvents.add(eventType);
     }
     const permissionCodes = new Set<string>();

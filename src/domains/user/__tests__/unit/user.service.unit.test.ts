@@ -200,14 +200,17 @@ describe('UserService', () => {
   });
 
   it('updateMfaEnabled updates flag', async () => {
-    await service.updateMfaEnabled(userRow.public_id, true);
+    await service.updateMfaEnabled({ public_id: userRow.public_id, enabled: true });
     expect(repository.updateMfaEnabled).toHaveBeenCalledWith(userRow.public_id, true);
   });
 
   it('getMe and updateMe return serialized user', async () => {
     const me = await service.getMe(asUserScope(userRow.public_id));
     expect(me.id).toBe(userRow.public_id);
-    await service.updateMe(asUserScope(userRow.public_id), { first_name: 'Updated' });
+    await service.updateMe({
+      scope: asUserScope(userRow.public_id),
+      body: { first_name: 'Updated' },
+    });
     expect(repository.update).toHaveBeenCalled();
   });
 
@@ -252,8 +255,11 @@ describe('UserService', () => {
       ...userRow,
       avatar_url: avatarKey,
     } as never);
-    const result = await service.uploadAvatar(userRow.public_id, {
-      avatar_key: avatarKey,
+    const result = await service.uploadAvatar({
+      publicId: userRow.public_id,
+      body: {
+        avatar_key: avatarKey,
+      },
     });
     // The raw object KEY is persisted…
     expect(repository.update).toHaveBeenCalledWith(userRow.public_id, {
@@ -265,8 +271,11 @@ describe('UserService', () => {
 
   it('uploadAvatar rejects keys outside avatars prefix', async () => {
     await expect(
-      service.uploadAvatar(userRow.public_id, {
-        avatar_key: 'wrong/prefix.png',
+      service.uploadAvatar({
+        publicId: userRow.public_id,
+        body: {
+          avatar_key: 'wrong/prefix.png',
+        },
       }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
@@ -288,7 +297,7 @@ describe('UserService', () => {
     });
     const avatarKey = `avatars/${userRow.public_id}/avatar.png`;
     await expect(
-      service.uploadAvatar(userRow.public_id, { avatar_key: avatarKey }),
+      service.uploadAvatar({ publicId: userRow.public_id, body: { avatar_key: avatarKey } }),
     ).rejects.toBeInstanceOf(ValidationError);
     expect(repository.update).not.toHaveBeenCalled();
     // The key is caller-supplied: an unconfirmed one never costs a storage call.
@@ -399,7 +408,7 @@ describe('UserService', () => {
     expect(listed.total).toBeNull();
     const profile = await service.getUser(userRow.public_id);
     expect(profile.id).toBe(userRow.public_id);
-    await service.adminUpdateUser(userRow.public_id, { status: 'SUSPENDED' });
+    await service.adminUpdateUser({ publicId: userRow.public_id, body: { status: 'SUSPENDED' } });
     await service.suspendUser(userRow.public_id);
     await service.unsuspendUser(userRow.public_id);
     expect(repository.suspend).toHaveBeenCalled();
@@ -432,13 +441,16 @@ describe('UserService', () => {
       userDataExportService: {} as never,
     });
 
-    await service.adminUpdateUser(userRow.public_id, { status: 'SUSPENDED' });
+    await service.adminUpdateUser({ publicId: userRow.public_id, body: { status: 'SUSPENDED' } });
     expect(revokeAllSessions).toHaveBeenCalledWith(userRow.public_id);
 
     revokeAllSessions.mockClear();
-    await service.adminUpdateUser(userRow.public_id, { status: 'ACTIVE' });
-    await service.adminUpdateUser(userRow.public_id, {
-      first_name: 'NoStatusChange',
+    await service.adminUpdateUser({ publicId: userRow.public_id, body: { status: 'ACTIVE' } });
+    await service.adminUpdateUser({
+      publicId: userRow.public_id,
+      body: {
+        first_name: 'NoStatusChange',
+      },
     });
     expect(revokeAllSessions).not.toHaveBeenCalled();
   });
@@ -460,7 +472,7 @@ describe('UserService', () => {
     vi.mocked(objectStorage.headObject).mockResolvedValueOnce(null);
     const avatarKey = `avatars/${userRow.public_id}/missing.png`;
     await expect(
-      service.uploadAvatar(userRow.public_id, { avatar_key: avatarKey }),
+      service.uploadAvatar({ publicId: userRow.public_id, body: { avatar_key: avatarKey } }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
@@ -479,7 +491,7 @@ describe('UserService', () => {
     });
     const avatarKey = `avatars/${userRow.public_id}/avatar.png`;
     await expect(
-      service.uploadAvatar(userRow.public_id, { avatar_key: avatarKey }),
+      service.uploadAvatar({ publicId: userRow.public_id, body: { avatar_key: avatarKey } }),
     ).rejects.toBeInstanceOf(ValidationError);
     // Refused on the database's verified type, before any storage call.
     expect(objectStorage.headObject).not.toHaveBeenCalled();
@@ -491,9 +503,12 @@ describe('UserService', () => {
       ...userRow,
       avatar_url: avatarKey,
     } as never);
-    const result = await service.updateMe(asUserScope(userRow.public_id), {
-      avatar_key: avatarKey,
-      first_name: 'New',
+    const result = await service.updateMe({
+      scope: asUserScope(userRow.public_id),
+      body: {
+        avatar_key: avatarKey,
+        first_name: 'New',
+      },
     });
     expect(result.avatar_url).toBe('https://presigned.example/download');
   });
@@ -501,7 +516,7 @@ describe('UserService', () => {
   it('updateMe throws when repository update returns null', async () => {
     vi.mocked(repository.update).mockResolvedValue(null);
     await expect(
-      service.updateMe(asUserScope(userRow.public_id), { first_name: 'Missing' }),
+      service.updateMe({ scope: asUserScope(userRow.public_id), body: { first_name: 'Missing' } }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -518,7 +533,7 @@ describe('UserService', () => {
       is_email_verified: true,
     });
     expect(repository.insertOAuthUser).toHaveBeenCalled();
-    await service.updatePassword(userRow.public_id, 'new-hash');
+    await service.updatePassword({ public_id: userRow.public_id, password_hash: 'new-hash' });
     expect(repository.updatePassword).toHaveBeenCalledWith(userRow.public_id, 'new-hash');
     const internalId = await service.resolveInternalIdByPublicId(userRow.public_id);
     expect(internalId).toBe(1);
@@ -541,7 +556,7 @@ describe('UserService', () => {
     vi.mocked(repository.adminUpdate).mockResolvedValue(null);
     vi.mocked(repository.suspend).mockResolvedValue(null);
     await expect(
-      service.adminUpdateUser(userRow.public_id, { status: 'SUSPENDED' }),
+      service.adminUpdateUser({ publicId: userRow.public_id, body: { status: 'SUSPENDED' } }),
     ).rejects.toBeInstanceOf(NotFoundError);
     await expect(service.suspendUser(userRow.public_id)).rejects.toBeInstanceOf(NotFoundError);
   });
@@ -656,14 +671,21 @@ describe('UserService', () => {
 
   it('updateMe rejects avatar keys outside the user prefix', async () => {
     await expect(
-      service.updateMe(asUserScope(userRow.public_id), { avatar_key: 'wrong/prefix.png' }),
+      service.updateMe({
+        scope: asUserScope(userRow.public_id),
+        body: { avatar_key: 'wrong/prefix.png' },
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('findUserRecordByPublicId and login helpers delegate to repository', async () => {
     const record = await service.findUserRecordByPublicId(userRow.public_id);
     expect(record?.public_id).toBe(userRow.public_id);
-    await service.updateLoginAttempt(userRow.public_id, 2, null);
+    await service.updateLoginAttempt({
+      public_id: userRow.public_id,
+      failed_login_count: 2,
+      account_locked_until: null,
+    });
     expect(repository.updateLoginAttempt).toHaveBeenCalledWith(userRow.public_id, 2, null);
     await service.updateEmailVerified(userRow.public_id);
     expect(repository.updateEmailVerified).toHaveBeenCalledWith(userRow.public_id);
@@ -739,7 +761,7 @@ describe('UserService', () => {
       contentLength: 100,
     });
     const avatarKey = `avatars/${userRow.public_id}/avatar.png`;
-    await service.uploadAvatar(userRow.public_id, { avatar_key: avatarKey });
+    await service.uploadAvatar({ publicId: userRow.public_id, body: { avatar_key: avatarKey } });
     expect(repository.update).toHaveBeenCalled();
   });
 
@@ -759,7 +781,7 @@ describe('UserService', () => {
     it('adminUpdateUser refuses to deactivate a protected super-admin', async () => {
       resolveGlobalRoleForEmailMock.mockReturnValue(GLOBAL_ROLES.SUPER_ADMIN);
       await expect(
-        service.adminUpdateUser(userRow.public_id, { status: 'SUSPENDED' }),
+        service.adminUpdateUser({ publicId: userRow.public_id, body: { status: 'SUSPENDED' } }),
       ).rejects.toBeInstanceOf(ForbiddenError);
       expect(repository.adminUpdate).not.toHaveBeenCalled();
     });

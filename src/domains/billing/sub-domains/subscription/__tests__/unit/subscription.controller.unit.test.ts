@@ -63,10 +63,10 @@ describe('createSubscriptionController', () => {
       mockReply(),
     );
     // The Stripe cursor + limit are validated in the service; the controller forwards request.query.
-    expect(service.listInvoices).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId }),
-      { limit: 25 },
-    );
+    expect(service.listInvoices).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId }),
+      query: { limit: 25 },
+    });
     expect(response).toMatchObject({
       data: [{ id: 'in_2' }],
       meta: { pagination: { per_page: 25, next: 'in_2', has_more: true } },
@@ -80,10 +80,10 @@ describe('createSubscriptionController', () => {
       }),
       mockReply(),
     );
-    expect(service.get).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId }),
-      subscriptionPublicId,
-    );
+    expect(service.get).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId }),
+      subscription_public_id: subscriptionPublicId,
+    });
   });
 
   it('createSubscription forwards the idempotency key to service.create', async () => {
@@ -95,13 +95,14 @@ describe('createSubscriptionController', () => {
       }),
       mockReply(),
     );
-    // Money-path regression: the key must reach service.create as the 4th arg — the service
-    // forwards it on to Stripe as the subscription-create idempotency key, so a dropped key
-    // lets a retry/double-click mint a second paid subscription. (Asserting positions 0 and 3
-    // directly because the 3rd arg — acting user public id — is undefined for this mock auth.)
+    // Money-path regression: the key must reach service.create — the service forwards it on to
+    // Stripe as the subscription-create idempotency key, so a dropped key lets a
+    // retry/double-click mint a second paid subscription.
     const createCall = vi.mocked(service.create).mock.calls[0];
-    expect(createCall?.[0]).toMatchObject({ organizationPublicId });
-    expect(createCall?.[3]).toBe('idem-key-123456789012');
+    expect(createCall?.[0]).toMatchObject({
+      scope: { organizationPublicId },
+      idempotencyKey: 'idem-key-123456789012',
+    });
   });
 
   it('changePlan passes idempotency key to service', async () => {
@@ -113,12 +114,12 @@ describe('createSubscriptionController', () => {
       }),
       mockReply(),
     );
-    expect(service.changePlan).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId }),
-      subscriptionPublicId,
-      expect.anything(),
-      'idem-key-123456789012',
-    );
+    expect(service.changePlan).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId }),
+      subscription_public_id: subscriptionPublicId,
+      body: expect.anything(),
+      idempotencyKey: 'idem-key-123456789012',
+    });
   });
 
   it('cancelSubscription passes idempotency key to service', async () => {
@@ -129,11 +130,11 @@ describe('createSubscriptionController', () => {
       }),
       mockReply(),
     );
-    expect(service.cancel).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId }),
-      subscriptionPublicId,
-      'idem-key-123456789012',
-    );
+    expect(service.cancel).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId }),
+      subscription_public_id: subscriptionPublicId,
+      idempotencyKey: 'idem-key-123456789012',
+    });
   });
 
   it('resumeSubscription passes idempotency key to service', async () => {
@@ -144,11 +145,11 @@ describe('createSubscriptionController', () => {
       }),
       mockReply(),
     );
-    expect(service.resume).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId }),
-      subscriptionPublicId,
-      'idem-key-123456789012',
-    );
+    expect(service.resume).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId }),
+      subscription_public_id: subscriptionPublicId,
+      idempotencyKey: 'idem-key-123456789012',
+    });
   });
 
   // sec-B10: every handler validated `id` but threaded `subscriptionId` raw.

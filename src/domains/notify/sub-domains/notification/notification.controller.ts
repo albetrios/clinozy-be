@@ -16,14 +16,14 @@ export function createNotificationController(service: NotificationService) {
     listNotifications: async (request: FastifyRequest, _reply: FastifyReply) => {
       const scope = requireUserScope(request);
       const parsed = validateListNotificationsQuery(request.query);
-      const result = await service.listForUser(
+      const result = await service.listForUser({
         scope,
-        omitUndefined({
+        options: omitUndefined({
           after: parsed.after,
           limit: parsed.limit,
           include_total: parsed.include_total === 'true',
         }),
-      );
+      });
       const serialized = NotificationSerializer.many(result.items);
       return paginatedResponse(serialized, getRequestIdentifier(request), {
         per_page: result.limit,
@@ -37,7 +37,7 @@ export function createNotificationController(service: NotificationService) {
       _reply: FastifyReply,
     ) => {
       const scope = requireUserScope(request);
-      const notification = await service.get(request.params.notification_id, scope);
+      const notification = await service.get({ public_id: request.params.notification_id, scope });
       if (!notification) throw new NotFoundError('Notification');
       return successResponse(
         NotificationSerializer.one(notification),
@@ -49,7 +49,10 @@ export function createNotificationController(service: NotificationService) {
       _reply: FastifyReply,
     ) => {
       const scope = requireUserScope(request);
-      const notification = await service.markRead(request.params.notification_id, scope);
+      const notification = await service.markRead({
+        public_id: request.params.notification_id,
+        scope,
+      });
       if (!notification) throw new NotFoundError('Notification');
       return successResponse(
         NotificationSerializer.one(notification),
@@ -71,7 +74,10 @@ export function createNotificationController(service: NotificationService) {
       reply: FastifyReply,
     ) => {
       const scope = requireUserScope(request);
-      const deleted = await service.deleteNotification(request.params.notification_id, scope);
+      const deleted = await service.deleteNotification({
+        public_id: request.params.notification_id,
+        scope,
+      });
       if (!deleted) throw new NotFoundError('Notification');
       return reply.code(204).send();
     },

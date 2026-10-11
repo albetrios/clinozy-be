@@ -23,19 +23,16 @@ export function createAuthWebauthnHandlers({ webauthnService }: AuthWebauthnHand
   return {
     webauthnRegisterOptions: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
-      const data = await webauthnService.generateRegistrationOptions(
-        auth.userId,
-        readRequestOrigin(request),
-      );
+      const data = await webauthnService.generateRegistrationOptions(auth.userId);
       return successResponse(data, getRequestIdentifier(request));
     },
     webauthnRegisterVerify: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
-      const data = await webauthnService.verifyRegistration(
-        auth.userId,
-        request.body,
-        readRequestOrigin(request),
-      );
+      const data = await webauthnService.verifyRegistration({
+        userPublicId: auth.userId,
+        body: request.body,
+        requestOrigin: readRequestOrigin(request),
+      });
       // Enrolling a new passkey adds a login credential (a takeover-persistence move), so audit it —
       // symmetric with the already-audited passkey revoke.
       await recordScopedAuditEvent(request, {
@@ -57,7 +54,7 @@ export function createAuthWebauthnHandlers({ webauthnService }: AuthWebauthnHand
     ) => {
       const auth = requireAuth(request);
       const credentialPublicId = validateWebauthnCredentialIdParam(request.params.credential_id);
-      await webauthnService.revokeCredential(auth.userId, credentialPublicId);
+      await webauthnService.revokeCredential({ userPublicId: auth.userId, credentialPublicId });
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'auth.webauthn.revoke',
@@ -67,21 +64,18 @@ export function createAuthWebauthnHandlers({ webauthnService }: AuthWebauthnHand
       return reply.code(204).send();
     },
     webauthnAuthenticateOptions: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const data = await webauthnService.generateAuthenticationOptions(
-        request.body,
-        readRequestOrigin(request),
-      );
+      const data = await webauthnService.generateAuthenticationOptions(request.body);
       return successResponse(data, getRequestIdentifier(request));
     },
     webauthnAuthenticateVerify: async (request: FastifyRequest, reply: FastifyReply) => {
       let data: Awaited<ReturnType<typeof webauthnService.verifyAuthentication>>;
       try {
-        data = await webauthnService.verifyAuthentication(
-          request.body,
-          getIpAddress(request),
-          readRequestOrigin(request),
-          getUserAgent(request) ?? undefined,
-        );
+        data = await webauthnService.verifyAuthentication({
+          body: request.body,
+          ipAddress: getIpAddress(request),
+          requestOrigin: readRequestOrigin(request),
+          userAgent: getUserAgent(request) ?? undefined,
+        });
       } catch (error) {
         // sec-A8 follow-up: record the failure side of the auth.overview.md invariant.
         await recordLoginFailureAuditEvent(request, 'webauthn', error);

@@ -141,7 +141,13 @@ export class WebhookService {
     });
   }
 
-  async get(scope: OrganizationPrincipalDatabaseScope, webhook_public_id: string) {
+  async get({
+    scope,
+    webhook_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    webhook_public_id: string;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext(scope, async () => {
       const organization =
@@ -155,11 +161,15 @@ export class WebhookService {
     });
   }
 
-  async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    created_by_user_public_id: string | undefined,
-  ) {
+  async create({
+    scope,
+    body,
+    created_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    created_by_user_public_id: string | undefined;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateCreateWebhook(body);
     await resolveAndPinWebhookUrl(parsed.url);
@@ -198,12 +208,17 @@ export class WebhookService {
     });
   }
 
-  async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    webhook_public_id: string,
-    body: unknown,
-    updated_by_user_public_id: string | undefined,
-  ) {
+  async update({
+    scope,
+    webhook_public_id,
+    body,
+    updated_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    webhook_public_id: string;
+    body: unknown;
+    updated_by_user_public_id: string | undefined;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateUpdateWebhook(body);
     if (parsed.url !== undefined) {
@@ -216,11 +231,11 @@ export class WebhookService {
       const overlapWindowMs = env.WEBHOOK_SECRET_ROTATION_OVERLAP_HOURS * MILLISECONDS_PER_HOUR;
       const rotatingSecret = parsed.secret !== undefined;
       if (rotatingSecret) {
-        await this.assertSecretRotationEligible(
+        await this.assertSecretRotationEligible({
           webhook_public_id,
-          organization.id,
+          organizationId: organization.id,
           overlapWindowMs,
-        );
+        });
       }
 
       const userId =
@@ -259,12 +274,12 @@ export class WebhookService {
         throw error;
       }
       if (!updated) {
-        throw await this.buildUnmatchedWebhookUpdateError(
+        throw await this.buildUnmatchedWebhookUpdateError({
           webhook_public_id,
-          organization.id,
+          organizationId: organization.id,
           rotatingSecret,
           overlapWindowMs,
-        );
+        });
       }
       // Best-effort: drop any cached breaker so a URL/secret change does not reuse stale state.
       // Cross-process delivery workers fall back to the breaker cache's idle TTL.
@@ -280,11 +295,15 @@ export class WebhookService {
    * rotation. The same cutoff is enforced atomically in the repository UPDATE predicate (audit-#9);
    * this pre-check just yields a clear 409 with a retry-after on the common (non-racing) path.
    */
-  private async assertSecretRotationEligible(
-    webhook_public_id: string,
-    organizationId: number,
-    overlapWindowMs: number,
-  ): Promise<void> {
+  private async assertSecretRotationEligible({
+    webhook_public_id,
+    organizationId,
+    overlapWindowMs,
+  }: {
+    webhook_public_id: string;
+    organizationId: number;
+    overlapWindowMs: number;
+  }): Promise<void> {
     const current = await this.webhookRepository.findByPublicId(webhook_public_id, organizationId);
     if (!current) throw new NotFoundError('Webhook');
     const rotatedAtMs = current.secret_rotated_at
@@ -303,12 +322,17 @@ export class WebhookService {
    * re-read to disambiguate so a race loser gets a retryable 409 with the correct retry-after rather
    * than a misleading 404. Returns the error for the caller to `throw`.
    */
-  private async buildUnmatchedWebhookUpdateError(
-    webhook_public_id: string,
-    organizationId: number,
-    rotatingSecret: boolean,
-    overlapWindowMs: number,
-  ): Promise<ConflictError | NotFoundError> {
+  private async buildUnmatchedWebhookUpdateError({
+    webhook_public_id,
+    organizationId,
+    rotatingSecret,
+    overlapWindowMs,
+  }: {
+    webhook_public_id: string;
+    organizationId: number;
+    rotatingSecret: boolean;
+    overlapWindowMs: number;
+  }): Promise<ConflictError | NotFoundError> {
     if (rotatingSecret) {
       const winner = await this.webhookRepository.findByPublicId(webhook_public_id, organizationId);
       if (winner) {
@@ -356,7 +380,13 @@ export class WebhookService {
     }
   }
 
-  async delete(scope: OrganizationPrincipalDatabaseScope, webhook_public_id: string) {
+  async delete({
+    scope,
+    webhook_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    webhook_public_id: string;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext(scope, async () => {
       const organization =
@@ -474,10 +504,13 @@ export class WebhookService {
   }
 
   /** Phase 1 of {@link WebhookService.testWebhook}: resolve the webhook row under RLS scope. */
-  private async resolveWebhookForTest(
-    scope: OrganizationPrincipalDatabaseScope,
-    webhook_public_id: string,
-  ) {
+  private async resolveWebhookForTest({
+    scope,
+    webhook_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    webhook_public_id: string;
+  }) {
     return withAppDatabaseContext(scope, async () => {
       const organization = await this.organizationService.requireOrganizationByPublicId(
         scope.organizationPublicId,
@@ -495,7 +528,7 @@ export class WebhookService {
   }) {
     const { scope, webhook_public_id, requestId } = options;
     // Phase 1 (DB context): resolve the webhook under RLS scope.
-    const webhook = await this.resolveWebhookForTest(scope, webhook_public_id);
+    const webhook = await this.resolveWebhookForTest({ scope, webhook_public_id });
 
     // Pins DNS to a single SSRF-validated resolution and enforces the production allowlist.
     // Throws ValidationError (4xx) before any attempt is recorded if the URL is now unsafe —

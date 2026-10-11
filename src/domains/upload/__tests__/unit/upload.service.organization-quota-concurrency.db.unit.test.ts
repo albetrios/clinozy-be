@@ -74,8 +74,8 @@ describe('UploadService organization pending-quota concurrency (database)', () =
 
     const launchFor = (memberPublicId: string) =>
       Array.from({ length: REQUESTS_PER_USER }, () =>
-        service.createUpload(
-          {
+        service.createUpload({
+          input: {
             purpose: 'organization-file',
             for: 'organization',
             organization_id: organization.public_id,
@@ -83,13 +83,13 @@ describe('UploadService organization pending-quota concurrency (database)', () =
             file_name: 'doc.png',
             file_size: 1024,
           },
-          {
+          principal: {
             userPublicId: memberPublicId,
             organizationPublicId: organization.public_id,
             // Both members hold `upload:manage` in the active organization.
             authorizeOrganization: async () => {},
           },
-        ),
+        }),
       );
 
     const results = await Promise.allSettled([

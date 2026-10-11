@@ -35,7 +35,11 @@ export function createMemberInvitationController(service: MemberInvitationServic
       };
       // sec-new-T2: reject malformed path params before reaching the service layer.
       const invitationId = validatePublicIdParam(rawAcceptId ?? '', 'invitation_id');
-      const data = await service.accept(invitationId, request.body, auth.userId);
+      const data = await service.accept({
+        invitation_public_id: invitationId,
+        body: request.body,
+        actingUserPublicId: auth.userId,
+      });
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'tenancy.member_invitation.accept',
@@ -52,7 +56,7 @@ export function createMemberInvitationController(service: MemberInvitationServic
       // sec-new-T2: reject malformed path params before reaching the service layer.
       const { invitation_id: rawRevokeId } = request.params as { invitation_id: string };
       const invitationId = validatePublicIdParam(rawRevokeId ?? '', 'invitation_id');
-      await service.revoke(scope, invitationId);
+      await service.revoke({ scope, invitation_public_id: invitationId });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'tenancy.member_invitation.revoke',
@@ -70,8 +74,13 @@ export function createMemberInvitationController(service: MemberInvitationServic
       const { invitation_id: rawResendId } = request.params as { invitation_id: string };
       const invitationId = validatePublicIdParam(rawResendId ?? '', 'invitation_id');
       // R1 / TEN-34: regenerated token is delivered only via email, never returned.
-      const invitation = await service.resend(scope, invitationId, request.body, {
-        requestId: getRequestIdentifier(request),
+      const invitation = await service.resend({
+        scope,
+        invitation_public_id: invitationId,
+        body: request.body,
+        options: {
+          requestId: getRequestIdentifier(request),
+        },
       });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),

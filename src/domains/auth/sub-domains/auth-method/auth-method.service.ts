@@ -166,7 +166,7 @@ export class AuthMethodService {
     );
   }
 
-  async create(userPublicId: string, body: unknown) {
+  async create({ userPublicId, body }: { userPublicId: string; body: unknown }) {
     // route-#3: the DTO restricts method_type to EMAIL_CODE — the only type that is a functional
     // credential-less row. PASSWORD/MFA_* (need a stored secret) and OAUTH (proves an external
     // identity, written only by the verified callback) are rejected at validation, so none can be
@@ -211,7 +211,7 @@ export class AuthMethodService {
    * case — sec-A4). Without this guard, a user could revoke their only PASSWORD/OAUTH
    * and lock themselves out of every login surface — recovery requires admin intervention.
    */
-  async delete(userPublicId: string, methodPublicId: string) {
+  async delete({ userPublicId, methodPublicId }: { userPublicId: string; methodPublicId: string }) {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
     await withAppDatabaseContext(
@@ -279,7 +279,13 @@ export class AuthMethodService {
     );
   }
 
-  async findByProviderUserId(provider: string, provider_user_id: string) {
+  async findByProviderUserId({
+    provider,
+    provider_user_id,
+  }: {
+    provider: string;
+    provider_user_id: string;
+  }) {
     return this.authMethodRepository.findByProviderUserId(provider, provider_user_id);
   }
 
@@ -328,7 +334,13 @@ export class AuthMethodService {
    *   email-code-only user has a real login-capable method that appears in
    *   `GET /auth/me/auth-methods` and is counted by the last-login-capable-credential guard.
    */
-  async createEmailCodeMethod(userId: number, userPublicId: string): Promise<void> {
+  async createEmailCodeMethod({
+    userId,
+    userPublicId,
+  }: {
+    userId: number;
+    userPublicId: string;
+  }): Promise<void> {
     await withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }), () =>
       this.authMethodRepository.create({
         user_id: userId,
@@ -339,16 +351,28 @@ export class AuthMethodService {
     );
   }
 
-  async updateAuthMethodLastUsedAt(methodId: number, userId: number): Promise<void> {
+  async updateAuthMethodLastUsedAt({
+    methodId,
+    userId,
+  }: {
+    methodId: number;
+    userId: number;
+  }): Promise<void> {
     await this.authMethodRepository.updateLastUsedAt(methodId, userId);
   }
 
-  async findAuthMethodByIdForUser(methodId: number, userId: number) {
+  async findAuthMethodByIdForUser({ methodId, userId }: { methodId: number; userId: number }) {
     return this.authMethodRepository.findByIdForUser(methodId, userId);
   }
 
   /** route-#10: resolves an auth method by its opaque public id (scoped to the owning user). */
-  async findAuthMethodByPublicIdForUser(methodPublicId: string, userId: number) {
+  async findAuthMethodByPublicIdForUser({
+    methodPublicId,
+    userId,
+  }: {
+    methodPublicId: string;
+    userId: number;
+  }) {
     return this.authMethodRepository.findByPublicIdForUser(methodPublicId, userId);
   }
 
@@ -365,17 +389,26 @@ export class AuthMethodService {
     await this.authMethodRepository.acquireCredentialMutationLock(userId);
   }
 
-  async revokeAuthMethod(methodId: number, userId: number): Promise<void> {
+  async revokeAuthMethod({
+    methodId,
+    userId,
+  }: {
+    methodId: number;
+    userId: number;
+  }): Promise<void> {
     const revoked = await this.authMethodRepository.revoke(methodId, userId);
     if (!revoked) throw new NotFoundError('Auth method');
   }
 
   // ── Password Reset ────────────────────────────────────────────
 
-  async forgotPassword(
-    body: unknown,
-    context?: { requestId?: string; locale?: SupportedLanguage },
-  ): Promise<{
+  async forgotPassword({
+    body,
+    context,
+  }: {
+    body: unknown;
+    context?: { requestId?: string; locale?: SupportedLanguage } | undefined;
+  }): Promise<{
     messageKey: string;
     messageParams?: Record<string, string | number>;
   }> {
@@ -504,14 +537,21 @@ export class AuthMethodService {
         const user = await this.userService.findById(record.user_id);
         if (!user) throw new NotFoundError('User');
 
-        await this.userService.updatePassword(user.public_id, passwordHash);
+        await this.userService.updatePassword({
+          public_id: user.public_id,
+          password_hash: passwordHash,
+        });
         // Completing a reset proves control of the email (the token was delivered there), so verify
         // it — parity with email-code / OAuth, and it unblocks an invited user from accepting their
         // organization invitation after recovering access.
         await this.userService.updateEmailVerified(user.public_id);
         // The password just changed, so any prior failed-login lockout is moot — clear the counter +
         // lock window (mirrors a successful login) so the owner is not held out of the next sign-in.
-        const recovered = await this.userService.updateLoginAttempt(user.public_id, 0, null);
+        const recovered = await this.userService.updateLoginAttempt({
+          public_id: user.public_id,
+          failed_login_count: 0,
+          account_locked_until: null,
+        });
         await this.verificationTokenRepository.invalidateAllForUser(user.id, 'PASSWORD_RESET');
 
         // A reset is the recovery path for a potentially compromised account, so every existing
@@ -526,11 +566,15 @@ export class AuthMethodService {
     );
   }
 
-  async changePassword(
-    userPublicId: string,
-    body: unknown,
-    options?: { currentAccessToken?: string },
-  ): Promise<void> {
+  async changePassword({
+    userPublicId,
+    body,
+    options,
+  }: {
+    userPublicId: string;
+    body: unknown;
+    options?: { currentAccessToken?: string } | undefined;
+  }): Promise<void> {
     const parsed = validateChangePassword(body);
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
@@ -551,7 +595,10 @@ export class AuthMethodService {
     // failure rolls the password change back rather than committing it alone.
     await withTransaction((transaction) =>
       runWithPinnedDatabaseHandle(transaction as RequestScopedPostgresDatabase, async () => {
-        const updatedUser = await this.userService.updatePassword(user.public_id, passwordHash);
+        const updatedUser = await this.userService.updatePassword({
+          public_id: user.public_id,
+          password_hash: passwordHash,
+        });
         if (!updatedUser) throw new NotFoundError('User');
 
         // An authenticated change keeps the caller's current session and terminates

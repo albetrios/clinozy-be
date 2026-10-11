@@ -334,12 +334,16 @@ describe('Integration: organization resource events reach subscribed webhooks', 
     });
 
     await app.billingDomain.stripeWebhookService.handleEvent({
-      id: `evt_deleted_${randomUUID()}`,
-      object: 'event',
-      type: 'customer.subscription.deleted',
-      created: Math.floor(Date.now() / 1000),
-      data: { object: { id: providerSubscriptionId, object: 'subscription', items: { data: [] } } },
-    } as unknown as Stripe.Event);
+      event: {
+        id: `evt_deleted_${randomUUID()}`,
+        object: 'event',
+        type: 'customer.subscription.deleted',
+        created: Math.floor(Date.now() / 1000),
+        data: {
+          object: { id: providerSubscriptionId, object: 'subscription', items: { data: [] } },
+        },
+      } as unknown as Stripe.Event,
+    });
 
     const [envelope] = await envelopes(webhook.id, 'subscription.cancelled');
     expectEnvelope(envelope, 'subscription.cancelled', subscription.public_id);
@@ -546,13 +550,19 @@ describe('Integration: organization resource events reach subscribed webhooks', 
       }) as unknown as Stripe.Event;
 
     // The first sync rewrites the periods to Stripe's whole seconds: a real change.
-    await app.billingDomain.stripeWebhookService.handleEvent(updatedEvent(nowSeconds + 1, false));
+    await app.billingDomain.stripeWebhookService.handleEvent({
+      event: updatedEvent(nowSeconds + 1, false),
+    });
     expect(await envelopes(webhook.id, 'subscription.updated')).toHaveLength(1);
     // The same state again (a redelivery, or the reconciliation after an HTTP mutation): nothing new.
-    await app.billingDomain.stripeWebhookService.handleEvent(updatedEvent(nowSeconds + 2, false));
+    await app.billingDomain.stripeWebhookService.handleEvent({
+      event: updatedEvent(nowSeconds + 2, false),
+    });
     expect(await envelopes(webhook.id, 'subscription.updated')).toHaveLength(1);
     // A real change again.
-    await app.billingDomain.stripeWebhookService.handleEvent(updatedEvent(nowSeconds + 3, true));
+    await app.billingDomain.stripeWebhookService.handleEvent({
+      event: updatedEvent(nowSeconds + 3, true),
+    });
     const updates = await envelopes(webhook.id, 'subscription.updated');
     expect(updates).toHaveLength(2);
     expectEnvelope(updates[1], 'subscription.updated', subscription.public_id);

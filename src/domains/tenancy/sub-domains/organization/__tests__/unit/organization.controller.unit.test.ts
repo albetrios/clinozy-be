@@ -70,12 +70,15 @@ describe('createOrganizationController', () => {
 
   it('getOrganization delegates to service', async () => {
     await controller.getOrganization(mockRequest({ params: {} }), mockReply());
-    expect(service.getByPublicId).toHaveBeenCalledWith(organizationPublicId, userPublicId);
+    expect(service.getByPublicId).toHaveBeenCalledWith({
+      public_id: organizationPublicId,
+      user_public_id: userPublicId,
+    });
   });
 
   it('getOrganizationBySlug delegates to service', async () => {
     await controller.getOrganizationBySlug(mockRequest({ params: { slug: 'acme' } }), mockReply());
-    expect(service.getBySlug).toHaveBeenCalledWith('acme', userPublicId);
+    expect(service.getBySlug).toHaveBeenCalledWith({ slug: 'acme', user_public_id: userPublicId });
   });
 
   it('createOrganization returns 200', async () => {
@@ -154,7 +157,10 @@ describe('createOrganizationController', () => {
       }),
       mockReply(),
     );
-    expect(service.getByPublicId).toHaveBeenCalledWith(organizationPublicId, userPublicId);
+    expect(service.getByPublicId).toHaveBeenCalledWith({
+      public_id: organizationPublicId,
+      user_public_id: userPublicId,
+    });
   });
 
   it('rejects a missing organization context with ForbiddenError on each validated handler', async () => {
@@ -202,7 +208,7 @@ describe('createOrganizationController', () => {
   it('uses empty slug default when params are undefined', async () => {
     vi.mocked(service.getBySlug).mockClear();
     await controller.getOrganizationBySlug(mockRequest({ params: undefined }), mockReply());
-    expect(service.getBySlug).toHaveBeenCalledWith('', userPublicId);
+    expect(service.getBySlug).toHaveBeenCalledWith({ slug: '', user_public_id: userPublicId });
   });
 
   it('listOrganizationAuditLogs returns has_more false on last page', async () => {

@@ -86,15 +86,15 @@ export async function completeFirstFactorAuth(options: {
   const sessionMaxAgeDays = env.AUTH_SESSION_MAX_AGE_DAYS;
   const expiresAt = new Date(Date.now() + sessionMaxAgeDays * MILLISECONDS_PER_DAY);
 
-  const session = await options.authSessionService.createSessionForUser(
-    options.user.public_id,
-    omitUndefined({
+  const session = await options.authSessionService.createSessionForUser({
+    userPublicId: options.user.public_id,
+    data: omitUndefined({
       token_hash: sessionTokenHash,
       ip_address: options.ipAddress,
       user_agent: options.userAgent,
       expires_at: expiresAt,
     }),
-  );
+  });
 
   // First-factor login deliberately does NOT grant a step-up window: a sensitive
   // credential mutation must be preceded by an explicit re-authentication (MFA verify

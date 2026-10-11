@@ -161,25 +161,31 @@ describe('MembershipService — permission cache invalidation', () => {
   });
 
   it('create invalidates user permission cache after membership is created', async () => {
-    await service.create(
-      asScope('org_public_abc'),
-      { email: 'invitee@example.com', role_id: 'role_public' },
-      'inviter_public',
-    );
+    await service.create({
+      scope: asScope('org_public_abc'),
+      body: { email: 'invitee@example.com', role_id: 'role_public' },
+      invited_by_user_public_id: 'inviter_public',
+    });
 
-    expect(invalidatePermissions).toHaveBeenCalledWith('user_public_new', 'org_public_abc');
+    expect(invalidatePermissions).toHaveBeenCalledWith({
+      userId: 'user_public_new',
+      organizationId: 'org_public_abc',
+    });
   });
 
   it('update invalidates the affected user permission cache', async () => {
-    await service.update(
-      asScope('org_public_abc'),
-      'membership_public',
-      { status: 'SUSPENDED' },
-      'admin',
-    );
+    await service.update({
+      scope: asScope('org_public_abc'),
+      membership_public_id: 'membership_public',
+      body: { status: 'SUSPENDED' },
+      updated_by_user_public_id: 'admin',
+    });
 
     expect(organizationService.resolveUserPublicIdByInternalId).toHaveBeenCalledWith(5);
-    expect(invalidatePermissions).toHaveBeenCalledWith('user_public_affected', 'org_public_abc');
+    expect(invalidatePermissions).toHaveBeenCalledWith({
+      userId: 'user_public_affected',
+      organizationId: 'org_public_abc',
+    });
   });
 
   it('delete invalidates the affected user permission cache', async () => {
@@ -193,15 +199,27 @@ describe('MembershipService — permission cache invalidation', () => {
       updated_at: new Date(),
     });
 
-    await service.delete(asScope('org_public_abc'), 'membership_public');
+    await service.delete({
+      scope: asScope('org_public_abc'),
+      membership_public_id: 'membership_public',
+    });
 
     expect(organizationService.resolveUserPublicIdByInternalId).toHaveBeenCalledWith(5);
-    expect(invalidatePermissions).toHaveBeenCalledWith('user_public_affected', 'org_public_abc');
+    expect(invalidatePermissions).toHaveBeenCalledWith({
+      userId: 'user_public_affected',
+      organizationId: 'org_public_abc',
+    });
   });
 
   it('leaveOrganization invalidates the leaving user permission cache', async () => {
-    await service.leaveOrganization(asScope('org_public_abc'), 'user_public_leaver');
+    await service.leaveOrganization({
+      scope: asScope('org_public_abc'),
+      user_public_id: 'user_public_leaver',
+    });
 
-    expect(invalidatePermissions).toHaveBeenCalledWith('user_public_leaver', 'org_public_abc');
+    expect(invalidatePermissions).toHaveBeenCalledWith({
+      userId: 'user_public_leaver',
+      organizationId: 'org_public_abc',
+    });
   });
 });

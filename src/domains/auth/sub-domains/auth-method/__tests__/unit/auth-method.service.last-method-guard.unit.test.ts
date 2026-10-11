@@ -78,7 +78,9 @@ describe('AuthMethodService.delete — last-method guard (sec-A5 / route-audit C
     // Atomic guard matches zero rows — no other login-capable method remains.
     vi.mocked(authMethodRepository.revokeUnlessLastLoginCapable).mockResolvedValue(null as never);
 
-    await expect(service.delete('user_pub', METHOD_PUB_A)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(
+      service.delete({ userPublicId: 'user_pub', methodPublicId: METHOD_PUB_A }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
     expect(userService.clearPasswordHash).not.toHaveBeenCalled();
   });
 
@@ -91,7 +93,9 @@ describe('AuthMethodService.delete — last-method guard (sec-A5 / route-audit C
       revoked_at: null,
     } as never);
 
-    await expect(service.delete('user_pub', METHOD_PUB_A)).resolves.toBeUndefined();
+    await expect(
+      service.delete({ userPublicId: 'user_pub', methodPublicId: METHOD_PUB_A }),
+    ).resolves.toBeUndefined();
     // The login-capable type set is passed so the repository can build the EXISTS guard.
     expect(authMethodRepository.revokeUnlessLastLoginCapable).toHaveBeenCalledWith(
       42,
@@ -111,7 +115,9 @@ describe('AuthMethodService.delete — last-method guard (sec-A5 / route-audit C
       revoked_at: null,
     } as never);
 
-    await expect(service.delete('user_pub', METHOD_PUB_A)).resolves.toBeUndefined();
+    await expect(
+      service.delete({ userPublicId: 'user_pub', methodPublicId: METHOD_PUB_A }),
+    ).resolves.toBeUndefined();
     expect(authMethodRepository.revokeUnlessLastLoginCapable).toHaveBeenCalledWith(
       42,
       user.id,
@@ -123,7 +129,9 @@ describe('AuthMethodService.delete — last-method guard (sec-A5 / route-audit C
   it('throws NotFoundError when the method does not exist (no guarded revoke)', async () => {
     vi.mocked(authMethodRepository.findByPublicIdForUser).mockResolvedValue(null);
 
-    await expect(service.delete('user_pub', METHOD_PUB_A)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      service.delete({ userPublicId: 'user_pub', methodPublicId: METHOD_PUB_A }),
+    ).rejects.toBeInstanceOf(NotFoundError);
     expect(authMethodRepository.revokeUnlessLastLoginCapable).not.toHaveBeenCalled();
   });
 });

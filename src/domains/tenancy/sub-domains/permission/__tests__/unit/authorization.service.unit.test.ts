@@ -51,10 +51,10 @@ describe('AuthorizationService', () => {
     vi.mocked(redisConnection.get).mockImplementation(async (key) =>
       String(key).startsWith('perm:org:') ? '0' : JSON.stringify(['organization:read']),
     );
-    const codes = await authorizationService.resolveUserOrganizationPermissions(
-      'user_public',
-      'org_public',
-    );
+    const codes = await authorizationService.resolveUserOrganizationPermissions({
+      userPublicId: 'user_public',
+      organizationPublicId: 'org_public',
+    });
     expect(codes).toEqual(['organization:read']);
     expect(permissionRepository.findPermissionCodesForUserInOrganization).not.toHaveBeenCalled();
   });
@@ -63,10 +63,10 @@ describe('AuthorizationService', () => {
     vi.mocked(redisConnection.get).mockResolvedValue(null);
     vi.mocked(redisConnection.set).mockResolvedValue('OK');
     vi.mocked(redisConnection.del).mockResolvedValue(1);
-    const codes = await authorizationService.resolveUserOrganizationPermissions(
-      'user_public',
-      'org_public',
-    );
+    const codes = await authorizationService.resolveUserOrganizationPermissions({
+      userPublicId: 'user_public',
+      organizationPublicId: 'org_public',
+    });
     expect(codes).toEqual(['organization:read', 'organization:manage']);
     expect(permissionRepository.findPermissionCodesForUserInOrganization).toHaveBeenCalled();
     expect(redisConnection.set).toHaveBeenCalled();
@@ -76,10 +76,10 @@ describe('AuthorizationService', () => {
     // A fresh cache value is present — the DB-direct path must ignore it and hit the join,
     // and must not read or write Redis.
     vi.mocked(redisConnection.get).mockResolvedValue(JSON.stringify(['stale:cached']));
-    const codes = await authorizationService.resolveUserOrganizationPermissionsFromDatabase(
-      'user_public',
-      'org_public',
-    );
+    const codes = await authorizationService.resolveUserOrganizationPermissionsFromDatabase({
+      userPublicId: 'user_public',
+      organizationPublicId: 'org_public',
+    });
     expect(codes).toEqual(['organization:read', 'organization:manage']);
     expect(permissionRepository.findPermissionCodesForUserInOrganization).toHaveBeenCalled();
     expect(redisConnection.get).not.toHaveBeenCalled();

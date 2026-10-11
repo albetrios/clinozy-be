@@ -67,8 +67,8 @@ describe('member-invitation-accepted notification handler (item #10)', () => {
     });
 
     expect(createAndDispatchNotificationMock).toHaveBeenCalledTimes(2);
-    expect(createAndDispatchNotificationMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(createAndDispatchNotificationMock).toHaveBeenCalledWith({
+      input: expect.objectContaining({
         user_id: 11,
         organization_id: 7,
         type: 'membership.invite_accepted',
@@ -77,10 +77,10 @@ describe('member-invitation-accepted notification handler (item #10)', () => {
         action_url: '/settings/members',
         data: { channels: ['in_app', 'email'] },
       }),
-    );
-    expect(createAndDispatchNotificationMock).toHaveBeenCalledWith(
-      expect.objectContaining({ user_id: 22 }),
-    );
+    });
+    expect(createAndDispatchNotificationMock).toHaveBeenCalledWith({
+      input: expect.objectContaining({ user_id: 22 }),
+    });
   });
 
   it("writes the notification in the organization's language and carries it to the email", async () => {
@@ -92,13 +92,13 @@ describe('member-invitation-accepted notification handler (item #10)', () => {
       locale: 'es',
     });
 
-    expect(createAndDispatchNotificationMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(createAndDispatchNotificationMock).toHaveBeenCalledWith({
+      input: expect.objectContaining({
         title: 'Invitación aceptada',
         message: 'Dana Scully aceptó tu invitación para unirse a Acme & Co.',
         data: { channels: ['in_app', 'email'], locale: 'es' },
       }),
-    );
+    });
   });
 
   it('one failed dispatch does not drop the rest and never throws out of the handler', async () => {

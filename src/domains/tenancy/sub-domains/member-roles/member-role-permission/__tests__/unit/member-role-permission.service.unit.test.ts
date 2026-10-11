@@ -125,23 +125,26 @@ describe('MemberRolePermissionService', () => {
     it('throws NotFoundError when the organization does not exist', async () => {
       vi.mocked(organizationRepository.findByPublicId).mockResolvedValueOnce(null as never);
 
-      await expect(service.list(asScope('org_public_abc'), 'role_public')).rejects.toBeInstanceOf(
-        NotFoundError,
-      );
+      await expect(
+        service.list({ scope: asScope('org_public_abc'), role_public_id: 'role_public' }),
+      ).rejects.toBeInstanceOf(NotFoundError);
       expect(memberRolePermissionRepository.findByRoleId).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundError when the role does not exist in the organization', async () => {
       vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValueOnce(null as never);
 
-      await expect(service.list(asScope('org_public_abc'), 'role_public')).rejects.toBeInstanceOf(
-        NotFoundError,
-      );
+      await expect(
+        service.list({ scope: asScope('org_public_abc'), role_public_id: 'role_public' }),
+      ).rejects.toBeInstanceOf(NotFoundError);
       expect(memberRolePermissionRepository.findByRoleId).not.toHaveBeenCalled();
     });
 
     it('resolves the role within the organization and returns its permission rows', async () => {
-      const rows = await service.list(asScope('org_public_abc'), 'role_public');
+      const rows = await service.list({
+        scope: asScope('org_public_abc'),
+        role_public_id: 'role_public',
+      });
 
       // Role is looked up scoped to the resolved organization id (cross-tenant safety).
       expect(memberRoleRepository.findByPublicId).toHaveBeenCalledWith('role_public', 1);
@@ -158,7 +161,12 @@ describe('MemberRolePermissionService', () => {
       vi.mocked(organizationRepository.findByPublicId).mockResolvedValueOnce(null as never);
 
       await expect(
-        service.put(asScope('org_public_abc'), 'role_public', PUT_BODY, 'admin_public'),
+        service.put({
+          scope: asScope('org_public_abc'),
+          role_public_id: 'role_public',
+          body: PUT_BODY,
+          created_by_user_public_id: 'admin_public',
+        }),
       ).rejects.toBeInstanceOf(NotFoundError);
       expect(memberRolePermissionRepository.replace).not.toHaveBeenCalled();
       expect(invalidateOrganizationPermissions).not.toHaveBeenCalled();
@@ -168,13 +176,23 @@ describe('MemberRolePermissionService', () => {
       vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValueOnce(null as never);
 
       await expect(
-        service.put(asScope('org_public_abc'), 'role_public', PUT_BODY, 'admin_public'),
+        service.put({
+          scope: asScope('org_public_abc'),
+          role_public_id: 'role_public',
+          body: PUT_BODY,
+          created_by_user_public_id: 'admin_public',
+        }),
       ).rejects.toBeInstanceOf(NotFoundError);
       expect(memberRolePermissionRepository.replace).not.toHaveBeenCalled();
     });
 
     it('checks the caller may grant the requested codes before any write', async () => {
-      await service.put(asScope('org_public_abc'), 'role_public', PUT_BODY, 'admin_public');
+      await service.put({
+        scope: asScope('org_public_abc'),
+        role_public_id: 'role_public',
+        body: PUT_BODY,
+        created_by_user_public_id: 'admin_public',
+      });
 
       expect(assertCallerCanGrantPermissionCodes).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -192,7 +210,12 @@ describe('MemberRolePermissionService', () => {
     });
 
     it('replaces the role permission set and invalidates the whole organization namespace', async () => {
-      await service.put(asScope('org_public_abc'), 'role_public', PUT_BODY, 'admin_public');
+      await service.put({
+        scope: asScope('org_public_abc'),
+        role_public_id: 'role_public',
+        body: PUT_BODY,
+        created_by_user_public_id: 'admin_public',
+      });
 
       expect(organizationRepository.resolveUserIdByPublicId).toHaveBeenCalledWith('admin_public');
       expect(memberRolePermissionRepository.replace).toHaveBeenCalledWith(
@@ -204,7 +227,12 @@ describe('MemberRolePermissionService', () => {
     });
 
     it('writes a null created-by and never resolves a user id when no caller is provided', async () => {
-      await service.put(asScope('org_public_abc'), 'role_public', PUT_BODY, undefined);
+      await service.put({
+        scope: asScope('org_public_abc'),
+        role_public_id: 'role_public',
+        body: PUT_BODY,
+        created_by_user_public_id: undefined,
+      });
 
       // The `created_by ? resolve(...) : null` branch must take the null path — a mutant that
       // flips the condition would call resolveUserIdByPublicId and persist id 7 instead of null.
@@ -229,12 +257,12 @@ describe('MemberRolePermissionService', () => {
         { permission_code: 'tenancy:write' },
       ] as never);
 
-      await service.put(
-        asScope('org_public_abc'),
-        'role_public',
-        { permission_codes: [] },
-        'admin_public',
-      );
+      await service.put({
+        scope: asScope('org_public_abc'),
+        role_public_id: 'role_public',
+        body: { permission_codes: [] },
+        created_by_user_public_id: 'admin_public',
+      });
 
       // Empty-PUT means the caller is removing both currently-held codes; the
       // guard must therefore receive both — not the empty array — so caller
@@ -261,12 +289,12 @@ describe('MemberRolePermissionService', () => {
         { permission_code: 'subscription:manage' },
       ] as never);
 
-      await service.put(
-        asScope('org_public_abc'),
-        'role_public',
-        { permission_codes: ['tenancy:read', 'audit:write'] },
-        'admin_public',
-      );
+      await service.put({
+        scope: asScope('org_public_abc'),
+        role_public_id: 'role_public',
+        body: { permission_codes: ['tenancy:read', 'audit:write'] },
+        created_by_user_public_id: 'admin_public',
+      });
 
       const passedCodes = vi
         .mocked(assertCallerCanGrantPermissionCodes)
@@ -283,12 +311,12 @@ describe('MemberRolePermissionService', () => {
     it('passes an empty array to the guard when role has no perms AND PUT is empty (no-op)', async () => {
       vi.mocked(memberRolePermissionRepository.findByRoleId).mockResolvedValueOnce([] as never);
 
-      await service.put(
-        asScope('org_public_abc'),
-        'role_public',
-        { permission_codes: [] },
-        'admin_public',
-      );
+      await service.put({
+        scope: asScope('org_public_abc'),
+        role_public_id: 'role_public',
+        body: { permission_codes: [] },
+        created_by_user_public_id: 'admin_public',
+      });
 
       expect(assertCallerCanGrantPermissionCodes).toHaveBeenCalledWith(
         expect.objectContaining({

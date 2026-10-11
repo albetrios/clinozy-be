@@ -95,10 +95,10 @@ async function authenticateWithBearerToken(request: FastifyRequest): Promise<voi
 
     // sec-new-A2: pass userPublicId so verifyActiveAccessToken can check user.status
     // on every DB-path validation (cache miss), reducing suspension propagation to ≤60 s.
-    const { sessionPublicId } = await authSessionService.verifyActiveAccessToken(
-      token,
-      payload.userId,
-    );
+    const { sessionPublicId } = await authSessionService.verifyActiveAccessToken({
+      rawToken: token,
+      userPublicId: payload.userId,
+    });
 
     // sec-A6 / route-#6: re-derive ANY privileged claim (super_admin OR admin) per request against
     // live state, so removal from GLOBAL_ADMIN_EMAILS or account suspension takes effect

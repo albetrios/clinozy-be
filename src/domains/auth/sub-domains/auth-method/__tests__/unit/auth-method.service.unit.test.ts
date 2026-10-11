@@ -156,9 +156,12 @@ describe('AuthMethodService', () => {
     vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue(null as never);
     await expect(service.list('missing')).rejects.toBeInstanceOf(NotFoundError);
     await expect(
-      service.create('missing', {
-        method_type: 'EMAIL_CODE',
-        is_primary: true,
+      service.create({
+        userPublicId: 'missing',
+        body: {
+          method_type: 'EMAIL_CODE',
+          is_primary: true,
+        },
       }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
@@ -247,17 +250,20 @@ describe('AuthMethodService', () => {
       { id: 3, public_id: 'testpublicmid000000b', user_id: 1, method_type: 'PASSWORD' },
     ] as never);
     await service.list('user_public');
-    await service.create('user_public', {
-      method_type: 'EMAIL_CODE',
-      is_primary: true,
+    await service.create({
+      userPublicId: 'user_public',
+      body: {
+        method_type: 'EMAIL_CODE',
+        is_primary: true,
+      },
     });
-    await service.delete('user_public', 'testpublicmid000000a');
+    await service.delete({ userPublicId: 'user_public', methodPublicId: 'testpublicmid000000a' });
     await service.revokeAllForUser('user_public');
     expect(authMethodRepository.create).toHaveBeenCalled();
   });
 
   it('does not persist user-supplied provider identity fields on manual create', async () => {
-    await service.create('user_public', { method_type: 'EMAIL_CODE' });
+    await service.create({ userPublicId: 'user_public', body: { method_type: 'EMAIL_CODE' } });
     const createArgs = vi.mocked(authMethodRepository.create).mock.calls.at(-1)?.[0];
     expect(createArgs).not.toHaveProperty('provider');
     expect(createArgs).not.toHaveProperty('provider_user_id');
@@ -268,7 +274,7 @@ describe('AuthMethodService', () => {
       MAX_LINKED_AUTH_METHODS_PER_USER,
     );
     await expect(
-      service.create('user_public', { method_type: 'EMAIL_CODE' }),
+      service.create({ userPublicId: 'user_public', body: { method_type: 'EMAIL_CODE' } }),
     ).rejects.toBeInstanceOf(ConflictError);
     // The lock is taken before the count, and no row is inserted when the cap is hit.
     expect(authMethodRepository.acquireCredentialMutationLock).toHaveBeenCalledWith(user.id);
@@ -276,38 +282,41 @@ describe('AuthMethodService', () => {
   });
 
   it('rejects manual OAUTH linking (account-takeover guard)', async () => {
-    await expect(service.create('user_public', { method_type: 'OAUTH' })).rejects.toBeInstanceOf(
-      ValidationError,
-    );
+    await expect(
+      service.create({ userPublicId: 'user_public', body: { method_type: 'OAUTH' } }),
+    ).rejects.toBeInstanceOf(ValidationError);
     expect(authMethodRepository.create).not.toHaveBeenCalled();
   });
 
   it('rejects manual provider identity binding via strict DTO', async () => {
     await expect(
-      service.create('user_public', {
-        method_type: 'OAUTH',
-        provider: 'google',
-        provider_user_id: 'victim-sub',
-      } as never),
+      service.create({
+        userPublicId: 'user_public',
+        body: {
+          method_type: 'OAUTH',
+          provider: 'google',
+          provider_user_id: 'victim-sub',
+        } as never,
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('forgotPassword creates reset token when user exists', async () => {
-    const result = await service.forgotPassword({ email: user.email });
+    const result = await service.forgotPassword({ body: { email: user.email } });
     expect(result.messageKey).toBe('success:passwordResetEmailSent');
     expect(verificationTokenRepository.create).toHaveBeenCalled();
   });
 
   it('forgotPassword returns success when user unknown', async () => {
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
-    const result = await service.forgotPassword({ email: 'missing@example.com' });
+    const result = await service.forgotPassword({ body: { email: 'missing@example.com' } });
     expect(result.messageKey).toBe('success:passwordResetEmailSent');
     expect(verificationTokenRepository.create).not.toHaveBeenCalled();
   });
 
   it('forgotPassword skips issuing a reset when the per-email cooldown is already held', async () => {
     mockedRedisSet(redis.set).mockResolvedValueOnce(null);
-    const result = await service.forgotPassword({ email: user.email });
+    const result = await service.forgotPassword({ body: { email: user.email } });
     expect(result.messageKey).toBe('success:passwordResetEmailSent');
     // On cooldown the user is never looked up and no token is issued (no email), but the uniform
     // success is preserved so the cooldown is not an account-existence oracle.
@@ -320,7 +329,7 @@ describe('AuthMethodService', () => {
     // still gets 200) would tell an attacker which emails have accounts.
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
     vi.mocked(eventBus.emitStrict).mockRejectedValueOnce(new Error('outbox unavailable'));
-    const result = await service.forgotPassword({ email: user.email });
+    const result = await service.forgotPassword({ body: { email: user.email } });
     expect(result.messageKey).toBe('success:passwordResetEmailSent');
     // The cooldown is released so the user's retry is not refused.
     expect(redis.del).toHaveBeenCalledWith(expect.stringMatching(/^auth:password_reset_cooldown:/));
@@ -331,11 +340,11 @@ describe('AuthMethodService', () => {
       '@/shared/utils/security/anti-enumeration.util.js'
     );
     vi.mocked(enforceMinimumDuration).mockClear();
-    await service.forgotPassword({ email: user.email });
+    await service.forgotPassword({ body: { email: user.email } });
     expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
     vi.mocked(enforceMinimumDuration).mockClear();
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
-    await service.forgotPassword({ email: 'missing@example.com' });
+    await service.forgotPassword({ body: { email: 'missing@example.com' } });
     expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
   });
 
@@ -349,7 +358,11 @@ describe('AuthMethodService', () => {
     // The reset token proves email control → mark verified; and the password changed → clear the
     // failed-login lockout so the owner is not held out of the next sign-in.
     expect(userService.updateEmailVerified).toHaveBeenCalledWith(user.public_id);
-    expect(userService.updateLoginAttempt).toHaveBeenCalledWith(user.public_id, 0, null);
+    expect(userService.updateLoginAttempt).toHaveBeenCalledWith({
+      public_id: user.public_id,
+      failed_login_count: 0,
+      account_locked_until: null,
+    });
     expect(authSessionService.revokeAllSessions).toHaveBeenCalledWith(user.public_id);
   });
 
@@ -361,14 +374,14 @@ describe('AuthMethodService', () => {
   });
 
   it('changePassword verifies current password and revokes other sessions', async () => {
-    await service.changePassword(
-      'user_public',
-      {
+    await service.changePassword({
+      userPublicId: 'user_public',
+      body: {
         current_password: 'old',
         new_password: 'NewPassword123!',
       },
-      { currentAccessToken: 'current-bearer-token' },
-    );
+      options: { currentAccessToken: 'current-bearer-token' },
+    });
     expect(userService.updatePassword).toHaveBeenCalled();
     expect(authSessionService.revokeAllSessionsExceptCurrent).toHaveBeenCalledWith({
       userPublicId: user.public_id,
@@ -378,9 +391,12 @@ describe('AuthMethodService', () => {
   });
 
   it('changePassword revokes all sessions when no current token is supplied', async () => {
-    await service.changePassword('user_public', {
-      current_password: 'old',
-      new_password: 'NewPassword123!',
+    await service.changePassword({
+      userPublicId: 'user_public',
+      body: {
+        current_password: 'old',
+        new_password: 'NewPassword123!',
+      },
     });
     expect(authSessionService.revokeAllSessionsExceptCurrent).not.toHaveBeenCalled();
     expect(authSessionService.revokeAllSessions).toHaveBeenCalledWith(user.public_id);
@@ -394,11 +410,11 @@ describe('AuthMethodService', () => {
       new Error('redis down'),
     );
     await expect(
-      service.changePassword(
-        'user_public',
-        { current_password: 'old', new_password: 'NewPassword123!' },
-        { currentAccessToken: 'current-bearer-token' },
-      ),
+      service.changePassword({
+        userPublicId: 'user_public',
+        body: { current_password: 'old', new_password: 'NewPassword123!' },
+        options: { currentAccessToken: 'current-bearer-token' },
+      }),
     ).rejects.toThrow('redis down');
     // updatePassword ran inside the same transaction callback, so a real DB rolls it back.
     expect(userService.updatePassword).toHaveBeenCalled();
@@ -410,9 +426,12 @@ describe('AuthMethodService', () => {
       password_hash: null,
     } as never);
     await expect(
-      service.changePassword('user_public', {
-        current_password: 'old',
-        new_password: 'NewPassword123!',
+      service.changePassword({
+        userPublicId: 'user_public',
+        body: {
+          current_password: 'old',
+          new_password: 'NewPassword123!',
+        },
       }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
@@ -420,17 +439,17 @@ describe('AuthMethodService', () => {
   it('forgotPassword rejects disposable email', async () => {
     const emailUtil = await import('@/shared/utils/text/email.util.js');
     vi.mocked(emailUtil.isDisposableEmailBlocked).mockReturnValueOnce(true);
-    await expect(service.forgotPassword({ email: 'bad@temp.com' })).rejects.toBeInstanceOf(
-      ValidationError,
-    );
+    await expect(
+      service.forgotPassword({ body: { email: 'bad@temp.com' } }),
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('delete throws when auth method is not found', async () => {
     // sec-new-B4: delete() accepts a publicId string; findByPublicIdForUser returning null triggers NotFoundError.
     vi.mocked(authMethodRepository.findByPublicIdForUser).mockResolvedValue(null);
-    await expect(service.delete('user_public', 'testpublicmid000000x')).rejects.toBeInstanceOf(
-      NotFoundError,
-    );
+    await expect(
+      service.delete({ userPublicId: 'user_public', methodPublicId: 'testpublicmid000000x' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('resetPassword rejects wrong token type and missing user', async () => {
@@ -462,26 +481,32 @@ describe('AuthMethodService', () => {
       needsRehash: false,
     });
     await expect(
-      service.changePassword('user_public', {
-        current_password: 'wrong',
-        new_password: 'NewPassword123!',
+      service.changePassword({
+        userPublicId: 'user_public',
+        body: {
+          current_password: 'wrong',
+          new_password: 'NewPassword123!',
+        },
       }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('delete throws NotFoundError when user record is missing', async () => {
     vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue(null as never);
-    await expect(service.delete('missing', 'testpublicmid000000y')).rejects.toBeInstanceOf(
-      NotFoundError,
-    );
+    await expect(
+      service.delete({ userPublicId: 'missing', methodPublicId: 'testpublicmid000000y' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('changePassword throws NotFoundError when user record is missing', async () => {
     vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue(null as never);
     await expect(
-      service.changePassword('missing', {
-        current_password: 'old',
-        new_password: 'NewPassword123!',
+      service.changePassword({
+        userPublicId: 'missing',
+        body: {
+          current_password: 'old',
+          new_password: 'NewPassword123!',
+        },
       }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
@@ -503,7 +528,7 @@ describe('AuthMethodService', () => {
     } as const;
 
     vi.mocked(authMethodRepository.findByProviderUserId).mockResolvedValue(null);
-    await service.findByProviderUserId('google', 'gid');
+    await service.findByProviderUserId({ provider: 'google', provider_user_id: 'gid' });
     await service.linkOAuthProviderIfMissing({ ownerPublicId: user.public_id, data: oauthData });
     expect(authMethodRepository.create).toHaveBeenCalledWith(oauthData);
 
@@ -520,11 +545,11 @@ describe('AuthMethodService', () => {
     });
     await service.findTotpByUserId(user.id);
     await service.createAuthMethodRecord(oauthData);
-    await service.updateAuthMethodLastUsedAt(2, user.id);
-    await service.findAuthMethodByIdForUser(2, user.id);
+    await service.updateAuthMethodLastUsedAt({ methodId: 2, userId: user.id });
+    await service.findAuthMethodByIdForUser({ methodId: 2, userId: user.id });
     await service.listMfaMethodsByUserId(user.id);
     vi.mocked(authMethodRepository.revoke).mockResolvedValue({ id: 2 } as never);
-    await service.revokeAuthMethod(2, user.id);
+    await service.revokeAuthMethod({ methodId: 2, userId: user.id });
     expect(authMethodRepository.findTotpByUserId).toHaveBeenCalled();
     expect(authMethodRepository.updateLastUsedAt).toHaveBeenCalled();
     expect(authMethodRepository.findByIdForUser).toHaveBeenCalled();

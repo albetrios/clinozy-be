@@ -26,7 +26,7 @@ export function createOrganizationApiKeyController(service: OrganizationApiKeySe
     listApiKeys: async (request: FastifyRequest, _reply: FastifyReply) => {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
-      const result = await service.list(scope, request.query);
+      const result = await service.list({ scope, query: request.query });
       return paginatedResponse(result.items, getRequestIdentifier(request), {
         per_page: result.limit,
         next: result.next_cursor,
@@ -44,14 +44,18 @@ export function createOrganizationApiKeyController(service: OrganizationApiKeySe
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const apiKeyId = validatePublicIdParam(rawParams.api_key_id ?? '', 'api_key_id');
-      const data = await service.getByPublicId(scope, apiKeyId);
+      const data = await service.getByPublicId({ scope, api_key_public_id: apiKeyId });
       return successResponse(data, getRequestIdentifier(request));
     },
     createApiKey: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
-      const result = await service.create(scope, request.body, auth.userId);
+      const result = await service.create({
+        scope,
+        body: request.body,
+        created_by_user_public_id: auth.userId,
+      });
       // Long-lived organization bearer credentials: audit minting at WARNING so creation is never silent.
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
@@ -77,7 +81,12 @@ export function createOrganizationApiKeyController(service: OrganizationApiKeySe
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const apiKeyId = validatePublicIdParam(rawParams.api_key_id ?? '', 'api_key_id');
-      const data = await service.update(scope, apiKeyId, request.body, getActingUserPublicId(auth));
+      const data = await service.update({
+        scope,
+        api_key_public_id: apiKeyId,
+        body: request.body,
+        updated_by_user_public_id: getActingUserPublicId(auth),
+      });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'organization.api_key.update',
@@ -98,7 +107,7 @@ export function createOrganizationApiKeyController(service: OrganizationApiKeySe
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const apiKeyId = validatePublicIdParam(rawParams.api_key_id ?? '', 'api_key_id');
-      await service.delete(scope, apiKeyId);
+      await service.delete({ scope, api_key_public_id: apiKeyId });
       // Revoking a long-lived organization credential is a security-relevant change; audit at WARNING.
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
@@ -121,7 +130,11 @@ export function createOrganizationApiKeyController(service: OrganizationApiKeySe
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const apiKeyId = validatePublicIdParam(rawParams.api_key_id ?? '', 'api_key_id');
-      const result = await service.rotate(scope, apiKeyId, auth.userId);
+      const result = await service.rotate({
+        scope,
+        api_key_public_id: apiKeyId,
+        created_by_user_public_id: auth.userId,
+      });
       // Rotation mints a new secret and invalidates the old one — audit at WARNING.
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,

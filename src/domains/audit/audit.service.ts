@@ -151,7 +151,13 @@ export class AuditService {
    * Notes: caller must already hold `audit-log:read` on the organization (enforced
    * at the tenancy route via `requireOrganizationPermission`).
    */
-  async listForOrganization(organization_public_id: string, query: Record<string, unknown>) {
+  async listForOrganization({
+    organization_public_id,
+    query,
+  }: {
+    organization_public_id: string;
+    query: Record<string, unknown>;
+  }) {
     return withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization_public_id }),
       () => this.list(query),

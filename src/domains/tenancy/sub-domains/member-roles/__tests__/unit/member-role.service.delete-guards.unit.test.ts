@@ -122,7 +122,7 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(systemRole as never);
 
     await expect(
-      service.delete(asScope('org_public'), systemRole.public_id),
+      service.delete({ scope: asScope('org_public'), role_public_id: systemRole.public_id }),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).not.toHaveBeenCalled();
@@ -135,7 +135,10 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.softDeleteIfNoActiveMembers).mockResolvedValue(null as never);
 
     await expect(
-      service.delete(asScope('org_public'), customRoleAssigned.public_id),
+      service.delete({
+        scope: asScope('org_public'),
+        role_public_id: customRoleAssigned.public_id,
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
 
     expect(invalidateOrganizationPermissions).not.toHaveBeenCalled();
@@ -145,7 +148,7 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(customRoleEmpty as never);
 
     await expect(
-      service.delete(asScope('org_public'), customRoleEmpty.public_id),
+      service.delete({ scope: asScope('org_public'), role_public_id: customRoleEmpty.public_id }),
     ).resolves.toBeUndefined();
 
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).toHaveBeenCalledWith(
@@ -158,9 +161,9 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
   it('throws NotFoundError when the role does not exist (guarded delete is skipped)', async () => {
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(null);
 
-    await expect(service.delete(asScope('org_public'), 'role_missing')).rejects.toBeInstanceOf(
-      NotFoundError,
-    );
+    await expect(
+      service.delete({ scope: asScope('org_public'), role_public_id: 'role_missing' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
 
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).not.toHaveBeenCalled();
   });
@@ -230,12 +233,12 @@ describe('MemberRoleService.update — sec-T3 is_system guard', () => {
     vi.mocked(roleRepoForUpdate.findByPublicId).mockResolvedValue(systemRole as never);
 
     await expect(
-      updateService.update(
-        asScope('org_public'),
-        systemRole.public_id,
-        { name: 'Hacked' },
-        undefined,
-      ),
+      updateService.update({
+        scope: asScope('org_public'),
+        role_public_id: systemRole.public_id,
+        body: { name: 'Hacked' },
+        updated_by_user_public_id: undefined,
+      }),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     expect(roleRepoForUpdate.update).not.toHaveBeenCalled();
@@ -247,12 +250,12 @@ describe('MemberRoleService.update — sec-T3 is_system guard', () => {
     vi.mocked(roleRepoForUpdate.update).mockResolvedValue(updatedRole as never);
 
     await expect(
-      updateService.update(
-        asScope('org_public'),
-        customRole.public_id,
-        { name: 'Renamed' },
-        undefined,
-      ),
+      updateService.update({
+        scope: asScope('org_public'),
+        role_public_id: customRole.public_id,
+        body: { name: 'Renamed' },
+        updated_by_user_public_id: undefined,
+      }),
     ).resolves.toBeDefined();
 
     expect(roleRepoForUpdate.update).toHaveBeenCalled();

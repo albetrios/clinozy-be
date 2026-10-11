@@ -255,7 +255,7 @@ sequenceDiagram
 
   Queue->>Worker: deliver job (async, separate process)
   Worker->>SWS: handleEvent → dispatchEvent
-  SWS->>Sub: syncFromStripeProviderSubscription(provider_id, data, event.created_at)
+  SWS->>Sub: syncFromStripeProviderSubscription({ provider_subscription_id, data, stripe_event_created_at })
   Sub->>DB: BEGIN; SET LOCAL app.current_organization_public_id
   Sub->>DB: UPDATE subscriptions SET ... WHERE provider_subscription_id=$1
   Sub->>DB: COMMIT

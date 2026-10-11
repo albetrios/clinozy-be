@@ -59,11 +59,14 @@ describe('AuthMeContextService.getContext', () => {
     expect(userService.getMe).toHaveBeenCalledWith(
       expect.objectContaining({ userPublicId: 'usr_1' }),
     );
-    expect(organizationService.getByPublicId).toHaveBeenCalledWith('org_active', 'usr_1');
-    expect(authorizationService.resolveUserOrganizationPermissions).toHaveBeenCalledWith(
-      'usr_1',
-      'org_active',
-    );
+    expect(organizationService.getByPublicId).toHaveBeenCalledWith({
+      public_id: 'org_active',
+      user_public_id: 'usr_1',
+    });
+    expect(authorizationService.resolveUserOrganizationPermissions).toHaveBeenCalledWith({
+      userPublicId: 'usr_1',
+      organizationPublicId: 'org_active',
+    });
     expect(data.activeOrganization).toBe(activeOrganization);
     expect(data.myPermissions).toEqual(['organization:read']);
     // The switcher list moved to `GET /users/me/organizations`, which pages.

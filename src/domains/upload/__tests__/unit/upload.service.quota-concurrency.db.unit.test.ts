@@ -58,22 +58,22 @@ describe('UploadService pending-quota concurrency (database)', () => {
 
     const results = await Promise.allSettled(
       Array.from({ length: CONCURRENT_REQUESTS }, () =>
-        service.createUpload(
-          {
+        service.createUpload({
+          input: {
             purpose: 'avatar',
             for: 'user',
             content_type: 'image/png',
             file_name: 'avatar.png',
             file_size: 1024,
           },
-          {
+          principal: {
             userPublicId: user.public_id,
             organizationPublicId: null,
             authorizeOrganization: async () => {
               throw new Error('a personal upload never authorizes an organization');
             },
           },
-        ),
+        }),
       ),
     );
 

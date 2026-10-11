@@ -65,7 +65,10 @@ export function createUserController({
     listMyOrganizations: async (request: FastifyRequest, _reply: FastifyReply) => {
       if (!organizationService) throw new Error('Organization service not configured');
       const auth = requireAuth(request);
-      const result = await organizationService.listForUser(request.query, auth.userId);
+      const result = await organizationService.listForUser({
+        query: request.query,
+        user_public_id: auth.userId,
+      });
       return paginatedResponse(result.items, getRequestIdentifier(request), {
         per_page: result.limit,
         next: result.next_cursor,
@@ -82,7 +85,8 @@ export function createUserController({
 
     patchMe: async (request: FastifyRequest, _reply: FastifyReply) => {
       const _auth = requireAuth(request);
-      const data = await userService.updateMe(requireUserScope(request), request.body);
+      const scope = requireUserScope(request);
+      const data = await userService.updateMe({ scope, body: request.body });
       return successResponse(data, getRequestIdentifier(request));
     },
 
@@ -114,7 +118,8 @@ export function createUserController({
 
     patchSettings: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
-      const data = await userSettingsService.update(requireUserScope(request), request.body);
+      const scope = requireUserScope(request);
+      const data = await userSettingsService.update({ scope, body: request.body });
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'user.settings.update',
@@ -131,16 +136,14 @@ export function createUserController({
 
     putNotificationPreferences: async (request: FastifyRequest, _reply: FastifyReply) => {
       const _auth = requireAuth(request);
-      const data = await userNotificationPreferencesService.put(
-        requireUserScope(request),
-        request.body,
-      );
+      const scope = requireUserScope(request);
+      const data = await userNotificationPreferencesService.put({ scope, body: request.body });
       return successResponse(data, getRequestIdentifier(request));
     },
 
     uploadAvatar: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
-      const data = await userService.uploadAvatar(auth.userId, request.body);
+      const data = await userService.uploadAvatar({ publicId: auth.userId, body: request.body });
       return successResponse(data, getRequestIdentifier(request));
     },
 
@@ -171,7 +174,7 @@ export function createUserController({
     updateUser: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       const userId = getUserIdParam(request);
-      const data = await userService.adminUpdateUser(userId, request.body);
+      const data = await userService.adminUpdateUser({ publicId: userId, body: request.body });
       // sec-U9: every admin user-management action emits an audit row so a rogue
       // admin cannot wipe accounts without leaving a platform-visible trace.
       await recordAdminUserAudit(request, auth.userId, 'user.admin.update', userId);

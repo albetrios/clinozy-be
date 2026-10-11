@@ -61,11 +61,15 @@ export interface SendEmailOptions {
   idempotencyKey?: string;
 }
 
-async function sendEmailViaResend(
-  options: SendEmailOptions,
-  recipientCount: number,
-  signal: AbortSignal,
-): Promise<string> {
+async function sendEmailViaResend({
+  options,
+  recipientCount,
+  signal,
+}: {
+  options: SendEmailOptions;
+  recipientCount: number;
+  signal: AbortSignal;
+}): Promise<string> {
   // No hardcoded sender fallback: env-schema requires EMAIL_FROM_ADDRESS whenever
   // RESEND_API_KEY is set, so reaching here without it is a misconfiguration we surface
   // rather than impersonating an arbitrary domain that Resend would silently reject.
@@ -148,7 +152,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<string> {
             !(error instanceof ResendApiError || error instanceof CircuitBreakerOpenError) &&
             isTransientNetworkError(error),
         },
-        operation: async (signal) => sendEmailViaResend(options, recipientCount, signal),
+        operation: async (signal) => sendEmailViaResend({ options, recipientCount, signal }),
       }),
     );
 

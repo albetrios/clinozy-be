@@ -97,12 +97,12 @@ describe('SubscriptionService — personal-organization billing guard', () => {
   it('create rejects a PERSONAL organization with 422 before any plan lookup or Stripe call', async () => {
     const { service, planService, paymentProvider, repository } = buildService();
     await expect(
-      service.create(
-        personalScope,
-        { plan_id: 'pln_test', billing_cycle: 'monthly' },
-        'creator_public',
-        'idem-personal-billing-key',
-      ),
+      service.create({
+        scope: personalScope,
+        body: { plan_id: 'pln_test', billing_cycle: 'monthly' },
+        created_by_user_public_id: 'creator_public',
+        idempotencyKey: 'idem-personal-billing-key',
+      }),
     ).rejects.toMatchObject(BILLING_REJECTION);
     expect(vi.mocked(repository.findActiveByOrganization)).not.toHaveBeenCalled();
     expect(vi.mocked(planService.requireActivePlanByPublicId)).not.toHaveBeenCalled();
@@ -112,24 +112,37 @@ describe('SubscriptionService — personal-organization billing guard', () => {
   it('changePlan rejects a PERSONAL organization with 422 before the subscription lookup', async () => {
     const { service, repository } = buildService();
     await expect(
-      service.changePlan(personalScope, 'sub_x', { plan_id: 'pln_test' }, 'idem-key'),
+      service.changePlan({
+        scope: personalScope,
+        subscription_public_id: 'sub_x',
+        body: { plan_id: 'pln_test' },
+        idempotencyKey: 'idem-key',
+      }),
     ).rejects.toMatchObject(BILLING_REJECTION);
     expect(vi.mocked(repository.findByPublicId)).not.toHaveBeenCalled();
   });
 
   it('cancel rejects a PERSONAL organization with 422 before the subscription lookup', async () => {
     const { service, repository } = buildService();
-    await expect(service.cancel(personalScope, 'sub_x', 'idem-key')).rejects.toMatchObject(
-      BILLING_REJECTION,
-    );
+    await expect(
+      service.cancel({
+        scope: personalScope,
+        subscription_public_id: 'sub_x',
+        idempotencyKey: 'idem-key',
+      }),
+    ).rejects.toMatchObject(BILLING_REJECTION);
     expect(vi.mocked(repository.findByPublicId)).not.toHaveBeenCalled();
   });
 
   it('resume rejects a PERSONAL organization with 422 before the subscription lookup', async () => {
     const { service, repository } = buildService();
-    await expect(service.resume(personalScope, 'sub_x', 'idem-key')).rejects.toMatchObject(
-      BILLING_REJECTION,
-    );
+    await expect(
+      service.resume({
+        scope: personalScope,
+        subscription_public_id: 'sub_x',
+        idempotencyKey: 'idem-key',
+      }),
+    ).rejects.toMatchObject(BILLING_REJECTION);
     expect(vi.mocked(repository.findByPublicId)).not.toHaveBeenCalled();
   });
 });

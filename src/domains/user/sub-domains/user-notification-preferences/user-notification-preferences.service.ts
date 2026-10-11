@@ -50,10 +50,13 @@ export class UserNotificationPreferencesService {
     return serializeUserNotificationPreferenceList(rows);
   }
 
-  async put(
-    scope: UserPrincipalDatabaseScope,
-    body: unknown,
-  ): Promise<NotificationPreferenceOutput[]> {
+  async put({
+    scope,
+    body,
+  }: {
+    scope: UserPrincipalDatabaseScope;
+    body: unknown;
+  }): Promise<NotificationPreferenceOutput[]> {
     const user_public_id = scope.userPublicId;
     const parsed = validatePutUserNotificationPreferences(body);
     const rows = await withAppDatabaseContext(scope, async () => {

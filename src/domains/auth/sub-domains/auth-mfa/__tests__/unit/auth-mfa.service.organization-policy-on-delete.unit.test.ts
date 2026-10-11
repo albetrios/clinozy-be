@@ -85,9 +85,9 @@ describe('MfaService.deleteMfa — organization MFA policy guard (sec-A4)', () =
     ] as never);
     vi.mocked(organizationSettingsService.userHasOrganizationRequiringMfa).mockResolvedValue(true);
 
-    await expect(service.deleteMfa('user_pub', 'mfamethodpublicid0001')).rejects.toBeInstanceOf(
-      ForbiddenError,
-    );
+    await expect(
+      service.deleteMfa({ userPublicId: 'user_pub', mfaMethodPublicId: 'mfamethodpublicid0001' }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
 
     // The organization-policy guard fires AFTER the candidate-method lookup but BEFORE the revoke;
     // the revoke must NOT execute and is_mfa_enabled must NOT flip.
@@ -102,10 +102,18 @@ describe('MfaService.deleteMfa — organization MFA policy guard (sec-A4)', () =
       .mockResolvedValueOnce([] as never);
     vi.mocked(organizationSettingsService.userHasOrganizationRequiringMfa).mockResolvedValue(false);
 
-    await expect(service.deleteMfa('user_pub', 'mfamethodpublicid0001')).resolves.toBeUndefined();
+    await expect(
+      service.deleteMfa({ userPublicId: 'user_pub', mfaMethodPublicId: 'mfamethodpublicid0001' }),
+    ).resolves.toBeUndefined();
 
-    expect(authMethodService.revokeAuthMethod).toHaveBeenCalledWith(42, user.id);
-    expect(userService.updateMfaEnabled).toHaveBeenCalledWith('user_pub', false);
+    expect(authMethodService.revokeAuthMethod).toHaveBeenCalledWith({
+      methodId: 42,
+      userId: user.id,
+    });
+    expect(userService.updateMfaEnabled).toHaveBeenCalledWith({
+      public_id: 'user_pub',
+      enabled: false,
+    });
   });
 
   it('allows deleting a non-last MFA method even when organization policy requires MFA (another factor remains)', async () => {
@@ -119,9 +127,14 @@ describe('MfaService.deleteMfa — organization MFA policy guard (sec-A4)', () =
       .mockResolvedValueOnce([{ id: 99, user_id: 7, method_type: 'MFA_TOTP' }] as never);
     vi.mocked(organizationSettingsService.userHasOrganizationRequiringMfa).mockResolvedValue(true);
 
-    await expect(service.deleteMfa('user_pub', 'mfamethodpublicid0001')).resolves.toBeUndefined();
+    await expect(
+      service.deleteMfa({ userPublicId: 'user_pub', mfaMethodPublicId: 'mfamethodpublicid0001' }),
+    ).resolves.toBeUndefined();
 
-    expect(authMethodService.revokeAuthMethod).toHaveBeenCalledWith(42, user.id);
+    expect(authMethodService.revokeAuthMethod).toHaveBeenCalledWith({
+      methodId: 42,
+      userId: user.id,
+    });
     // Not the last method → is_mfa_enabled stays true.
     expect(userService.updateMfaEnabled).not.toHaveBeenCalled();
   });

@@ -12,10 +12,10 @@ import type { SubscriptionSeatSyncJobData } from '@/domains/billing/sub-domains/
  *   depend on the full container surface.
  */
 export type SubscriptionSeatSyncService = {
-  syncSeatQuantityForOrganization(
-    organizationPublicId: string,
-    idempotencyKey?: string,
-  ): Promise<void>;
+  syncSeatQuantityForOrganization(options: {
+    organization_public_id: string;
+    idempotencyKey?: string | undefined;
+  }): Promise<void>;
 };
 
 /**
@@ -38,5 +38,8 @@ export async function processSubscriptionSeatSyncJob(
   service: SubscriptionSeatSyncService,
 ): Promise<void> {
   const { organizationPublicId, idempotencyKey } = jobData;
-  await service.syncSeatQuantityForOrganization(organizationPublicId, idempotencyKey);
+  await service.syncSeatQuantityForOrganization({
+    organization_public_id: organizationPublicId,
+    idempotencyKey,
+  });
 }

@@ -6,4 +6,4 @@ alwaysApply: false
 
 # Object params
 
-Convention (no backing skill — **no automated enforcement point; review-enforced**). Functions/methods with **2+ parameters** take a single named options object, **except** repository files and framework callbacks (Fastify `req`/`reply`, array callbacks). Reduces arg-order bugs, keeps call sites self-documenting and signatures stable. Detail: CLAUDE.md › Naming Conventions.
+Convention (no backing skill). Functions/methods with **2+ parameters** take a single named options object, **except** repository files, constructors (dependency injection, wired once in the containers) and framework callbacks (Fastify `req`/`reply`, array callbacks). Reduces arg-order bugs, keeps call sites self-documenting and signatures stable. **Enforced for the service layer** (every `*.service.ts` method, function and port signature) by `src/tests/global/service-object-params.global.test.ts`; review-enforced elsewhere. Detail: CLAUDE.md › Naming Conventions.

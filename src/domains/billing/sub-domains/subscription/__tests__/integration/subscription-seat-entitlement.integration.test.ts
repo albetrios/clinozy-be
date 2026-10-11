@@ -109,21 +109,23 @@ describe('Subscription seats follow the paid entitlement', () => {
     });
 
     await containers.billingDomain.stripeWebhookService.handleEvent({
-      id: `evt_seats_${generatePublicId('subscription')}`,
-      type: 'customer.subscription.deleted',
-      created: Math.floor(Date.now() / 1000),
-      data: {
-        object: {
-          id: providerSubscriptionId,
-          customer: 'cus_seats',
-          status: 'canceled',
-          cancel_at_period_end: false,
-          canceled_at: Math.floor(Date.now() / 1000),
-          metadata: { organization_id: organization.public_id },
-          items: { data: [{ price: { id: stripePriceId } }] },
+      event: {
+        id: `evt_seats_${generatePublicId('subscription')}`,
+        type: 'customer.subscription.deleted',
+        created: Math.floor(Date.now() / 1000),
+        data: {
+          object: {
+            id: providerSubscriptionId,
+            customer: 'cus_seats',
+            status: 'canceled',
+            cancel_at_period_end: false,
+            canceled_at: Math.floor(Date.now() / 1000),
+            metadata: { organization_id: organization.public_id },
+            items: { data: [{ price: { id: stripePriceId } }] },
+          },
         },
-      },
-    } as unknown as Stripe.Event);
+      } as unknown as Stripe.Event,
+    });
 
     // Owner + 3 members against an allowance of 2: the two most recently joined members go.
     await vi.waitFor(async () => {
@@ -168,7 +170,9 @@ describe('Subscription seats follow the paid entitlement', () => {
     const result = await runSubscriptionSeatReconcileJob(subscriptionService);
 
     expect(result).toEqual({ quantityDriftCount: 1, entitlementLapsedCount: 1 });
-    expect(enqueueSeatQuantitySync).toHaveBeenCalledWith(drifted.organization.public_id);
+    expect(enqueueSeatQuantitySync).toHaveBeenCalledWith({
+      organization_public_id: drifted.organization.public_id,
+    });
     // Owner + 2 members against an allowance of 2: the most recently joined member goes.
     expect(await suspendedMembershipIds(lapsed.organization.id)).toEqual([lapsed.memberIds[1]!]);
     expect(await suspendedMembershipIds(drifted.organization.id)).toEqual([]);

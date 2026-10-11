@@ -72,7 +72,11 @@ describe('OrganizationApiKeyService.authenticate', () => {
     vi.mocked(apiKeyRepository.findActiveByKeyPrefix).mockResolvedValue([candidate] as never);
     const hashCompare = vi.fn().mockReturnValue(true);
 
-    const result = await service.authenticate('ak_prefix', 'candidate-hash', hashCompare);
+    const result = await service.authenticate({
+      key_prefix: 'ak_prefix',
+      key_hash: 'candidate-hash',
+      hashCompare,
+    });
 
     expect(result).toEqual({
       public_id: 'apikey_public_abc',
@@ -87,7 +91,11 @@ describe('OrganizationApiKeyService.authenticate', () => {
 
   it('returns null when hash does not match any candidate', async () => {
     vi.mocked(apiKeyRepository.findActiveByKeyPrefix).mockResolvedValue([candidate] as never);
-    const result = await service.authenticate('ak_prefix', 'wrong-hash', () => false);
+    const result = await service.authenticate({
+      key_prefix: 'ak_prefix',
+      key_hash: 'wrong-hash',
+      hashCompare: () => false,
+    });
     expect(result).toBeNull();
     expect(apiKeyRepository.touchLastUsedAt).not.toHaveBeenCalled();
   });
@@ -96,14 +104,22 @@ describe('OrganizationApiKeyService.authenticate', () => {
     vi.mocked(apiKeyRepository.findActiveByKeyPrefix).mockResolvedValue([
       { ...candidate, expires_at: new Date(Date.now() - 60_000) },
     ] as never);
-    const result = await service.authenticate('ak_prefix', 'candidate-hash', () => true);
+    const result = await service.authenticate({
+      key_prefix: 'ak_prefix',
+      key_hash: 'candidate-hash',
+      hashCompare: () => true,
+    });
     expect(result).toBeNull();
     expect(apiKeyRepository.touchLastUsedAt).not.toHaveBeenCalled();
   });
 
   it('returns null when no active candidates exist for prefix', async () => {
     vi.mocked(apiKeyRepository.findActiveByKeyPrefix).mockResolvedValue([]);
-    const result = await service.authenticate('ak_unknown', 'hash', () => true);
+    const result = await service.authenticate({
+      key_prefix: 'ak_unknown',
+      key_hash: 'hash',
+      hashCompare: () => true,
+    });
     expect(result).toBeNull();
   });
 
@@ -115,7 +131,11 @@ describe('OrganizationApiKeyService.authenticate', () => {
     vi.mocked(apiKeyRepository.findActiveByKeyPrefix).mockResolvedValue([candidate] as never);
     claimLastUsedWrite.mockResolvedValue(false);
 
-    const result = await service.authenticate('ak_prefix', 'candidate-hash', () => true);
+    const result = await service.authenticate({
+      key_prefix: 'ak_prefix',
+      key_hash: 'candidate-hash',
+      hashCompare: () => true,
+    });
 
     expect(result).toEqual({
       public_id: 'apikey_public_abc',
@@ -130,7 +150,11 @@ describe('OrganizationApiKeyService.authenticate', () => {
     // A claim on a rejected key would let an attacker spraying a known public id suppress the
     // legitimate holder's `last_used_at` — small, but it is free not to have.
     vi.mocked(apiKeyRepository.findActiveByKeyPrefix).mockResolvedValue([candidate] as never);
-    await service.authenticate('ak_prefix', 'wrong-hash', () => false);
+    await service.authenticate({
+      key_prefix: 'ak_prefix',
+      key_hash: 'wrong-hash',
+      hashCompare: () => false,
+    });
     expect(claimLastUsedWrite).not.toHaveBeenCalled();
   });
 });

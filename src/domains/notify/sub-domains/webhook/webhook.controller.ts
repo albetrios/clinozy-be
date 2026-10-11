@@ -103,10 +103,10 @@ export function createWebhookController(service: WebhookService) {
       _reply: FastifyReply,
     ) => {
       // sec-new-N1: reject malformed webhookId before reaching the service layer.
-      const data = await service.get(
-        requireOrganizationScope(request),
-        validatePublicIdParam(request.params.webhook_id, 'webhook_id'),
-      );
+      const data = await service.get({
+        scope: requireOrganizationScope(request),
+        webhook_public_id: validatePublicIdParam(request.params.webhook_id, 'webhook_id'),
+      });
       // sec-T #17: service already returns the serialized public shape (id, url,
       // events, is_enabled, ...). Re-running WebhookSerializer.one over it would
       // double-serialize and (with the typed projection) reject the input shape.
@@ -115,7 +115,11 @@ export function createWebhookController(service: WebhookService) {
     createWebhook: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
-      const data = await service.create(scope, request.body, getActingUserPublicId(auth));
+      const data = await service.create({
+        scope,
+        body: request.body,
+        created_by_user_public_id: getActingUserPublicId(auth),
+      });
       // A new outbound destination for the organization's events — recorded at WARNING.
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
@@ -135,12 +139,12 @@ export function createWebhookController(service: WebhookService) {
       const scope = requireOrganizationScope(request);
       // sec-new-N1: reject malformed webhookId before reaching the service layer.
       const webhookId = validatePublicIdParam(request.params.webhook_id, 'webhook_id');
-      const data = await service.update(
+      const data = await service.update({
         scope,
-        webhookId,
-        request.body,
-        getActingUserPublicId(auth),
-      );
+        webhook_public_id: webhookId,
+        body: request.body,
+        updated_by_user_public_id: getActingUserPublicId(auth),
+      });
       const changedFields = listBodyFieldNames(request.body);
       // A URL change is a new outbound destination — recorded at WARNING with its origin.
       const destinationChanged = changedFields.includes('url');
@@ -166,7 +170,7 @@ export function createWebhookController(service: WebhookService) {
       const scope = requireOrganizationScope(request);
       // sec-new-N1: reject malformed webhookId before reaching the service layer.
       const webhookId = validatePublicIdParam(request.params.webhook_id, 'webhook_id');
-      await service.delete(scope, webhookId);
+      await service.delete({ scope, webhook_public_id: webhookId });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'notify.webhook.delete',

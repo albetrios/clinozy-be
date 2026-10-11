@@ -139,10 +139,10 @@ describe('MfaService', () => {
   });
 
   it('verifyLoginMfa issues session after valid TOTP', async () => {
-    const result = await service.verifyLoginMfa(
-      { mfa_session_token: 'token', totp_code: '123456' },
-      '127.0.0.1',
-    );
+    const result = await service.verifyLoginMfa({
+      body: { mfa_session_token: 'token', totp_code: '123456' },
+      ipAddress: '127.0.0.1',
+    });
     expect(result.access_token).toBe('access-token');
     // The handler audits recovery-code use distinctly, so the factor must be surfaced.
     expect(result.factor).toBe('totp');
@@ -151,10 +151,10 @@ describe('MfaService', () => {
     // the first-factor path. Without it an MFA user gets an organization-less token and is locked out of
     // every organization-scoped route (which resolve the active organization from the claim post-flatten).
     // The second factor was just verified: the session starts MFA-assured and its token says so.
-    expect(authSessionService.createSessionForUser).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ mfa_verified_at: expect.any(Date) }),
-    );
+    expect(authSessionService.createSessionForUser).toHaveBeenCalledWith({
+      userPublicId: expect.any(String),
+      data: expect.objectContaining({ mfa_verified_at: expect.any(Date) }),
+    });
     expect(vi.mocked(signAccessToken)).toHaveBeenCalledWith(
       expect.objectContaining({ authenticationMethods: ['mfa'] }),
     );
@@ -173,7 +173,10 @@ describe('MfaService', () => {
     } as never);
 
     await expect(
-      service.verifyLoginMfa({ mfa_session_token: 'token', totp_code: '123456' }, '127.0.0.1'),
+      service.verifyLoginMfa({
+        body: { mfa_session_token: 'token', totp_code: '123456' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(authSessionService.createSessionForUser).not.toHaveBeenCalled();
   });
@@ -185,7 +188,10 @@ describe('MfaService', () => {
     } as never);
 
     await expect(
-      service.verifyLoginMfa({ mfa_session_token: 'token', totp_code: '123456' }, '127.0.0.1'),
+      service.verifyLoginMfa({
+        body: { mfa_session_token: 'token', totp_code: '123456' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(authSessionService.createSessionForUser).not.toHaveBeenCalled();
   });
@@ -196,10 +202,10 @@ describe('MfaService', () => {
     );
     vi.mocked(consumeMfaRecoveryCode).mockResolvedValueOnce(true);
 
-    const result = await service.verifyLoginMfa(
-      { mfa_session_token: 'token', recovery_code: 'ABCD-1234' },
-      '127.0.0.1',
-    );
+    const result = await service.verifyLoginMfa({
+      body: { mfa_session_token: 'token', recovery_code: 'ABCD-1234' },
+      ipAddress: '127.0.0.1',
+    });
     expect(result.access_token).toBe('access-token');
     // Recovery-code use must be distinguishable (the TOTP-bypass break-glass path the handler flags).
     expect(result.factor).toBe('recovery_code');
@@ -215,14 +221,17 @@ describe('MfaService', () => {
 
     // TOTP is rejected while locked...
     await expect(
-      service.verifyLoginMfa({ mfa_session_token: 'token', totp_code: '123456' }, '127.0.0.1'),
+      service.verifyLoginMfa({
+        body: { mfa_session_token: 'token', totp_code: '123456' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
 
     // ...but the recovery (break-glass) code still works — the lockout does not gate it.
-    const result = await service.verifyLoginMfa(
-      { mfa_session_token: 'token', recovery_code: 'ABCD-1234' },
-      '127.0.0.1',
-    );
+    const result = await service.verifyLoginMfa({
+      body: { mfa_session_token: 'token', recovery_code: 'ABCD-1234' },
+      ipAddress: '127.0.0.1',
+    });
     expect(result.access_token).toBe('access-token');
   });
 
@@ -233,10 +242,10 @@ describe('MfaService', () => {
     vi.mocked(consumeMfaRecoveryCode).mockResolvedValueOnce(false);
 
     await expect(
-      service.verifyLoginMfa(
-        { mfa_session_token: 'token', recovery_code: 'WRONG-9999' },
-        '127.0.0.1',
-      ),
+      service.verifyLoginMfa({
+        body: { mfa_session_token: 'token', recovery_code: 'WRONG-9999' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(redis.eval).not.toHaveBeenCalled();
   });
@@ -248,15 +257,15 @@ describe('MfaService', () => {
     vi.mocked(consumeMfaRecoveryCode).mockResolvedValueOnce(false);
 
     await expect(
-      service.verifyLoginMfa(
-        { mfa_session_token: 'token', recovery_code: 'USED-CODE1' },
-        '127.0.0.1',
-      ),
+      service.verifyLoginMfa({
+        body: { mfa_session_token: 'token', recovery_code: 'USED-CODE1' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('verify accepts valid TOTP code', async () => {
-    const result = await service.verify('user_public', { code: '123456' });
+    const result = await service.verify({ userPublicId: 'user_public', body: { code: '123456' } });
     expect(result.verified).toBe(true);
     expect(authMethodService.updateAuthMethodLastUsedAt).toHaveBeenCalled();
   });
@@ -264,9 +273,9 @@ describe('MfaService', () => {
   it('verify records a failure and rejects on an invalid TOTP code (audit-#12)', async () => {
     const { verify } = await import('otplib');
     vi.mocked(verify).mockResolvedValueOnce({ valid: false } as never);
-    await expect(service.verify('user_public', { code: '000000' })).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.verify({ userPublicId: 'user_public', body: { code: '000000' } }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(redis.eval).toHaveBeenCalledWith(
       expect.any(String),
       1,
@@ -278,15 +287,15 @@ describe('MfaService', () => {
   it('verify locks out atomically before checking the code once the budget is exhausted (audit-#12 / route-audit-#4)', async () => {
     redis.eval.mockResolvedValue(11); // > MAX_MFA_VERIFICATION_ATTEMPTS — atomic counter says locked
     const { verify } = await import('otplib');
-    await expect(service.verify('user_public', { code: '123456' })).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.verify({ userPublicId: 'user_public', body: { code: '123456' } }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(verify).not.toHaveBeenCalled();
   });
 
   it('route-audit-#4: counts the attempt with an atomic INCR up-front, not a read-only GET', async () => {
     redis.eval.mockResolvedValue(1); // under budget
-    await service.verify('user_public', { code: '123456' });
+    await service.verify({ userPublicId: 'user_public', body: { code: '123456' } });
     // The counter is incremented atomically per attempt (so concurrent guesses get distinct
     // counts and cannot overspend the budget); the old non-atomic read-only GET check is gone.
     expect(redis.eval).toHaveBeenCalledWith(
@@ -299,7 +308,7 @@ describe('MfaService', () => {
   });
 
   it('verify clears the failure counter on success (audit-#12)', async () => {
-    await service.verify('user_public', { code: '123456' });
+    await service.verify({ userPublicId: 'user_public', body: { code: '123456' } });
     expect(redis.del).toHaveBeenCalledWith('mfa:verify:fail:user_public');
   });
 
@@ -307,10 +316,10 @@ describe('MfaService', () => {
     const { verify } = await import('otplib');
     vi.mocked(verify).mockResolvedValueOnce({ valid: false } as never);
     await expect(
-      service.verifyLoginMfa(
-        { mfa_session_token: 'session-token', totp_code: '000000' },
-        '127.0.0.1',
-      ),
+      service.verifyLoginMfa({
+        body: { mfa_session_token: 'session-token', totp_code: '000000' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(redis.eval).toHaveBeenCalledWith(
       expect.any(String),
@@ -322,9 +331,9 @@ describe('MfaService', () => {
 
   it('verify rejects when MFA not enabled', async () => {
     vi.mocked(authMethodService.findTotpByUserId).mockResolvedValue(null);
-    await expect(service.verify('user_public', { code: '123456' })).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.verify({ userPublicId: 'user_public', body: { code: '123456' } }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('enrollInit stages the secret in Redis without persisting an auth_methods row or flipping is_mfa_enabled', async () => {
@@ -332,7 +341,10 @@ describe('MfaService', () => {
     // are returned to the caller but NOTHING is written to Postgres until phase 2
     // confirms a fresh code. The prior single-step `enroll` flipped is_mfa_enabled
     // immediately, locking users out when transcription failed.
-    const result = await service.enrollInit('user_public', { method_type: 'MFA_TOTP' });
+    const result = await service.enrollInit({
+      userPublicId: 'user_public',
+      body: { method_type: 'MFA_TOTP' },
+    });
     expect(result.secret).toBe('TESTSECRET');
     expect(result.provisioning_uri).toContain('otpauth://');
     expect(redis.set).toHaveBeenCalledWith(
@@ -347,7 +359,7 @@ describe('MfaService', () => {
 
   it('enrollInit rejects non-TOTP method types', async () => {
     await expect(
-      service.enrollInit('user_public', { method_type: 'MFA_SMS' }),
+      service.enrollInit({ userPublicId: 'user_public', body: { method_type: 'MFA_SMS' } }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(redis.set).not.toHaveBeenCalledWith(
       expect.stringMatching(/^mfa:enroll:/),
@@ -385,7 +397,10 @@ describe('MfaService', () => {
       return null as never;
     });
 
-    const result = await service.enrollConfirm('user_public', { code: '123456' });
+    const result = await service.enrollConfirm({
+      userPublicId: 'user_public',
+      body: { code: '123456' },
+    });
 
     expect(redis.getdel).toHaveBeenCalledWith(expect.stringMatching(/^mfa:enroll:/));
     expect(authMethodService.createAuthMethodRecord).toHaveBeenCalledWith(
@@ -393,7 +408,10 @@ describe('MfaService', () => {
     );
     expect(insertMfaRecoveryCodes).toHaveBeenCalledTimes(1);
     expect(generateMfaRecoveryCodes).toHaveBeenCalledTimes(1);
-    expect(userService.updateMfaEnabled).toHaveBeenCalledWith('user_public', true);
+    expect(userService.updateMfaEnabled).toHaveBeenCalledWith({
+      public_id: 'user_public',
+      enabled: true,
+    });
     // sec-new-B4: enrollConfirm now returns method_public_id (opaque id) instead of bigserial method_id.
     expect(result.method_public_id).toBeDefined();
     expect(typeof result.method_public_id).toBe('string');
@@ -408,9 +426,9 @@ describe('MfaService', () => {
 
   it('enrollConfirm rejects when no staged secret is present (expired or never started)', async () => {
     redis.getdel.mockResolvedValueOnce(null);
-    await expect(service.enrollConfirm('user_public', { code: '123456' })).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.enrollConfirm({ userPublicId: 'user_public', body: { code: '123456' } }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(authMethodService.createAuthMethodRecord).not.toHaveBeenCalled();
     expect(userService.updateMfaEnabled).not.toHaveBeenCalled();
   });
@@ -419,9 +437,9 @@ describe('MfaService', () => {
     const otp = await import('otplib');
     vi.mocked(otp.verify).mockResolvedValueOnce({ valid: false });
     redis.getdel.mockResolvedValueOnce('TESTSECRET');
-    await expect(service.enrollConfirm('user_public', { code: '000000' })).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.enrollConfirm({ userPublicId: 'user_public', body: { code: '000000' } }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(authMethodService.createAuthMethodRecord).not.toHaveBeenCalled();
     expect(userService.updateMfaEnabled).not.toHaveBeenCalled();
   });
@@ -463,11 +481,17 @@ describe('MfaService', () => {
     });
     redis.getdel.mockResolvedValueOnce('TESTSECRET');
 
-    await service.enrollConfirm('user_public', { code: '123456' });
+    await service.enrollConfirm({ userPublicId: 'user_public', body: { code: '123456' } });
 
     // Both existing TOTP rows are revoked.
-    expect(authMethodService.revokeAuthMethod).toHaveBeenCalledWith(11, user.id);
-    expect(authMethodService.revokeAuthMethod).toHaveBeenCalledWith(12, user.id);
+    expect(authMethodService.revokeAuthMethod).toHaveBeenCalledWith({
+      methodId: 11,
+      userId: user.id,
+    });
+    expect(authMethodService.revokeAuthMethod).toHaveBeenCalledWith({
+      methodId: 12,
+      userId: user.id,
+    });
     // Recovery codes for the old secret are invalidated.
     expect(invalidateAllUnusedRecoveryCodesForUser).toHaveBeenCalledWith(user.id);
     // The new credentials are persisted.
@@ -504,7 +528,7 @@ describe('MfaService', () => {
     vi.mocked(authMethodService.listMfaMethodsByUserId).mockResolvedValueOnce([] as never);
     redis.getdel.mockResolvedValueOnce('TESTSECRET');
 
-    await service.enrollConfirm('user_public', { code: '123456' });
+    await service.enrollConfirm({ userPublicId: 'user_public', body: { code: '123456' } });
 
     expect(authMethodService.revokeAuthMethod).not.toHaveBeenCalled();
     expect(invalidateAllUnusedRecoveryCodesForUser).toHaveBeenCalledWith(user.id);
@@ -515,20 +539,26 @@ describe('MfaService', () => {
   it('verifyLoginMfa rejects a replayed TOTP code within its window', async () => {
     redis.set.mockResolvedValueOnce(null);
     await expect(
-      service.verifyLoginMfa({ mfa_session_token: 'token', totp_code: '123456' }, '127.0.0.1'),
+      service.verifyLoginMfa({
+        body: { mfa_session_token: 'token', totp_code: '123456' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(authSessionService.createSessionForUser).not.toHaveBeenCalled();
   });
 
   it('verify rejects a replayed TOTP code within its window', async () => {
     redis.set.mockResolvedValueOnce(null);
-    await expect(service.verify('user_public', { code: '123456' })).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.verify({ userPublicId: 'user_public', body: { code: '123456' } }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('verifyLoginMfa marks the consumed TOTP code in Redis with NX', async () => {
-    await service.verifyLoginMfa({ mfa_session_token: 'token', totp_code: '123456' }, '127.0.0.1');
+    await service.verifyLoginMfa({
+      body: { mfa_session_token: 'token', totp_code: '123456' },
+      ipAddress: '127.0.0.1',
+    });
     expect(redis.set).toHaveBeenCalledWith(
       expect.stringContaining('mfa:totp:consumed:user_public:'),
       '1',
@@ -546,8 +576,14 @@ describe('MfaService', () => {
     vi.mocked(authMethodService.revokeAuthMethod).mockResolvedValue({ id: 5 } as never);
     vi.mocked(authMethodService.listMfaMethodsByUserId).mockResolvedValue([]);
 
-    await service.deleteMfa('user_public', 'mfamethodpublicid0001');
-    expect(userService.updateMfaEnabled).toHaveBeenCalledWith('user_public', false);
+    await service.deleteMfa({
+      userPublicId: 'user_public',
+      mfaMethodPublicId: 'mfamethodpublicid0001',
+    });
+    expect(userService.updateMfaEnabled).toHaveBeenCalledWith({
+      public_id: 'user_public',
+      enabled: false,
+    });
   });
 
   it('listMfaMethods returns enrolled methods with the opaque public id (route-#10)', async () => {
@@ -569,9 +605,9 @@ describe('MfaService', () => {
   it('verify rejects invalid TOTP codes', async () => {
     const { verify } = await import('otplib');
     vi.mocked(verify).mockResolvedValueOnce({ valid: false } as never);
-    await expect(service.verify('user_public', { code: '000000' })).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.verify({ userPublicId: 'user_public', body: { code: '000000' } }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('deleteMfa keeps MFA enabled when other methods remain', async () => {
@@ -584,30 +620,42 @@ describe('MfaService', () => {
       { id: 6, method_type: 'MFA_TOTP' },
     ] as never);
 
-    await service.deleteMfa('user_public', 'mfamethodpublicid0001');
-    expect(userService.updateMfaEnabled).not.toHaveBeenCalledWith('user_public', false);
+    await service.deleteMfa({
+      userPublicId: 'user_public',
+      mfaMethodPublicId: 'mfamethodpublicid0001',
+    });
+    expect(userService.updateMfaEnabled).not.toHaveBeenCalledWith({
+      public_id: 'user_public',
+      enabled: false,
+    });
   });
 
   it('deleteMfa rejects unknown or non-TOTP methods', async () => {
     vi.mocked(authMethodService.findAuthMethodByPublicIdForUser).mockResolvedValue(null);
-    await expect(service.deleteMfa('user_public', 'mfamethodpublicid0001')).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.deleteMfa({
+        userPublicId: 'user_public',
+        mfaMethodPublicId: 'mfamethodpublicid0001',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
 
     vi.mocked(authMethodService.findAuthMethodByPublicIdForUser).mockResolvedValue({
       id: 5,
       method_type: 'OAUTH',
     } as never);
-    await expect(service.deleteMfa('user_public', 'mfamethodpublicid0001')).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.deleteMfa({
+        userPublicId: 'user_public',
+        mfaMethodPublicId: 'mfamethodpublicid0001',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('deleteMfa rejects when user record is missing', async () => {
     vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue(null as never);
-    await expect(service.deleteMfa('missing', 'mfamethodpublicid0001')).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.deleteMfa({ userPublicId: 'missing', mfaMethodPublicId: 'mfamethodpublicid0001' }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('deleteMfa rejects when revoke fails', async () => {
@@ -618,9 +666,12 @@ describe('MfaService', () => {
     vi.mocked(authMethodService.revokeAuthMethod).mockRejectedValue(
       new UnauthorizedError('errors:mfaMethodNotFound'),
     );
-    await expect(service.deleteMfa('user_public', 'mfamethodpublicid0001')).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.deleteMfa({
+        userPublicId: 'user_public',
+        mfaMethodPublicId: 'mfamethodpublicid0001',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('sec-new-A4: updateMfaEnabled is called inside the withAppDatabaseContext (user scope) transaction (no TOCTOU window)', async () => {
@@ -656,7 +707,10 @@ describe('MfaService', () => {
       return null as never;
     });
 
-    await service.deleteMfa('user_public', 'mfamethodpublicid0001');
+    await service.deleteMfa({
+      userPublicId: 'user_public',
+      mfaMethodPublicId: 'mfamethodpublicid0001',
+    });
 
     // updateMfaEnabled must happen INSIDE the transaction (between txn_start and txn_end)
     expect(callOrder).toContain('updateMfaEnabled');
@@ -670,17 +724,17 @@ describe('MfaService', () => {
 
   it('verify and listMfaMethods reject when user record is missing', async () => {
     vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue(null as never);
-    await expect(service.verify('missing', { code: '123456' })).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.verify({ userPublicId: 'missing', body: { code: '123456' } }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
     await expect(service.listMfaMethods('missing')).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('enrollInit rejects when user record is missing', async () => {
     vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue(null as never);
-    await expect(service.enrollInit('missing', { method_type: 'MFA_TOTP' })).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.enrollInit({ userPublicId: 'missing', body: { method_type: 'MFA_TOTP' } }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('verify rejects when TOTP secret is missing', async () => {
@@ -688,8 +742,8 @@ describe('MfaService', () => {
       id: 5,
       encrypted_secret: null,
     } as never);
-    await expect(service.verify('user_public', { code: '123456' })).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.verify({ userPublicId: 'user_public', body: { code: '123456' } }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 });

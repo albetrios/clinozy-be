@@ -122,7 +122,7 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue(
       baseRow({ seats: 4, plan_included_seats: null }) as never,
     );
-    const row = await service.get(scope, 'sub_public');
+    const row = await service.get({ scope, subscription_public_id: 'sub_public' });
     expect(row.seats_total).toBeNull();
     expect(row.seats_used).toBe(3);
   });
@@ -145,7 +145,9 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
       const rows = await service.list(scope);
       expect(rows.map((item) => item.seats_total)).toEqual([1, 1]);
       expect(planService.getFreePlanSeatCeiling).toHaveBeenCalledTimes(1);
-      expect((await service.get(scope, 'sub_public')).seats_total).toBe(1);
+      expect((await service.get({ scope, subscription_public_id: 'sub_public' })).seats_total).toBe(
+        1,
+      );
       await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(1);
     },
   );
@@ -258,7 +260,10 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     vi.mocked(repository.findActiveByOrganization).mockResolvedValue(baseRow() as never);
     vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(4);
 
-    await service.syncSeatQuantityForOrganization('org_public', 'idem-1');
+    await service.syncSeatQuantityForOrganization({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'idem-1',
+    });
 
     // The Stripe key is the stable base token scoped by the resolved quantity, so a retry of the
     // SAME job (same quantity) reuses ONE key (Stripe dedups → no duplicate proration).
@@ -274,8 +279,14 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     vi.mocked(repository.findActiveByOrganization).mockResolvedValue(baseRow() as never);
     vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(0);
 
-    await service.syncSeatQuantityForOrganization('org_public', 'zero-seat-retry');
-    await service.syncSeatQuantityForOrganization('org_public', 'zero-seat-retry');
+    await service.syncSeatQuantityForOrganization({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'zero-seat-retry',
+    });
+    await service.syncSeatQuantityForOrganization({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'zero-seat-retry',
+    });
 
     expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenCalledTimes(2);
     expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(
@@ -298,9 +309,15 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     vi.mocked(repository.findActiveByOrganization).mockResolvedValue(baseRow() as never);
 
     vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(6);
-    await service.syncSeatQuantityForOrganization('org_public', 'tok-A');
+    await service.syncSeatQuantityForOrganization({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'tok-A',
+    });
     vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(5);
-    await service.syncSeatQuantityForOrganization('org_public', 'tok-A');
+    await service.syncSeatQuantityForOrganization({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'tok-A',
+    });
 
     expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(
       1,
@@ -317,7 +334,7 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
   });
 
   it('enqueueSeatQuantitySync stamps a stable per-enqueue token when the hot path passes none (audit #1)', () => {
-    service.enqueueSeatQuantitySync('org_public');
+    service.enqueueSeatQuantitySync({ organization_public_id: 'org_public' });
     const call = vi.mocked(seatSyncMocks.enqueueSubscriptionSeatSyncBestEffort).mock
       .calls[0]![0] as {
       idempotencyKey?: string;
@@ -326,7 +343,10 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
   });
 
   it('enqueueSeatQuantitySync namespaces an explicit caller key by organization before Stripe (changePlan path)', () => {
-    service.enqueueSeatQuantitySync('org_public', 'client-key-123');
+    service.enqueueSeatQuantitySync({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'client-key-123',
+    });
     const call = vi.mocked(seatSyncMocks.enqueueSubscriptionSeatSyncBestEffort).mock
       .calls[0]![0] as {
       idempotencyKey?: string;
@@ -339,7 +359,7 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
 
   it('syncSeatQuantityForOrganization is a no-op when there is no active subscription', async () => {
     vi.mocked(repository.findActiveByOrganization).mockResolvedValue(null);
-    await service.syncSeatQuantityForOrganization('org_public');
+    await service.syncSeatQuantityForOrganization({ organization_public_id: 'org_public' });
     expect(paymentProvider.updateSubscriptionQuantity).not.toHaveBeenCalled();
     expect(repository.update).not.toHaveBeenCalled();
   });
@@ -350,7 +370,9 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     vi.mocked(organizationService.requireOrganizationByPublicId).mockRejectedValue(
       new NotFoundError('Organization'),
     );
-    await expect(service.syncSeatQuantityForOrganization('org_public')).resolves.toBeUndefined();
+    await expect(
+      service.syncSeatQuantityForOrganization({ organization_public_id: 'org_public' }),
+    ).resolves.toBeUndefined();
     expect(repository.findActiveByOrganization).not.toHaveBeenCalled();
     expect(paymentProvider.updateSubscriptionQuantity).not.toHaveBeenCalled();
     expect(repository.update).not.toHaveBeenCalled();
@@ -360,9 +382,9 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     vi.mocked(organizationService.requireOrganizationByPublicId).mockRejectedValue(
       new Error('connection terminated'),
     );
-    await expect(service.syncSeatQuantityForOrganization('org_public')).rejects.toThrow(
-      'connection terminated',
-    );
+    await expect(
+      service.syncSeatQuantityForOrganization({ organization_public_id: 'org_public' }),
+    ).rejects.toThrow('connection terminated');
   });
 
   it('syncSeatQuantityForOrganization reconciles seats locally but skips Stripe for a subscription with no provider id', async () => {
@@ -373,7 +395,10 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     );
     vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(4);
 
-    await service.syncSeatQuantityForOrganization('org_public', 'idem-local');
+    await service.syncSeatQuantityForOrganization({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'idem-local',
+    });
 
     expect(paymentProvider.updateSubscriptionQuantity).not.toHaveBeenCalled();
     // The ledger is still updated to the recomputed max(1, memberCount).

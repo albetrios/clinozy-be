@@ -84,15 +84,18 @@ describe('UserSettingsService', () => {
   });
 
   it('update upserts settings for user', async () => {
-    const result = await service.update(asUserScope('user_public'), { language: 'fr' });
+    const result = await service.update({
+      scope: asUserScope('user_public'),
+      body: { language: 'fr' },
+    });
     expect(settingsRepository.upsert).toHaveBeenCalledWith(1, { language: 'fr' });
     expect(result.language).toBe('es');
   });
 
   it('update throws when user is missing', async () => {
     vi.mocked(userService.resolveInternalIdByPublicId).mockResolvedValue(null);
-    await expect(service.update(asUserScope('missing'), { language: 'de' })).rejects.toBeInstanceOf(
-      NotFoundError,
-    );
+    await expect(
+      service.update({ scope: asUserScope('missing'), body: { language: 'de' } }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 });

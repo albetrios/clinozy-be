@@ -20,9 +20,12 @@ export function createAuthEmailLoginHandlers({
 }: AuthEmailLoginHandlersDependencies) {
   return {
     sendEmailCode: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const data = await emailLoginService.sendCode(request.body, {
-        requestId: getRequestIdentifier(request),
-        locale: toSupportedLanguage(request.language),
+      const data = await emailLoginService.sendCode({
+        body: request.body,
+        context: {
+          requestId: getRequestIdentifier(request),
+          locale: toSupportedLanguage(request.language),
+        },
       });
       const translated = translateMessageKeyPayload(request, data);
       return successResponse(
@@ -41,7 +44,7 @@ export function createAuthEmailLoginHandlers({
       const userAgent = getUserAgent(request) ?? undefined;
       let data: Awaited<ReturnType<typeof emailLoginService.login>>;
       try {
-        data = await emailLoginService.login(request.body, ipAddress, userAgent);
+        data = await emailLoginService.login({ body: request.body, ipAddress, userAgent });
       } catch (error) {
         // sec-A8 follow-up: record the failure side of the auth.overview.md invariant.
         await recordLoginFailureAuditEvent(request, 'email_code', error);

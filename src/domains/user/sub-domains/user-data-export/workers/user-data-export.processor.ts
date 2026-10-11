@@ -58,12 +58,12 @@ export async function runUserDataExportJob(
         return null;
       }
 
-      await userDataExportService.markProcessing(
+      await userDataExportService.markProcessing({
         exportPublicId,
-        ownerInternalId,
+        userInternalId: ownerInternalId,
         databaseHandle,
         userPublicId,
-      );
+      });
 
       if (await isCancelled()) {
         logger.info({ exportPublicId, userPublicId }, 'user-data-export.worker.cancelled');
@@ -107,12 +107,12 @@ export async function runUserDataExportJob(
       const ownerInternalId =
         await userDataExportService.resolveExportOwnerInternalId(userPublicId);
       if (ownerInternalId === null) return;
-      await userDataExportService.failExportJob(
+      await userDataExportService.failExportJob({
         exportPublicId,
-        ownerInternalId,
-        'export_failed',
+        userInternalId: ownerInternalId,
+        errorCode: 'export_failed',
         databaseHandle,
-      );
+      });
     });
     throw error;
   }

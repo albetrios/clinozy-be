@@ -142,7 +142,7 @@ describe('Stripe Webhook — out-of-order cancellation (audit-#1)', () => {
   it('writes a CANCELED tombstone when the deletion arrives with no local row', async () => {
     const providerSubscriptionId = `sub_ooo_${generatePublicId('subscription')}`;
 
-    await service.handleEvent(deletedEvent(providerSubscriptionId, 'evt_del_only'));
+    await service.handleEvent({ event: deletedEvent(providerSubscriptionId, 'evt_del_only') });
 
     const rows = await readSubscriptionRows(providerSubscriptionId);
     expect(rows).toHaveLength(1);
@@ -153,8 +153,8 @@ describe('Stripe Webhook — out-of-order cancellation (audit-#1)', () => {
     const providerSubscriptionId = `sub_ooo_${generatePublicId('subscription')}`;
 
     // Delivery order: deletion first (no row → tombstone), then the older create.
-    await service.handleEvent(deletedEvent(providerSubscriptionId, 'evt_del_first'));
-    await service.handleEvent(createdEvent(providerSubscriptionId, 'evt_created_late'));
+    await service.handleEvent({ event: deletedEvent(providerSubscriptionId, 'evt_del_first') });
+    await service.handleEvent({ event: createdEvent(providerSubscriptionId, 'evt_created_late') });
 
     const rows = await readSubscriptionRows(providerSubscriptionId);
     // Exactly one row (the tombstone) — the create must not insert a second/active row.
@@ -166,12 +166,16 @@ describe('Stripe Webhook — out-of-order cancellation (audit-#1)', () => {
     const providerSubscriptionId = `sub_ooo_${generatePublicId('subscription')}`;
 
     // .created with no prior HTTP row → fallback INSERT (ACTIVE), then .deleted cancels it.
-    await service.handleEvent(createdEvent(providerSubscriptionId, 'evt_created_normal'));
+    await service.handleEvent({
+      event: createdEvent(providerSubscriptionId, 'evt_created_normal'),
+    });
     const afterCreate = await readSubscriptionRows(providerSubscriptionId);
     expect(afterCreate).toHaveLength(1);
     expect(afterCreate[0]!.status).toBe('ACTIVE');
 
-    await service.handleEvent(deletedEvent(providerSubscriptionId, 'evt_deleted_normal'));
+    await service.handleEvent({
+      event: deletedEvent(providerSubscriptionId, 'evt_deleted_normal'),
+    });
     const afterDelete = await readSubscriptionRows(providerSubscriptionId);
     expect(afterDelete).toHaveLength(1);
     expect(afterDelete[0]!.status).toBe('CANCELED');
@@ -179,19 +183,21 @@ describe('Stripe Webhook — out-of-order cancellation (audit-#1)', () => {
 
   it('processes a .deleted that finds the row already past it, instead of retrying until it pages', async () => {
     const providerSubscriptionId = `sub_ooo_${generatePublicId('subscription')}`;
-    await service.handleEvent(createdEvent(providerSubscriptionId, 'evt_created_then_final'));
+    await service.handleEvent({
+      event: createdEvent(providerSubscriptionId, 'evt_created_then_final'),
+    });
     // Stripe's final `.updated` (canceled) is applied first; the older `.deleted` arrives after.
-    await service.handleEvent(
-      updatedEvent(providerSubscriptionId, {
+    await service.handleEvent({
+      event: updatedEvent(providerSubscriptionId, {
         eventId: 'evt_final_update',
         createdSeconds: deletedEventSeconds + 300,
         status: 'canceled',
         canceledAtSeconds: deletedEventSeconds,
       }),
-    );
+    });
 
     await expect(
-      service.handleEvent(deletedEvent(providerSubscriptionId, 'evt_deleted_stale')),
+      service.handleEvent({ event: deletedEvent(providerSubscriptionId, 'evt_deleted_stale') }),
     ).resolves.toBeUndefined();
     const rows = await readSubscriptionRows(providerSubscriptionId);
     expect(rows).toHaveLength(1);
@@ -200,25 +206,27 @@ describe('Stripe Webhook — out-of-order cancellation (audit-#1)', () => {
 
   it('clears canceled_at when a scheduled cancellation is undone at Stripe', async () => {
     const providerSubscriptionId = `sub_ooo_${generatePublicId('subscription')}`;
-    await service.handleEvent(createdEvent(providerSubscriptionId, 'evt_created_resume'));
-    await service.handleEvent(
-      updatedEvent(providerSubscriptionId, {
+    await service.handleEvent({
+      event: createdEvent(providerSubscriptionId, 'evt_created_resume'),
+    });
+    await service.handleEvent({
+      event: updatedEvent(providerSubscriptionId, {
         eventId: 'evt_cancel_scheduled',
         createdSeconds: createdEventSeconds + 100,
         status: 'active',
         cancelAtPeriodEnd: true,
         canceledAtSeconds: createdEventSeconds + 100,
       }),
-    );
+    });
     expect((await readSubscriptionRows(providerSubscriptionId))[0]!.canceled_at).not.toBeNull();
 
-    await service.handleEvent(
-      updatedEvent(providerSubscriptionId, {
+    await service.handleEvent({
+      event: updatedEvent(providerSubscriptionId, {
         eventId: 'evt_cancel_undone',
         createdSeconds: createdEventSeconds + 200,
         status: 'active',
       }),
-    );
+    });
 
     // Resumed: no cancellation date left behind for the billing account to show.
     expect((await readSubscriptionRows(providerSubscriptionId))[0]!.canceled_at).toBeNull();

@@ -39,7 +39,10 @@ export function createAuthAuthMethodHandlers({
     },
     createAuthMethod: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
-      const data = await authMethodService.create(auth.userId, request.body);
+      const data = await authMethodService.create({
+        userPublicId: auth.userId,
+        body: request.body,
+      });
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'auth.auth_method.create',
@@ -54,7 +57,7 @@ export function createAuthAuthMethodHandlers({
     ) => {
       const auth = requireAuth(request);
       const publicId = validateAuthMethodPublicIdParam(request.params.auth_method_id);
-      await authMethodService.delete(auth.userId, publicId);
+      await authMethodService.delete({ userPublicId: auth.userId, methodPublicId: publicId });
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'auth.auth_method.delete',
@@ -64,9 +67,12 @@ export function createAuthAuthMethodHandlers({
       return reply.code(204).send();
     },
     forgotPassword: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const data = await authMethodService.forgotPassword(request.body, {
-        requestId: getRequestIdentifier(request),
-        locale: toSupportedLanguage(request.language),
+      const data = await authMethodService.forgotPassword({
+        body: request.body,
+        context: {
+          requestId: getRequestIdentifier(request),
+          locale: toSupportedLanguage(request.language),
+        },
       });
       return successResponse(
         resolveAuthMessageKeyResponse(request, data),
@@ -76,11 +82,11 @@ export function createAuthAuthMethodHandlers({
     resetPassword: async (request: FastifyRequest, reply: FastifyReply) => {
       const ipAddress = getIpAddress(request);
       const userAgent = getUserAgent(request) ?? undefined;
-      const { userPublicId, loginResult: data } = await authService.resetPassword(
-        request.body,
+      const { userPublicId, loginResult: data } = await authService.resetPassword({
+        body: request.body,
         ipAddress,
         userAgent,
-      );
+      });
 
       // A completed reset is a credential change — record it DISTINCTLY (and at WARNING) from the
       // subsequent login so a reset is queryable on its own (previously it surfaced only as
@@ -142,11 +148,11 @@ export function createAuthAuthMethodHandlers({
     changePassword: async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = requireAuth(request);
       const currentAccessToken = request.headers.authorization?.match(/^Bearer\s+(\S.*)$/i)?.[1];
-      await authMethodService.changePassword(
-        auth.userId,
-        request.body,
-        currentAccessToken ? { currentAccessToken } : undefined,
-      );
+      await authMethodService.changePassword({
+        userPublicId: auth.userId,
+        body: request.body,
+        options: currentAccessToken ? { currentAccessToken } : undefined,
+      });
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'auth.password.change',

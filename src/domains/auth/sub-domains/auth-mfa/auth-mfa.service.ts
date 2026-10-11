@@ -114,11 +114,15 @@ export class MfaService {
   }
 
   /** Public login step: verify TOTP or recovery code, then issue JWT + session. */
-  async verifyLoginMfa(
-    body: unknown,
-    ipAddress: string,
-    userAgent?: string,
-  ): Promise<{
+  async verifyLoginMfa({
+    body,
+    ipAddress,
+    userAgent,
+  }: {
+    body: unknown;
+    ipAddress: string;
+    userAgent?: string | undefined;
+  }): Promise<{
     access_token: string;
     session_public_id: string;
     session_refresh_secret: string;
@@ -161,9 +165,15 @@ export class MfaService {
         // The attempt was already counted in consumeMfaVerificationAttempt above (route-audit-#4).
         throw new UnauthorizedError(ERROR_KEY_MFA_INVALID_OR_EXPIRED_CODE);
       }
-      await this.rejectReplayedTotpCode(user.public_id, parsed.totp_code);
+      await this.rejectReplayedTotpCode({
+        userPublicId: user.public_id,
+        totpCode: parsed.totp_code,
+      });
       await withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }), () =>
-        this.authMethodService.updateAuthMethodLastUsedAt(totpMethod.id, user.id),
+        this.authMethodService.updateAuthMethodLastUsedAt({
+          methodId: totpMethod.id,
+          userId: user.id,
+        }),
       );
       verified = true;
     } else if (parsed.recovery_code) {
@@ -190,7 +200,7 @@ export class MfaService {
 
     // audit-#12: successful second factor clears the failure counter.
     await this.clearMfaVerificationFailures(user.public_id);
-    const issued = await this.issueAccessTokenAndSession(user, ipAddress, userAgent);
+    const issued = await this.issueAccessTokenAndSession({ user, ipAddress, userAgent });
     // Surface the factor so the handler can audit recovery-code use (the TOTP-bypass break-glass
     // path) distinctly from a normal TOTP second factor.
     return { ...issued, factor };
@@ -202,7 +212,13 @@ export class MfaService {
    * requests carrying the same valid code cannot both succeed; a replay surfaces
    * as the generic invalid-code error to avoid leaking that the code was valid.
    */
-  private async rejectReplayedTotpCode(userPublicId: string, totpCode: string): Promise<void> {
+  private async rejectReplayedTotpCode({
+    userPublicId,
+    totpCode,
+  }: {
+    userPublicId: string;
+    totpCode: string;
+  }): Promise<void> {
     const codeHash = createHash('sha256').update(totpCode).digest('hex');
     const key = `${MFA_TOTP_CONSUMED_KEY_PREFIX}${userPublicId}:${codeHash}`;
     const stored = await this.redis.set(key, '1', 'EX', MFA_TOTP_CODE_REPLAY_TTL_SECONDS, 'NX');
@@ -246,17 +262,21 @@ export class MfaService {
     await this.redis.del(`${MFA_VERIFICATION_FAILURE_KEY_PREFIX}${userPublicId}`);
   }
 
-  private async issueAccessTokenAndSession(
+  private async issueAccessTokenAndSession({
+    user,
+    ipAddress,
+    userAgent,
+  }: {
     user: {
       id: number;
       public_id: string;
       email: string;
       status: string;
       is_email_verified: boolean;
-    },
-    ipAddress: string,
-    userAgent?: string,
-  ): Promise<{ access_token: string; session_public_id: string; session_refresh_secret: string }> {
+    };
+    ipAddress: string;
+    userAgent?: string | undefined;
+  }): Promise<{ access_token: string; session_public_id: string; session_refresh_secret: string }> {
     // Bake the active-organization `org` claim into the token, mirroring the first-factor path
     // (`complete-first-factor-auth.ts`). Without this an MFA login mints an organization-less token and the
     // user is locked out of every organization-scoped route (which resolve the active organization from the claim
@@ -277,16 +297,16 @@ export class MfaService {
     const sessionTokenHash = createHash('sha256').update(jsonWebToken).digest('hex');
     const sessionMaxAgeDays = env.AUTH_SESSION_MAX_AGE_DAYS;
     const expiresAt = new Date(Date.now() + sessionMaxAgeDays * MILLISECONDS_PER_DAY);
-    const authSession = await this.authSessionService.createSessionForUser(
-      user.public_id,
-      omitUndefined({
+    const authSession = await this.authSessionService.createSessionForUser({
+      userPublicId: user.public_id,
+      data: omitUndefined({
         token_hash: sessionTokenHash,
         ip_address: ipAddress,
         user_agent: userAgent,
         expires_at: expiresAt,
         mfa_verified_at: new Date(),
       }),
-    );
+    });
     return {
       access_token: jsonWebToken,
       session_public_id: authSession.public_id,
@@ -295,7 +315,13 @@ export class MfaService {
   }
 
   /** Verify TOTP code for the current user. Requires authenticated request (user public_id). */
-  async verify(userPublicId: string, body: unknown): Promise<{ verified: boolean }> {
+  async verify({
+    userPublicId,
+    body,
+  }: {
+    userPublicId: string;
+    body: unknown;
+  }): Promise<{ verified: boolean }> {
     const parsed = validateMfaVerify(body);
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new UnauthorizedError(ERROR_KEY_MFA_USER_NOT_FOUND);
@@ -318,11 +344,14 @@ export class MfaService {
       // Already counted in consumeMfaVerificationAttempt above (route-audit-#4).
       throw new UnauthorizedError(ERROR_KEY_MFA_INVALID_OR_EXPIRED_CODE);
     }
-    await this.rejectReplayedTotpCode(user.public_id, parsed.code);
+    await this.rejectReplayedTotpCode({ userPublicId: user.public_id, totpCode: parsed.code });
     // audit-#12: successful step-up clears the failure counter.
     await this.clearMfaVerificationFailures(user.public_id);
     await withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }), () =>
-      this.authMethodService.updateAuthMethodLastUsedAt(totpMethod.id, user.id),
+      this.authMethodService.updateAuthMethodLastUsedAt({
+        methodId: totpMethod.id,
+        userId: user.id,
+      }),
     );
     return { verified: true };
   }
@@ -346,10 +375,13 @@ export class MfaService {
    * Re-running INIT before CONFIRM overwrites the staged secret (last-write wins),
    * matching natural retry semantics.
    */
-  async enrollInit(
-    userPublicId: string,
-    body: unknown,
-  ): Promise<{ secret: string; provisioning_uri: string }> {
+  async enrollInit({
+    userPublicId,
+    body,
+  }: {
+    userPublicId: string;
+    body: unknown;
+  }): Promise<{ secret: string; provisioning_uri: string }> {
     const parsed = validateMfaEnroll(body);
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new UnauthorizedError(ERROR_KEY_MFA_USER_NOT_FOUND);
@@ -397,10 +429,13 @@ export class MfaService {
    *   one-time-use and a wrong-code attempt is most often a fat-fingered transcription
    *   that warrants regenerating to be safe)
    */
-  async enrollConfirm(
-    userPublicId: string,
-    body: unknown,
-  ): Promise<{ recovery_codes: string[]; method_public_id: string }> {
+  async enrollConfirm({
+    userPublicId,
+    body,
+  }: {
+    userPublicId: string;
+    body: unknown;
+  }): Promise<{ recovery_codes: string[]; method_public_id: string }> {
     const parsed = validateMfaEnrollConfirm(body);
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new UnauthorizedError(ERROR_KEY_MFA_USER_NOT_FOUND);
@@ -425,7 +460,7 @@ export class MfaService {
 
     // Mark the code consumed so it can't double as both an enroll-verify and an
     // immediate step-up verify within the replay window.
-    await this.rejectReplayedTotpCode(user.public_id, parsed.code);
+    await this.rejectReplayedTotpCode({ userPublicId: user.public_id, totpCode: parsed.code });
 
     const plaintextRecoveryCodes = generateMfaRecoveryCodes(MFA_RECOVERY_CODE_COUNT);
     const recoveryCodeHashes = plaintextRecoveryCodes.map(hashMfaRecoveryCode);
@@ -450,7 +485,10 @@ export class MfaService {
         const existingMfaMethods = await this.authMethodService.listMfaMethodsByUserId(user.id);
         for (const existing of existingMfaMethods) {
           if (existing.method_type === 'MFA_TOTP') {
-            await this.authMethodService.revokeAuthMethod(existing.id, user.id);
+            await this.authMethodService.revokeAuthMethod({
+              methodId: existing.id,
+              userId: user.id,
+            });
           }
         }
         await invalidateAllUnusedRecoveryCodesForUser(user.id);
@@ -472,7 +510,7 @@ export class MfaService {
         // The nested withAppDatabaseContext (user scope) call reuses the already-pinned handle
         // (the outer callback is still inside the same transaction), so no separate
         // transaction is opened — all three writes still commit atomically.
-        await this.userService.updateMfaEnabled(user.public_id, true);
+        await this.userService.updateMfaEnabled({ public_id: user.public_id, enabled: true });
         return created;
       },
     );
@@ -496,7 +534,13 @@ export class MfaService {
    * when the policy would be violated. Non-last deletions and users in MFA-non-required
    * organizations are unaffected.
    */
-  async deleteMfa(userPublicId: string, mfaMethodPublicId: string): Promise<void> {
+  async deleteMfa({
+    userPublicId,
+    mfaMethodPublicId,
+  }: {
+    userPublicId: string;
+    mfaMethodPublicId: string;
+  }): Promise<void> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new UnauthorizedError(ERROR_KEY_MFA_USER_NOT_FOUND);
     await withAppDatabaseContext(
@@ -508,10 +552,10 @@ export class MfaService {
         await this.authMethodService.acquireCredentialMutationLock(user.id);
         // route-#10: resolve by opaque public id (not the leaked sequential id); the resolved row
         // still yields its numeric id for the user-scoped revoke below.
-        const found = await this.authMethodService.findAuthMethodByPublicIdForUser(
-          mfaMethodPublicId,
-          user.id,
-        );
+        const found = await this.authMethodService.findAuthMethodByPublicIdForUser({
+          methodPublicId: mfaMethodPublicId,
+          userId: user.id,
+        });
         if (!found) throw new UnauthorizedError('errors:mfaMethodNotFound');
         if (found.method_type !== 'MFA_TOTP') {
           throw new UnauthorizedError('errors:mfaNotTotpMethod');
@@ -527,14 +571,14 @@ export class MfaService {
             throw new ForbiddenError('errors:lastMfaRequiredByOrganization');
           }
         }
-        await this.authMethodService.revokeAuthMethod(found.id, user.id);
+        await this.authMethodService.revokeAuthMethod({ methodId: found.id, userId: user.id });
         const remaining = await this.authMethodService.listMfaMethodsByUserId(user.id);
         // sec-new-A4: flip is_mfa_enabled INSIDE the same withAppDatabaseContext (user scope)
         // transaction as the revoke so there is no TOCTOU window where a concurrent
         // enroll could set is_mfa_enabled = true between the delete and the flag flip.
         // The nested withAppDatabaseContext (user scope) call reuses the already-pinned handle.
         if (remaining.length === 0) {
-          await this.userService.updateMfaEnabled(user.public_id, false);
+          await this.userService.updateMfaEnabled({ public_id: user.public_id, enabled: false });
         }
       },
     );

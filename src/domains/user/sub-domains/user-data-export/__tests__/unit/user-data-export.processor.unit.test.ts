@@ -77,12 +77,12 @@ describe('user-data-export.processor', () => {
         databaseHandle: fakeDatabaseHandle,
       }),
     );
-    expect(service.markProcessing).toHaveBeenCalledWith(
-      jobData.exportPublicId,
-      OWNER_INTERNAL_ID,
-      fakeDatabaseHandle,
-      jobData.userPublicId,
-    );
+    expect(service.markProcessing).toHaveBeenCalledWith({
+      exportPublicId: jobData.exportPublicId,
+      userInternalId: OWNER_INTERNAL_ID,
+      databaseHandle: fakeDatabaseHandle,
+      userPublicId: jobData.userPublicId,
+    });
     expect(service.buildExportPayload).toHaveBeenCalledWith(jobData.userPublicId);
     expect(service.completeExportJob).toHaveBeenCalledOnce();
     const completeArguments = service.completeExportJob.mock.calls[0]?.[0] as {
@@ -155,12 +155,12 @@ describe('user-data-export.processor', () => {
 
     await expect(runUserDataExportJob(jobData, service as never)).rejects.toBe(failure);
 
-    expect(service.failExportJob).toHaveBeenCalledWith(
-      jobData.exportPublicId,
-      OWNER_INTERNAL_ID,
-      'export_failed',
-      fakeDatabaseHandle,
-    );
+    expect(service.failExportJob).toHaveBeenCalledWith({
+      exportPublicId: jobData.exportPublicId,
+      userInternalId: OWNER_INTERNAL_ID,
+      errorCode: 'export_failed',
+      databaseHandle: fakeDatabaseHandle,
+    });
   });
 
   it('leaves the export processing on an attempt that is not the last — BullMQ retries it', async () => {

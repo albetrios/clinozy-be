@@ -52,25 +52,37 @@ export function createUploadController(uploadService: UploadService) {
   return {
     createUpload: async (request: FastifyRequest, reply: FastifyReply) => {
       const input = validateCreateUpload(request.body);
-      const result = await uploadService.createUpload(input, uploadPrincipal(request));
+      const result = await uploadService.createUpload({
+        input,
+        principal: uploadPrincipal(request),
+      });
       return reply.status(200).send(successResponse(result, getRequestIdentifier(request)));
     },
 
     getUpload: async (request: FastifyRequest, reply: FastifyReply) => {
       const publicId = (request.params as { upload_id: string }).upload_id;
-      const result = await uploadService.getUpload(publicId, uploadPrincipal(request));
+      const result = await uploadService.getUpload({
+        public_id: publicId,
+        principal: uploadPrincipal(request),
+      });
       return reply.send(successResponse(result, getRequestIdentifier(request)));
     },
 
     confirmUpload: async (request: FastifyRequest, reply: FastifyReply) => {
       const publicId = (request.params as { upload_id: string }).upload_id;
-      const result = await uploadService.confirmUpload(publicId, uploadPrincipal(request));
+      const result = await uploadService.confirmUpload({
+        public_id: publicId,
+        principal: uploadPrincipal(request),
+      });
       return reply.send(successResponse(result, getRequestIdentifier(request)));
     },
 
     deleteUpload: async (request: FastifyRequest, reply: FastifyReply) => {
       const publicId = (request.params as { upload_id: string }).upload_id;
-      await uploadService.deleteUpload(publicId, uploadPrincipal(request));
+      await uploadService.deleteUpload({
+        public_id: publicId,
+        principal: uploadPrincipal(request),
+      });
       return reply.code(204).send();
     },
   };

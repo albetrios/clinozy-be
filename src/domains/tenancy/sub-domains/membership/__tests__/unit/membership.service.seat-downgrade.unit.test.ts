@@ -110,8 +110,14 @@ describe('MembershipService.suspendExcessActiveMembersToFitCeiling (F2 downgrade
     expect(suspendedCount).toBe(2);
     // Post-commit: each suspended member's permission cache is purged so a concurrent recompute
     // cannot re-cache the pre-suspension permission set.
-    expect(invalidatePermissionsMock).toHaveBeenCalledWith('user_11', 'org_public');
-    expect(invalidatePermissionsMock).toHaveBeenCalledWith('user_12', 'org_public');
+    expect(invalidatePermissionsMock).toHaveBeenCalledWith({
+      userId: 'user_11',
+      organizationId: 'org_public',
+    });
+    expect(invalidatePermissionsMock).toHaveBeenCalledWith({
+      userId: 'user_12',
+      organizationId: 'org_public',
+    });
     // …resolved in ONE lookup for the whole set, not one per suspended member. A downgrade can
     // suspend an unbounded number of members, so a per-member resolve scaled round trips with it.
     expect(resolveUserPublicIdsByInternalIds).toHaveBeenCalledTimes(1);

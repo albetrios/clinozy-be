@@ -58,7 +58,10 @@ export async function processStripeWebhookJob(
   );
 
   try {
-    await stripeWebhookService.handleEvent(eventPayload, omitUndefined({ requestId }));
+    await stripeWebhookService.handleEvent({
+      event: eventPayload,
+      context: omitUndefined({ requestId }),
+    });
   } catch (error) {
     if (error instanceof StripeWebhookEventAbandonedError) {
       throw new UnrecoverableError(error.message);

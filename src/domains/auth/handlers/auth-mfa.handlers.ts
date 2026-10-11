@@ -42,7 +42,7 @@ export function createAuthMfaHandlers({
       const userAgent = getUserAgent(request) ?? undefined;
       let data: Awaited<ReturnType<typeof mfaService.verifyLoginMfa>>;
       try {
-        data = await mfaService.verifyLoginMfa(request.body, ipAddress, userAgent);
+        data = await mfaService.verifyLoginMfa({ body: request.body, ipAddress, userAgent });
       } catch (error) {
         // The second factor failed/locked out — record the symmetric failure event (no actor id is
         // asserted; the failed-attempt source + IP are what an investigator queries on).
@@ -63,7 +63,7 @@ export function createAuthMfaHandlers({
       const auth = requireAuth(request);
       let data: Awaited<ReturnType<typeof mfaService.verify>>;
       try {
-        data = await mfaService.verify(auth.userId, request.body);
+        data = await mfaService.verify({ userPublicId: auth.userId, body: request.body });
       } catch (error) {
         await recordScopedAuditEvent(request, {
           actorUserPublicId: auth.userId,
@@ -90,7 +90,7 @@ export function createAuthMfaHandlers({
     },
     enrollMfa: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
-      const data = await mfaService.enrollInit(auth.userId, request.body);
+      const data = await mfaService.enrollInit({ userPublicId: auth.userId, body: request.body });
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'auth.mfa.enroll_init',
@@ -100,7 +100,10 @@ export function createAuthMfaHandlers({
     },
     confirmEnrollMfa: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
-      const data = await mfaService.enrollConfirm(auth.userId, request.body);
+      const data = await mfaService.enrollConfirm({
+        userPublicId: auth.userId,
+        body: request.body,
+      });
       // Confirming enrollment verified a fresh code from the new factor — a second factor proven
       // on this session, so an invited user who must enroll can enter an MFA-required organization.
       if (auth.sessionPublicId) {
@@ -120,7 +123,7 @@ export function createAuthMfaHandlers({
     ) => {
       const auth = requireAuth(request);
       const mfaMethodId = validateMfaMethodIdParam(request.params.mfa_method_id);
-      await mfaService.deleteMfa(auth.userId, mfaMethodId);
+      await mfaService.deleteMfa({ userPublicId: auth.userId, mfaMethodPublicId: mfaMethodId });
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'auth.mfa.delete',

@@ -130,10 +130,10 @@ export class StripePaymentProvider implements PaymentProvider {
           idempotencyKey: `customer-create:${input.organization.public_id}`,
         });
         stripeCustomerId = customer.id;
-        await this.organizationService.updateStripeCustomerIdForOrganization(
-          input.organization.public_id,
-          stripeCustomerId,
-        );
+        await this.organizationService.updateStripeCustomerIdForOrganization({
+          organization_public_id: input.organization.public_id,
+          stripe_customer_id: stripeCustomerId,
+        });
       }
 
       const stripeSubscription = await createStripeSubscription(

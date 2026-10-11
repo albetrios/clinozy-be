@@ -74,9 +74,9 @@ describe('EmailLoginService.login (one-time-code atomicity — audit-#12)', () =
       createSessionForUser: vi.fn().mockRejectedValue(new Error('forced session failure')),
     });
 
-    await expect(service.login({ email: user.email, code }, '127.0.0.1')).rejects.toThrow(
-      'forced session failure',
-    );
+    await expect(
+      service.login({ body: { email: user.email, code }, ipAddress: '127.0.0.1' }),
+    ).rejects.toThrow('forced session failure');
 
     // Rollback proven: the code was NOT permanently consumed and remains valid for a retry.
     const stillValid = await verificationTokenRepository.findValidByTokenHash(codeHash);
@@ -94,7 +94,10 @@ describe('EmailLoginService.login (one-time-code atomicity — audit-#12)', () =
       }),
     });
 
-    const result = await service.login({ email: user.email, code }, '127.0.0.1');
+    const result = await service.login({
+      body: { email: user.email, code },
+      ipAddress: '127.0.0.1',
+    });
     expect('access_token' in result && result.access_token).toBeTruthy();
 
     // The code is now consumed (single-use enforced).

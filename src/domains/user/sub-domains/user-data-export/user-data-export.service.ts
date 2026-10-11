@@ -34,7 +34,13 @@ import {
   type UserPrincipalDatabaseScope,
 } from '@/infrastructure/database/contexts/database-context.js';
 
-function buildExportS3Key(userPublicId: string, exportPublicId: string): string {
+function buildExportS3Key({
+  userPublicId,
+  exportPublicId,
+}: {
+  userPublicId: string;
+  exportPublicId: string;
+}): string {
   return `${USER_DATA_EXPORT_S3_PREFIX}/${userPublicId}/${exportPublicId}.json.gz`;
 }
 
@@ -75,11 +81,15 @@ export type UserDataExportCrossDomainServices = {
  * - **Side effects:** mutates the passed `truncatedCategories` accumulator.
  * - **Notes:** callers must fetch `cap + 1` rows for the overflow signal to be reliable.
  */
-export function capExportCategory<Row>(
-  rows: Row[],
-  category: string,
-  truncatedCategories: string[],
-): Row[] {
+export function capExportCategory<Row>({
+  rows,
+  category,
+  truncatedCategories,
+}: {
+  rows: Row[];
+  category: string;
+  truncatedCategories: string[];
+}): Row[] {
   if (rows.length > GDPR_EXPORT_MAX_ROWS_PER_TABLE) {
     truncatedCategories.push(category);
     return rows.slice(0, GDPR_EXPORT_MAX_ROWS_PER_TABLE);
@@ -142,10 +152,13 @@ export class UserDataExportService {
     return userId;
   }
 
-  async requestExport(
-    scope: UserPrincipalDatabaseScope,
-    options?: { requestId?: string },
-  ): Promise<UserDataExportOutput> {
+  async requestExport({
+    scope,
+    options,
+  }: {
+    scope: UserPrincipalDatabaseScope;
+    options?: { requestId?: string } | undefined;
+  }): Promise<UserDataExportOutput> {
     const userPublicId = scope.userPublicId;
     // One context for the id lookup AND the pending check: the lookup used to open its own
     // transaction first, holding a second pooled checkout for a value this request already has the
@@ -167,7 +180,7 @@ export class UserDataExportService {
     }
 
     const exportPublicId = generatePublicId('userDataExport');
-    const s3Key = buildExportS3Key(userPublicId, exportPublicId);
+    const s3Key = buildExportS3Key({ userPublicId, exportPublicId });
     const expiresAt = computeArtifactExpiresAt();
 
     // auth.user_data_exports is FORCE RLS keyed on app.current_user_public_id — insert inside the user
@@ -214,10 +227,13 @@ export class UserDataExportService {
     return serializeUserDataExport(row);
   }
 
-  async getExportStatus(
-    scope: UserPrincipalDatabaseScope,
-    exportPublicId: string,
-  ): Promise<UserDataExportOutput> {
+  async getExportStatus({
+    scope,
+    exportPublicId,
+  }: {
+    scope: UserPrincipalDatabaseScope;
+    exportPublicId: string;
+  }): Promise<UserDataExportOutput> {
     const userPublicId = scope.userPublicId;
     const row = await withAppDatabaseContext(scope, async () =>
       this.exportRepository.findByPublicIdAndUserId(
@@ -278,12 +294,17 @@ export class UserDataExportService {
     return user === null || user.deleted_at !== null;
   }
 
-  async markProcessing(
-    exportPublicId: string,
-    userInternalId: number,
-    databaseHandle?: WorkerDatabaseHandle,
-    userPublicId?: string,
-  ): Promise<void> {
+  async markProcessing({
+    exportPublicId,
+    userInternalId,
+    databaseHandle,
+    userPublicId,
+  }: {
+    exportPublicId: string;
+    userInternalId: number;
+    databaseHandle?: WorkerDatabaseHandle | undefined;
+    userPublicId?: string | undefined;
+  }): Promise<void> {
     const exportRepository = this.resolveExportRepository(databaseHandle);
     if (databaseHandle !== undefined && userPublicId !== undefined) {
       const cancelled = await this.isExportJobCancelled({
@@ -313,14 +334,14 @@ export class UserDataExportService {
     const s3Key = await withAppDatabaseContext(
       PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
       async (scopedDatabaseHandle) =>
-        this.resolveExportArtifactS3Key(
-          {
+        this.resolveExportArtifactS3Key({
+          options: {
             exportPublicId: options.exportPublicId,
             userInternalId: options.userInternalId,
             userPublicId: options.userPublicId,
           },
-          scopedDatabaseHandle,
-        ),
+          databaseHandle: scopedDatabaseHandle,
+        }),
     );
 
     await this.objectStorage.putObject({
@@ -337,33 +358,39 @@ export class UserDataExportService {
       await withAppDatabaseContext(
         PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
         async (scopedDatabaseHandle) => {
-          await this.finalizeExportAfterUpload(
-            {
+          await this.finalizeExportAfterUpload({
+            options: {
               exportPublicId: options.exportPublicId,
               userInternalId: options.userInternalId,
               userPublicId: options.userPublicId,
             },
-            scopedDatabaseHandle,
-          );
+            databaseHandle: scopedDatabaseHandle,
+          });
         },
       );
     } catch (error) {
-      await this.bestEffortDeleteUploadedExportArtifact(s3Key, {
-        exportPublicId: options.exportPublicId,
-        userInternalId: options.userInternalId,
+      await this.bestEffortDeleteUploadedExportArtifact({
+        s3Key,
+        context: {
+          exportPublicId: options.exportPublicId,
+          userInternalId: options.userInternalId,
+        },
       });
       throw error;
     }
   }
 
-  private async finalizeExportAfterUpload(
+  private async finalizeExportAfterUpload({
+    options,
+    databaseHandle,
+  }: {
     options: {
       exportPublicId: string;
       userInternalId: number;
       userPublicId: string;
-    },
-    databaseHandle: WorkerDatabaseHandle,
-  ): Promise<void> {
+    };
+    databaseHandle: WorkerDatabaseHandle;
+  }): Promise<void> {
     const cancelled = await this.isExportJobCancelled({
       exportPublicId: options.exportPublicId,
       userInternalId: options.userInternalId,
@@ -391,24 +418,30 @@ export class UserDataExportService {
     }
   }
 
-  private async bestEffortDeleteUploadedExportArtifact(
-    s3Key: string,
-    context: { exportPublicId: string; userInternalId: number },
-  ): Promise<void> {
+  private async bestEffortDeleteUploadedExportArtifact({
+    s3Key,
+    context,
+  }: {
+    s3Key: string;
+    context: { exportPublicId: string; userInternalId: number };
+  }): Promise<void> {
     const objectDelete = await this.objectStorage.deleteObject(s3Key);
     if (objectDelete.kind !== 'deleted') {
       logger.warn({ ...context, s3Key }, 'user-data-export.complete.s3DeleteFailed');
     }
   }
 
-  private async resolveExportArtifactS3Key(
+  private async resolveExportArtifactS3Key({
+    options,
+    databaseHandle,
+  }: {
     options: {
       exportPublicId: string;
       userInternalId: number;
       userPublicId: string;
-    },
-    databaseHandle: WorkerDatabaseHandle,
-  ): Promise<string> {
+    };
+    databaseHandle: WorkerDatabaseHandle;
+  }): Promise<string> {
     const cancelled = await this.isExportJobCancelled({
       exportPublicId: options.exportPublicId,
       userInternalId: options.userInternalId,
@@ -431,12 +464,17 @@ export class UserDataExportService {
     return row.s3_key;
   }
 
-  async failExportJob(
-    exportPublicId: string,
-    userInternalId: number,
-    errorCode: string,
-    databaseHandle?: WorkerDatabaseHandle,
-  ): Promise<void> {
+  async failExportJob({
+    exportPublicId,
+    userInternalId,
+    errorCode,
+    databaseHandle,
+  }: {
+    exportPublicId: string;
+    userInternalId: number;
+    errorCode: string;
+    databaseHandle?: WorkerDatabaseHandle | undefined;
+  }): Promise<void> {
     const exportRepository = this.resolveExportRepository(databaseHandle);
     await exportRepository.updateStatus(exportPublicId, userInternalId, {
       status: USER_DATA_EXPORT_STATUSES.FAILED,
@@ -445,7 +483,13 @@ export class UserDataExportService {
     });
   }
 
-  async deleteAllExportsForUser(userInternalId: number, userPublicId: string): Promise<void> {
+  async deleteAllExportsForUser({
+    userInternalId,
+    userPublicId,
+  }: {
+    userInternalId: number;
+    userPublicId: string;
+  }): Promise<void> {
     // auth.user_data_exports is FORCE RLS keyed on app.current_user_public_id. Offboarding can be initiated
     // by an admin, so pin the context to the TARGET user (not the caller) so the owner-access policy
     // matches and the rows are actually removed.
@@ -540,22 +584,26 @@ export class UserDataExportService {
     });
 
     const truncatedCategories: string[] = [];
-    const userMemberships = capExportCategory(
-      userMembershipsRaw,
-      'organizations',
+    const userMemberships = capExportCategory({
+      rows: userMembershipsRaw,
+      category: 'organizations',
       truncatedCategories,
-    );
-    const userSessions = capExportCategory(userSessionsRaw, 'sessions', truncatedCategories);
-    const userNotifications = capExportCategory(
-      userNotificationsRaw,
-      'notifications',
+    });
+    const userSessions = capExportCategory({
+      rows: userSessionsRaw,
+      category: 'sessions',
       truncatedCategories,
-    );
-    const userAuditLogs = capExportCategory(
-      userAuditLogsRaw,
-      'audit_activity',
+    });
+    const userNotifications = capExportCategory({
+      rows: userNotificationsRaw,
+      category: 'notifications',
       truncatedCategories,
-    );
+    });
+    const userAuditLogs = capExportCategory({
+      rows: userAuditLogsRaw,
+      category: 'audit_activity',
+      truncatedCategories,
+    });
 
     if (truncatedCategories.length > 0) {
       logger.warn(

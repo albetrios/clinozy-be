@@ -90,10 +90,13 @@ describe('UserNotificationPreferencesService', () => {
   it('put throws when user missing', async () => {
     vi.mocked(userService.resolveInternalIdByPublicId).mockResolvedValue(null);
     await expect(
-      service.put(asUserScope('missing'), {
-        preferences: [
-          { notification_type: 'subscription.updated', channel: 'EMAIL', is_enabled: true },
-        ],
+      service.put({
+        scope: asUserScope('missing'),
+        body: {
+          preferences: [
+            { notification_type: 'subscription.updated', channel: 'EMAIL', is_enabled: true },
+          ],
+        },
       }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
@@ -102,15 +105,18 @@ describe('UserNotificationPreferencesService', () => {
     // Organization-scoped preferences are tenancy notification policies; the strict body schema
     // refuses the unknown key before the repository is reached.
     await expect(
-      service.put(asUserScope('user_public'), {
-        preferences: [
-          {
-            notification_type: 'subscription.updated',
-            channel: 'EMAIL',
-            organization_id: 1,
-            is_enabled: true,
-          },
-        ],
+      service.put({
+        scope: asUserScope('user_public'),
+        body: {
+          preferences: [
+            {
+              notification_type: 'subscription.updated',
+              channel: 'EMAIL',
+              organization_id: 1,
+              is_enabled: true,
+            },
+          ],
+        },
       }),
     ).rejects.toBeInstanceOf(ValidationError);
 
@@ -118,10 +124,13 @@ describe('UserNotificationPreferencesService', () => {
   });
 
   it('put persists the user-wide preferences', async () => {
-    await service.put(asUserScope('user_public'), {
-      preferences: [
-        { notification_type: 'subscription.updated', channel: 'EMAIL', is_enabled: true },
-      ],
+    await service.put({
+      scope: asUserScope('user_public'),
+      body: {
+        preferences: [
+          { notification_type: 'subscription.updated', channel: 'EMAIL', is_enabled: true },
+        ],
+      },
     });
 
     expect(preferencesRepository.replaceAll).toHaveBeenCalledWith(
@@ -139,23 +148,29 @@ describe('UserNotificationPreferencesService', () => {
 
   it('put returns empty list when replaceAll returns no rows', async () => {
     vi.mocked(preferencesRepository.replaceAll).mockResolvedValue([]);
-    const result = await service.put(asUserScope('user_public'), {
-      preferences: [
-        { notification_type: 'subscription.updated', channel: 'EMAIL', is_enabled: false },
-      ],
+    const result = await service.put({
+      scope: asUserScope('user_public'),
+      body: {
+        preferences: [
+          { notification_type: 'subscription.updated', channel: 'EMAIL', is_enabled: false },
+        ],
+      },
     });
     expect(result).toEqual([]);
   });
 
   it('put replaces preferences for user', async () => {
-    const result = await service.put(asUserScope('user_public'), {
-      preferences: [
-        {
-          notification_type: 'subscription.updated',
-          channel: 'EMAIL',
-          is_enabled: false,
-        },
-      ],
+    const result = await service.put({
+      scope: asUserScope('user_public'),
+      body: {
+        preferences: [
+          {
+            notification_type: 'subscription.updated',
+            channel: 'EMAIL',
+            is_enabled: false,
+          },
+        ],
+      },
     });
     expect(preferencesRepository.replaceAll).toHaveBeenCalled();
     expect(result).toHaveLength(1);

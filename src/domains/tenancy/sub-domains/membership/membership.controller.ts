@@ -34,7 +34,7 @@ function createMembershipReadHandlers(service: MembershipService) {
     listMemberships: async (request: FastifyRequest, _reply: FastifyReply) => {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
-      const result = await service.list(scope, request.query);
+      const result = await service.list({ scope, query: request.query });
       return paginatedResponse(result.items, getRequestIdentifier(request), {
         per_page: result.limit,
         next: result.next_cursor,
@@ -46,14 +46,14 @@ function createMembershipReadHandlers(service: MembershipService) {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const membershipId = readMembershipIdParam(request);
-      const data = await service.getByPublicId(scope, membershipId);
+      const data = await service.getByPublicId({ scope, membership_public_id: membershipId });
       return successResponse(data, getRequestIdentifier(request));
     },
     getMembershipPermissions: async (request: FastifyRequest, _reply: FastifyReply) => {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const membershipId = readMembershipIdParam(request);
-      const data = await service.getPermissions(scope, membershipId);
+      const data = await service.getPermissions({ scope, membership_public_id: membershipId });
       return successResponse(data, getRequestIdentifier(request));
     },
   };
@@ -68,8 +68,13 @@ function createMembershipWriteHandlers(service: MembershipService) {
       const _organizationId = scope.organizationPublicId;
       // REQ-1: "Add member" — the raw invitation token is delivered ONLY via email, never returned;
       // the response carries the created INVITED membership (with its embedded invitation ref).
-      const data = await service.create(scope, request.body, getActingUserPublicId(auth), {
-        requestId: getRequestIdentifier(request),
+      const data = await service.create({
+        scope,
+        body: request.body,
+        invited_by_user_public_id: getActingUserPublicId(auth),
+        options: {
+          requestId: getRequestIdentifier(request),
+        },
       });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
@@ -90,13 +95,13 @@ function createMembershipWriteHandlers(service: MembershipService) {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const membershipId = readMembershipIdParam(request);
-      const data = await service.update(
+      const data = await service.update({
         scope,
-        membershipId,
-        request.body,
-        getActingUserPublicId(auth),
-        membershipActionOptions(auth),
-      );
+        membership_public_id: membershipId,
+        body: request.body,
+        updated_by_user_public_id: getActingUserPublicId(auth),
+        options: membershipActionOptions(auth),
+      });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'tenancy.membership.update',
@@ -116,7 +121,11 @@ function createMembershipWriteHandlers(service: MembershipService) {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const membershipId = readMembershipIdParam(request);
-      await service.delete(scope, membershipId, membershipActionOptions(auth));
+      await service.delete({
+        scope,
+        membership_public_id: membershipId,
+        options: membershipActionOptions(auth),
+      });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'tenancy.membership.delete',
@@ -130,7 +139,7 @@ function createMembershipWriteHandlers(service: MembershipService) {
       const auth = requireAuth(request);
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
-      await service.leaveOrganization(scope, auth.userId);
+      await service.leaveOrganization({ scope, user_public_id: auth.userId });
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'tenancy.membership.leave',
@@ -143,7 +152,11 @@ function createMembershipWriteHandlers(service: MembershipService) {
       const auth = requireAuth(request);
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
-      const data = await service.transferOwnership(scope, request.body, auth.userId);
+      const data = await service.transferOwnership({
+        scope,
+        body: request.body,
+        current_user_public_id: auth.userId,
+      });
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'tenancy.membership.transfer_ownership',

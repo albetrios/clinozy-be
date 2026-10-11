@@ -142,22 +142,22 @@ describe('WebhookService', () => {
     const listed = await service.list({ scope });
     expect(listed.items).toHaveLength(1);
     expect(listed.items[0]).toMatchObject({ id: webhook.public_id, url: webhook.url });
-    const found = await service.get(scope, 'webhook_public');
+    const found = await service.get({ scope, webhook_public_id: 'webhook_public' });
     expect(found).toMatchObject({ id: webhook.public_id, url: webhook.url });
     expect(found).not.toHaveProperty('encrypted_secret');
     expect(webhookRepository.findByPublicId).toHaveBeenCalledWith(
       webhook.public_id,
       organization.id,
     );
-    const created = await service.create(
+    const created = await service.create({
       scope,
-      {
+      body: {
         url: 'https://example.com/hook',
         events: ['subscription.updated'],
         secret: 'sixteenCharSecret',
       },
-      'user_public',
-    );
+      created_by_user_public_id: 'user_public',
+    });
     expect(created).toMatchObject({ id: webhook.public_id, url: webhook.url });
     expect(webhookRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -168,12 +168,12 @@ describe('WebhookService', () => {
         created_by_user_id: 10,
       }),
     );
-    const updated = await service.update(
+    const updated = await service.update({
       scope,
-      'webhook_public',
-      { is_enabled: false },
-      'user_public',
-    );
+      webhook_public_id: 'webhook_public',
+      body: { is_enabled: false },
+      updated_by_user_public_id: 'user_public',
+    });
     expect(updated.id).toBe(webhook.public_id);
     expect(webhookRepository.update).toHaveBeenCalledWith(
       webhook.public_id,
@@ -182,7 +182,7 @@ describe('WebhookService', () => {
       10,
       {},
     );
-    await service.delete(scope, 'webhook_public');
+    await service.delete({ scope, webhook_public_id: 'webhook_public' });
     expect(webhookRepository.softDelete).toHaveBeenCalledWith(webhook.public_id, organization.id);
   });
 
@@ -313,16 +313,25 @@ describe('WebhookService', () => {
 
   it('get throws NotFound when webhook is missing', async () => {
     vi.mocked(webhookRepository.findByPublicId).mockResolvedValue(null);
-    await expect(service.get(scope, 'missing')).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.get({ scope, webhook_public_id: 'missing' })).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
   });
 
   it('update and delete throw NotFound when webhook is missing', async () => {
     vi.mocked(webhookRepository.update).mockResolvedValue(null);
     vi.mocked(webhookRepository.softDelete).mockResolvedValue(null);
     await expect(
-      service.update(scope, 'missing', { is_enabled: false }, 'user_public'),
+      service.update({
+        scope,
+        webhook_public_id: 'missing',
+        body: { is_enabled: false },
+        updated_by_user_public_id: 'user_public',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
-    await expect(service.delete(scope, 'missing')).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.delete({ scope, webhook_public_id: 'missing' })).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
   });
 
   it('testWebhook throws NotFound when webhook is missing', async () => {
@@ -439,12 +448,12 @@ describe('WebhookService', () => {
   });
 
   it('update encrypts secret when provided in body', async () => {
-    await service.update(
+    await service.update({
       scope,
-      'webhook_public',
-      { secret: 'new-signing-secret-value' },
-      'user_public',
-    );
+      webhook_public_id: 'webhook_public',
+      body: { secret: 'new-signing-secret-value' },
+      updated_by_user_public_id: 'user_public',
+    });
     expect(webhookRepository.update).toHaveBeenCalledWith(
       'webhook_public',
       organization.id,
@@ -464,7 +473,12 @@ describe('WebhookService', () => {
       secret_rotated_at: new Date(Date.now() - 60 * 60 * 1000),
     } as never);
     await expect(
-      service.update(scope, 'webhook_public', { secret: 'another-new-secret-value' }, 'u'),
+      service.update({
+        scope,
+        webhook_public_id: 'webhook_public',
+        body: { secret: 'another-new-secret-value' },
+        updated_by_user_public_id: 'u',
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
     expect(webhookRepository.update).not.toHaveBeenCalled();
   });
@@ -482,12 +496,12 @@ describe('WebhookService', () => {
     vi.mocked(webhookRepository.update).mockResolvedValueOnce(null as never);
 
     await expect(
-      service.update(
+      service.update({
         scope,
-        'webhook_public',
-        { secret: 'race-losing-secret-value' },
-        'user_public',
-      ),
+        webhook_public_id: 'webhook_public',
+        body: { secret: 'race-losing-secret-value' },
+        updated_by_user_public_id: 'user_public',
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
     // Unlike the pre-check 409, the UPDATE WAS attempted — the race was lost at the DB, not the gate.
     expect(webhookRepository.update).toHaveBeenCalled();
@@ -500,12 +514,12 @@ describe('WebhookService', () => {
     vi.mocked(webhookRepository.update).mockResolvedValueOnce(null as never);
 
     await expect(
-      service.update(
+      service.update({
         scope,
-        'webhook_public',
-        { secret: 'secret-for-vanished-hook' },
-        'user_public',
-      ),
+        webhook_public_id: 'webhook_public',
+        body: { secret: 'secret-for-vanished-hook' },
+        updated_by_user_public_id: 'user_public',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -514,12 +528,12 @@ describe('WebhookService', () => {
       ...webhook,
       secret_rotated_at: new Date(Date.now() - 48 * 60 * 60 * 1000), // past the 24h window
     } as never);
-    await service.update(
+    await service.update({
       scope,
-      'webhook_public',
-      { secret: 'another-new-secret-value' },
-      'user_public',
-    );
+      webhook_public_id: 'webhook_public',
+      body: { secret: 'another-new-secret-value' },
+      updated_by_user_public_id: 'user_public',
+    });
     expect(webhookRepository.update).toHaveBeenCalled();
   });
 
@@ -536,11 +550,11 @@ describe('WebhookService', () => {
 
   it('create passes undefined created_by_user_id when user cannot be resolved', async () => {
     vi.mocked(organizationService.resolveUserInternalIdByPublicId).mockResolvedValue(null);
-    await service.create(
+    await service.create({
       scope,
-      { url: 'https://example.com/hook', events: ['subscription.updated'] },
-      'unknown_user',
-    );
+      body: { url: 'https://example.com/hook', events: ['subscription.updated'] },
+      created_by_user_public_id: 'unknown_user',
+    });
     const createPayload = vi
       .mocked(webhookRepository.create)
       .mock.calls.at(-1)?.[0] as unknown as Record<string, unknown>;
@@ -552,11 +566,11 @@ describe('WebhookService', () => {
     // is that an omitted secret becomes a STRONG one — an empty/weak signing secret makes the HMAC
     // forgeable. encryptFieldSecret is the real impl in this suite (only decryptFieldSecret is
     // stubbed), so the stored ciphertext is genuine and can be reversed with the real decryptor.
-    await service.create(
+    await service.create({
       scope,
-      { url: 'https://example.com/hook', events: ['subscription.updated'] },
-      'user_public',
-    );
+      body: { url: 'https://example.com/hook', events: ['subscription.updated'] },
+      created_by_user_public_id: 'user_public',
+    });
 
     const createPayload = vi.mocked(webhookRepository.create).mock.calls.at(-1)?.[0] as {
       encrypted_secret: string;

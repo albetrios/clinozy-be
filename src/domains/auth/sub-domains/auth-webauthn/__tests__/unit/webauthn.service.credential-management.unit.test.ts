@@ -110,7 +110,10 @@ describe('WebauthnService — passkey management (sec-r5-M3)', () => {
         buildCredential('wac_bbbbbbbbbbbbbbbbbbbbb', 2),
       ] as never);
 
-      await service.revokeCredential(user.public_id, 'wac_aaaaaaaaaaaaaaaaaaaaa');
+      await service.revokeCredential({
+        userPublicId: user.public_id,
+        credentialPublicId: 'wac_aaaaaaaaaaaaaaaaaaaaa',
+      });
 
       expect(authMethodService.acquireCredentialMutationLock).toHaveBeenCalledWith(user.id);
       expect(credentialRepository.revokeByUserId).toHaveBeenCalledWith(user.id, 1);
@@ -124,7 +127,10 @@ describe('WebauthnService — passkey management (sec-r5-M3)', () => {
       ] as never);
 
       await expect(
-        service.revokeCredential(user.public_id, 'wac_zzzzzzzzzzzzzzzzzzzzz'),
+        service.revokeCredential({
+          userPublicId: user.public_id,
+          credentialPublicId: 'wac_zzzzzzzzzzzzzzzzzzzzz',
+        }),
       ).rejects.toBeInstanceOf(NotFoundError);
       expect(credentialRepository.revokeByUserId).not.toHaveBeenCalled();
     });
@@ -136,7 +142,10 @@ describe('WebauthnService — passkey management (sec-r5-M3)', () => {
       vi.mocked(authMethodService.hasLoginCapableMethod).mockResolvedValue(false);
 
       await expect(
-        service.revokeCredential(user.public_id, 'wac_aaaaaaaaaaaaaaaaaaaaa'),
+        service.revokeCredential({
+          userPublicId: user.public_id,
+          credentialPublicId: 'wac_aaaaaaaaaaaaaaaaaaaaa',
+        }),
       ).rejects.toBeInstanceOf(ConflictError);
       expect(credentialRepository.revokeByUserId).not.toHaveBeenCalled();
     });
@@ -147,7 +156,10 @@ describe('WebauthnService — passkey management (sec-r5-M3)', () => {
       ] as never);
       vi.mocked(authMethodService.hasLoginCapableMethod).mockResolvedValue(true);
 
-      await service.revokeCredential(user.public_id, 'wac_aaaaaaaaaaaaaaaaaaaaa');
+      await service.revokeCredential({
+        userPublicId: user.public_id,
+        credentialPublicId: 'wac_aaaaaaaaaaaaaaaaaaaaa',
+      });
 
       expect(authMethodService.hasLoginCapableMethod).toHaveBeenCalledWith(user.public_id);
       expect(credentialRepository.revokeByUserId).toHaveBeenCalledWith(user.id, 1);

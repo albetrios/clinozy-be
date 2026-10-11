@@ -134,11 +134,15 @@ import { enqueueSubscriptionSeatSyncBestEffort } from './queues/subscription-sea
  * chosen-key cross-tenant DoS. Prefixing with `op:org` keeps each tenant's key space disjoint.
  * Returns `undefined` when no client key was supplied (the caller passes nothing to Stripe).
  */
-export function buildStripeIdempotencyKey(
-  operation: string,
-  organizationPublicId: string,
-  clientKey: string | undefined,
-): string | undefined {
+export function buildStripeIdempotencyKey({
+  operation,
+  organizationPublicId,
+  clientKey,
+}: {
+  operation: string;
+  organizationPublicId: string;
+  clientKey: string | undefined;
+}): string | undefined {
   return clientKey === undefined ? undefined : `${operation}:${organizationPublicId}:${clientKey}`;
 }
 
@@ -150,20 +154,26 @@ export function buildStripeIdempotencyKey(
 // `customer.subscription.updated` webhook (un-self-healing divergence). Only a
 // genuinely local-only subscription (no `provider_subscription_id`) may change to
 // a price-less plan. Extracted so changePlan stays within its complexity budget.
-function assertProviderPriceForStripeBackedPlanChange(
-  providerSubscriptionId: string | null,
-  providerPriceId: string | null | undefined,
-): void {
+function assertProviderPriceForStripeBackedPlanChange({
+  providerSubscriptionId,
+  providerPriceId,
+}: {
+  providerSubscriptionId: string | null;
+  providerPriceId: string | null | undefined;
+}): void {
   if (providerSubscriptionId && !providerPriceId) {
     throw new UnprocessableEntityError('errors:planNotAvailableForBillingCycle');
   }
 }
 
 /** Whether a customer-visible subscription field differs between two states. */
-function subscriptionPublicStateChanged(
-  before: SubscriptionPublicState,
-  after: SubscriptionPublicState,
-): boolean {
+function subscriptionPublicStateChanged({
+  before,
+  after,
+}: {
+  before: SubscriptionPublicState;
+  after: SubscriptionPublicState;
+}): boolean {
   const time = (value: Date | string | null) => (value === null ? null : new Date(value).getTime());
   return (
     before.status !== after.status ||
@@ -239,10 +249,13 @@ export class SubscriptionService {
    * - **Notes:** the count is resolved ONCE per request and reused across every row (a list of an
    *   org's subscriptions all share the same organization seat usage).
    */
-  private async decorateWithSeatCounts<TRow extends SubscriptionRowWithSeatState>(
-    organization_public_id: string,
-    rows: TRow[],
-  ): Promise<(TRow & { seats_total: number | null; seats_used: number })[]> {
+  private async decorateWithSeatCounts<TRow extends SubscriptionRowWithSeatState>({
+    organization_public_id,
+    rows,
+  }: {
+    organization_public_id: string;
+    rows: TRow[];
+  }): Promise<(TRow & { seats_total: number | null; seats_used: number })[]> {
     let seatsUsed = 0;
     if (this.membershipSeatUsage) {
       seatsUsed = await this.membershipSeatUsage.countActiveMembers({
@@ -308,8 +321,15 @@ export class SubscriptionService {
       options.subscription.organization_id,
     );
     if (!row) return;
-    if (options.previous && !subscriptionPublicStateChanged(options.previous, row)) return;
-    const [decorated] = await this.decorateWithSeatCounts(organizationPublicId, [row]);
+    if (
+      options.previous &&
+      !subscriptionPublicStateChanged({ before: options.previous, after: row })
+    )
+      return;
+    const [decorated] = await this.decorateWithSeatCounts({
+      organization_public_id: organizationPublicId,
+      rows: [row],
+    });
     const event = buildDomainEvent<OrganizationResourceEventPayload>(options.type, {
       organization_public_id: organizationPublicId,
       data: SubscriptionSerializer.one(decorated!),
@@ -393,7 +413,13 @@ export class SubscriptionService {
    * - **Notes:** the cross-domain entry point tenancy's `MembershipService` calls after a member
    *   add/remove commits, and `changePlan` calls after a successful plan change.
    */
-  enqueueSeatQuantitySync(organization_public_id: string, idempotencyKey?: string): void {
+  enqueueSeatQuantitySync({
+    organization_public_id,
+    idempotencyKey,
+  }: {
+    organization_public_id: string;
+    idempotencyKey?: string | undefined;
+  }): void {
     // audit #1: stamp a STABLE idempotency token so every RETRY of the same job reuses it — the
     // Stripe quantity update is then deduped at Stripe instead of re-issued (which, with
     // proration/usage billing, would post duplicate proration line items). The member add/remove hot
@@ -404,8 +430,11 @@ export class SubscriptionService {
     // with the same resulting seat count collide on ONE Stripe idempotency key across different
     // subscriptions (Stripe 400 param-mismatch → retries exhaust → seats never sync).
     const seatSyncToken =
-      buildStripeIdempotencyKey('sub-seat-sync', organization_public_id, idempotencyKey) ??
-      `seat-sync:${organization_public_id}:${randomUUID()}`;
+      buildStripeIdempotencyKey({
+        operation: 'sub-seat-sync',
+        organizationPublicId: organization_public_id,
+        clientKey: idempotencyKey,
+      }) ?? `seat-sync:${organization_public_id}:${randomUUID()}`;
     enqueueSubscriptionSeatSyncBestEffort(
       omitUndefined({
         organizationPublicId: organization_public_id,
@@ -432,10 +461,13 @@ export class SubscriptionService {
    * - **Notes:** safe to call from the seat-sync worker directly (it manages its own contexts, like
    *   `cancelActiveForOrganizationOffboarding`); never holds a checkout across the Stripe call.
    */
-  async syncSeatQuantityForOrganization(
-    organization_public_id: string,
-    idempotencyKey?: string,
-  ): Promise<void> {
+  async syncSeatQuantityForOrganization({
+    organization_public_id,
+    idempotencyKey,
+  }: {
+    organization_public_id: string;
+    idempotencyKey?: string | undefined;
+  }): Promise<void> {
     if (!this.membershipSeatUsage) {
       logger.warn(
         { organizationPublicId: organization_public_id },
@@ -500,13 +532,19 @@ export class SubscriptionService {
     );
   }
 
-  async syncFromStripeProviderSubscription(
-    provider_subscription_id: string,
-    data: SubscriptionUpdateData,
-    stripe_event_created_at: Date,
-    repositoryOverride?: SubscriptionRepository,
-    reconciliation?: StripeSubscriptionOrderingState,
-  ) {
+  async syncFromStripeProviderSubscription({
+    provider_subscription_id,
+    data,
+    stripe_event_created_at,
+    repositoryOverride,
+    reconciliation,
+  }: {
+    provider_subscription_id: string;
+    data: SubscriptionUpdateData;
+    stripe_event_created_at: Date;
+    repositoryOverride?: SubscriptionRepository | undefined;
+    reconciliation?: StripeSubscriptionOrderingState | undefined;
+  }) {
     const repository = repositoryOverride ?? this.repository;
     return repository.syncFromStripeProviderSubscription(
       provider_subscription_id,
@@ -516,11 +554,15 @@ export class SubscriptionService {
     );
   }
 
-  async markCanceledByStripeProviderSubscriptionId(
-    provider_subscription_id: string,
-    stripe_event_created_at: Date,
-    repositoryOverride?: SubscriptionRepository,
-  ) {
+  async markCanceledByStripeProviderSubscriptionId({
+    provider_subscription_id,
+    stripe_event_created_at,
+    repositoryOverride,
+  }: {
+    provider_subscription_id: string;
+    stripe_event_created_at: Date;
+    repositoryOverride?: SubscriptionRepository | undefined;
+  }) {
     const repository = repositoryOverride ?? this.repository;
     return repository.markCanceledByProviderSubscriptionId(
       provider_subscription_id,
@@ -534,10 +576,13 @@ export class SubscriptionService {
    * when the sync UPDATE returns null. Routed through the service so tests inject
    * the worker-scoped repository the same way they do for sync/cancel.
    */
-  async existsByStripeProviderSubscriptionId(
-    provider_subscription_id: string,
-    repositoryOverride?: SubscriptionRepository,
-  ): Promise<boolean> {
+  async existsByStripeProviderSubscriptionId({
+    provider_subscription_id,
+    repositoryOverride,
+  }: {
+    provider_subscription_id: string;
+    repositoryOverride?: SubscriptionRepository | undefined;
+  }): Promise<boolean> {
     const repository = repositoryOverride ?? this.repository;
     return repository.existsByProviderSubscriptionId(provider_subscription_id);
   }
@@ -657,11 +702,17 @@ export class SubscriptionService {
         await this.organizationService.requireOrganizationByPublicId(organization_public_id);
       const rows = await this.repository.listByOrganization(organization.id);
       // REQ-4: enrich each row with seats_total / seats_used (cross-domain membership count).
-      return this.decorateWithSeatCounts(organization_public_id, rows);
+      return this.decorateWithSeatCounts({ organization_public_id, rows });
     });
   }
 
-  async get(scope: OrganizationPrincipalDatabaseScope, subscription_public_id: string) {
+  async get({
+    scope,
+    subscription_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    subscription_public_id: string;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext(scope, async () => {
       const organization =
@@ -672,7 +723,10 @@ export class SubscriptionService {
       );
       if (!subscription) throw new NotFoundError('Subscription');
       // REQ-4: attach seats_total / seats_used to the single subscription.
-      const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [subscription]);
+      const [decorated] = await this.decorateWithSeatCounts({
+        organization_public_id,
+        rows: [subscription],
+      });
       return decorated!;
     });
   }
@@ -681,7 +735,13 @@ export class SubscriptionService {
    * Returns the Stripe PaymentIntent `client_secret` for an INCOMPLETE subscription so the
    * frontend can confirm the first payment. Stripe network I/O runs outside RLS context.
    */
-  async getPaymentSetup(scope: OrganizationPrincipalDatabaseScope, subscription_public_id: string) {
+  async getPaymentSetup({
+    scope,
+    subscription_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    subscription_public_id: string;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     const providerSubscriptionId = await withAppDatabaseContext(scope, async () => {
       const organization =
@@ -713,12 +773,17 @@ export class SubscriptionService {
     return { client_secret };
   }
 
-  async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    created_by_user_public_id: string | undefined,
-    idempotencyKey?: string,
-  ) {
+  async create({
+    scope,
+    body,
+    created_by_user_public_id,
+    idempotencyKey,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    created_by_user_public_id: string | undefined;
+    idempotencyKey?: string | undefined;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateCreateSubscription(body);
     // B4: serialize concurrent creates for one organization across the pre-check → Stripe create → insert
@@ -782,11 +847,11 @@ export class SubscriptionService {
           billingCycle: parsed.billing_cycle,
           quantity: Math.max(1, seatsUsed),
           // audit #3: namespace the client key by organization before it reaches Stripe's global key space.
-          idempotencyKey: buildStripeIdempotencyKey(
-            'sub-create',
-            organization_public_id,
-            idempotencyKey,
-          ),
+          idempotencyKey: buildStripeIdempotencyKey({
+            operation: 'sub-create',
+            organizationPublicId: organization_public_id,
+            clientKey: idempotencyKey,
+          }),
         }),
       );
 
@@ -838,7 +903,8 @@ export class SubscriptionService {
           const existing = await withAppDatabaseContext(scope, () =>
             this.repository.findByProviderSubscriptionId(providerSubscriptionId),
           );
-          if (existing) return this.completeCreatedSubscription(organization_public_id, existing);
+          if (existing)
+            return this.completeCreatedSubscription({ organization_public_id, created: existing });
         }
         // Only a failed write is compensated (the local row was not created): a failure after the
         // commit must never cancel a subscription the organization now has.
@@ -852,7 +918,7 @@ export class SubscriptionService {
         }
         throw error;
       }
-      return this.completeCreatedSubscription(organization_public_id, created, idempotencyKey);
+      return this.completeCreatedSubscription({ organization_public_id, created, idempotencyKey });
     };
 
     try {
@@ -883,13 +949,20 @@ export class SubscriptionService {
    * subscription has no Stripe-synced `seats` yet, so seats_total falls back to the plan's
    * included_seats; seats_used reflects current memberships.
    */
-  private async completeCreatedSubscription(
-    organization_public_id: string,
-    created: Awaited<ReturnType<SubscriptionRepository['create']>>,
-    idempotencyKey?: string,
-  ) {
-    this.enqueueSeatQuantitySync(organization_public_id, idempotencyKey);
-    const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [created]);
+  private async completeCreatedSubscription({
+    organization_public_id,
+    created,
+    idempotencyKey,
+  }: {
+    organization_public_id: string;
+    created: Awaited<ReturnType<SubscriptionRepository['create']>>;
+    idempotencyKey?: string | undefined;
+  }) {
+    this.enqueueSeatQuantitySync({ organization_public_id, idempotencyKey });
+    const [decorated] = await this.decorateWithSeatCounts({
+      organization_public_id,
+      rows: [created],
+    });
     return decorated!;
   }
 
@@ -910,10 +983,13 @@ export class SubscriptionService {
    * - **Notes:** suspended members re-consume a seat on reactivation and are re-checked against the
    *   ceiling (the F1 guard), so they can be restored after an upgrade.
    */
-  private async suspendExcessMembersForDowngrade(
-    organizationPublicId: string,
-    newPlan: { included_seats: number | null },
-  ): Promise<void> {
+  private async suspendExcessMembersForDowngrade({
+    organizationPublicId,
+    newPlan,
+  }: {
+    organizationPublicId: string;
+    newPlan: { included_seats: number | null };
+  }): Promise<void> {
     await this.suspendExcessMembersToCeiling({
       organizationPublicId,
       ceiling: newPlan.included_seats,
@@ -1006,12 +1082,17 @@ export class SubscriptionService {
     await runEnqueueAfterCommit(() => this.enforceFreeSeatCeiling(organization.public_id));
   }
 
-  async changePlan(
-    scope: OrganizationPrincipalDatabaseScope,
-    subscription_public_id: string,
-    body: unknown,
-    idempotencyKey?: string,
-  ) {
+  async changePlan({
+    scope,
+    subscription_public_id,
+    body,
+    idempotencyKey,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    subscription_public_id: string;
+    body: unknown;
+    idempotencyKey?: string | undefined;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateChangePlan(body);
     // Two concurrent plan changes would both call Stripe and both write the plan from the same
@@ -1069,10 +1150,10 @@ export class SubscriptionService {
           // audit H2: fail closed before any local write when a Stripe-backed subscription
           // would change to a plan with no Stripe price for its cycle (extracted to keep
           // changePlan's cognitive complexity within budget).
-          assertProviderPriceForStripeBackedPlanChange(
-            subscription.provider_subscription_id,
+          assertProviderPriceForStripeBackedPlanChange({
+            providerSubscriptionId: subscription.provider_subscription_id,
             providerPriceId,
-          );
+          });
 
           // Stripe network call — outside any database context. Fail-closed: a provider
           // failure throws ServiceUnavailableError here (before any local write), so the
@@ -1082,7 +1163,11 @@ export class SubscriptionService {
             await this.paymentProvider.updateSubscriptionPrice(
               subscription.provider_subscription_id,
               providerPriceId,
-              buildStripeIdempotencyKey('sub-change-plan', organization_public_id, idempotencyKey),
+              buildStripeIdempotencyKey({
+                operation: 'sub-change-plan',
+                organizationPublicId: organization_public_id,
+                clientKey: idempotencyKey,
+              }),
             );
             providerPlanUpdated = true;
           }
@@ -1111,14 +1196,18 @@ export class SubscriptionService {
             // most-recently-joined non-owner members down to the new allowance (best-effort; never rolls
             // back the committed plan change). Runs before the Stripe quantity sync so it reconciles to the
             // post-suspension headcount.
-            await this.suspendExcessMembersForDowngrade(organization_public_id, plan);
+            await this.suspendExcessMembersForDowngrade({
+              organizationPublicId: organization_public_id,
+              newPlan: plan,
+            });
             // REQ-4: a plan change can change the seat allowance and proration, so reconcile the
             // Stripe subscription quantity to the current member count out-of-band (never inline —
             // a Stripe outage must not fail the plan change). No-op for local-only subscriptions.
-            this.enqueueSeatQuantitySync(organization_public_id, idempotencyKey);
-            const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [
-              updated,
-            ]);
+            this.enqueueSeatQuantitySync({ organization_public_id, idempotencyKey });
+            const [decorated] = await this.decorateWithSeatCounts({
+              organization_public_id,
+              rows: [updated],
+            });
             return decorated!;
           } catch (error) {
             if (providerPlanUpdated && subscription.provider_subscription_id) {
@@ -1147,11 +1236,15 @@ export class SubscriptionService {
     }
   }
 
-  async cancel(
-    scope: OrganizationPrincipalDatabaseScope,
-    subscription_public_id: string,
-    idempotencyKey?: string,
-  ) {
+  async cancel({
+    scope,
+    subscription_public_id,
+    idempotencyKey,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    subscription_public_id: string;
+    idempotencyKey?: string | undefined;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     const { organization, subscription } = await withAppDatabaseContext(scope, async () => {
       const organization =
@@ -1180,7 +1273,11 @@ export class SubscriptionService {
       if (subscription.provider_subscription_id) {
         await this.paymentProvider.cancelSubscriptionImmediately(
           subscription.provider_subscription_id,
-          buildStripeIdempotencyKey('sub-cancel-now', organization_public_id, idempotencyKey),
+          buildStripeIdempotencyKey({
+            operation: 'sub-cancel-now',
+            organizationPublicId: organization_public_id,
+            clientKey: idempotencyKey,
+          }),
         );
       }
       const canceled = await withAppDatabaseContext(scope, async () => {
@@ -1199,9 +1296,10 @@ export class SubscriptionService {
         return row;
       });
       if (!canceled) throw new NotFoundError('Subscription');
-      const [decoratedCanceled] = await this.decorateWithSeatCounts(organization_public_id, [
-        canceled,
-      ]);
+      const [decoratedCanceled] = await this.decorateWithSeatCounts({
+        organization_public_id,
+        rows: [canceled],
+      });
       return decoratedCanceled!;
     }
 
@@ -1209,7 +1307,11 @@ export class SubscriptionService {
     if (subscription.provider_subscription_id) {
       await this.paymentProvider.cancelSubscriptionAtPeriodEnd(
         subscription.provider_subscription_id,
-        buildStripeIdempotencyKey('sub-cancel', organization_public_id, idempotencyKey),
+        buildStripeIdempotencyKey({
+          operation: 'sub-cancel',
+          organizationPublicId: organization_public_id,
+          clientKey: idempotencyKey,
+        }),
       );
     }
 
@@ -1231,7 +1333,10 @@ export class SubscriptionService {
       return row;
     });
     if (!updated) throw new NotFoundError('Subscription');
-    const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [updated]);
+    const [decorated] = await this.decorateWithSeatCounts({
+      organization_public_id,
+      rows: [updated],
+    });
     return decorated!;
   }
 
@@ -1268,11 +1373,11 @@ export class SubscriptionService {
       // id is the stable per-subscription discriminator.
       await this.paymentProvider.cancelSubscriptionImmediately(
         subscription.provider_subscription_id,
-        buildStripeIdempotencyKey(
-          'sub-cancel-offboarding',
-          organization_public_id,
-          subscription.provider_subscription_id,
-        ),
+        buildStripeIdempotencyKey({
+          operation: 'sub-cancel-offboarding',
+          organizationPublicId: organization_public_id,
+          clientKey: subscription.provider_subscription_id,
+        }),
       );
     }
     await withAppDatabaseContext(
@@ -1288,11 +1393,15 @@ export class SubscriptionService {
     );
   }
 
-  async resume(
-    scope: OrganizationPrincipalDatabaseScope,
-    subscription_public_id: string,
-    idempotencyKey?: string,
-  ) {
+  async resume({
+    scope,
+    subscription_public_id,
+    idempotencyKey,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    subscription_public_id: string;
+    idempotencyKey?: string | undefined;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     const { organization, subscription } = await withAppDatabaseContext(scope, async () => {
       const organization =
@@ -1316,7 +1425,11 @@ export class SubscriptionService {
     if (subscription.provider_subscription_id) {
       await this.paymentProvider.resumeSubscription(
         subscription.provider_subscription_id,
-        buildStripeIdempotencyKey('sub-resume', organization_public_id, idempotencyKey),
+        buildStripeIdempotencyKey({
+          operation: 'sub-resume',
+          organizationPublicId: organization_public_id,
+          clientKey: idempotencyKey,
+        }),
       );
     }
 
@@ -1344,7 +1457,10 @@ export class SubscriptionService {
       return row;
     });
     if (!updated) throw new NotFoundError('Subscription');
-    const [decorated] = await this.decorateWithSeatCounts(organization_public_id, [updated]);
+    const [decorated] = await this.decorateWithSeatCounts({
+      organization_public_id,
+      rows: [updated],
+    });
     return decorated!;
   }
 
@@ -1360,7 +1476,13 @@ export class SubscriptionService {
    *   customer yet. Invoices live in Stripe, not our DB — this is a cursor passthrough, not a keyset
    *   query, so it does not use the DB list helpers.
    */
-  async listInvoices(scope: OrganizationPrincipalDatabaseScope, query: unknown) {
+  async listInvoices({
+    scope,
+    query,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    query: unknown;
+  }) {
     const parsed = validateListInvoicesQuery(query);
     // `limit` is optional in the DTO (kept optional in OpenAPI) — apply the shared default here.
     const limit = parsed.limit ?? PAGINATION.DEFAULT_LIMIT;
@@ -1408,10 +1530,13 @@ export class SubscriptionService {
   /**
    * Creates a SetupIntent `client_secret` so the frontend can add a card in-app.
    */
-  async createPaymentMethodSetup(
-    scope: OrganizationPrincipalDatabaseScope,
-    idempotencyKey?: string,
-  ) {
+  async createPaymentMethodSetup({
+    scope,
+    idempotencyKey,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    idempotencyKey?: string | undefined;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     const customerId = await this.resolveStripeCustomerId(scope);
     if (!customerId) {
@@ -1424,7 +1549,11 @@ export class SubscriptionService {
       customerId,
       omitUndefined({
         idempotencyKey: idempotencyKey
-          ? buildStripeIdempotencyKey('pm-setup', organization_public_id, idempotencyKey)
+          ? buildStripeIdempotencyKey({
+              operation: 'pm-setup',
+              organizationPublicId: organization_public_id,
+              clientKey: idempotencyKey,
+            })
           : undefined,
       }),
     );

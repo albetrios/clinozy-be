@@ -1831,6 +1831,7 @@ src/
     │   ├── seed-public-id-entity.global.test.ts
     │   ├── serializer-response-leak.global.test.ts
     │   ├── service-cross-domain-boundary.global.test.ts
+    │   ├── service-object-params.global.test.ts
     │   ├── stryker-mutate-paths.global.test.ts
     │   ├── system-validation.global.test.ts
     │   ├── test-hygiene.global.test.ts

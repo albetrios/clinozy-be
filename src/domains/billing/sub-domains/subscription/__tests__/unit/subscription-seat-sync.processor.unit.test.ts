@@ -18,7 +18,10 @@ describe('processSubscriptionSeatSyncJob (REQ-4)', () => {
 
     await processSubscriptionSeatSyncJob(jobData, service);
 
-    expect(service.syncSeatQuantityForOrganization).toHaveBeenCalledWith('org_public', 'idem-1');
+    expect(service.syncSeatQuantityForOrganization).toHaveBeenCalledWith({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'idem-1',
+    });
   });
 
   it('passes undefined idempotency key through when absent', async () => {
@@ -29,6 +32,9 @@ describe('processSubscriptionSeatSyncJob (REQ-4)', () => {
 
     await processSubscriptionSeatSyncJob(jobData, service);
 
-    expect(service.syncSeatQuantityForOrganization).toHaveBeenCalledWith('org_public', undefined);
+    expect(service.syncSeatQuantityForOrganization).toHaveBeenCalledWith({
+      organization_public_id: 'org_public',
+      idempotencyKey: undefined,
+    });
   });
 });

@@ -241,7 +241,10 @@ describe('Security: Permission route matrix', () => {
         organizationId: organization.id,
         roleId: role.id,
       });
-      await invalidatePermissions(user.public_id, organization.public_id);
+      await invalidatePermissions({
+        userId: user.public_id,
+        organizationId: organization.public_id,
+      });
       // A recent step-up too: some permission routes also sit behind the step-up gate
       // (organization deletion), and the matrix asserts the permission outcome.
       const token = await generateTestToken({

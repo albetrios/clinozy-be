@@ -34,10 +34,10 @@ async function resolveExistingOAuthAccount(parameters: {
   const { authMethodService, userService, provider, profile } = parameters;
   let resolvedUser = parameters.existingUser;
 
-  const existingProviderMethod = await authMethodService.findByProviderUserId(
+  const existingProviderMethod = await authMethodService.findByProviderUserId({
     provider,
-    profile.provider_user_id,
-  );
+    provider_user_id: profile.provider_user_id,
+  });
   const isOAuthIdentityAlreadyLinked = existingProviderMethod?.user_id === resolvedUser.id;
   // A bare placeholder has NO usable credential of any kind: no password, no login-capable auth
   // method, AND no WebAuthn passkey. Counting passkeys (not just `hasLoginCapableMethod`) means

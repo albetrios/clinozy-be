@@ -33,18 +33,18 @@ export function createOrganizationController(
     getOrganization: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       const id = requireOrganizationScope(request).organizationPublicId;
-      const data = await service.getByPublicId(id, auth.userId);
+      const data = await service.getByPublicId({ public_id: id, user_public_id: auth.userId });
       return successResponse(data, getRequestIdentifier(request));
     },
     getOrganizationBySlug: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       const { slug } = (request.params as { slug: string }) ?? { slug: '' };
-      const data = await service.getBySlug(slug, auth.userId);
+      const data = await service.getBySlug({ slug, user_public_id: auth.userId });
       return successResponse(data, getRequestIdentifier(request));
     },
     createOrganization: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
-      const data = await service.create(request.body, auth.userId);
+      const data = await service.create({ body: request.body, owner_user_public_id: auth.userId });
       // Recorded in the new organization's own log, so its admins can see who created it.
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
@@ -57,7 +57,11 @@ export function createOrganizationController(
     updateOrganization: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const id = requireOrganizationScope(request);
-      const data = await service.update(id, request.body, getActingUserPublicId(auth));
+      const data = await service.update({
+        scope: id,
+        body: request.body,
+        updated_by_user_public_id: getActingUserPublicId(auth),
+      });
       const changedFields = listBodyFieldNames(request.body);
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
@@ -86,13 +90,20 @@ export function createOrganizationController(
     uploadLogo: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const id = requireOrganizationScope(request);
-      const data = await service.uploadLogo(id, request.body, getActingUserPublicId(auth));
+      const data = await service.uploadLogo({
+        scope: id,
+        body: request.body,
+        updated_by_user_public_id: getActingUserPublicId(auth),
+      });
       return successResponse(data, getRequestIdentifier(request));
     },
     deleteLogo: async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const id = requireOrganizationScope(request);
-      await service.deleteLogo(id, getActingUserPublicId(auth));
+      await service.deleteLogo({
+        scope: id,
+        updated_by_user_public_id: getActingUserPublicId(auth),
+      });
       return reply.code(204).send();
     },
     listOrganizationAuditLogs: async (request: FastifyRequest, _reply: FastifyReply) => {
@@ -103,7 +114,10 @@ export function createOrganizationController(
         ...(request.query as Record<string, unknown>),
         organization_id: organizationId,
       };
-      const result = await auditService.listForOrganization(organizationId, query);
+      const result = await auditService.listForOrganization({
+        organization_public_id: organizationId,
+        query,
+      });
       // sec-T finding #4 + sec-re-08: route organization-scoped audit log rows through
       // `AuditSerializer.many` so (a) the sensitive-metadata denylist runs and
       // (b) the strip-only allowlist drops every top-level bigint id, surfacing

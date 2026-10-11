@@ -58,11 +58,11 @@ export async function applyApiKeyAuthentication(request: FastifyRequest): Promis
 
   const keyHash = hashApiKey(rawKey);
   const keyPrefix = rawKey.slice(0, 8);
-  const match = await request.server.tenancyDomain.organizationApiKeyService.authenticate(
-    keyPrefix,
-    keyHash,
-    hashesMatch,
-  );
+  const match = await request.server.tenancyDomain.organizationApiKeyService.authenticate({
+    key_prefix: keyPrefix,
+    key_hash: keyHash,
+    hashCompare: hashesMatch,
+  });
 
   if (!match) {
     throw new UnauthorizedError('errors:validation.invalidToken');

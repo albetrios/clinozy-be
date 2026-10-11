@@ -100,11 +100,11 @@ describe('WebauthnService.verifyRegistration — per-user passkey cap', () => {
   });
 
   it('registers a passkey when under the cap (lock taken, then insert)', async () => {
-    const result = await service.verifyRegistration(
-      user.public_id,
+    const result = await service.verifyRegistration({
+      userPublicId: user.public_id,
       body,
-      'https://app.example.com',
-    );
+      requestOrigin: 'https://app.example.com',
+    });
     expect(result.verified).toBe(true);
     expect(credentialRepository.acquireCreationQuotaLock).toHaveBeenCalledWith(user.id);
     expect(credentialRepository.createCredential).toHaveBeenCalledTimes(1);
@@ -115,7 +115,11 @@ describe('WebauthnService.verifyRegistration — per-user passkey cap', () => {
       MAX_WEBAUTHN_CREDENTIALS_PER_USER,
     );
     await expect(
-      service.verifyRegistration(user.public_id, body, 'https://app.example.com'),
+      service.verifyRegistration({
+        userPublicId: user.public_id,
+        body,
+        requestOrigin: 'https://app.example.com',
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
     // The lock is taken before the count, and no credential is persisted at the cap.
     expect(credentialRepository.acquireCreationQuotaLock).toHaveBeenCalledWith(user.id);

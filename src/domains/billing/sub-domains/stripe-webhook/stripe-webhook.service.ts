@@ -41,13 +41,16 @@ type MatchedPlanForCreate = Awaited<ReturnType<PlanRepository['findByStripePrice
  * upstream `customer.subscription.updated` handler will reconcile any actual
  * billing-cycle drift on the next event.
  */
-function resolveBillingCycleForStripePrice(
-  stripePriceId: string | undefined,
+function resolveBillingCycleForStripePrice({
+  stripePriceId,
+  plan,
+}: {
+  stripePriceId: string | undefined;
   plan: {
     stripe_price_monthly_id: string | null;
     stripe_price_yearly_id: string | null;
-  },
-): 'monthly' | 'yearly' {
+  };
+}): 'monthly' | 'yearly' {
   if (stripePriceId !== undefined && plan.stripe_price_yearly_id === stripePriceId) {
     return 'yearly';
   }
@@ -144,10 +147,13 @@ export class StripeWebhookService {
    *   stuck rows if the enqueue was lost.
    * - **Side effects:** writes `billing.stripe_webhook_events`; enqueues a `stripe-webhook` job.
    */
-  async ingestEvent(
-    event: Stripe.Event,
-    context?: { requestId?: string },
-  ): Promise<StripeWebhookIngressResult> {
+  async ingestEvent({
+    event,
+    context,
+  }: {
+    event: Stripe.Event;
+    context?: { requestId?: string } | undefined;
+  }): Promise<StripeWebhookIngressResult> {
     const ingressResult = await withMaintenanceDatabaseContext(
       MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
       () =>
@@ -176,7 +182,13 @@ export class StripeWebhookService {
   /**
    * Dispatch a Stripe event to the appropriate handler (idempotent by event id).
    */
-  async handleEvent(event: Stripe.Event, context?: { requestId?: string }): Promise<void> {
+  async handleEvent({
+    event,
+    context,
+  }: {
+    event: Stripe.Event;
+    context?: { requestId?: string } | undefined;
+  }): Promise<void> {
     const stripeEventCreatedAt = new Date(event.created * 1000);
 
     const claimResult = await withMaintenanceDatabaseContext(
@@ -230,12 +242,12 @@ export class StripeWebhookService {
           this.stripeWebhookEventRepository,
           async (databaseHandle) => {
             const workerSubscriptionRepository = createWorkerSubscriptionRepository(databaseHandle);
-            await this.dispatchEvent(
-              prepared.event,
+            await this.dispatchEvent({
+              event: prepared.event,
               stripeEventCreatedAt,
-              workerSubscriptionRepository,
-              prepared.reconciliation,
-            );
+              subscriptionRepository: workerSubscriptionRepository,
+              reconciliation: prepared.reconciliation,
+            });
           },
         );
         // sec-new-D2: detect no-op writes (ledger row unexpectedly absent)
@@ -249,7 +261,7 @@ export class StripeWebhookService {
       });
     } catch (error) {
       throw await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, () =>
-        this.settleFailedEvent(event, error),
+        this.settleFailedEvent({ event, error }),
       );
     }
   }
@@ -307,7 +319,13 @@ export class StripeWebhookService {
    * - **Failure modes:** a ledger write error propagates (the job retries).
    * - **Side effects:** writes the ledger row's status and failure reason.
    */
-  private async settleFailedEvent(event: Stripe.Event, error: unknown): Promise<Error> {
+  private async settleFailedEvent({
+    event,
+    error,
+  }: {
+    event: Stripe.Event;
+    error: unknown;
+  }): Promise<Error> {
     const failureReason = error instanceof Error ? error.message : String(error);
     const logFields = { eventId: event.id, eventType: event.type, failureReason };
 
@@ -346,30 +364,35 @@ export class StripeWebhookService {
     );
   }
 
-  private async dispatchEvent(
-    event: Stripe.Event,
-    stripeEventCreatedAt: Date,
-    subscriptionRepository: SubscriptionRepository,
-    reconciliation?: StripeSubscriptionOrderingState,
-  ): Promise<void> {
+  private async dispatchEvent({
+    event,
+    stripeEventCreatedAt,
+    subscriptionRepository,
+    reconciliation,
+  }: {
+    event: Stripe.Event;
+    stripeEventCreatedAt: Date;
+    subscriptionRepository: SubscriptionRepository;
+    reconciliation?: StripeSubscriptionOrderingState | undefined;
+  }): Promise<void> {
     switch (event.type) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
-        await this.handleSubscriptionUpdated(
-          event.data.object,
+        await this.handleSubscriptionUpdated({
+          stripeSubscription: event.data.object,
           stripeEventCreatedAt,
           subscriptionRepository,
-          event.type,
+          eventType: event.type,
           reconciliation,
-        );
+        });
         break;
 
       case 'customer.subscription.deleted':
-        await this.handleSubscriptionDeleted(
-          event.data.object,
+        await this.handleSubscriptionDeleted({
+          stripeSubscription: event.data.object,
           stripeEventCreatedAt,
           subscriptionRepository,
-        );
+        });
         break;
 
       default:
@@ -377,13 +400,19 @@ export class StripeWebhookService {
     }
   }
 
-  private async handleSubscriptionUpdated(
-    stripeSubscription: Stripe.Subscription,
-    stripeEventCreatedAt: Date,
-    subscriptionRepository: SubscriptionRepository,
-    eventType: 'customer.subscription.created' | 'customer.subscription.updated',
-    reconciliation?: StripeSubscriptionOrderingState,
-  ): Promise<void> {
+  private async handleSubscriptionUpdated({
+    stripeSubscription,
+    stripeEventCreatedAt,
+    subscriptionRepository,
+    eventType,
+    reconciliation,
+  }: {
+    stripeSubscription: Stripe.Subscription;
+    stripeEventCreatedAt: Date;
+    subscriptionRepository: SubscriptionRepository;
+    eventType: 'customer.subscription.created' | 'customer.subscription.updated';
+    reconciliation?: StripeSubscriptionOrderingState | undefined;
+  }): Promise<void> {
     const providerSubscriptionId = stripeSubscription.id;
 
     const statusMap: Record<string, string> = {
@@ -456,9 +485,9 @@ export class StripeWebhookService {
       providerSubscriptionId,
       repositoryOverride: subscriptionRepository,
     });
-    const row = await this.subscriptionService.syncFromStripeProviderSubscription(
-      providerSubscriptionId,
-      omitUndefined({
+    const row = await this.subscriptionService.syncFromStripeProviderSubscription({
+      provider_subscription_id: providerSubscriptionId,
+      data: omitUndefined({
         status: mappedStatus,
         cancel_at_period_end: stripeSubscription.cancel_at_period_end,
         // `null`, not omitted, when Stripe has none: a resumed subscription must not keep its old
@@ -473,10 +502,10 @@ export class StripeWebhookService {
         // seats_total) stays in lockstep with the provider.
         seats,
       }),
-      stripeEventCreatedAt,
-      subscriptionRepository,
-      ...(reconciliation ? [reconciliation] : []),
-    );
+      stripe_event_created_at: stripeEventCreatedAt,
+      repositoryOverride: subscriptionRepository,
+      reconciliation,
+    });
 
     if (row) {
       // A Dashboard cancel arrives as `.updated` with status canceled: the subscription ended.
@@ -579,7 +608,10 @@ export class StripeWebhookService {
     // tombstone (audit-#1) or a newer watermark already wins (stale). Either way
     // the in-place sync correctly refused — skip without resurrecting.
     if (
-      await this.rowExistsForProviderSubscription(providerSubscriptionId, subscriptionRepository)
+      await this.rowExistsForProviderSubscription({
+        providerSubscriptionId,
+        subscriptionRepository,
+      })
     ) {
       logger.info(
         { providerSubscriptionId, stripeEventCreatedAt, eventType },
@@ -610,7 +642,10 @@ export class StripeWebhookService {
     // the row between the first existence check and the failed fallback — re-check
     // before declaring an orphan so we do not needlessly retry/DLQ.
     if (
-      await this.rowExistsForProviderSubscription(providerSubscriptionId, subscriptionRepository)
+      await this.rowExistsForProviderSubscription({
+        providerSubscriptionId,
+        subscriptionRepository,
+      })
     ) {
       logger.info(
         { providerSubscriptionId, stripeEventCreatedAt, eventType },
@@ -631,14 +666,17 @@ export class StripeWebhookService {
     );
   }
 
-  private async rowExistsForProviderSubscription(
-    providerSubscriptionId: string,
-    subscriptionRepository: SubscriptionRepository,
-  ): Promise<boolean> {
-    return this.subscriptionService.existsByStripeProviderSubscriptionId(
-      providerSubscriptionId,
-      subscriptionRepository,
-    );
+  private async rowExistsForProviderSubscription({
+    providerSubscriptionId,
+    subscriptionRepository,
+  }: {
+    providerSubscriptionId: string;
+    subscriptionRepository: SubscriptionRepository;
+  }): Promise<boolean> {
+    return this.subscriptionService.existsByStripeProviderSubscriptionId({
+      provider_subscription_id: providerSubscriptionId,
+      repositoryOverride: subscriptionRepository,
+    });
   }
 
   /**
@@ -678,10 +716,10 @@ export class StripeWebhookService {
     // ('MONTHLY','YEARLY') by `chk_subs_cycle`; the resolver returns lower-case,
     // so normalise before the INSERT (the prior code inserted 'monthly' and would
     // have failed the CHECK on the real DB).
-    const billingCycle = resolveBillingCycleForStripePrice(
+    const billingCycle = resolveBillingCycleForStripePrice({
       stripePriceId,
-      matchedPlanForCreate,
-    ).toUpperCase();
+      plan: matchedPlanForCreate,
+    }).toUpperCase();
     const inserted = await this.subscriptionService.createFromStripeWebhookEvent({
       providerSubscriptionId,
       providerCustomerId:
@@ -716,18 +754,22 @@ export class StripeWebhookService {
     return true;
   }
 
-  private async handleSubscriptionDeleted(
-    stripeSubscription: Stripe.Subscription,
-    stripeEventCreatedAt: Date,
-    subscriptionRepository: SubscriptionRepository,
-  ): Promise<void> {
+  private async handleSubscriptionDeleted({
+    stripeSubscription,
+    stripeEventCreatedAt,
+    subscriptionRepository,
+  }: {
+    stripeSubscription: Stripe.Subscription;
+    stripeEventCreatedAt: Date;
+    subscriptionRepository: SubscriptionRepository;
+  }): Promise<void> {
     const providerSubscriptionId = stripeSubscription.id;
 
-    const row = await this.subscriptionService.markCanceledByStripeProviderSubscriptionId(
-      providerSubscriptionId,
-      stripeEventCreatedAt,
-      subscriptionRepository,
-    );
+    const row = await this.subscriptionService.markCanceledByStripeProviderSubscriptionId({
+      provider_subscription_id: providerSubscriptionId,
+      stripe_event_created_at: stripeEventCreatedAt,
+      repositoryOverride: subscriptionRepository,
+    });
 
     if (row) {
       await this.subscriptionService.emitSubscriptionEvent({
@@ -748,10 +790,10 @@ export class StripeWebhookService {
     // The row exists but the cancel matched nothing: it is already terminal (cancelled locally
     // first) or newer than this event. Nothing is left to do — retrying would only page.
     if (
-      await this.subscriptionService.existsByStripeProviderSubscriptionId(
-        providerSubscriptionId,
-        subscriptionRepository,
-      )
+      await this.subscriptionService.existsByStripeProviderSubscriptionId({
+        provider_subscription_id: providerSubscriptionId,
+        repositoryOverride: subscriptionRepository,
+      })
     ) {
       logger.info(
         { providerSubscriptionId, stripeEventCreatedAt },
@@ -798,11 +840,11 @@ export class StripeWebhookService {
 
     // The tombstone could not be written because a concurrent `.created` inserted
     // the row first (lost the unique race). Re-run the cancel against that row.
-    const recovered = await this.subscriptionService.markCanceledByStripeProviderSubscriptionId(
-      providerSubscriptionId,
-      stripeEventCreatedAt,
-      subscriptionRepository,
-    );
+    const recovered = await this.subscriptionService.markCanceledByStripeProviderSubscriptionId({
+      provider_subscription_id: providerSubscriptionId,
+      stripe_event_created_at: stripeEventCreatedAt,
+      repositoryOverride: subscriptionRepository,
+    });
     if (recovered) {
       await this.subscriptionService.emitSubscriptionEvent({
         type: SUBSCRIPTION_EVENT.CANCELLED,
@@ -874,10 +916,10 @@ export class StripeWebhookService {
       return false;
     }
 
-    const billingCycle = resolveBillingCycleForStripePrice(
+    const billingCycle = resolveBillingCycleForStripePrice({
       stripePriceId,
-      matchedPlan,
-    ).toUpperCase();
+      plan: matchedPlan,
+    }).toUpperCase();
     const periodStart = new Date(firstItem.current_period_start * 1000);
     const periodEnd = new Date(firstItem.current_period_end * 1000);
     const canceledAt = stripeSubscription.canceled_at

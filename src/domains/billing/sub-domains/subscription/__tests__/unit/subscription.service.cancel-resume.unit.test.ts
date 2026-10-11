@@ -137,7 +137,7 @@ describe('SubscriptionService cancel / resume / changePlan guards', () => {
   it('cancel still calls Stripe and persists when subscription has provider id', async () => {
     const { service, repository, paymentProvider } = context;
 
-    await service.cancel(scope, 'sub_public');
+    await service.cancel({ scope, subscription_public_id: 'sub_public' });
 
     expect(paymentProvider.cancelSubscriptionAtPeriodEnd).toHaveBeenCalledWith(
       'sub_provider',
@@ -161,7 +161,7 @@ describe('SubscriptionService cancel / resume / changePlan guards', () => {
       status: 'CANCELED',
     } as never);
 
-    await service.cancel(scope, 'sub_public');
+    await service.cancel({ scope, subscription_public_id: 'sub_public' });
 
     // Immediate Stripe cancel (not at-period-end, which is a no-op on an incomplete sub)...
     expect(paymentProvider.cancelSubscriptionImmediately).toHaveBeenCalledWith(
@@ -181,7 +181,9 @@ describe('SubscriptionService cancel / resume / changePlan guards', () => {
     const { service, repository, paymentProvider } = context;
     vi.mocked(repository.findByPublicId).mockResolvedValueOnce(null);
 
-    await expect(service.cancel(scope, 'sub_public')).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      service.cancel({ scope, subscription_public_id: 'sub_public' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
     expect(paymentProvider.cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
     expect(repository.update).not.toHaveBeenCalled();
   });
@@ -223,7 +225,7 @@ describe('SubscriptionService cancel / resume / changePlan guards', () => {
   it('resume calls Stripe and clears cancel_at_period_end without force-writing status (sec-B4)', async () => {
     const { service, repository, paymentProvider } = context;
 
-    await service.resume(scope, 'sub_public');
+    await service.resume({ scope, subscription_public_id: 'sub_public' });
 
     expect(paymentProvider.resumeSubscription).toHaveBeenCalledWith('sub_provider', undefined);
     expect(repository.update).toHaveBeenCalledWith(
@@ -245,7 +247,11 @@ describe('SubscriptionService cancel / resume / changePlan guards', () => {
       provider_subscription_id: null,
     } as never);
 
-    await service.changePlan(scope, 'sub_public', { plan_id: 'plan_public' });
+    await service.changePlan({
+      scope,
+      subscription_public_id: 'sub_public',
+      body: { plan_id: 'plan_public' },
+    });
 
     expect(paymentProvider.updateSubscriptionPrice).not.toHaveBeenCalled();
     expect(repository.update).toHaveBeenCalled();
@@ -261,9 +267,9 @@ describe('SubscriptionService cancel / resume / changePlan guards', () => {
         status: terminalStatus,
       } as never);
 
-      await expect(service.cancel(scope, 'sub_public')).rejects.toBeInstanceOf(
-        UnprocessableEntityError,
-      );
+      await expect(
+        service.cancel({ scope, subscription_public_id: 'sub_public' }),
+      ).rejects.toBeInstanceOf(UnprocessableEntityError);
       expect(paymentProvider.cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
       expect(repository.update).not.toHaveBeenCalled();
     },
@@ -278,9 +284,9 @@ describe('SubscriptionService cancel / resume / changePlan guards', () => {
         status: terminalStatus,
       } as never);
 
-      await expect(service.resume(scope, 'sub_public')).rejects.toBeInstanceOf(
-        UnprocessableEntityError,
-      );
+      await expect(
+        service.resume({ scope, subscription_public_id: 'sub_public' }),
+      ).rejects.toBeInstanceOf(UnprocessableEntityError);
       expect(paymentProvider.resumeSubscription).not.toHaveBeenCalled();
       expect(repository.update).not.toHaveBeenCalled();
     },
@@ -296,7 +302,11 @@ describe('SubscriptionService cancel / resume / changePlan guards', () => {
       } as never);
 
       await expect(
-        service.changePlan(scope, 'sub_public', { plan_id: 'plan_public' }),
+        service.changePlan({
+          scope,
+          subscription_public_id: 'sub_public',
+          body: { plan_id: 'plan_public' },
+        }),
       ).rejects.toBeInstanceOf(UnprocessableEntityError);
       expect(paymentProvider.updateSubscriptionPrice).not.toHaveBeenCalled();
       expect(repository.update).not.toHaveBeenCalled();

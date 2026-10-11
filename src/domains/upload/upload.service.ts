@@ -121,14 +121,20 @@ export class UploadService {
     private readonly objectStorage: ObjectStoragePort,
   ) {}
 
-  async createUpload(
-    input: CreateUploadInput,
-    principal: UploadPrincipal,
-  ): Promise<UploadCreateOutput> {
+  async createUpload({
+    input,
+    principal,
+  }: {
+    input: CreateUploadInput;
+    principal: UploadPrincipal;
+  }): Promise<UploadCreateOutput> {
     const { userPublicId } = principal;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
 
-    const organizationInternalId = await this.resolveUploadOrganizationInternalId(input, principal);
+    const organizationInternalId = await this.resolveUploadOrganizationInternalId({
+      input,
+      principal,
+    });
     const config = UPLOAD_PURPOSE_CONFIG[input.purpose];
     const extension = getCanonicalExtensionForContentType(input.content_type);
     const ownerSegment =
@@ -327,10 +333,13 @@ export class UploadService {
     );
   }
 
-  private async resolveUploadOrganizationInternalId(
-    input: CreateUploadInput,
-    principal: UploadPrincipal,
-  ): Promise<number | null> {
+  private async resolveUploadOrganizationInternalId({
+    input,
+    principal,
+  }: {
+    input: CreateUploadInput;
+    principal: UploadPrincipal;
+  }): Promise<number | null> {
     if (input.for === UPLOAD_TARGETS.ORGANIZATION && input.organization_id) {
       await principal.authorizeOrganization(input.organization_id);
       /**
@@ -385,10 +394,13 @@ export class UploadService {
     return { mimeType: row.mime_type };
   }
 
-  private async assertUserCanAccessOrgScopedUpload(
-    row: UploadRow,
-    principal: UploadPrincipal,
-  ): Promise<void> {
+  private async assertUserCanAccessOrgScopedUpload({
+    row,
+    principal,
+  }: {
+    row: UploadRow;
+    principal: UploadPrincipal;
+  }): Promise<void> {
     if (row.organization_id === null) {
       return;
     }
@@ -463,11 +475,17 @@ export class UploadService {
       return { row, scope };
     }
 
-    await this.assertUserCanAccessOrgScopedUpload(row, principal);
+    await this.assertUserCanAccessOrgScopedUpload({ row, principal });
     return { row, scope };
   }
 
-  async getUpload(public_id: string, principal: UploadPrincipal): Promise<UploadDetailOutput> {
+  async getUpload({
+    public_id,
+    principal,
+  }: {
+    public_id: string;
+    principal: UploadPrincipal;
+  }): Promise<UploadDetailOutput> {
     const validatedPublicId = validateUploadPublicIdParam(public_id);
     const { userPublicId } = principal;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
@@ -477,7 +495,7 @@ export class UploadService {
       principal,
     });
 
-    return this.toUploadDetail(row, userPublicId);
+    return this.toUploadDetail({ row, userPublicId });
   }
 
   /**
@@ -513,7 +531,11 @@ export class UploadService {
       );
       return false;
     }
-    const published = await this.publishConfirmedObject(sourceKey, finalKey, mimeType);
+    const published = await this.publishConfirmedObject({
+      sourceKey,
+      finalKey,
+      contentType: mimeType,
+    });
     if (!published) {
       logger.warn({ id: publicId, fileKey: sourceKey }, 'upload.confirm.contentRejected');
     }
@@ -528,7 +550,13 @@ export class UploadService {
    * served bytes can never execute as stored XSS. Consumers must require UPLOADED before
    * attaching the object. Idempotent for already-UPLOADED rows.
    */
-  async confirmUpload(public_id: string, principal: UploadPrincipal): Promise<UploadDetailOutput> {
+  async confirmUpload({
+    public_id,
+    principal,
+  }: {
+    public_id: string;
+    principal: UploadPrincipal;
+  }): Promise<UploadDetailOutput> {
     const validatedPublicId = validateUploadPublicIdParam(public_id);
     const { userPublicId } = principal;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
@@ -539,7 +567,7 @@ export class UploadService {
     });
 
     if (row.status === UPLOAD_STATUS.UPLOADED) {
-      return this.toUploadDetail(row, userPublicId);
+      return this.toUploadDetail({ row, userPublicId });
     }
     if (row.status !== UPLOAD_STATUS.PENDING) {
       throw new ValidationError('errors:uploadNotPending', undefined, undefined, [
@@ -604,7 +632,7 @@ export class UploadService {
       );
     }
 
-    return this.toUploadDetail(updated, userPublicId);
+    return this.toUploadDetail({ row: updated, userPublicId });
   }
 
   /**
@@ -617,15 +645,19 @@ export class UploadService {
    * so does a pending object written again between the verify and the copy (409, row stays
    * PENDING so the client can confirm again and the new bytes get verified).
    */
-  private async publishConfirmedObject(
-    sourceKey: string,
-    finalKey: string,
-    contentType: string,
-  ): Promise<boolean> {
+  private async publishConfirmedObject({
+    sourceKey,
+    finalKey,
+    contentType,
+  }: {
+    sourceKey: string;
+    finalKey: string;
+    contentType: string;
+  }): Promise<boolean> {
     // SVGs are active content: an uploaded <svg onload=…> served with an image/svg+xml type would
     // execute as stored XSS. Neutralise the bytes before publishing them to the servable key.
     if (isSvgContentType(contentType)) {
-      return this.publishSanitizedSvg(sourceKey, finalKey, contentType);
+      return this.publishSanitizedSvg({ sourceKey, finalKey, contentType });
     }
     // HEAD only echoes the client-declared content-type, which is trivially spoofable (e.g. an
     // HTML/script payload uploaded as image/png). Verify the actual leading bytes before the object
@@ -667,11 +699,15 @@ export class UploadService {
    * sanitization yields an empty document, so the caller fails verification for hostile or
    * zero-byte SVGs.
    */
-  private async publishSanitizedSvg(
-    sourceKey: string,
-    finalKey: string,
-    contentType: string,
-  ): Promise<boolean> {
+  private async publishSanitizedSvg({
+    sourceKey,
+    finalKey,
+    contentType,
+  }: {
+    sourceKey: string;
+    finalKey: string;
+    contentType: string;
+  }): Promise<boolean> {
     const object = await this.objectStorage.getObject(sourceKey);
     const sanitized = sanitizeSvgBuffer(object.body);
     if (!sanitized) return false;
@@ -679,7 +715,13 @@ export class UploadService {
     return true;
   }
 
-  private async toUploadDetail(row: UploadRow, userPublicId?: string): Promise<UploadDetailOutput> {
+  private async toUploadDetail({
+    row,
+    userPublicId,
+  }: {
+    row: UploadRow;
+    userPublicId?: string | undefined;
+  }): Promise<UploadDetailOutput> {
     let organizationPublicId: string | null = null;
     if (row.organization_id !== null) {
       /**
@@ -700,7 +742,13 @@ export class UploadService {
     return serializeUploadDetail(row, organizationPublicId);
   }
 
-  async deleteUpload(public_id: string, principal: UploadPrincipal): Promise<void> {
+  async deleteUpload({
+    public_id,
+    principal,
+  }: {
+    public_id: string;
+    principal: UploadPrincipal;
+  }): Promise<void> {
     const validatedPublicId = validateUploadPublicIdParam(public_id);
     const { userPublicId } = principal;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);

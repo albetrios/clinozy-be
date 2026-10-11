@@ -45,10 +45,10 @@ export async function assertCallerCanGrantPermissionCodes(options: {
   // 5-minute Redis cache. This is a privilege-escalation backstop — a code revoked from the
   // caller seconds ago must not still be grantable to a role/API key during the stale window.
   const callerPermissionCodes =
-    await options.authorizationService.resolveUserOrganizationPermissionsFromDatabase(
-      options.callerUserPublicId,
-      options.organizationPublicId,
-    );
+    await options.authorizationService.resolveUserOrganizationPermissionsFromDatabase({
+      userPublicId: options.callerUserPublicId,
+      organizationPublicId: options.organizationPublicId,
+    });
   const callerPermissionSet = new Set(callerPermissionCodes);
 
   for (const permissionCode of options.requestedPermissionCodes) {
@@ -82,10 +82,10 @@ export async function assertCallerHoldsMemberPermissionCodes(options: {
   if (options.memberPermissionCodes.length === 0) return;
   let held: readonly string[] = options.callerApiKeyScopes ?? [];
   if (options.callerApiKeyScopes === undefined && options.callerUserPublicId) {
-    held = await options.authorizationService.resolveUserOrganizationPermissionsFromDatabase(
-      options.callerUserPublicId,
-      options.organizationPublicId,
-    );
+    held = await options.authorizationService.resolveUserOrganizationPermissionsFromDatabase({
+      userPublicId: options.callerUserPublicId,
+      organizationPublicId: options.organizationPublicId,
+    });
   }
   const heldSet = new Set(held);
   if (options.memberPermissionCodes.some((permissionCode) => !heldSet.has(permissionCode))) {

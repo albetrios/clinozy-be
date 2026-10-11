@@ -79,7 +79,7 @@ describe('Stripe webhook execution claims against PostgreSQL', () => {
     // Ten concurrent runs of the worker's own service (the composition root the worker builds).
     const { stripeWebhookService } = createDomainContainers().billingDomain;
     const outcomes = await Promise.allSettled(
-      Array.from({ length: 10 }, () => stripeWebhookService.handleEvent(event)),
+      Array.from({ length: 10 }, () => stripeWebhookService.handleEvent({ event })),
     );
     expect(outcomes.some((outcome) => outcome.status === 'fulfilled')).toBe(true);
     for (const outcome of outcomes) {
@@ -106,7 +106,7 @@ describe('Stripe webhook execution claims against PostgreSQL', () => {
     expect(persisted?.status).toBe('PAST_DUE');
     expect(persisted?.last_stripe_event_created_at).toEqual(new Date(nowSeconds * 1000));
 
-    await stripeWebhookService.handleEvent(event);
+    await stripeWebhookService.handleEvent({ event });
     expect(updateSpy).toHaveBeenCalledTimes(1);
     const [replayedLedger] = await getOperatorDatabase()
       .select()

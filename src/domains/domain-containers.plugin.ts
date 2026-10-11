@@ -28,20 +28,16 @@ async function registerDomainContainers(application: FastifyInstance): Promise<v
     tenancyDeparture: {
       removeAllForDepartingUser: (userInternalId) =>
         application.tenancyDomain.membershipService.removeAllForDepartingUser(userInternalId),
-      offboardPersonalOrganization: (userInternalId, userPublicId) =>
-        application.tenancyDomain.organizationService.offboardPersonalOrganization(
-          userInternalId,
-          userPublicId,
-        ),
+      offboardPersonalOrganization: (options) =>
+        application.tenancyDomain.organizationService.offboardPersonalOrganization(options),
     },
     webhookPayloadErasure: application.notifyDomain.webhookService,
   });
 
-  application.tenancyDomain.organizationService.wireOffboardingUploadService(
-    application.uploadDomain.uploadService,
-    // route-audit-#2: cancel the org's active subscription on organization delete so billing stops.
-    application.billingDomain.subscriptionService,
-  );
+  application.tenancyDomain.organizationService.wireOffboardingUploadService({
+    uploadService: application.uploadDomain.uploadService,
+    subscriptionService: application.billingDomain.subscriptionService,
+  });
 
   // REQ-4: break the membership↔subscription cycle by late-wiring. billing was built with the
   // tenancy membership service (for seats_used); now inject billing's subscription service into the

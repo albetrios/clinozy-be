@@ -122,10 +122,13 @@ export class EmailLoginService {
    * `.refine()` forbids it in production; never set on a deployed runtime): under it the result carries
    * `debug_verification_code` so an out-of-process test client (k6 load test) can complete the flow.
    */
-  async sendCode(
-    body: unknown,
-    context?: { requestId?: string; locale?: SupportedLanguage },
-  ): Promise<EmailSendCodeResult> {
+  async sendCode({
+    body,
+    context,
+  }: {
+    body: unknown;
+    context?: { requestId?: string; locale?: SupportedLanguage } | undefined;
+  }): Promise<EmailSendCodeResult> {
     const startedAtMillis = Date.now();
     const parsed = validateEmailSendCode(body);
     if (isDisposableEmailBlocked(parsed.email)) {
@@ -218,7 +221,10 @@ export class EmailLoginService {
           const created = await this.userService.createForEmailCode({
             email,
           });
-          await this.authMethodService.createEmailCodeMethod(created.id, created.public_id);
+          await this.authMethodService.createEmailCodeMethod({
+            userId: created.id,
+            userPublicId: created.public_id,
+          });
           return created;
         }),
       );
@@ -328,11 +334,15 @@ export class EmailLoginService {
   }
 
   /** Verify an email verification code; returns an MFA challenge or an access token + session. */
-  async login(
-    body: unknown,
-    ipAddress: string,
-    userAgent?: string,
-  ): Promise<FirstFactorAuthResult> {
+  async login({
+    body,
+    ipAddress,
+    userAgent,
+  }: {
+    body: unknown;
+    ipAddress: string;
+    userAgent?: string | undefined;
+  }): Promise<FirstFactorAuthResult> {
     const parsed = validateEmailLogin(body);
     const normalizedEmail = parsed.email.trim().toLowerCase();
 

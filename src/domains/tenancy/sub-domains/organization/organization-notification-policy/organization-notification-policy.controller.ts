@@ -48,17 +48,21 @@ export function createOrganizationNotificationPolicyController(
       }) ?? { notification_policy_id: '' };
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
-      const data = await service.getByPublicId(
+      const data = await service.getByPublicId({
         scope,
-        validatePublicIdParam(policyId, 'notification_policy_id'),
-      );
+        policy_public_id: validatePublicIdParam(policyId, 'notification_policy_id'),
+      });
       return successResponse(data, getRequestIdentifier(request));
     },
     createPolicy: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
-      const data = await service.create(scope, request.body, getActingUserPublicId(auth));
+      const data = await service.create({
+        scope,
+        body: request.body,
+        created_by_user_public_id: getActingUserPublicId(auth),
+      });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'tenancy.notification_policy.create',
@@ -76,12 +80,12 @@ export function createOrganizationNotificationPolicyController(
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const notificationPolicyId = validatePublicIdParam(policyId, 'notification_policy_id');
-      const data = await service.update(
+      const data = await service.update({
         scope,
-        notificationPolicyId,
-        request.body,
-        getActingUserPublicId(auth),
-      );
+        policy_public_id: notificationPolicyId,
+        body: request.body,
+        updated_by_user_public_id: getActingUserPublicId(auth),
+      });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'tenancy.notification_policy.update',
@@ -102,7 +106,7 @@ export function createOrganizationNotificationPolicyController(
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const notificationPolicyId = validatePublicIdParam(policyId, 'notification_policy_id');
-      await service.delete(scope, notificationPolicyId);
+      await service.delete({ scope, policy_public_id: notificationPolicyId });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'tenancy.notification_policy.delete',

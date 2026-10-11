@@ -27,7 +27,7 @@ export function createMemberRolePermissionController(service: MemberRolePermissi
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const { role_id: roleId } = request.params as { role_id: string };
-      const rows = await service.list(scope, roleId);
+      const rows = await service.list({ scope, role_public_id: roleId });
       const data = rows.map((row) => serializeMemberRolePermission(row, roleId));
       return paginatedResponse(data, getRequestIdentifier(request), {
         per_page: data.length,
@@ -41,7 +41,12 @@ export function createMemberRolePermissionController(service: MemberRolePermissi
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const { role_id: roleId } = request.params as { role_id: string };
-      const rows = await service.put(scope, roleId, request.body, getActingUserPublicId(auth));
+      const rows = await service.put({
+        scope,
+        role_public_id: roleId,
+        body: request.body,
+        created_by_user_public_id: getActingUserPublicId(auth),
+      });
       const data = rows.map((row) => serializeMemberRolePermission(row, roleId));
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),

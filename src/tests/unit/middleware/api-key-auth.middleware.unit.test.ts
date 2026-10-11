@@ -115,7 +115,7 @@ describe('api-key-auth.middleware', () => {
       application = await createApplication();
       vi.mocked(
         application.tenancyDomain.organizationApiKeyService.authenticate,
-      ).mockImplementationOnce(async (_prefix: string, candidateHash: string, compare) =>
+      ).mockImplementationOnce(async ({ key_hash: candidateHash, hashCompare: compare }) =>
         compare(KEY_HASH, candidateHash)
           ? { public_id: 'k', organization_public_id: 'o', scopes: [] }
           : null,
@@ -132,7 +132,7 @@ describe('api-key-auth.middleware', () => {
       application = await createApplication();
       vi.mocked(
         application.tenancyDomain.organizationApiKeyService.authenticate,
-      ).mockImplementationOnce(async (_prefix: string, candidateHash: string, compare) =>
+      ).mockImplementationOnce(async ({ key_hash: candidateHash, hashCompare: compare }) =>
         // 'abcd' decodes to 2 bytes vs the 32-byte candidate → the length guard must return false
         // before timingSafeEqual (which would otherwise throw on unequal lengths).
         compare('abcd', candidateHash)

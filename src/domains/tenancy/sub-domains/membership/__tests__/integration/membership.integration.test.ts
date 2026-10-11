@@ -367,9 +367,9 @@ describe('Membership Sub-Domain — Integration', () => {
       expect((await inviteMember(adminToken, memberRole.public_id)).statusCode).toBe(200);
 
       // The seat-sync worker's write: the billed quantity follows the member count.
-      await app.billingDomain.subscriptionService.syncSeatQuantityForOrganization(
-        organization.public_id,
-      );
+      await app.billingDomain.subscriptionService.syncSeatQuantityForOrganization({
+        organization_public_id: organization.public_id,
+      });
       const [synced] = await getOperatorDatabase()
         .select({ seats: subscriptions.seats })
         .from(subscriptions)

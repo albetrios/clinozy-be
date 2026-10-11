@@ -57,7 +57,13 @@ export class MemberRoleService {
     private readonly permissionRepository: PermissionRepository,
   ) {}
 
-  async list(scope: OrganizationPrincipalDatabaseScope, pagination: ListMemberRolesQueryInput) {
+  async list({
+    scope,
+    pagination,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    pagination: ListMemberRolesQueryInput;
+  }) {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext(scope, async () => {
       const organization =
@@ -90,28 +96,40 @@ export class MemberRoleService {
     });
   }
 
-  async requireRoleRecordForOrganization(
-    organization_id: number,
-    role_public_id: string,
-  ): Promise<MemberRoleRow> {
+  async requireRoleRecordForOrganization({
+    organization_id,
+    role_public_id,
+  }: {
+    organization_id: number;
+    role_public_id: string;
+  }): Promise<MemberRoleRow> {
     const role = await this.memberRoleRepository.findByPublicId(role_public_id, organization_id);
     if (!role) throw new NotFoundError('Role');
     return role;
   }
 
-  async requireRoleRecordByPublicId(
-    organization_public_id: string,
-    role_public_id: string,
-  ): Promise<MemberRoleRow> {
+  async requireRoleRecordByPublicId({
+    organization_public_id,
+    role_public_id,
+  }: {
+    organization_public_id: string;
+    role_public_id: string;
+  }): Promise<MemberRoleRow> {
     const organization =
       await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-    return this.requireRoleRecordForOrganization(organization.id, role_public_id);
+    return this.requireRoleRecordForOrganization({
+      organization_id: organization.id,
+      role_public_id,
+    });
   }
 
-  async resolveRolePublicIdForOrganization(
-    organization_id: number,
-    role_internal_id: number,
-  ): Promise<string> {
+  async resolveRolePublicIdForOrganization({
+    organization_id,
+    role_internal_id,
+  }: {
+    organization_id: number;
+    role_internal_id: number;
+  }): Promise<string> {
     const role = await this.memberRoleRepository.findByInternalId(
       role_internal_id,
       organization_id,
@@ -120,19 +138,28 @@ export class MemberRoleService {
     return role.public_id;
   }
 
-  async resolveRolePublicIdByInternalId(
-    organization_public_id: string,
-    role_internal_id: number,
-  ): Promise<string> {
+  async resolveRolePublicIdByInternalId({
+    organization_public_id,
+    role_internal_id,
+  }: {
+    organization_public_id: string;
+    role_internal_id: number;
+  }): Promise<string> {
     const organization =
       await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-    return this.resolveRolePublicIdForOrganization(organization.id, role_internal_id);
+    return this.resolveRolePublicIdForOrganization({
+      organization_id: organization.id,
+      role_internal_id,
+    });
   }
 
-  async getByPublicId(
-    scope: OrganizationPrincipalDatabaseScope,
-    role_public_id: string,
-  ): Promise<MemberRoleOutput> {
+  async getByPublicId({
+    scope,
+    role_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    role_public_id: string;
+  }): Promise<MemberRoleOutput> {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext(scope, async () => {
       const organization =
@@ -152,18 +179,28 @@ export class MemberRoleService {
    * `(organization_id, name)` unique violation, so duplicate role names surface
    * as 409 instead of an unhandled 500. Any other error is rethrown unchanged.
    */
-  private mapRoleNameConflict(error: unknown, name: string | undefined): unknown {
+  private mapRoleNameConflict({
+    error,
+    name,
+  }: {
+    error: unknown;
+    name: string | undefined;
+  }): unknown {
     if (isPostgresUniqueViolation(error)) {
       return new ConflictError('errors:roleNameExists', name ? { name } : undefined);
     }
     return error;
   }
 
-  async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    created_by_user_public_id: string | undefined,
-  ): Promise<MemberRoleOutput> {
+  async create({
+    scope,
+    body,
+    created_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    created_by_user_public_id: string | undefined;
+  }): Promise<MemberRoleOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateCreateMemberRole(body);
     return withAppDatabaseContext(scope, async () => {
@@ -218,7 +255,7 @@ export class MemberRoleService {
           }),
         );
       } catch (error) {
-        throw this.mapRoleNameConflict(error, parsed.name);
+        throw this.mapRoleNameConflict({ error, name: parsed.name });
       }
 
       // Assign the initial permission set in the SAME transaction as the insert (atomic).
@@ -238,12 +275,17 @@ export class MemberRoleService {
     });
   }
 
-  async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    role_public_id: string,
-    body: unknown,
-    updated_by_user_public_id: string | undefined,
-  ): Promise<MemberRoleOutput> {
+  async update({
+    scope,
+    role_public_id,
+    body,
+    updated_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    role_public_id: string;
+    body: unknown;
+    updated_by_user_public_id: string | undefined;
+  }): Promise<MemberRoleOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateUpdateMemberRole(body);
     return withAppDatabaseContext(scope, async () => {
@@ -266,7 +308,7 @@ export class MemberRoleService {
           userId ?? null,
         );
       } catch (error) {
-        throw this.mapRoleNameConflict(error, parsed.name);
+        throw this.mapRoleNameConflict({ error, name: parsed.name });
       }
       if (!updated) throw new NotFoundError('Role');
       const memberCount = await this.memberRoleRepository.countMembersForRole(
@@ -294,7 +336,13 @@ export class MemberRoleService {
    * partial state. The is_system guard runs first so operators get the more actionable
    * "system role" message in the seeded-Admin case (which is the most common attempt).
    */
-  async delete(scope: OrganizationPrincipalDatabaseScope, role_public_id: string): Promise<void> {
+  async delete({
+    scope,
+    role_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    role_public_id: string;
+  }): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
     await withAppDatabaseContext(scope, async () => {
       const organization =

@@ -79,7 +79,10 @@ export function createAuthSessionHandlers({
       ) {
         throw new ConflictError('errors:cannotRevokeCurrentSession');
       }
-      await authSessionService.revoke(auth.userId, request.params.session_id);
+      await authSessionService.revoke({
+        userPublicId: auth.userId,
+        sessionPublicId: request.params.session_id,
+      });
       await recordScopedAuditEvent(request, {
         actorUserPublicId: auth.userId,
         action: 'auth.session.revoke',

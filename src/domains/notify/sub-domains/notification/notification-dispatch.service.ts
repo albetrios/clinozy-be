@@ -22,10 +22,10 @@ import { ConfigurationError, NotFoundError } from '@/shared/errors/index.js';
  *   never invoke this contract before the container has wired the singleton.
  */
 export type NotificationDispatch = {
-  createAndDispatchNotification(
-    input: CreateNotificationInput,
-    options?: { requestId?: string },
-  ): Promise<void>;
+  createAndDispatchNotification(options: {
+    input: CreateNotificationInput;
+    options?: { requestId?: string } | undefined;
+  }): Promise<void>;
   /** Internal recipient ids → public ids, for keying their per-user caches. */
   resolveRecipientPublicIds(userInternalIds: readonly number[]): Promise<string[]>;
 };
@@ -48,10 +48,13 @@ export function createNotificationDispatch(
   notificationRepository: NotificationRepository,
 ): NotificationDispatch {
   return {
-    async createAndDispatchNotification(
-      input: CreateNotificationInput,
-      options?: { requestId?: string },
-    ): Promise<void> {
+    async createAndDispatchNotification({
+      input,
+      options,
+    }: {
+      input: CreateNotificationInput;
+      options?: { requestId?: string } | undefined;
+    }): Promise<void> {
       // Resolve organization public id BEFORE the insert so failure of either step
       // leaves no orphan notification row: a lookup failure short-circuits before
       // any write, and an insert failure means there is nothing to enqueue.
@@ -115,16 +118,19 @@ export function configureNotificationDispatch(dispatch: NotificationDispatch): v
  * - **Side effects:** writes a notification row and enqueues a BullMQ job on commit.
  * - **Notes:** keeps the call site free of DI plumbing so domain event handlers stay simple.
  */
-export async function createAndDispatchNotification(
-  input: CreateNotificationInput,
-  options?: { requestId?: string },
-): Promise<void> {
+export async function createAndDispatchNotification({
+  input,
+  options,
+}: {
+  input: CreateNotificationInput;
+  options?: { requestId?: string } | undefined;
+}): Promise<void> {
   if (!notificationDispatch) {
     throw new ConfigurationError(
       'Notification dispatch is not configured. Call configureNotificationDispatch from notify.container.',
     );
   }
-  await notificationDispatch.createAndDispatchNotification(input, options);
+  await notificationDispatch.createAndDispatchNotification({ input, options });
 }
 
 /**

@@ -68,10 +68,13 @@ export function resetPoolExhaustionAlertStateForTests(): void {
   consecutiveClusterCriticalPolls = 0;
 }
 
-function evaluateActiveCheckoutPressure(
-  activeCheckouts: number,
-  poolMaxConnections: number,
-): PoolPressureLevel {
+function evaluateActiveCheckoutPressure({
+  activeCheckouts,
+  poolMaxConnections,
+}: {
+  activeCheckouts: number;
+  poolMaxConnections: number;
+}): PoolPressureLevel {
   const criticalThreshold = Math.ceil(poolMaxConnections * env.DATABASE_POOL_ACTIVE_CRITICAL_RATIO);
   const warnThreshold = Math.ceil(poolMaxConnections * env.DATABASE_POOL_ACTIVE_WARN_RATIO);
 
@@ -84,10 +87,13 @@ function evaluateActiveCheckoutPressure(
   return 'ok';
 }
 
-function evaluateClusterPressure(
-  clusterActiveConnections: number,
-  allowedApplicationConnections: number,
-): PoolPressureLevel {
+function evaluateClusterPressure({
+  clusterActiveConnections,
+  allowedApplicationConnections,
+}: {
+  clusterActiveConnections: number;
+  allowedApplicationConnections: number;
+}): PoolPressureLevel {
   if (allowedApplicationConnections < 1) {
     return 'ok';
   }
@@ -108,7 +114,13 @@ function evaluateClusterPressure(
   return 'ok';
 }
 
-function bumpConsecutivePolls(current: number, isOverThreshold: boolean): number {
+function bumpConsecutivePolls({
+  current,
+  isOverThreshold,
+}: {
+  current: number;
+  isOverThreshold: boolean;
+}): number {
   if (!isOverThreshold) {
     return 0;
   }
@@ -119,10 +131,13 @@ function shouldEmitAlert(consecutivePolls: number): boolean {
   return consecutivePolls >= env.DATABASE_POOL_ALERT_CONSECUTIVE_POLLS;
 }
 
-function buildWorkerPoolDemandAlertExtra(
-  demand: ReturnType<typeof getWorkerPostgresPoolDemandContext>,
-  poolMaxConnections: number,
-): Record<string, number | string> {
+function buildWorkerPoolDemandAlertExtra({
+  demand,
+  poolMaxConnections,
+}: {
+  demand: ReturnType<typeof getWorkerPostgresPoolDemandContext>;
+  poolMaxConnections: number;
+}): Record<string, number | string> {
   if (demand === undefined) {
     return {};
   }
@@ -256,34 +271,37 @@ export function evaluatePoolExhaustionAndAlert(parameters: {
 }): PoolPressureSample {
   const poolMaxConnections = resolvePoolMaxConnections();
   const activeOrganizationRlsCheckouts = getActiveOrganizationRlsCheckoutCount();
-  const activeLevel = evaluateActiveCheckoutPressure(
-    activeOrganizationRlsCheckouts,
+  const activeLevel = evaluateActiveCheckoutPressure({
+    activeCheckouts: activeOrganizationRlsCheckouts,
     poolMaxConnections,
-  );
-  const clusterLevel = evaluateClusterPressure(
-    parameters.clusterActiveConnections,
-    parameters.allowedApplicationConnections,
-  );
+  });
+  const clusterLevel = evaluateClusterPressure({
+    clusterActiveConnections: parameters.clusterActiveConnections,
+    allowedApplicationConnections: parameters.allowedApplicationConnections,
+  });
 
-  consecutiveActiveCriticalPolls = bumpConsecutivePolls(
-    consecutiveActiveCriticalPolls,
-    activeLevel === 'critical',
-  );
-  consecutiveActiveWarnPolls = bumpConsecutivePolls(
-    consecutiveActiveWarnPolls,
-    activeLevel === 'warn',
-  );
-  consecutiveClusterCriticalPolls = bumpConsecutivePolls(
-    consecutiveClusterCriticalPolls,
-    clusterLevel === 'critical',
-  );
-  consecutiveClusterWarnPolls = bumpConsecutivePolls(
-    consecutiveClusterWarnPolls,
-    clusterLevel === 'warn',
-  );
+  consecutiveActiveCriticalPolls = bumpConsecutivePolls({
+    current: consecutiveActiveCriticalPolls,
+    isOverThreshold: activeLevel === 'critical',
+  });
+  consecutiveActiveWarnPolls = bumpConsecutivePolls({
+    current: consecutiveActiveWarnPolls,
+    isOverThreshold: activeLevel === 'warn',
+  });
+  consecutiveClusterCriticalPolls = bumpConsecutivePolls({
+    current: consecutiveClusterCriticalPolls,
+    isOverThreshold: clusterLevel === 'critical',
+  });
+  consecutiveClusterWarnPolls = bumpConsecutivePolls({
+    current: consecutiveClusterWarnPolls,
+    isOverThreshold: clusterLevel === 'warn',
+  });
 
   const workerPoolDemandExtra = isWorkerRuntime()
-    ? buildWorkerPoolDemandAlertExtra(getWorkerPostgresPoolDemandContext(), poolMaxConnections)
+    ? buildWorkerPoolDemandAlertExtra({
+        demand: getWorkerPostgresPoolDemandContext(),
+        poolMaxConnections,
+      })
     : {};
 
   emitActiveCheckoutAlertIfNeeded({

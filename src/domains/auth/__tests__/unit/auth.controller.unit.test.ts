@@ -186,11 +186,11 @@ describe('createAuthController', () => {
       mockRequest({ body: { email: 'a@b.com', password: 'pass' } }),
       reply,
     );
-    expect(authService.login).toHaveBeenCalledWith(
-      { email: 'a@b.com', password: 'pass' },
-      '127.0.0.1',
-      'vitest',
-    );
+    expect(authService.login).toHaveBeenCalledWith({
+      body: { email: 'a@b.com', password: 'pass' },
+      ipAddress: '127.0.0.1',
+      userAgent: 'vitest',
+    });
     expect(response).toMatchObject({
       data: { access_token: 'token' },
       meta: { request_id: 'request-id' },

@@ -54,10 +54,13 @@ export class OrganizationNotificationPolicyService {
     });
   }
 
-  async getByPublicId(
-    scope: OrganizationPrincipalDatabaseScope,
-    policy_public_id: string,
-  ): Promise<OrganizationNotificationPolicyOutput> {
+  async getByPublicId({
+    scope,
+    policy_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    policy_public_id: string;
+  }): Promise<OrganizationNotificationPolicyOutput> {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext(scope, async () => {
       const organization = await this.organizationRepository.findByPublicId(organization_public_id);
@@ -68,11 +71,15 @@ export class OrganizationNotificationPolicyService {
     });
   }
 
-  async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    created_by_user_public_id: string | undefined,
-  ): Promise<OrganizationNotificationPolicyOutput> {
+  async create({
+    scope,
+    body,
+    created_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    created_by_user_public_id: string | undefined;
+  }): Promise<OrganizationNotificationPolicyOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateCreateOrganizationNotificationPolicy(body);
     return withAppDatabaseContext(scope, async () => {
@@ -104,12 +111,17 @@ export class OrganizationNotificationPolicyService {
     });
   }
 
-  async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    policy_public_id: string,
-    body: unknown,
-    updated_by_user_public_id: string | undefined,
-  ): Promise<OrganizationNotificationPolicyOutput> {
+  async update({
+    scope,
+    policy_public_id,
+    body,
+    updated_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    policy_public_id: string;
+    body: unknown;
+    updated_by_user_public_id: string | undefined;
+  }): Promise<OrganizationNotificationPolicyOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateUpdateOrganizationNotificationPolicy(body);
     return withAppDatabaseContext(scope, async () => {
@@ -138,7 +150,13 @@ export class OrganizationNotificationPolicyService {
     });
   }
 
-  async delete(scope: OrganizationPrincipalDatabaseScope, policy_public_id: string): Promise<void> {
+  async delete({
+    scope,
+    policy_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    policy_public_id: string;
+  }): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
     return withAppDatabaseContext(scope, async () => {
       const organization = await this.organizationRepository.findByPublicId(organization_public_id);

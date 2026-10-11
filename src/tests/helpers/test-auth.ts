@@ -196,14 +196,14 @@ export async function generateTestTokenWithActiveSession(
   });
   const tokenHash = createHash('sha256').update(token).digest('hex');
   const expiresAt = new Date(Date.now() + env.AUTH_SESSION_MAX_AGE_DAYS * MILLISECONDS_PER_DAY);
-  const session = await application.authDomain.authSessionService.createSessionForUser(
+  const session = await application.authDomain.authSessionService.createSessionForUser({
     userPublicId,
-    {
+    data: {
       token_hash: tokenHash,
       ip_address: '127.0.0.1',
       expires_at: expiresAt,
     },
-  );
+  });
   return { token, sessionPublicId: session.public_id };
 }
 

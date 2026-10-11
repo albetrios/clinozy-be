@@ -114,12 +114,12 @@ describe('MemberRolePermissionService.put — owner-role protection (sec-T2)', (
     } as never);
 
     await expect(
-      service.put(
-        asScope('org_public'),
-        ownerRole.public_id,
-        { permission_codes: [] },
-        'requester_public',
-      ),
+      service.put({
+        scope: asScope('org_public'),
+        role_public_id: ownerRole.public_id,
+        body: { permission_codes: [] },
+        created_by_user_public_id: 'requester_public',
+      }),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     expect(memberRolePermissionRepository.replace).not.toHaveBeenCalled();
@@ -138,12 +138,12 @@ describe('MemberRolePermissionService.put — owner-role protection (sec-T2)', (
     } as never);
 
     await expect(
-      service.put(
-        asScope('org_public'),
-        ownerRole.public_id,
-        { permission_codes: ['tenancy:read'] },
-        'requester_public',
-      ),
+      service.put({
+        scope: asScope('org_public'),
+        role_public_id: ownerRole.public_id,
+        body: { permission_codes: ['tenancy:read'] },
+        created_by_user_public_id: 'requester_public',
+      }),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     expect(memberRolePermissionRepository.replace).not.toHaveBeenCalled();
@@ -160,12 +160,12 @@ describe('MemberRolePermissionService.put — owner-role protection (sec-T2)', (
       status: 'ACTIVE',
     } as never);
 
-    const result = await service.put(
-      asScope('org_public'),
-      nonOwnerRole.public_id,
-      { permission_codes: ['tenancy:read'] },
-      'requester_public',
-    );
+    const result = await service.put({
+      scope: asScope('org_public'),
+      role_public_id: nonOwnerRole.public_id,
+      body: { permission_codes: ['tenancy:read'] },
+      created_by_user_public_id: 'requester_public',
+    });
 
     expect(memberRolePermissionRepository.replace).toHaveBeenCalledWith(
       nonOwnerRole.id,
@@ -181,12 +181,12 @@ describe('MemberRolePermissionService.put — owner-role protection (sec-T2)', (
     vi.mocked(membershipRepository.findByUserAndOrganization).mockResolvedValue(null);
 
     await expect(
-      service.put(
-        asScope('org_public'),
-        ownerRole.public_id,
-        { permission_codes: ['tenancy:read'] },
-        'requester_public',
-      ),
+      service.put({
+        scope: asScope('org_public'),
+        role_public_id: ownerRole.public_id,
+        body: { permission_codes: ['tenancy:read'] },
+        created_by_user_public_id: 'requester_public',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
 
     expect(memberRolePermissionRepository.replace).not.toHaveBeenCalled();

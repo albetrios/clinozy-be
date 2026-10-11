@@ -103,7 +103,10 @@ describe('stripe-webhook.worker', () => {
 
     expect(retrieveStripeEvent).toHaveBeenCalledWith('evt_123');
     expect(handleEvent).toHaveBeenCalledOnce();
-    expect(handleEvent).toHaveBeenCalledWith(eventPayload, { requestId: 'req-1' });
+    expect(handleEvent).toHaveBeenCalledWith({
+      event: eventPayload,
+      context: { requestId: 'req-1' },
+    });
   });
 
   it('createStripeWebhookWorker uses injected billing container service', async () => {

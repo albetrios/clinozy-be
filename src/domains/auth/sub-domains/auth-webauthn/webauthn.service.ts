@@ -111,10 +111,7 @@ export class WebauthnService {
     private readonly authMethodService: AuthMethodService,
   ) {}
 
-  async generateRegistrationOptions(
-    userPublicId: string,
-    _requestOrigin?: string,
-  ): Promise<WebauthnRegisterOptionsResult> {
+  async generateRegistrationOptions(userPublicId: string): Promise<WebauthnRegisterOptionsResult> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) {
       throw new UnauthorizedError('errors:userNotFound');
@@ -165,11 +162,15 @@ export class WebauthnService {
     return { options, challenge_token: challengeToken };
   }
 
-  async verifyRegistration(
-    userPublicId: string,
-    body: unknown,
-    requestOrigin?: string,
-  ): Promise<{ verified: boolean; credential_id: string }> {
+  async verifyRegistration({
+    userPublicId,
+    body,
+    requestOrigin,
+  }: {
+    userPublicId: string;
+    body: unknown;
+    requestOrigin?: string | undefined;
+  }): Promise<{ verified: boolean; credential_id: string }> {
     const parsed = validateWebauthnRegisterVerify(body);
     const challenge = await consumeWebauthnChallenge(
       this.redis,
@@ -242,10 +243,7 @@ export class WebauthnService {
     return { verified: true, credential_id: created.public_id };
   }
 
-  async generateAuthenticationOptions(
-    body: unknown,
-    _requestOrigin?: string,
-  ): Promise<WebauthnAuthenticateOptionsResult> {
+  async generateAuthenticationOptions(body: unknown): Promise<WebauthnAuthenticateOptionsResult> {
     const parsed = validateWebauthnAuthenticateOptions(body);
     // `email` is required at the DTO layer (sec-A finding #24).
     const user = await this.userService.findByEmail(parsed.email);
@@ -289,12 +287,17 @@ export class WebauthnService {
     return { options, challenge_token: challengeToken };
   }
 
-  async verifyAuthentication(
-    body: unknown,
-    ipAddress: string,
-    requestOrigin?: string,
-    userAgent?: string,
-  ): Promise<FirstFactorAuthResult> {
+  async verifyAuthentication({
+    body,
+    ipAddress,
+    requestOrigin,
+    userAgent,
+  }: {
+    body: unknown;
+    ipAddress: string;
+    requestOrigin?: string | undefined;
+    userAgent?: string | undefined;
+  }): Promise<FirstFactorAuthResult> {
     const parsed = validateWebauthnAuthenticateVerify(body);
     const challenge = await consumeWebauthnChallenge(
       this.redis,
@@ -421,7 +424,13 @@ export class WebauthnService {
    * - **Notes:** sec-r5-M3 — wires the previously-orphaned `revokeByUserId`. A user with a password /
    *   OAuth / email-code method may remove every passkey.
    */
-  async revokeCredential(userPublicId: string, credentialPublicId: string): Promise<void> {
+  async revokeCredential({
+    userPublicId,
+    credentialPublicId,
+  }: {
+    userPublicId: string;
+    credentialPublicId: string;
+  }): Promise<void> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) {
       throw new UnauthorizedError('errors:userNotFound');

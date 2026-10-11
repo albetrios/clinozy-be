@@ -27,7 +27,7 @@ function hashRefreshSecret(refreshSecret: string): string {
 }
 
 /** Constant-time equality of two hex digests (equal length when both are SHA-256 hex). */
-function refreshHashesEqual(left: string, right: string): boolean {
+function refreshHashesEqual({ left, right }: { left: string; right: string }): boolean {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
@@ -81,7 +81,13 @@ export class AuthSessionService {
     );
   }
 
-  async revoke(userPublicId: string, sessionPublicId: string) {
+  async revoke({
+    userPublicId,
+    sessionPublicId,
+  }: {
+    userPublicId: string;
+    sessionPublicId: string;
+  }) {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
     const revoked = await withAppDatabaseContext(
@@ -149,10 +155,13 @@ export class AuthSessionService {
     await this.invalidateRevokedSessionCaches(revokedSessions);
   }
 
-  async createSessionForUser(
-    userPublicId: string,
-    data: Omit<AuthSessionCreateData, 'user_id' | 'refresh_token_hash'>,
-  ): Promise<{ public_id: string; refresh_secret: string }> {
+  async createSessionForUser({
+    userPublicId,
+    data,
+  }: {
+    userPublicId: string;
+    data: Omit<AuthSessionCreateData, 'user_id' | 'refresh_token_hash'>;
+  }): Promise<{ public_id: string; refresh_secret: string }> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
     const refreshSecret = generateRefreshSecret({ userPublicId });
@@ -213,10 +222,13 @@ export class AuthSessionService {
    * still-valid access token. The Redis cache caps the propagation window at ≤60 s
    * (same TTL as session validity), down from the prior ≤15 min access-token lifetime.
    */
-  async verifyActiveAccessToken(
-    rawToken: string,
-    userPublicId: string,
-  ): Promise<{ sessionPublicId: string }> {
+  async verifyActiveAccessToken({
+    rawToken,
+    userPublicId,
+  }: {
+    rawToken: string;
+    userPublicId: string;
+  }): Promise<{ sessionPublicId: string }> {
     const sessionTokenHash = hashAccessToken(rawToken);
     const cachedSessionPublicId = await getCachedSessionTokenValid(sessionTokenHash);
     if (cachedSessionPublicId !== null) {
@@ -295,7 +307,13 @@ export class AuthSessionService {
     );
   }
 
-  async rotateSessionTokenHash(sessionPublicId: string, sessionTokenHash: string): Promise<void> {
+  async rotateSessionTokenHash({
+    sessionPublicId,
+    sessionTokenHash,
+  }: {
+    sessionPublicId: string;
+    sessionTokenHash: string;
+  }): Promise<void> {
     await withAppDatabaseContext(
       SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
       async (_databaseHandle) => {
@@ -369,11 +387,15 @@ export class AuthSessionService {
         const existing =
           await this.sessionRepository.findByPublicIdIncludingRevoked(sessionPublicId);
         if (!existing?.refresh_token_hash) return null;
-        if (refreshHashesEqual(existing.refresh_token_hash, currentRefreshHash)) return null;
+        if (refreshHashesEqual({ left: existing.refresh_token_hash, right: currentRefreshHash }))
+          return null;
         const provenIssued =
           isIssuedRefreshSecret({ userPublicId, refreshSecret }) ||
           (existing.previous_refresh_token_hash !== null &&
-            refreshHashesEqual(existing.previous_refresh_token_hash, currentRefreshHash));
+            refreshHashesEqual({
+              left: existing.previous_refresh_token_hash,
+              right: currentRefreshHash,
+            }));
         return {
           userId: existing.user_id,
           wasAlreadyRevoked: existing.is_revoked,

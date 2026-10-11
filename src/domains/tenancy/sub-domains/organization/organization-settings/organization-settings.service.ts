@@ -63,11 +63,13 @@ export class OrganizationSettingsService {
     });
   }
 
-  async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    _updated_by_user_public_id: string | undefined,
-  ): Promise<OrganizationSettingsOutput> {
+  async update({
+    scope,
+    body,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+  }): Promise<OrganizationSettingsOutput> {
     const parsed = validateUpdateOrganizationSettings(body);
     const result = await withAppDatabaseContext(scope, async () => {
       const organization = await this.organizationRepository.findByPublicId(

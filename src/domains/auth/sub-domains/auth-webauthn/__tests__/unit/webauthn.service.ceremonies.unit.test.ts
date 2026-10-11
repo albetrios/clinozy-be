@@ -142,12 +142,11 @@ describe('WebauthnService.verifyAuthentication', () => {
   it('completes the ceremony: verifier gets the STORED credential material, the counter advances, and the session mint receives the user', async () => {
     const { service, credentialRepository } = buildService({});
 
-    const result = await service.verifyAuthentication(
-      authenticationBody(),
-      '203.0.113.7',
-      undefined,
-      'agent/1.0',
-    );
+    const result = await service.verifyAuthentication({
+      body: authenticationBody(),
+      ipAddress: '203.0.113.7',
+      userAgent: 'agent/1.0',
+    });
 
     // The challenge must be consumed from the AUTHENTICATION namespace — a registration
     // challenge replayed here would otherwise mint a session.
@@ -194,7 +193,7 @@ describe('WebauthnService.verifyAuthentication', () => {
     const handle = Buffer.from(ACTIVE_USER.public_id, 'utf8').toString('base64url');
 
     await expect(
-      service.verifyAuthentication(authenticationBody(handle), '203.0.113.7'),
+      service.verifyAuthentication({ body: authenticationBody(handle), ipAddress: '203.0.113.7' }),
     ).resolves.toBeDefined();
   });
 
@@ -203,7 +202,10 @@ describe('WebauthnService.verifyAuthentication', () => {
     const foreignHandle = Buffer.from('usr_zzzzzzzzzzzzzzzzzzzzz', 'utf8').toString('base64url');
 
     await expect(
-      service.verifyAuthentication(authenticationBody(foreignHandle), '203.0.113.7'),
+      service.verifyAuthentication({
+        body: authenticationBody(foreignHandle),
+        ipAddress: '203.0.113.7',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(credentialRepository.findActiveByCredentialId).not.toHaveBeenCalled();
     expect(completeFirstFactorAuthMock).not.toHaveBeenCalled();
@@ -213,7 +215,7 @@ describe('WebauthnService.verifyAuthentication', () => {
     const { service } = buildService({ credential: null });
 
     await expect(
-      service.verifyAuthentication(authenticationBody(), '203.0.113.7'),
+      service.verifyAuthentication({ body: authenticationBody(), ipAddress: '203.0.113.7' }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(verifyAuthenticationMock).not.toHaveBeenCalled();
   });
@@ -222,7 +224,7 @@ describe('WebauthnService.verifyAuthentication', () => {
     const { service } = buildService({ credential: { ...STORED_CREDENTIAL, user_id: 999 } });
 
     await expect(
-      service.verifyAuthentication(authenticationBody(), '203.0.113.7'),
+      service.verifyAuthentication({ body: authenticationBody(), ipAddress: '203.0.113.7' }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(verifyAuthenticationMock).not.toHaveBeenCalled();
   });
@@ -231,7 +233,7 @@ describe('WebauthnService.verifyAuthentication', () => {
     const { service } = buildService({ user: { ...ACTIVE_USER, status: 'SUSPENDED' } });
 
     await expect(
-      service.verifyAuthentication(authenticationBody(), '203.0.113.7'),
+      service.verifyAuthentication({ body: authenticationBody(), ipAddress: '203.0.113.7' }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(verifyAuthenticationMock).not.toHaveBeenCalled();
     expect(completeFirstFactorAuthMock).not.toHaveBeenCalled();
@@ -242,7 +244,7 @@ describe('WebauthnService.verifyAuthentication', () => {
     const { service, credentialRepository } = buildService({});
 
     await expect(
-      service.verifyAuthentication(authenticationBody(), '203.0.113.7'),
+      service.verifyAuthentication({ body: authenticationBody(), ipAddress: '203.0.113.7' }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(credentialRepository.updateCounter).not.toHaveBeenCalled();
     expect(completeFirstFactorAuthMock).not.toHaveBeenCalled();
@@ -323,7 +325,10 @@ describe('WebauthnService.verifyRegistration', () => {
   it('persists the verified credential with base64url key material and reports its id', async () => {
     const { service, credentialRepository } = buildService({});
 
-    const result = await service.verifyRegistration(ACTIVE_USER.public_id, registrationBody);
+    const result = await service.verifyRegistration({
+      userPublicId: ACTIVE_USER.public_id,
+      body: registrationBody,
+    });
 
     expect(consumeChallengeMock).toHaveBeenCalledWith(
       expect.anything(),
@@ -354,7 +359,7 @@ describe('WebauthnService.verifyRegistration', () => {
     const { service, credentialRepository } = buildService({});
 
     await expect(
-      service.verifyRegistration(ACTIVE_USER.public_id, registrationBody),
+      service.verifyRegistration({ userPublicId: ACTIVE_USER.public_id, body: registrationBody }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(verifyRegistrationMock).not.toHaveBeenCalled();
     expect(credentialRepository.createCredential).not.toHaveBeenCalled();
@@ -365,7 +370,7 @@ describe('WebauthnService.verifyRegistration', () => {
     const { service, credentialRepository } = buildService({});
 
     await expect(
-      service.verifyRegistration(ACTIVE_USER.public_id, registrationBody),
+      service.verifyRegistration({ userPublicId: ACTIVE_USER.public_id, body: registrationBody }),
     ).rejects.toBeInstanceOf(ValidationError);
     expect(credentialRepository.createCredential).not.toHaveBeenCalled();
   });
@@ -377,7 +382,7 @@ describe('WebauthnService.verifyRegistration', () => {
     );
 
     await expect(
-      service.verifyRegistration(ACTIVE_USER.public_id, registrationBody),
+      service.verifyRegistration({ userPublicId: ACTIVE_USER.public_id, body: registrationBody }),
     ).rejects.toBeInstanceOf(ConflictError);
   });
 });

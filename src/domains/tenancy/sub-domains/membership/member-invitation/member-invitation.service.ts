@@ -44,7 +44,7 @@ import {
 
 const MEMBER_INVITATION_RESOURCE = 'Member invitation';
 
-function assertInvitationAcceptable(row: MemberInvitationRow, now: Date): void {
+function assertInvitationAcceptable({ row, now }: { row: MemberInvitationRow; now: Date }): void {
   if (row.revoked_at) {
     throw new ValidationError('errors:validation.invitationRevoked').withReason(
       'invitation_revoked',
@@ -62,9 +62,15 @@ function assertInvitationAcceptable(row: MemberInvitationRow, now: Date): void {
   }
 }
 
-function throwInvitationAcceptFailure(current: MemberInvitationRow | null, now: Date): never {
+function throwInvitationAcceptFailure({
+  current,
+  now,
+}: {
+  current: MemberInvitationRow | null;
+  now: Date;
+}): never {
   if (!current) throw new NotFoundError(MEMBER_INVITATION_RESOURCE);
-  assertInvitationAcceptable(current, now);
+  assertInvitationAcceptable({ row: current, now });
   throw new ValidationError('errors:validation.invalidToken', undefined, undefined, [
     { field: 'token', messageKey: 'errors:validation.invalidToken' },
   ]);
@@ -221,7 +227,9 @@ export class MemberInvitationService {
   private enqueueSeatQuantitySync(organizationPublicId: string): void {
     if (!this.seatQuantitySync) return;
     try {
-      this.seatQuantitySync.enqueueSeatQuantitySync(organizationPublicId);
+      this.seatQuantitySync.enqueueSeatQuantitySync({
+        organization_public_id: organizationPublicId,
+      });
     } catch (error) {
       logger.warn({ error, organizationPublicId }, 'member_invitation.seat_sync.enqueue_failed');
     }
@@ -284,11 +292,15 @@ export class MemberInvitationService {
     return output;
   }
 
-  async accept(
-    invitation_public_id: string,
-    body: unknown,
-    actingUserPublicId: string,
-  ): Promise<AcceptMemberInvitationOutput> {
+  async accept({
+    invitation_public_id,
+    body,
+    actingUserPublicId,
+  }: {
+    invitation_public_id: string;
+    body: unknown;
+    actingUserPublicId: string;
+  }): Promise<AcceptMemberInvitationOutput> {
     const parsed = validateAcceptMemberInvitation(body);
     // sec-T4: previously accept was unauthenticated, so anyone with the
     // invitation URL could flip the victim's pending membership to ACTIVE.
@@ -328,7 +340,7 @@ export class MemberInvitationService {
         }
         const tokenHash = hashInvitationToken(parsed.token);
         const now = new Date();
-        assertInvitationAcceptable(row, now);
+        assertInvitationAcceptable({ row, now });
         const updated = await this.invitationRepository.accept(
           invitation_public_id,
           tokenHash,
@@ -336,7 +348,7 @@ export class MemberInvitationService {
         );
         if (!updated) {
           const current = await this.invitationRepository.findByPublicId(invitation_public_id);
-          throwInvitationAcceptFailure(current, now);
+          throwInvitationAcceptFailure({ current, now });
         }
         /**
          * Atomically activate the membership in the same transaction so accepting
@@ -398,17 +410,23 @@ export class MemberInvitationService {
     // from the committed ACTIVE membership — a pre-commit invalidation could be re-populated with
     // the stale (pre-acceptance) set by a concurrent recompute, delaying the access grant.
     if (acceptedMemberPublicId) {
-      await invalidatePermissions(acceptedMemberPublicId, lookup.organization_public_id);
+      await invalidatePermissions({
+        userId: acceptedMemberPublicId,
+        organizationId: lookup.organization_public_id,
+      });
     }
     // Return the joined org's public id alongside the invitation so the client can
     // POST /auth/switch-to-organization into it without a separate lookup (gate reduction).
     return { ...result, organization_id: lookup.organization_public_id };
   }
 
-  async revoke(
-    scope: OrganizationPrincipalDatabaseScope,
-    invitation_public_id: string,
-  ): Promise<void> {
+  async revoke({
+    scope,
+    invitation_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    invitation_public_id: string;
+  }): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
     await withAppDatabaseContext(scope, async () => {
       const organization = await this.organizationRepository.findByPublicId(organization_public_id);
@@ -443,12 +461,17 @@ export class MemberInvitationService {
     this.enqueueSeatQuantitySync(organization_public_id);
   }
 
-  async resend(
-    scope: OrganizationPrincipalDatabaseScope,
-    invitation_public_id: string,
-    body: unknown,
-    options?: MemberInvitationCommandOptions,
-  ): Promise<MemberInvitationOutput> {
+  async resend({
+    scope,
+    invitation_public_id,
+    body,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    invitation_public_id: string;
+    body: unknown;
+    options?: MemberInvitationCommandOptions | undefined;
+  }): Promise<MemberInvitationOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateResendMemberInvitation(body);
     return withAppDatabaseContext(scope, async () => {

@@ -11,7 +11,8 @@ const permissionCacheServicePath = join(
 function extractWithPermissionCacheRecomputeLockBody(source: string): string {
   const start = source.indexOf('export async function withPermissionCacheRecomputeLock');
   expect(start).toBeGreaterThanOrEqual(0);
-  const openBrace = source.indexOf('{', start);
+  // The body opens after the return type; the options-object parameter has braces of its own.
+  const openBrace = source.indexOf('{', source.indexOf('): Promise<', start));
   let depth = 0;
   for (let index = openBrace; index < source.length; index++) {
     if (source[index] === '{') depth += 1;

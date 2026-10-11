@@ -26,7 +26,7 @@ export function createMemberRoleController(service: MemberRoleService) {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const pagination = validateListMemberRolesQuery(request.query);
-      const result = await service.list(scope, pagination);
+      const result = await service.list({ scope, pagination });
       return paginatedResponse(result.items, getRequestIdentifier(request), {
         per_page: result.limit,
         next: result.next_cursor,
@@ -42,14 +42,18 @@ export function createMemberRoleController(service: MemberRoleService) {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const roleId = validatePublicIdParam(rawRoleId ?? '', 'role_id');
-      const data = await service.getByPublicId(scope, roleId);
+      const data = await service.getByPublicId({ scope, role_public_id: roleId });
       return successResponse(data, getRequestIdentifier(request));
     },
     createRole: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const organizationId = scope.organizationPublicId;
-      const data = await service.create(scope, request.body, getActingUserPublicId(auth));
+      const data = await service.create({
+        scope,
+        body: request.body,
+        created_by_user_public_id: getActingUserPublicId(auth),
+      });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'tenancy.role.create',
@@ -68,7 +72,12 @@ export function createMemberRoleController(service: MemberRoleService) {
       const scope = requireOrganizationScope(request);
       const organizationId = scope.organizationPublicId;
       const roleId = validatePublicIdParam(rawUpdateRoleId ?? '', 'role_id');
-      const data = await service.update(scope, roleId, request.body, getActingUserPublicId(auth));
+      const data = await service.update({
+        scope,
+        role_public_id: roleId,
+        body: request.body,
+        updated_by_user_public_id: getActingUserPublicId(auth),
+      });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'tenancy.role.update',
@@ -87,7 +96,7 @@ export function createMemberRoleController(service: MemberRoleService) {
       const scope = requireOrganizationScope(request);
       const organizationId = scope.organizationPublicId;
       const roleId = validatePublicIdParam(rawDeleteRoleId ?? '', 'role_id');
-      await service.delete(scope, roleId);
+      await service.delete({ scope, role_public_id: roleId });
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
         action: 'tenancy.role.delete',

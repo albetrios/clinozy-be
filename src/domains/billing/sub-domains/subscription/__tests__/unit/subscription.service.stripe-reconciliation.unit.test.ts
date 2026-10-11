@@ -157,7 +157,11 @@ describe('SubscriptionService — Stripe reconciliation (sec-B1+B2+B3+B4)', () =
 
   // ── sec-B2 ──────────────────────────────────────────────────────────────────────────
   it('create() stamps last_stripe_event_created_at at the current clock time (sec-B2)', async () => {
-    await service.create(scope, { plan_id: 'plan_pro', billing_cycle: 'monthly' }, 'created_by');
+    await service.create({
+      scope,
+      body: { plan_id: 'plan_pro', billing_cycle: 'monthly' },
+      created_by_user_public_id: 'created_by',
+    });
 
     expect(repository.create).toHaveBeenCalledTimes(1);
     const createPayload = vi.mocked(repository.create).mock.calls[0]![0];
@@ -166,33 +170,41 @@ describe('SubscriptionService — Stripe reconciliation (sec-B1+B2+B3+B4)', () =
 
   it('create() does NOT stamp the watermark when Stripe is not configured (local-only flow)', async () => {
     vi.mocked(paymentProvider.createSubscription).mockResolvedValueOnce({});
-    await service.create(scope, { plan_id: 'plan_pro', billing_cycle: 'monthly' }, 'created_by');
+    await service.create({
+      scope,
+      body: { plan_id: 'plan_pro', billing_cycle: 'monthly' },
+      created_by_user_public_id: 'created_by',
+    });
     const createPayload = vi.mocked(repository.create).mock.calls[0]![0];
     expect(createPayload.last_stripe_event_created_at).toBeUndefined();
   });
 
   // ── sec-B3 ──────────────────────────────────────────────────────────────────────────
   it('cancel() bumps last_stripe_event_created_at on the local update (sec-B3)', async () => {
-    await service.cancel(scope, 'sub_public');
+    await service.cancel({ scope, subscription_public_id: 'sub_public' });
     const updatePayload = vi.mocked(repository.update).mock.calls[0]![2];
     expect(updatePayload.last_stripe_event_created_at).toEqual(fixedNow);
   });
 
   it('resume() bumps last_stripe_event_created_at on the local update (sec-B3)', async () => {
-    await service.resume(scope, 'sub_public');
+    await service.resume({ scope, subscription_public_id: 'sub_public' });
     const updatePayload = vi.mocked(repository.update).mock.calls[0]![2];
     expect(updatePayload.last_stripe_event_created_at).toEqual(fixedNow);
   });
 
   it('changePlan() bumps last_stripe_event_created_at on the local update (sec-B3)', async () => {
-    await service.changePlan(scope, 'sub_public', { plan_id: 'plan_pro' });
+    await service.changePlan({
+      scope,
+      subscription_public_id: 'sub_public',
+      body: { plan_id: 'plan_pro' },
+    });
     const updatePayload = vi.mocked(repository.update).mock.calls[0]![2];
     expect(updatePayload.last_stripe_event_created_at).toEqual(fixedNow);
   });
 
   // ── sec-B4 ──────────────────────────────────────────────────────────────────────────
   it('resume() does NOT force-write status=ACTIVE; lets the Stripe webhook reconcile (sec-B4)', async () => {
-    await service.resume(scope, 'sub_public');
+    await service.resume({ scope, subscription_public_id: 'sub_public' });
     const updatePayload = vi.mocked(repository.update).mock.calls[0]![2];
     expect(updatePayload.cancel_at_period_end).toBe(false);
     expect(updatePayload.status).toBeUndefined();

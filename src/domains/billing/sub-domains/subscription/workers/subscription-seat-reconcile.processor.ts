@@ -47,7 +47,7 @@ export async function runSubscriptionSeatReconcileJob(
     }),
   );
   for (const organizationPublicId of candidates.quantityDrift) {
-    subscriptionService.enqueueSeatQuantitySync(organizationPublicId);
+    subscriptionService.enqueueSeatQuantitySync({ organization_public_id: organizationPublicId });
   }
   for (const organizationPublicId of candidates.entitlementLapsed) {
     await subscriptionService.enforceFreeSeatCeiling(organizationPublicId);

@@ -140,7 +140,7 @@ describe('Stripe webhook ingestion contract (`constructStripeWebhookEvent` + Str
       stripeSignatureHeaderOutbound,
     );
 
-    await webhookEventHandlerServiceOutbound.handleEvent(verifiedStripeEventOutbound);
+    await webhookEventHandlerServiceOutbound.handleEvent({ event: verifiedStripeEventOutbound });
 
     expect(drizzleOutboundWebhookDatabaseUpdateSpy).toHaveBeenCalledOnce();
     expect(drizzleOutboundWebhookDatabaseUpdateSpy.mock.calls[0]?.[0]).toBe(subscriptions);
@@ -195,7 +195,7 @@ describe('Stripe webhook ingestion contract (`constructStripeWebhookEvent` + Str
       stripeSignatureHeaderOutbound,
     );
 
-    await webhookEventHandlerServiceOutbound.handleEvent(verifiedStripeEventOutbound);
+    await webhookEventHandlerServiceOutbound.handleEvent({ event: verifiedStripeEventOutbound });
     expect(drizzleOutboundWebhookDatabaseUpdateSpy).toHaveBeenCalled();
   });
 
@@ -223,7 +223,7 @@ describe('Stripe webhook ingestion contract (`constructStripeWebhookEvent` + Str
       webhookRawPayloadOutboundUtf8,
       stripeSignatureHeaderOutbound,
     );
-    await webhookEventHandlerServiceOutbound.handleEvent(verifiedStripeEventOutbound);
+    await webhookEventHandlerServiceOutbound.handleEvent({ event: verifiedStripeEventOutbound });
 
     expect(drizzleOutboundWebhookDatabaseUpdateSpy).toHaveBeenCalledOnce();
   });

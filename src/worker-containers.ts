@@ -87,20 +87,16 @@ export function createDomainContainers(
     tenancyDeparture: {
       removeAllForDepartingUser: (userInternalId) =>
         tenancyDomain.membershipService.removeAllForDepartingUser(userInternalId),
-      offboardPersonalOrganization: (userInternalId, userPublicId) =>
-        tenancyDomain.organizationService.offboardPersonalOrganization(
-          userInternalId,
-          userPublicId,
-        ),
+      offboardPersonalOrganization: (options) =>
+        tenancyDomain.organizationService.offboardPersonalOrganization(options),
     },
     webhookPayloadErasure: notifyDomain.webhookService,
   });
 
-  tenancyDomain.organizationService.wireOffboardingUploadService(
-    uploadDomain.uploadService,
-    // route-audit-#2: cancel the org's active subscription on organization delete so billing stops.
-    billingDomain.subscriptionService,
-  );
+  tenancyDomain.organizationService.wireOffboardingUploadService({
+    uploadService: uploadDomain.uploadService,
+    subscriptionService: billingDomain.subscriptionService,
+  });
 
   // REQ-4: late-wire billing's subscription service into the membership service so seat enforcement
   // + Stripe seat reconciliation work in the worker process too (membership↔subscription cycle).

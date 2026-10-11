@@ -1,7 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { successResponse } from '@/shared/utils/http/response.util.js';
 import {
-  getActingUserPublicId,
   getRequestIdentifier,
   requireOrganizationScope,
   requirePrincipal,
@@ -29,7 +28,7 @@ export function createOrganizationSettingsController(service: OrganizationSettin
     updateSettings: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
-      const data = await service.update(scope, request.body, getActingUserPublicId(auth));
+      const data = await service.update({ scope, body: request.body });
       const changedFields = listBodyFieldNames(request.body);
       await recordScopedAuditEvent(request, {
         ...buildAuditActorFields(auth),
