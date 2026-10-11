@@ -13,6 +13,11 @@ export interface PatientImageOutput {
   file_key: string;
   /** The upload's file name (P25) */
   file_name: string;
+  /**
+   * A link that shows the photo, valid 15 minutes, made fresh on every read (D86) — null when its
+   * upload is gone
+   */
+  file_url: string | null;
   display_name: string | null;
   caption: string | null;
   body_part: string | null;

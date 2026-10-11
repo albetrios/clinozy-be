@@ -1149,6 +1149,9 @@ const UNWIRED_PORTS: BaseRecordPorts = {
   removeImageLocation: () => {
     throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
   },
+  fileReadUrls: () => {
+    throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
+  },
 };
 
 /**

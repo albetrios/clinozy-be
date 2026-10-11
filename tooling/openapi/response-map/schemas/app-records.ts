@@ -967,6 +967,13 @@ export const patientImagesRecordSchema = {
     stage: { type: 'string', enum: ['before', 'after'], nullable: true },
     file_key: { type: 'string' },
     file_name: { type: 'string', description: "The upload's (P25)" },
+    file_url: {
+      type: 'string',
+      format: 'uri',
+      nullable: true,
+      description:
+        'A link that shows the photo, valid 15 minutes and made fresh on every read — null when its upload is gone (D86)',
+    },
     display_name: { type: 'string', maxLength: 60, nullable: true },
     caption: { type: 'string', maxLength: 200, nullable: true },
     body_part: {
@@ -1011,6 +1018,8 @@ export const patientImagesRecordExample = {
   stage: 'before',
   file_key: 'uploads/org_k7x9m2pqr4w8n1v3a1b2c/3f1c2b7e.jpg',
   file_name: 'cheek-left.jpg',
+  file_url:
+    'https://clinozy-uploads.s3.amazonaws.com/uploads/org_k7x9m2pqr4w8n1v3a1b2c/3f1c2b7e.jpg?X-Amz-Expires=900&X-Amz-Signature=…',
   display_name: 'Left cheek',
   caption: null,
   body_part: 'face',
@@ -1045,6 +1054,29 @@ export const patientReportsRecordSchema = {
       items: { type: 'string' },
       description: 'Confirmed uploads of the organization (P29)',
     },
+    files: {
+      type: 'array',
+      maxItems: 10,
+      description: "Each of `file_keys`, in order, with its upload's name and a view link (D86)",
+      items: {
+        type: 'object',
+        properties: {
+          file_key: { type: 'string' },
+          file_name: {
+            type: 'string',
+            nullable: true,
+            description: 'The name it was uploaded under — null when its upload is gone',
+          },
+          file_url: {
+            type: 'string',
+            format: 'uri',
+            nullable: true,
+            description:
+              'A link that shows the file, valid 15 minutes and made fresh on every read — null when its upload is gone',
+          },
+        },
+      },
+    },
     notes: { type: 'string', maxLength: 1000, nullable: true },
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
@@ -1059,6 +1091,14 @@ export const patientReportsRecordExample = {
   name: 'CBC',
   report_date: '2026-10-08',
   file_keys: ['uploads/org_k7x9m2pqr4w8n1v3a1b2c/9a2d4c1f.pdf'],
+  files: [
+    {
+      file_key: 'uploads/org_k7x9m2pqr4w8n1v3a1b2c/9a2d4c1f.pdf',
+      file_name: 'cbc-oct.pdf',
+      file_url:
+        'https://clinozy-uploads.s3.amazonaws.com/uploads/org_k7x9m2pqr4w8n1v3a1b2c/9a2d4c1f.pdf?X-Amz-Expires=900&X-Amz-Signature=…',
+    },
+  ],
   notes: null,
   created_at: '2026-10-08T10:30:00.000Z',
   updated_at: '2026-10-08T10:30:00.000Z',

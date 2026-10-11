@@ -35,7 +35,7 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
         schema: {
           summary: "List a patient's photos",
           description:
-            'Returns one page of a patient\'s photos (newest `taken_on` first; `sort=created_at` by upload), each with its visit\'s `service_label` (the date groups), and `meta.album_counts` — the live photos per album you can see (`general`, `lhr`, and `private` only with the album code — the tab counts, P26). Filters: `album` (the tab; none = every album you can see), `appointment_id`, `has_appointment=false` ("Not attached to a visit"), `patient_treatment_id`, `stage`, `body_part`, `q` (the name or file name), the created range. A private photo shows only to patient:private_album:read holders (P23). Requires patient:clinical_record:read (P14).',
+            'Returns one page of a patient\'s photos (newest `taken_on` first; `sort=created_at` by upload), each with its visit\'s `service_label` (the date groups) and `file_url` — a link that shows the photo, valid 15 minutes and made fresh on every read (null when its upload is gone, D86) — and `meta.album_counts` — the live photos per album you can see (`general`, `lhr`, and `private` only with the album code — the tab counts, P26). Filters: `album` (the tab; none = every album you can see), `appointment_id`, `has_appointment=false` ("Not attached to a visit"), `patient_treatment_id`, `stage`, `body_part`, `q` (the name or file name), the created range. A private photo shows only to patient:private_album:read holders (P23). Requires patient:clinical_record:read (P14).',
           tags: ['Patient file'],
           params: patientImagesParentParamsDto,
           querystring: listPatientImagesQueryDto,
@@ -72,7 +72,7 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
         schema: {
           summary: 'Get a photo',
           description:
-            "Returns one of a patient's photos — another patient's, or a private one without the album code, is a 404. Requires patient:clinical_record:read (P14).",
+            "Returns one of a patient's photos, with `file_url` (a 15-minute link that shows it, D86) — another patient's, or a private one without the album code, is a 404. Requires patient:clinical_record:read (P14).",
           tags: ['Patient file'],
           params: patientImagesIdParamsDto,
         },

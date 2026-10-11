@@ -4,7 +4,7 @@ import type { PatientImageOutput } from './patient-images.types.js';
 
 /**
  * Shapes an `app.patient_images` row as the API returns it (routes-final 7.F.6). `service_label`
- * is the rules' `decorate` (one read per page) — empty here.
+ * and `file_url` are the rules' `decorate` (one read each per page) — empty here.
  */
 export function serializePatientImage(
   row: BaseRecordRow,
@@ -19,6 +19,7 @@ export function serializePatientImage(
     stage: row.stage as string | null,
     file_key: row.file_key as string,
     file_name: row.file_name as string,
+    file_url: null,
     display_name: row.display_name as string | null,
     caption: row.caption as string | null,
     body_part: row.body_part as string | null,

@@ -339,6 +339,17 @@ describe('Security: app records are isolated per organization (models organizati
     });
   }
 
+  /**
+   * A read with each signed link cut to the object it points at: a photo's or report file's link
+   * is signed afresh on every read (D86), so an unchanged record answers a new signature each time.
+   */
+  function withoutSignatures(data: unknown): unknown {
+    if (data === undefined) return undefined;
+    return JSON.parse(JSON.stringify(data), (_key, field: unknown) =>
+      typeof field === 'string' && field.includes('X-Amz-Signature=') ? field.split('?')[0] : field,
+    );
+  }
+
   /** Every modelled GET as the victim's owner (the front desk for their own saved view). */
   async function snapshotVictim(): Promise<Record<string, unknown>> {
     const snapshot: Record<string, unknown> = {};
@@ -347,7 +358,7 @@ describe('Security: app records are isolated per organization (models organizati
       const response = await victimFlow.call('GET', victimPath(route.path));
       snapshot[route.key] = {
         status: response.status,
-        data: (response.body as { data?: unknown } | null)?.data,
+        data: withoutSignatures((response.body as { data?: unknown } | null)?.data),
       };
     }
     victimFlow.as('owner');

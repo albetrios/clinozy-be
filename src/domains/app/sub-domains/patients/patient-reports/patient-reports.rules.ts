@@ -10,7 +10,8 @@ import { writePatientFileActivity } from '@/domains/app/sub-domains/patients/pat
  * @remarks
  * - **Algorithm:** a create or change checks each of `file_keys` is a confirmed upload of the
  *   organization (P29); after a create a `system` entry linked to the report joins the contact's
- *   activity — shown only to `patient:clinical_record:read` holders (7.10, M10).
+ *   activity — shown only to `patient:clinical_record:read` holders (7.10, M10). `decorate` gives
+ *   each file its upload's name and a 15-minute view link (D86).
  * - **Failure modes:** `ValidationError` on `file_keys`.
  */
 export const patientReportsRules: BaseRecordRules = {
@@ -27,6 +28,19 @@ export const patientReportsRules: BaseRecordRules = {
       field: 'file_keys',
       context,
     });
+  },
+  // D86: each file's name and a link that shows it — one upload read per page
+  decorate: async (outputs, context) => {
+    const links = await context.ports.fileReadUrls({
+      organizationId: context.organizationId,
+      fileKeys: outputs.flatMap((output) => output.file_keys as string[]),
+    });
+    for (const output of outputs) {
+      output.files = (output.file_keys as string[]).map((file_key) => {
+        const link = links.get(file_key);
+        return { file_key, file_name: link?.fileName ?? null, file_url: link?.url ?? null };
+      });
+    }
   },
   afterWrite: async (row, change, context) => {
     if (change.kind !== 'create') return;

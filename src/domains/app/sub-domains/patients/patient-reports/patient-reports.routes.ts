@@ -35,7 +35,7 @@ export function patientReportsRoutes(service: PatientReportsService): FastifyPlu
         schema: {
           summary: "List a patient's reports",
           description:
-            "Returns one page of a patient's lab, scan, consent and other reports (newest `report_date` first; `sort=created_at` by entry), with the total count on the first page. Filters: `type`, `q` (the name), the created range. Reports are clinical (P29). Requires patient:clinical_record:read (P14).",
+            "Returns one page of a patient's lab, scan, consent and other reports (newest `report_date` first; `sort=created_at` by entry), with the total count on the first page; each report's `files` give every file its upload's name and a link that shows it, valid 15 minutes and made fresh on every read (null when its upload is gone, D86). Filters: `type`, `q` (the name), the created range. Reports are clinical (P29). Requires patient:clinical_record:read (P14).",
           tags: ['Patient file'],
           params: patientReportsParentParamsDto,
           querystring: listPatientReportsQueryDto,
@@ -72,7 +72,7 @@ export function patientReportsRoutes(service: PatientReportsService): FastifyPlu
         schema: {
           summary: 'Get a report',
           description:
-            "Returns one of a patient's reports — another patient's is a 404. Requires patient:clinical_record:read (P14).",
+            "Returns one of a patient's reports, with its `files` (each one's name and 15-minute view link, D86) — another patient's is a 404. Requires patient:clinical_record:read (P14).",
           tags: ['Patient file'],
           params: patientReportsIdParamsDto,
         },

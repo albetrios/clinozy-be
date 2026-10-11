@@ -99,9 +99,9 @@ Paths below drop `/api/v1`. "→ §n" points at the route review section that ex
 | `createPrescription` / `updatePrescription` | `POST` / `PATCH /app/patients/:patient_id/prescriptions[/:patient_prescription_id]` · `POST …/approve` | a draft until a Doctor or Admin approves it; kits at `/app/prescription-kits` |
 | `listTreatments` | `GET /app/patients/:patient_id/treatments` | org-wide: `GET /app/patient-treatments` |
 | `createTreatment` / `updateTreatment` | `POST` / `PATCH /app/patients/:patient_id/treatments[/:patient_treatment_id]` · `POST …/reverse` | recording a session spends one; reversing gives it back |
-| `listImages` | `GET /app/patients/:patient_id/images` | `album`, `appointment_id`, `patient_treatment_id`, `stage`, `body_part`; `meta.album_counts` |
+| `listImages` | `GET /app/patients/:patient_id/images` | `album`, `appointment_id`, `patient_treatment_id`, `stage`, `body_part`; `meta.album_counts`; each photo's `file_url` shows it — a 15-minute link made on every read, so read the list again rather than keep a link (D86) |
 | `uploadImages` / `updateImage` | uploads as above → `POST /app/patients/:patient_id/images` / `PATCH …/images/:patient_image_id` | |
-| `listReports` / `createReport` | `GET` / `POST /app/patients/:patient_id/reports` | |
+| `listReports` / `createReport` | `GET` / `POST /app/patients/:patient_id/reports` | each report's `files` give every file its name and a 15-minute `file_url` that opens it (inline, saved under its name — D86) |
 | `listPackages` | `GET /app/patients/:patient_id/offerings?is_package=true` | every session-based offering bought (drop the filter for all); extend or change sessions with `PATCH …/offerings/:patient_offering_id` |
 | `listNotes` / `addNote` | `GET /app/contacts/:contact_id/activities?type=note` / `POST /app/contacts/:contact_id/activities/add-note` | patient notes are notes in the contact's activity (→ §7 P20) |
 | `listPatientInvoices` / `listPatientPayments` | `GET /app/invoices?patient_id=` / `GET /app/payments?patient_id=` | |

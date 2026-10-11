@@ -146,6 +146,22 @@ export interface BaseRecordPorts {
     organizationId: number;
     fileKey: string;
   }) => Promise<void>;
+  /**
+   * A short-lived view link, with the uploaded file's name, for each of the organization's
+   * confirmed uploads among `fileKeys` (a photo, a report's files — launch D86) — late-wired from
+   * the upload domain; a key that is none has no entry. Runs in the read's organization context;
+   * the record's own gate decides who receives the links.
+   */
+  fileReadUrls: (options: {
+    organizationId: number;
+    fileKeys: readonly string[];
+  }) => Promise<ReadonlyMap<string, BaseRecordFileLink>>;
+}
+
+/** A stored file's short-lived view link and the name the person uploaded it under. */
+export interface BaseRecordFileLink {
+  url: string;
+  fileName: string;
 }
 
 /** What a rule reads of a confirmed upload: its type, the client's file name, its size in bytes. */

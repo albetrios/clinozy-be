@@ -5,7 +5,11 @@ import type { MembershipService } from '@/domains/tenancy/sub-domains/membership
 import type { MemberRoleService } from '@/domains/tenancy/sub-domains/member-roles/member-role.service.js';
 import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
 import { ValidationError } from '@/shared/errors/index.js';
-import type { BaseRecordConfirmedUpload, BaseRecordPorts } from './base-record.types.js';
+import type {
+  BaseRecordConfirmedUpload,
+  BaseRecordFileLink,
+  BaseRecordPorts,
+} from './base-record.types.js';
 import { BranchesRepository } from './sub-domains/branches/branches.repository.js';
 import { BranchesService } from './sub-domains/branches/branches.service.js';
 import { BranchMembersRepository } from './sub-domains/branches/branch-members/branch-members.repository.js';
@@ -81,6 +85,9 @@ export function createAppContainer(
     removeImageLocation: () => {
       throw new Error('App uploads are not wired (domain-containers.plugin.ts → wireAppUploads)');
     },
+    fileReadUrls: () => {
+      throw new Error('App uploads are not wired (domain-containers.plugin.ts → wireAppUploads)');
+    },
   };
   for (const service of Object.values(records)) service.usePorts(ports);
   return {
@@ -137,10 +144,15 @@ export interface AppUploadChecker {
     fileKey: string;
     organizationInternalId: number;
   }): Promise<void>;
+  createReadUrls(options: {
+    organizationInternalId: number;
+    fileKeys: readonly string[];
+  }): Promise<ReadonlyMap<string, BaseRecordFileLink>>;
 }
 
 /**
- * Wires the app's upload port (`findConfirmedUpload`) to the upload domain — called by the
+ * Wires the app's upload ports (`findConfirmedUpload`, `removeImageLocation`, `fileReadUrls`) to
+ * the upload domain — called by the
  * composition root once both containers exist (the upload container registers after the app's).
  *
  * @remarks
@@ -161,6 +173,8 @@ export function wireAppUploads(container: AppContainer, uploads: AppUploadChecke
   };
   container.ports.removeImageLocation = ({ scope, organizationId, fileKey }) =>
     uploads.removeImageLocation({ scope, fileKey, organizationInternalId: organizationId });
+  container.ports.fileReadUrls = ({ organizationId, fileKeys }) =>
+    uploads.createReadUrls({ organizationInternalId: organizationId, fileKeys });
 }
 
 /** Decorates `appDomain` on the Fastify instance (after the tenancy container). */

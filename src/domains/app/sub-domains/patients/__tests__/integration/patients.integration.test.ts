@@ -942,6 +942,11 @@ describe('Patients — integration (routes-final §7)', () => {
       '[.data.album, .data.taken_on, .data.file_name, .data.service_label] | join(",")',
       `general,${today},cheek.jpg,Consultation`,
     );
+    flow.expectValue(
+      'its link (D86): a 15-minute signed GET of its key, shown inline under its name',
+      '[(.data.file_url | test("^https://")), (.data.file_url | contains("cheek.jpg")), (.data.file_url | test("X-Amz-Expires=900")), (.data.file_url | test("response-content-disposition=inline"))] | map(tostring) | join(",")',
+      'true,true,true,true',
+    );
     await flow.expect(409, 'the same upload again (P25)', 'POST', images, { file_key: jpgKey });
     flow.expectValue('again: why', REASON, 'image_exists');
     await flow.expect(400, 'a PDF', 'POST', images, { file_key: pdfKey });
@@ -997,6 +1002,11 @@ describe('Patients — integration (routes-final §7)', () => {
       'no private photo, no private count',
       '[(.data | length), (.meta.album_counts | has("private"))] | map(tostring) | join(",")',
       '2,false',
+    );
+    flow.expectValue(
+      'a link for each photo listed — and so none for the private one (D86, P23)',
+      '[.data[] | select(.file_url != null)] | length',
+      2,
     );
     await flow.expect(404, 'a private photo by id', 'GET', `${images}/${privatePhoto}`);
     await flow.expect(
@@ -1074,6 +1084,17 @@ describe('Patients — integration (routes-final §7)', () => {
       'GET',
       `/app/patients/${ashaFile}/images/${lhrPhoto}`,
     );
+    const goneKey = await confirmedUpload('gone.png', 'image/png', 2048);
+    await flow.expect(200, 'a photo', 'POST', images, { file_key: goneKey });
+    const gonePhoto = flow.last('.data.id');
+    await getOperatorSql()`UPDATE upload.uploads SET deleted_at = now() WHERE file_key = ${goneKey}`;
+    await flow.expect(
+      200,
+      'the photo after its upload is deleted',
+      'GET',
+      `${images}/${gonePhoto}`,
+    );
+    flow.expectValue('no link to a file that is gone (D86)', '.data.file_url == null', true);
   });
 
   it('7.G reports (routes 39–44, P29)', async () => {
@@ -1091,6 +1112,11 @@ describe('Patients — integration (routes-final §7)', () => {
       'report: prep_, lab, one file',
       '[(.data.id | startswith("prep_")), .data.type, (.data.file_keys | length)] | map(tostring) | join(",")',
       'true,lab,1',
+    );
+    flow.expectValue(
+      "its file (D86): the key, the upload's name and a 15-minute link that shows it",
+      `[(.data.files[0].file_key == "${reportKey}"), .data.files[0].file_name, (.data.files[0].file_url | test("X-Amz-Expires=900")), (.data.files[0].file_url | test("response-content-disposition=inline"))] | map(tostring) | join(",")`,
+      'true,cbc.pdf,true,true',
     );
     await flow.expect(400, 'an unconfirmed file (P29)', 'POST', reports, {
       name: 'X',
@@ -1111,6 +1137,11 @@ describe('Patients — integration (routes-final §7)', () => {
     const scan = flow.last('.data.id');
     await flow.expect(200, 'the reports, newest first', 'GET', reports);
     flow.expectValue('newest report date first', '[.data[].id] | join(",")', `${scan},${report}`);
+    flow.expectValue(
+      'each report its own files: none for the scan, the CBC for the lab report (D86)',
+      '[.data[] | (.files | map(.file_name) | join("+"))] | join(",")',
+      ',cbc.pdf',
+    );
     await flow.expect(200, 'type filter', 'GET', `${reports}?type=lab`);
     flow.expectValue('lab: the CBC', '[.data[].id] | join(",")', report);
     await flow.call('GET', `${reports}/${report}`);

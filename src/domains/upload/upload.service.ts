@@ -393,6 +393,41 @@ export class UploadService {
   }
 
   /**
+   * A short-lived view link for each of the organization's confirmed uploads among `fileKeys` —
+   * a patient photo, a report's files (launch D86) — with the name the person uploaded it under.
+   *
+   * @remarks
+   * - **Algorithm:** one read of the keys' live, confirmed upload rows of the organization (in
+   *   the caller's organization context); for each, a presigned GET valid
+   *   {@link PRESIGNED_URL_EXPIRY_SECONDS} that serves the object inline under its `file_name`.
+   *   A key that is missing, pending, deleted or another organization's gets no link.
+   * - **Failure modes:** a storage presign error propagates (signing is local — no request).
+   * - **Side effects:** none; the caller decides who may hold the links (the record's own gate).
+   */
+  async createReadUrls(options: {
+    organizationInternalId: number;
+    fileKeys: readonly string[];
+  }): Promise<Map<string, { url: string; fileName: string }>> {
+    const keys = [...new Set(options.fileKeys)];
+    const rows = await this.repository.findConfirmedByFileKeys(
+      options.organizationInternalId,
+      keys,
+    );
+    const links = new Map<string, { url: string; fileName: string }>();
+    for (const row of rows) {
+      links.set(row.file_key, {
+        url: await this.objectStorage.createPresignedDownloadUrl({
+          key: row.file_key,
+          expiresInSeconds: PRESIGNED_URL_EXPIRY_SECONDS,
+          fileName: row.file_name,
+        }),
+        fileName: row.file_name,
+      });
+    }
+    return links;
+  }
+
+  /**
    * Rewrites an organization's confirmed photo without where it was taken (launch D79, WC-42) — the
    * app files patient photos only after this.
    *

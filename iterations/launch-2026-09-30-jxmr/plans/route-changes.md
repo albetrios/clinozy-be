@@ -409,7 +409,7 @@ that drops them is built. The medical store's routes are §11's — back in the 
 | 11.50 | NEW     | POST   | `/medical-sales/{medical_sale_id}/returns`                             | `payment:create`  | Return from patient — refund, stock back                 | routes-final §11.H.7 | `POST /api/v1/app/medical-sales/{medical_sale_id}/returns` · #153                             |
 | 11.51 | NEW     | GET    | `/medical-payments`                                                    | `medicine:read`   | The store's Payments tab                                 | routes-final §11.H.7 | `GET /api/v1/app/medical-payments` · #153                                                     |
 
-## 12. Frontend integration (D81, D82, D83, D84, D85, ROUTE #154–#178)
+## 12. Frontend integration (D81, D82, D83, D84, D85, D86, ROUTE #154–#180)
 
 Proposed 2026-10-10 from the frontend's per-room research; built and confirmed row by row in `AS-BUILT.md`.
 
@@ -447,6 +447,8 @@ Proposed 2026-10-10 from the frontend's per-room research; built and confirmed r
 | I30 | POST       | `/tenancy/membership-invitations/{membership_invitation_id}/decline` | NEW | the invitee declines (expired or not): revoked, the membership ends `declined` (seat freed), the inviter told in the app; the invitation plus `organization_id` (D84 (3), ROUTE #174) |
 | I31 | GET        | `/tenancy/organization/memberships` (ended members)      | CHANGED | `end_reason` gains `declined` and `invitation_expired` — the daily expiry sweep ends an invite 7 days past its expiry (D84 (4), ROUTE #175) |
 | I32 | GET, PATCH | `/users/me/settings` | CHANGED | the person's analytics consent (D85): `analytics_consent` (`granted` / `denied`) and `analytics_consent_version` written together, `analytics_consent_at` stamped by the server, all three `null` until first answered; each decision audited as `user.settings.analytics_consent.update`. The documented response drops `user_id`, `created_at` and `updated_at`, which the route never sent |
+| I33 | GET, POST, PATCH, restore | `/app/patients/{patient_id}/images` (and `…/{patient_image_id}`) | CHANGED | each photo gains `file_url` — a 15-minute presigned GET of its upload, made on every read, served inline under the uploaded name; `null` when its upload is gone; a private photo stays unread without the album code (D86, ROUTE #179) |
+| I34 | GET, POST, PATCH, restore | `/app/patients/{patient_id}/reports` (and `…/{patient_report_id}`) | CHANGED | each report gains `files` — every one of `file_keys`, in order, with `file_name` (the upload's) and `file_url` (as I33); both `null` when the upload is gone (D86, ROUTE #179) |
 
 ## Before → after
 

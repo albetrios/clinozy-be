@@ -94,7 +94,7 @@ async function assertLinks(values: Record<string, unknown>, patientId: number): 
  *   refuses a future `taken_on`, another contact's or an unvisited appointment, another patient's
  *   session. After a create a `system` entry links the photo in the contact's activity — a private
  *   one marked so only the album's holders see it; a move in or out of the album re-marks its
- *   entries (M10, PC16). `decorate` adds each visit's `service_label` (one read per page).
+ *   entries (M10, PC16). `decorate` adds each visit's `service_label` and each photo's `file_url` (one read each per page, D86).
  * - **Failure modes:** `ForbiddenError('field_permission_required')`; `ValidationError` on
  *   `file_key`, `taken_on`, `appointment_id` or `patient_treatment_id`.
  */
@@ -143,7 +143,15 @@ export function createPatientImagesRules(repository: PatientImagesRepository): B
         });
       }
     },
-    decorate: async (outputs) => {
+    decorate: async (outputs, context) => {
+      // D86: a link that shows each photo — only rows the caller may read reach here (P23)
+      const links = await context.ports.fileReadUrls({
+        organizationId: context.organizationId,
+        fileKeys: outputs.map((output) => toText(output.file_key)),
+      });
+      for (const output of outputs) {
+        output.file_url = links.get(toText(output.file_key))?.url ?? null;
+      }
       const appointmentIds = [
         ...new Set(
           outputs.flatMap((output) =>
