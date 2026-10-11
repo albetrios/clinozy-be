@@ -415,8 +415,8 @@ call `switchToOrganization` / `loginScopedToOrganization`), not to build the pat
 | `member-role-permission-list.js` | `TEST_TOKEN`, `TEST_ORG_ID`, `TEST_ROLE_ID` | `GET /api/v1/tenancy/organization/roles/:role_id/permissions` |
 | `notification-policy-crud.js` | `TEST_TOKEN`, `TEST_ORG_ID` | `GET /api/v1/tenancy/organization/notification-policies` |
 | `billing-subscriptions-rls.js` | `TEST_TOKEN`, `TEST_ORG_ID`, optional `TEST_SUBSCRIPTION_ID` | `GET /api/v1/billing/subscriptions` |
-| `upload-list.js` | `TEST_TOKEN`, optional `TEST_UPLOAD_PUBLIC_ID` | `GET /api/v1/uploads/:id` |
-| `user-data-export.js` | `TEST_TOKEN` | `POST /api/v1/users/me/data-export` |
+| `upload-list.js` | `TEST_TOKEN`, `TEST_UPLOAD_PUBLIC_ID` (without it the scenario sends nothing) | `GET /api/v1/uploads/:id` |
+| `user-data-export.js` | `TEST_TOKEN`, `DEMO_PASSWORD` (the token user's, for the step-up) | once: `POST /api/v1/auth/step-up`, `POST /api/v1/users/me/data-export`; under load: `GET /api/v1/users/me/data-export/:data_export_id` |
 
 CI runs a subset in the **organization-scoped routes** job step (see `scheduled-k6-load-slo.yml`).
 
