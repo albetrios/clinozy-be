@@ -2,7 +2,7 @@ import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { ConfigurationError } from '@/shared/errors/index.js';
 import {
   getCachedPermissions,
@@ -56,28 +56,39 @@ function getPermissionRepository(): PermissionRepository {
  *   cached set could let a just-revoked code still be granted. Most callers should prefer the
  *   cached {@link resolvePermissionsWithRepository} path.
  */
-async function resolvePermissionsFromDatabase(
-  repository: PermissionRepository,
-  userPublicId: string,
-  organizationPublicId: string,
-): Promise<string[]> {
-  return withAppDatabaseContext(
-    PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
-    async (databaseHandle) =>
+async function resolvePermissionsFromDatabase({
+  repository,
+  userPublicId,
+  organizationPublicId,
+}: {
+  repository: PermissionRepository;
+  userPublicId: string;
+  organizationPublicId: string;
+}): Promise<string[]> {
+  return withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
+    callback: async (databaseHandle) =>
       repository.findPermissionCodesForUserInOrganization(
         userPublicId,
         organizationPublicId,
-        databaseHandle as PostgresJsDatabase,
+        databaseHandle as NodePgDatabase,
       ),
-  );
+  });
 }
 
-async function resolvePermissionsWithRepository(
-  repository: PermissionRepository,
-  userPublicId: string,
-  organizationPublicId: string,
-): Promise<string[]> {
-  const cached = await getCachedPermissions(userPublicId, organizationPublicId);
+async function resolvePermissionsWithRepository({
+  repository,
+  userPublicId,
+  organizationPublicId,
+}: {
+  repository: PermissionRepository;
+  userPublicId: string;
+  organizationPublicId: string;
+}): Promise<string[]> {
+  const cached = await getCachedPermissions({
+    userId: userPublicId,
+    organizationId: organizationPublicId,
+  });
   if (cached !== null) {
     return cached;
   }
@@ -87,9 +98,12 @@ async function resolvePermissionsWithRepository(
   // lock nonce (per-user invalidatePermissions deletes the lock) and the organization cache version
   // captured before the DB read (organization-wide invalidateOrganizationPermissions bumps the version,
   // orphaning this commit). See audit-#H1.
-  return withPermissionCacheRecomputeLock(userPublicId, organizationPublicId, async () =>
-    resolvePermissionsFromDatabase(repository, userPublicId, organizationPublicId),
-  );
+  return withPermissionCacheRecomputeLock({
+    userId: userPublicId,
+    organizationId: organizationPublicId,
+    recompute: async () =>
+      resolvePermissionsFromDatabase({ repository, userPublicId, organizationPublicId }),
+  });
 }
 
 /**
@@ -114,15 +128,18 @@ async function resolvePermissionsWithRepository(
  *   entries are invalidated via
  *   {@link invalidatePermissions} on role/permission changes.
  */
-export async function resolveUserOrganizationPermissions(
-  userPublicId: string,
-  organizationPublicId: string,
-): Promise<string[]> {
-  return resolvePermissionsWithRepository(
-    getPermissionRepository(),
+export async function resolveUserOrganizationPermissions({
+  userPublicId,
+  organizationPublicId,
+}: {
+  userPublicId: string;
+  organizationPublicId: string;
+}): Promise<string[]> {
+  return resolvePermissionsWithRepository({
+    repository: getPermissionRepository(),
     userPublicId,
     organizationPublicId,
-  );
+  });
 }
 
 /**
@@ -139,15 +156,18 @@ export async function resolveUserOrganizationPermissions(
  *   (up-to-5-minute) cached permission set. Prefer {@link resolveUserOrganizationPermissions}
  *   for hot-path authorization.
  */
-export async function resolveUserOrganizationPermissionsFromDatabase(
-  userPublicId: string,
-  organizationPublicId: string,
-): Promise<string[]> {
-  return resolvePermissionsFromDatabase(
-    getPermissionRepository(),
+export async function resolveUserOrganizationPermissionsFromDatabase({
+  userPublicId,
+  organizationPublicId,
+}: {
+  userPublicId: string;
+  organizationPublicId: string;
+}): Promise<string[]> {
+  return resolvePermissionsFromDatabase({
+    repository: getPermissionRepository(),
     userPublicId,
     organizationPublicId,
-  );
+  });
 }
 
 /**
@@ -174,15 +194,18 @@ export class AuthorizationService {
     configureAuthorization(permissionRepository);
   }
 
-  resolveUserOrganizationPermissions(
-    userPublicId: string,
-    organizationPublicId: string,
-  ): Promise<string[]> {
-    return resolvePermissionsWithRepository(
-      this.permissionRepository,
+  resolveUserOrganizationPermissions({
+    userPublicId,
+    organizationPublicId,
+  }: {
+    userPublicId: string;
+    organizationPublicId: string;
+  }): Promise<string[]> {
+    return resolvePermissionsWithRepository({
+      repository: this.permissionRepository,
       userPublicId,
       organizationPublicId,
-    );
+    });
   }
 
   /**
@@ -197,14 +220,17 @@ export class AuthorizationService {
    * - **Notes:** sec-r5-L3 — used by {@link assertCallerCanGrantPermissionCodes} so a
    *   privilege-escalation check never trusts a stale (up-to-5-minute) cached set.
    */
-  resolveUserOrganizationPermissionsFromDatabase(
-    userPublicId: string,
-    organizationPublicId: string,
-  ): Promise<string[]> {
-    return resolvePermissionsFromDatabase(
-      this.permissionRepository,
+  resolveUserOrganizationPermissionsFromDatabase({
+    userPublicId,
+    organizationPublicId,
+  }: {
+    userPublicId: string;
+    organizationPublicId: string;
+  }): Promise<string[]> {
+    return resolvePermissionsFromDatabase({
+      repository: this.permissionRepository,
       userPublicId,
       organizationPublicId,
-    );
+    });
   }
 }

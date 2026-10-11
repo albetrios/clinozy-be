@@ -3,13 +3,16 @@ import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.
 import type { BranchMachineOutput } from './branch-machines.types.js';
 
 /** Shapes a `app.branch_machines` row as the API returns it (public ids, numbers, ISO times). */
-export function serializeBranchMachine(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): BranchMachineOutput {
+export function serializeBranchMachine({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): BranchMachineOutput {
   return {
     id: row.public_id,
-    branch_id: references.publicIdOf('branch_id', row) ?? '',
+    branch_id: references.publicIdOf({ field: 'branch_id', row }) ?? '',
     name: row.name as string,
     is_active: row.is_active as boolean,
     created_at: row.created_at.toISOString(),

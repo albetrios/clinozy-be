@@ -73,6 +73,7 @@ describe('Tenancy team-only route guards — Integration', () => {
     const token = await generateTestToken({
       userId: user.public_id,
       organizationPublicId: organization.public_id,
+      stepUp: true,
     });
     return { user, organization, role, token };
   }
@@ -168,6 +169,7 @@ describe('Tenancy team-only route guards — Integration', () => {
       const outsiderToken = await generateTestToken({
         userId: outsider.public_id,
         organizationPublicId: personal.organization.public_id,
+        stepUp: true,
       });
 
       const response = await injectAuthenticated(app, {

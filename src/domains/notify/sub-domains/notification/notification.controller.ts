@@ -16,20 +16,24 @@ export function createNotificationController(service: NotificationService) {
     listNotifications: async (request: FastifyRequest, _reply: FastifyReply) => {
       const scope = requireUserScope(request);
       const parsed = validateListNotificationsQuery(request.query);
-      const result = await service.listForUser(
+      const result = await service.listForUser({
         scope,
-        omitUndefined({
+        options: omitUndefined({
           after: parsed.after,
           limit: parsed.limit,
           include_total: parsed.include_total === 'true',
         }),
-      );
+      });
       const serialized = NotificationSerializer.many(result.items);
-      return paginatedResponse(serialized, getRequestIdentifier(request), {
-        per_page: result.limit,
-        next: result.next_cursor,
-        has_more: result.has_more,
-        ...(result.total !== null ? { estimated_total: result.total } : {}),
+      return paginatedResponse({
+        data: serialized,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: result.limit,
+          next: result.next_cursor,
+          has_more: result.has_more,
+          ...(result.total !== null ? { estimated_total: result.total } : {}),
+        },
       });
     },
     getNotification: async (
@@ -37,41 +41,50 @@ export function createNotificationController(service: NotificationService) {
       _reply: FastifyReply,
     ) => {
       const scope = requireUserScope(request);
-      const notification = await service.get(request.params.notification_id, scope);
+      const notification = await service.get({ public_id: request.params.notification_id, scope });
       if (!notification) throw new NotFoundError('Notification');
-      return successResponse(
-        NotificationSerializer.one(notification),
-        getRequestIdentifier(request),
-      );
+      return successResponse({
+        data: NotificationSerializer.one(notification),
+        request_id: getRequestIdentifier(request),
+      });
     },
     markNotificationRead: async (
       request: FastifyRequest<{ Params: { notification_id: string } }>,
       _reply: FastifyReply,
     ) => {
       const scope = requireUserScope(request);
-      const notification = await service.markRead(request.params.notification_id, scope);
+      const notification = await service.markRead({
+        public_id: request.params.notification_id,
+        scope,
+      });
       if (!notification) throw new NotFoundError('Notification');
-      return successResponse(
-        NotificationSerializer.one(notification),
-        getRequestIdentifier(request),
-      );
+      return successResponse({
+        data: NotificationSerializer.one(notification),
+        request_id: getRequestIdentifier(request),
+      });
     },
     markAllRead: async (request: FastifyRequest, _reply: FastifyReply) => {
       const scope = requireUserScope(request);
       const updatedCount = await service.markAllRead(scope);
-      return successResponse({ updated_count: updatedCount }, getRequestIdentifier(request));
+      return successResponse({
+        data: { updated_count: updatedCount },
+        request_id: getRequestIdentifier(request),
+      });
     },
     getUnreadCount: async (request: FastifyRequest, _reply: FastifyReply) => {
       const scope = requireUserScope(request);
       const count = await service.getUnreadCount(scope);
-      return successResponse({ count }, getRequestIdentifier(request));
+      return successResponse({ data: { count }, request_id: getRequestIdentifier(request) });
     },
     deleteNotification: async (
       request: FastifyRequest<{ Params: { notification_id: string } }>,
       reply: FastifyReply,
     ) => {
       const scope = requireUserScope(request);
-      const deleted = await service.deleteNotification(request.params.notification_id, scope);
+      const deleted = await service.deleteNotification({
+        public_id: request.params.notification_id,
+        scope,
+      });
       if (!deleted) throw new NotFoundError('Notification');
       return reply.code(204).send();
     },

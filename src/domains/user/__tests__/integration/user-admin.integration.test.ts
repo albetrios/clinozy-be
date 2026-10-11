@@ -6,7 +6,24 @@ import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { generateTestToken, generateTestTokenAndSession } from '@/tests/helpers/test-auth.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { eq } from 'drizzle-orm';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
+import { users } from '@/domains/user/user.schema.js';
+import { sessions } from '@/domains/auth/sub-domains/auth-session/auth-session.schema.js';
 import type { FastifyInstance } from 'fastify';
+
+async function readPersistedUser(userId: number) {
+  const [row] = await getOperatorDatabase()
+    .select({
+      id: users.public_id,
+      first_name: users.first_name,
+      status: users.status,
+      deleted_at: users.deleted_at,
+    })
+    .from(users)
+    .where(eq(users.id, userId));
+  return row;
+}
 
 /**
  * Admin user-management happy paths (`ROLE: super_admin` routes) — the
@@ -49,6 +66,25 @@ describe('User admin routes — happy paths', () => {
     expect(body.data.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('GET /users?search= returns the matching user and leaves out the rest', async () => {
+    // The ILIKE over email + display name was proven against the repository only; this pins that
+    // `search` reaches it through the admin route's query DTO.
+    const match = await createTestUser({ email: 'search-target-quokka@example.com' });
+    const nonMatch = await createTestUser({ email: 'search-bystander@example.com' });
+    const response = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath('/users'),
+      token: adminToken,
+      query: { search: 'QUOKKA' },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const listedIds = (response.json() as { data: Array<{ id: string }> }).data.map(
+      (listedUser) => listedUser.id,
+    );
+    expect(listedIds).toEqual([match.public_id]);
+    expect(listedIds).not.toContain(nonMatch.public_id);
+  });
+
   it('GET /users/:user_id returns the target profile', async () => {
     const target = await createTestUser();
     const response = await injectAuthenticated(app, {
@@ -57,10 +93,21 @@ describe('User admin routes — happy paths', () => {
       token: adminToken,
     });
     expect(response.statusCode, response.body).toBe(200);
+    const profile = (response.json() as { data: Record<string, unknown> }).data;
+    expect(profile).toMatchObject({ id: target.public_id, email: target.email, status: 'ACTIVE' });
+    for (const secretField of [
+      'password_hash',
+      'email_hash',
+      'failed_login_count',
+      'account_locked_until',
+    ]) {
+      expect(profile).not.toHaveProperty(secretField);
+    }
   });
 
   it('PATCH /users/:user_id updates profile fields', async () => {
-    const target = await createTestUser();
+    const target = await createTestUser({ firstName: 'Target' });
+    const unaffected = await createTestUser({ firstName: 'Unchanged' });
     const response = await injectAuthenticated(app, {
       method: 'PATCH',
       url: testApiPath(`/users/${target.public_id}`),
@@ -68,6 +115,25 @@ describe('User admin routes — happy paths', () => {
       payload: { first_name: 'Updated' },
     });
     expect(response.statusCode, response.body).toBe(200);
+    expect((response.json() as { data: Record<string, unknown> }).data).toMatchObject({
+      id: target.public_id,
+      first_name: 'Updated',
+    });
+    const read = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath(`/users/${target.public_id}`),
+      token: adminToken,
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    expect((read.json() as { data: Record<string, unknown> }).data).toMatchObject({
+      id: target.public_id,
+      first_name: 'Updated',
+    });
+    expect(await readPersistedUser(unaffected.id)).toMatchObject({
+      id: unaffected.public_id,
+      first_name: 'Unchanged',
+      status: 'ACTIVE',
+    });
   });
 
   it('POST /users/:user_id/suspend then /unsuspend round-trips status', async () => {
@@ -79,6 +145,11 @@ describe('User admin routes — happy paths', () => {
       token: adminToken,
     });
     expect(suspend.statusCode, suspend.body).toBe(200);
+    expect((suspend.json() as { data: Record<string, unknown> }).data).toMatchObject({
+      id: target.public_id,
+      status: 'SUSPENDED',
+    });
+    expect(await readPersistedUser(target.id)).toMatchObject({ status: 'SUSPENDED' });
 
     const unsuspend = await injectAuthenticated(app, {
       method: 'POST',
@@ -86,16 +157,62 @@ describe('User admin routes — happy paths', () => {
       token: adminToken,
     });
     expect(unsuspend.statusCode, unsuspend.body).toBe(200);
+    expect((unsuspend.json() as { data: Record<string, unknown> }).data).toMatchObject({
+      id: target.public_id,
+      status: 'ACTIVE',
+    });
+    expect(await readPersistedUser(target.id)).toMatchObject({
+      status: 'ACTIVE',
+      deleted_at: null,
+    });
   });
 
-  it('DELETE /users/:user_id soft-deletes the target', async () => {
+  it('DELETE /users/:user_id soft-deletes the target and revokes its session without affecting other users', async () => {
     const target = await createTestUser();
+    const unaffected = await createTestUser();
+    const { token: targetToken, sessionPublicId } = await generateTestTokenAndSession({
+      userId: target.public_id,
+    });
+    // Prime token validity without provisioning an owned personal organization.
+    const before = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath('/auth/me/sessions'),
+      token: targetToken,
+    });
+    expect(before.statusCode, before.body).toBe(200);
     const response = await injectAuthenticated(app, {
       method: 'DELETE',
       url: testApiPath(`/users/${target.public_id}`),
       token: adminToken,
     });
     expect(response.statusCode, response.body).toBe(204);
+    expect(response.body).toBe('');
+    expect(await readPersistedUser(target.id)).toMatchObject({
+      id: target.public_id,
+      deleted_at: expect.any(Date),
+    });
+    const [revoked] = await getOperatorDatabase()
+      .select({ is_revoked: sessions.is_revoked })
+      .from(sessions)
+      .where(eq(sessions.public_id, sessionPublicId));
+    expect(revoked?.is_revoked).toBe(true);
+    const after = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath('/auth/me/sessions'),
+      token: targetToken,
+    });
+    expect(after.statusCode, after.body).toBe(401);
+    const hidden = await injectAuthenticated(app, {
+      method: 'GET',
+      url: testApiPath(`/users/${target.public_id}`),
+      token: adminToken,
+    });
+    expect(hidden.statusCode, hidden.body).toBe(404);
+    expect(await readPersistedUser(unaffected.id)).toMatchObject({
+      id: unaffected.public_id,
+      status: 'ACTIVE',
+      deleted_at: null,
+    });
   });
 
   /**
@@ -167,6 +284,11 @@ describe('User admin routes — happy paths', () => {
         payload: { first_name: 'Nope' },
       });
       expect(response.statusCode, response.body).toBe(403);
+      expect(await readPersistedUser(target.id)).toMatchObject({
+        first_name: target.first_name,
+        status: 'ACTIVE',
+        deleted_at: null,
+      });
     });
 
     it('PATCH /users/:user_id returns 404 for an unknown user id', async () => {
@@ -190,6 +312,11 @@ describe('User admin routes — happy paths', () => {
         token,
       });
       expect(response.statusCode, response.body).toBe(403);
+      expect(await readPersistedUser(target.id)).toMatchObject({
+        id: target.public_id,
+        status: 'ACTIVE',
+        deleted_at: null,
+      });
     });
 
     it('DELETE /users/:user_id returns 404 for an unknown user id', async () => {

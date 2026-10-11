@@ -43,7 +43,13 @@ export interface TaskRulesRunCounts {
 }
 
 /** A rule with no saved switch is on, by hand (TK10). */
-function isOn(switches: Map<string, TaskRuleSwitch>, rule: TaskRule): boolean {
+function isOn({
+  switches,
+  rule,
+}: {
+  switches: Map<string, TaskRuleSwitch>;
+  rule: TaskRule;
+}): boolean {
   return switches.get(rule)?.isOn ?? true;
 }
 
@@ -57,7 +63,7 @@ function clinozyMessageOf(step: ClinozyStepTask): {
   automationKind: ContactActivityAutomationKind;
   templateParameters: string[];
 } | null {
-  const first = templateParameter(step.firstName, 'there');
+  const first = templateParameter({ value: step.firstName, fallback: 'there' });
   if (step.rule === TASK_RULE.CONFIRM && step.appointmentId !== null) {
     return {
       body: `Hi ${first}, this is a reminder of your visit on ${step.visitDate} at ${step.visitTime}. Reply YES to confirm.`,
@@ -68,7 +74,7 @@ function clinozyMessageOf(step: ClinozyStepTask): {
   }
   if (step.rule === TASK_RULE.PAYMENT_DUE && step.invoiceId !== null) {
     const due = `₹${step.dueAmount}`;
-    const invoice = templateParameter(step.invoiceNumber, '-');
+    const invoice = templateParameter({ value: step.invoiceNumber, fallback: '-' });
     return {
       body: `Hi ${first}, ${due} is still due on invoice ${invoice}. You can pay at your next visit, or reply here and we will help.`,
       link: { invoice_id: step.invoiceId },
@@ -139,10 +145,13 @@ async function takeClinozyStep(options: {
  * visit is the clinic's `retarget_after_days` ago, with marketing consent and nothing booked; staff
  * send the first message. Answers how many it opened.
  */
-async function openLapsedPatientLeads(
-  repository: TaskRulesRepository,
-  organization: TaskRulesOrganization,
-): Promise<number> {
+async function openLapsedPatientLeads({
+  repository,
+  organization,
+}: {
+  repository: TaskRulesRepository;
+  organization: TaskRulesOrganization;
+}): Promise<number> {
   let opened = 0;
   for (const patient of await repository.findLapsedPatients({
     organizationId: organization.id,
@@ -181,10 +190,13 @@ async function openLapsedPatientLeads(
  *   entries on `app.contact_activities` (with the contact's activity times), a booking's reminder
  *   status, re-target leads on `app.leads`.
  */
-export async function runTaskRulesJob(
-  databaseHandle: WorkerDatabaseHandle,
-  organizationPublicId: string,
-): Promise<TaskRulesRunCounts> {
+export async function runTaskRulesJob({
+  databaseHandle,
+  organizationPublicId,
+}: {
+  databaseHandle: WorkerDatabaseHandle;
+  organizationPublicId: string;
+}): Promise<TaskRulesRunCounts> {
   const repository = createWorkerTaskRulesRepository(databaseHandle);
   const organization = await repository.findOrganization(organizationPublicId);
   const counts: TaskRulesRunCounts = {
@@ -205,11 +217,11 @@ export async function runTaskRulesJob(
       organizationId: organization.id,
       source,
     });
-    if (isOn(switches, source.rule))
+    if (isOn({ switches, rule: source.rule }))
       counts.openedCount += await repository.openTasks({ scope, source });
   }
   const handledRules = TASK_AUTOMATIC_RULE_VALUES.filter(
-    (rule) => isOn(switches, rule) && switches.get(rule)?.isAutomatic === true,
+    (rule) => isOn({ switches, rule }) && switches.get(rule)?.isAutomatic === true,
   );
   for (const step of await repository.findDueClinozySteps({
     organizationId: organization.id,
@@ -218,7 +230,7 @@ export async function runTaskRulesJob(
     if (await takeClinozyStep({ repository, organizationId: organization.id, step }))
       counts.handledCount += 1;
   }
-  counts.retargetCount = await openLapsedPatientLeads(repository, organization);
+  counts.retargetCount = await openLapsedPatientLeads({ repository, organization });
   counts.messageCount = await queueClinozyMessages({
     repository,
     messages: createWorkerTaskRuleMessagesRepository(databaseHandle),

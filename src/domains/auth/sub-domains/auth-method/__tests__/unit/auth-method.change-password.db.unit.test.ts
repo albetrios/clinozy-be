@@ -45,9 +45,12 @@ describe('AuthMethodService.changePassword (atomicity — audit-#4)', () => {
     const service = buildService(failingSessionService);
 
     await expect(
-      service.changePassword(user.public_id, {
-        current_password: password,
-        new_password: 'BrandNewPassword456!',
+      service.changePassword({
+        userPublicId: user.public_id,
+        body: {
+          current_password: password,
+          new_password: 'BrandNewPassword456!',
+        },
       }),
     ).rejects.toThrow('forced revoke failure');
 
@@ -71,9 +74,12 @@ describe('AuthMethodService.changePassword (atomicity — audit-#4)', () => {
     };
     const service = buildService(sessionService);
 
-    await service.changePassword(user.public_id, {
-      current_password: password,
-      new_password: 'BrandNewPassword456!',
+    await service.changePassword({
+      userPublicId: user.public_id,
+      body: {
+        current_password: password,
+        new_password: 'BrandNewPassword456!',
+      },
     });
 
     const [persisted] = await database

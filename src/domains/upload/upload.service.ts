@@ -6,11 +6,9 @@ import { getEnv } from '@/shared/config/env.config.js';
 import {
   ConfigurationError,
   ConflictError,
-  ForbiddenError,
   NotFoundError,
   ValidationError,
 } from '@/shared/errors/index.js';
-import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import {
@@ -33,8 +31,12 @@ import {
   MAGIC_BYTE_PREFIX_LENGTH,
   verifyFileMagicBytes,
 } from '@/shared/utils/validation/file-magic.util.js';
-import { UPLOAD_PERMISSIONS } from './upload.permissions.js';
-import type { CreateUploadInput, UploadCreateOutput, UploadDetailOutput } from './upload.types.js';
+import type {
+  CreateUploadInput,
+  UploadCreateOutput,
+  UploadDetailOutput,
+  UploadPrincipal,
+} from './upload.types.js';
 import type { UploadRepository, UploadRow } from './upload.repository.js';
 import { serializeUploadCreate, serializeUploadDetail } from './upload.serializer.js';
 import { validateUploadPublicIdParam } from './upload.validator.js';
@@ -119,16 +121,22 @@ export class UploadService {
     private readonly userService: UserService,
     private readonly organizationService: OrganizationService,
     private readonly objectStorage: ObjectStoragePort,
-    private readonly authorizationService: AuthorizationService,
   ) {}
 
-  async createUpload(input: CreateUploadInput, userPublicId: string): Promise<UploadCreateOutput> {
+  async createUpload({
+    input,
+    principal,
+  }: {
+    input: CreateUploadInput;
+    principal: UploadPrincipal;
+  }): Promise<UploadCreateOutput> {
+    const { userPublicId } = principal;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
 
-    const organizationInternalId = await this.resolveUploadOrganizationInternalId(
+    const organizationInternalId = await this.resolveUploadOrganizationInternalId({
       input,
-      userPublicId,
-    );
+      principal,
+    });
     const config = UPLOAD_PURPOSE_CONFIG[input.purpose];
     const extension = getCanonicalExtensionForContentType(input.content_type);
     const ownerSegment =
@@ -316,38 +324,35 @@ export class UploadService {
     };
 
     if (organizationInternalId !== null && organizationPublicId !== null) {
-      return withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
-        runReservation,
-      );
+      return withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
+        callback: runReservation,
+      });
     }
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      runReservation,
-    );
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: runReservation,
+    });
   }
 
-  private async resolveUploadOrganizationInternalId(
-    input: CreateUploadInput,
-    userPublicId: string,
-  ): Promise<number | null> {
+  private async resolveUploadOrganizationInternalId({
+    input,
+    principal,
+  }: {
+    input: CreateUploadInput;
+    principal: UploadPrincipal;
+  }): Promise<number | null> {
     if (input.for === UPLOAD_TARGETS.ORGANIZATION && input.organization_id) {
-      const permissions = await this.authorizationService.resolveUserOrganizationPermissions(
-        userPublicId,
-        input.organization_id,
-      );
-      if (!permissions.includes(UPLOAD_PERMISSIONS.UPLOAD_MANAGE)) {
-        throw new ForbiddenError('errors:insufficientUploadPermissions');
-      }
+      await principal.authorizeOrganization(input.organization_id);
       /**
-       * `requireOrganizationByPublicId` reads `tenancy.organizations` which is FORCE RLS.
-       * The call needs either an active organization context or `app.current_user_public_id` + the `organizations_user_discovery`
-       * policy. The latter is appropriate here because we have just authorized the user.
+       * `requireOrganizationByPublicId` reads `tenancy.organizations` which is FORCE RLS. The
+       * caller was just authorized in this organization (its active one), so its own context reads it.
        */
-      const organization = await withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-        () => this.organizationService.requireOrganizationByPublicId(input.organization_id!),
-      );
+      const organization = await withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: input.organization_id }),
+        callback: () =>
+          this.organizationService.requireOrganizationByPublicId(input.organization_id!),
+      });
       return organization.id;
     }
     return null;
@@ -373,15 +378,15 @@ export class UploadService {
   }): Promise<{ mimeType: string; fileName: string; fileSize: number }> {
     const { fileKey, userInternalId, organizationInternalId } = options;
     if (userInternalId === undefined && organizationInternalId === undefined) {
-      throw new ValidationError('errors:validation.uploadNotConfirmed', undefined, {
-        key: ['assertKeyConfirmedForOwner requires user or organization owner'],
-      });
+      throw new ValidationError('errors:validation.uploadNotConfirmed', undefined, undefined, [
+        { field: 'key', messageKey: 'errors:validation.uploadNotConfirmed' },
+      ]);
     }
     const row = await this.repository.findByFileKey(fileKey);
     const notConfirmed = (): ValidationError =>
-      new ValidationError('errors:validation.uploadNotConfirmed', undefined, {
-        key: ['Upload has not been confirmed'],
-      });
+      new ValidationError('errors:validation.uploadNotConfirmed', undefined, undefined, [
+        { field: 'key', messageKey: 'errors:validation.uploadNotConfirmed' },
+      ]);
     if (!row || row.status !== UPLOAD_STATUS.UPLOADED) throw notConfirmed();
     if (userInternalId !== undefined && row.user_id !== userInternalId) {
       throw notConfirmed();
@@ -447,12 +452,14 @@ export class UploadService {
     fileKey: string;
     organizationInternalId: number;
   }): Promise<void> {
-    const upload = await withAppDatabaseContext(options.scope, () =>
-      this.assertKeyConfirmedForOwner({
-        fileKey: options.fileKey,
-        organizationInternalId: options.organizationInternalId,
-      }),
-    );
+    const upload = await withAppDatabaseContext({
+      scope: options.scope,
+      callback: () =>
+        this.assertKeyConfirmedForOwner({
+          fileKey: options.fileKey,
+          organizationInternalId: options.organizationInternalId,
+        }),
+    });
     if (upload.mimeType !== 'image/jpeg' && upload.mimeType !== 'image/png') return;
     const stored = await this.readStoredObject(options.fileKey);
     if (stored === null) {
@@ -460,7 +467,7 @@ export class UploadService {
       logger.warn({ fileKey: options.fileKey }, 'upload.image_location_object_missing');
       return;
     }
-    const cleaned = removeImageLocation(stored.body, upload.mimeType);
+    const cleaned = removeImageLocation({ image: stored.body, mimeType: upload.mimeType });
     if (!cleaned.changed) return;
     await this.objectStorage.putObject({
       key: options.fileKey,
@@ -484,29 +491,26 @@ export class UploadService {
     }
   }
 
-  private async assertUserCanAccessOrgScopedUpload(
-    row: UploadRow,
-    userPublicId: string,
-  ): Promise<void> {
+  private async assertUserCanAccessOrgScopedUpload({
+    row,
+    principal,
+  }: {
+    row: UploadRow;
+    principal: UploadPrincipal;
+  }): Promise<void> {
     if (row.organization_id === null) {
       return;
     }
 
-    const organization = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      () => this.organizationService.findOrganizationByInternalId(row.organization_id!),
-    );
+    const organization = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: principal.userPublicId }),
+      callback: () => this.organizationService.findOrganizationByInternalId(row.organization_id!),
+    });
     if (!organization) {
       throw new NotFoundError('Upload');
     }
 
-    const permissions = await this.authorizationService.resolveUserOrganizationPermissions(
-      userPublicId,
-      organization.public_id,
-    );
-    if (!permissions.includes(UPLOAD_PERMISSIONS.UPLOAD_MANAGE)) {
-      throw new ForbiddenError('errors:insufficientUploadPermissions');
-    }
+    await principal.authorizeOrganization(organization.public_id);
   }
 
   /**
@@ -530,15 +534,16 @@ export class UploadService {
    */
   private async loadUploadForUserAction(input: {
     public_id: string;
-    userPublicId: string;
     userInternalId: number;
-    organizationPublicId?: string | null | undefined;
+    principal: UploadPrincipal;
   }): Promise<LoadedUpload> {
-    const { public_id, userPublicId, userInternalId, organizationPublicId } = input;
+    const { public_id, userInternalId, principal } = input;
+    const { userPublicId, organizationPublicId } = principal;
     const userScope = PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId });
-    const ownRow = await withAppDatabaseContext(userScope, () =>
-      this.repository.findByPublicId(public_id),
-    );
+    const ownRow = await withAppDatabaseContext({
+      scope: userScope,
+      callback: () => this.repository.findByPublicId(public_id),
+    });
 
     // Only reached when the owner arm saw nothing AND the caller has an organization to try.
     const organizationScope =
@@ -548,9 +553,10 @@ export class UploadService {
     const row =
       ownRow ??
       (organizationScope
-        ? await withAppDatabaseContext(organizationScope, () =>
-            this.repository.findByPublicId(public_id),
-          )
+        ? await withAppDatabaseContext({
+            scope: organizationScope,
+            callback: () => this.repository.findByPublicId(public_id),
+          })
         : null);
     if (!row) throw new NotFoundError('Upload');
     // The scope that FOUND the row is the one every follow-up write must use — see LoadedUpload.
@@ -568,25 +574,27 @@ export class UploadService {
       return { row, scope };
     }
 
-    await this.assertUserCanAccessOrgScopedUpload(row, userPublicId);
+    await this.assertUserCanAccessOrgScopedUpload({ row, principal });
     return { row, scope };
   }
 
-  async getUpload(
-    public_id: string,
-    userPublicId: string,
-    organizationPublicId?: string | null,
-  ): Promise<UploadDetailOutput> {
+  async getUpload({
+    public_id,
+    principal,
+  }: {
+    public_id: string;
+    principal: UploadPrincipal;
+  }): Promise<UploadDetailOutput> {
     const validatedPublicId = validateUploadPublicIdParam(public_id);
+    const { userPublicId } = principal;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     const { row } = await this.loadUploadForUserAction({
       public_id: validatedPublicId,
-      userPublicId,
       userInternalId: user.id,
-      organizationPublicId,
+      principal,
     });
 
-    return this.toUploadDetail(row, userPublicId);
+    return this.toUploadDetail({ row, userPublicId });
   }
 
   /**
@@ -611,9 +619,12 @@ export class UploadService {
     publicId: string;
   }): Promise<boolean> {
     const { sourceKey, finalKey, mimeType, fileSize, publicId } = options;
-    const verdict = await this.objectStorage.verifyUploadedObject(sourceKey, {
-      contentType: mimeType,
-      contentLength: fileSize,
+    const verdict = await this.objectStorage.verifyUploadedObject({
+      key: sourceKey,
+      expected: {
+        contentType: mimeType,
+        contentLength: fileSize,
+      },
     });
     if (verdict.kind === 'rejected') {
       logger.warn(
@@ -622,7 +633,11 @@ export class UploadService {
       );
       return false;
     }
-    const published = await this.publishConfirmedObject(sourceKey, finalKey, mimeType);
+    const published = await this.publishConfirmedObject({
+      sourceKey,
+      finalKey,
+      contentType: mimeType,
+    });
     if (!published) {
       logger.warn({ id: publicId, fileKey: sourceKey }, 'upload.confirm.contentRejected');
     }
@@ -637,27 +652,29 @@ export class UploadService {
    * served bytes can never execute as stored XSS. Consumers must require UPLOADED before
    * attaching the object. Idempotent for already-UPLOADED rows.
    */
-  async confirmUpload(
-    public_id: string,
-    userPublicId: string,
-    organizationPublicId?: string | null,
-  ): Promise<UploadDetailOutput> {
+  async confirmUpload({
+    public_id,
+    principal,
+  }: {
+    public_id: string;
+    principal: UploadPrincipal;
+  }): Promise<UploadDetailOutput> {
     const validatedPublicId = validateUploadPublicIdParam(public_id);
+    const { userPublicId } = principal;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     const { row, scope } = await this.loadUploadForUserAction({
       public_id: validatedPublicId,
-      userPublicId,
       userInternalId: user.id,
-      organizationPublicId,
+      principal,
     });
 
     if (row.status === UPLOAD_STATUS.UPLOADED) {
-      return this.toUploadDetail(row, userPublicId);
+      return this.toUploadDetail({ row, userPublicId });
     }
     if (row.status !== UPLOAD_STATUS.PENDING) {
-      throw new ValidationError('errors:uploadNotPending', undefined, {
-        status: ['Upload is not awaiting confirmation'],
-      });
+      throw new ValidationError('errors:uploadNotPending', undefined, undefined, [
+        { field: 'status', messageKey: 'errors:uploadNotPending' },
+      ]);
     }
 
     // The bytes live at the (still client-writable) pending key; the verified bytes are published
@@ -670,17 +687,19 @@ export class UploadService {
     // with hostile content. createUpload always issues a pending key, so such a row is a bug or
     // hand-written data: fail it and require a re-upload to a fresh pending key.
     if (finalKey === sourceKey) {
-      const failedRow = await withAppDatabaseContext(scope, () =>
-        this.repository.markStatusByPublicId(validatedPublicId, UPLOAD_STATUS.FAILED),
-      );
+      const failedRow = await withAppDatabaseContext({
+        scope,
+        callback: () =>
+          this.repository.markStatusByPublicId(validatedPublicId, UPLOAD_STATUS.FAILED),
+      });
       if (!failedRow) throw new NotFoundError('Upload');
       logger.warn(
         { id: validatedPublicId, fileKey: sourceKey },
         'upload.confirm.notPendingKeyedRefused',
       );
-      throw new ValidationError('errors:uploadVerificationFailed', undefined, {
-        file: ['Upload did not go through the pending-key flow; re-upload to a fresh key'],
-      });
+      throw new ValidationError('errors:uploadVerificationFailed', undefined, undefined, [
+        { field: 'file', messageKey: 'errors:uploadNotFromPendingKey' },
+      ]);
     }
 
     const verified = await this.verifyAndPublishUploadedObject({
@@ -692,20 +711,23 @@ export class UploadService {
     });
 
     if (!verified) {
-      const failedRow = await withAppDatabaseContext(scope, () =>
-        this.repository.markStatusByPublicId(validatedPublicId, UPLOAD_STATUS.FAILED),
-      );
-      if (!failedRow) throw new NotFoundError('Upload');
-      throw new ValidationError('errors:uploadVerificationFailed', undefined, {
-        file: ['Uploaded object could not be verified against its declared type and size'],
+      const failedRow = await withAppDatabaseContext({
+        scope,
+        callback: () =>
+          this.repository.markStatusByPublicId(validatedPublicId, UPLOAD_STATUS.FAILED),
       });
+      if (!failedRow) throw new NotFoundError('Upload');
+      throw new ValidationError('errors:uploadVerificationFailed', undefined, undefined, [
+        { field: 'file', messageKey: 'errors:uploadVerificationFailed' },
+      ]);
     }
 
     // Repoint the row at the immutable final key in the same update that marks it UPLOADED, so a
     // servable row never references the overwritable pending key.
-    const updated = await withAppDatabaseContext(scope, () =>
-      this.repository.markConfirmedByPublicId(validatedPublicId, finalKey),
-    );
+    const updated = await withAppDatabaseContext({
+      scope,
+      callback: () => this.repository.markConfirmedByPublicId(validatedPublicId, finalKey),
+    });
     if (!updated) throw new NotFoundError('Upload');
 
     // Best-effort: drop the now-published pending object so it is not billed or swept.
@@ -717,7 +739,7 @@ export class UploadService {
       );
     }
 
-    return this.toUploadDetail(updated, userPublicId);
+    return this.toUploadDetail({ row: updated, userPublicId });
   }
 
   /**
@@ -730,26 +752,30 @@ export class UploadService {
    * so does a pending object written again between the verify and the copy (409, row stays
    * PENDING so the client can confirm again and the new bytes get verified).
    */
-  private async publishConfirmedObject(
-    sourceKey: string,
-    finalKey: string,
-    contentType: string,
-  ): Promise<boolean> {
+  private async publishConfirmedObject({
+    sourceKey,
+    finalKey,
+    contentType,
+  }: {
+    sourceKey: string;
+    finalKey: string;
+    contentType: string;
+  }): Promise<boolean> {
     // SVGs are active content: an uploaded <svg onload=…> served with an image/svg+xml type would
     // execute as stored XSS. Neutralise the bytes before publishing them to the servable key.
     if (isSvgContentType(contentType)) {
-      return this.publishSanitizedSvg(sourceKey, finalKey, contentType);
+      return this.publishSanitizedSvg({ sourceKey, finalKey, contentType });
     }
     // HEAD only echoes the client-declared content-type, which is trivially spoofable (e.g. an
     // HTML/script payload uploaded as image/png). Verify the actual leading bytes before the object
     // becomes servable. Ranged GET (first 32 bytes) avoids buffering the full upload.
     let sourceETag: string | undefined;
     if (isMagicByteVerifiable(contentType)) {
-      const header = await this.objectStorage.getObjectFirstBytes(
-        sourceKey,
-        MAGIC_BYTE_PREFIX_LENGTH,
-      );
-      if (!(header && verifyFileMagicBytes(header.body, contentType))) {
+      const header = await this.objectStorage.getObjectFirstBytes({
+        key: sourceKey,
+        byteCount: MAGIC_BYTE_PREFIX_LENGTH,
+      });
+      if (!(header && verifyFileMagicBytes({ buffer: header.body, contentType }))) {
         return false;
       }
       // sec-re-10: pin the COPY to the exact object bytes we just verified.
@@ -780,11 +806,15 @@ export class UploadService {
    * sanitization yields an empty document, so the caller fails verification for hostile or
    * zero-byte SVGs.
    */
-  private async publishSanitizedSvg(
-    sourceKey: string,
-    finalKey: string,
-    contentType: string,
-  ): Promise<boolean> {
+  private async publishSanitizedSvg({
+    sourceKey,
+    finalKey,
+    contentType,
+  }: {
+    sourceKey: string;
+    finalKey: string;
+    contentType: string;
+  }): Promise<boolean> {
     const object = await this.objectStorage.getObject(sourceKey);
     const sanitized = sanitizeSvgBuffer(object.body);
     if (!sanitized) return false;
@@ -792,7 +822,13 @@ export class UploadService {
     return true;
   }
 
-  private async toUploadDetail(row: UploadRow, userPublicId?: string): Promise<UploadDetailOutput> {
+  private async toUploadDetail({
+    row,
+    userPublicId,
+  }: {
+    row: UploadRow;
+    userPublicId?: string | undefined;
+  }): Promise<UploadDetailOutput> {
     let organizationPublicId: string | null = null;
     if (row.organization_id !== null) {
       /**
@@ -803,28 +839,31 @@ export class UploadService {
        */
       const organization =
         userPublicId !== undefined && userPublicId.length > 0
-          ? await withAppDatabaseContext(
-              PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-              () => this.organizationService.findOrganizationByInternalId(row.organization_id!),
-            )
+          ? await withAppDatabaseContext({
+              scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+              callback: () =>
+                this.organizationService.findOrganizationByInternalId(row.organization_id!),
+            })
           : await this.organizationService.findOrganizationByInternalId(row.organization_id);
       organizationPublicId = organization?.public_id ?? null;
     }
-    return serializeUploadDetail(row, organizationPublicId);
+    return serializeUploadDetail({ row, organization_public_id: organizationPublicId });
   }
 
-  async deleteUpload(
-    public_id: string,
-    userPublicId: string,
-    organizationPublicId?: string | null,
-  ): Promise<void> {
+  async deleteUpload({
+    public_id,
+    principal,
+  }: {
+    public_id: string;
+    principal: UploadPrincipal;
+  }): Promise<void> {
     const validatedPublicId = validateUploadPublicIdParam(public_id);
+    const { userPublicId } = principal;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     const { row, scope } = await this.loadUploadForUserAction({
       public_id: validatedPublicId,
-      userPublicId,
       userInternalId: user.id,
-      organizationPublicId,
+      principal,
     });
 
     // S3 delete runs outside the DB context. A failure leaves the object for tombstone retention,
@@ -837,9 +876,10 @@ export class UploadService {
       );
     }
 
-    const deleted = await withAppDatabaseContext(scope, () =>
-      this.repository.softDeleteByPublicId(validatedPublicId),
-    );
+    const deleted = await withAppDatabaseContext({
+      scope,
+      callback: () => this.repository.softDeleteByPublicId(validatedPublicId),
+    });
     if (!deleted) throw new NotFoundError('Upload');
   }
 
@@ -872,15 +912,15 @@ export class UploadService {
     // through the full set exactly once; the soft-delete at the end is the durable marker.
     let afterId = 0;
     for (;;) {
-      const rows = await withMaintenanceDatabaseContext(
-        MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-        () =>
+      const rows = await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: () =>
           this.repository.findActiveByUserIdAfter(
             user_id,
             afterId,
             UPLOAD_OFFBOARDING_DELETE_BATCH_SIZE,
           ),
-      );
+      });
       if (rows.length === 0) {
         break;
       }
@@ -893,9 +933,10 @@ export class UploadService {
         break;
       }
     }
-    return withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, () =>
-      this.repository.softDeleteAllByUserId(user_id),
-    );
+    return withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: () => this.repository.softDeleteAllByUserId(user_id),
+    });
   }
 
   /** Deletes S3 objects in fixed-size concurrent chunks; failures are logged, never thrown. */
@@ -943,15 +984,15 @@ export class UploadService {
     // FORCE RLS `upload.uploads` GUC-less, match no policy arm, and silently tombstone nothing.
     let afterId = 0;
     for (;;) {
-      const rows = await withMaintenanceDatabaseContext(
-        MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-        () =>
+      const rows = await withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: () =>
           this.repository.findActiveByOrganizationIdAfter(
             organization_id,
             afterId,
             UPLOAD_OFFBOARDING_DELETE_BATCH_SIZE,
           ),
-      );
+      });
       if (rows.length === 0) {
         break;
       }
@@ -965,8 +1006,9 @@ export class UploadService {
         break;
       }
     }
-    return withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, () =>
-      this.repository.softDeleteAllByOrganizationId(organization_id),
-    );
+    return withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: () => this.repository.softDeleteAllByOrganizationId(organization_id),
+    });
   }
 }

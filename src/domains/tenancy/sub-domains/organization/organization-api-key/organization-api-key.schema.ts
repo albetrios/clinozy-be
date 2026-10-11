@@ -43,9 +43,11 @@ export const api_keys = tenancySchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
       updated_by_user_id: bigint('updated_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [
@@ -71,8 +73,10 @@ export const api_keys = tenancySchema
       uniqueIndex('idx_api_keys_key_hash_active_unique')
         .on(table.key_hash)
         .where(sql`${table.status} = 'ACTIVE' AND ${table.deleted_at} IS NULL`),
-      index('idx_api_keys_deleted').on(table.deleted_at).where(sql`${table.deleted_at} IS NULL`),
-      index('idx_api_keys_scopes_gin').using('gin', table.scopes),
+      // Tombstone purge: only the soft-deleted rows, so live writes never maintain it.
+      index('idx_api_keys_tombstoned')
+        .on(table.deleted_at)
+        .where(sql`${table.deleted_at} IS NOT NULL`),
       check('chk_api_keys_status', sql`${table.status} IN ('ACTIVE', 'REVOKED')`),
       check('chk_api_keys_updated', sql`${table.updated_at} >= ${table.created_at}`),
       pgPolicy('api_keys_tenant_isolation', {

@@ -12,19 +12,19 @@ import {
 export function validateCreateContactMessageTemplate(
   data: unknown,
 ): CreateContactMessageTemplateInput {
-  return parseWithSchema(CreateContactMessageTemplateDto, data);
+  return parseWithSchema({ schema: CreateContactMessageTemplateDto, data });
 }
 
 /** Parses a template update body; throws `ValidationError` naming each bad field. */
 export function validateUpdateContactMessageTemplate(
   data: unknown,
 ): UpdateContactMessageTemplateInput {
-  return parseWithSchema(UpdateContactMessageTemplateDto, data);
+  return parseWithSchema({ schema: UpdateContactMessageTemplateDto, data });
 }
 
 /** Parses the templates list query into a list input — `q` on the name, the `type` filter. */
 export function validateListContactMessageTemplatesQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listContactMessageTemplatesQueryDto, data);
+  const query = parseWithSchema({ schema: listContactMessageTemplatesQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

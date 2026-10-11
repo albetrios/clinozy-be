@@ -23,7 +23,7 @@ const linkIdsSchema = z
 
 /** The fields a create and a change share (routes-final 11.A.8). */
 const manufacturerFields = {
-  name: trimmedStringMinMax(1, MANUFACTURER_NAME_MAX),
+  name: trimmedStringMinMax({ min: 1, max: MANUFACTURER_NAME_MAX }),
   tone: z.enum(MANUFACTURER_TONE_VALUES),
   supplier_ids: linkIdsSchema,
   medical_rep_ids: linkIdsSchema,

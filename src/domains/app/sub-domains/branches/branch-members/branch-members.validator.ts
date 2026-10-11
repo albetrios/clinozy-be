@@ -3,5 +3,5 @@ import { ReplaceBranchMembersDto, type ReplaceBranchMembersInput } from './branc
 
 /** Parses a branch access-list body; throws `ValidationError` on a bad value. */
 export function validateReplaceBranchMembers(data: unknown): ReplaceBranchMembersInput {
-  return parseWithSchema(ReplaceBranchMembersDto, data);
+  return parseWithSchema({ schema: ReplaceBranchMembersDto, data });
 }

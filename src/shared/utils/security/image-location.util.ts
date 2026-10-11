@@ -73,7 +73,7 @@ function tiffReader(tiff: Buffer): {
 type TiffReader = NonNullable<ReturnType<typeof tiffReader>>;
 
 /** The offset of the GPS IFD IFD0 points at, or `null` when there is none (or it is out of range). */
-function findGpsDirectory(tiff: Buffer, read: TiffReader): number | null {
+function findGpsDirectory({ tiff, read }: { tiff: Buffer; read: TiffReader }): number | null {
   const firstDirectory = read.u32(4);
   if (firstDirectory + 2 > tiff.length) return null;
   const entryCount = read.u16(firstDirectory);
@@ -89,7 +89,15 @@ function findGpsDirectory(tiff: Buffer, read: TiffReader): number | null {
 }
 
 /** Zeroes one GPS entry and the value it points at (a value over four bytes lives elsewhere). */
-function clearGpsEntry(tiff: Buffer, read: TiffReader, entry: number): void {
+function clearGpsEntry({
+  tiff,
+  read,
+  entry,
+}: {
+  tiff: Buffer;
+  read: TiffReader;
+  entry: number;
+}): void {
   const size = (TIFF_TYPE_SIZES[read.u16(entry + 2)] ?? 1) * read.u32(entry + 4);
   if (size > 4) {
     const valueAt = read.u32(entry + 8);
@@ -105,20 +113,26 @@ function clearGpsEntry(tiff: Buffer, read: TiffReader, entry: number): void {
  */
 function emptyGpsDirectory(tiff: Buffer): boolean {
   const read = tiffReader(tiff);
-  const gpsDirectory = read ? findGpsDirectory(tiff, read) : null;
+  const gpsDirectory = read ? findGpsDirectory({ tiff, read }) : null;
   if (!read || gpsDirectory === null) return false;
   const gpsCount = read.u16(gpsDirectory);
   for (let index = 0; index < gpsCount; index += 1) {
     const entry = gpsDirectory + 2 + index * TIFF_ENTRY_SIZE;
     if (entry + TIFF_ENTRY_SIZE > tiff.length) break;
-    clearGpsEntry(tiff, read, entry);
+    clearGpsEntry({ tiff, read, entry });
   }
   tiff.fill(0, gpsDirectory, gpsDirectory + 2);
   return true;
 }
 
 /** What a JPEG segment is to the location removal. */
-function segmentKind(marker: number, payload: Buffer): 'xmp' | 'exif' | 'other' {
+function segmentKind({
+  marker,
+  payload,
+}: {
+  marker: number;
+  payload: Buffer;
+}): 'xmp' | 'exif' | 'other' {
   if (marker !== JPEG_APP1) return 'other';
   if (XMP_HEADERS.some((header) => payload.subarray(0, header.length).equals(header))) return 'xmp';
   return payload.subarray(0, EXIF_HEADER.length).equals(EXIF_HEADER) ? 'exif' : 'other';
@@ -138,7 +152,7 @@ function removeJpegLocation(image: Buffer): ImageLocationRemoval {
     const end = offset + 2 + length;
     if (marker === JPEG_START_OF_SCAN || length < 2 || end > image.length) break;
     const segment = Buffer.from(image.subarray(offset, end));
-    const kind = segmentKind(marker, segment.subarray(4));
+    const kind = segmentKind({ marker, payload: segment.subarray(4) });
     if (kind === 'exif')
       changed = emptyGpsDirectory(segment.subarray(4 + EXIF_HEADER.length)) || changed;
     if (kind === 'xmp') changed = true;
@@ -151,7 +165,7 @@ function removeJpegLocation(image: Buffer): ImageLocationRemoval {
 }
 
 /** Whether a PNG chunk carries location: `eXIf`, or a text chunk holding XMP. */
-function isPngLocationChunk(type: string, data: Buffer): boolean {
+function isPngLocationChunk({ type, data }: { type: string; data: Buffer }): boolean {
   if (type === 'eXIf') return true;
   return (
     PNG_TEXT_CHUNKS.has(type) &&
@@ -172,7 +186,7 @@ function removePngLocation(image: Buffer): ImageLocationRemoval {
     const end = offset + 12 + length;
     if (end > image.length) break;
     const type = image.toString('latin1', offset + 4, offset + 8);
-    if (isPngLocationChunk(type, image.subarray(offset + 8, offset + 8 + length))) {
+    if (isPngLocationChunk({ type, data: image.subarray(offset + 8, offset + 8 + length) })) {
       changed = true;
     } else {
       parts.push(image.subarray(offset, end));
@@ -197,7 +211,13 @@ function removePngLocation(image: Buffer): ImageLocationRemoval {
  * - **Failure modes:** none — a truncated or odd file is returned unchanged, never thrown on.
  * - **Notes:** a pure buffer function; the caller reads and writes the stored object.
  */
-export function removeImageLocation(image: Buffer, mimeType: string): ImageLocationRemoval {
+export function removeImageLocation({
+  image,
+  mimeType,
+}: {
+  image: Buffer;
+  mimeType: string;
+}): ImageLocationRemoval {
   if (mimeType === 'image/jpeg') return removeJpegLocation(image);
   if (mimeType === 'image/png') return removePngLocation(image);
   return { body: image, changed: false };

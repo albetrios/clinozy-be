@@ -41,7 +41,7 @@ async function probeWithBypassGuc(options: {
   return database.transaction(async (transaction) => {
     const databaseHandle = transaction as unknown as RequestScopedPostgresDatabase;
     await options.role(databaseHandle);
-    await setLocalDatabaseConfig(databaseHandle, options.guc, 'true');
+    await setLocalDatabaseConfig({ databaseHandle, key: options.guc, value: 'true' });
     const result = await databaseHandle.execute(options.statement);
     const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
     return rows.length;

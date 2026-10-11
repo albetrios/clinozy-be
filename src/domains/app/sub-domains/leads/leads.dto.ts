@@ -37,7 +37,7 @@ const leadFields = {
     .refine(distinct, { message: 'Each team member once' }),
   follow_up_at: instantSchema.nullable(),
   branch_id: recordIdSchema.nullable(),
-  notes: trimmedStringMinMax(1, LEAD_NOTES_MAX).nullable(),
+  notes: trimmedStringMinMax({ min: 1, max: LEAD_NOTES_MAX }).nullable(),
 };
 
 /** The owner is not also involved (the design's "assignee cannot also be involved"). */

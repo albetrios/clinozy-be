@@ -23,7 +23,9 @@ describe('GET /api/v1/users/me', () => {
     );
 
     try {
-      expect(findInjectUrlViolations(temporaryRoot, temporaryRoot)).toEqual([]);
+      expect(
+        findInjectUrlViolations({ sourceRoot: temporaryRoot, projectRoot: temporaryRoot }),
+      ).toEqual([]);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -45,7 +47,10 @@ describe('GET /api/v1/users/me', () => {
     );
 
     try {
-      const violations = findInjectUrlViolations(temporaryRoot, temporaryRoot);
+      const violations = findInjectUrlViolations({
+        sourceRoot: temporaryRoot,
+        projectRoot: temporaryRoot,
+      });
       expect(violations).toHaveLength(1);
       expect(violations[0]?.file).toContain('demo.integration.test.ts');
     } finally {
@@ -65,7 +70,9 @@ describe('GET /api/v1/users/me', () => {
     writeFileSync(join(testDirectory, 'future.unit.test.ts'), futureInjectLine, 'utf-8');
 
     try {
-      expect(findInjectUrlViolations(temporaryRoot, temporaryRoot)).toHaveLength(1);
+      expect(
+        findInjectUrlViolations({ sourceRoot: temporaryRoot, projectRoot: temporaryRoot }),
+      ).toHaveLength(1);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

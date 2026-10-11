@@ -1,5 +1,5 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import { patient_treatments } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.schema.js';
 import { stock_counts } from '@/domains/app/sub-domains/stock/stock-counts/stock-counts.schema.js';
@@ -50,7 +50,7 @@ export class StockItemMovementsService extends BaseRecordService<StockItemMoveme
           table: stock_item_movements,
           label: 'stock item movement',
         },
-        { field: 'author_membership_id', table: memberships, label: 'team member' },
+        memberReference('author_membership_id'),
       ],
       ...createStockItemMovementsRules(repository),
     });

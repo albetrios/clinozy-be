@@ -51,7 +51,10 @@ describe('createStripeWebhookController', () => {
       reply,
     );
 
-    expect(ingestEvent).toHaveBeenCalledWith(verifiedEvent, { requestId: 'request-id' });
+    expect(ingestEvent).toHaveBeenCalledWith({
+      event: verifiedEvent,
+      context: { requestId: 'request-id' },
+    });
     expect(reply.status).toHaveBeenCalledWith(200);
     expect(response).toMatchObject({
       data: { received: true },

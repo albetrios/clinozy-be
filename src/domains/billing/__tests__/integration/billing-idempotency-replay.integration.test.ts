@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
@@ -47,6 +47,12 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
  * `fingerprint`, which is the documented backward-compatible shape and keeps the assertion on
  * the in-flight branch rather than the key-reuse branch.
  */
+// Keep provider I/O deterministic; HTTP auth, Redis idempotency and database lookups remain real.
+vi.mock('@/infrastructure/payment/stripe.client.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/infrastructure/payment/stripe.client.js')>();
+  return { ...actual, isStripeConfigured: () => false };
+});
+
 const BILLING_PERMISSIONS = ['subscription:read', 'subscription:manage'] as const;
 
 describe('Billing idempotency replay — 409 while a key is in flight', () => {
@@ -107,9 +113,12 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
     organizationPublicId: string;
     request: IdempotencySeedRequest;
   }): Promise<void> {
-    const cacheKey = buildIdempotencyCacheKey(options.idempotencyKey, {
-      userId: options.userPublicId,
-      organizationId: options.organizationPublicId,
+    const cacheKey = buildIdempotencyCacheKey({
+      idempotencyKey: options.idempotencyKey,
+      scope: {
+        userId: options.userPublicId,
+        organizationId: options.organizationPublicId,
+      },
     });
     seededCacheKeys.push(cacheKey);
     await redisConnection.set(cacheKey, buildInFlightIdempotencyEntry(options.request), 'EX', 60);
@@ -254,9 +263,12 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
     // `x-idempotency-replay: true` — never 409, and never re-execute the handler.
     const { user, organization, token } = await createBillingContext();
     const idempotencyKey = generatePublicId('subscription');
-    const cacheKey = buildIdempotencyCacheKey(idempotencyKey, {
-      userId: user.public_id,
-      organizationId: organization.public_id,
+    const cacheKey = buildIdempotencyCacheKey({
+      idempotencyKey,
+      scope: {
+        userId: user.public_id,
+        organizationId: organization.public_id,
+      },
     });
     seededCacheKeys.push(cacheKey);
     await redisConnection.set(
@@ -295,7 +307,7 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
     // Guards the scope segment of the cache key. If it regressed to a global
     // `idempotency:<key>` namespace, one tenant holding a key in flight would 409 every other
     // tenant that happened to pick the same key string.
-    const { organization, token } = await createBillingContext();
+    const { user, organization, token } = await createBillingContext();
     const otherUser = await createTestUser();
     const idempotencyKey = generatePublicId('subscription');
     await seedInFlightClaim({
@@ -317,6 +329,19 @@ describe('Billing idempotency replay — 409 while a key is in flight', () => {
       headers: { 'x-idempotency-key': idempotencyKey },
     });
 
-    expect(response.statusCode).not.toBe(409);
+    seededCacheKeys.push(
+      buildIdempotencyCacheKey({
+        idempotencyKey,
+        scope: {
+          userId: user.public_id,
+          organizationId: organization.public_id,
+        },
+      }),
+    );
+    expect(response.statusCode, response.body).toBe(200);
+    expect((response.json() as { data: { client_secret: string | null } }).data).toEqual({
+      client_secret: null,
+    });
+    expect(response.headers['x-idempotency-replay']).toBeUndefined();
   });
 });

@@ -80,7 +80,13 @@ export interface InvoiceLinePlan {
 }
 
 /** A 400 on `items` with its message. */
-function itemsError(messageKey: string, messageParams?: Record<string, string | number>) {
+function itemsError({
+  messageKey,
+  messageParams,
+}: {
+  messageKey: string;
+  messageParams?: Record<string, string | number> | undefined;
+}) {
   return fieldValidationError({
     field: 'items',
     messageKey,
@@ -97,11 +103,15 @@ function sellsSessions(offering: BaseRecordRow | null): boolean {
 }
 
 /** The ids of a list of public ids (live rows of the organization) — unknown ones absent. */
-async function resolveAll(
-  table: Parameters<typeof resolveRecordIds>[0]['table'],
-  organizationId: number,
-  publicIds: readonly (string | null | undefined)[],
-): Promise<Map<string, number>> {
+async function resolveAll({
+  table,
+  organizationId,
+  publicIds,
+}: {
+  table: Parameters<typeof resolveRecordIds>[0]['table'];
+  organizationId: number;
+  publicIds: readonly (string | null | undefined)[];
+}): Promise<Map<string, number>> {
   return resolveRecordIds({
     table,
     organizationId,
@@ -117,16 +127,22 @@ async function assertOfferingFits(options: {
 }): Promise<void> {
   const { offering, header } = options;
   if (offering.is_active !== true) {
-    throw itemsError('errors:validation.offeringNotActive', { id: String(offering.public_id) });
+    throw itemsError({
+      messageKey: 'errors:validation.offeringNotActive',
+      messageParams: { id: String(offering.public_id) },
+    });
   }
   const branches = options.offeredBranches.get(offering.id) ?? [];
   if (branches.length > 0 && !branches.includes(header.branchId)) {
-    throw itemsError('errors:validation.invoiceOfferingNotAtBranch', {
-      id: String(offering.public_id),
+    throw itemsError({
+      messageKey: 'errors:validation.invoiceOfferingNotAtBranch',
+      messageParams: {
+        id: String(offering.public_id),
+      },
     });
   }
   if (header.type === INVOICE_TYPE.CONSULTATION && offering.category !== CONSULTATION_CATEGORY) {
-    throw itemsError('errors:validation.invoiceConsultationOnly');
+    throw itemsError({ messageKey: 'errors:validation.invoiceConsultationOnly' });
   }
 }
 
@@ -154,8 +170,11 @@ async function resolveSuggestion(options: {
   const id = options.suggestionIds.get(item.patient_offering_suggestion_id);
   const row = id === undefined ? null : await suggestionsRepository.findById(id);
   if (!row || row.patient_id !== options.patientId || row.offering_id !== options.offeringId) {
-    throw itemsError('errors:validation.invoiceSuggestionNotThePatients', {
-      id: item.patient_offering_suggestion_id,
+    throw itemsError({
+      messageKey: 'errors:validation.invoiceSuggestionNotThePatients',
+      messageParams: {
+        id: item.patient_offering_suggestion_id,
+      },
     });
   }
   return row.id;
@@ -258,31 +277,34 @@ interface InvoiceLineIds {
 }
 
 /** Resolves the offerings, medicines, plan rows and treatments a save's lines name. */
-async function resolveLineIds(
-  organizationId: number,
-  items: readonly InvoiceItemInput[],
-): Promise<InvoiceLineIds> {
+async function resolveLineIds({
+  organizationId,
+  items,
+}: {
+  organizationId: number;
+  items: readonly InvoiceItemInput[];
+}): Promise<InvoiceLineIds> {
   return {
-    offerings: await resolveAll(
-      offerings,
+    offerings: await resolveAll({
+      table: offerings,
       organizationId,
-      items.map((item) => item.offering_id),
-    ),
-    medicines: await resolveAll(
-      medicines,
+      publicIds: items.map((item) => item.offering_id),
+    }),
+    medicines: await resolveAll({
+      table: medicines,
       organizationId,
-      items.map((item) => item.medicine_id),
-    ),
-    suggestions: await resolveAll(
-      patient_offering_suggestions,
+      publicIds: items.map((item) => item.medicine_id),
+    }),
+    suggestions: await resolveAll({
+      table: patient_offering_suggestions,
       organizationId,
-      items.map((item) => item.patient_offering_suggestion_id),
-    ),
-    treatments: await resolveAll(
-      patient_treatments,
+      publicIds: items.map((item) => item.patient_offering_suggestion_id),
+    }),
+    treatments: await resolveAll({
+      table: patient_treatments,
       organizationId,
-      items.flatMap((item) => item.patient_treatment_ids ?? []),
-    ),
+      publicIds: items.flatMap((item) => item.patient_treatment_ids ?? []),
+    }),
   };
 }
 
@@ -309,10 +331,16 @@ function resolveLineItem(options: {
   const sentMedicineId =
     item.medicine_id === undefined ? undefined : ids.medicines.get(item.medicine_id);
   if (item.offering_id !== undefined && sentOfferingId === undefined) {
-    throw itemsError('errors:validation.offeringNotActive', { id: item.offering_id });
+    throw itemsError({
+      messageKey: 'errors:validation.offeringNotActive',
+      messageParams: { id: item.offering_id },
+    });
   }
   if (item.medicine_id !== undefined && sentMedicineId === undefined) {
-    throw itemsError('errors:validation.invoiceMedicineNotLive', { id: item.medicine_id });
+    throw itemsError({
+      messageKey: 'errors:validation.invoiceMedicineNotLive',
+      messageParams: { id: item.medicine_id },
+    });
   }
   const itemSent = sentOfferingId !== undefined || sentMedicineId !== undefined;
   const offeringId =
@@ -321,11 +349,11 @@ function resolveLineItem(options: {
     sentMedicineId ?? (sentOfferingId === undefined ? (kept?.medicine_id ?? null) : null);
   const isMedical = options.type === INVOICE_TYPE.MEDICAL;
   if ((offeringId !== null) === isMedical) {
-    throw itemsError(
-      isMedical
+    throw itemsError({
+      messageKey: isMedical
         ? 'errors:validation.invoiceMedicalLinesOnly'
         : 'errors:validation.invoiceOfferingLinesOnly',
-    );
+    });
   }
   return {
     offeringId,
@@ -482,10 +510,13 @@ async function planLine(options: {
 }
 
 /** B9: the planned lines with their amounts, and the invoice's totals — the overall discount at most what the lines come to. */
-function withAmounts(
-  pending: readonly Omit<PlannedInvoiceLine, 'amounts'>[],
-  overallDiscount: number,
-): { lines: PlannedInvoiceLine[]; totals: InvoiceLinePlan['totals'] } {
+function withAmounts({
+  pending,
+  overallDiscount,
+}: {
+  pending: readonly Omit<PlannedInvoiceLine, 'amounts'>[];
+  overallDiscount: number;
+}): { lines: PlannedInvoiceLine[]; totals: InvoiceLinePlan['totals'] } {
   const computed = computeInvoiceAmounts({
     lines: pending.map((line) => ({
       quantity: Number(line.values.quantity),
@@ -538,7 +569,7 @@ export async function planInvoiceLines(options: {
   existing: readonly InvoiceItemWriteRow[];
 }): Promise<InvoiceLinePlan> {
   const { context, header, items, existing } = options;
-  const ids = await resolveLineIds(context.organizationId, items);
+  const ids = await resolveLineIds({ organizationId: context.organizationId, items });
   const existingByPublicId = new Map(existing.map((row) => [row.public_id, row]));
   const offeringRows = new Map<number, BaseRecordRow>();
   const plan: LinePlanContext = {
@@ -563,7 +594,10 @@ export async function planInvoiceLines(options: {
   for (const [index, item] of items.entries()) {
     const kept = item.id === undefined ? undefined : existingByPublicId.get(item.id);
     if (item.id !== undefined && !kept) {
-      throw itemsError('errors:validation.invoiceItemNotOnInvoice', { id: item.id });
+      throw itemsError({
+        messageKey: 'errors:validation.invoiceItemNotOnInvoice',
+        messageParams: { id: item.id },
+      });
     }
     if (kept) keptIds.add(kept.id);
     pending.push(await planLine({ item, index, kept, plan }));
@@ -572,8 +606,8 @@ export async function planInvoiceLines(options: {
   if (removed.some((row) => (row.sessions_used ?? 0) > 0)) {
     throw new ConflictError('errors:invoiceOfferingInUse').withReason('offering_in_use');
   }
-  const { lines, totals } = withAmounts(pending, header.overallDiscount);
-  await assertNotBelowLowestPrice(lines, context);
+  const { lines, totals } = withAmounts({ pending, overallDiscount: header.overallDiscount });
+  await assertNotBelowLowestPrice({ lines, context });
   return { lines, removedIds: removed.map((row) => row.id), totals };
 }
 
@@ -582,10 +616,13 @@ export async function planInvoiceLines(options: {
  * offering's lowest price; the 400 names the line (`items/<n>`, its place in the save's `items` —
  * D81, PAY-M1), and the floor only to holders of `offering:lower_price:read`.
  */
-async function assertNotBelowLowestPrice(
-  lines: readonly PlannedInvoiceLine[],
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function assertNotBelowLowestPrice({
+  lines,
+  context,
+}: {
+  lines: readonly PlannedInvoiceLine[];
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   for (const line of lines) {
     const floor = toAmount(line.offering?.min_price) ?? 0;
     const quantity = Number(line.values.quantity);

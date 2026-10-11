@@ -1,4 +1,5 @@
 import { getActiveOrganizationRlsCheckoutCount } from '@/infrastructure/database/pool/organization-rls-checkout-counter.js';
+import type { DatabasePoolStatistics } from '@/infrastructure/database/connection.js';
 import { isWorkerRuntime } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { getWorkerPostgresPoolDemandContext } from '@/infrastructure/queue/worker-runtime/worker-pool-demand-context.js';
 import { env } from '@/shared/config/env.config.js';
@@ -68,10 +69,13 @@ export function resetPoolExhaustionAlertStateForTests(): void {
   consecutiveClusterCriticalPolls = 0;
 }
 
-function evaluateActiveCheckoutPressure(
-  activeCheckouts: number,
-  poolMaxConnections: number,
-): PoolPressureLevel {
+function evaluateActiveCheckoutPressure({
+  activeCheckouts,
+  poolMaxConnections,
+}: {
+  activeCheckouts: number;
+  poolMaxConnections: number;
+}): PoolPressureLevel {
   const criticalThreshold = Math.ceil(poolMaxConnections * env.DATABASE_POOL_ACTIVE_CRITICAL_RATIO);
   const warnThreshold = Math.ceil(poolMaxConnections * env.DATABASE_POOL_ACTIVE_WARN_RATIO);
 
@@ -84,10 +88,13 @@ function evaluateActiveCheckoutPressure(
   return 'ok';
 }
 
-function evaluateClusterPressure(
-  clusterActiveConnections: number,
-  allowedApplicationConnections: number,
-): PoolPressureLevel {
+function evaluateClusterPressure({
+  clusterActiveConnections,
+  allowedApplicationConnections,
+}: {
+  clusterActiveConnections: number;
+  allowedApplicationConnections: number;
+}): PoolPressureLevel {
   if (allowedApplicationConnections < 1) {
     return 'ok';
   }
@@ -108,7 +115,13 @@ function evaluateClusterPressure(
   return 'ok';
 }
 
-function bumpConsecutivePolls(current: number, isOverThreshold: boolean): number {
+function bumpConsecutivePolls({
+  current,
+  isOverThreshold,
+}: {
+  current: number;
+  isOverThreshold: boolean;
+}): number {
   if (!isOverThreshold) {
     return 0;
   }
@@ -119,10 +132,13 @@ function shouldEmitAlert(consecutivePolls: number): boolean {
   return consecutivePolls >= env.DATABASE_POOL_ALERT_CONSECUTIVE_POLLS;
 }
 
-function buildWorkerPoolDemandAlertExtra(
-  demand: ReturnType<typeof getWorkerPostgresPoolDemandContext>,
-  poolMaxConnections: number,
-): Record<string, number | string> {
+function buildWorkerPoolDemandAlertExtra({
+  demand,
+  poolMaxConnections,
+}: {
+  demand: ReturnType<typeof getWorkerPostgresPoolDemandContext>;
+  poolMaxConnections: number;
+}): Record<string, number | string> {
   if (demand === undefined) {
     return {};
   }
@@ -136,6 +152,23 @@ function buildWorkerPoolDemandAlertExtra(
   };
 }
 
+/**
+ * This process's live pool counts as alert extras (`primaryPoolInUse`, `primaryPoolWaiting`, …), so
+ * an alert shows whether units of work were already queuing for a connection.
+ */
+function buildPoolStatisticsAlertExtra(
+  poolStatistics: ReadonlyArray<DatabasePoolStatistics>,
+): Record<string, number> {
+  const extra: Record<string, number> = {};
+  for (const { pool, maxConnections, inUse, idle, waiting } of poolStatistics) {
+    extra[`${pool}PoolInUse`] = inUse;
+    extra[`${pool}PoolIdle`] = idle;
+    extra[`${pool}PoolWaiting`] = waiting;
+    extra[`${pool}PoolMax`] = maxConnections;
+  }
+  return extra;
+}
+
 function emitPoolExhaustionAlert(parameters: {
   level: 'warning' | 'error';
   message: string;
@@ -146,16 +179,19 @@ function emitPoolExhaustionAlert(parameters: {
   } else {
     logger.warn(parameters.extra, parameters.message);
   }
-  captureMessage(parameters.message, {
-    level: parameters.level,
-    extra: parameters.extra,
+  captureMessage({
+    message: parameters.message,
+    options: {
+      level: parameters.level,
+      extra: parameters.extra,
+    },
   });
 }
 
 function emitActiveCheckoutAlertIfNeeded(parameters: {
   activeOrganizationRlsCheckouts: number;
   poolMaxConnections: number;
-  workerPoolDemandExtra: Record<string, number | string>;
+  alertContextExtra: Record<string, number | string>;
 }): void {
   if (shouldEmitAlert(consecutiveActiveCriticalPolls)) {
     emitPoolExhaustionAlert({
@@ -166,7 +202,7 @@ function emitActiveCheckoutAlertIfNeeded(parameters: {
         activeOrganizationRlsCheckouts: parameters.activeOrganizationRlsCheckouts,
         poolMaxConnections: parameters.poolMaxConnections,
         criticalRatio: env.DATABASE_POOL_ACTIVE_CRITICAL_RATIO,
-        ...parameters.workerPoolDemandExtra,
+        ...parameters.alertContextExtra,
       },
     });
     consecutiveActiveCriticalPolls = 0;
@@ -179,7 +215,7 @@ function emitActiveCheckoutAlertIfNeeded(parameters: {
         activeOrganizationRlsCheckouts: parameters.activeOrganizationRlsCheckouts,
         poolMaxConnections: parameters.poolMaxConnections,
         warnRatio: env.DATABASE_POOL_ACTIVE_WARN_RATIO,
-        ...parameters.workerPoolDemandExtra,
+        ...parameters.alertContextExtra,
       },
     });
     consecutiveActiveWarnPolls = 0;
@@ -189,7 +225,7 @@ function emitActiveCheckoutAlertIfNeeded(parameters: {
 function emitClusterAlertIfNeeded(parameters: {
   clusterActiveConnections: number;
   allowedApplicationConnections: number;
-  workerPoolDemandExtra: Record<string, number | string>;
+  alertContextExtra: Record<string, number | string>;
 }): void {
   if (shouldEmitAlert(consecutiveClusterCriticalPolls)) {
     emitPoolExhaustionAlert({
@@ -200,7 +236,7 @@ function emitClusterAlertIfNeeded(parameters: {
         clusterActiveConnections: parameters.clusterActiveConnections,
         allowedApplicationConnections: parameters.allowedApplicationConnections,
         criticalRatio: env.DATABASE_POOL_CLUSTER_CRITICAL_RATIO,
-        ...parameters.workerPoolDemandExtra,
+        ...parameters.alertContextExtra,
       },
     });
     consecutiveClusterCriticalPolls = 0;
@@ -213,7 +249,7 @@ function emitClusterAlertIfNeeded(parameters: {
         clusterActiveConnections: parameters.clusterActiveConnections,
         allowedApplicationConnections: parameters.allowedApplicationConnections,
         warnRatio: env.DATABASE_POOL_CLUSTER_WARN_RATIO,
-        ...parameters.workerPoolDemandExtra,
+        ...parameters.alertContextExtra,
       },
     });
     consecutiveClusterWarnPolls = 0;
@@ -246,55 +282,63 @@ function resolveOverallPressureLevel(parameters: {
  * - **Failure modes:** never throws — missing cluster info short-circuits to
  *   `ok`; alert emission is fire-and-forget.
  * - **Side effects:** Sentry `captureMessage` and `logger.warn` / `logger.error`
- *   with worker pool-demand context attached when `isWorkerRuntime()`.
+ *   with the live pool counts (`poolStatistics`) and, when `isWorkerRuntime()`, the worker
+ *   pool-demand context attached.
  * - **Notes:** call once per polling interval from `refreshPostgresPoolMetrics`;
  *   the returned {@link PoolPressureSample} is used for gauge updates and tests.
  */
 export function evaluatePoolExhaustionAndAlert(parameters: {
   clusterActiveConnections: number;
   allowedApplicationConnections: number;
+  poolStatistics?: ReadonlyArray<DatabasePoolStatistics> | undefined;
 }): PoolPressureSample {
   const poolMaxConnections = resolvePoolMaxConnections();
   const activeOrganizationRlsCheckouts = getActiveOrganizationRlsCheckoutCount();
-  const activeLevel = evaluateActiveCheckoutPressure(
-    activeOrganizationRlsCheckouts,
+  const activeLevel = evaluateActiveCheckoutPressure({
+    activeCheckouts: activeOrganizationRlsCheckouts,
     poolMaxConnections,
-  );
-  const clusterLevel = evaluateClusterPressure(
-    parameters.clusterActiveConnections,
-    parameters.allowedApplicationConnections,
-  );
+  });
+  const clusterLevel = evaluateClusterPressure({
+    clusterActiveConnections: parameters.clusterActiveConnections,
+    allowedApplicationConnections: parameters.allowedApplicationConnections,
+  });
 
-  consecutiveActiveCriticalPolls = bumpConsecutivePolls(
-    consecutiveActiveCriticalPolls,
-    activeLevel === 'critical',
-  );
-  consecutiveActiveWarnPolls = bumpConsecutivePolls(
-    consecutiveActiveWarnPolls,
-    activeLevel === 'warn',
-  );
-  consecutiveClusterCriticalPolls = bumpConsecutivePolls(
-    consecutiveClusterCriticalPolls,
-    clusterLevel === 'critical',
-  );
-  consecutiveClusterWarnPolls = bumpConsecutivePolls(
-    consecutiveClusterWarnPolls,
-    clusterLevel === 'warn',
-  );
+  consecutiveActiveCriticalPolls = bumpConsecutivePolls({
+    current: consecutiveActiveCriticalPolls,
+    isOverThreshold: activeLevel === 'critical',
+  });
+  consecutiveActiveWarnPolls = bumpConsecutivePolls({
+    current: consecutiveActiveWarnPolls,
+    isOverThreshold: activeLevel === 'warn',
+  });
+  consecutiveClusterCriticalPolls = bumpConsecutivePolls({
+    current: consecutiveClusterCriticalPolls,
+    isOverThreshold: clusterLevel === 'critical',
+  });
+  consecutiveClusterWarnPolls = bumpConsecutivePolls({
+    current: consecutiveClusterWarnPolls,
+    isOverThreshold: clusterLevel === 'warn',
+  });
 
-  const workerPoolDemandExtra = isWorkerRuntime()
-    ? buildWorkerPoolDemandAlertExtra(getWorkerPostgresPoolDemandContext(), poolMaxConnections)
-    : {};
+  const alertContextExtra = {
+    ...buildPoolStatisticsAlertExtra(parameters.poolStatistics ?? []),
+    ...(isWorkerRuntime()
+      ? buildWorkerPoolDemandAlertExtra({
+          demand: getWorkerPostgresPoolDemandContext(),
+          poolMaxConnections,
+        })
+      : {}),
+  };
 
   emitActiveCheckoutAlertIfNeeded({
     activeOrganizationRlsCheckouts,
     poolMaxConnections,
-    workerPoolDemandExtra,
+    alertContextExtra,
   });
   emitClusterAlertIfNeeded({
     clusterActiveConnections: parameters.clusterActiveConnections,
     allowedApplicationConnections: parameters.allowedApplicationConnections,
-    workerPoolDemandExtra,
+    alertContextExtra,
   });
 
   return {

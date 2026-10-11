@@ -107,10 +107,12 @@ describe('OrganizationService', () => {
       membershipPublicId: generatePublicId('membership'),
     });
     service.wireOffboardingUploadService({
-      deleteObject: vi.fn(),
-      tombstoneAllByOrganizationId: vi.fn().mockResolvedValue(0),
-      assertKeyConfirmedForOwner: vi.fn().mockResolvedValue({ mimeType: 'image/png' }),
-    } as never);
+      uploadService: {
+        deleteObject: vi.fn(),
+        tombstoneAllByOrganizationId: vi.fn().mockResolvedValue(0),
+        assertKeyConfirmedForOwner: vi.fn().mockResolvedValue({ mimeType: 'image/png' }),
+      } as never,
+    });
     vi.mocked(objectStorage.headObject).mockResolvedValue({
       contentLength: 100,
       contentType: 'image/png',
@@ -141,12 +143,18 @@ describe('OrganizationService', () => {
   });
 
   it('list returns paginated organizations', async () => {
-    const result = await service.listForUser({ limit: 20 }, 'user_public');
+    const result = await service.listForUser({
+      query: { limit: 20 },
+      user_public_id: 'user_public',
+    });
     expect(result.items).toHaveLength(1);
   });
 
   it('create persists organization for owner', async () => {
-    const result = await service.create({ name: 'New Org', slug: 'new-org' }, 'owner_public');
+    const result = await service.create({
+      body: { name: 'New Org', slug: 'new-org' },
+      owner_user_public_id: 'owner_public',
+    });
     expect(provisionOrganizationWithOwnerMock).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'New Org', slug: 'new-org', type: 'TEAM' }),
     );
@@ -154,27 +162,36 @@ describe('OrganizationService', () => {
   });
 
   it('getByPublicId returns organization, naming its owner (D81 (4))', async () => {
-    const result = await service.getByPublicId(organizationRow.public_id, 'user_public');
+    const result = await service.getByPublicId({
+      public_id: organizationRow.public_id,
+      user_public_id: 'user_public',
+    });
     expect(result.id).toBe(organizationRow.public_id);
     expect(result.owner_user_id).toBe('usr_owner_10');
   });
 
   it("serializes owner_user_id null when the owner's login is gone", async () => {
     vi.mocked(repository.resolveUserPublicIdsByInternalIds).mockResolvedValueOnce(new Map());
-    const result = await service.getByPublicId(organizationRow.public_id, 'user_public');
+    const result = await service.getByPublicId({
+      public_id: organizationRow.public_id,
+      user_public_id: 'user_public',
+    });
     expect(result.owner_user_id).toBeNull();
   });
 
   it('create throws when owner user missing', async () => {
     vi.mocked(repository.resolveUserIdByPublicId).mockResolvedValue(null);
     await expect(
-      service.create({ name: 'New Org', slug: 'new-org' }, 'missing_owner'),
+      service.create({
+        body: { name: 'New Org', slug: 'new-org' },
+        owner_user_public_id: 'missing_owner',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('getBySlug returns organization', async () => {
     vi.mocked(repository.findBySlug).mockResolvedValue(organizationRow as never);
-    const result = await service.getBySlug('acme', 'user_public');
+    const result = await service.getBySlug({ slug: 'acme', user_public_id: 'user_public' });
     expect(result.slug).toBe('acme');
   });
 
@@ -184,13 +201,17 @@ describe('OrganizationService', () => {
       public_id: 'other_org',
     } as never);
     await expect(
-      service.update(asScope(organizationRow.public_id), { slug: 'taken' }, 'owner_public'),
+      service.update({
+        scope: asScope(organizationRow.public_id),
+        body: { slug: 'taken' },
+        updated_by_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
   it('delete runs offboarding when dependencies attached', async () => {
     const uploadService = { tombstoneAllByOrganizationId: vi.fn().mockResolvedValue(3) };
-    service.wireOffboardingUploadService(uploadService as never);
+    service.wireOffboardingUploadService({ uploadService: uploadService as never });
     await service.delete(asScope(organizationRow.public_id));
     expect(uploadService.tombstoneAllByOrganizationId).toHaveBeenCalledWith(organizationRow.id);
   });
@@ -200,7 +221,10 @@ describe('OrganizationService', () => {
     const subscriptionService = {
       cancelActiveForOrganizationOffboarding: vi.fn().mockResolvedValue(undefined),
     };
-    service.wireOffboardingUploadService(uploadService as never, subscriptionService);
+    service.wireOffboardingUploadService({
+      uploadService: uploadService as never,
+      subscriptionService,
+    });
     await service.delete(asScope(organizationRow.public_id));
     expect(subscriptionService.cancelActiveForOrganizationOffboarding).toHaveBeenCalledWith(
       organizationRow.public_id,
@@ -214,7 +238,10 @@ describe('OrganizationService', () => {
         .fn()
         .mockRejectedValue(new Error('stripe unavailable')),
     };
-    service.wireOffboardingUploadService(uploadService as never, subscriptionService);
+    service.wireOffboardingUploadService({
+      uploadService: uploadService as never,
+      subscriptionService,
+    });
     await expect(service.delete(asScope(organizationRow.public_id))).rejects.toThrow();
     // The soft-delete must NOT have run after the failed cancel.
     expect(repository.softDelete).not.toHaveBeenCalled();
@@ -235,11 +262,11 @@ describe('OrganizationService', () => {
 
   it('uploadLogo stores the object KEY, not a permanent public URL (TEN-07)', async () => {
     const key = `organization-logos/${organizationRow.public_id}/logo.png`;
-    const result = await service.uploadLogo(
-      asScope(organizationRow.public_id),
-      { key },
-      'owner_public',
-    );
+    const result = await service.uploadLogo({
+      scope: asScope(organizationRow.public_id),
+      body: { key },
+      updated_by_user_public_id: 'owner_public',
+    });
     expect(result).toBeDefined();
     // TEN-07: the private object KEY is persisted (signed-on-read), never a permanent URL.
     expect(repository.update).toHaveBeenCalledWith(
@@ -253,7 +280,11 @@ describe('OrganizationService', () => {
     vi.mocked(objectStorage.headObject).mockResolvedValueOnce(null);
     const key = `organization-logos/${organizationRow.public_id}/logo.png`;
     await expect(
-      service.uploadLogo(asScope(organizationRow.public_id), { key }, 'owner_public'),
+      service.uploadLogo({
+        scope: asScope(organizationRow.public_id),
+        body: { key },
+        updated_by_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
@@ -262,13 +293,19 @@ describe('OrganizationService', () => {
     // served inline and is a stored-XSS vector. The upload domain's SVG tests do not cover this
     // path; here the confirmed upload's verified type is image/svg+xml.
     service.wireOffboardingUploadService({
-      deleteObject: vi.fn(),
-      assertKeyConfirmedForOwner: vi.fn().mockResolvedValue({ mimeType: 'image/svg+xml' }),
-    } as never);
+      uploadService: {
+        deleteObject: vi.fn(),
+        assertKeyConfirmedForOwner: vi.fn().mockResolvedValue({ mimeType: 'image/svg+xml' }),
+      } as never,
+    });
     const key = `organization-logos/${organizationRow.public_id}/logo.svg`;
 
     await expect(
-      service.uploadLogo(asScope(organizationRow.public_id), { key }, 'owner_public'),
+      service.uploadLogo({
+        scope: asScope(organizationRow.public_id),
+        body: { key },
+        updated_by_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
     expect(repository.update).not.toHaveBeenCalled();
     expect(objectStorage.headObject).not.toHaveBeenCalled();
@@ -277,31 +314,41 @@ describe('OrganizationService', () => {
   it('update throws when repository update returns null', async () => {
     vi.mocked(repository.update).mockResolvedValue(null);
     await expect(
-      service.update(asScope(organizationRow.public_id), { name: 'X' }, 'owner_public'),
+      service.update({
+        scope: asScope(organizationRow.public_id),
+        body: { name: 'X' },
+        updated_by_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('uploadLogo rejects keys outside organization prefix', async () => {
     const otherOrganizationKey = `organization-logos/${generatePublicId('organization')}/logo.png`;
     await expect(
-      service.uploadLogo(
-        asScope(organizationRow.public_id),
-        { key: otherOrganizationKey },
-        'owner_public',
-      ),
+      service.uploadLogo({
+        scope: asScope(organizationRow.public_id),
+        body: { key: otherOrganizationKey },
+        updated_by_user_public_id: 'owner_public',
+      }),
     ).rejects.toMatchObject({ name: 'ValidationError' });
   });
 
   it('uploadLogo rejects when the upload has not been confirmed', async () => {
     service.wireOffboardingUploadService({
-      deleteObject: vi.fn(),
-      assertKeyConfirmedForOwner: vi
-        .fn()
-        .mockRejectedValue(new ValidationError('errors:validation.uploadNotConfirmed')),
-    } as never);
+      uploadService: {
+        deleteObject: vi.fn(),
+        assertKeyConfirmedForOwner: vi
+          .fn()
+          .mockRejectedValue(new ValidationError('errors:validation.uploadNotConfirmed')),
+      } as never,
+    });
     const key = `organization-logos/${organizationRow.public_id}/logo.png`;
     await expect(
-      service.uploadLogo(asScope(organizationRow.public_id), { key }, 'owner_public'),
+      service.uploadLogo({
+        scope: asScope(organizationRow.public_id),
+        body: { key },
+        updated_by_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
     expect(repository.update).not.toHaveBeenCalled();
     // The key is caller-supplied: an unconfirmed one never costs a storage call.
@@ -310,11 +357,16 @@ describe('OrganizationService', () => {
 
   it('getBySlug throws when organization missing', async () => {
     vi.mocked(repository.findBySlug).mockResolvedValue(null);
-    await expect(service.getBySlug('missing', 'user_public')).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      service.getBySlug({ slug: 'missing', user_public_id: 'user_public' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('transferOrganizationOwnership updates owner and returns context', async () => {
-    const result = await service.transferOrganizationOwnership(organizationRow.public_id, 99);
+    const result = await service.transferOrganizationOwnership({
+      organization_public_id: organizationRow.public_id,
+      new_owner_user_id: 99,
+    });
     expect(repository.updateOwner).toHaveBeenCalledWith(organizationRow.public_id, 99);
     expect(result.public_id).toBe(organizationRow.public_id);
   });
@@ -324,7 +376,10 @@ describe('OrganizationService', () => {
     // caller's status check and the write (the EXISTS guard failed) — surface a clean conflict.
     vi.mocked(repository.updateOwner).mockResolvedValueOnce(null);
     await expect(
-      service.transferOrganizationOwnership(organizationRow.public_id, 99),
+      service.transferOrganizationOwnership({
+        organization_public_id: organizationRow.public_id,
+        new_owner_user_id: 99,
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
@@ -337,14 +392,20 @@ describe('OrganizationService', () => {
       ...organizationRow,
       logo_url: null,
     } as never);
-    const result = await service.deleteLogo(asScope(organizationRow.public_id), 'owner_public');
+    const result = await service.deleteLogo({
+      scope: asScope(organizationRow.public_id),
+      updated_by_user_public_id: 'owner_public',
+    });
     expect(result.logo_url).toBeNull();
   });
 
   it('create throws conflict when slug already exists', async () => {
     vi.mocked(repository.findBySlug).mockResolvedValue(organizationRow as never);
     await expect(
-      service.create({ name: 'Dup', slug: organizationRow.slug }, 'owner_public'),
+      service.create({
+        body: { name: 'Dup', slug: organizationRow.slug },
+        owner_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
@@ -354,22 +415,38 @@ describe('OrganizationService', () => {
       Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' }),
     );
     await expect(
-      service.create({ name: 'Race', slug: 'race-slug' }, 'owner_public'),
+      service.create({
+        body: { name: 'Race', slug: 'race-slug' },
+        owner_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
   it('TEN-02/R12: create takes the owned-organization quota advisory lock before counting', async () => {
-    await service.create({ name: 'Locked Co', slug: 'locked-co' }, 'owner_public');
+    await service.create({
+      body: { name: 'Locked Co', slug: 'locked-co' },
+      owner_user_public_id: 'owner_public',
+    });
     // A single per-owner transaction-scoped quota lock serializes the count + insert; the
     // previously-redundant resource-cap-lock has been removed (audit R12).
     expect(repository.acquireOwnedOrganizationQuotaLock).toHaveBeenCalledWith(expect.any(Number));
+    expect(repository.countActiveOwnedByUser).toHaveBeenCalledOnce();
+    expect(
+      vi.mocked(repository.acquireOwnedOrganizationQuotaLock).mock.invocationCallOrder[0],
+    ).toBeLessThan(vi.mocked(repository.countActiveOwnedByUser).mock.invocationCallOrder[0]!);
+    expect(vi.mocked(repository.countActiveOwnedByUser).mock.invocationCallOrder[0]).toBeLessThan(
+      provisionOrganizationWithOwnerMock.mock.invocationCallOrder[0]!,
+    );
   });
 
   it('create rejects when the owner is at the team-organization cap', async () => {
     // env MAX_TEAM_ORGANIZATIONS_PER_OWNER defaults to 20; simulate the owner already at the cap.
     vi.mocked(repository.countActiveOwnedByUser).mockResolvedValue(20);
     await expect(
-      service.create({ name: 'Over Cap', slug: 'over-cap' }, 'owner_public'),
+      service.create({
+        body: { name: 'Over Cap', slug: 'over-cap' },
+        owner_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
     // The provisioning path must not run once the cap is hit.
     expect(provisionOrganizationWithOwnerMock).not.toHaveBeenCalled();
@@ -381,7 +458,10 @@ describe('OrganizationService', () => {
     (env as { TEAM_ORGANIZATION_ENABLED: boolean }).TEAM_ORGANIZATION_ENABLED = false;
     try {
       await expect(
-        service.create({ name: 'No Teams', slug: 'no-teams' }, 'owner_public'),
+        service.create({
+          body: { name: 'No Teams', slug: 'no-teams' },
+          owner_user_public_id: 'owner_public',
+        }),
       ).rejects.toBeInstanceOf(ForbiddenError);
       // The capability gate fires before any validation or provisioning work.
       expect(provisionOrganizationWithOwnerMock).not.toHaveBeenCalled();
@@ -395,9 +475,9 @@ describe('OrganizationService', () => {
     // check owns the lookup, so the service no longer calls `findByPublicId` itself.
     // Mocking the inner step would leave this passing for the wrong reason.
     vi.mocked(repository.userCanAccessOrganization).mockResolvedValue(null);
-    await expect(service.getByPublicId('missing', 'user_public')).rejects.toBeInstanceOf(
-      NotFoundError,
-    );
+    await expect(
+      service.getByPublicId({ public_id: 'missing', user_public_id: 'user_public' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it("getByPublicId throws when the organization exists but is not the caller's", async () => {
@@ -405,7 +485,10 @@ describe('OrganizationService', () => {
     // to tell "does not exist" from "exists, not yours".
     vi.mocked(repository.userCanAccessOrganization).mockResolvedValue(null);
     await expect(
-      service.getByPublicId(organizationRow.public_id, 'outsider_public'),
+      service.getByPublicId({
+        public_id: organizationRow.public_id,
+        user_public_id: 'outsider_public',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -417,7 +500,10 @@ describe('OrganizationService', () => {
   });
 
   it('updateStripeCustomerIdForOrganization updates stripe customer', async () => {
-    await service.updateStripeCustomerIdForOrganization(organizationRow.public_id, 'cus_test');
+    await service.updateStripeCustomerIdForOrganization({
+      organization_public_id: organizationRow.public_id,
+      stripe_customer_id: 'cus_test',
+    });
     expect(repository.updateStripeCustomerId).toHaveBeenCalledWith(organizationRow.id, 'cus_test');
   });
 
@@ -426,7 +512,10 @@ describe('OrganizationService', () => {
       ...organizationRow,
       logo_url: null,
     } as never);
-    const result = await service.deleteLogo(asScope(organizationRow.public_id), 'owner_public');
+    const result = await service.deleteLogo({
+      scope: asScope(organizationRow.public_id),
+      updated_by_user_public_id: 'owner_public',
+    });
     expect(result.logo_url).toBeNull();
   });
 
@@ -445,7 +534,10 @@ describe('OrganizationService', () => {
       ...organizationRow,
       logo_url: null,
     } as never);
-    const result = await service.deleteLogo(asScope(organizationRow.public_id), 'owner_public');
+    const result = await service.deleteLogo({
+      scope: asScope(organizationRow.public_id),
+      updated_by_user_public_id: 'owner_public',
+    });
     expect(result.logo_url).toBeNull();
     expect(objectStorage.deleteObject).toHaveBeenCalledWith(
       `organization-logos/${organizationRow.public_id}/logo.png`,
@@ -462,7 +554,10 @@ describe('OrganizationService', () => {
   it('updateStripeCustomerIdForOrganization throws when organization missing', async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue(null);
     await expect(
-      service.updateStripeCustomerIdForOrganization('missing', 'cus_test'),
+      service.updateStripeCustomerIdForOrganization({
+        organization_public_id: 'missing',
+        stripe_customer_id: 'cus_test',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -476,7 +571,7 @@ describe('OrganizationService', () => {
     // The column holds the object KEY written by uploadLogo; a URL is not a key, so the S3
     // reclaim is skipped while offboarding still clears the column and tombstones uploads.
     const uploadService = { tombstoneAllByOrganizationId: vi.fn().mockResolvedValue(0) };
-    service.wireOffboardingUploadService(uploadService as never);
+    service.wireOffboardingUploadService({ uploadService: uploadService as never });
     vi.mocked(repository.findByPublicId).mockResolvedValue({
       ...organizationRow,
       logo_url: `https://cdn.example/organization-logos/${organizationRow.public_id}/logo.png`,
@@ -492,11 +587,11 @@ describe('OrganizationService', () => {
   });
 
   it('update skips slug conflict check when slug is omitted', async () => {
-    await service.update(
-      asScope(organizationRow.public_id),
-      { name: 'Renamed only' },
-      'owner_public',
-    );
+    await service.update({
+      scope: asScope(organizationRow.public_id),
+      body: { name: 'Renamed only' },
+      updated_by_user_public_id: 'owner_public',
+    });
     expect(repository.findBySlug).not.toHaveBeenCalled();
     expect(repository.update).toHaveBeenCalled();
   });
@@ -521,7 +616,10 @@ describe('OrganizationService', () => {
       ...organizationRow,
       logo_url: null,
     } as never);
-    const result = await service.deleteLogo(asScope(organizationRow.public_id), 'owner_public');
+    const result = await service.deleteLogo({
+      scope: asScope(organizationRow.public_id),
+      updated_by_user_public_id: 'owner_public',
+    });
     expect(result.logo_url).toBeNull();
   });
 
@@ -594,7 +692,10 @@ describe('OrganizationService', () => {
       ...organizationRow,
       logo_url: 'https://cdn.example.com/no-organization-logos/here.png',
     } as never);
-    const result = await service.deleteLogo(asScope(organizationRow.public_id), 'owner_public');
+    const result = await service.deleteLogo({
+      scope: asScope(organizationRow.public_id),
+      updated_by_user_public_id: 'owner_public',
+    });
     expect(objectStorage.headObject).not.toHaveBeenCalled();
     expect(objectStorage.deleteObject).not.toHaveBeenCalled();
     expect(result.logo_url).toBeNull();
@@ -607,7 +708,11 @@ describe('OrganizationService', () => {
       contentLength: 1,
       contentType: undefined,
     });
-    await service.uploadLogo(asScope(organizationRow.public_id), { key }, 'missing_user');
+    await service.uploadLogo({
+      scope: asScope(organizationRow.public_id),
+      body: { key },
+      updated_by_user_public_id: 'missing_user',
+    });
     expect(repository.update).toHaveBeenCalledWith(
       organizationRow.public_id,
       expect.objectContaining({ logo_url: expect.any(String) }),
@@ -615,7 +720,11 @@ describe('OrganizationService', () => {
     );
 
     vi.mocked(repository.update).mockResolvedValue(organizationRow as never);
-    await service.update(asScope(organizationRow.public_id), { name: 'Renamed' }, 'missing_user');
+    await service.update({
+      scope: asScope(organizationRow.public_id),
+      body: { name: 'Renamed' },
+      updated_by_user_public_id: 'missing_user',
+    });
     expect(repository.update).toHaveBeenCalledWith(
       organizationRow.public_id,
       { name: 'Renamed' },
@@ -626,7 +735,7 @@ describe('OrganizationService', () => {
   it('wireOffboardingUploadService stores upload service for delete', async () => {
     const uploadService = { tombstoneAllByOrganizationId: vi.fn().mockResolvedValue(2) };
     const serviceWithOffboarding = new OrganizationService(repository, objectStorage);
-    serviceWithOffboarding.wireOffboardingUploadService(uploadService as never);
+    serviceWithOffboarding.wireOffboardingUploadService({ uploadService: uploadService as never });
     await serviceWithOffboarding.delete(asScope(organizationRow.public_id));
     expect(uploadService.tombstoneAllByOrganizationId).toHaveBeenCalledWith(organizationRow.id);
   });
@@ -646,11 +755,11 @@ describe('OrganizationService', () => {
 
   it('update allows keeping the same slug for the same organization', async () => {
     vi.mocked(repository.findBySlug).mockResolvedValue(organizationRow as never);
-    await service.update(
-      asScope(organizationRow.public_id),
-      { slug: organizationRow.slug },
-      'owner_public',
-    );
+    await service.update({
+      scope: asScope(organizationRow.public_id),
+      body: { slug: organizationRow.slug },
+      updated_by_user_public_id: 'owner_public',
+    });
     expect(repository.update).toHaveBeenCalled();
   });
 
@@ -665,26 +774,36 @@ describe('OrganizationService', () => {
       ...organizationRow,
       logo_url: null,
     } as never);
-    const result = await service.deleteLogo(asScope(organizationRow.public_id), 'owner_public');
+    const result = await service.deleteLogo({
+      scope: asScope(organizationRow.public_id),
+      updated_by_user_public_id: 'owner_public',
+    });
     expect(objectStorage.deleteObject).toHaveBeenCalledWith(logoPath);
+    expect(repository.update).toHaveBeenCalledOnce();
+    expect(vi.mocked(objectStorage.deleteObject).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(repository.update).mock.invocationCallOrder[0]!,
+    );
     expect(result.logo_url).toBeNull();
   });
 
   it('updateStripeCustomerIdForOrganization throws when stripe update target is missing', async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue(organizationRow as never);
     vi.mocked(repository.updateStripeCustomerId).mockResolvedValue(null);
-    await service.updateStripeCustomerIdForOrganization(organizationRow.public_id, 'cus_new');
+    await service.updateStripeCustomerIdForOrganization({
+      organization_public_id: organizationRow.public_id,
+      stripe_customer_id: 'cus_new',
+    });
     expect(repository.updateStripeCustomerId).toHaveBeenCalledWith(organizationRow.id, 'cus_new');
   });
 
   it('uploadLogo throws when organization is missing', async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue(null);
     await expect(
-      service.uploadLogo(
-        asScope(organizationRow.public_id),
-        { key: `organization-logos/${organizationRow.public_id}/logo.png` },
-        'owner_public',
-      ),
+      service.uploadLogo({
+        scope: asScope(organizationRow.public_id),
+        body: { key: `organization-logos/${organizationRow.public_id}/logo.png` },
+        updated_by_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -697,7 +816,11 @@ describe('OrganizationService', () => {
   it('update throws when organization is missing', async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue(null);
     await expect(
-      service.update(asScope(organizationRow.public_id), { name: 'X' }, 'owner_public'),
+      service.update({
+        scope: asScope(organizationRow.public_id),
+        body: { name: 'X' },
+        updated_by_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -711,7 +834,10 @@ describe('OrganizationService', () => {
   it('deleteLogo throws when organization is missing', async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue(null);
     await expect(
-      service.deleteLogo(asScope(organizationRow.public_id), 'owner_public'),
+      service.deleteLogo({
+        scope: asScope(organizationRow.public_id),
+        updated_by_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -719,7 +845,11 @@ describe('OrganizationService', () => {
     const key = `organization-logos/${organizationRow.public_id}/logo.png`;
     vi.mocked(repository.update).mockResolvedValue(null);
     await expect(
-      service.uploadLogo(asScope(organizationRow.public_id), { key }, 'owner_public'),
+      service.uploadLogo({
+        scope: asScope(organizationRow.public_id),
+        body: { key },
+        updated_by_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -730,7 +860,10 @@ describe('OrganizationService', () => {
     } as never);
     vi.mocked(repository.update).mockResolvedValue(null);
     await expect(
-      service.deleteLogo(asScope(organizationRow.public_id), 'owner_public'),
+      service.deleteLogo({
+        scope: asScope(organizationRow.public_id),
+        updated_by_user_public_id: 'owner_public',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -740,7 +873,10 @@ describe('OrganizationService', () => {
       ...organizationRow,
       logo_url: null,
     } as never);
-    await service.deleteLogo(asScope(organizationRow.public_id), 'missing_user');
+    await service.deleteLogo({
+      scope: asScope(organizationRow.public_id),
+      updated_by_user_public_id: 'missing_user',
+    });
     expect(repository.update).toHaveBeenCalledWith(
       organizationRow.public_id,
       { logo_url: null },

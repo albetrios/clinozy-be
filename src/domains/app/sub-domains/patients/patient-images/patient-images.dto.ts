@@ -21,8 +21,8 @@ const imageFields = {
   patient_treatment_id: recordIdSchema.nullable(),
   body_part: z.enum(PATIENT_BODY_PART_VALUES).nullable(),
   taken_on: calendarDateSchema,
-  display_name: trimmedStringMinMax(1, 60).nullable(),
-  caption: trimmedStringMinMax(1, 200).nullable(),
+  display_name: trimmedStringMinMax({ min: 1, max: 60 }).nullable(),
+  caption: trimmedStringMinMax({ min: 1, max: 200 }).nullable(),
 };
 
 /** Path params of the by-id `patient-images` routes (nested under the patient). */
@@ -48,7 +48,7 @@ export const patientImagesParentParamsDto = z
  */
 export const CreatePatientImageDto = z
   .object({
-    file_key: trimmedStringMinMax(1, 512),
+    file_key: trimmedStringMinMax({ min: 1, max: 512 }),
     album: imageFields.album.optional(),
     stage: imageFields.stage.optional(),
     appointment_id: imageFields.appointment_id.optional(),

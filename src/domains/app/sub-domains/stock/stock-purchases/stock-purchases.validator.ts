@@ -16,17 +16,17 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a purchase; throws `ValidationError` naming each bad field. */
 export function validateCreateStockPurchase(data: unknown): CreateStockPurchaseInput {
-  return parseWithSchema(CreateStockPurchaseDto, data);
+  return parseWithSchema({ schema: CreateStockPurchaseDto, data });
 }
 
 /** Parses a change to a purchase's bill details; throws `ValidationError` naming each bad field. */
 export function validateUpdateStockPurchase(data: unknown): UpdateStockPurchaseInput {
-  return parseWithSchema(UpdateStockPurchaseDto, data);
+  return parseWithSchema({ schema: UpdateStockPurchaseDto, data });
 }
 
 /** Parses the Purchases tab's query into a list input (routes-final 9.D.8 #16). */
 export function validateListStockPurchasesQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listStockPurchasesQueryDto, data);
+  const query = parseWithSchema({ schema: listStockPurchasesQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

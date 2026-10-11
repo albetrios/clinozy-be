@@ -16,13 +16,14 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/infrastructure/queue/worker-runtime/worker-processor.util.js', () => ({
-  runOrganizationScopedWorkerJob: async (
-    _options: unknown,
-    work: (handle: unknown) => Promise<unknown>,
-  ) => {
+  runOrganizationScopedWorkerJob: async ({
+    processor,
+  }: {
+    processor: (handle: unknown, job: unknown) => Promise<unknown>;
+  }) => {
     mocks.contextDepth += 1;
     try {
-      return await work({ kind: 'organization' });
+      return await processor({ kind: 'organization' }, {});
     } finally {
       mocks.contextDepth -= 1;
     }

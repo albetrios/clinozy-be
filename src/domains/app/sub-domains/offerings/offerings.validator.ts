@@ -10,17 +10,17 @@ import {
 
 /** Parses an offering create body; throws `ValidationError` naming each bad field. */
 export function validateCreateOffering(data: unknown): CreateOfferingInput {
-  return parseWithSchema(CreateOfferingDto, data);
+  return parseWithSchema({ schema: CreateOfferingDto, data });
 }
 
 /** Parses an offering update body; throws `ValidationError` naming each bad field. */
 export function validateUpdateOffering(data: unknown): UpdateOfferingInput {
-  return parseWithSchema(UpdateOfferingDto, data);
+  return parseWithSchema({ schema: UpdateOfferingDto, data });
 }
 
 /** Parses the `GET /app/offerings` (and export) query into a list input — filters by column, group and branch. */
 export function validateListOfferingsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listOfferingsQueryDto, data);
+  const query = parseWithSchema({ schema: listOfferingsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

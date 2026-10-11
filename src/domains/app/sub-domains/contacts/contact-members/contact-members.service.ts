@@ -40,52 +40,69 @@ export class ContactMembersService {
   ) {}
 
   /** The team members handling a live contact, oldest first. */
-  async list(
-    scope: OrganizationPrincipalDatabaseScope,
-    contactPublicId: string,
-  ): Promise<ContactMemberOutput[]> {
-    return withAppDatabaseContext(scope, async () => {
-      const ids = await this.requireContactId(scope, contactPublicId);
-      return serializeContactMembers(
-        await this.contactMembersRepository.listForContact(ids.contact),
-      );
+  async list({
+    scope,
+    contactPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    contactPublicId: string;
+  }): Promise<ContactMemberOutput[]> {
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const ids = await this.requireContactId({ scope, contactPublicId });
+        return serializeContactMembers(
+          await this.contactMembersRepository.listForContact(ids.contact),
+        );
+      },
     });
   }
 
   /** Makes `membership_ids` the exact list of who handles a live contact. */
-  async replace(
-    scope: OrganizationPrincipalDatabaseScope,
-    contactPublicId: string,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-  ): Promise<ContactMemberOutput[]> {
+  async replace({
+    scope,
+    contactPublicId,
+    body,
+    actingUserPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    contactPublicId: string;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+  }): Promise<ContactMemberOutput[]> {
     const parsed = validateReplaceContactMembers(body);
-    return withAppDatabaseContext(scope, async () => {
-      const ids = await this.requireContactId(scope, contactPublicId);
-      const resolved = await resolveMembershipIds({
-        membershipService: this.membershipService,
-        organizationId: ids.organization,
-        membershipPublicIds: parsed.membership_ids,
-      });
-      await replaceLinkedIds({
-        link: CONTACT_MEMBERS_LINK,
-        ownerId: ids.contact,
-        organizationId: ids.organization,
-        targetIds: parsed.membership_ids.map((publicId) => resolved.get(publicId)!),
-        createdByUserId:
-          await this.organizationService.resolveUserInternalIdByPublicId(actingUserPublicId),
-      });
-      return serializeContactMembers(
-        await this.contactMembersRepository.listForContact(ids.contact),
-      );
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const ids = await this.requireContactId({ scope, contactPublicId });
+        const resolved = await resolveMembershipIds({
+          membershipService: this.membershipService,
+          organizationId: ids.organization,
+          membershipPublicIds: parsed.membership_ids,
+        });
+        await replaceLinkedIds({
+          link: CONTACT_MEMBERS_LINK,
+          ownerId: ids.contact,
+          organizationId: ids.organization,
+          targetIds: parsed.membership_ids.map((publicId) => resolved.get(publicId)!),
+          createdByUserId:
+            await this.organizationService.resolveUserInternalIdByPublicId(actingUserPublicId),
+        });
+        return serializeContactMembers(
+          await this.contactMembersRepository.listForContact(ids.contact),
+        );
+      },
     });
   }
 
   /** The organization's and the live contact's internal ids; 404 when the contact is not here. */
-  private async requireContactId(
-    scope: OrganizationPrincipalDatabaseScope,
-    contactPublicId: string,
-  ): Promise<{ organization: number; contact: number }> {
+  private async requireContactId({
+    scope,
+    contactPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    contactPublicId: string;
+  }): Promise<{ organization: number; contact: number }> {
     const organization = await this.organizationService.requireOrganizationByPublicId(
       scope.organizationPublicId,
     );

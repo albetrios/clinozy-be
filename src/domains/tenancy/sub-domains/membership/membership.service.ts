@@ -10,8 +10,10 @@ import { isDisposableEmailBlocked } from '@/shared/utils/text/email.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { assertRecordNotChangedSince } from '@/shared/utils/validation/record-fields.util.js';
 import {
+  MAINTENANCE_SCOPE,
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
+  withMaintenanceDatabaseContext,
   type OrganizationPrincipalDatabaseScope,
   type UserPrincipalDatabaseScope,
 } from '@/infrastructure/database/contexts/database-context.js';
@@ -32,11 +34,15 @@ import type { MemberRoleService } from '@/domains/tenancy/sub-domains/member-rol
 import type { MemberRolePermissionService } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.service.js';
 import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import type { PermissionRepository } from '@/domains/tenancy/sub-domains/permission/permission.repository.js';
-import { assertCallerCanGrantPermissionCodes } from '@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js';
+import {
+  assertCallerCanGrantPermissionCodes,
+  assertCallerHoldsMemberPermissionCodes,
+} from '@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js';
 import type { MembershipListQuery, MembershipRepository } from './membership.repository.js';
 import {
   type CallerMembershipContext,
   type MembershipAccessRefs,
+  type MembershipActionOptions,
   type MembershipOutput,
   type MembershipProfileData,
   type MembershipRow,
@@ -51,6 +57,9 @@ import {
   validateTransferOwnership,
 } from './membership.validator.js';
 import { serializeMembership } from './membership.serializer.js';
+import { buildDomainEvent, eventBus } from '@/core/events/event-bus.js';
+import type { OrganizationResourceEventPayload } from '@/core/events/organization-resource-event.js';
+import { MEMBERSHIP_EVENT, type MembershipEventType } from './events/membership.events.js';
 import { resolveStoredMediaReadUrl } from '@/shared/utils/infrastructure/media-url.util.js';
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import type { UserService } from '@/domains/user/user.service.js';
@@ -140,7 +149,10 @@ export type MembershipLeavePort = {
  */
 export type MembershipSeatEnforcementPort = {
   reserveSeatCeilingForMemberAdd(organizationId: number): Promise<number | null>;
-  enqueueSeatQuantitySync(organizationPublicId: string, idempotencyKey?: string): void;
+  enqueueSeatQuantitySync(options: {
+    organization_public_id: string;
+    idempotencyKey?: string | undefined;
+  }): void;
 };
 
 /**
@@ -231,9 +243,9 @@ function assertLiveMembershipEdit(options: {
   const workStartsAt = parsed.work_starts_at ?? membership.work_starts_at.slice(0, 5);
   const workEndsAt = parsed.work_ends_at ?? membership.work_ends_at.slice(0, 5);
   if (workEndsAt <= workStartsAt) {
-    throw new ValidationError('errors:validation.workEndsBeforeStarts', undefined, {
-      work_ends_at: ['Working hours must end after they start'],
-    });
+    throw new ValidationError('errors:validation.workEndsBeforeStarts', undefined, undefined, [
+      { field: 'work_ends_at', messageKey: 'errors:validation.workEndsBeforeStarts' },
+    ]);
   }
   // T10: status moves only between active and suspended — an invited member becomes active
   // only by accepting the invite.
@@ -351,29 +363,38 @@ export class MembershipService {
    *
    * @remarks
    * - **Algorithm:** the guarded soft delete first (it refuses the organization's owner); then the
-   *   API keys; then {@link MembershipLeavePort.releaseEndedMembership}.
+   *   API keys; then {@link MembershipLeavePort.releaseEndedMembership}; then `membership.deleted`.
    * - **Failure modes:** returns null when the soft delete refused (the owner, or no live row) and
    *   then does nothing else — the caller surfaces the precise error.
    * - **Side effects:** writes `tenancy.memberships`, the organization's API keys and, through the
-   *   port, the app's tables. Permission caches and the seat sync are the caller's, after commit.
+   *   port, the app's tables; one `membership.deleted` event (webhook fan-out). Permission caches
+   *   and the seat sync are the caller's, after commit.
    */
   private async endMembershipInContext(options: {
-    organizationId: number;
+    organization: SerializingOrganization & { id: number };
     membershipPublicId: string;
     reason: MembershipDeleteReason;
     note: string | null;
   }): Promise<MembershipRow | null> {
     const ended = await this.membershipRepository.softDelete(
       options.membershipPublicId,
-      options.organizationId,
+      options.organization.id,
       { delete_reason: options.reason, delete_note: options.note },
     );
     if (!ended) return null;
     // reaudit-#7: revoke the departed member's API keys so they lose access too.
-    await this.revokeApiKeysForDepartedMember(ended.user_id, options.organizationId);
+    await this.revokeApiKeysForDepartedMember({
+      userId: ended.user_id,
+      organizationId: options.organization.id,
+    });
     await this.leaveStep?.releaseEndedMembership({
-      organizationId: options.organizationId,
+      organizationId: options.organization.id,
       membershipId: ended.id,
+    });
+    await this.emitMembershipEvents({
+      type: MEMBERSHIP_EVENT.DELETED,
+      memberships: [ended],
+      organization: options.organization,
     });
     return ended;
   }
@@ -385,25 +406,29 @@ export class MembershipService {
    * - **Failure modes:** an id that is no live role here is a `ValidationError` on `role_ids`
    *   (400) — the list is the body, not the path.
    */
-  private async resolveRoleIds(
-    organizationId: number,
-    rolePublicIds: readonly string[],
-  ): Promise<ResolvedRole[]> {
+  private async resolveRoleIds({
+    organizationId,
+    rolePublicIds,
+  }: {
+    organizationId: number;
+    rolePublicIds: readonly string[];
+  }): Promise<ResolvedRole[]> {
     const resolved: ResolvedRole[] = [];
     for (const rolePublicId of rolePublicIds) {
       try {
         resolved.push(
-          await this.memberRoleService.requireRoleRecordForOrganization(
-            organizationId,
-            rolePublicId,
-          ),
+          await this.memberRoleService.requireRoleRecordForOrganization({
+            organization_id: organizationId,
+            role_public_id: rolePublicId,
+          }),
         );
       } catch (error) {
         if (!(error instanceof NotFoundError)) throw error;
         throw new ValidationError(
           'errors:validation.membershipRoleNotFound',
           { role_id: rolePublicId },
-          { role_ids: [`${rolePublicId} is not a role of this organization`] },
+          undefined,
+          [{ field: 'role_ids', messageKey: 'errors:validation.membershipRoleNotFound' }],
         );
       }
     }
@@ -433,6 +458,39 @@ export class MembershipService {
       callerUserPublicId: options.callerUserPublicId,
       organizationPublicId: options.organizationPublicId,
       requestedPermissionCodes: [...requestedPermissionCodes],
+    });
+  }
+
+  /**
+   * Role ordering for update and delete: the caller must hold every permission the member's live
+   * roles (main and additional) grant — see {@link assertCallerHoldsMemberPermissionCodes}.
+   */
+  private async assertCallerHoldsMemberPermissions(options: {
+    organizationPublicId: string;
+    membership: MembershipRow;
+    callerUserPublicId: string | undefined;
+    callerApiKeyScopes: readonly string[] | undefined;
+  }): Promise<void> {
+    const roleIds = [
+      options.membership.role_id,
+      ...(await this.membershipAdditionalRolesRepository.listRoleIdsForMembership(
+        options.membership.id,
+      )),
+    ];
+    const memberPermissionCodes = new Set<string>();
+    for (const roleId of roleIds) {
+      for (const code of await this.memberRolePermissionService.listPermissionCodesForRole(
+        roleId,
+      )) {
+        memberPermissionCodes.add(code);
+      }
+    }
+    await assertCallerHoldsMemberPermissionCodes({
+      authorizationService: this.authorizationService,
+      callerUserPublicId: options.callerUserPublicId,
+      callerApiKeyScopes: options.callerApiKeyScopes,
+      organizationPublicId: options.organizationPublicId,
+      memberPermissionCodes: [...memberPermissionCodes],
     });
   }
 
@@ -508,10 +566,13 @@ export class MembershipService {
    * organization DB context (RLS-scoped). Best-effort: skipped when the api-key repository is not
    * wired (minimal test harness).
    */
-  private async revokeApiKeysForDepartedMember(
-    userId: number,
-    organizationId: number,
-  ): Promise<void> {
+  private async revokeApiKeysForDepartedMember({
+    userId,
+    organizationId,
+  }: {
+    userId: number;
+    organizationId: number;
+  }): Promise<void> {
     if (!this.organizationApiKeyRepository) return;
     await this.organizationApiKeyRepository.revokeAllByCreatorInOrganization(
       organizationId,
@@ -539,10 +600,10 @@ export class MembershipService {
     if (!this.seatEnforcement) return;
     // Serialize concurrent member-adds for this organization before the count so the free-tier path (no
     // FOR UPDATE row to lock) cannot race two inserts past the ceiling. Auto-released at COMMIT.
-    await acquireResourceQuotaLock(
-      RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBERSHIP_SEAT,
-      organizationInternalId,
-    );
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBERSHIP_SEAT,
+      key: organizationInternalId,
+    });
     const seatCeiling =
       await this.seatEnforcement.reserveSeatCeilingForMemberAdd(organizationInternalId);
     if (seatCeiling === null) return;
@@ -564,20 +625,25 @@ export class MembershipService {
   private enqueueSeatQuantitySync(organizationPublicId: string): void {
     if (!this.seatEnforcement) return;
     try {
-      this.seatEnforcement.enqueueSeatQuantitySync(organizationPublicId);
+      this.seatEnforcement.enqueueSeatQuantitySync({
+        organization_public_id: organizationPublicId,
+      });
     } catch (error) {
       logger.warn({ error, organizationPublicId }, 'membership.seat_sync.enqueue_failed');
     }
   }
 
-  private async invalidatePermissionsForMembership(
-    user_internal_id: number,
-    organization_public_id: string,
-  ): Promise<void> {
+  private async invalidatePermissionsForMembership({
+    user_internal_id,
+    organization_public_id,
+  }: {
+    user_internal_id: number;
+    organization_public_id: string;
+  }): Promise<void> {
     const userPublicId =
       await this.organizationService.resolveUserPublicIdByInternalId(user_internal_id);
     if (userPublicId) {
-      await invalidatePermissions(userPublicId, organization_public_id);
+      await invalidatePermissions({ userId: userPublicId, organizationId: organization_public_id });
     }
   }
 
@@ -594,24 +660,30 @@ export class MembershipService {
    * An id the resolver does not return has no active user, which is exactly the case the
    * single-member version skips on `null`.
    */
-  private async invalidatePermissionsForMemberships(
-    user_internal_ids: readonly number[],
-    organization_public_id: string,
-  ): Promise<void> {
+  private async invalidatePermissionsForMemberships({
+    user_internal_ids,
+    organization_public_id,
+  }: {
+    user_internal_ids: readonly number[];
+    organization_public_id: string;
+  }): Promise<void> {
     if (user_internal_ids.length === 0) return;
     const publicIdsByInternalId =
       await this.organizationService.resolveUserPublicIdsByInternalIds(user_internal_ids);
     await Promise.all(
       [...publicIdsByInternalId.values()].map((userPublicId) =>
-        invalidatePermissions(userPublicId, organization_public_id),
+        invalidatePermissions({ userId: userPublicId, organizationId: organization_public_id }),
       ),
     );
   }
 
-  private async applyOrganizationLocaleDefaults(
-    userPublicId: string,
-    organizationPublicId: string,
-  ): Promise<void> {
+  private async applyOrganizationLocaleDefaults({
+    userPublicId,
+    organizationPublicId,
+  }: {
+    userPublicId: string;
+    organizationPublicId: string;
+  }): Promise<void> {
     if (!(this.organizationSettingsService && this.userSettingsService)) return;
     const currentSettings = await this.userSettingsService.getForInvitedUser(userPublicId);
     if (!isFactoryDefaultUserLocaleSettings(currentSettings)) return;
@@ -619,9 +691,12 @@ export class MembershipService {
       await this.organizationSettingsService.resolveDefaultLocaleForOrganization(
         organizationPublicId,
       );
-    await this.userSettingsService.updateForInvitedUser(userPublicId, {
-      language: defaultLocale,
-      preferred_locales: preferredLocalesForOrganizationDefaultLocale(defaultLocale),
+    await this.userSettingsService.updateForInvitedUser({
+      user_public_id: userPublicId,
+      body: {
+        language: defaultLocale,
+        preferred_locales: preferredLocalesForOrganizationDefaultLocale(defaultLocale),
+      },
     });
   }
 
@@ -686,7 +761,10 @@ export class MembershipService {
         // Presign the raw avatar key for read (network-free signature); pass through when no
         // object-storage adapter is wired (minimal test harness).
         avatar_url: this.objectStorage
-          ? await resolveStoredMediaReadUrl(this.objectStorage, row.avatar_url)
+          ? await resolveStoredMediaReadUrl({
+              objectStorage: this.objectStorage,
+              storedValue: row.avatar_url,
+            })
           : row.avatar_url,
       });
     }
@@ -726,6 +804,42 @@ export class MembershipService {
   }
 
   /**
+   * Emits a membership resource event per row, each with the membership's public JSON.
+   *
+   * @remarks
+   * - **Algorithm:** serializes the rows in one batch ({@link serializeMemberships}), then emits
+   *   one {@link MEMBERSHIP_EVENT} per membership.
+   * - **Failure modes:** a serialization read failure propagates (it runs in the caller's
+   *   transaction); handler failures are swallowed by the bus.
+   * - **Side effects:** the notify handler records PENDING webhook delivery attempts.
+   * - **Notes:** call it inside the write's organization database context, so the fan-out joins its
+   *   transaction. Public because {@link MembershipInvitationService} (accept) changes memberships
+   *   too and emits through it.
+   */
+  async emitMembershipEvents(options: {
+    type: MembershipEventType;
+    memberships: MembershipRow[];
+    organization: SerializingOrganization;
+  }): Promise<MembershipOutput[]> {
+    const outputs = await this.serializeMemberships({
+      rows: options.memberships,
+      organization: options.organization,
+    });
+    for (const output of outputs) {
+      await eventBus.emit(
+        buildDomainEvent<OrganizationResourceEventPayload>({
+          type: options.type,
+          payload: {
+            organization_public_id: options.organization.public_id,
+            data: { ...output },
+          },
+        }),
+      );
+    }
+    return outputs;
+  }
+
+  /**
    * Turns a role and a branch named by public id into the list filters; `null` when either is not
    * of this organization — the list is then empty, never a 400 (a filter, not a write).
    */
@@ -737,10 +851,10 @@ export class MembershipService {
     const filters: Pick<MembershipListQuery, 'roleId' | 'membershipIds'> = {};
     if (options.rolePublicId !== undefined) {
       try {
-        const role = await this.memberRoleService.requireRoleRecordForOrganization(
-          options.organizationId,
-          options.rolePublicId,
-        );
+        const role = await this.memberRoleService.requireRoleRecordForOrganization({
+          organization_id: options.organizationId,
+          role_public_id: options.rolePublicId,
+        });
         filters.roleId = role.id;
       } catch (error) {
         if (error instanceof NotFoundError) return null;
@@ -765,36 +879,41 @@ export class MembershipService {
    * `branch_id` (T2) and `q`; ended members with `include_ended=true` (D58); the capped total on
    * the first page.
    */
-  async list(scope: OrganizationPrincipalDatabaseScope, query: unknown) {
+  async list({ scope, query }: { scope: OrganizationPrincipalDatabaseScope; query: unknown }) {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateListMembershipsQuery(query);
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      const filters = await this.resolveListFilters({
-        organizationId: organization.id,
-        rolePublicId: parsed.role_id,
-        branchPublicId: parsed.branch_id,
-      });
-      if (filters === null) {
-        return { items: [], total: 0, limit: parsed.limit, has_more: false, next_cursor: null };
-      }
-      const result = await this.membershipRepository.list(organization.id, {
-        ...filters,
-        after: parsed.after,
-        limit: parsed.limit,
-        q: parsed.q,
-        sort: parsed.sort,
-        order: parsed.order,
-        statuses: parsed.status === undefined ? undefined : [parsed.status],
-        includeEnded: parsed.include_ended === 'true',
-        withTotal: true,
-      });
-      return {
-        ...result,
-        // Batch-resolve user + role summaries + live invitations for the page (no N+1).
-        items: await this.serializeMemberships({ rows: result.items, organization }),
-      };
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        const filters = await this.resolveListFilters({
+          organizationId: organization.id,
+          rolePublicId: parsed.role_id,
+          branchPublicId: parsed.branch_id,
+        });
+        if (filters === null) {
+          return { items: [], total: 0, limit: parsed.limit, has_more: false, next_cursor: null };
+        }
+        const result = await this.membershipRepository.list(organization.id, {
+          ...filters,
+          after: parsed.after,
+          limit: parsed.limit,
+          q: parsed.q,
+          sort: parsed.sort,
+          order: parsed.order,
+          statuses: parsed.status === undefined ? undefined : [parsed.status],
+          includeEnded: parsed.include_ended === 'true',
+          withTotal: true,
+        });
+        return {
+          ...result,
+          // Batch-resolve user + role summaries + live invitations for the page (no N+1).
+          items: await this.serializeMemberships({ rows: result.items, organization }),
+        };
+      },
     });
   }
 
@@ -809,62 +928,86 @@ export class MembershipService {
    *   members one of whose live roles grants it (T8 — e.g. who can be given a task).
    * - **Failure modes:** none beyond the query.
    */
-  async listDirectory(scope: OrganizationPrincipalDatabaseScope, query: MembershipDirectoryQuery) {
+  async listDirectory({
+    scope,
+    query,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    query: MembershipDirectoryQuery;
+  }) {
     const organization_public_id = scope.organizationPublicId;
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      const filters = await this.resolveListFilters({
-        organizationId: organization.id,
-        rolePublicId: query.rolePublicId,
-        branchPublicId: query.branchPublicId,
-      });
-      if (filters === null) {
-        return { items: [], total: null, limit: query.limit, has_more: false, next_cursor: null };
-      }
-      const result = await this.membershipRepository.list(organization.id, {
-        ...filters,
-        after: query.after,
-        limit: query.limit,
-        q: query.q,
-        sort: 'name',
-        order: 'asc',
-        publicIds: query.publicIds,
-        holdsPermissionCode: query.holdsPermissionCode,
-        statuses: query.includeEnded ? undefined : [MEMBERSHIP_STATUS.ACTIVE],
-        includeEnded: query.includeEnded,
-      });
-      return {
-        ...result,
-        items: await this.serializeMemberships({ rows: result.items, organization }),
-      };
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        const filters = await this.resolveListFilters({
+          organizationId: organization.id,
+          rolePublicId: query.rolePublicId,
+          branchPublicId: query.branchPublicId,
+        });
+        if (filters === null) {
+          return { items: [], total: null, limit: query.limit, has_more: false, next_cursor: null };
+        }
+        const result = await this.membershipRepository.list(organization.id, {
+          ...filters,
+          after: query.after,
+          limit: query.limit,
+          q: query.q,
+          sort: 'name',
+          order: 'asc',
+          publicIds: query.publicIds,
+          holdsPermissionCode: query.holdsPermissionCode,
+          statuses: query.includeEnded ? undefined : [MEMBERSHIP_STATUS.ACTIVE],
+          includeEnded: query.includeEnded,
+        });
+        return {
+          ...result,
+          items: await this.serializeMemberships({ rows: result.items, organization }),
+        };
+      },
     });
   }
 
   /** One member, live or ended (launch D58); 404 when not of this organization. */
-  async getByPublicId(
-    scope: OrganizationPrincipalDatabaseScope,
-    membership_public_id: string,
-  ): Promise<MembershipOutput> {
+  async getByPublicId({
+    scope,
+    membership_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    membership_public_id: string;
+  }): Promise<MembershipOutput> {
     const organization_public_id = scope.organizationPublicId;
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      const membership = await this.membershipRepository.findAnyByPublicId(
-        membership_public_id,
-        organization.id,
-      );
-      if (!membership) throw new NotFoundError('Membership');
-      return this.resolveAndSerializeMembership({ membership, organization });
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        const membership = await this.membershipRepository.findAnyByPublicId(
+          membership_public_id,
+          organization.id,
+        );
+        if (!membership) throw new NotFoundError('Membership');
+        return this.resolveAndSerializeMembership({ membership, organization });
+      },
     });
   }
 
-  async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    invited_by_user_public_id: string | undefined,
-    options?: { requestId?: string },
-  ): Promise<MembershipOutput> {
+  async create({
+    scope,
+    body,
+    invited_by_user_public_id,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    invited_by_user_public_id: string | undefined;
+    options?: { requestId?: string } | undefined;
+  }): Promise<MembershipOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateCreateMembership(body);
     const userService = this.userService;
@@ -887,103 +1030,119 @@ export class MembershipService {
     const inviteeUser = await userService.findOrCreateInvitedByEmail({
       email: parsed.email,
     });
-    const result = await withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      // Capability matrix: a PERSONAL organization is single-member by definition. Collaboration
-      // requires a TEAM organization — reject here so the single-member invariant holds at every door.
-      assertTeamOrganization(organization, 'MEMBERS');
-      // `role_ids`, main first (D5): the main role is the membership's `role_id`, the rest are
-      // its additional roles.
-      const roles = await this.resolveRoleIds(organization.id, parsed.role_ids);
-      const [role, ...additionalRoles] = roles;
-      if (!role) throw new ValidationError('errors:invalidInput');
-      // Privilege-escalation guard: the caller must already hold every permission the assigned roles
-      // would grant, or a MEMBERSHIP_CREATE holder could mint an Admin membership for a throwaway
-      // address and accept it → full organization takeover. Runs BEFORE any row is persisted.
-      await this.assertCallerCanGrantRoles({
-        roles,
-        callerUserPublicId: invited_by_user_public_id,
-        organizationPublicId: organization_public_id,
-      });
-      // REQ-4: enforce the plan seat limit before persisting the new membership. Runs INSIDE the
-      // existing organization transaction so the per-organization advisory lock (plus the FOR UPDATE row lock when a
-      // subscription exists) serializes concurrent adds — two simultaneous adds cannot both pass the
-      // same count and exceed the limit, on the paid OR the free-tier path (audit-#M1). Ceiling of
-      // null (unlimited plan / unwired port) is a no-op.
-      await this.assertSeatAvailableForMemberAdd(organization.id);
-      const inviterId =
-        await this.organizationService.resolveUserInternalIdByPublicId(invited_by_user_public_id);
-      if (inviterId === null) throw new NotFoundError('User');
-      let created: MembershipRow;
-      try {
-        // K7 / KC6: the same login added again gets its ended membership back — same id, staff
-        // number and history, invited again — instead of a new row. A different login is always a
-        // new member (an email can pass to another person).
-        const ended = await this.membershipRepository.findLatestEndedForUser({
-          userId: inviteeUser.id,
-          organizationId: organization.id,
-        });
-        const revived = ended
-          ? await this.membershipRepository.reviveAsInvited({
-              id: ended.id,
-              organizationId: organization.id,
-              roleId: role.id,
-              invitedByUserId: inviterId,
-              profile: this.toProfileData(parsed),
-            })
-          : null;
-        created =
-          revived ??
-          (await this.membershipRepository.create({
-            organization_id: organization.id,
-            user_id: inviteeUser.id,
-            role_id: role.id,
-            status: MEMBERSHIP_STATUS.INVITED,
-            invited_by_user_id: inviterId,
-            created_by_user_id: inviterId,
-            profile: this.toProfileData(parsed),
-          }));
-      } catch (error) {
-        // The invitee already belongs to this organization (idx_memberships_user_org_unique) —
-        // surface a clean 409 instead of an unhandled unique_violation 500. Covers an existing
-        // active member and a still-live invited one (the FE resends in that case).
-        if (isPostgresUniqueViolation(error)) {
-          throw new ConflictError('errors:membershipAlreadyExists').withReason(
-            'membership_already_exists',
+    const result = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
           );
+        // Capability matrix: a PERSONAL organization is single-member by definition. Collaboration
+        // requires a TEAM organization — reject here so the single-member invariant holds at every door.
+        assertTeamOrganization({ organization, capability: 'MEMBERS' });
+        // `role_ids`, main first (D5): the main role is the membership's `role_id`, the rest are
+        // its additional roles.
+        const roles = await this.resolveRoleIds({
+          organizationId: organization.id,
+          rolePublicIds: parsed.role_ids,
+        });
+        const [role, ...additionalRoles] = roles;
+        if (!role) throw new ValidationError('errors:invalidInput');
+        // Privilege-escalation guard: the caller must already hold every permission the assigned roles
+        // would grant, or a MEMBERSHIP_CREATE holder could mint an Admin membership for a throwaway
+        // address and accept it → full organization takeover. Runs BEFORE any row is persisted.
+        await this.assertCallerCanGrantRoles({
+          roles,
+          callerUserPublicId: invited_by_user_public_id,
+          organizationPublicId: organization_public_id,
+        });
+        // REQ-4: enforce the plan seat limit before persisting the new membership. Runs INSIDE the
+        // existing organization transaction so the per-organization advisory lock (plus the FOR UPDATE row lock when a
+        // subscription exists) serializes concurrent adds — two simultaneous adds cannot both pass the
+        // same count and exceed the limit, on the paid OR the free-tier path (audit-#M1). Ceiling of
+        // null (unlimited plan / unwired port) is a no-op.
+        await this.assertSeatAvailableForMemberAdd(organization.id);
+        const inviterId =
+          await this.organizationService.resolveUserInternalIdByPublicId(invited_by_user_public_id);
+        if (inviterId === null) throw new NotFoundError('User');
+        let created: MembershipRow;
+        try {
+          // K7 / KC6: the same login added again gets its ended membership back — same id, staff
+          // number and history, invited again — instead of a new row. A different login is always a
+          // new member (an email can pass to another person).
+          const ended = await this.membershipRepository.findLatestEndedForUser({
+            userId: inviteeUser.id,
+            organizationId: organization.id,
+          });
+          const revived = ended
+            ? await this.membershipRepository.reviveAsInvited({
+                id: ended.id,
+                organizationId: organization.id,
+                roleId: role.id,
+                invitedByUserId: inviterId,
+                profile: this.toProfileData(parsed),
+              })
+            : null;
+          created =
+            revived ??
+            (await this.membershipRepository.create({
+              organization_id: organization.id,
+              user_id: inviteeUser.id,
+              role_id: role.id,
+              status: MEMBERSHIP_STATUS.INVITED,
+              invited_by_user_id: inviterId,
+              created_by_user_id: inviterId,
+              profile: this.toProfileData(parsed),
+            }));
+        } catch (error) {
+          // The invitee already belongs to this organization (idx_memberships_user_org_unique) —
+          // surface a clean 409 instead of an unhandled unique_violation 500. Covers an existing
+          // active member and a still-live invited one (the FE resends in that case).
+          if (isPostgresUniqueViolation(error)) {
+            throw new ConflictError('errors:membershipAlreadyExists').withReason(
+              'membership_already_exists',
+            );
+          }
+          throw error;
         }
-        throw error;
-      }
-      await this.writeMembershipAccess({
-        organizationId: organization.id,
-        membershipId: created.id,
-        additionalRoles,
-        branchPublicIds: parsed.branch_ids,
-        actingUserId: inviterId,
-      });
-      // Issue the invitation (token + email) in this same organization transaction.
-      const issuedInvitation = await membershipInvitationService.createForMembership({
-        organization_name: organization.name ?? organization.public_id,
-        organization_id: organization.id,
-        membership_id: created.id,
-        membership_public_id: created.public_id,
-        email: inviteeUser.email,
-        expires_in_days: parsed.expires_in_days,
-        invited_by_user_id: inviterId,
-        inviter_label: invited_by_user_public_id ?? 'Team member',
-        ...(options?.requestId !== undefined ? { requestId: options.requestId } : {}),
-      });
-      await this.applyOrganizationLocaleDefaults(inviteeUser.public_id, organization_public_id);
-      // ROUTE #164: the dev-only accept-token echo rides on the embedded invitation (flag off → none).
-      return attachInvitationTokenEcho(
-        await this.resolveAndSerializeMembership({ membership: created, organization }),
-        issuedInvitation,
-      );
+        await this.writeMembershipAccess({
+          organizationId: organization.id,
+          membershipId: created.id,
+          additionalRoles,
+          branchPublicIds: parsed.branch_ids,
+          actingUserId: inviterId,
+        });
+        // Issue the invitation (token + email) in this same organization transaction.
+        const issuedInvitation = await membershipInvitationService.createForMembership({
+          organization_name: organization.name ?? organization.public_id,
+          organization_id: organization.id,
+          membership_id: created.id,
+          membership_public_id: created.public_id,
+          email: inviteeUser.email,
+          expires_in_days: parsed.expires_in_days,
+          invited_by_user_id: inviterId,
+          organization_public_id,
+          ...(options?.requestId !== undefined ? { requestId: options.requestId } : {}),
+        });
+        await this.applyOrganizationLocaleDefaults({
+          userPublicId: inviteeUser.public_id,
+          organizationPublicId: organization_public_id,
+        });
+        const [output] = await this.emitMembershipEvents({
+          type: MEMBERSHIP_EVENT.CREATED,
+          memberships: [created],
+          organization,
+        });
+        // ROUTE #164: the dev-only accept-token echo rides on the embedded invitation (flag off → none).
+        return attachInvitationTokenEcho({ membership: output!, issued: issuedInvitation });
+      },
     });
     // sec-R11: invalidate the invitee's cached permissions AFTER the organization transaction commits.
     // Doing it pre-commit left a race where a concurrent recompute re-cached the stale set.
-    await invalidatePermissions(inviteeUser.public_id, organization_public_id);
+    await invalidatePermissions({
+      userId: inviteeUser.public_id,
+      organizationId: organization_public_id,
+    });
     // REQ-4: the seat count just grew — reconcile the Stripe subscription quantity out-of-band.
     // Enqueued AFTER the organization transaction commits so the worker re-reads the new count. Best-effort.
     this.enqueueSeatQuantitySync(organization_public_id);
@@ -1007,106 +1166,143 @@ export class MembershipService {
    *   and for a code the caller does not hold; `ConflictError` `record_changed` and
    *   `seat_limit_reached`.
    */
-  async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    membership_public_id: string,
-    body: unknown,
-    updated_by_user_public_id: string | undefined,
-  ): Promise<MembershipOutput> {
+  async update({
+    scope,
+    membership_public_id,
+    body,
+    updated_by_user_public_id,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    membership_public_id: string;
+    body: unknown;
+    updated_by_user_public_id: string | undefined;
+    options?: MembershipActionOptions | undefined;
+  }): Promise<MembershipOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateUpdateMembership(body);
     let affectedUserInternalId: number | undefined;
     let seatUsageChanged = false;
-    const result = await withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      const membership = await this.membershipRepository.findAnyByPublicId(
-        membership_public_id,
-        organization.id,
-      );
-      if (!membership) throw new NotFoundError('Membership');
-      // T14 / D43: a save based on an older version is refused with who and when.
-      await assertRecordNotChangedSince({
-        row: membership,
-        expected: parsed.expected_updated_at,
-        resolveUserPublicId: (userInternalId) =>
-          this.organizationService.resolveUserPublicIdByInternalId(userInternalId),
-      });
-      const userId =
-        await this.organizationService.resolveUserInternalIdByPublicId(updated_by_user_public_id);
-      if (membership.deleted_at !== null) {
-        return this.renameEndedMembership({
-          membership,
-          parsed,
-          organization,
-          updatedByUserId: userId ?? null,
+    const result = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        const membership = await this.membershipRepository.findAnyByPublicId(
+          membership_public_id,
+          organization.id,
+        );
+        if (!membership) throw new NotFoundError('Membership');
+        // T14 / D43: a save based on an older version is refused with who and when.
+        await assertRecordNotChangedSince({
+          row: membership,
+          expected: parsed.expected_updated_at,
+          resolveUserPublicId: (userInternalId) =>
+            this.organizationService.resolveUserPublicIdByInternalId(userInternalId),
         });
-      }
-      assertLiveMembershipEdit({ parsed, membership, ownerUserId: organization.owner_user_id });
-      /**
-       * F1: reactivating a suspended member re-consumes a seat — suspended memberships are NOT
-       * counted toward the cap, so a `suspended -> active` transition adds one to the live seat
-       * count. Without this check, suspend → add-a-new-member-into-the-freed-slot → reactivate
-       * overshoots the plan's seat ceiling unbounded. Run the same seat-availability check as
-       * `create`, inside this organization transaction so the subscription `FOR UPDATE` lock serializes it.
-       */
-      if (
-        parsed.status === MEMBERSHIP_STATUS.ACTIVE &&
-        membership.status !== MEMBERSHIP_STATUS.ACTIVE
-      ) {
-        await this.assertSeatAvailableForMemberAdd(organization.id);
-      }
-      let roleInternalId: number | undefined;
-      let additionalRoles: ResolvedRole[] | undefined;
-      if (parsed.role_ids !== undefined) {
-        // REQ-3 + D5: resolve the new roles (main first) and run the same privilege-escalation
-        // guard as create — a caller must already hold every permission the roles grant together,
-        // so a MEMBERSHIP_UPDATE holder cannot escalate a member past their own access.
-        const roles = await this.resolveRoleIds(organization.id, parsed.role_ids);
-        assertOwnerKeepsMainRole({
-          membership,
-          ownerUserId: organization.owner_user_id,
-          mainRoleId: roles[0]?.id,
-        });
-        await this.assertCallerCanGrantRoles({
-          roles,
-          callerUserPublicId: updated_by_user_public_id,
+        const userId =
+          await this.organizationService.resolveUserInternalIdByPublicId(updated_by_user_public_id);
+        if (membership.deleted_at !== null) {
+          return this.renameEndedMembership({
+            membership,
+            parsed,
+            organization,
+            updatedByUserId: userId ?? null,
+          });
+        }
+        assertLiveMembershipEdit({ parsed, membership, ownerUserId: organization.owner_user_id });
+        // The roles asked for, main first (D5). The owner's main role is fixed whoever asks (D81 (4)),
+        // so that refusal comes before role ordering and names the owner, not the caller's codes.
+        const roles =
+          parsed.role_ids === undefined
+            ? undefined
+            : await this.resolveRoleIds({
+                organizationId: organization.id,
+                rolePublicIds: parsed.role_ids,
+              });
+        if (roles !== undefined) {
+          assertOwnerKeepsMainRole({
+            membership,
+            ownerUserId: organization.owner_user_id,
+            mainRoleId: roles[0]?.id,
+          });
+        }
+        // Role ordering: only a caller holding every permission of the member's roles changes them.
+        await this.assertCallerHoldsMemberPermissions({
           organizationPublicId: organization_public_id,
+          membership,
+          callerUserPublicId: updated_by_user_public_id,
+          callerApiKeyScopes: options?.callerApiKeyScopes,
         });
-        const [mainRole, ...rest] = roles;
-        roleInternalId = mainRole?.id;
-        additionalRoles = rest;
-      }
-      const updated = await this.membershipRepository.update(
-        membership_public_id,
-        organization.id,
-        omitUndefined({
-          status: parsed.status,
-          role_id: roleInternalId,
-          profile: this.toProfileData(parsed),
-        }),
-        userId ?? null,
-      );
-      if (!updated) throw new NotFoundError('Membership');
-      await this.writeMembershipAccess({
-        organizationId: organization.id,
-        membershipId: updated.id,
-        additionalRoles,
-        branchPublicIds: parsed.branch_ids,
-        actingUserId: userId ?? null,
-      });
-      affectedUserInternalId = updated.user_id;
-      // REQ-4: suspended does not occupy a seat, so crossing that line in either direction moves
-      // `seats_used` and has to reach Stripe. A role-only PATCH, or a status change that stays on
-      // the same side of the line, leaves the count alone and must NOT enqueue a job.
-      seatUsageChanged =
-        membershipStatusConsumesSeat(membership.status) !==
-        membershipStatusConsumesSeat(updated.status);
-      return this.resolveAndSerializeMembership({ membership: updated, organization });
+        /**
+         * F1: reactivating a suspended member re-consumes a seat — suspended memberships are NOT
+         * counted toward the cap, so a `suspended -> active` transition adds one to the live seat
+         * count. Without this check, suspend → add-a-new-member-into-the-freed-slot → reactivate
+         * overshoots the plan's seat ceiling unbounded. Run the same seat-availability check as
+         * `create`, inside this organization transaction so the subscription `FOR UPDATE` lock serializes it.
+         */
+        if (
+          parsed.status === MEMBERSHIP_STATUS.ACTIVE &&
+          membership.status !== MEMBERSHIP_STATUS.ACTIVE
+        ) {
+          await this.assertSeatAvailableForMemberAdd(organization.id);
+        }
+        let roleInternalId: number | undefined;
+        let additionalRoles: ResolvedRole[] | undefined;
+        if (roles !== undefined) {
+          // REQ-3: the same privilege-escalation guard as create — a caller must already hold every
+          // permission the roles grant together, so a MEMBERSHIP_UPDATE holder cannot escalate a
+          // member past their own access.
+          await this.assertCallerCanGrantRoles({
+            roles,
+            callerUserPublicId: updated_by_user_public_id,
+            organizationPublicId: organization_public_id,
+          });
+          const [mainRole, ...rest] = roles;
+          roleInternalId = mainRole?.id;
+          additionalRoles = rest;
+        }
+        const updated = await this.membershipRepository.update(
+          membership_public_id,
+          organization.id,
+          omitUndefined({
+            status: parsed.status,
+            role_id: roleInternalId,
+            profile: this.toProfileData(parsed),
+          }),
+          userId ?? null,
+        );
+        if (!updated) throw new NotFoundError('Membership');
+        await this.writeMembershipAccess({
+          organizationId: organization.id,
+          membershipId: updated.id,
+          additionalRoles,
+          branchPublicIds: parsed.branch_ids,
+          actingUserId: userId ?? null,
+        });
+        affectedUserInternalId = updated.user_id;
+        // REQ-4: suspended does not occupy a seat, so crossing that line in either direction moves
+        // `seats_used` and has to reach Stripe. A role-only PATCH, or a status change that stays on
+        // the same side of the line, leaves the count alone and must NOT enqueue a job.
+        seatUsageChanged =
+          membershipStatusConsumesSeat(membership.status) !==
+          membershipStatusConsumesSeat(updated.status);
+        const [output] = await this.emitMembershipEvents({
+          type: MEMBERSHIP_EVENT.UPDATED,
+          memberships: [updated],
+          organization,
+        });
+        return output!;
+      },
     });
     // sec-R11: invalidate AFTER commit so a racing recompute can't re-cache the stale role set.
     if (affectedUserInternalId !== undefined) {
-      await this.invalidatePermissionsForMembership(affectedUserInternalId, organization_public_id);
+      await this.invalidatePermissionsForMembership({
+        user_internal_id: affectedUserInternalId,
+        organization_public_id,
+      });
     }
     // REQ-4: suspending a member frees a seat and reactivating one takes it back, exactly like the
     // add/remove paths below — enqueued after the commit so the worker re-reads the settled count.
@@ -1152,84 +1348,114 @@ export class MembershipService {
     });
   }
 
-  async delete(
-    scope: OrganizationPrincipalDatabaseScope,
-    membership_public_id: string,
-    query: unknown,
-  ): Promise<void> {
+  async delete({
+    scope,
+    membership_public_id,
+    query,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    membership_public_id: string;
+    query: unknown;
+    options?: MembershipActionOptions | undefined;
+  }): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
     // RC-143: a manager's removal carries why (and a note for `other`).
     const removal = validateDeleteMembershipQuery(query);
     let affectedUserInternalId: number | undefined;
-    await withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      const membership = await this.membershipRepository.findByPublicId(
-        membership_public_id,
-        organization.id,
-      );
-      if (!membership) throw new NotFoundError('Membership');
-      // The owner cannot be removed — they must transfer ownership first, or the organization
-      // would be left without an owner.
-      if (organization.owner_user_id === membership.user_id) {
-        throw ownerMembershipFixedError('errors:ownerCannotBeRemoved');
-      }
-      const deleted = await this.endMembershipInContext({
-        organizationId: organization.id,
-        membershipPublicId: membership_public_id,
-        reason: removal.reason,
-        note: removal.note ?? null,
-      });
-      if (!deleted) {
-        // The atomic owner-guard refused the delete (a concurrent transfer made this member the
-        // owner after the check above) or the row vanished — re-resolve for the precise error.
-        const current =
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
           await this.organizationService.requireOrganizationRecordByPublicId(
             organization_public_id,
           );
-        if (current.owner_user_id === membership.user_id) {
+        const membership = await this.membershipRepository.findByPublicId(
+          membership_public_id,
+          organization.id,
+        );
+        if (!membership) throw new NotFoundError('Membership');
+        // The owner cannot be removed — they must transfer ownership first, or the organization
+        // would be left without an owner.
+        if (organization.owner_user_id === membership.user_id) {
           throw ownerMembershipFixedError('errors:ownerCannotBeRemoved');
         }
-        throw new NotFoundError('Membership');
-      }
-      affectedUserInternalId = deleted.user_id;
+        await this.assertCallerHoldsMemberPermissions({
+          organizationPublicId: organization_public_id,
+          membership,
+          callerUserPublicId: scope.userPublicId,
+          callerApiKeyScopes: options?.callerApiKeyScopes,
+        });
+        const deleted = await this.endMembershipInContext({
+          organization,
+          membershipPublicId: membership_public_id,
+          reason: removal.reason,
+          note: removal.note ?? null,
+        });
+        if (!deleted) {
+          // The atomic owner-guard refused the delete (a concurrent transfer made this member the
+          // owner after the check above) or the row vanished — re-resolve for the precise error.
+          const current =
+            await this.organizationService.requireOrganizationRecordByPublicId(
+              organization_public_id,
+            );
+          if (current.owner_user_id === membership.user_id) {
+            throw ownerMembershipFixedError('errors:ownerCannotBeRemoved');
+          }
+          throw new NotFoundError('Membership');
+        }
+        affectedUserInternalId = deleted.user_id;
+      },
     });
     // sec-R11: invalidate AFTER commit so a racing recompute can't re-cache the removed member's
     // stale permissions (delayed revocation).
     if (affectedUserInternalId !== undefined) {
-      await this.invalidatePermissionsForMembership(affectedUserInternalId, organization_public_id);
+      await this.invalidatePermissionsForMembership({
+        user_internal_id: affectedUserInternalId,
+        organization_public_id,
+      });
     }
     // REQ-4: the seat count just shrank — reconcile the Stripe subscription quantity out-of-band.
     this.enqueueSeatQuantitySync(organization_public_id);
   }
 
-  async getPermissions(
-    scope: OrganizationPrincipalDatabaseScope,
-    membership_public_id: string,
-  ): Promise<MembershipPermissionsOutput> {
+  async getPermissions({
+    scope,
+    membership_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    membership_public_id: string;
+  }): Promise<MembershipPermissionsOutput> {
     const organization_public_id = scope.organizationPublicId;
-    return withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      const membership = await this.membershipRepository.findByPublicId(
-        membership_public_id,
-        organization.id,
-      );
-      if (!membership) throw new NotFoundError('Membership');
-      // The union across the main role and the additional ones (D5).
-      const roleIds = [
-        membership.role_id,
-        ...(await this.membershipAdditionalRolesRepository.listRoleIdsForMembership(membership.id)),
-      ];
-      const permissionCodes = new Set<string>();
-      for (const roleId of roleIds) {
-        for (const code of await this.memberRolePermissionService.listPermissionCodesForRole(
-          roleId,
-        )) {
-          permissionCodes.add(code);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        const membership = await this.membershipRepository.findByPublicId(
+          membership_public_id,
+          organization.id,
+        );
+        if (!membership) throw new NotFoundError('Membership');
+        // The union across the main role and the additional ones (D5).
+        const roleIds = [
+          membership.role_id,
+          ...(await this.membershipAdditionalRolesRepository.listRoleIdsForMembership(
+            membership.id,
+          )),
+        ];
+        const permissionCodes = new Set<string>();
+        for (const roleId of roleIds) {
+          for (const code of await this.memberRolePermissionService.listPermissionCodesForRole(
+            roleId,
+          )) {
+            permissionCodes.add(code);
+          }
         }
-      }
-      return { permission_codes: [...permissionCodes] };
+        return { permission_codes: [...permissionCodes] };
+      },
     });
   }
 
@@ -1246,59 +1472,71 @@ export class MembershipService {
    *   again, (`seat_limit_reached`) when no seat is free.
    * - **Notes:** the API keys revoked at removal stay revoked.
    */
-  async restore(
-    scope: OrganizationPrincipalDatabaseScope,
-    membership_public_id: string,
-    restored_by_user_public_id: string | undefined,
-  ): Promise<MembershipOutput> {
+  async restore({
+    scope,
+    membership_public_id,
+    restored_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    membership_public_id: string;
+    restored_by_user_public_id: string | undefined;
+  }): Promise<MembershipOutput> {
     const organization_public_id = scope.organizationPublicId;
     let restoredUserInternalId: number | undefined;
     let seatTaken = false;
-    const result = await withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      const deleted = await this.membershipRepository.findDeletedByPublicId(
-        membership_public_id,
-        organization.id,
-      );
-      if (!deleted) {
-        const live = await this.membershipRepository.findByPublicId(
+    const result = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        const deleted = await this.membershipRepository.findDeletedByPublicId(
           membership_public_id,
           organization.id,
         );
-        if (live) {
-          throw new ConflictError('errors:membershipNotDeleted').withReason(
-            'membership_not_deleted',
+        if (!deleted) {
+          const live = await this.membershipRepository.findByPublicId(
+            membership_public_id,
+            organization.id,
           );
+          if (live) {
+            throw new ConflictError('errors:membershipNotDeleted').withReason(
+              'membership_not_deleted',
+            );
+          }
+          throw new NotFoundError('Membership');
         }
-        throw new NotFoundError('Membership');
-      }
-      seatTaken = membershipStatusConsumesSeat(deleted.status);
-      if (seatTaken) await this.assertSeatAvailableForMemberAdd(organization.id);
-      const userId = await this.organizationService.resolveUserInternalIdByPublicId(
-        restored_by_user_public_id,
-      );
-      let restored: MembershipRow | null;
-      try {
-        restored = await this.membershipRepository.restore(
-          membership_public_id,
-          organization.id,
-          userId ?? null,
+        seatTaken = membershipStatusConsumesSeat(deleted.status);
+        if (seatTaken) await this.assertSeatAvailableForMemberAdd(organization.id);
+        const userId = await this.organizationService.resolveUserInternalIdByPublicId(
+          restored_by_user_public_id,
         );
-      } catch (error) {
-        if (isPostgresUniqueViolation(error)) {
-          throw new ConflictError('errors:membershipAlreadyExists').withReason(
-            'membership_already_exists',
+        let restored: MembershipRow | null;
+        try {
+          restored = await this.membershipRepository.restore(
+            membership_public_id,
+            organization.id,
+            userId ?? null,
           );
+        } catch (error) {
+          if (isPostgresUniqueViolation(error)) {
+            throw new ConflictError('errors:membershipAlreadyExists').withReason(
+              'membership_already_exists',
+            );
+          }
+          throw error;
         }
-        throw error;
-      }
-      if (!restored) throw new NotFoundError('Membership');
-      restoredUserInternalId = restored.user_id;
-      return this.resolveAndSerializeMembership({ membership: restored, organization });
+        if (!restored) throw new NotFoundError('Membership');
+        restoredUserInternalId = restored.user_id;
+        return this.resolveAndSerializeMembership({ membership: restored, organization });
+      },
     });
     if (restoredUserInternalId !== undefined) {
-      await this.invalidatePermissionsForMembership(restoredUserInternalId, organization_public_id);
+      await this.invalidatePermissionsForMembership({
+        user_internal_id: restoredUserInternalId,
+        organization_public_id,
+      });
     }
     if (seatTaken) this.enqueueSeatQuantitySync(organization_public_id);
     return result;
@@ -1317,36 +1555,47 @@ export class MembershipService {
    * - **Side effects:** writes `tenancy.membership_invitations`, `tenancy.memberships` and, through
    *   the leave step, the app's tables.
    */
-  async revokeInvitation(
-    scope: OrganizationPrincipalDatabaseScope,
-    membership_public_id: string,
-  ): Promise<void> {
+  async revokeInvitation({
+    scope,
+    membership_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    membership_public_id: string;
+  }): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
     const invitationService = this.requireInvitationService();
     let affectedUserInternalId: number | undefined;
-    await withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      const membership = await this.membershipRepository.findByPublicId(
-        membership_public_id,
-        organization.id,
-      );
-      if (membership?.status !== MEMBERSHIP_STATUS.INVITED) {
-        throw new NotFoundError('Membership invitation');
-      }
-      const revoked = await invitationService.revokePendingForMembership(membership.id);
-      if (!revoked) throw new NotFoundError('Membership invitation');
-      const ended = await this.endMembershipInContext({
-        organizationId: organization.id,
-        membershipPublicId: membership_public_id,
-        reason: MEMBERSHIP_DELETE_REASON.NOT_NEEDED,
-        note: null,
-      });
-      if (!ended) throw new NotFoundError('Membership invitation');
-      affectedUserInternalId = ended.user_id;
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        const membership = await this.membershipRepository.findByPublicId(
+          membership_public_id,
+          organization.id,
+        );
+        if (membership?.status !== MEMBERSHIP_STATUS.INVITED) {
+          throw new NotFoundError('Membership invitation');
+        }
+        const revoked = await invitationService.revokePendingForMembership(membership.id);
+        if (!revoked) throw new NotFoundError('Membership invitation');
+        const ended = await this.endMembershipInContext({
+          organization,
+          membershipPublicId: membership_public_id,
+          reason: MEMBERSHIP_DELETE_REASON.NOT_NEEDED,
+          note: null,
+        });
+        if (!ended) throw new NotFoundError('Membership invitation');
+        affectedUserInternalId = ended.user_id;
+      },
     });
     if (affectedUserInternalId !== undefined) {
-      await this.invalidatePermissionsForMembership(affectedUserInternalId, organization_public_id);
+      await this.invalidatePermissionsForMembership({
+        user_internal_id: affectedUserInternalId,
+        organization_public_id,
+      });
     }
     // REQ-4: an invited membership holds a seat, so revoking the invite frees one.
     this.enqueueSeatQuantitySync(organization_public_id);
@@ -1375,20 +1624,23 @@ export class MembershipService {
     actingUserPublicId: string;
   }): Promise<MembershipInvitationOutput & { organization_id: string }> {
     const invitationService = this.requireInvitationService();
-    const { invitee, lookup } = await invitationService.resolveInviteeAndOrganization(
-      options.invitationPublicId,
-      options.actingUserPublicId,
-    );
+    const { invitee, lookup } = await invitationService.resolveInviteeAndOrganization({
+      invitation_public_id: options.invitationPublicId,
+      actingUserPublicId: options.actingUserPublicId,
+    });
     let affectedUserInternalId: number | undefined;
-    const revoked = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: lookup.organization_public_id }),
-      async () => {
-        const invitation = await invitationService.revokeForInvitee(
-          options.invitationPublicId,
-          invitee.email,
+    const revoked = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: lookup.organization_public_id }),
+      callback: async () => {
+        const invitation = await invitationService.revokeForInvitee({
+          invitation_public_id: options.invitationPublicId,
+          inviteeEmail: invitee.email,
+        });
+        const organization = await this.organizationService.requireOrganizationRecordByPublicId(
+          lookup.organization_public_id,
         );
         const ended = await this.endInvitedMembershipInContext({
-          organizationId: lookup.organization_id,
+          organization,
           membershipPublicId: lookup.membership_public_id,
           reason: MEMBERSHIP_DELETE_REASON.DECLINED,
         });
@@ -1405,16 +1657,19 @@ export class MembershipService {
         });
         return invitation;
       },
-    );
+    });
     if (affectedUserInternalId !== undefined) {
-      await this.invalidatePermissionsForMembership(
-        affectedUserInternalId,
-        lookup.organization_public_id,
-      );
+      await this.invalidatePermissionsForMembership({
+        user_internal_id: affectedUserInternalId,
+        organization_public_id: lookup.organization_public_id,
+      });
     }
     this.enqueueSeatQuantitySync(lookup.organization_public_id);
     return {
-      ...serializeMembershipInvitation(revoked, lookup.membership_public_id),
+      ...serializeMembershipInvitation({
+        row: revoked,
+        membership_public_id: lookup.membership_public_id,
+      }),
       organization_id: lookup.organization_public_id,
     };
   }
@@ -1438,32 +1693,38 @@ export class MembershipService {
     expiredBefore: Date;
   }): Promise<boolean> {
     const invitationService = this.requireInvitationService();
-    const ended = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: options.organizationPublicId }),
-      async () => {
-        const organization = await this.organizationService.findOrganizationByPublicId(
+    const ended = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: options.organizationPublicId }),
+      callback: async () => {
+        const found = await this.organizationService.findOrganizationByPublicId(
           options.organizationPublicId,
         );
-        if (!organization) return null;
+        if (!found) return null;
+        const organization = await this.organizationService.requireOrganizationRecordByPublicId(
+          options.organizationPublicId,
+        );
         const membership = await this.membershipRepository.findByPublicId(
           options.membershipPublicId,
           organization.id,
         );
         if (membership?.status !== MEMBERSHIP_STATUS.INVITED) return null;
-        const revoked = await invitationService.revokeExpiredForMembership(
-          membership.id,
-          options.expiredBefore,
-        );
+        const revoked = await invitationService.revokeExpiredForMembership({
+          membership_id: membership.id,
+          expiredBefore: options.expiredBefore,
+        });
         if (!revoked) return null;
         return this.endInvitedMembershipInContext({
-          organizationId: organization.id,
+          organization,
           membershipPublicId: options.membershipPublicId,
           reason: MEMBERSHIP_DELETE_REASON.INVITATION_EXPIRED,
         });
       },
-    );
+    });
     if (!ended) return false;
-    await this.invalidatePermissionsForMembership(ended.user_id, options.organizationPublicId);
+    await this.invalidatePermissionsForMembership({
+      user_internal_id: ended.user_id,
+      organization_public_id: options.organizationPublicId,
+    });
     this.enqueueSeatQuantitySync(options.organizationPublicId);
     return true;
   }
@@ -1484,17 +1745,17 @@ export class MembershipService {
    * or already ended). MUST run inside the organization context.
    */
   private async endInvitedMembershipInContext(options: {
-    organizationId: number;
+    organization: SerializingOrganization & { id: number };
     membershipPublicId: string;
     reason: MembershipDeleteReason;
   }): Promise<MembershipRow | null> {
     const membership = await this.membershipRepository.findByPublicId(
       options.membershipPublicId,
-      options.organizationId,
+      options.organization.id,
     );
     if (membership?.status !== MEMBERSHIP_STATUS.INVITED) return null;
     return this.endMembershipInContext({
-      organizationId: options.organizationId,
+      organization: options.organization,
       membershipPublicId: options.membershipPublicId,
       reason: options.reason,
       note: null,
@@ -1518,134 +1779,166 @@ export class MembershipService {
   ): Promise<CallerMembershipContext | null> {
     const organizationPublicId = scope.organizationPublicId;
     if (!organizationPublicId) return null;
-    return withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationService
-        .requireOrganizationRecordByPublicId(organizationPublicId)
-        .catch((error: unknown) => {
-          if (error instanceof NotFoundError) return null;
-          throw error;
-        });
-      const userId = await this.organizationService.resolveUserInternalIdByPublicId(
-        scope.userPublicId,
-      );
-      if (!organization || userId === null) return null;
-      const membership = await this.membershipRepository.findByUserAndOrganization(
-        userId,
-        organization.id,
-      );
-      if (!membership) return null;
-      const roleIds = [
-        membership.role_id,
-        ...(await this.membershipAdditionalRolesRepository.listRoleIdsForMembership(membership.id)),
-      ];
-      const summaries = await this.membershipRepository.resolveRoleSummariesByInternalIds(roleIds);
-      return {
-        membership_id: membership.public_id,
-        roles: roleIds.flatMap((roleId) => {
-          const summary = summaries.get(roleId);
-          return summary
-            ? [
-                {
-                  id: summary.public_id,
-                  name: summary.name,
-                  tone: summary.tone,
-                  is_system: summary.is_system,
-                },
-              ]
-            : [];
-        }),
-      };
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization = await this.organizationService
+          .requireOrganizationRecordByPublicId(organizationPublicId)
+          .catch((error: unknown) => {
+            if (error instanceof NotFoundError) return null;
+            throw error;
+          });
+        const userId = await this.organizationService.resolveUserInternalIdByPublicId(
+          scope.userPublicId,
+        );
+        if (!organization || userId === null) return null;
+        const membership = await this.membershipRepository.findByUserAndOrganization(
+          userId,
+          organization.id,
+        );
+        if (!membership) return null;
+        const roleIds = [
+          membership.role_id,
+          ...(await this.membershipAdditionalRolesRepository.listRoleIdsForMembership(
+            membership.id,
+          )),
+        ];
+        const summaries =
+          await this.membershipRepository.resolveRoleSummariesByInternalIds(roleIds);
+        return {
+          membership_id: membership.public_id,
+          roles: roleIds.flatMap((roleId) => {
+            const summary = summaries.get(roleId);
+            return summary
+              ? [
+                  {
+                    id: summary.public_id,
+                    name: summary.name,
+                    tone: summary.tone,
+                    is_system: summary.is_system,
+                  },
+                ]
+              : [];
+          }),
+        };
+      },
     });
   }
 
-  async leaveOrganization(
-    scope: OrganizationPrincipalDatabaseScope,
-    user_public_id: string,
-  ): Promise<void> {
+  async leaveOrganization({
+    scope,
+    user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    user_public_id: string;
+  }): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
-    await withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      const userId = await this.organizationService.resolveUserInternalIdByPublicId(user_public_id);
-      if (userId === null) throw new NotFoundError('User');
-      const membership = await this.membershipRepository.findByUserAndOrganization(
-        userId,
-        organization.id,
-      );
-      if (!membership) throw new NotFoundError('Membership');
-      if (organization.owner_user_id === userId) {
-        throw new ForbiddenError('errors:ownerCannotLeave').withReason('owner_cannot_leave');
-      }
-      const deleted = await this.endMembershipInContext({
-        organizationId: organization.id,
-        membershipPublicId: membership.public_id,
-        reason: MEMBERSHIP_DELETE_REASON.LEFT,
-        note: null,
-      });
-      if (!deleted) {
-        // The atomic owner-guard refused the delete: a concurrent transfer made this user the
-        // owner after the pre-check above (which would otherwise orphan the organization), or the row
-        // vanished. Re-resolve so the race surfaces the same ownerCannotLeave as the pre-check.
-        const current =
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
           await this.organizationService.requireOrganizationRecordByPublicId(
             organization_public_id,
           );
-        if (current.owner_user_id === userId) {
+        const userId =
+          await this.organizationService.resolveUserInternalIdByPublicId(user_public_id);
+        if (userId === null) throw new NotFoundError('User');
+        const membership = await this.membershipRepository.findByUserAndOrganization(
+          userId,
+          organization.id,
+        );
+        if (!membership) throw new NotFoundError('Membership');
+        if (organization.owner_user_id === userId) {
           throw new ForbiddenError('errors:ownerCannotLeave').withReason('owner_cannot_leave');
         }
-        throw new NotFoundError('Membership');
-      }
+        const deleted = await this.endMembershipInContext({
+          organization,
+          membershipPublicId: membership.public_id,
+          reason: MEMBERSHIP_DELETE_REASON.LEFT,
+          note: null,
+        });
+        if (!deleted) {
+          // The atomic owner-guard refused the delete: a concurrent transfer made this user the
+          // owner after the pre-check above (which would otherwise orphan the organization), or the row
+          // vanished. Re-resolve so the race surfaces the same ownerCannotLeave as the pre-check.
+          const current =
+            await this.organizationService.requireOrganizationRecordByPublicId(
+              organization_public_id,
+            );
+          if (current.owner_user_id === userId) {
+            throw new ForbiddenError('errors:ownerCannotLeave').withReason('owner_cannot_leave');
+          }
+          throw new NotFoundError('Membership');
+        }
+      },
     });
     // sec-R11: invalidate AFTER commit so a racing recompute can't re-cache the stale set.
-    await invalidatePermissions(user_public_id, organization_public_id);
+    await invalidatePermissions({ userId: user_public_id, organizationId: organization_public_id });
     // REQ-4: the seat count just shrank — reconcile the Stripe subscription quantity out-of-band.
     this.enqueueSeatQuantitySync(organization_public_id);
   }
 
-  async transferOwnership(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    current_user_public_id: string,
-  ): Promise<MembershipOutput> {
+  async transferOwnership({
+    scope,
+    body,
+    current_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    current_user_public_id: string;
+  }): Promise<MembershipOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateTransferOwnership(body);
-    const result = await withAppDatabaseContext(scope, async () => {
-      const organization =
-        await this.organizationService.requireOrganizationRecordByPublicId(organization_public_id);
-      // A PERSONAL organization belongs solely to its owner and cannot be handed off.
-      assertTeamOrganization(organization, 'MUTATION');
-      const currentUserId =
-        await this.organizationService.resolveUserInternalIdByPublicId(current_user_public_id);
-      if (currentUserId === null) throw new NotFoundError('User');
-      if (organization.owner_user_id !== currentUserId) {
-        throw new ForbiddenError('errors:onlyOwnerCanTransfer');
-      }
-      const newOwnerUserId = await this.organizationService.resolveUserInternalIdByPublicId(
-        parsed.new_owner_user_id,
-      );
-      if (newOwnerUserId === null) throw new NotFoundError('User');
-      const newOwnerMembership = await this.membershipRepository.findByUserAndOrganization(
-        newOwnerUserId,
-        organization.id,
-      );
-      if (newOwnerMembership?.status !== MEMBERSHIP_STATUS.ACTIVE) {
-        throw new NotFoundError('New owner must be an active member');
-      }
-      const transferred = await this.organizationService.transferOrganizationOwnership(
-        organization_public_id,
-        newOwnerUserId,
-      );
-      // Serialized against the new owner, so the answer reads `is_owner: true`.
-      return this.resolveAndSerializeMembership({
-        membership: newOwnerMembership,
-        organization: transferred,
-      });
+    const result = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        // A PERSONAL organization belongs solely to its owner and cannot be handed off.
+        assertTeamOrganization({ organization, capability: 'MUTATION' });
+        const currentUserId =
+          await this.organizationService.resolveUserInternalIdByPublicId(current_user_public_id);
+        if (currentUserId === null) throw new NotFoundError('User');
+        if (organization.owner_user_id !== currentUserId) {
+          throw new ForbiddenError('errors:onlyOwnerCanTransfer');
+        }
+        const newOwnerUserId = await this.organizationService.resolveUserInternalIdByPublicId(
+          parsed.new_owner_user_id,
+        );
+        if (newOwnerUserId === null) throw new NotFoundError('User');
+        const newOwnerMembership = await this.membershipRepository.findByUserAndOrganization(
+          newOwnerUserId,
+          organization.id,
+        );
+        if (newOwnerMembership?.status !== MEMBERSHIP_STATUS.ACTIVE) {
+          // The new owner has no active membership here: as far as this organization goes, there
+          // is no such member.
+          throw new NotFoundError('Membership');
+        }
+        const transferred = await this.organizationService.transferOrganizationOwnership({
+          organization_public_id,
+          new_owner_user_id: newOwnerUserId,
+        });
+        // Serialized against the new owner, so the answer reads `is_owner: true`.
+        return this.resolveAndSerializeMembership({
+          membership: newOwnerMembership,
+          organization: transferred,
+        });
+      },
     });
     // sec-R11b: ownership itself is a live DB check (never cached), but invalidate both parties'
     // cached permission sets after commit for defense-in-depth and consistency with the other
     // membership mutations, so no owner-implied permission can ever linger in cache.
-    await invalidatePermissions(current_user_public_id, organization_public_id);
-    await invalidatePermissions(parsed.new_owner_user_id, organization_public_id);
+    await invalidatePermissions({
+      userId: current_user_public_id,
+      organizationId: organization_public_id,
+    });
+    await invalidatePermissions({
+      userId: parsed.new_owner_user_id,
+      organizationId: organization_public_id,
+    });
     return result;
   }
 
@@ -1663,15 +1956,15 @@ export class MembershipService {
    *   directly (cross-domain reads go service→service).
    */
   async countActiveMembers(options: { organizationPublicId: string }): Promise<number> {
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: options.organizationPublicId }),
-      async () => {
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: options.organizationPublicId }),
+      callback: async () => {
         const organization = await this.organizationService.requireOrganizationByPublicId(
           options.organizationPublicId,
         );
         return this.membershipRepository.countActiveByOrganization(organization.id);
       },
-    );
+    });
   }
 
   /**
@@ -1689,15 +1982,16 @@ export class MembershipService {
    * - **Failure modes:** `NotFoundError('Organization')` for a missing organization; otherwise none beyond the
    *   underlying queries. Runs in the organization DB context + transaction so the count and suspend are
    *   consistent and RLS-scoped.
-   * - **Side effects:** flips excess memberships to `SUSPENDED`; invalidates permission caches.
+   * - **Side effects:** flips excess memberships to `SUSPENDED` (one `membership.updated` event
+   *   each); invalidates permission caches.
    */
   async suspendExcessActiveMembersToFitCeiling(options: {
     organizationPublicId: string;
     ceiling: number;
   }): Promise<number> {
-    const suspendedUserIds = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: options.organizationPublicId }),
-      async () => {
+    const suspendedUserIds = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: options.organizationPublicId }),
+      callback: async () => {
         const organization = await this.organizationService.requireOrganizationRecordByPublicId(
           options.organizationPublicId,
         );
@@ -1706,64 +2000,92 @@ export class MembershipService {
         );
         const excess = seatsUsed - options.ceiling;
         if (excess <= 0) return [];
-        return this.membershipRepository.suspendExcessActiveMembers({
+        const suspended = await this.membershipRepository.suspendExcessActiveMembers({
           organization_id: organization.id,
           owner_user_id: organization.owner_user_id,
           suspend_count: excess,
         });
+        await this.emitMembershipEvents({
+          type: MEMBERSHIP_EVENT.UPDATED,
+          memberships: suspended,
+          organization,
+        });
+        return suspended.map((membership) => membership.user_id);
       },
-    );
+    });
     // Post-commit (policy audit R11): purge each suspended member's permission cache OUTSIDE the
     // organization context block, so a concurrent recompute can't re-cache the pre-suspension permission set
     // before the suspend transaction commits.
-    await this.invalidatePermissionsForMemberships(suspendedUserIds, options.organizationPublicId);
+    await this.invalidatePermissionsForMemberships({
+      user_internal_ids: suspendedUserIds,
+      organization_public_id: options.organizationPublicId,
+    });
     return suspendedUserIds.length;
   }
 
   /**
-   * Ends every live membership of a login whose account is being deleted (launch K6): each one
-   * through the leave step with `delete_reason = account_deleted`, in its own organization, so the
-   * clinics keep the frozen membership name and what the person did.
+   * Ends every membership of a login whose account is being deleted (launch K6), as a manager's
+   * removal would — each through the one leave step with `delete_reason = account_deleted`, in its
+   * own organization, so the clinics keep the frozen membership name and what the person did — and
+   * returns the organizations the user belonged to (ended now or earlier), so account deletion can
+   * erase the user's details there too.
    *
    * @remarks
-   * - **Algorithm:** reads the login's live memberships under its own user context (the cross-
-   *   organization read the data export uses), then ends each in that organization's context; after
-   *   each commit, drops the cached permissions and reconciles the seat count.
-   * - **Failure modes:** an error stops at that organization; the ones already ended stay ended and
-   *   a retried deletion ends the rest. A membership the owner guard refuses is skipped (account
-   *   deletion already refuses an owner).
+   * - **Algorithm:** the user's membership rows span tenants, so they are listed under the retention
+   *   maintenance context; each live membership of a live TEAM organization is then ended under that
+   *   organization's own context (API keys revoked, the app's part released, `membership.deleted`
+   *   emitted), its permissions purged after the commit and its seat count reconciled. The personal
+   *   organization is tombstoned whole by the organization service.
+   * - **Failure modes:** propagates; account deletion is re-runnable and every step is idempotent. A
+   *   membership the owner guard refuses is skipped (account deletion already refuses an owner).
    * - **Side effects:** see {@link MembershipService} `endMembershipInContext`.
-   * - **Notes:** returns how many memberships it ended.
    */
-  async endMembershipsForDeletedAccount(options: {
-    userPublicId: string;
-    userInternalId: number;
-  }): Promise<number> {
-    const live = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
-      () => this.membershipRepository.listLiveForUser(options.userInternalId),
-    );
-    let endedCount = 0;
-    for (const membership of live) {
-      const ended = await withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({
-          userPublicId: options.userPublicId,
-          organizationPublicId: membership.organization_public_id,
-        }),
-        () =>
-          this.endMembershipInContext({
-            organizationId: membership.organization_id,
-            membershipPublicId: membership.public_id,
+  async removeAllForDepartingUser(
+    userInternalId: number,
+  ): Promise<{ organizationPublicIds: string[] }> {
+    const rows = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: () => this.membershipRepository.listForDepartingUser(userInternalId),
+    });
+    for (const row of rows) {
+      if (
+        row.membership_deleted_at !== null ||
+        row.organization_deleted_at !== null ||
+        row.organization_type === 'PERSONAL'
+      ) {
+        continue;
+      }
+      const ended = await withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: row.organization_public_id }),
+        callback: async () => {
+          const organization = await this.organizationService.requireOrganizationRecordByPublicId(
+            row.organization_public_id,
+          );
+          return this.endMembershipInContext({
+            organization,
+            membershipPublicId: row.membership_public_id,
             reason: MEMBERSHIP_DELETE_REASON.ACCOUNT_DELETED,
             note: null,
-          }),
-      );
-      if (!ended) continue;
-      endedCount += 1;
-      await invalidatePermissions(options.userPublicId, membership.organization_public_id);
-      this.enqueueSeatQuantitySync(membership.organization_public_id);
+          });
+        },
+      });
+      if (ended) {
+        await this.invalidatePermissionsForMembership({
+          user_internal_id: userInternalId,
+          organization_public_id: row.organization_public_id,
+        });
+        this.enqueueSeatQuantitySync(row.organization_public_id);
+      }
     }
-    return endedCount;
+    return {
+      organizationPublicIds: [
+        ...new Set(
+          rows
+            .filter((row) => row.organization_deleted_at === null)
+            .map((row) => row.organization_public_id),
+        ),
+      ],
+    };
   }
 
   /**
@@ -1775,13 +2097,13 @@ export class MembershipService {
     userInternalId: number;
     limit: number;
   }) {
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
-      (_databaseHandle) =>
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
+      callback: (_databaseHandle) =>
         this.membershipRepository.listOrganizationsForUserDataExport(
           options.userInternalId,
           options.limit,
         ),
-    );
+    });
   }
 }

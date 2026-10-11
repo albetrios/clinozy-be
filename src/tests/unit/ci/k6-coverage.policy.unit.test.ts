@@ -83,7 +83,11 @@ describe('k6 coverage policy (#67)', () => {
     );
 
     expect(stripe).toContain('expectedStatuses(400)');
-    expect(idempotency).toContain('expectedStatuses(200, 409, 422)');
+    // The storm reuses the strict role journey rather than accepting billing 422
+    // failures as idempotency successes. A completed journey is mandatory.
+    expect(idempotency).toContain('tenancyRoleWriteOps');
+    expect(idempotency).toContain("role_journeys_completed: ['count==20']");
+    expect(idempotency).not.toContain('expectedStatuses(200, 409, 422)');
   });
 
   it('binds every per-request threshold to a tag a request actually sends', () => {

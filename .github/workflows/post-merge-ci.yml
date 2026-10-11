@@ -131,6 +131,9 @@ jobs:
               - 'migrations/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              # Dependency overrides and patches change what installs and how it behaves.
+              - 'pnpm-workspace.yaml'
+              - 'patches/**'
               - 'Dockerfile.agent'
               - 'vitest.config.ts'
               - 'tooling/**'
@@ -139,6 +142,8 @@ jobs:
               - 'Dockerfile.worker'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'patches/**'
               - 'tooling/ci/check-dockerfile-sync.mjs'
             ci-config:
               - '.github/**'

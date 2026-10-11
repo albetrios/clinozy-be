@@ -51,7 +51,7 @@ function getPackageVersion(): string {
   return packageData.version ?? '0.0.0';
 }
 
-function buildRegistryUrl(namespace: string, slug: string): string {
+function buildRegistryUrl({ namespace, slug }: { namespace: string; slug: string }): string {
   return `${SCALAR_REGISTRY_BASE_URL}/@${namespace}/apis/${slug}/latest`;
 }
 
@@ -68,7 +68,12 @@ function runScalarCommand(argumentsList: string[]): void {
 }
 
 function main(): void {
-  if (shouldSkipHostedUpload('Scalar Registry', SCALAR_UPLOAD_REQUIRED_VARIABLES)) {
+  if (
+    shouldSkipHostedUpload({
+      targetName: 'Scalar Registry',
+      requiredVariableNames: SCALAR_UPLOAD_REQUIRED_VARIABLES,
+    })
+  ) {
     return;
   }
 
@@ -101,7 +106,7 @@ function main(): void {
   ]);
 
   if (namespace) {
-    console.log(`Published to Scalar Registry: ${buildRegistryUrl(namespace, slug)}`);
+    console.log(`Published to Scalar Registry: ${buildRegistryUrl({ namespace, slug })}`);
   } else {
     console.log(`Published to Scalar Registry under your active team (slug: ${slug}).`);
   }

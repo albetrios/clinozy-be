@@ -46,10 +46,10 @@ export function bookingConfirmBody(booking: BookingMessageCandidate): string {
  */
 export function bookingReminderParameters(booking: BookingMessageCandidate): string[] {
   return [
-    templateParameter(booking.firstName, 'there'),
-    templateParameter(booking.branchName, 'the clinic'),
-    templateParameter(booking.visitDate, '-'),
-    templateParameter(booking.visitTime, '-'),
+    templateParameter({ value: booking.firstName, fallback: 'there' }),
+    templateParameter({ value: booking.branchName, fallback: 'the clinic' }),
+    templateParameter({ value: booking.visitDate, fallback: '-' }),
+    templateParameter({ value: booking.visitTime, fallback: '-' }),
   ];
 }
 
@@ -65,9 +65,9 @@ export function bookingConfirmParameters(booking: {
   visitTime: string | null;
 }): string[] {
   return [
-    templateParameter(booking.firstName, 'there'),
-    templateParameter(booking.visitDate, '-'),
-    templateParameter(booking.visitTime, '-'),
+    templateParameter({ value: booking.firstName, fallback: 'there' }),
+    templateParameter({ value: booking.visitDate, fallback: '-' }),
+    templateParameter({ value: booking.visitTime, fallback: '-' }),
   ];
 }
 
@@ -90,10 +90,10 @@ export function receiptBody(receipt: ReceiptMessageCandidate): string {
  */
 export function receiptParameters(receipt: ReceiptMessageCandidate): string[] {
   return [
-    templateParameter(receipt.firstName, 'there'),
+    templateParameter({ value: receipt.firstName, fallback: 'there' }),
     rupees(receipt.amount),
     receipt.invoiceNumber === null ? 'your visit' : `invoice ${receipt.invoiceNumber}`,
-    templateParameter(receipt.paidOn, '-'),
+    templateParameter({ value: receipt.paidOn, fallback: '-' }),
   ];
 }
 
@@ -121,7 +121,13 @@ export async function queueClinozyMessages(options: {
   if (!(organization.isWhatsAppConnected && isMessagingDeliveryEnabled())) return 0;
   const scope = { organizationId: organization.id, timeZone: organization.timeZone };
   let queuedCount = 0;
-  const queueBooking = async (booking: BookingMessageCandidate, reminder: boolean) => {
+  const queueBooking = async ({
+    booking,
+    reminder,
+  }: {
+    booking: BookingMessageCandidate;
+    reminder: boolean;
+  }) => {
     await repository.queueClinozyMessage({
       organizationId: organization.id,
       contactId: booking.contactId,
@@ -150,10 +156,10 @@ export async function queueClinozyMessages(options: {
     ...scope,
     reminderHour: organization.reminderHour,
   })) {
-    await queueBooking(booking, true);
+    await queueBooking({ booking, reminder: true });
   }
   for (const booking of await messages.findConfirmRequestCandidates(scope)) {
-    await queueBooking(booking, false);
+    await queueBooking({ booking, reminder: false });
   }
   for (const receipt of await messages.findReceiptCandidates(scope)) {
     await repository.queueClinozyMessage({

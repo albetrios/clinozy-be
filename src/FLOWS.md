@@ -225,7 +225,9 @@ Two paths:
 - **Inbound (authoritative)**: Stripe sends `customer.subscription.updated` → `POST /api/v1/billing/webhook`.
 - **User-initiated**: organization admin calls `POST /api/v1/billing/subscriptions/:subscription_id/change-plan` (active organization from the JWT `org` claim). The service calls Stripe; the inbound webhook lands shortly after and reconciles state.
 
-A plan change or cancel writes the local row right after Stripe accepts the call (stamping `last_stripe_event_created_at` so an older webhook cannot roll it back); the webhook that follows is authoritative and reconciles anything that drifted.
+A plan change or cancel writes the local row right after Stripe accepts the call (stamping `last_stripe_event_created_at` so an older webhook cannot roll it back); the webhook that follows is authoritative and reconciles anything that drifted. Plan changes to one subscription run one at a time (a Redis lock per subscription; a concurrent one gets `409 subscription_change_in_progress`), and a plan change never writes the billing period — that is Stripe's, synced by the webhook.
+
+A new subscription bills every member the organization already has from its first invoice (Stripe `quantity` = ACTIVE + INVITED, at least 1). Only a failed local write cancels the just-created Stripe subscription; when the webhook's `.created` inserted the row first, the create returns that row instead.
 
 ### Sequence
 
@@ -243,16 +245,17 @@ sequenceDiagram
   Stripe->>Ingest: POST /api/v1/billing/webhook (Stripe-Signature)
   Ingest->>SWS: ingestEvent(event)
   SWS->>DB: insert stripe_webhook_events (status=processing) ON CONFLICT (event_id) DO NOTHING
-  alt new event
-    SWS->>Queue: enqueue stripe-webhook job
-  else duplicate event_id
-    Note over SWS: insert returns no rows; idempotent no-op
+  alt new event, or a redelivery still waiting for its run
+    SWS->>Queue: enqueue stripe-webhook job (job id = event id)
+  else already processed or abandoned
+    Note over SWS: no enqueue; idempotent no-op
   end
+  Note over SWS: the ingress records, never claims — the worker's first claim stays free
   Ingest-->>Stripe: 200
 
   Queue->>Worker: deliver job (async, separate process)
   Worker->>SWS: handleEvent → dispatchEvent
-  SWS->>Sub: syncFromStripeProviderSubscription(provider_id, data, event.created_at)
+  SWS->>Sub: syncFromStripeProviderSubscription({ provider_subscription_id, data, stripe_event_created_at })
   Sub->>DB: BEGIN; SET LOCAL app.current_organization_public_id
   Sub->>DB: UPDATE subscriptions SET ... WHERE provider_subscription_id=$1
   Sub->>DB: COMMIT
@@ -263,11 +266,13 @@ sequenceDiagram
 
 - `stripe_webhook_events` row keyed by Stripe `event.id` (idempotent inbound).
 - `subscriptions` table updated with the latest Stripe state.
+- `subscription.updated` (or `subscription.cancelled` once the status is `CANCELED`) to the organization's subscribed webhooks — see `organization-resource-webhook-flow`.
 
 ### Failure modes
 
 - **Invalid Stripe signature** → 400; Stripe retries.
-- **Duplicate `event.id`** → silently no-op (unique constraint); Stripe retries are safe.
+- **Duplicate `event.id`** → silently no-op (unique constraint); Stripe retries are safe. A redelivery that arrives before the worker ran is re-enqueued (a no-op while the job exists) and leaves the claim to the worker — an ingress that claimed made the worker wait out the 15-minute lease.
+- **`.deleted` that finds the row already cancelled or newer** → processed with a log line (`stripe.webhook.subscription_cancel_already_terminal_or_stale`), never retried into an alert.
 - **Stripe API timeout or outage (user-initiated path)** → 503 `paymentProviderUnavailable`; nothing is written locally. If Stripe did apply the change, its webhook reconciles the row.
 - **Worker crash mid-processing** → row stuck in `processing`; reclaim worker (`stripe-webhook-event-reclaim.processor`) restarts it after `STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES` (15 min).
 - **Event that keeps failing** → after `STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS` (25) handler attempts — or at once for a permanent failure — the row turns `abandoned` and one alert fires; the reclaim never selects it again.
@@ -312,8 +317,65 @@ sequenceDiagram
 ### Side effects
 
 - `subscriptions.status` transitions: `active` → `past_due` (and back, or onward to `canceled`).
+- Each transition is a `subscription.updated` (the final one a `subscription.cancelled`) to the organization's subscribed webhooks.
+- **Losing the paid entitlement suspends the excess seats.** Once a cancel, expiry, pause or never-paid status commits, the most recently joined non-owner ACTIVE members are suspended until the organization fits the Free plan's allowance (suspended, never removed; reactivating one re-checks the ceiling). The end of a dunning grace (`current_period_end + BILLING_DUNNING_GRACE_DAYS`) has no Stripe event, so the hourly `subscription-seat-reconcile` job on the seat-sync queue applies it, and re-enqueues a seat sync wherever Stripe bills a quantity other than the seats in use.
 
 ### Failure modes
 
 - **All standard subscription-change-flow failure modes apply** (signature, duplicate event id, stale events, worker crash).
 - **Customer ignores the dunning emails** → Stripe-driven cancellation eventually fires; the platform does not unilaterally cancel.
+
+## organization-resource-webhook-flow
+
+### Trigger
+
+A write changes one of the public resources the webhook catalog (`GET /api/v1/notify/webhook-events`) advertises:
+
+| Event | Emitted by |
+| ----- | ---------- |
+| `organization.created` | `POST /tenancy/organizations` |
+| `organization.updated` | `PATCH /tenancy/organization`, logo upload / delete |
+| `membership.created` | `POST /tenancy/organization/memberships` (the INVITED membership) |
+| `membership.updated` | membership PATCH (role, suspend, reactivate), invitation accept, downgrade auto-suspend |
+| `membership.deleted` | membership DELETE, leave, invitation revoke |
+| `subscription.created` | `POST /billing/subscriptions`, the Stripe `.created` fallback insert |
+| `subscription.updated` | change-plan, cancel at period end, resume, a Stripe sync that changes a customer-visible field (status, cancel at period end, cancelled at, periods, plan) |
+| `subscription.cancelled` | immediate cancel (`INCOMPLETE`), Stripe `.deleted` or a sync to `canceled` |
+
+Creating or changing a webhook needs the permission the API needs to read each event's resource — for the events it will receive and, on a change, those it already receives (its pending attempts go to the URL it holds at delivery time): `membership:read` for `membership.*`, `subscription:read` for `subscription.*` (`organization.*` is readable by every member).
+
+### Sequence
+
+```mermaid
+sequenceDiagram
+  participant Service as Tenancy / billing service
+  participant Bus as Event bus
+  participant Notify as Webhook fan-out (notify)
+  participant DB as Postgres
+  participant Queue as webhook-delivery queue
+
+  Service->>DB: BEGIN (organization context); write the resource
+  Service->>Bus: emit <resource>.<verb> { organization_public_id, data: public JSON }
+  Bus->>Notify: dispatchOrganizationWebhooks (reuses the transaction)
+  Notify->>DB: SAVEPOINT
+  Notify->>DB: list enabled webhooks subscribed to the type
+  Notify->>DB: INSERT webhook_delivery_attempts (PENDING, envelope { id, type, created_at, data })
+  Notify->>DB: RELEASE SAVEPOINT
+  Service->>DB: COMMIT
+  Notify->>Queue: enqueue one delivery job per attempt (after the commit)
+```
+
+### Side effects
+
+- One PENDING `webhook_delivery_attempts` row per subscribed enabled webhook, committed with the write. Every endpoint gets the same envelope: `id` (`evt_…`, one per event), `type`, `created_at`, `data` (what the resource's serializer returns over the API).
+- One `webhook-delivery` job per attempt, enqueued only once the transaction commits (`runInCommitUnit`): over HTTP by the request's `onResponse` flush, in a worker right after the commit. A unit that rolls back drops its jobs.
+
+### Failure modes
+
+- **The write rolls back** → the attempts roll back with it; nothing is delivered.
+- **Fan-out fails** → the savepoint rolls back every attempt of that event (all or nothing) and the write still commits. Over HTTP the bus logs and alerts; in the Stripe webhook job the failure is rethrown (`emitStrict`), so the job retries the whole event — otherwise the watermark would let the retry emit nothing.
+- **Redis refuses the enqueue, or the process dies after the commit** → the attempt stays PENDING and `webhook-delivery-reclaim` re-enqueues it.
+- **A Stripe event replayed, or a sync that changes nothing customer-visible** (the same-second reconciliation after an HTTP mutation) → no event: the watermark refuses a replay, and a sync is compared with the row's state before it.
+- **The organization is deleted** → organization offboarding emits no `subscription.cancelled` (nothing could deliver it); `webhook-delivery-reclaim` skips its pending attempts, and a delivery job already queued completes as skipped (`attempt_missing`).
+- **`organization.created`** → cannot reach a webhook: the new organization has none yet. It is emitted for completeness.
+- **Ownership transfer, organization settings, seat-quantity sync** → no event: the organization's public JSON does not change, settings are another resource, and Stripe's quantity update returns as a `customer.subscription.updated` that emits `subscription.updated`.

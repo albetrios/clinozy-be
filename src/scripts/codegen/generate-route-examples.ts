@@ -158,7 +158,13 @@ function sanitizeString(value: string): string {
   return value;
 }
 
-function sanitize(value: unknown, parentFieldName?: string): unknown {
+function sanitize({
+  value,
+  parentFieldName,
+}: {
+  value: unknown;
+  parentFieldName?: string | undefined;
+}): unknown {
   if (typeof value === 'string') {
     if (parentFieldName && isSecretFieldName(parentFieldName)) return REDACTED;
     if (parentFieldName && CURSOR_FIELD_NAMES.has(parentFieldName)) {
@@ -170,7 +176,7 @@ function sanitize(value: unknown, parentFieldName?: string): unknown {
     if (parentFieldName && isSecretFieldName(`${parentFieldName.replace(/s$/, '')}`)) {
       return [REDACTED];
     }
-    return value.slice(0, 2).map((item) => sanitize(item, parentFieldName));
+    return value.slice(0, 2).map((item) => sanitize({ value: item, parentFieldName }));
   }
   if (value !== null && typeof value === 'object') {
     const sanitized: Record<string, unknown> = {};
@@ -183,7 +189,7 @@ function sanitize(value: unknown, parentFieldName?: string): unknown {
         sanitized[fieldName] = Array.isArray(fieldValue) ? [REDACTED] : REDACTED;
         continue;
       }
-      sanitized[fieldName] = sanitize(fieldValue, fieldName);
+      sanitized[fieldName] = sanitize({ value: fieldValue, parentFieldName: fieldName });
     }
     return sanitized;
   }
@@ -240,7 +246,7 @@ function main(): void {
       if (key.slice(0, lastSpace) !== routeKey) continue;
       if (Number(status) >= 500) continue; // 5xx bodies are not contract examples
       if (sample.response_body !== undefined && responses[status] === undefined) {
-        const sanitized = sanitize(sample.response_body) as Record<string, unknown>;
+        const sanitized = sanitize({ value: sample.response_body }) as Record<string, unknown>;
         if (sanitized && typeof sanitized === 'object' && sanitized.meta) {
           // Deterministic, realistic-looking request id derived from the route+status
           // so examples read like production traffic while staying reproducible.
@@ -252,7 +258,7 @@ function main(): void {
         responseCount += 1;
       }
       if (String(declaredStatus) === status && sample.request_body !== undefined) {
-        requestBody = sanitize(sample.request_body);
+        requestBody = sanitize({ value: sample.request_body });
       }
     }
 

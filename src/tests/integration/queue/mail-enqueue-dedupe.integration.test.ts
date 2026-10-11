@@ -35,9 +35,9 @@ describe('Integration: mail enqueue keeps one live job per outbox row', () => {
   it('ignores a re-enqueue while the row still has a job, and accepts one after that job is gone', async () => {
     const mailOutboxToken = randomUUID();
 
-    await enqueueMailOutboxJob(mailOutboxToken, { requestId: 'first-dispatch' });
-    await enqueueMailOutboxJob(mailOutboxToken, { requestId: 'mail-outbox-sweeper' });
-    await enqueueMailOutboxJob(mailOutboxToken, { requestId: 'mail-outbox-sweeper' });
+    await enqueueMailOutboxJob({ mailOutboxToken, options: { requestId: 'first-dispatch' } });
+    await enqueueMailOutboxJob({ mailOutboxToken, options: { requestId: 'mail-outbox-sweeper' } });
+    await enqueueMailOutboxJob({ mailOutboxToken, options: { requestId: 'mail-outbox-sweeper' } });
 
     const live = await liveJobsFor(mailOutboxToken);
     expect(live).toHaveLength(1);
@@ -45,7 +45,7 @@ describe('Integration: mail enqueue keeps one live job per outbox row', () => {
 
     // The job is gone (finished, or lost with Redis): the row can be enqueued again.
     await live[0]?.remove();
-    await enqueueMailOutboxJob(mailOutboxToken, { requestId: 'mail-outbox-sweeper' });
+    await enqueueMailOutboxJob({ mailOutboxToken, options: { requestId: 'mail-outbox-sweeper' } });
     const again = await liveJobsFor(mailOutboxToken);
     expect(again).toHaveLength(1);
 

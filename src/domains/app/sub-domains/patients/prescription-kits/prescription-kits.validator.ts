@@ -15,17 +15,17 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a kit create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePrescriptionKit(data: unknown): CreatePrescriptionKitInput {
-  return parseWithSchema(CreatePrescriptionKitDto, data);
+  return parseWithSchema({ schema: CreatePrescriptionKitDto, data });
 }
 
 /** Parses a kit update body; throws `ValidationError` naming each bad field. */
 export function validateUpdatePrescriptionKit(data: unknown): UpdatePrescriptionKitInput {
-  return parseWithSchema(UpdatePrescriptionKitDto, data);
+  return parseWithSchema({ schema: UpdatePrescriptionKitDto, data });
 }
 
 /** Parses the `GET /app/prescription-kits` query into a list input (routes-final 7.D.8 #21). */
 export function validateListPrescriptionKitsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listPrescriptionKitsQueryDto, data);
+  const query = parseWithSchema({ schema: listPrescriptionKitsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

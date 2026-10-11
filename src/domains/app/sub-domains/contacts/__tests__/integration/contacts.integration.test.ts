@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import {
   type AppFixture,
   createAppFixture,
@@ -446,7 +446,7 @@ describe('Contacts — integration (routes-final §4.A–4.B)', () => {
     );
     flow.expectValue('has_open_lead=false: five', '.data | length', 5);
     await flow.expect(400, 'sort=match is internal', 'GET', '/app/contacts?sort=match');
-    const operatorSql = getOperatorSql();
+    const operatorSql = operatorQuery;
     await operatorSql`
       UPDATE app.contacts SET last_received_at = now(), last_activity_at = now()
       WHERE public_id = ${riya}

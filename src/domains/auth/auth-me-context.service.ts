@@ -63,17 +63,23 @@ export class AuthMeContextService {
     // (`app.current_organization_public_id`), so it must keep its own transaction and
     // can still overlap with the block below.
     const [userScoped, myPermissions, membership] = await Promise.all([
-      withAppDatabaseContext(scope, async () => ({
-        user: await this.userService.getMe(scope),
-        activeOrganization: activeOrganizationPublicId
-          ? await this.organizationService.getByPublicId(activeOrganizationPublicId, userPublicId)
-          : null,
-      })),
+      withAppDatabaseContext({
+        scope,
+        callback: async () => ({
+          user: await this.userService.getMe(scope),
+          activeOrganization: activeOrganizationPublicId
+            ? await this.organizationService.getByPublicId({
+                public_id: activeOrganizationPublicId,
+                user_public_id: userPublicId,
+              })
+            : null,
+        }),
+      }),
       activeOrganizationPublicId
-        ? this.authorizationService.resolveUserOrganizationPermissions(
+        ? this.authorizationService.resolveUserOrganizationPermissions({
             userPublicId,
-            activeOrganizationPublicId,
-          )
+            organizationPublicId: activeOrganizationPublicId,
+          })
         : Promise.resolve<string[]>([]),
       this.membershipService
         ? this.membershipService.getCallerMembershipContext(scope)
@@ -124,11 +130,14 @@ export class AuthMeContextService {
     // Independent of each other — both read from `options` only — so they go out together
     // rather than one after the other. This runs inline on every organization switch.
     const [activeOrganization, myPermissions] = await Promise.all([
-      this.organizationService.getByPublicId(organizationPublicId, userPublicId),
-      this.authorizationService.resolveUserOrganizationPermissions(
+      this.organizationService.getByPublicId({
+        public_id: organizationPublicId,
+        user_public_id: userPublicId,
+      }),
+      this.authorizationService.resolveUserOrganizationPermissions({
         userPublicId,
         organizationPublicId,
-      ),
+      }),
     ]);
     return {
       active_organization: activeOrganization,

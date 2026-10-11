@@ -36,11 +36,13 @@ describe('NotificationDispatch', () => {
   it('defers enqueueNotification until flushOnCommit', async () => {
     enterOnCommitScope();
     await dispatch.createAndDispatchNotification({
-      user_id: 1,
-      organization_id: 2,
-      type: 'billing',
-      title: 'Test',
-      message: 'Body',
+      input: {
+        user_id: 1,
+        organization_id: 2,
+        type: 'billing',
+        title: 'Test',
+        message: 'Body',
+      },
     });
 
     expect(enqueueNotificationMock).not.toHaveBeenCalled();
@@ -77,11 +79,13 @@ describe('NotificationDispatch', () => {
 
     enterOnCommitScope();
     await dispatch.createAndDispatchNotification({
-      user_id: 1,
-      organization_id: 2,
-      type: 'billing',
-      title: 'Test',
-      message: 'Body',
+      input: {
+        user_id: 1,
+        organization_id: 2,
+        type: 'billing',
+        title: 'Test',
+        message: 'Body',
+      },
     });
 
     expect(callOrder).toEqual(['lookup', 'recipient', 'create']);
@@ -90,10 +94,12 @@ describe('NotificationDispatch', () => {
   it('skips organization lookup and passes null public id for user-only notifications', async () => {
     enterOnCommitScope();
     await dispatch.createAndDispatchNotification({
-      user_id: 1,
-      type: 'system',
-      title: 'Test',
-      message: 'Body',
+      input: {
+        user_id: 1,
+        type: 'system',
+        title: 'Test',
+        message: 'Body',
+      },
     });
 
     expect(notificationRepository.findOrganizationPublicIdByOrganizationId).not.toHaveBeenCalled();
@@ -111,10 +117,12 @@ describe('NotificationDispatch', () => {
 
     await expect(
       dispatch.createAndDispatchNotification({
-        user_id: 404,
-        type: 'system',
-        title: 'Test',
-        message: 'Body',
+        input: {
+          user_id: 404,
+          type: 'system',
+          title: 'Test',
+          message: 'Body',
+        },
       }),
     ).rejects.toMatchObject({ statusCode: 404, messageParams: { resource: 'User' } });
 
@@ -129,11 +137,13 @@ describe('NotificationDispatch', () => {
 
     await expect(
       dispatch.createAndDispatchNotification({
-        user_id: 1,
-        organization_id: 2,
-        type: 'billing',
-        title: 'Test',
-        message: 'Body',
+        input: {
+          user_id: 1,
+          organization_id: 2,
+          type: 'billing',
+          title: 'Test',
+          message: 'Body',
+        },
       }),
     ).rejects.toBe(lookupError);
 

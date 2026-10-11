@@ -80,10 +80,10 @@ describe('WhatsApp notice templates', () => {
       expect(parameters, kind).toHaveLength(templateParameterCount(template));
     }
     expect(
-      renderWhatsAppTemplate(
-        WHATSAPP_NOTICE_TEMPLATES.payment_receipt,
-        receiptParameters({ ...receipt, invoiceNumber: null }),
-      ),
+      renderWhatsAppTemplate({
+        notice: WHATSAPP_NOTICE_TEMPLATES.payment_receipt,
+        parameters: receiptParameters({ ...receipt, invoiceNumber: null }),
+      }),
     ).toBe('Hi Asha, we have received ₹1,500.00 for your visit on 9 Oct. Thank you!');
     const summary = dayCloseSummaryParameters({
       id: 1,
@@ -108,9 +108,11 @@ describe('WhatsApp notice templates', () => {
   });
 
   it('flattens a parameter onto one line and never leaves it empty', () => {
-    expect(templateParameter('Asha\nMehta\t  Jr', 'there')).toBe('Asha Mehta Jr');
-    expect(templateParameter('   ', 'there')).toBe('there');
-    expect(templateParameter(null, 'there')).toBe('there');
+    expect(templateParameter({ value: 'Asha\nMehta\t  Jr', fallback: 'there' })).toBe(
+      'Asha Mehta Jr',
+    );
+    expect(templateParameter({ value: '   ', fallback: 'there' })).toBe('there');
+    expect(templateParameter({ value: null, fallback: 'there' })).toBe('there');
     expect(bookingConfirmParameters({ firstName: null, visitDate: null, visitTime: '' })).toEqual([
       'there',
       '-',
@@ -120,22 +122,30 @@ describe('WhatsApp notice templates', () => {
 
   it('renders the text a person reads; a missing parameter stays visible', () => {
     expect(
-      renderWhatsAppTemplate(WHATSAPP_NOTICE_TEMPLATES.booking_confirm, [
-        'Asha',
-        '12 Oct',
-        '10:30',
-      ]),
+      renderWhatsAppTemplate({
+        notice: WHATSAPP_NOTICE_TEMPLATES.booking_confirm,
+        parameters: ['Asha', '12 Oct', '10:30'],
+      }),
     ).toBe('Hi Asha, please confirm your visit on 12 Oct at 10:30. Reply YES to confirm.');
-    expect(renderWhatsAppTemplate(WHATSAPP_NOTICE_TEMPLATES.booking_confirm, ['Asha'])).toContain(
-      '{{2}}',
-    );
+    expect(
+      renderWhatsAppTemplate({
+        notice: WHATSAPP_NOTICE_TEMPLATES.booking_confirm,
+        parameters: ['Asha'],
+      }),
+    ).toContain('{{2}}');
   });
 
   it('the 24-hour window: never wrote, or 24 hours or more ago, is outside', () => {
     const now = new Date('2026-10-09T12:00:00Z');
-    expect(isOutsideServiceWindow(null, now)).toBe(true);
-    expect(isOutsideServiceWindow(new Date('2026-10-08T12:00:00Z'), now)).toBe(true);
-    expect(isOutsideServiceWindow(new Date('2026-10-08T12:00:01Z'), now)).toBe(false);
-    expect(isOutsideServiceWindow(new Date('2026-10-09T11:59:00Z'), now)).toBe(false);
+    expect(isOutsideServiceWindow({ lastReceivedAt: null, now })).toBe(true);
+    expect(isOutsideServiceWindow({ lastReceivedAt: new Date('2026-10-08T12:00:00Z'), now })).toBe(
+      true,
+    );
+    expect(isOutsideServiceWindow({ lastReceivedAt: new Date('2026-10-08T12:00:01Z'), now })).toBe(
+      false,
+    );
+    expect(isOutsideServiceWindow({ lastReceivedAt: new Date('2026-10-09T11:59:00Z'), now })).toBe(
+      false,
+    );
   });
 });

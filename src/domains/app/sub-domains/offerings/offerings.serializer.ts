@@ -4,10 +4,13 @@ import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import type { OfferingOutput } from './offerings.types.js';
 
 /** Shapes an `app.offerings` row as the API returns it (public ids, rupees as numbers, ISO times). */
-export function serializeOffering(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): OfferingOutput {
+export function serializeOffering({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): OfferingOutput {
   return {
     id: row.public_id,
     offering_number: row.offering_number as number,
@@ -22,9 +25,9 @@ export function serializeOffering(
     validity_days: row.validity_days as number,
     gst_percent: row.gst_percent as number,
     is_active: row.is_active as boolean,
-    offering_group_id: references.publicIdOf('offering_group_id', row),
+    offering_group_id: references.publicIdOf({ field: 'offering_group_id', row }),
     offer_price: toAmount(row.offer_price),
-    branch_ids: references.listOf('branch_ids', row),
+    branch_ids: references.listOf({ field: 'branch_ids', row }),
     is_gst_inclusive: row.is_gst_inclusive as boolean,
     search_terms: row.search_terms as string[],
     description: row.description as string | null,

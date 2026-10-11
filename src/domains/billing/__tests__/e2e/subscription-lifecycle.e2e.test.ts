@@ -16,7 +16,7 @@ import type { FastifyInstance } from 'fastify';
 
 const BILLING_PERMISSIONS = ['subscription:read', 'subscription:manage'];
 
-describe('Billing e2e: subscription lifecycle', () => {
+describe('Billing e2e: organization plan and subscription reads', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
@@ -36,7 +36,7 @@ describe('Billing e2e: subscription lifecycle', () => {
   it('lists plans then subscriptions for organization', async () => {
     const user = await createTestUser();
     const organization = await createTestOrganization({ ownerUserId: user.id });
-    await createTestPlan();
+    const plan = await createTestPlan();
     const role = await createRoleWithPermissions({
       organizationId: organization.id,
       permissionCodes: BILLING_PERMISSIONS,
@@ -57,6 +57,9 @@ describe('Billing e2e: subscription lifecycle', () => {
       token,
     });
     expect(plansResponse.statusCode).toBe(200);
+    expect((plansResponse.json() as { data: unknown[] }).data).toEqual([
+      expect.objectContaining({ id: plan.public_id, name: plan.name }),
+    ]);
 
     const subscriptionsResponse = await injectAuthenticated(app, {
       method: 'GET',
@@ -64,5 +67,6 @@ describe('Billing e2e: subscription lifecycle', () => {
       token,
     });
     expect(subscriptionsResponse.statusCode).toBe(200);
+    expect((subscriptionsResponse.json() as { data: unknown[] }).data).toEqual([]);
   });
 });

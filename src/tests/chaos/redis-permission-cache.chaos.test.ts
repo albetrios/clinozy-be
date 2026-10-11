@@ -79,8 +79,11 @@ describe('Chaos resilience: Redis permission-cache miss', () => {
               },
             });
 
-          expect(membershipsHttpRouteResponseListening.statusCode).toBeGreaterThanOrEqual(200);
-          expect(membershipsHttpRouteResponseListening.statusCode).toBeLessThan(500);
+          expect(
+            membershipsHttpRouteResponseListening.statusCode,
+            membershipsHttpRouteResponseListening.body,
+          ).toBe(200);
+          expect(Array.isArray(membershipsHttpRouteResponseListening.json().data)).toBe(true);
 
           expect(
             permissionCacheObservationSpyListening.mock.calls.some(

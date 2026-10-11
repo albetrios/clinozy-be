@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { buildIdempotencyCacheKey } from '@/shared/utils/idempotency/idempotency-key.util.js';
@@ -12,14 +12,29 @@ import {
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
+import { createObjectStoragePortMock } from '@/tests/helpers/object-storage-mock.helper.js';
+import { getDefaultS3ObjectStorageAdapter } from '@/infrastructure/storage/s3-adapter.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { uploads } from '@/domains/upload/upload.schema.js';
+import { stripPendingObjectKeyPrefix } from '@/domains/upload/upload.constants.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { MFA_AUTHENTICATION_METHOD } from '@/shared/utils/security/jwt.util.js';
+import { createTestOrganization } from '@/tests/factories/organization.factory.js';
+import {
+  createMembership,
+  createRoleWithPermissions,
+  seedPermissions,
+} from '@/domains/tenancy/__tests__/factories/permission.factory.js';
+import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
+import { UPLOAD_PERMISSIONS } from '@/domains/upload/upload.permissions.js';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
 /** Bucket recorded on seeded rows; asserted to be absent from the detail response body. */
 const SEEDED_BUCKET = 'test-uploads';
+
+/** PNG file signature, so the confirm step's magic-byte check accepts the mocked object. */
+const PNG_MAGIC_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 describe('Upload Domain — Integration', () => {
   let app: FastifyInstance;
@@ -36,6 +51,34 @@ describe('Upload Domain — Integration', () => {
   beforeEach(async () => {
     await cleanupDatabase();
   });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Answers the confirm and delete storage calls from {@link createObjectStoragePortMock} by
+   * spying on the default S3 adapter — the singleton the upload container is built on — so a test
+   * can walk PENDING → UPLOADED over HTTP without a bucket. The presign stays real (it signs
+   * locally), so every other case in this file keeps running on the production adapter.
+   */
+  function mockDefaultObjectStorage() {
+    const objectStorageMock = createObjectStoragePortMock({
+      getObjectFirstBytes: vi
+        .fn()
+        .mockResolvedValue({ body: PNG_MAGIC_BYTES, contentType: 'image/png', eTag: '"etag"' }),
+    });
+    const adapter = getDefaultS3ObjectStorageAdapter();
+    vi.spyOn(adapter, 'verifyUploadedObject').mockImplementation(
+      objectStorageMock.verifyUploadedObject,
+    );
+    vi.spyOn(adapter, 'getObjectFirstBytes').mockImplementation(
+      objectStorageMock.getObjectFirstBytes,
+    );
+    vi.spyOn(adapter, 'copyObject').mockImplementation(objectStorageMock.copyObject);
+    vi.spyOn(adapter, 'deleteObject').mockImplementation(objectStorageMock.deleteObject);
+    return objectStorageMock;
+  }
 
   /**
    * Inserts an already-`UPLOADED` upload row directly. The read and re-confirm paths never
@@ -201,6 +244,27 @@ describe('Upload Domain — Integration', () => {
       });
       expect(response.statusCode).toBe(404);
     });
+
+    it('returns 404 on a GET of the upload once its owner has deleted it', async () => {
+      mockDefaultObjectStorage();
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      const { publicId } = await seedUploadedRow(user.id);
+
+      const remove = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath(`/uploads/${publicId}`),
+        token,
+      });
+      expect(remove.statusCode, remove.body).toBe(204);
+
+      const read = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath(`/uploads/${publicId}`),
+        token,
+      });
+      expect(read.statusCode, read.body).toBe(404);
+    });
   });
 
   describe('POST /api/v1/uploads/:publicId/confirm (route-coverage gap-fill)', () => {
@@ -245,6 +309,72 @@ describe('Upload Domain — Integration', () => {
         .from(uploads)
         .where(eq(uploads.id, id));
       expect(postCall!.status).toBe('UPLOADED');
+    });
+
+    it('moves a PENDING upload to UPLOADED and repoints it at the final key (storage verdict mocked)', async () => {
+      const objectStorageMock = mockDefaultObjectStorage();
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      const create = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/uploads'),
+        token,
+        payload: {
+          purpose: 'avatar',
+          for: 'user',
+          content_type: 'image/png',
+          file_name: 'avatar.png',
+          file_size: 1024,
+        },
+      });
+      expect(create.statusCode, create.body).toBe(200);
+      const createdPublicId = (create.json() as { data: { id: string } }).data.id;
+
+      const pending = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath(`/uploads/${createdPublicId}`),
+        token,
+      });
+      expect(pending.statusCode, pending.body).toBe(200);
+      expect((pending.json() as { data: { status: string } }).data.status).toBe('PENDING');
+      const [pendingRow] = await getOperatorDatabase()
+        .select()
+        .from(uploads)
+        .where(eq(uploads.public_id, createdPublicId));
+      const pendingKey = pendingRow!.file_key;
+      const finalKey = stripPendingObjectKeyPrefix(pendingKey);
+      expect(finalKey).not.toBe(pendingKey);
+
+      const confirm = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/uploads/${createdPublicId}/confirm`),
+        token,
+        payload: {},
+      });
+      expect(confirm.statusCode, confirm.body).toBe(200);
+      expect((confirm.json() as { data: Record<string, unknown> }).data).toMatchObject({
+        id: createdPublicId,
+        status: 'UPLOADED',
+        file_size: 1024,
+      });
+      // The storage verdict is checked against what the client declared at create time.
+      expect(objectStorageMock.verifyUploadedObject).toHaveBeenCalledWith({
+        key: pendingKey,
+        expected: {
+          contentType: 'image/png',
+          contentLength: 1024,
+        },
+      });
+      expect(objectStorageMock.copyObject).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceKey: pendingKey, destinationKey: finalKey }),
+      );
+
+      const [confirmedRow] = await getOperatorDatabase()
+        .select()
+        .from(uploads)
+        .where(eq(uploads.public_id, createdPublicId));
+      expect(confirmedRow!.status).toBe('UPLOADED');
+      expect(confirmedRow!.file_key).toBe(finalKey);
     });
   });
 
@@ -340,7 +470,10 @@ describe('Upload Domain — Integration', () => {
       const token = await generateTestToken({ userId: user.public_id });
       const idempotencyKey = `idem-${randomUUID()}`;
       // No organization in the token -> the middleware scopes the key as `none:<userId>`.
-      const cacheKey = buildIdempotencyCacheKey(idempotencyKey, { userId: user.public_id });
+      const cacheKey = buildIdempotencyCacheKey({
+        idempotencyKey,
+        scope: { userId: user.public_id },
+      });
       await redisConnection.set(
         cacheKey,
         buildInFlightIdempotencyEntry({
@@ -366,6 +499,86 @@ describe('Upload Domain — Integration', () => {
       } finally {
         await redisConnection.del(cacheKey);
       }
+    });
+  });
+
+  describe('organization uploads are authorized like every organization route', () => {
+    async function memberWithUploadManage(options: { mfaRequired: boolean }) {
+      await seedPermissions([UPLOAD_PERMISSIONS.UPLOAD_MANAGE]);
+      const member = await createTestUser();
+      const organization = await createTestOrganization({ ownerUserId: member.id });
+      await getOperatorDatabase()
+        .insert(organization_settings)
+        .values({
+          organization_id: organization.id,
+          security_policy: { mfa_required: options.mfaRequired },
+          default_locale: 'en',
+        });
+      const role = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [UPLOAD_PERMISSIONS.UPLOAD_MANAGE],
+      });
+      await createMembership({
+        userId: member.id,
+        organizationId: organization.id,
+        roleId: role.id,
+      });
+      return { member, organization, role };
+    }
+
+    function requestOrganizationLogo(token: string, organizationPublicId: string) {
+      return app.inject({
+        method: 'POST',
+        url: testApiPath('/uploads'),
+        headers: { authorization: `Bearer ${token}`, 'x-idempotency-key': `idem-${randomUUID()}` },
+        payload: {
+          purpose: 'organization-logo',
+          for: 'organization',
+          organization_id: organizationPublicId,
+          content_type: 'image/png',
+          file_name: 'logo.png',
+          file_size: 1024,
+        },
+      });
+    }
+
+    it('an MFA-required organization refuses a session without a second factor', async () => {
+      const { member, organization } = await memberWithUploadManage({ mfaRequired: true });
+
+      const firstFactorOnly = await generateTestToken({
+        userId: member.public_id,
+        organizationPublicId: organization.public_id,
+      });
+      const refused = await requestOrganizationLogo(firstFactorOnly, organization.public_id);
+      expect(refused.statusCode, refused.body).toBe(403);
+      expect((refused.json() as { error: { reason?: string } }).error.reason).toBe('mfa_required');
+
+      const withMfa = await generateTestToken({
+        userId: member.public_id,
+        organizationPublicId: organization.public_id,
+        authenticationMethods: [MFA_AUTHENTICATION_METHOD],
+      });
+      const allowed = await requestOrganizationLogo(withMfa, organization.public_id);
+      expect(allowed.statusCode, allowed.body).toBe(200);
+    });
+
+    it('an organization upload must target the active organization', async () => {
+      const { member, organization } = await memberWithUploadManage({ mfaRequired: false });
+      const other = await createTestOrganization({ ownerUserId: member.id });
+      const otherRole = await createRoleWithPermissions({
+        organizationId: other.id,
+        permissionCodes: [UPLOAD_PERMISSIONS.UPLOAD_MANAGE],
+      });
+      await createMembership({ userId: member.id, organizationId: other.id, roleId: otherRole.id });
+
+      const token = await generateTestToken({
+        userId: member.public_id,
+        organizationPublicId: organization.public_id,
+      });
+      const refused = await requestOrganizationLogo(token, other.public_id);
+      expect(refused.statusCode, refused.body).toBe(403);
+      const allowed = await requestOrganizationLogo(token, organization.public_id);
+      expect(allowed.statusCode, allowed.body).toBe(200);
     });
   });
 });

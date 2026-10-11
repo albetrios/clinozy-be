@@ -30,9 +30,12 @@ export function createBranchesController(service: BranchesService) {
       const data = await service.listMine({
         scope: requireOrganizationScope(request),
         userPublicId: getActingUserPublicId(auth),
-        canReadAllBranches: await hasOrganizationPermission(request, APP_PERMISSIONS.BRANCH_READ),
+        canReadAllBranches: await hasOrganizationPermission({
+          request,
+          permissionCode: APP_PERMISSIONS.BRANCH_READ,
+        }),
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     listBranches: async (request: FastifyRequest, _reply: FastifyReply) => {
       const query = validateListBranchesQuery(request.query);
@@ -40,41 +43,65 @@ export function createBranchesController(service: BranchesService) {
         scope: requireOrganizationScope(request),
         includeInactive: query.include_inactive === 'true',
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     getBranch: async (request: FastifyRequest<BranchParams>, _reply: FastifyReply) => {
-      const data = await service.get(
-        requireOrganizationScope(request),
-        validatePublicIdParam(request.params.branch_id, 'branch_id'),
-      );
-      return successResponse(data, getRequestIdentifier(request));
+      const data = await service.get({
+        scope: requireOrganizationScope(request),
+        branchPublicId: validatePublicIdParam({
+          value: request.params.branch_id,
+          fieldName: 'branch_id',
+        }),
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     createBranch: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
-      const data = await service.create(scope, request.body, getActingUserPublicId(auth));
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'app.branch.create',
-        resource_type: 'branch',
-        organizationPublicId: scope.organizationPublicId,
-        metadata: { branch_public_id: data.id },
+      const data = await service.create({
+        scope,
+        body: request.body,
+        actingUserPublicId: getActingUserPublicId(auth),
       });
-      return successResponse(data, getRequestIdentifier(request));
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'app.branch.create',
+          resource_type: 'branch',
+          organizationPublicId: scope.organizationPublicId,
+          metadata: { branch_public_id: data.id },
+        },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     updateBranch: async (request: FastifyRequest<BranchParams>, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
-      const branchId = validatePublicIdParam(request.params.branch_id, 'branch_id');
-      const data = await service.update(scope, branchId, request.body, getActingUserPublicId(auth));
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'app.branch.update',
-        resource_type: 'branch',
-        organizationPublicId: scope.organizationPublicId,
-        metadata: { branch_public_id: branchId, changed_fields: listBodyFieldNames(request.body) },
+      const branchId = validatePublicIdParam({
+        value: request.params.branch_id,
+        fieldName: 'branch_id',
       });
-      return successResponse(data, getRequestIdentifier(request));
+      const data = await service.update({
+        scope,
+        branchPublicId: branchId,
+        body: request.body,
+        actingUserPublicId: getActingUserPublicId(auth),
+      });
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'app.branch.update',
+          resource_type: 'branch',
+          organizationPublicId: scope.organizationPublicId,
+          metadata: {
+            branch_public_id: branchId,
+            changed_fields: listBodyFieldNames(request.body),
+          },
+        },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

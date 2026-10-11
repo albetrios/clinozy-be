@@ -9,10 +9,13 @@ import type {
  * audit columns; exposes only the displayable `key_prefix`, ISO timestamps,
  * and the organization's public id.
  */
-export function serializeOrganizationApiKey(
-  row: OrganizationApiKeyRow,
-  organization_public_id: string,
-): OrganizationApiKeyOutput {
+export function serializeOrganizationApiKey({
+  row,
+  organization_public_id,
+}: {
+  row: OrganizationApiKeyRow;
+  organization_public_id: string;
+}): OrganizationApiKeyOutput {
   return {
     id: row.public_id,
     organization_id: organization_public_id,

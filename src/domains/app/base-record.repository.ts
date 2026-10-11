@@ -16,7 +16,6 @@ import {
   sql,
 } from 'drizzle-orm';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
-import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
@@ -24,7 +23,11 @@ import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js'
 import { branch_members } from '@/domains/app/sub-domains/branches/branch-members/branch-members.schema.js';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import { buildSearchCondition } from '@/shared/utils/http/list-query.util.js';
-import { createOpaqueCursorFromRow, parseListCursor } from '@/shared/utils/http/pagination.util.js';
+import {
+  createOpaqueCursorFromRow,
+  cursorTimestampSelection,
+  parseListCursor,
+} from '@/shared/utils/http/pagination.util.js';
 import { generatePublicId, type PublicIdEntity } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 
@@ -644,7 +647,7 @@ export async function findMembershipWorkingHours(options: {
 }
 
 /**
- * The base repository of every app record table (extends the infrastructure `BaseRepository`) —
+ * The base repository of every app record table —
  * the list, read, write, soft-delete and restore every `app.*` record shares. Each table's
  * repository extends it with its table and list settings.
  *
@@ -655,10 +658,8 @@ export async function findMembershipWorkingHours(options: {
  * - **Failure modes:** a unique violation on insert or update propagates (the service maps it).
  * - **Side effects:** writes stamp `updated_at` (never before `created_at`) and the actor.
  */
-export class BaseRecordRepository extends BaseRepository {
-  constructor(protected readonly config: BaseRecordTableConfig) {
-    super();
-  }
+export class BaseRecordRepository {
+  constructor(protected readonly config: BaseRecordTableConfig) {}
 
   /** The named column of this table. */
   protected column(name: string): AnyPgColumn {
@@ -693,8 +694,8 @@ export class BaseRecordRepository extends BaseRepository {
 
   /** `q` over the search columns, or the running number when `q` reads as one. */
   private searchCondition(q: string | undefined): SQL | undefined {
-    const text = buildSearchCondition(
-      [
+    const text = buildSearchCondition({
+      columns: [
         ...this.config.searchColumns.map((name) => {
           const column = this.column(name);
           // A text array (an offering's search terms, O9) is searched as one string of its entries.
@@ -703,7 +704,7 @@ export class BaseRecordRepository extends BaseRepository {
         ...(this.config.searchExpressions ?? []),
       ],
       q,
-    );
+    });
     const digits = q?.match(/^\s*(?:#|[a-z]{1,4}-)?0*(\d{1,9})\s*$/i)?.[1];
     if (!this.config.numberColumn || digits === undefined) return text;
     const number = eq(this.column(this.config.numberColumn), Number(digits));
@@ -842,10 +843,15 @@ export class BaseRecordRepository extends BaseRepository {
           : sql<string>`${key.expression}::text`,
       ]),
     );
+    // The cursor's microsecond created_at (createOpaqueCursorFromRow), selected beside the sort texts.
+    const pageTexts = {
+      ...sortTexts,
+      page_cursor_created_at: cursorTimestampSelection(this.column('created_at')),
+    };
     const idDirection = sort.keys.at(-1)?.direction ?? sort.order;
     const database = getRequestDatabase();
     const fetched = (await database
-      .select({ ...getTableColumns(this.config.table), ...sortTexts })
+      .select({ ...getTableColumns(this.config.table), ...pageTexts })
       .from(this.config.table)
       .where(and(where, keyset))
       .orderBy(
@@ -854,7 +860,7 @@ export class BaseRecordRepository extends BaseRepository {
         ),
         idDirection === 'desc' ? desc(idColumn) : asc(idColumn),
       )
-      .limit(query.limit + 1)) as (BaseRecordRow & Record<string, unknown>)[];
+      .limit(query.limit + 1)) as unknown as (BaseRecordRow & Record<string, unknown>)[];
     const has_more = fetched.length > query.limit;
     const page = has_more ? fetched.slice(0, query.limit) : fetched;
     const last = page.at(-1);
@@ -864,7 +870,7 @@ export class BaseRecordRepository extends BaseRepository {
     const next_cursor =
       has_more && last
         ? createOpaqueCursorFromRow({
-            created_at: last.created_at,
+            cursor_created_at: String(last.page_cursor_created_at),
             id: last.id,
             sort_value: sortValues.length === 1 ? sortValues[0]! : JSON.stringify(sortValues),
             filter_fingerprint: fingerprint,
@@ -872,7 +878,7 @@ export class BaseRecordRepository extends BaseRepository {
         : null;
     const items = page.map((row) => {
       const item = { ...row };
-      for (const name of Object.keys(sortTexts)) delete item[name];
+      for (const name of Object.keys(pageTexts)) delete item[name];
       return item as BaseRecordRow;
     });
     // The total is the first page's: later pages and internal readers skip the count (M1).
@@ -1039,12 +1045,14 @@ export class BaseRecordRepository extends BaseRepository {
 
   /** Inserts a row with a fresh public id; returns it. */
   async insert(values: Record<string, unknown>): Promise<BaseRecordRow> {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const rows = (await getRequestDatabase()
-        .insert(this.config.table)
-        .values({ ...values, public_id: generatePublicId(this.config.entity) } as never)
-        .returning()) as BaseRecordRow[];
-      return rows[0]!;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const rows = (await getRequestDatabase()
+          .insert(this.config.table)
+          .values({ ...values, public_id: generatePublicId(this.config.entity) } as never)
+          .returning()) as BaseRecordRow[];
+        return rows[0]!;
+      },
     });
   }
 

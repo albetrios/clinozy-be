@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import {
   loadRouteAuthorizationModel,
   MODEL_EXPECTED_ATTACKER_STATUS,
@@ -64,7 +64,7 @@ describe('Security: app records are isolated per organization (models organizati
   /** Inserts a confirmed upload of `fixture`'s owner and returns its key. */
   async function confirmedUpload(fixture: AppFixture, name: string): Promise<string> {
     const key = `organizations/${fixture.organization.publicId}/uploads/${name}`;
-    await getOperatorSql()`
+    await operatorQuery`
       INSERT INTO upload.uploads (public_id, user_id, organization_id, file_name, file_key, mime_type,
         file_size, bucket, status, uploaded_at)
       VALUES (${generatePublicId('upload')}, ${fixture.members.owner.userId}, ${fixture.organization.id},
@@ -229,7 +229,7 @@ describe('Security: app records are isolated per organization (models organizati
     });
     // The patient offering a bill's line sold (the shape an invoice save writes for a package).
     const boughtOffering = generatePublicId('patientOffering');
-    await getOperatorSql()`
+    await operatorQuery`
       INSERT INTO app.patient_offerings (public_id, organization_id, patient_id, offering_id,
         invoice_item_id, sessions_total)
       SELECT ${boughtOffering}, p.organization_id, p.id, line.offering_id, line.id, 3

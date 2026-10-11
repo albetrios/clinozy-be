@@ -31,14 +31,20 @@ export type AuthContainer = {
 };
 
 /** Builds the auth-domain {@link AuthContainer}: instantiates auth-method, email verification-code, OAuth, MFA, WebAuthn, and session services with their repositories and Redis. */
-export function createAuthContainer(
-  userService: UserService,
-  organizationSettingsService: OrganizationSettingsService,
-  organizationService: OrganizationService,
-  authorizationService: AuthorizationService,
-  // Launch ROUTE #4: the caller's roles for /auth/me/context; the worker process omits it.
-  membershipService?: MembershipService,
-): AuthContainer {
+export function createAuthContainer({
+  userService,
+  organizationSettingsService,
+  organizationService,
+  authorizationService,
+  membershipService,
+}: {
+  userService: UserService;
+  organizationSettingsService: OrganizationSettingsService;
+  organizationService: OrganizationService;
+  authorizationService: AuthorizationService;
+  /** Launch ROUTE #4: the caller's roles for /auth/me/context; the worker process omits it. */
+  membershipService?: MembershipService;
+}): AuthContainer {
   const authMethodRepository = new AuthMethodRepository();
   const verificationTokenRepository = new VerificationTokenRepository();
   const authSessionRepository = new AuthSessionRepository();
@@ -116,12 +122,12 @@ export function createAuthContainer(
 export function registerAuthContainer(application: FastifyInstance): void {
   application.decorate(
     'authDomain',
-    createAuthContainer(
-      application.userDomain.userService,
-      application.tenancyDomain.organizationSettingsService,
-      application.tenancyDomain.organizationService,
-      application.tenancyDomain.authorizationService,
-      application.tenancyDomain.membershipService,
-    ),
+    createAuthContainer({
+      userService: application.userDomain.userService,
+      organizationSettingsService: application.tenancyDomain.organizationSettingsService,
+      organizationService: application.tenancyDomain.organizationService,
+      authorizationService: application.tenancyDomain.authorizationService,
+      membershipService: application.tenancyDomain.membershipService,
+    }),
   );
 }

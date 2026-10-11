@@ -68,10 +68,10 @@ describe('UserDataExportService (database)', () => {
       resource_id: user.id,
     });
 
-    const exported = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
-      () => service.buildExportPayload(user.public_id),
-    );
+    const exported = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+      callback: () => service.buildExportPayload(user.public_id),
+    });
 
     expect(exported.user.email).toBe('export@example.com');
     expect(exported.user.full_name).toBe('Export');
@@ -88,9 +88,10 @@ describe('UserDataExportService (database)', () => {
 
   it('buildExportPayload throws when user is missing', async () => {
     await expect(
-      withAppDatabaseContext(PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'missing_public_id' }), () =>
-        service.buildExportPayload('missing_public_id'),
-      ),
+      withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: 'missing_public_id' }),
+        callback: () => service.buildExportPayload('missing_public_id'),
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -104,10 +105,10 @@ describe('UserDataExportService (database)', () => {
       expires_at: new Date(Date.now() + 60_000),
     });
 
-    const exported = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
-      () => service.buildExportPayload(user.public_id),
-    );
+    const exported = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+      callback: () => service.buildExportPayload(user.public_id),
+    });
 
     expect(exported.sessions).toHaveLength(1);
     expect(exported.sessions[0]?.ip_address).toBe('203.0.113.10');
@@ -120,10 +121,10 @@ describe('UserDataExportService (database)', () => {
       lastName: '',
     });
 
-    const exported = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
-      () => service.buildExportPayload(user.public_id),
-    );
+    const exported = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+      callback: () => service.buildExportPayload(user.public_id),
+    });
 
     expect(exported.user.full_name).toBeNull();
     expect(exported.organizations).toEqual([]);

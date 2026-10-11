@@ -36,7 +36,7 @@ export const BillingAccountSerializer = {
   invoices(rows: readonly Stripe.Invoice[]) {
     return rows.map((row) => BillingAccountSerializer.invoice(row));
   },
-  paymentMethod(row: Stripe.PaymentMethod, isDefault: boolean) {
+  paymentMethod({ row, is_default }: { row: Stripe.PaymentMethod; is_default: boolean }) {
     const card = row.card;
     return {
       id: row.id,
@@ -44,15 +44,21 @@ export const BillingAccountSerializer = {
       last4: card?.last4 ?? '????',
       exp_month: card?.exp_month ?? 0,
       exp_year: card?.exp_year ?? 0,
-      is_default: isDefault,
+      is_default,
     };
   },
-  paymentMethods(rows: readonly Stripe.PaymentMethod[], defaultPaymentMethodId: string | null) {
+  paymentMethods({
+    rows,
+    default_payment_method_id,
+  }: {
+    rows: readonly Stripe.PaymentMethod[];
+    default_payment_method_id: string | null;
+  }) {
     return rows.map((row) =>
-      BillingAccountSerializer.paymentMethod(
+      BillingAccountSerializer.paymentMethod({
         row,
-        defaultPaymentMethodId !== null && row.id === defaultPaymentMethodId,
-      ),
+        is_default: default_payment_method_id !== null && row.id === default_payment_method_id,
+      }),
     );
   },
 };

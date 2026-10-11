@@ -64,6 +64,17 @@ describe('User Data Export Sub-Domain — Integration', () => {
   });
 
   describe('POST /api/v1/users/me/data-export', () => {
+    it('requires a recent step-up on this session (the bundle is every piece of personal data)', async () => {
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      const response = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/users/me/data-export'),
+        token,
+      });
+      expect(response.statusCode, response.body).toBe(403);
+    });
+
     it('should return 401 without authentication', async () => {
       const response = await injectUnauthenticated(app, {
         method: 'POST',
@@ -75,7 +86,10 @@ describe('User Data Export Sub-Domain — Integration', () => {
 
     it('should accept export request for authenticated user', async () => {
       const authenticatedUser = await createTestUser();
-      const bearerToken = await generateTestToken({ userId: authenticatedUser.public_id });
+      const bearerToken = await generateTestToken({
+        userId: authenticatedUser.public_id,
+        stepUp: true,
+      });
       await getAuthenticatedUserReady(app, bearerToken);
 
       const organizationOwner = await createTestUser({
@@ -119,7 +133,7 @@ describe('User Data Export Sub-Domain — Integration', () => {
       // A full copy of the account's data is about to exist; the request used to leave no trace
       // (only each later download-link mint was recorded).
       const user = await createTestUser();
-      const token = await generateTestToken({ userId: user.public_id });
+      const token = await generateTestToken({ userId: user.public_id, stepUp: true });
       await getAuthenticatedUserReady(app, token);
 
       const response = await injectAuthenticated(app, {
@@ -147,7 +161,7 @@ describe('User Data Export Sub-Domain — Integration', () => {
 
     it('returns the in-flight export instead of creating a second one', async () => {
       const user = await createTestUser();
-      const token = await generateTestToken({ userId: user.public_id });
+      const token = await generateTestToken({ userId: user.public_id, stepUp: true });
       await getAuthenticatedUserReady(app, token);
 
       const first = await injectAuthenticated(app, {
@@ -171,7 +185,7 @@ describe('User Data Export Sub-Domain — Integration', () => {
 
     it('survives concurrent export requests without a unique-violation 500', async () => {
       const user = await createTestUser();
-      const token = await generateTestToken({ userId: user.public_id });
+      const token = await generateTestToken({ userId: user.public_id, stepUp: true });
       await getAuthenticatedUserReady(app, token);
 
       // Fired together so both can pass the pending-check before either insert lands — the
@@ -224,7 +238,7 @@ describe('User Data Export Sub-Domain — Integration', () => {
     // absent rather than leaking another user's export status or download URL.
     it('should return 404 for an export id owned by a different user', async () => {
       const owner = await createTestUser();
-      const ownerToken = await generateTestToken({ userId: owner.public_id });
+      const ownerToken = await generateTestToken({ userId: owner.public_id, stepUp: true });
       await getAuthenticatedUserReady(app, ownerToken);
 
       const created = await injectAuthenticated(app, {

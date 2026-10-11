@@ -1,5 +1,17 @@
 import { MEMBERSHIP_STATUS } from './membership.constants.js';
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import {
+  getTableColumns,
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
   getContextFreeDatabase,
@@ -11,16 +23,20 @@ import { membership_invitations } from '@/domains/tenancy/sub-domains/membership
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import { role_permissions } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.schema.js';
-import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import {
+  type DepartingUserMembershipRow,
   type MembershipProfileData,
   type MembershipRow,
   SEAT_CONSUMING_MEMBERSHIP_STATUSES,
 } from './membership.types.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
+import {
+  type CursorTimestampRow,
+  cursorTimestampSelection,
+} from '@/shared/utils/http/pagination.util.js';
 import {
   buildContainsLikePattern,
   finishKeysetPage,
@@ -117,30 +133,23 @@ export interface MembershipInvitationRefRow {
  * Listing uses a `(created_at, id)` or `(display_name, id)` keyset cursor; `joined_at` is set once,
  * when the invite is accepted (launch T10).
  */
-export class MembershipRepository extends BaseRepository {
+export class MembershipRepository {
   /**
-   * A login's live memberships with their organization's public id (account deletion, K6). Runs
-   * under the login's own user context — the same cross-organization read as the data export.
+   * Every membership row a user has — live or already removed — with its organization, for
+   * account deletion. Spans tenants, so the caller runs it under the retention maintenance context.
    */
-  async listLiveForUser(user_id: number): Promise<
-    {
-      id: number;
-      public_id: string;
-      organization_id: number;
-      organization_public_id: string;
-    }[]
-  > {
+  async listForDepartingUser(user_id: number): Promise<DepartingUserMembershipRow[]> {
     return getRequestDatabase()
       .select({
-        id: memberships.id,
-        public_id: memberships.public_id,
-        organization_id: memberships.organization_id,
+        membership_public_id: memberships.public_id,
+        membership_deleted_at: memberships.deleted_at,
         organization_public_id: organizations.public_id,
+        organization_type: organizations.type,
+        organization_deleted_at: organizations.deleted_at,
       })
       .from(memberships)
       .innerJoin(organizations, eq(memberships.organization_id, organizations.id))
-      .where(and(eq(memberships.user_id, user_id), isNull(memberships.deleted_at)))
-      .orderBy(memberships.id);
+      .where(eq(memberships.user_id, user_id));
   }
 
   async listOrganizationsForUserDataExport(
@@ -236,12 +245,18 @@ export class MembershipRepository extends BaseRepository {
         after: query.after,
       });
     const rows = (await getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(memberships),
+        cursor_created_at: cursorTimestampSelection(memberships.created_at),
+      })
       .from(memberships)
       .where(and(where, cursorCondition))
       .orderBy(...orderBy)
-      .limit(query.limit + 1)) as MembershipRow[];
-    const page = finishKeysetPage(rows, { limit: query.limit, sortValueFor, filterFingerprint });
+      .limit(query.limit + 1)) as (MembershipRow & CursorTimestampRow)[];
+    const page = finishKeysetPage({
+      rows,
+      args: { limit: query.limit, sortValueFor, filterFingerprint },
+    });
     const total =
       query.withTotal && query.after === undefined
         ? await countWithCap({ database: getRequestDatabase(), table: memberships, where })
@@ -482,15 +497,15 @@ export class MembershipRepository extends BaseRepository {
    * - **Failure modes:** none beyond the underlying queries; runs inside the caller's organization
    *   DB context (RLS-scoped) and transaction.
    * - **Side effects:** writes `status = 'suspended'` (a suspended seat is not counted toward the
-   *   cap, so this lowers the org's seat usage). Returns the internal `user_id`s actually suspended
-   *   (empty when no non-owner ACTIVE members remain — e.g. an owner-only organization that can't shrink
-   *   further) so the caller can purge each suspended member's permission cache.
+   *   cap, so this lowers the org's seat usage). Returns the suspended membership rows (empty when
+   *   no non-owner ACTIVE members remain — e.g. an owner-only organization that can't shrink
+   *   further) so the caller can emit their events and purge each member's permission cache.
    */
   async suspendExcessActiveMembers(options: {
     organization_id: number;
     owner_user_id: number;
     suspend_count: number;
-  }): Promise<number[]> {
+  }): Promise<MembershipRow[]> {
     if (options.suspend_count <= 0) return [];
     const candidates = await getRequestDatabase()
       .select({ id: memberships.id, user_id: memberships.user_id })
@@ -506,7 +521,7 @@ export class MembershipRepository extends BaseRepository {
       .orderBy(desc(memberships.joined_at))
       .limit(options.suspend_count);
     if (candidates.length === 0) return [];
-    await getRequestDatabase()
+    return getRequestDatabase()
       .update(memberships)
       .set({ status: MEMBERSHIP_STATUS.SUSPENDED, updated_at: new Date() })
       .where(
@@ -514,8 +529,8 @@ export class MembershipRepository extends BaseRepository {
           memberships.id,
           candidates.map((candidate) => candidate.id),
         ),
-      );
-    return candidates.map((candidate) => candidate.user_id);
+      )
+      .returning();
   }
 
   async findByUserAndOrganization(
@@ -581,21 +596,23 @@ export class MembershipRepository extends BaseRepository {
     created_by_user_id?: number | null;
     profile?: MembershipProfileData;
   }) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('membership');
-      const row = {
-        ...(data.profile ?? {}),
-        public_id,
-        organization_id: data.organization_id,
-        user_id: data.user_id,
-        role_id: data.role_id,
-        status: data.status ?? MEMBERSHIP_STATUS.INVITED,
-        invited_by_user_id: data.invited_by_user_id ?? undefined,
-        created_by_user_id: data.created_by_user_id ?? undefined,
-        updated_by_user_id: data.created_by_user_id ?? undefined,
-      };
-      const rows = await getRequestDatabase().insert(memberships).values(row).returning();
-      return rows[0]! as MembershipRow;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const public_id = generatePublicId('membership');
+        const row = {
+          ...(data.profile ?? {}),
+          public_id,
+          organization_id: data.organization_id,
+          user_id: data.user_id,
+          role_id: data.role_id,
+          status: data.status ?? MEMBERSHIP_STATUS.INVITED,
+          invited_by_user_id: data.invited_by_user_id ?? undefined,
+          created_by_user_id: data.created_by_user_id ?? undefined,
+          updated_by_user_id: data.created_by_user_id ?? undefined,
+        };
+        const rows = await getRequestDatabase().insert(memberships).values(row).returning();
+        return rows[0]! as MembershipRow;
+      },
     });
   }
 

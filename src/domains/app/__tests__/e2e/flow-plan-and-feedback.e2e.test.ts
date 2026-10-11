@@ -36,9 +36,10 @@ describe('Flow 3 — treatment plan and feedback (launch ROUTE #150)', () => {
   /** One run of the task rules for the fixture organization, now. */
   async function runTaskRules(): Promise<void> {
     const organizationPublicId = fixture.organization.publicId;
-    await runOrganizationScopedWorkerJob({ organizationPublicId }, (databaseHandle) =>
-      runTaskRulesJob(databaseHandle, organizationPublicId),
-    );
+    await runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: (databaseHandle) => runTaskRulesJob({ databaseHandle, organizationPublicId }),
+    });
   }
 
   beforeAll(async () => {

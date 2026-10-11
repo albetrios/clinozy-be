@@ -41,10 +41,13 @@ export async function hashPassword(plaintext: string): Promise<string> {
  * Verify a password against a stored Argon2id hash.
  * Returns `needsRehash` when Argon2 parameters should be upgraded.
  */
-export async function verifyPassword(
-  plaintext: string,
-  storedHash: string,
-): Promise<{ valid: boolean; needsRehash: boolean }> {
+export async function verifyPassword({
+  plaintext,
+  storedHash,
+}: {
+  plaintext: string;
+  storedHash: string;
+}): Promise<{ valid: boolean; needsRehash: boolean }> {
   if (!storedHash.startsWith('$argon2')) {
     return { valid: false, needsRehash: false };
   }

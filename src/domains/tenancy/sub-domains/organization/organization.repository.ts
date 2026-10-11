@@ -1,30 +1,44 @@
 import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
-import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import {
+  getTableColumns,
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+  lt,
+  ne,
+} from 'drizzle-orm';
+import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
   getContextFreeDatabase,
   getRequestDatabase,
+  assertWorkerDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import { alias } from 'drizzle-orm/pg-core';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { users as authUsers } from '@/domains/user/user.schema.js';
-import { BaseRepository } from '@/infrastructure/database/base-repository.js';
-import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
-import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import {
   RESOURCE_QUOTA_LOCK_NAMESPACE,
   acquireResourceQuotaLock,
 } from '@/infrastructure/database/resource-quota-lock.util.js';
 import {
   buildAscendingCreatedAtIdCursorCondition,
-  createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 import type { Organization } from './organization.types.js';
 
 /**
- * Normalizes a `db.execute()` result into rows across drivers (postgres-js returns an array,
- * node-postgres a `{ rows }` envelope) for the SECURITY DEFINER `auth.*` resolvers.
+ * Normalizes a `db.execute()` result into rows (node-postgres returns a `{ rows }` envelope; a bare
+ * array is accepted too) for the SECURITY DEFINER `auth.*` resolvers.
  */
 function extractResolverRows<T>(result: unknown): T[] {
   return (Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? [])) as T[];
@@ -39,11 +53,10 @@ interface OrganizationListPagination {
  * Drizzle data-access for the `tenancy.organizations` table. Honours
  * soft-delete (`deleted_at IS NULL`) on every read; supports cursor-based
  * listings (global and per-user via memberships join), slug + Stripe customer
- * lookups, owner transfer, and soft-delete. Insert paths use
- * {@link runInsertWithPublicIdentifierRetry} to recover from rare public-id
- * collisions.
+ * lookups, owner transfer, and soft-delete. Organizations are inserted by
+ * `provisionOrganizationWithOwner`, in the new organization's own context.
  */
-export class OrganizationRepository extends BaseRepository {
+export class OrganizationRepository {
   /**
    * Resolve `auth.users.public_id` → internal id via the `auth.resolve_user_id_by_public_id`
    * SECURITY DEFINER resolver rather than a direct `auth.users` SELECT.
@@ -148,74 +161,80 @@ export class OrganizationRepository extends BaseRepository {
     // an unknown or soft-deleted user resolves to NULL, both comparisons below fail, and the page
     // comes back empty — the same answer the separate lookup produced with an early return.
     const userId = sql<number>`auth.resolve_user_id_by_public_id(${user_public_id})`;
-    const cursorCondition = buildAscendingCreatedAtIdCursorCondition(
-      organizations.created_at,
-      organizations.id,
-      parseListCursor(after),
-    );
-    // Perf: push the membership predicate into a subquery rather than a LEFT JOIN so the access
-    // filter references only `organizations`. That lets the partial keyset index
-    // `idx_organizations_created_id_active (created_at, id) WHERE deleted_at IS NULL` drive an
-    // index-ordered scan — a join-side predicate in the OR branch forced a join + sort over the
-    // whole organization table per page, so latency grew with total tenant count, not the user's organization count.
-    // The subquery reads `memberships` with the identical predicate, so the result set is unchanged.
+    const cursorCondition = buildAscendingCreatedAtIdCursorCondition({
+      createdAtColumn: organizations.created_at,
+      idColumn: organizations.id,
+      cursor: parseListCursor(after),
+    });
+    // Perf: the page is driven from the user's own organization ids — the ACTIVE memberships
+    // (idx_memberships_user_status) UNION the owned organizations (idx_organizations_owner) — joined
+    // to `organizations` by primary key and sorted: a few rows, whatever the tenant count. The
+    // previous `owner = $1 OR id IN (memberships)` could not become a semi-join, so the planner
+    // walked `idx_organizations_created_id_active` across EVERY organization and evaluated the RLS
+    // policy's SECURITY DEFINER function on each (2,203 rows walked, 2,197 discarded, 39.9 ms at 2.2k
+    // organizations; 1.7 ms now). The access set is unchanged.
+    const ownedOrganizations = alias(organizations, 'owned_organizations');
+    const accessibleOrganizationIds = getRequestDatabase()
+      .select({ organizationId: memberships.organization_id })
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.user_id, userId),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
+          isNull(memberships.deleted_at),
+        ),
+      )
+      .union(
+        getRequestDatabase()
+          .select({ organizationId: ownedOrganizations.id })
+          .from(ownedOrganizations)
+          .where(eq(ownedOrganizations.owner_user_id, userId)),
+      );
     const accessWhere = and(
       isNull(organizations.deleted_at),
       cursorCondition,
-      or(
-        eq(organizations.owner_user_id, userId),
-        inArray(
-          organizations.id,
-          getRequestDatabase()
-            .select({ organizationId: memberships.organization_id })
-            .from(memberships)
-            .where(
-              and(
-                eq(memberships.user_id, userId),
-                eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
-                isNull(memberships.deleted_at),
-              ),
-            ),
-        ),
-      ),
+      inArray(organizations.id, accessibleOrganizationIds),
     );
     const rows = await getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(organizations),
+        cursor_created_at: cursorTimestampSelection(organizations.created_at),
+      })
       .from(organizations)
       .where(accessWhere)
       .orderBy(asc(organizations.created_at), asc(organizations.id))
       .limit(limit + 1);
-    const hasMore = rows.length > limit;
-    const organizationsOnly = hasMore ? rows.slice(0, limit) : rows;
-    const lastItem = organizationsOnly.at(-1);
-    return {
-      items: organizationsOnly,
-      total: null,
-      limit,
-      has_more: hasMore,
-      next_cursor: hasMore && lastItem !== undefined ? createOpaqueCursorFromRow(lastItem) : null,
-    };
+    return finishKeysetPage({ rows, args: { limit } });
   }
 
   /**
    * The organization, if this user may see it — otherwise `null`.
    *
    * @remarks
-   * Returns the ROW rather than a boolean because every caller needed it next and
-   * fetched it again: `getByPublicId` ran `findByPublicId` here and then a second,
-   * identical `findByPublicId` immediately after, so the normal team-member path
-   * cost four queries to read one row. Handing the row back removes that entirely.
+   * Returns the row and checks owner/active membership in one RLS-scoped query.
+   * The explicit user predicate remains necessary when an organization-scoped
+   * caller can see the row through the tenant policy. No permission is cached.
    */
   async userCanAccessOrganization(
     user_public_id: string,
     organization_public_id: string,
   ): Promise<Organization | null> {
-    const organization = await this.findByPublicId(organization_public_id);
-    if (!organization) {
-      return null;
-    }
-    const canAccess = await this.userCanAccessLoadedOrganization(user_public_id, organization);
-    return canAccess ? organization : null;
+    const rows = await getRequestDatabase()
+      .select(getTableColumns(organizations))
+      .from(organizations)
+      .innerJoin(authUsers, eq(authUsers.public_id, user_public_id))
+      .where(
+        and(
+          eq(organizations.public_id, organization_public_id),
+          isNull(organizations.deleted_at),
+          or(
+            and(eq(organizations.owner_user_id, authUsers.id), isNull(authUsers.deleted_at)),
+            sql`EXISTS (SELECT 1 FROM ${memberships} WHERE ${memberships.organization_id} = ${organizations.id} AND ${memberships.user_id} = ${authUsers.id} AND ${memberships.status} = ${MEMBERSHIP_STATUS.ACTIVE} AND ${memberships.deleted_at} IS NULL)`,
+          ),
+        ),
+      )
+      .limit(1);
+    return (rows[0] ?? null) as Organization | null;
   }
 
   /**
@@ -408,31 +427,6 @@ export class OrganizationRepository extends BaseRepository {
     return rows[0] ?? null;
   }
 
-  async create(data: {
-    name: string;
-    /** Null for a personal organization (no human handle); kebab string for a team. */
-    slug: string | null;
-    /** `PERSONAL` or `TEAM` (defaults to `TEAM` for the public create endpoint). */
-    type?: string;
-    owner_user_id: number;
-    created_by_user_id: number | null;
-  }) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('organization');
-      const row = {
-        public_id,
-        name: data.name,
-        slug: data.slug,
-        type: data.type ?? 'TEAM',
-        owner_user_id: data.owner_user_id,
-        created_by_user_id: data.created_by_user_id ?? undefined,
-        updated_by_user_id: data.created_by_user_id ?? undefined,
-      };
-      const rows = await getRequestDatabase().insert(organizations).values(row).returning();
-      return rows[0]! as Organization;
-    });
-  }
-
   async update(
     public_id: string,
     data: {
@@ -515,7 +509,10 @@ export class OrganizationRepository extends BaseRepository {
    * create transaction before {@link countActiveOwnedByUser}.
    */
   async acquireOwnedOrganizationQuotaLock(owner_user_id: number): Promise<void> {
-    await acquireResourceQuotaLock(RESOURCE_QUOTA_LOCK_NAMESPACE.OWNED_ORGANIZATION, owner_user_id);
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.OWNED_ORGANIZATION,
+      key: owner_user_id,
+    });
   }
 
   async updateStripeCustomerId(
@@ -573,4 +570,27 @@ export class OrganizationRepository extends BaseRepository {
       .returning();
     return (rows[0] ?? null) as Organization | null;
   }
+}
+
+/**
+ * TEAM organizations whose offboarding started before `startedBefore` and never finished (a crash
+ * mid-teardown) — the offboarding reconcile's read, across tenants (retention maintenance context).
+ */
+export async function findOrganizationsStuckInOffboarding(
+  databaseHandle: WorkerDatabaseHandle,
+  options: { startedBefore: Date; limit: number },
+): Promise<Array<{ public_id: string }>> {
+  assertWorkerDatabaseContext(['global_retention_cleanup']);
+  return databaseHandle
+    .select({ public_id: organizations.public_id })
+    .from(organizations)
+    .where(
+      and(
+        isNotNull(organizations.deletion_started_at),
+        isNull(organizations.deleted_at),
+        lt(organizations.deletion_started_at, options.startedBefore),
+        ne(organizations.type, 'PERSONAL'),
+      ),
+    )
+    .limit(options.limit);
 }

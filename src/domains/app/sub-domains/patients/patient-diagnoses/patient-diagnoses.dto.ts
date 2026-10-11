@@ -18,14 +18,14 @@ export const patientDiagnosesIdParamsDto = z
 /** Body of `POST /app/patient-diagnoses` (routes-final 7.E.8 #28): the `name` (1–120). */
 export const CreatePatientDiagnosisDto = z
   .object({
-    name: trimmedStringMinMax(1, PATIENT_DIAGNOSIS_NAME_MAX),
+    name: trimmedStringMinMax({ min: 1, max: PATIENT_DIAGNOSIS_NAME_MAX }),
   })
   .strict();
 
 /** Body of `PATCH /app/patient-diagnoses/{patient_diagnosis_id}` (7.E.8 #30): a new `name`; `expected_updated_at` refuses a stale save (D43). */
 export const UpdatePatientDiagnosisDto = z
   .object({
-    name: trimmedStringMinMax(1, PATIENT_DIAGNOSIS_NAME_MAX),
+    name: trimmedStringMinMax({ min: 1, max: PATIENT_DIAGNOSIS_NAME_MAX }),
     expected_updated_at: expectedUpdatedAtSchema,
   })
   .strict();

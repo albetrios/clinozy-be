@@ -14,15 +14,15 @@ export function createTaskRuleSettingsController(service: TaskRuleSettingsServic
   return {
     listRules: async (request: FastifyRequest, _reply: FastifyReply) => {
       const data = await service.listRules(requireOrganizationScope(request));
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     replaceRules: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const data = await service.replaceRules(
-        requireOrganizationScope(request),
-        request.body,
-        getActingUserPublicId(requirePrincipal(request)),
-      );
-      return successResponse(data, getRequestIdentifier(request));
+      const data = await service.replaceRules({
+        scope: requireOrganizationScope(request),
+        body: request.body,
+        actingUserPublicId: getActingUserPublicId(requirePrincipal(request)),
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

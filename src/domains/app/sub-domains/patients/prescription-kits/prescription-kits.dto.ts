@@ -22,7 +22,7 @@ export const prescriptionKitsIdParamsDto = z
  */
 export const CreatePrescriptionKitDto = z
   .object({
-    name: trimmedStringMinMax(1, PRESCRIPTION_KIT_NAME_MAX),
+    name: trimmedStringMinMax({ min: 1, max: PRESCRIPTION_KIT_NAME_MAX }),
     items: patientPrescriptionItemsSchema,
   })
   .strict();
@@ -30,7 +30,7 @@ export const CreatePrescriptionKitDto = z
 /** Body of `PATCH /app/prescription-kits/{prescription_kit_id}` (7.D.8 #24): any of `name`, `items` (at least one); `expected_updated_at` refuses a stale save (D43). */
 export const UpdatePrescriptionKitDto = z
   .object({
-    name: trimmedStringMinMax(1, PRESCRIPTION_KIT_NAME_MAX).optional(),
+    name: trimmedStringMinMax({ min: 1, max: PRESCRIPTION_KIT_NAME_MAX }).optional(),
     items: patientPrescriptionItemsSchema.optional(),
     expected_updated_at: expectedUpdatedAtSchema,
   })

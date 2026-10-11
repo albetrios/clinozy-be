@@ -20,7 +20,7 @@ flowchart TB
     Bench[pnpm test:bench]
   end
 
-  subgraph full [Full confidence]
+  subgraph full [Scoped stress checks]
     Stress[pnpm load:stress]
     StressAPI[pnpm load:stress:api]
   end
@@ -30,9 +30,36 @@ flowchart TB
   full --> Scenarios[Scenarios: health, auth, daily-ops, billing, webhooks, admin]
 ```
 
-Prerequisites → Quick (health, bench) vs Full confidence (stress, stress:api) → Scenarios.
+Prerequisites → Quick (health, bench) vs Scoped stress checks (stress, stress:api) → Scenarios.
 
 ---
+
+## Route coverage and test intent
+
+Count distinct **method + route template** pairs actually requested, and compare API pairs with the current [route catalogue](../../routes.txt). Scenario files and optional branches are potential coverage; they are not executed coverage. `api-stress.js` exercises five reads, `rls-concurrency-beyond-pool.js` exercises one of those membership reads, and `session-refresh-journey.js` adds login, refresh, and logout. Increasing VUs does not increase route coverage or the number of identities.
+
+`pnpm load:read-surface` adds 24 nondestructive GET routes across auth, user, tenancy, billing, and notify. Supply `TEST_TOKEN` scoped to `TEST_ORG_ID`; setup verifies a TEAM tenant and the required permissions. Defaults are 10 concurrent clients and 20 complete journeys (`VUS` / `ITERATIONS`). Every route must execute, return HTTP 200, and pass its basic response-shape checks. This is functional read load, not full business-invariant or production capacity certification. It excludes destructive writes, admin routes, resource details, and live Stripe/S3 calls.
+
+Load scenarios must fail on missing prerequisites and gate semantic checks as well as HTTP/latency metrics. API/RLS stress now require credentials and request counts; membership denial cannot pass as an authorized success. The session journey preserves the current rotated cookies before logout, replays them with valid CSRF, and requires 401 for both refresh and bearer access. Clearing the client cookie or receiving 403/429 does not prove server revocation.
+
+Report separately: executed route coverage, concurrency profile, fixture/identity/tenant counts, status distribution, semantic check results, latency percentiles, and exclusions. An all-green run means no failures in those checks; it does not imply an error-free backend.
+
+## Lifecycle journeys
+
+`auth-security-lifecycle.js` runs in the nightly strict step against the running API on the
+seeded credential pool (`VUS=4`, `ITERATIONS=5`: 20 distinct users). Each journey revokes
+sessions, links and removes a sign-in method, changes and restores the password, enrolls real
+TOTP MFA, verifies and replays codes, consumes a recovery code and removes MFA, so every pool
+user ends as it started. It requires 100% checks, zero unexpected HTTP failures, zero dropped
+iterations and exactly 20 completed journeys.
+
+The account, tenant, upload, passkey, billing-provider and webhook-delivery journeys are
+covered by the Vitest lanes (the same assertions, in-process, with the existing factories and
+mocks): `src/domains/auth/__tests__/` (password, MFA, email-code, reset, CSRF and real P-256
+passkey ceremonies via `src/tests/helpers/webauthn-authenticator.helper.ts`),
+`membership.integration.test.ts`, `upload.integration.test.ts`, `user-admin.integration.test.ts`,
+`notify.test.ts`, `billing-subscription-mutations.integration.test.ts`, and the Stripe contract
+tests under `src/tests/contract/`.
 
 ## Nightly CI gate (GitHub Actions)
 
@@ -45,7 +72,8 @@ The service containers are plaintext and the connection is the superuser, while 
 | Role                 | Scenarios                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Job outcome                                                          |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | **Gate (must pass)** | `health-stress.js`, `api-stress.js`, `login-smoke.js`, `permission-cached.js`, `stripe-webhook-ingest.js`, `idempotency-storm.js`                                                                                                                                                                                                                                                                                                                                                                                        | Workflow **fails** if any k6 threshold fails                         |
-| **Informational**    | `auth-onboarding.js`, `passwordless-signup.js`, `daily-ops.js`, `billing.js`, `webhooks.js`, `admin.js`; the organization-scoped set (`audit-list.js`, `organization-membership-list.js`, `notification-policy-crud.js`, `billing-subscriptions-rls.js`, `user-data-export.js`, `rls-concurrency-beyond-pool.js`); and the organization writes (`member-role-permission-list.js`, `permission-write.js`, `tenancy-role-write.js`, `organization-settings-write.js`, `notification-write.js`, `organization-api-key-lifecycle.js`); and `fe-full-surface.js`, every call clinozy-fe makes, walked once by each of 20 pool users (the job seeds the pool with `pnpm db:seed:loadtest` and starts the API with `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED=true`) | `continue-on-error`; failures do not fail the workflow by themselves |
+| **Informational**    | `auth-onboarding.js`, `passwordless-signup.js`, `daily-ops.js`, `webhooks.js`, `admin.js`; the organization-scoped set (`audit-list.js`, `organization-membership-list.js`, `notification-policy-crud.js`, `billing-subscriptions-rls.js`, `user-data-export.js`, `rls-concurrency-beyond-pool.js`); and the organization writes (`member-role-permission-list.js`, `permission-write.js`, `tenancy-role-write.js`, `organization-settings-write.js`, `organization-api-key-lifecycle.js`); and `fe-full-surface.js`, every call clinozy-fe makes, walked once by each of 20 pool users (the job seeds the pool with `pnpm db:seed:loadtest` and starts the API with `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED=true`) | `continue-on-error`; failures do not fail the workflow by themselves |
+| **Strict (must pass)** | On the seeded pool: `multi-tenant-membership-read.js`, `notification-write.js`, `auth-security-lifecycle.js`; then `tenancy-role-write.js`, `organization-api-key-lifecycle.js`, `notification-policy-crud.js`, `organization-settings-write.js`, `webhooks.js` and `billing.js` as completed-journey gates | Workflow **fails** if any check, completion count or threshold fails |
 
 **SLO-style thresholds (k6):** Scenarios define `http_req_duration` percentiles on tagged requests and `http_req_failed` (see each file under `src/tests/load/k6/scenarios/`). A `{name:<tag>}` threshold only measures requests sent with exactly that `name` tag; on a tag no request carries it has no samples, reports p(95)=0s and always passes, so `k6-coverage.policy.unit.test.ts` fails on any threshold its scenario never tags. The gate enforces:
 
@@ -56,13 +84,13 @@ Artifacts (`k6-*.json` summaries and `server.log`) are uploaded for 14 days. Opt
 
 **Writes, paced.** Every organization write route carries a 100-per-minute cap per (organization, actor) that `RATE_LIMIT_RELAXED_CAPS` does not lift, and a k6 run is one actor (the demo user). The write scenarios therefore use the `pacedWrites` profile in `helpers/config.js` (one iteration per second) rather than 10 closed-loop VUs, which measured the rate limiter (429) instead of the route. Writes take their `X-Idempotency-Key` from `idempotencyKey()` in `helpers/idempotency.js`: the API requires 16–255 characters, and a timestamp keeps a key from replaying an earlier run.
 
-**Route coverage.** `pnpm load:coverage` matches every request the scenario files make — method and path — against `docs/routes.txt`; `pnpm load:coverage --nightly` counts only the files this workflow runs. It skips ROLE and TOKEN routes and public infrastructure routes (OAuth, email sign-in, WebAuthn, the Stripe webhook, health). The nightly count is a ratchet: `tooling/ci/load-coverage-budget.json` records it, and `k6-coverage.policy.unit.test.ts` fails when the nightly load-tests fewer routes — raise the budget when a change adds coverage. Left out on purpose: `POST /notify/webhooks/:webhook_id/test` (it calls the webhook URL live), routes that end the account or the membership (`DELETE /users/me`, organization leave and ownership transfer), and S3- or Stripe-backed writes this job has no backend for.
+**Route coverage.** `pnpm load:coverage` matches every request the scenario files make — method and path — against `docs/routes.txt`; `pnpm load:coverage --nightly` counts only the files this workflow runs. It skips ROLE and TOKEN routes and public infrastructure routes (OAuth, email sign-in, WebAuthn, the Stripe webhook, health). The nightly count is a ratchet: `tooling/ci/load-coverage-budget.json` records it, and `k6-coverage.policy.unit.test.ts` fails when the nightly load-tests fewer routes — raise the budget when a change adds coverage. The nightly workflow references 78 eligible catalog routes; this static inventory does not prove every route passed at runtime. Stripe-backed writes, signed outbound webhook delivery, account deletion, organization leave/ownership transfer and S3 transport writes are covered by the Vitest lanes (see [Lifecycle journeys](#lifecycle-journeys)), not by load.
 
 **Reproduce locally:** `pnpm compose:up`, `pnpm db:migrate`, `pnpm setup:local --only-env`, `DEMO_PASSWORD=DemoPassword123! pnpm db:seed:full`, `pnpm dev:loadtest`, then `pnpm tool:load-test-credentials`, export `TEST_TOKEN` / `TEST_ORG_ID`, and run `pnpm load:stress` and `pnpm load:stress:api` (same thresholds as CI).
 
 ---
 
-## Full confidence (recommended)
+## Scoped load coverage
 
 To gain confidence in the **whole system** (not just health endpoints), run both infrastructure stress and API stress:
 
@@ -84,7 +112,7 @@ To gain confidence in the **whole system** (not just health endpoints), run both
 3. **Optional — auth flow**: `pnpm load:auth`
    - Stresses login + profile + list organizations (ramping load profile; see thresholds in `src/tests/load/k6/scenarios/auth-onboarding.js`).
 
-If **load:stress** and **load:stress:api** both pass, the system is under load-tested for both infra and main API paths.
+Passing these scenarios establishes their named health and API checks, not capacity or correctness across every API route.
 
 ### Failure rate and how to handle it
 
@@ -225,7 +253,8 @@ every route is the signature that you measured the machine instead of the code.
 | Metric | What it tells you |
 | --- | --- |
 | Per-route p95 | The user-visible effect. Read this **before** the aggregate — a change to three routes barely moves a mix of sixteen. |
-| `db_pool_connections{state="waiting"}` | Requests queued for a connection. This is the ceiling a transaction-count change is aimed at. |
+| `postgres_pool_waiting{pool="primary"}` | Units of work queued for a pooled connection. This is the ceiling a transaction-count change is aimed at. |
+| `postgres_pool_connections{state="in_use"}` | Connections the process holds now, against `postgres_pool_max_connections`. |
 | `database_rls_active_checkouts` | Should fall if contexts were folded. |
 | `database_rls_checkout_hold_seconds` | How long each checkout pins its connection. |
 | `read_cache_requests_total{cache,result}` | The hit ratio, per cache. |
@@ -283,7 +312,7 @@ The same signals are observable live via `GET /readyz` (verbose), `GET /metrics`
 - **Env**: Optional `BASE_URL` (default `http://localhost:3000`)
 - **Run**: `pnpm load:health` or `k6 run src/tests/load/k6/scenarios/health.js`
 
-### 2. API stress (full confidence)
+### 2. API stress (five-route coverage)
 
 - **File**: `src/tests/load/k6/scenarios/api-stress.js`
 - **Auth**: Bearer token (TEST_TOKEN) + TEST_ORG_ID for memberships
@@ -387,8 +416,8 @@ call `switchToOrganization` / `loginScopedToOrganization`), not to build the pat
 | `member-role-permission-list.js` | `TEST_TOKEN`, `TEST_ORG_ID`, `TEST_ROLE_ID` | `GET /api/v1/tenancy/organization/roles/:role_id/permissions` |
 | `notification-policy-crud.js` | `TEST_TOKEN`, `TEST_ORG_ID` | `GET /api/v1/tenancy/organization/notification-policies` |
 | `billing-subscriptions-rls.js` | `TEST_TOKEN`, `TEST_ORG_ID`, optional `TEST_SUBSCRIPTION_ID` | `GET /api/v1/billing/subscriptions` |
-| `upload-list.js` | `TEST_TOKEN`, optional `TEST_UPLOAD_PUBLIC_ID` | `GET /api/v1/uploads/:id` |
-| `user-data-export.js` | `TEST_TOKEN` | `POST /api/v1/users/me/data-export` |
+| `upload-list.js` | `TEST_TOKEN`, `TEST_UPLOAD_PUBLIC_ID` (without it the scenario sends nothing) | `GET /api/v1/uploads/:id` |
+| `user-data-export.js` | `TEST_TOKEN`, `DEMO_PASSWORD` (the token user's, for the step-up) | once: `POST /api/v1/auth/step-up`, `POST /api/v1/users/me/data-export`; under load: `GET /api/v1/users/me/data-export/:data_export_id` |
 
 CI runs a subset in the **organization-scoped routes** job step (see `scheduled-k6-load-slo.yml`).
 
@@ -411,3 +440,109 @@ CI runs a subset in the **organization-scoped routes** job step (see `scheduled-
 ## Optional env (all scenarios)
 
 - `BASE_URL`: API base URL (default `http://localhost:3000`). k6 reads this as `__ENV.BASE_URL`.
+
+### Strict lifecycle and distinct-user validation
+
+`tenancy-role-write.js` requires scoped `TEST_TOKEN` and `TEST_ORG_ID`. Each
+journey sends concurrent duplicate creates, requires one persisted role and the
+same replay id, reads back updates and exact permissions, then deletes and
+checks absence. `organization-api-key-lifecycle.js` checks persisted renaming,
+secret omission from detail responses, fresh rotation secrets, new-key authentication, old/deleted-key rejection,
+read-only scope enforcement, and deletion.
+Both enforce 100% checks, a completed-journey minimum (`MIN_COMPLETED`, default 1),
+and zero dropped iterations. `DURATION` overrides the default two-minute run.
+These scenarios share one actor; their VUs are concurrent clients, not distinct users.
+
+`multi-tenant-membership-read.js` uses the generated credential pool and runs two
+journeys per distinct user (`VUS`, default 20). It verifies user/tenant binding,
+two nonempty disjoint cursor pages belonging to that tenant, and member detail and resolved permissions, and a foreign
+membership returning 404. Setup requires at least two tenants and fails on an
+undersized pool. The pool generator chooses one deterministic membership per
+user; the reader rejects duplicate identities and incomplete credentials.
+Use a separate seeded database and Redis namespace. Generated credentials and
+raw response secrets must never be committed. Successful assertions do not
+establish production capacity; dataset size, API pool size, user count, tenant
+count, and latency threshold results must accompany every report.
+
+Example (from the repository root, with the API using the same isolated database):
+
+```sh
+VUS=20 BASE_URL=http://localhost:3002 k6 run src/tests/load/k6/scenarios/multi-tenant-membership-read.js
+DURATION=20s MIN_COMPLETED=20 k6 run src/tests/load/k6/scenarios/tenancy-role-write.js
+```
+
+For 240-user capacity investigations, record the admission ceiling as
+`ceil(DATABASE_POOL_MAX × OVERLOAD_DB_POOL_SHED_RATIO)`: this counts running and
+waiting database work, rather than database connections alone. A run that sheds
+with `database_pool_wait_overload` had a connection waiter older than
+`OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS` (2 s) — the pool was not draining, which is
+the database's latency, not the burst's size.
+The defaults (pool 30, ratio 10) admit 300 units, and the API opens its pool before
+listening, so a freshly started process takes a synchronized 240-user burst
+without shedding or paying connection handshakes under load. The bulk seed gives every
+seeded user the personal organization signup provisions, so a user's first
+`GET /users/me` measures a read, not the on-demand self-heal that would otherwise write
+one under the burst.
+
+On macOS the kernel caps a listener's accept queue at `kern.ipc.somaxconn` (128 by
+default), so a burst of more than 128 simultaneous TCP connects to one fresh process
+can be refused with `connection reset by peer` before the API sees it. Linux defaults
+to 4096. For a local 240-user burst, raise it until reboot first:
+`sudo sysctl -w kern.ipc.somaxconn=1024`.
+
+A 240-user burst needs at least 240 distinct pool users: seed them with
+`BULK_ORGS=200 BULK_USERS_PER_ORG=10 pnpm db:seed:bulk` followed by
+`pnpm tool:load-test-credential-pool` (the pool excludes members of organizations
+that require MFA). Fresh-process runs used to fail the 500 ms cold p95 gate because
+the first request of each journey, `GET /users/me`, self-healed a missing personal
+organization for every bulk-seeded user (p95 1,157 ms on that request alone). With the
+seed provisioning it and the pool primed, three consecutive fresh-process bursts of
+240 users on the defaults passed every gate locally on an idle host: cold p95
+226 / 379 / 268 ms, p99 488 / 668 / 452 ms; warm p95 161 / 156 / 158 ms; zero errors,
+resets or sheds. The
+cold gate is sensitive to the host: on a busy laptop (load average 4–7 from other
+applications) the same build swung between 279 and 976 ms cold p95 across back-to-back
+runs, still with zero errors — run it on an otherwise idle machine, and compare builds
+by alternating them. Keep cold-process and warm-process results separate; do not
+prewarm a benchmark, dilute cold samples, or relax thresholds to claim a fix.
+Keep the monolithic worker's independently budgeted pool (60 in `.env.example`);
+do not apply the API's smaller pool to that worker.
+
+Queue recovery and future clinic workflows require additional controlled fixtures.
+
+The nightly workflow runs the strict notification and tenant journeys after
+bulk seeding and before front-end scenarios consume those fixtures. Notification
+writes require seeded unread rows for every selected user, assert a one-item
+unread-count decrement, mark all read, verify zero, and delete an owned item.
+Policy and webhook CRUD require completed lifecycles and persisted updates;
+policy conflicts fail instead of skipping work. Settings/profile toggles use one writer,
+check independent readback, and restore settings, profile fields, organization
+name, and the complete notification-preference set. Billing reads
+require nonempty plan/subscription fixtures and matching tenant-scoped details.
+Billing uses two ordinary bulk-seeded tenants and proves foreign subscription
+access returns 404. It does not send fake seed customer IDs to live payment
+providers; invoice and payment-method mapping is pinned by the Stripe contract tests.
+These strict steps fail the job; earlier informational scenarios retain their
+separate purpose. The idempotency storm reuses the strict role journey instead
+of treating billing validation rejections as successful idempotency coverage.
+
+Webhook CRUD never invokes test delivery. `WEBHOOK_TEST_BASE_URL` can select a
+public numeric HTTPS fixture to isolate backend latency from external hostname
+DNS latency; the default remains `https://example.com`. SSRF checks still apply.
+Hostname DNS behavior and public-network delivery still need separate measurements.
+Signed test delivery and its persisted attempts are covered by `notify.test.ts`.
+
+Timestamp keysets select `cursor_created_at` using
+`cursorTimestampSelection(created_at)` and pass it through cursor creation.
+It preserves PostgreSQL microseconds in the encrypted cursor; API serializers
+omit this internal field. Ordering and predicates still use the original indexed
+timestamp column and id tie-breaker. Cursor comparison does not look up the
+boundary row, so deletion between pages does not change its sort position.
+
+## Sustained distinct-user validation
+
+Set `VUS` to the number of distinct credential-pool users. Set `DURATION=10m` for `multi-tenant-membership-read.js` to run sustained journeys instead of two iterations per user. The scenario requires every check to pass, zero unexpected HTTP failures, zero dropped iterations, and p95 below 500 ms / p99 below 1000 ms. It verifies tenant scope, pagination, permissions and foreign-tenant denial. The sustained run requires every configured distinct user to finish their first complete journey (`tenant_read_distinct_users_completed == VUS`), as well as the total completion gate. Setup rejects duplicate user identities. Short bursts and sustained runs are separate results; a passing soak does not waive a failed burst or certify different pool/admission settings.
+
+Measure RSS and file descriptors for the actual API process, after warm-up. The existing memory-soak helper measures its orchestration process and is insufficient evidence of API memory stability. Raising overload admission can remove 503 responses while increasing latency; retain the latency thresholds and report both outcomes.
+
+For managed HTTP proxies on Node 24, start the API with `NODE_USE_ENV_PROXY=1` and retain loopback addresses in `NO_PROXY`. The Stripe production SDK uses the platform HTTPS agent so these proxy settings apply; retain platform CA trust.

@@ -16,17 +16,17 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses an order create body; throws `ValidationError` naming each bad field. */
 export function validateCreateMedicalPurchaseOrder(data: unknown): CreateMedicalPurchaseOrderInput {
-  return parseWithSchema(CreateMedicalPurchaseOrderDto, data);
+  return parseWithSchema({ schema: CreateMedicalPurchaseOrderDto, data });
 }
 
 /** Parses an order change body; throws `ValidationError` naming each bad field. */
 export function validateUpdateMedicalPurchaseOrder(data: unknown): UpdateMedicalPurchaseOrderInput {
-  return parseWithSchema(UpdateMedicalPurchaseOrderDto, data);
+  return parseWithSchema({ schema: UpdateMedicalPurchaseOrderDto, data });
 }
 
 /** Parses the Purchases tab's (and CSV's) query into a list input (routes-final 11.E.8 #25). */
 export function validateListMedicalPurchaseOrdersQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listMedicalPurchaseOrdersQueryDto, data);
+  const query = parseWithSchema({ schema: listMedicalPurchaseOrdersQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

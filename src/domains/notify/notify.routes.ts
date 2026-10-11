@@ -9,5 +9,10 @@ import { webhookRoutes } from './sub-domains/webhook/webhook.routes.js';
 export const notifyRoutesPlugin: FastifyPluginAsync = async (app) => {
   const { notifyDomain } = app;
   await app.register(notificationRoutes(notifyDomain.notificationService));
-  await app.register(webhookRoutes(notifyDomain.webhookService, notifyDomain.webhookEventService));
+  await app.register(
+    webhookRoutes({
+      webhookService: notifyDomain.webhookService,
+      webhookEventService: notifyDomain.webhookEventService,
+    }),
+  );
 };

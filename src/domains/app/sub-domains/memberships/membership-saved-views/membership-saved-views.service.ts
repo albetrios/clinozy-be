@@ -70,16 +70,23 @@ export class MembershipSavedViewsService {
    * - **Algorithm:** keyset page over the caller's rows; the capped total on the first page.
    * - **Failure modes:** `ValidationError` for a bad query.
    */
-  async list(
-    scope: OrganizationPrincipalDatabaseScope,
-    query: unknown,
-    actingUserPublicId: string | undefined,
-  ): Promise<MembershipSavedViewsListResult> {
+  async list({
+    scope,
+    query,
+    actingUserPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    query: unknown;
+    actingUserPublicId: string | undefined;
+  }): Promise<MembershipSavedViewsListResult> {
     const parsed = validateListMembershipSavedViewsQuery(query);
-    return withAppDatabaseContext(scope, async () => {
-      const caller = await this.requireCaller(scope, actingUserPublicId);
-      const page = await this.repository.list(caller.membershipId, parsed);
-      return { ...page, items: page.items.map(serializeMembershipSavedView) };
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const caller = await this.requireCaller({ scope, actingUserPublicId });
+        const page = await this.repository.list(caller.membershipId, parsed);
+        return { ...page, items: page.items.map(serializeMembershipSavedView) };
+      },
     });
   }
 
@@ -90,14 +97,23 @@ export class MembershipSavedViewsService {
    * - **Algorithm:** a read by public id within the caller's rows.
    * - **Failure modes:** `NotFoundError('Saved view')` when it is not theirs.
    */
-  async get(
-    scope: OrganizationPrincipalDatabaseScope,
-    savedViewPublicId: string,
-    actingUserPublicId: string | undefined,
-  ): Promise<MembershipSavedViewOutput> {
-    return withAppDatabaseContext(scope, async () => {
-      const caller = await this.requireCaller(scope, actingUserPublicId);
-      return serializeMembershipSavedView(await this.requireOwnView(caller, savedViewPublicId));
+  async get({
+    scope,
+    savedViewPublicId,
+    actingUserPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    savedViewPublicId: string;
+    actingUserPublicId: string | undefined;
+  }): Promise<MembershipSavedViewOutput> {
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const caller = await this.requireCaller({ scope, actingUserPublicId });
+        return serializeMembershipSavedView(
+          await this.requireOwnView({ caller, savedViewPublicId }),
+        );
+      },
     });
   }
 
@@ -109,34 +125,41 @@ export class MembershipSavedViewsService {
    *   insert.
    * - **Failure modes:** `ValidationError`; `ConflictError` `view_limit` and `view_exists`.
    */
-  async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-  ): Promise<MembershipSavedViewOutput> {
+  async create({
+    scope,
+    body,
+    actingUserPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+  }): Promise<MembershipSavedViewOutput> {
     const parsed = validateCreateMembershipSavedView(body);
     assertSavedViewFiltersTaken({ listKey: parsed.list_key, filters: parsed.filters });
-    return withAppDatabaseContext(scope, async () => {
-      const caller = await this.requireCaller(scope, actingUserPublicId);
-      await this.repository.acquireListLock(caller.membershipId, parsed.list_key);
-      const onList = await this.repository.countForList(caller.membershipId, parsed.list_key);
-      if (onList >= MEMBERSHIP_SAVED_VIEWS_PER_LIST_MAX) {
-        throw new ConflictError('errors:savedViewLimit', {
-          max: MEMBERSHIP_SAVED_VIEWS_PER_LIST_MAX,
-        }).withReason('view_limit');
-      }
-      const row = await this.withLabelConflict(() =>
-        this.repository.create({
-          organization_id: caller.organizationId,
-          membership_id: caller.membershipId,
-          list_key: parsed.list_key,
-          label: parsed.label,
-          filters: parsed.filters,
-          hidden_columns: parsed.hidden_columns ?? [],
-          user_id: caller.userId,
-        }),
-      );
-      return serializeMembershipSavedView(row);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const caller = await this.requireCaller({ scope, actingUserPublicId });
+        await this.repository.acquireListLock(caller.membershipId, parsed.list_key);
+        const onList = await this.repository.countForList(caller.membershipId, parsed.list_key);
+        if (onList >= MEMBERSHIP_SAVED_VIEWS_PER_LIST_MAX) {
+          throw new ConflictError('errors:savedViewLimit', {
+            max: MEMBERSHIP_SAVED_VIEWS_PER_LIST_MAX,
+          }).withReason('view_limit');
+        }
+        const row = await this.withLabelConflict(() =>
+          this.repository.create({
+            organization_id: caller.organizationId,
+            membership_id: caller.membershipId,
+            list_key: parsed.list_key,
+            label: parsed.label,
+            filters: parsed.filters,
+            hidden_columns: parsed.hidden_columns ?? [],
+            user_id: caller.userId,
+          }),
+        );
+        return serializeMembershipSavedView(row);
+      },
     });
   }
 
@@ -148,37 +171,45 @@ export class MembershipSavedViewsService {
    *   against the view's list; update.
    * - **Failure modes:** `ValidationError`; `ConflictError` `view_exists` and `record_changed`.
    */
-  async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    savedViewPublicId: string,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-  ): Promise<MembershipSavedViewOutput> {
+  async update({
+    scope,
+    savedViewPublicId,
+    body,
+    actingUserPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    savedViewPublicId: string;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+  }): Promise<MembershipSavedViewOutput> {
     const parsed = validateUpdateMembershipSavedView(body);
-    return withAppDatabaseContext(scope, async () => {
-      const caller = await this.requireCaller(scope, actingUserPublicId);
-      const existing = await this.requireOwnView(caller, savedViewPublicId);
-      await assertRecordNotChangedSince({
-        row: existing,
-        expected: parsed.expected_updated_at,
-        resolveUserPublicId: (userInternalId) =>
-          this.organizationService.resolveUserPublicIdByInternalId(userInternalId),
-      });
-      if (parsed.filters !== undefined) {
-        assertSavedViewFiltersTaken({
-          listKey: existing.list_key as MembershipSavedViewListKey,
-          filters: parsed.filters,
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const caller = await this.requireCaller({ scope, actingUserPublicId });
+        const existing = await this.requireOwnView({ caller, savedViewPublicId });
+        await assertRecordNotChangedSince({
+          row: existing,
+          expected: parsed.expected_updated_at,
+          resolveUserPublicId: (userInternalId) =>
+            this.organizationService.resolveUserPublicIdByInternalId(userInternalId),
         });
-      }
-      const fields: MembershipSavedViewFields = {
-        ...(parsed.label === undefined ? {} : { label: parsed.label }),
-        ...(parsed.filters === undefined ? {} : { filters: parsed.filters }),
-        ...(parsed.hidden_columns === undefined ? {} : { hidden_columns: parsed.hidden_columns }),
-      };
-      const row = await this.withLabelConflict(() =>
-        this.repository.update({ id: existing.id, fields, user_id: caller.userId }),
-      );
-      return serializeMembershipSavedView(row);
+        if (parsed.filters !== undefined) {
+          assertSavedViewFiltersTaken({
+            listKey: existing.list_key as MembershipSavedViewListKey,
+            filters: parsed.filters,
+          });
+        }
+        const fields: MembershipSavedViewFields = {
+          ...(parsed.label === undefined ? {} : { label: parsed.label }),
+          ...(parsed.filters === undefined ? {} : { filters: parsed.filters }),
+          ...(parsed.hidden_columns === undefined ? {} : { hidden_columns: parsed.hidden_columns }),
+        };
+        const row = await this.withLabelConflict(() =>
+          this.repository.update({ id: existing.id, fields, user_id: caller.userId }),
+        );
+        return serializeMembershipSavedView(row);
+      },
     });
   }
 
@@ -189,22 +220,32 @@ export class MembershipSavedViewsService {
    * - **Algorithm:** the caller's row (404 otherwise), then a hard delete.
    * - **Failure modes:** `NotFoundError('Saved view')`.
    */
-  async remove(
-    scope: OrganizationPrincipalDatabaseScope,
-    savedViewPublicId: string,
-    actingUserPublicId: string | undefined,
-  ): Promise<void> {
-    await withAppDatabaseContext(scope, async () => {
-      const caller = await this.requireCaller(scope, actingUserPublicId);
-      const existing = await this.requireOwnView(caller, savedViewPublicId);
-      await this.repository.delete(existing.id);
+  async remove({
+    scope,
+    savedViewPublicId,
+    actingUserPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    savedViewPublicId: string;
+    actingUserPublicId: string | undefined;
+  }): Promise<void> {
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const caller = await this.requireCaller({ scope, actingUserPublicId });
+        const existing = await this.requireOwnView({ caller, savedViewPublicId });
+        await this.repository.delete(existing.id);
+      },
     });
   }
 
-  private requireCaller(
-    scope: OrganizationPrincipalDatabaseScope,
-    actingUserPublicId: string | undefined,
-  ): Promise<CallerMembership> {
+  private requireCaller({
+    scope,
+    actingUserPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    actingUserPublicId: string | undefined;
+  }): Promise<CallerMembership> {
     return requireCallerMembership({
       organizationService: this.organizationService,
       scope,
@@ -212,7 +253,13 @@ export class MembershipSavedViewsService {
     });
   }
 
-  private async requireOwnView(caller: CallerMembership, savedViewPublicId: string) {
+  private async requireOwnView({
+    caller,
+    savedViewPublicId,
+  }: {
+    caller: CallerMembership;
+    savedViewPublicId: string;
+  }) {
     const row = await this.repository.findByPublicId(caller.membershipId, savedViewPublicId);
     if (!row) throw new NotFoundError('Saved view');
     return row;

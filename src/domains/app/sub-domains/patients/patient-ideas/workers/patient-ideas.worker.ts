@@ -41,11 +41,11 @@ export function createPatientIdeasWorker(): WorkerHandle {
         job,
         queueName: PATIENT_IDEAS_QUEUE_NAME,
       });
-      return runWithPropagatedTraceContext(
-        { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
-        job.name,
-        () => runPatientIdeasJob(jobData.organizationPublicId),
-      );
+      return runWithPropagatedTraceContext({
+        carrier: { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
+        spanName: job.name,
+        callback: () => runPatientIdeasJob(jobData.organizationPublicId),
+      });
     },
     workerOptions: {
       connection: getBullMQConnectionOptions(),
@@ -58,5 +58,5 @@ export function createPatientIdeasWorker(): WorkerHandle {
     logger.warn({ jobId, queue: PATIENT_IDEAS_QUEUE_NAME }, 'patient-ideas.stalled');
   });
 
-  return buildWorkerHandle(worker, PATIENT_IDEAS_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: PATIENT_IDEAS_QUEUE_NAME });
 }

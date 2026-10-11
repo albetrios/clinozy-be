@@ -46,10 +46,10 @@ describe('createNotificationController', () => {
       mockRequest({ query: { limit: '25' } }),
       {} as FastifyReply,
     );
-    expect(service.listForUser).toHaveBeenCalledWith(
-      expect.objectContaining({ source: 'request' }),
-      expect.objectContaining({ limit: 25, include_total: false }),
-    );
+    expect(service.listForUser).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ source: 'request' }),
+      options: expect.objectContaining({ limit: 25, include_total: false }),
+    });
     expect(
       (response as { meta: { pagination: { has_more: boolean; next: string | null } } }).meta
         .pagination,
@@ -67,10 +67,10 @@ describe('createNotificationController', () => {
       mockRequest({ params: { notification_id: notificationId } }),
       {} as FastifyReply,
     );
-    expect(service.get).toHaveBeenCalledWith(
-      notificationId,
-      expect.objectContaining({ source: 'request' }),
-    );
+    expect(service.get).toHaveBeenCalledWith({
+      public_id: notificationId,
+      scope: expect.objectContaining({ source: 'request' }),
+    });
   });
 
   it('markNotificationRead updates row', async () => {

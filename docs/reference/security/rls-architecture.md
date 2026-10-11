@@ -40,14 +40,14 @@ row. Elevated access exists only as the named fixture role `clinozy_be_operator`
 
 | Old call | New call |
 | -------- | -------- |
-| `withOrganizationContext(organizationId, cb)` / `withOrganizationDatabaseContext(organizationId, cb)` | `withAppDatabaseContext(scope, cb)` — scope minted by `PRINCIPAL_SCOPE.REQUEST` (attached by the auth middleware as `request.principalScope`), `PRINCIPAL_SCOPE.JOB({ organizationPublicId })` (worker), or `PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId })` (ledgered flows) |
-| `withUserDatabaseContext(userId, cb)` | `withAppDatabaseContext(scope, cb)` — `request.principalScope` narrowed by `requireUserScope(request)`, `PRINCIPAL_SCOPE.JOB({ userPublicId })`, or `PRINCIPAL_SCOPE.VERIFIED({ userPublicId })` |
-| `withGlobalRetentionCleanupDatabaseContext(cb)` | `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, cb)` |
-| `withSessionRetentionCleanupDatabaseContext(cb)` | `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SESSION_RETENTION_CLEANUP, cb)` |
-| `withGlobalAdminDatabaseContext(cb)` | `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_ADMIN, cb)` |
-| `withSystemAuditInsertContext(cb)` | `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT, cb)` |
-| `withSystemTableRetentionContext(cb)` | `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_RETENTION, cb)` |
-| `withSystemTableWorkerContext(cb)` | `withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, cb)` |
+| `withOrganizationContext(organizationId, cb)` / `withOrganizationDatabaseContext(organizationId, cb)` | `withAppDatabaseContext({ scope, callback })` — scope minted by `PRINCIPAL_SCOPE.REQUEST` (attached by the auth middleware as `request.principalScope`), `PRINCIPAL_SCOPE.JOB({ organizationPublicId })` (worker), or `PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId })` (ledgered flows) |
+| `withUserDatabaseContext(userId, cb)` | `withAppDatabaseContext({ scope, callback })` — `request.principalScope` narrowed by `requireUserScope(request)`, `PRINCIPAL_SCOPE.JOB({ userPublicId })`, or `PRINCIPAL_SCOPE.VERIFIED({ userPublicId })` |
+| `withGlobalRetentionCleanupDatabaseContext(cb)` | `withMaintenanceDatabaseContext({ scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, callback })` |
+| `withSessionRetentionCleanupDatabaseContext(cb)` | `withMaintenanceDatabaseContext({ scope: MAINTENANCE_SCOPE.SESSION_RETENTION_CLEANUP, callback })` |
+| `withGlobalAdminDatabaseContext(cb)` | `withMaintenanceDatabaseContext({ scope: MAINTENANCE_SCOPE.GLOBAL_ADMIN, callback })` |
+| `withSystemAuditInsertContext(cb)` | `withMaintenanceDatabaseContext({ scope: MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT, callback })` |
+| `withSystemTableRetentionContext(cb)` | `withMaintenanceDatabaseContext({ scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_RETENTION, callback })` |
+| `withSystemTableWorkerContext(cb)` | `withMaintenanceDatabaseContext({ scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, callback })` |
 | (pre-auth session lookups, raw) | `withAppDatabaseContext(SESSION_SCOPE.ARTIFACT({ sessionPublicId \| sessionTokenHash }), cb)` |
 
 The key upgrade: the first argument is no longer a string anyone can fabricate — it is a
@@ -126,9 +126,9 @@ out of organization routes or un-types 102 field reads).
                                                 ▼
 ┌──────────────────────────── PATTERN LAYER  (contexts/database-context.ts) ───────────────────────────┐
 │                                                                                                      │
-│   withAppDatabaseContext(scope, cb)           principal scope → identity GUCs (organization and/or user)     │
+│   withAppDatabaseContext({ scope, callback })           principal scope → identity GUCs (organization and/or user)     │
 │                                               session scope   → one artifact GUC (kind-dispatched)  │
-│   withMaintenanceDatabaseContext(scope, cb)   one bypass GUC = 'true' (registry-dispatched)         │
+│   withMaintenanceDatabaseContext({ scope, callback })   one bypass GUC = 'true' (registry-dispatched)         │
 │                                                                                                      │
 │   Registries (single source of truth):                                                               │
 │     MAINTENANCE_CONTEXTS  { kind → guc | null, opensTransaction, workerContextKind,                  │
@@ -176,8 +176,11 @@ Rules the layers enforce:
   block:
 
   ```ts
-  await withAppDatabaseContext(scope, async (db) => {
-    // everything here: one trx, GUCs armed, auto commit/rollback/release
+  await withAppDatabaseContext({
+    scope,
+    callback: async (db) => {
+      // everything here: one trx, GUCs armed, auto commit/rollback/release
+    },
   });
   ```
 
@@ -234,7 +237,7 @@ ledger at zero).
 
 ```text
 request → controller mints scope ─┐
-                                  ├─ withAppDatabaseContext(scope, cb)
+                                  ├─ withAppDatabaseContext({ scope, callback })
 job → worker-runtime mints scope ─┘        │
                                            ▼
                      one SELECT set_config(...), set_config(...)   ← ONE round trip,
@@ -408,10 +411,10 @@ route preHandler: [app.authenticate, requireOrganizationPermission(…)]
  │
  ├─ controller                        <resource>.controller.ts
  │    const scope = requireOrganizationScope(request)   // or requireUserScope — 403/401 + type narrowing
- │    service.method(scope, …)
+ │    service.method({ scope, … })
  │
  ├─ service                           <resource>.service.ts
- │    await withAppDatabaseContext(scope, async (db) => repository.…)
+ │    await withAppDatabaseContext({ scope, callback: async (db) => repository.… })
  │
  ├─ withAppDatabaseContext            contexts/database-context.ts
  │    'source' in scope → principal branch: same-organization ALS reuse, else
@@ -427,7 +430,7 @@ route preHandler: [app.authenticate, requireOrganizationPermission(…)]
 enqueue (inside a scoped context) → payload carries organizationPublicId / userPublicId
 src/worker.ts → queue/bootstrap.ts → domains/**/workers/<x>.worker.ts
  └─ runOrganizationScopedWorkerJob / runUserScopedWorkerJob   worker-runtime/worker-processor.util.ts
-      zod-validate payload → PRINCIPAL_SCOPE.JOB({ ids }) → withAppDatabaseContext(scope, cb)
+      zod-validate payload → PRINCIPAL_SCOPE.JOB({ ids }) → withAppDatabaseContext({ scope, callback })
       createWorker*Repository(databaseHandle) + assertWorkerRlsGucSet (live tripwire)
       (getRequestDatabase() without a pinned context THROWS in worker runtime)
 ```
@@ -452,7 +455,7 @@ membership-invitation.service.ts (ledgered): invitation token matched (the calle
 
 ```text
 queue/scheduler.ts (cron) → workers/<x>-retention.worker.ts
-  withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, cb)
+  withMaintenanceDatabaseContext({ scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, callback })
   pool: getMaintenanceDatabase() (clinozy_be_maintenance) · registry row decides guc/trx/timeout
   USING arm admits cross-tenant read/purge; WITH CHECK does not → never plants rows
 ```

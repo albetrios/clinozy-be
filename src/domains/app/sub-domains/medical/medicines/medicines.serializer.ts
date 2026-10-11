@@ -5,7 +5,13 @@ import { MEDICINE_STOCK_LEVEL } from './medicines.constants.js';
 import type { MedicineOutput } from './medicines.types.js';
 
 /** MD12: out at 0, low at or under the reorder level, else ok. */
-export function medicineStockLevel(quantity: number, minStock: number): string {
+export function medicineStockLevel({
+  quantity,
+  min_stock: minStock,
+}: {
+  quantity: number;
+  min_stock: number;
+}): string {
   if (quantity === 0) return MEDICINE_STOCK_LEVEL.OUT;
   return quantity <= minStock ? MEDICINE_STOCK_LEVEL.LOW : MEDICINE_STOCK_LEVEL.OK;
 }
@@ -20,15 +26,18 @@ function round2(value: number): number {
  * name and tone, the batches, prices, nearest expiry, best rate and margin are the rules'
  * `decorate`.
  */
-export function serializeMedicine(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): MedicineOutput {
+export function serializeMedicine({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): MedicineOutput {
   const mrp = toAmount(row.mrp) ?? 0;
   const gstPercent = Number(row.gst_percent);
   const quantity = Number(row.quantity);
   const composition = (row.composition as string | null) ?? null;
-  const manufacturerId = references.publicIdOf('manufacturer_id', row);
+  const manufacturerId = references.publicIdOf({ field: 'manufacturer_id', row });
   return {
     id: row.public_id,
     medicine_number: row.medicine_number as number,
@@ -42,7 +51,7 @@ export function serializeMedicine(
     min_stock: Number(row.min_stock),
     max_stock: Number(row.max_stock),
     quantity,
-    stock_level: medicineStockLevel(quantity, Number(row.min_stock)),
+    stock_level: medicineStockLevel({ quantity, min_stock: Number(row.min_stock) }),
     nearest_expiry: null,
     near_expiry_discount_percent: toAmount(row.near_expiry_discount_percent),
     best_rate: null,

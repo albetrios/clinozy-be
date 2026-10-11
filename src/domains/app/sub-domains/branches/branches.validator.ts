@@ -10,15 +10,15 @@ import {
 
 /** Parses the `GET /app/branches` query; throws `ValidationError` on a bad value. */
 export function validateListBranchesQuery(data: unknown): ListBranchesQueryInput {
-  return parseWithSchema(listBranchesQueryDto, data);
+  return parseWithSchema({ schema: listBranchesQueryDto, data });
 }
 
 /** Parses a branch create body; throws `ValidationError` naming each bad field. */
 export function validateCreateBranch(data: unknown): CreateBranchInput {
-  return parseWithSchema(CreateBranchDto, data);
+  return parseWithSchema({ schema: CreateBranchDto, data });
 }
 
 /** Parses a branch update body; throws `ValidationError` naming each bad field. */
 export function validateUpdateBranch(data: unknown): UpdateBranchInput {
-  return parseWithSchema(UpdateBranchDto, data);
+  return parseWithSchema({ schema: UpdateBranchDto, data });
 }

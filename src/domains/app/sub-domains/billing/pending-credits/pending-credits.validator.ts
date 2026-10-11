@@ -16,17 +16,17 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a pending-credit create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePendingCredit(data: unknown): CreatePendingCreditInput {
-  return parseWithSchema(CreatePendingCreditDto, data);
+  return parseWithSchema({ schema: CreatePendingCreditDto, data });
 }
 
 /** Parses a pending-credit change body; throws `ValidationError` naming each bad field. */
 export function validateUpdatePendingCredit(data: unknown): UpdatePendingCreditInput {
-  return parseWithSchema(UpdatePendingCreditDto, data);
+  return parseWithSchema({ schema: UpdatePendingCreditDto, data });
 }
 
 /** Parses the pending-credit list query into a list input (routes-final 8.D.8 #21). */
 export function validateListPendingCreditsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listPendingCreditsQueryDto, data);
+  const query = parseWithSchema({ schema: listPendingCreditsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

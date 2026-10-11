@@ -13,7 +13,7 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a movement by hand; throws `ValidationError` naming each bad field. */
 export function validateCreateStockItemMovement(data: unknown): CreateStockItemMovementInput {
-  return parseWithSchema(CreateStockItemMovementDto, data);
+  return parseWithSchema({ schema: CreateStockItemMovementDto, data });
 }
 
 /** A movement is never changed (S5) — there is no change route. */
@@ -23,7 +23,7 @@ export function refuseStockItemMovementUpdate(): Record<string, unknown> {
 
 /** Parses the Movements tab's query (or an item's history) into a list input (9.B.8 #8, #9). */
 export function validateListStockItemMovementsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listStockItemMovementsQueryDto, data);
+  const query = parseWithSchema({ schema: listStockItemMovementsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

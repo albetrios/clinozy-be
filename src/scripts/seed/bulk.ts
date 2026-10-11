@@ -55,7 +55,7 @@ export async function runBulkSeed(environment: NodeJS.ProcessEnv): Promise<void>
 /**
  * Auto-run only when executed directly (`tsx src/scripts/seed/bulk.ts`), never on import — so a
  * test can import {@link runBulkSeed} without triggering a seed. `closeDatabase` always runs so the
- * postgres.js pool drains before the process exits.
+ * database pool drains before the process exits.
  */
 if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {
   runBulkSeed(process.env)

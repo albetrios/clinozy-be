@@ -34,11 +34,14 @@ export function captureNextVerificationCode(
     }, timeoutMilliseconds);
     timer.unref();
 
-    eventBus.on(AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED, async (event) => {
-      const payload = event.payload as EmailVerificationCodePayload;
-      if (payload.email !== email) return;
-      clearTimeout(timer);
-      resolve(payload.verification_code);
+    eventBus.on({
+      eventType: AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED,
+      handler: async (event) => {
+        const payload = event.payload as EmailVerificationCodePayload;
+        if (payload.email !== email) return;
+        clearTimeout(timer);
+        resolve(payload.verification_code);
+      },
     });
   });
 }

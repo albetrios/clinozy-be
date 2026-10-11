@@ -8,7 +8,7 @@ import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js'
 import { ContactsRepository } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
 import type { ContactsService } from '@/domains/app/sub-domains/contacts/contacts.service.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import type { PatientsRepository } from './patients.repository.js';
 import { patientsRules } from './patients.rules.js';
 import { serializePatient } from './patients.serializer.js';
@@ -53,7 +53,7 @@ export class PatientsService extends BaseRecordService<PatientOutput> {
       references: [
         { field: 'contact_id', table: contacts, label: 'contact' },
         { field: 'home_branch_id', table: branches, label: 'branch' },
-        { field: 'doctor_membership_id', table: memberships, label: 'team member' },
+        memberReference('doctor_membership_id'),
         { field: 'lead_id', table: leads, label: 'lead' },
       ],
       conflicts: {
@@ -70,50 +70,73 @@ export class PatientsService extends BaseRecordService<PatientOutput> {
    * Adds a patient file — for `contact_id`, or with a new `contact` created first in the same
    * transaction (P1); the controller lets only `contact:create` holders send `contact`.
    */
-  override async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    parentPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    createName?: string,
-  ): Promise<PatientOutput> {
+  override async create({
+    scope,
+    body,
+    actingUserPublicId,
+    parentPublicId,
+    visibility,
+    createName,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    parentPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    createName?: string | undefined;
+  }): Promise<PatientOutput> {
     if (validateCreatePatient(body).contact === undefined) {
-      return super.create(scope, body, actingUserPublicId, parentPublicId, visibility, createName);
-    }
-    const { contact, ...patient } = body as Record<string, unknown>;
-    return withAppDatabaseContext(scope, async () => {
-      const created = await this.contactsService.create(
+      return super.create({
         scope,
-        contact,
-        actingUserPublicId,
-        undefined,
-        visibility,
-      );
-      return super.create(
-        scope,
-        { ...patient, contact_id: created.id },
+        body,
         actingUserPublicId,
         parentPublicId,
         visibility,
         createName,
-      );
+      });
+    }
+    const { contact, ...patient } = body as Record<string, unknown>;
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const created = await this.contactsService.create({
+          scope,
+          body: contact,
+          actingUserPublicId,
+          parentPublicId: undefined,
+          visibility,
+        });
+        return super.create({
+          scope,
+          body: { ...patient, contact_id: created.id },
+          actingUserPublicId,
+          parentPublicId,
+          visibility,
+          createName,
+        });
+      },
     });
   }
 
   /** The export's rows (7.A.6): each file with its contact's name and primary number joined in. */
-  override async exportRows(
-    scope: OrganizationPrincipalDatabaseScope,
-    query: unknown,
+  override async exportRows({
+    scope,
+    query,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    query: unknown;
     options: {
       actingUserPublicId?: string | undefined;
       visibility?: BaseRecordVisibility | undefined;
-    },
-  ): Promise<{ rows: PatientExportRow[]; is_truncated: boolean }> {
-    const { rows, is_truncated } = await super.exportRows(scope, query, options);
-    const summaries = await withAppDatabaseContext(scope, () =>
-      this.contactsRepository.findSummaries([...new Set(rows.map((row) => row.contact_id))]),
-    );
+    };
+  }): Promise<{ rows: PatientExportRow[]; is_truncated: boolean }> {
+    const { rows, is_truncated } = await super.exportRows({ scope, query, options });
+    const summaries = await withAppDatabaseContext({
+      scope,
+      callback: () =>
+        this.contactsRepository.findSummaries([...new Set(rows.map((row) => row.contact_id))]),
+    });
     const contactOf = new Map(summaries.map((contact) => [contact.id, contact]));
     return {
       rows: rows.map((row) => {

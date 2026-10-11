@@ -8,7 +8,13 @@ import type { Faker } from '@faker-js/faker';
  * Picks a varied, non-empty subset of the supplied permission codes for one custom role so seeded
  * roles exercise different permission grants.
  */
-export function generateBulkRolePermissionCodes(faker: Faker, allCodes: string[]): string[] {
+export function generateBulkRolePermissionCodes({
+  faker,
+  allCodes,
+}: {
+  faker: Faker;
+  allCodes: string[];
+}): string[] {
   const maximum = Math.max(1, allCodes.length);
   const count = faker.number.int({ min: 1, max: maximum });
   return faker.helpers.arrayElements(allCodes, count);

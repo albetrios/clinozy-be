@@ -1,5 +1,5 @@
 import '@/shared/config/load-env-files.js';
-import postgres from 'postgres';
+import pg from 'pg';
 import { resolve } from 'node:path';
 import { readdir, readFile } from 'node:fs/promises';
 import { describeMigrationConnectionError } from '@/infrastructure/database/migration/migration-error-hint.js';
@@ -8,7 +8,11 @@ import {
   applyMigrationTimeouts,
   retryOnMigrationLockTimeout,
 } from '@/infrastructure/database/migration/migration-lock-timeout.js';
-import { isNeonPoolerConnection } from '@/infrastructure/database/utils/connection-url.util.js';
+import {
+  isNeonPoolerConnection,
+  resolveDatabaseSsl,
+  withoutSslQueryParameters,
+} from '@/infrastructure/database/utils/connection-url.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 /**
@@ -41,7 +45,7 @@ if (isNeonPoolerConnection(migrationUrl)) {
 /**
  * Fail fast on a malformed URL (surrounding quotes, a trailing newline, or whitespace pasted into the
  * secret) with a clear, secret-free message instead of a raw `TypeError: Invalid URL` from deep inside
- * postgres.js.
+ * the driver.
  */
 try {
   new URL(migrationUrl);
@@ -54,12 +58,23 @@ try {
 }
 
 /**
- * `connect_timeout` (seconds): fail fast when the host is unreachable — a wrong/internal host, a
+ * One connection, so every statement runs on the backend that holds the migration advisory lock.
+ * `connectionTimeoutMillis`: fail fast when the host is unreachable — a wrong/internal host, a
  * firewall, or an IP allowlist that silently drops packets — instead of hanging until the CI job's
- * timeout (a ~30-minute silent stall). `max: 1` keeps every statement on the one backend that holds
- * the migration advisory lock.
+ * timeout (a ~30-minute silent stall). TLS follows the URL's `sslmode` exactly as the application
+ * pool does ({@link resolveDatabaseSsl}). The error listener keeps a dropped connection from becoming
+ * an uncaught exception; the statement in flight still fails.
  */
-const sql = postgres(migrationUrl, { max: 1, connect_timeout: 15 });
+const client = new pg.Client({
+  connectionString: withoutSslQueryParameters(migrationUrl),
+  ssl: resolveDatabaseSsl({
+    databaseUrl: migrationUrl,
+    sslEnabledByDefault: false,
+    rejectUnauthorizedOverride: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'true',
+  }),
+  connectionTimeoutMillis: 15_000,
+});
+client.on('error', (error) => logger.error({ error }, 'Migration connection error'));
 
 /**
  * Postgres 17+ is required project-wide (docker-compose, CI services,
@@ -90,12 +105,11 @@ const MIGRATION_ADVISORY_LOCK_KEY = 4_017_309_021;
 const isDryRun = process.argv.includes('--dry-run');
 
 /**
- * Acquires the migration advisory lock on the shared `sql` session. The pool
- * is created with `max: 1`, so every statement in this process runs on the
- * same Postgres backend/session that holds the lock.
+ * Acquires the migration advisory lock on the one `client` session, so every statement in
+ * this process runs on the same Postgres backend/session that holds the lock.
  */
 async function acquireMigrationAdvisoryLock(): Promise<void> {
-  await sql`SELECT pg_advisory_lock(${MIGRATION_ADVISORY_LOCK_KEY}::bigint)`;
+  await client.query('SELECT pg_advisory_lock($1::bigint)', [MIGRATION_ADVISORY_LOCK_KEY]);
   logger.info({ lockKey: MIGRATION_ADVISORY_LOCK_KEY }, 'Acquired migration advisory lock');
 }
 
@@ -106,7 +120,7 @@ async function acquireMigrationAdvisoryLock(): Promise<void> {
  */
 async function releaseMigrationAdvisoryLock(): Promise<void> {
   try {
-    await sql`SELECT pg_advisory_unlock(${MIGRATION_ADVISORY_LOCK_KEY}::bigint)`;
+    await client.query('SELECT pg_advisory_unlock($1::bigint)', [MIGRATION_ADVISORY_LOCK_KEY]);
     logger.info({ lockKey: MIGRATION_ADVISORY_LOCK_KEY }, 'Released migration advisory lock');
   } catch (unlockError) {
     logger.error({ error: unlockError }, 'Failed to release migration advisory lock');
@@ -114,9 +128,11 @@ async function releaseMigrationAdvisoryLock(): Promise<void> {
 }
 
 async function assertPostgresMajorVersionAtLeast17(): Promise<void> {
-  const [row] = await sql<
-    { server_version_num: string; server_version: string }[]
-  >`SELECT current_setting('server_version_num') AS server_version_num, current_setting('server_version') AS server_version`;
+  const {
+    rows: [row],
+  } = await client.query<{ server_version_num: string; server_version: string }>(
+    "SELECT current_setting('server_version_num') AS server_version_num, current_setting('server_version') AS server_version",
+  );
   const serverVersionNum = Number(row?.server_version_num ?? '0');
   if (
     !Number.isFinite(serverVersionNum) ||
@@ -128,9 +144,9 @@ async function assertPostgresMajorVersionAtLeast17(): Promise<void> {
   }
 }
 
-/** Minimal shape shared by the top-level `sql` tag and a `sql.begin` transaction. */
+/** The one migration connection, inside or outside a transaction. */
 interface MigrationStatementExecutor {
-  unsafe: (query: string) => PromiseLike<unknown>;
+  query: (text: string) => PromiseLike<unknown>;
 }
 
 interface RunMigrationStatementsInput {
@@ -153,7 +169,7 @@ async function runMigrationStatements({
   for (const statement of statements) {
     statementIndex += 1;
     try {
-      await executor.unsafe(statement);
+      await executor.query(statement);
     } catch (statementError) {
       logger.error(
         {
@@ -175,7 +191,10 @@ async function runMigrationStatements({
  * by the non-transactional lane (the sole place concurrent indexes are built).
  */
 async function assertNoInvalidIndexes({ filename }: { filename: string }): Promise<void> {
-  const invalidIndexes = await sql<{ schema_name: string; index_name: string }[]>`
+  const { rows: invalidIndexes } = await client.query<{
+    schema_name: string;
+    index_name: string;
+  }>(`
     SELECT n.nspname AS schema_name, c.relname AS index_name
     FROM pg_index i
     JOIN pg_class c ON c.oid = i.indexrelid
@@ -183,7 +202,7 @@ async function assertNoInvalidIndexes({ filename }: { filename: string }): Promi
     WHERE (NOT i.indisvalid OR NOT i.indisready)
       AND n.nspname NOT IN ('pg_catalog', 'pg_toast', 'information_schema')
     ORDER BY n.nspname, c.relname
-  `;
+  `);
 
   if (invalidIndexes.length === 0) return;
 
@@ -195,10 +214,26 @@ async function assertNoInvalidIndexes({ filename }: { filename: string }): Promi
   );
 }
 
+/**
+ * Runs `work` inside one transaction on the migration connection: committed when it resolves,
+ * rolled back when it throws (the rollback's own failure never masks the original error).
+ */
+async function inTransaction(work: () => Promise<void>): Promise<void> {
+  await client.query('BEGIN');
+  try {
+    await work();
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  }
+}
+
 async function main() {
   const migrationsFolder = resolve(process.cwd(), 'migrations');
   logger.info({ migrationsFolder, dryRun: isDryRun }, 'Running migrations');
 
+  await client.connect();
   await assertPostgresMajorVersionAtLeast17();
 
   /**
@@ -209,16 +244,16 @@ async function main() {
    */
   await acquireMigrationAdvisoryLock();
   try {
-    await sql`
+    await client.query(`
       create table if not exists public.schema_migrations (
         filename text primary key,
         applied_at timestamptz not null default now()
       )
-    `;
+    `);
 
-    const applied = await sql<{ filename: string }[]>`
-      select filename from public.schema_migrations order by filename asc
-    `;
+    const { rows: applied } = await client.query<{ filename: string }>(
+      'select filename from public.schema_migrations order by filename asc',
+    );
     const appliedSet = new Set(applied.map((row) => row.filename));
 
     const allFiles = await readdir(migrationsFolder);
@@ -258,14 +293,13 @@ async function main() {
         await retryOnMigrationLockTimeout({
           filename,
           run: () =>
-            sql.begin(async (transaction) => {
-              await applyMigrationTimeouts({ executor: transaction, scope: 'transaction' });
-              await runMigrationStatements({ filename, statements, executor: transaction });
+            inTransaction(async () => {
+              await applyMigrationTimeouts({ executor: client, scope: 'transaction' });
+              await runMigrationStatements({ filename, statements, executor: client });
               if (!isDryRun) {
-                await transaction.unsafe(
-                  'insert into public.schema_migrations (filename) values ($1)',
-                  [filename],
-                );
+                await client.query('insert into public.schema_migrations (filename) values ($1)', [
+                  filename,
+                ]);
               }
             }),
         });
@@ -281,18 +315,18 @@ async function main() {
        * an operator must `DROP INDEX CONCURRENTLY` the invalid index and re-run.
        */
       // The lock wait is bounded here too; the statement cap is lifted for long index builds.
-      await applyMigrationTimeouts({ executor: sql, scope: 'session' });
+      await applyMigrationTimeouts({ executor: client, scope: 'session' });
       try {
-        await runMigrationStatements({ filename, statements, executor: sql });
+        await runMigrationStatements({ filename, statements, executor: client });
         await assertNoInvalidIndexes({ filename });
         if (!isDryRun) {
-          await sql.unsafe('insert into public.schema_migrations (filename) values ($1)', [
+          await client.query('insert into public.schema_migrations (filename) values ($1)', [
             filename,
           ]);
         }
       } finally {
-        await sql.unsafe('RESET lock_timeout');
-        await sql.unsafe('RESET statement_timeout');
+        await client.query('RESET lock_timeout');
+        await client.query('RESET statement_timeout');
       }
     }
 
@@ -304,7 +338,7 @@ async function main() {
 
 main()
   .then(async () => {
-    await sql.end({ timeout: 5_000 });
+    await client.end();
     process.exit(0);
   })
   .catch(async (error) => {
@@ -314,7 +348,7 @@ main()
       logger.error({ hint }, 'Migration connection hint');
     }
     try {
-      await sql.end({ timeout: 5_000 });
+      await client.end();
     } catch {
       // ignore
     }

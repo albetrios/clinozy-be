@@ -21,7 +21,7 @@ import {
   metaCircuit,
 } from '@/infrastructure/resilience/circuit-breaker.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import {
   type AppFixture,
   createAppFixture,
@@ -155,7 +155,7 @@ describe('Chaos: a provider down pauses its queue; back, the first job probes', 
       }
       const statuses = async () =>
         (
-          await getOperatorSql()<{ delivery_status: string; claimed: boolean }[]>`
+          await operatorQuery<{ delivery_status: string; claimed: boolean }[]>`
             SELECT delivery_status, delivery_claimed_at IS NOT NULL AS claimed
             FROM app.contact_activities activity
             JOIN app.contacts person ON person.id = activity.contact_id
@@ -236,7 +236,7 @@ describe('Chaos: a provider down pauses its queue; back, the first job probes', 
       has_data_consent: true,
     });
     const staleSince = async () => {
-      const [row] = await getOperatorSql()<{ stale_since: string | null }[]>`
+      const [row] = await operatorQuery<{ stale_since: string | null }[]>`
         SELECT ideas_stale_since::text AS stale_since FROM app.patients WHERE public_id = ${patient}
       `;
       return row?.stale_since ?? null;
@@ -278,7 +278,7 @@ describe('Chaos: a provider down pauses its queue; back, the first job probes', 
     await letResetWindowPass('anthropic');
     await waitFor(async () => (await parked.getState()) === 'completed', PAUSE_MS * 6);
     expect(await staleSince(), 'refreshed: the mark is cleared').toBeNull();
-    const stored = await getOperatorSql()<{ offering: string }[]>`
+    const stored = await operatorQuery<{ offering: string }[]>`
       SELECT offering.public_id AS offering FROM app.patient_ideas idea
       JOIN app.patients file ON file.id = idea.patient_id
       JOIN app.offerings offering ON offering.id = idea.offering_id

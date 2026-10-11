@@ -97,10 +97,16 @@ export interface BaseRecordVisibility {
 
 /** Reads the public ids a row's references point at, for the serializer. */
 export interface BaseRecordReferenceLookup {
-  publicIdOf(field: string, row: BaseRecordRow): string | null;
-  listOf(field: string, row: BaseRecordRow): string[];
+  publicIdOf({ field, row }: { field: string; row: BaseRecordRow }): string | null;
+  listOf({ field, row }: { field: string; row: BaseRecordRow }): string[];
   /** A child list's rows (`phones`) — `undefined` on a list page, which never reads them. */
-  childrenOf(field: string, row: BaseRecordRow): Record<string, unknown>[] | undefined;
+  childrenOf({
+    field,
+    row,
+  }: {
+    field: string;
+    row: BaseRecordRow;
+  }): Record<string, unknown>[] | undefined;
 }
 
 /** The organization's operating settings a rule reads (launch #1) and its time zone (D41). */
@@ -329,7 +335,7 @@ export interface BaseRecordDescriptor<Output> extends BaseRecordRules {
   namedCreates?: Readonly<Record<string, (body: unknown) => Record<string, unknown>>>;
   parseUpdate: (body: unknown) => Record<string, unknown>;
   parseList: (query: unknown) => BaseRecordListInput;
-  serialize: (row: BaseRecordRow, references: BaseRecordReferenceLookup) => Output;
+  serialize: (options: { row: BaseRecordRow; references: BaseRecordReferenceLookup }) => Output;
   references?: readonly BaseRecordReference[];
   referenceLists?: readonly BaseRecordReferenceList[];
   childLists?: readonly BaseRecordChildList[];

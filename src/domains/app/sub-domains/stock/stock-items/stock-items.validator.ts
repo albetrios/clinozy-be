@@ -15,17 +15,17 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a stock item create body; throws `ValidationError` naming each bad field. */
 export function validateCreateStockItem(data: unknown): CreateStockItemInput {
-  return parseWithSchema(CreateStockItemDto, data);
+  return parseWithSchema({ schema: CreateStockItemDto, data });
 }
 
 /** Parses a stock item change body; throws `ValidationError` naming each bad field. */
 export function validateUpdateStockItem(data: unknown): UpdateStockItemInput {
-  return parseWithSchema(UpdateStockItemDto, data);
+  return parseWithSchema({ schema: UpdateStockItemDto, data });
 }
 
 /** Parses the Items tab's query into a list input (routes-final 9.A.8 #1). */
 export function validateListStockItemsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listStockItemsQueryDto, data);
+  const query = parseWithSchema({ schema: listStockItemsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

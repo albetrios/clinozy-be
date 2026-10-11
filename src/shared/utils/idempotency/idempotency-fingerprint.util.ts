@@ -59,7 +59,7 @@ export function normalizeIdempotencyRoutePath(routePath: string): string {
 }
 
 /** Lexicographic (code-point) key comparator for the canonical-serialize sort. */
-function compareFingerprintKeys(a: string, b: string): number {
+function compareFingerprintKeys({ a, b }: { a: string; b: string }): number {
   if (a < b) return -1;
   if (a > b) return 1;
   return 0;
@@ -92,7 +92,7 @@ function canonicalSerializeForFingerprint(value: unknown): string {
     return `[${value.map((entry) => canonicalSerializeForFingerprint(entry)).join(',')}]`;
   }
   const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
-    compareFingerprintKeys(a, b),
+    compareFingerprintKeys({ a, b }),
   );
   const segments = entries.map(
     ([key, nested]) => `${JSON.stringify(key)}:${canonicalSerializeForFingerprint(nested)}`,

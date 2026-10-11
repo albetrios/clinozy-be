@@ -13,19 +13,33 @@ import type { AppMembershipsService } from './memberships.service.js';
 export function createAppMembershipsController(service: AppMembershipsService) {
   return {
     list: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const result = await service.list(requireOrganizationScope(request), request.query);
-      return paginatedResponse(result.items, getRequestIdentifier(request), {
-        per_page: result.limit,
-        next: result.next_cursor,
-        has_more: result.has_more,
+      const result = await service.list({
+        scope: requireOrganizationScope(request),
+        query: request.query,
+      });
+      return paginatedResponse({
+        data: result.items,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: result.limit,
+          next: result.next_cursor,
+          has_more: result.has_more,
+        },
       });
     },
     listRoles: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const result = await service.listRoles(requireOrganizationScope(request), request.query);
-      return paginatedResponse(result.items, getRequestIdentifier(request), {
-        per_page: result.limit,
-        next: result.next_cursor,
-        has_more: result.has_more,
+      const result = await service.listRoles({
+        scope: requireOrganizationScope(request),
+        query: request.query,
+      });
+      return paginatedResponse({
+        data: result.items,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: result.limit,
+          next: result.next_cursor,
+          has_more: result.has_more,
+        },
       });
     },
   };

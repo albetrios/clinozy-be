@@ -5,7 +5,7 @@ import type { StockVendorOutput } from './stock-vendors.types.js';
  * Shapes an `app.stock_vendors` row as the API returns it (routes-final 9.E.6). The payable and the
  * purchase count are the rules' `decorate`.
  */
-export function serializeStockVendor(row: BaseRecordRow): StockVendorOutput {
+export function serializeStockVendor({ row }: { row: BaseRecordRow }): StockVendorOutput {
   return {
     id: row.public_id,
     name: row.name as string,

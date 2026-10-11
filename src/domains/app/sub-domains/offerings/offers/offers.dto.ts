@@ -62,7 +62,7 @@ export const offersIdParamsDto = z
  */
 export const CreateOfferDto = z
   .object({
-    name: trimmedStringMinMax(1, 80),
+    name: trimmedStringMinMax({ min: 1, max: 80 }),
     code: offerCodeSchema.nullable().optional(),
     kind: z.enum(OFFER_KIND_VALUES).optional(),
     value: moneySchema,
@@ -82,7 +82,7 @@ export const CreateOfferDto = z
  */
 export const UpdateOfferDto = z
   .object({
-    name: trimmedStringMinMax(1, 80).optional(),
+    name: trimmedStringMinMax({ min: 1, max: 80 }).optional(),
     code: offerCodeSchema.nullable().optional(),
     kind: z.enum(OFFER_KIND_VALUES).optional(),
     value: moneySchema.optional(),

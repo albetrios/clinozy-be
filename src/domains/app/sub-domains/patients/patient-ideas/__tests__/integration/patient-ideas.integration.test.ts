@@ -10,7 +10,7 @@ vi.mock('@/infrastructure/ai/anthropic-messages.config.js', () => ({
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { anthropicCircuit } from '@/infrastructure/resilience/circuit-breaker.js';
 import { ProviderOutageError } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
 import { runGlobalRetentionWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
@@ -54,7 +54,7 @@ describe('Patient ideas — integration (routes-final 7.N, ROUTE #152)', () => {
 
   /** The patient's stale mark, or `null`. */
   async function staleSince(): Promise<string | null> {
-    const [row] = await getOperatorSql()<{ stale_since: string | null }[]>`
+    const [row] = await operatorQuery<{ stale_since: string | null }[]>`
       SELECT ideas_stale_since::text AS stale_since FROM app.patients WHERE public_id = ${patient}
     `;
     return row?.stale_since ?? null;
@@ -236,7 +236,7 @@ describe('Patient ideas — integration (routes-final 7.N, ROUTE #152)', () => {
     flow.expectValue('never AI without consent', '.meta.source', 'rules');
 
     expect((await runPatientIdeasJob(fixture.organization.publicId)).removedCount).toBe(1);
-    const [row] = await getOperatorSql()<{ count: string }[]>`
+    const [row] = await operatorQuery<{ count: string }[]>`
       SELECT count(*)::text AS count FROM app.patient_ideas i
         JOIN app.patients p ON p.id = i.patient_id WHERE p.public_id = ${patient}
     `;

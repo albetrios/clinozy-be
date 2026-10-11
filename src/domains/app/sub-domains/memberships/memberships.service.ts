@@ -43,21 +43,27 @@ export class AppMembershipsService {
    * - **Algorithm:** see the class; an unknown role or branch matches nobody.
    * - **Failure modes:** `ValidationError`.
    */
-  async list(
-    scope: OrganizationPrincipalDatabaseScope,
-    query: unknown,
-  ): Promise<DirectoryPage<AppMembershipOutput>> {
+  async list({
+    scope,
+    query,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    query: unknown;
+  }): Promise<DirectoryPage<AppMembershipOutput>> {
     const parsed = validateListAppMembershipsQuery(query);
     const ids = splitRecordIds(parsed.ids);
-    const page = await this.membershipService.listDirectory(scope, {
-      q: parsed.q,
-      rolePublicId: parsed.role_id,
-      branchPublicId: parsed.branch_id,
-      holdsPermissionCode: parsed.holds,
-      includeEnded: parsed.include_ended === 'true',
-      publicIds: ids.length > 0 ? ids : undefined,
-      limit: parsed.limit,
-      after: parsed.after,
+    const page = await this.membershipService.listDirectory({
+      scope,
+      query: {
+        q: parsed.q,
+        rolePublicId: parsed.role_id,
+        branchPublicId: parsed.branch_id,
+        holdsPermissionCode: parsed.holds,
+        includeEnded: parsed.include_ended === 'true',
+        publicIds: ids.length > 0 ? ids : undefined,
+        limit: parsed.limit,
+        after: parsed.after,
+      },
     });
     return {
       items: page.items.map(serializeAppMembership),
@@ -75,14 +81,20 @@ export class AppMembershipsService {
    * - **Algorithm:** {@link MemberRoleService.listDirectory}, then the slim directory shape.
    * - **Failure modes:** `ValidationError` for a bad query.
    */
-  async listRoles(
-    scope: OrganizationPrincipalDatabaseScope,
-    query: unknown,
-  ): Promise<DirectoryPage<AppRoleOutput>> {
+  async listRoles({
+    scope,
+    query,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    query: unknown;
+  }): Promise<DirectoryPage<AppRoleOutput>> {
     const parsed = validateListAppRolesQuery(query);
-    const page = await this.memberRoleService.listDirectory(scope, {
-      limit: parsed.limit,
-      after: parsed.after,
+    const page = await this.memberRoleService.listDirectory({
+      scope,
+      pagination: {
+        limit: parsed.limit,
+        after: parsed.after,
+      },
     });
     return {
       items: page.items.map(serializeAppRole),

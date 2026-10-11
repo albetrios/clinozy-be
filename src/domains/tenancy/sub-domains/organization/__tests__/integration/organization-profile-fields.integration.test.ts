@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import {
@@ -37,7 +37,7 @@ describe('Integration: organization profile fields and settings', () => {
   });
 
   it('gives a new organization the launch profile', async () => {
-    const [row] = await getOperatorSql()<
+    const [row] = await operatorQuery<
       { specialties: string[]; timezone: string; currency: string }[]
     >`SELECT specialties, timezone, currency FROM tenancy.organizations WHERE id = ${organizationId}`;
 
@@ -50,10 +50,10 @@ describe('Integration: organization profile fields and settings', () => {
 
   it('accepts every allowed specialty, up to six', async () => {
     const six = ORGANIZATION_SPECIALTIES.slice(0, 6);
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE tenancy.organizations SET specialties = ${six}::text[] WHERE id = ${organizationId}
     `;
-    const [row] = await getOperatorSql()<{ specialties: string[] }[]>`
+    const [row] = await operatorQuery<{ specialties: string[] }[]>`
       SELECT specialties FROM tenancy.organizations WHERE id = ${organizationId}
     `;
     expect(row?.specialties).toEqual(six);
@@ -77,17 +77,17 @@ describe('Integration: organization profile fields and settings', () => {
       `UPDATE tenancy.organizations SET currency = 'USD' WHERE id = $1`,
     ],
   ])('rejects %s on the organization', async (_case, statement) => {
-    await expect(getOperatorSql().unsafe(statement, [organizationId])).rejects.toMatchObject({
+    await expect(operatorQuery.unsafe(statement, [organizationId])).rejects.toMatchObject({
       code: CHECK_VIOLATION,
     });
   });
 
   it('gives a new settings row the launch operating settings', async () => {
-    await getOperatorSql()`
+    await operatorQuery`
       INSERT INTO tenancy.organization_settings (organization_id) VALUES (${organizationId})
       ON CONFLICT (organization_id) DO NOTHING
     `;
-    const [row] = await getOperatorSql()<
+    const [row] = await operatorQuery<
       {
         default_day_float: string;
         lead_hold_days: number;
@@ -118,12 +118,12 @@ describe('Integration: organization profile fields and settings', () => {
     ['zero re-target days', 'retarget_after_days = 0'],
     ['zero purge days', 'deleted_record_purge_days = 0'],
   ])('rejects %s on the settings', async (_case, assignment) => {
-    await getOperatorSql()`
+    await operatorQuery`
       INSERT INTO tenancy.organization_settings (organization_id) VALUES (${organizationId})
       ON CONFLICT (organization_id) DO NOTHING
     `;
     await expect(
-      getOperatorSql().unsafe(
+      operatorQuery.unsafe(
         `UPDATE tenancy.organization_settings SET ${assignment} WHERE organization_id = $1`,
         [organizationId],
       ),

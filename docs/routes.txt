@@ -512,7 +512,7 @@ Legend:
 ================================================================================
 
   GET    /internal/ops/circuit-breakers                           200  -    both  TOKEN: metrics
-  POST   /internal/ops/circuit-breakers/:circuit_name/reset       200  -    both  TOKEN: metrics
+  POST   /internal/ops/circuit-breakers/:circuit_name/reset       200  -    both  TOKEN: ops-admin
 
 ================================================================================
   DOMAIN: HEALTH (/livez)

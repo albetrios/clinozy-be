@@ -40,7 +40,7 @@ export function isMetaWebhookIngressConfigured(): boolean {
 }
 
 /** Constant-time equality of two strings. */
-function safeEquals(left: string, right: string): boolean {
+function safeEquals({ left, right }: { left: string; right: string }): boolean {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
@@ -54,11 +54,20 @@ function safeEquals(left: string, right: string): boolean {
  *   compared in constant time.
  * - **Failure modes:** none — false for a missing secret, a malformed header or a mismatch.
  */
-export function verifyMetaWebhookSignature(rawBody: Buffer, signatureHeader: string): boolean {
+export function verifyMetaWebhookSignature({
+  rawBody,
+  signatureHeader,
+}: {
+  rawBody: Buffer;
+  signatureHeader: string;
+}): boolean {
   const secret = env.META_APP_SECRET;
   if (!(secret && signatureHeader.startsWith(SIGNATURE_PREFIX))) return false;
   const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
-  return safeEquals(expected, signatureHeader.slice(SIGNATURE_PREFIX.length).toLowerCase());
+  return safeEquals({
+    left: expected,
+    right: signatureHeader.slice(SIGNATURE_PREFIX.length).toLowerCase(),
+  });
 }
 
 /**
@@ -70,5 +79,5 @@ export function verifyMetaWebhookSignature(rawBody: Buffer, signatureHeader: str
  */
 export function matchesMetaWebhookVerifyToken(token: string): boolean {
   const expected = env.META_WEBHOOK_VERIFY_TOKEN;
-  return expected !== undefined && safeEquals(expected, token);
+  return expected !== undefined && safeEquals({ left: expected, right: token });
 }

@@ -17,10 +17,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -169,11 +171,11 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
       return membershipRow as never;
     });
 
-    await service.create(
-      asScope('org_public'),
-      { email: 'invitee@example.com', role_ids: ['role_public_admin'] },
-      'inviter_public',
-    );
+    await service.create({
+      scope: asScope('org_public'),
+      body: { email: 'invitee@example.com', role_ids: ['role_public_admin'] },
+      invited_by_user_public_id: 'inviter_public',
+    });
 
     expect(memberRolePermissionService.listPermissionCodesForRole).toHaveBeenCalledWith(
       adminRole.id,
@@ -194,11 +196,11 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
     );
 
     await expect(
-      service.create(
-        asScope('org_public'),
-        { email: 'invitee@example.com', role_ids: ['role_public_admin'] },
-        'inviter_public',
-      ),
+      service.create({
+        scope: asScope('org_public'),
+        body: { email: 'invitee@example.com', role_ids: ['role_public_admin'] },
+        invited_by_user_public_id: 'inviter_public',
+      }),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     expect(membershipRepository.create).not.toHaveBeenCalled();
@@ -210,11 +212,11 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
     );
 
     await expect(
-      service.create(
-        asScope('org_public'),
-        { email: 'invitee@example.com', role_ids: ['role_public_admin'] },
-        undefined,
-      ),
+      service.create({
+        scope: asScope('org_public'),
+        body: { email: 'invitee@example.com', role_ids: ['role_public_admin'] },
+        invited_by_user_public_id: undefined,
+      }),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     expect(assertCallerCanGrantPermissionCodes).toHaveBeenCalledWith(

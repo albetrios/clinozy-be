@@ -10,17 +10,17 @@ import {
 
 /** Parses a branch holiday create body; throws `ValidationError` naming each bad field. */
 export function validateCreateBranchHoliday(data: unknown): CreateBranchHolidayInput {
-  return parseWithSchema(CreateBranchHolidayDto, data);
+  return parseWithSchema({ schema: CreateBranchHolidayDto, data });
 }
 
 /** Parses a branch holiday update body; throws `ValidationError` naming each bad field. */
 export function validateUpdateBranchHoliday(data: unknown): UpdateBranchHolidayInput {
-  return parseWithSchema(UpdateBranchHolidayDto, data);
+  return parseWithSchema({ schema: UpdateBranchHolidayDto, data });
 }
 
 /** Parses the `GET /app/branches/{branch_id}/holidays` query into a list input (filters by column). */
 export function validateListBranchHolidaysQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listBranchHolidaysQueryDto, data);
+  const query = parseWithSchema({ schema: listBranchHolidaysQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

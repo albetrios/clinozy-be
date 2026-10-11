@@ -76,15 +76,17 @@ describe('worker-registration.registry', () => {
   it('keeps expected family, criticality, scheduler, and external-io counts', () => {
     const definitions = getWorkerQueueRegistrationDefinitions();
 
-    // REQ-4: subscription-seat-sync adds one Postgres-backed, event-driven, throughput worker; the
-    // webhook-delivery-reclaim sweep one Postgres-backed, scheduled, maintenance worker; the app
-    // record purge and the day auto-close sweep two more, and the auto-close jobs one Postgres-backed,
-    // event-driven (the sweep adds them), throughput worker; the task rules sweep and its runs the
-    // same pair again; messaging (D77) two event-driven throughput workers and two scheduled
-    // maintenance ones; the AI ideas sweep and its refreshes (D80) the task rules' pair again; the
-    // membership invitation expiry sweep (D84) one Postgres-backed, scheduled, maintenance worker.
+    // REQ-4: subscription-seat-sync adds one Postgres-backed throughput worker (event-driven, plus the
+    // hourly seat reconcile on its queue); the webhook-delivery-reclaim sweep one Postgres-backed,
+    // scheduled, maintenance worker; user-data-export also runs its lost-enqueue sweep. The app
+    // record purge and the day auto-close sweep add two more, and the auto-close jobs one
+    // Postgres-backed, event-driven (the sweep adds them), throughput worker; the task rules sweep and
+    // its runs the same pair again; messaging (D77) two event-driven throughput workers and two
+    // scheduled maintenance ones; the AI ideas sweep and its refreshes (D80) the task rules' pair
+    // again; the membership invitation expiry sweep (D84) one Postgres-backed, scheduled, maintenance
+    // worker.
     expect(definitions.filter((definition) => definition.usesPostgres)).toHaveLength(42);
-    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(34);
+    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(36);
     expect(
       definitions.filter((definition) => definition.criticality === 'throughput'),
     ).toHaveLength(11);

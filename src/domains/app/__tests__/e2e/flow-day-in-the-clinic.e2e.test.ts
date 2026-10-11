@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { env } from '@/shared/config/env.config.js';
 import { metaCircuit } from '@/infrastructure/resilience/circuit-breaker.js';
 import {
@@ -91,7 +91,7 @@ describe('Flow — a day in the clinic, two branches', () => {
     await flow.expect(200, 'connect WhatsApp', 'PATCH', '/tenancy/organization/settings', {
       whatsapp_phone_number_id: `13${S.slice(-10)}`,
     });
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE tenancy.memberships SET phone = ${OWNER_PHONE} WHERE id = ${fixture.members.owner.membershipId}
     `;
     await flow.expect(200, 'a consultation', 'POST', '/app/offerings', {

@@ -21,32 +21,35 @@ export function serializePaymentEdit(row: PaymentEditRow): PaymentEditOutput {
  * summary, `is_settled`, the reversal, the edits, who recorded it and the numbers of what it points
  * at are the rules' `decorate`.
  */
-export function serializePayment(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): PaymentOutput {
+export function serializePayment({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): PaymentOutput {
   return {
     id: row.public_id,
     payment_number: Number(row.payment_number),
     direction: row.direction as string,
     kind: row.kind as string,
-    branch_id: references.publicIdOf('branch_id', row) ?? '',
+    branch_id: references.publicIdOf({ field: 'branch_id', row }) ?? '',
     amount: toAmount(row.amount) ?? 0,
     splits: columnsToSplits(row),
     paid_at: toInstant(row.paid_at) as string,
-    contact: billedContactRef(references.publicIdOf('contact_id', row)),
+    contact: billedContactRef(references.publicIdOf({ field: 'contact_id', row })),
     patient_id: null,
-    invoice_id: references.publicIdOf('invoice_id', row),
+    invoice_id: references.publicIdOf({ field: 'invoice_id', row }),
     invoice: null,
-    invoice_credit_note_id: references.publicIdOf('invoice_credit_note_id', row),
+    invoice_credit_note_id: references.publicIdOf({ field: 'invoice_credit_note_id', row }),
     invoice_credit_note_number: null,
-    pending_credit_id: references.publicIdOf('pending_credit_id', row),
+    pending_credit_id: references.publicIdOf({ field: 'pending_credit_id', row }),
     pending_credit_number: null,
-    stock_purchase_id: references.publicIdOf('stock_purchase_id', row),
+    stock_purchase_id: references.publicIdOf({ field: 'stock_purchase_id', row }),
     stock_purchase: null,
-    medical_purchase_order_id: references.publicIdOf('medical_purchase_order_id', row),
+    medical_purchase_order_id: references.publicIdOf({ field: 'medical_purchase_order_id', row }),
     medical_purchase_order: null,
-    reverses_payment_id: references.publicIdOf('reverses_payment_id', row),
+    reverses_payment_id: references.publicIdOf({ field: 'reverses_payment_id', row }),
     reversed_by_payment_id: null,
     payee_name: (row.payee_name as string | null) ?? null,
     expense_category: (row.expense_category as string | null) ?? null,

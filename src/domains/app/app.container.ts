@@ -53,12 +53,17 @@ export type AppContainer = {
 } & AppRecordServices;
 
 /** Builds the app domain container from its repositories and the tenancy services it reads. */
-export function createAppContainer(
-  organizationService: OrganizationService,
-  membershipService: MembershipService,
-  organizationSettingsService: OrganizationSettingsService,
-  memberRoleService: MemberRoleService,
-): AppContainer {
+export function createAppContainer({
+  organizationService,
+  membershipService,
+  organizationSettingsService,
+  memberRoleService,
+}: {
+  organizationService: OrganizationService;
+  membershipService: MembershipService;
+  organizationSettingsService: OrganizationSettingsService;
+  memberRoleService: MemberRoleService;
+}): AppContainer {
   const branchesRepository = new BranchesRepository();
   const branchMembersRepository = new BranchMembersRepository();
   const records = createAppRecordServices(organizationService);
@@ -159,7 +164,13 @@ export interface AppUploadChecker {
  * - **Failure modes:** the port answers null for a key that is missing, unconfirmed or another
  *   organization's (the upload service's `ValidationError`); any other error propagates.
  */
-export function wireAppUploads(container: AppContainer, uploads: AppUploadChecker): void {
+export function wireAppUploads({
+  container,
+  uploads,
+}: {
+  container: AppContainer;
+  uploads: AppUploadChecker;
+}): void {
   container.ports.findConfirmedUpload = async ({ organizationId, fileKey }) => {
     try {
       return await uploads.assertKeyConfirmedForOwner({
@@ -183,11 +194,11 @@ export function registerAppContainer(application: FastifyInstance): void {
     application.tenancyDomain;
   application.decorate(
     'appDomain',
-    createAppContainer(
+    createAppContainer({
       organizationService,
       membershipService,
       organizationSettingsService,
       memberRoleService,
-    ),
+    }),
   );
 }

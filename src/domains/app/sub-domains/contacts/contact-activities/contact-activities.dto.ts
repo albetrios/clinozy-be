@@ -18,11 +18,11 @@ import {
 const distinct = (values: readonly unknown[]) => new Set(values).size === values.length;
 
 /** An entry's text — 1–1000 (M6). */
-const bodySchema = trimmedStringMinMax(1, CONTACT_ACTIVITY_BODY_MAX);
+const bodySchema = trimmedStringMinMax({ min: 1, max: CONTACT_ACTIVITY_BODY_MAX });
 
 /** Up to five upload keys, each once — confirmed uploads of the organization (M6, D64). */
 const attachmentKeysSchema = z
-  .array(trimmedStringMinMax(1, 512))
+  .array(trimmedStringMinMax({ min: 1, max: 512 }))
   .max(CONTACT_ACTIVITY_ATTACHMENTS_MAX)
   .refine(distinct, { message: 'Each attachment once' });
 
@@ -32,7 +32,13 @@ const linkFields = Object.fromEntries(
 ) as Record<(typeof CONTACT_ACTIVITY_LINK_COLUMNS)[number], z.ZodOptional<typeof recordIdSchema>>;
 
 /** M5: at most one record link — each extra one is a 400 on its own field. */
-function atMostOneLink(value: Record<string, unknown>, context: z.RefinementCtx): void {
+function atMostOneLink({
+  value,
+  context,
+}: {
+  value: Record<string, unknown>;
+  context: z.RefinementCtx;
+}): void {
   const named = CONTACT_ACTIVITY_LINK_COLUMNS.filter((column) => value[column] !== undefined);
   for (const column of named.slice(1)) {
     context.addIssue({ code: 'custom', path: [column], message: 'Link one record at most' });
@@ -68,7 +74,7 @@ export const SendContactMessageDto = z
     ...linkFields,
   })
   .strict()
-  .superRefine(atMostOneLink);
+  .superRefine((value, context) => atMostOneLink({ value, context }));
 
 /** Body of `POST …/activities/log-call` (4.C.8 #12): a call that happened, either way. */
 export const LogContactCallDto = z
@@ -79,7 +85,7 @@ export const LogContactCallDto = z
     ...linkFields,
   })
   .strict()
-  .superRefine(atMostOneLink);
+  .superRefine((value, context) => atMostOneLink({ value, context }));
 
 /** Body of `POST …/activities/add-note` (4.C.8 #13): an internal note — never sent. */
 export const AddContactNoteDto = z
@@ -89,7 +95,7 @@ export const AddContactNoteDto = z
     ...linkFields,
   })
   .strict()
-  .superRefine(atMostOneLink);
+  .superRefine((value, context) => atMostOneLink({ value, context }));
 
 /** Body of `POST /contact-activities/message-batches` (4.C.8 #16): one message to many contacts. */
 export const ContactMessageBatchDto = z

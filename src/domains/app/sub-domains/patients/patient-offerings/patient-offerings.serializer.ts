@@ -8,19 +8,22 @@ import type { PatientOfferingOutput } from './patient-offerings.types.js';
  * name, the invoice (through its line) and an expired `status` (the organization's today) are the
  * rules' `decorate` — here the status knows only whether a session is left.
  */
-export function serializePatientOffering(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): PatientOfferingOutput {
+export function serializePatientOffering({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): PatientOfferingOutput {
   const sessionsTotal = Number(row.sessions_total);
   const sessionsUsed = Number(row.sessions_used);
   return {
     id: row.public_id,
-    patient_id: references.publicIdOf('patient_id', row) ?? '',
-    offering_id: references.publicIdOf('offering_id', row) ?? '',
+    patient_id: references.publicIdOf({ field: 'patient_id', row }) ?? '',
+    offering_id: references.publicIdOf({ field: 'offering_id', row }) ?? '',
     offering_name: '',
     invoice_id: null,
-    invoice_item_id: references.publicIdOf('invoice_item_id', row),
+    invoice_item_id: references.publicIdOf({ field: 'invoice_item_id', row }),
     sessions_total: sessionsTotal,
     sessions_used: sessionsUsed,
     sessions_left: sessionsTotal - sessionsUsed,

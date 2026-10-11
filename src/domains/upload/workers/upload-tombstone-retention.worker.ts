@@ -49,5 +49,5 @@ export function createUploadTombstoneRetentionWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME });
 }

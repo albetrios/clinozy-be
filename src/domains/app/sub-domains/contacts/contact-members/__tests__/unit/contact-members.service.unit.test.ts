@@ -17,18 +17,23 @@ describe('ContactMembersService', () => {
 
   it('refuses a replace without its member list (400)', async () => {
     await expect(
-      service.replace(SCOPE, 'con_aaaaaaaaaaaaaaaaaaaaa', {}, undefined),
+      service.replace({
+        scope: SCOPE,
+        contactPublicId: 'con_aaaaaaaaaaaaaaaaaaaaa',
+        body: {},
+        actingUserPublicId: undefined,
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('refuses a replace with an unknown field (400)', async () => {
     await expect(
-      service.replace(
-        SCOPE,
-        'con_aaaaaaaaaaaaaaaaaaaaa',
-        { membership_ids: [], not_a_field: true },
-        undefined,
-      ),
+      service.replace({
+        scope: SCOPE,
+        contactPublicId: 'con_aaaaaaaaaaaaaaaaaaaaa',
+        body: { membership_ids: [], not_a_field: true },
+        actingUserPublicId: undefined,
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 });

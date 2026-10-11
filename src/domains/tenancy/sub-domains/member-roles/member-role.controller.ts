@@ -26,12 +26,16 @@ export function createMemberRoleController(service: MemberRoleService) {
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const pagination = validateListMemberRolesQuery(request.query);
-      const result = await service.list(scope, pagination);
-      return paginatedResponse(result.items, getRequestIdentifier(request), {
-        per_page: result.limit,
-        next: result.next_cursor,
-        has_more: result.has_more,
-        ...(result.total !== null ? { estimated_total: result.total } : {}),
+      const result = await service.list({ scope, pagination });
+      return paginatedResponse({
+        data: result.items,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: result.limit,
+          next: result.next_cursor,
+          has_more: result.has_more,
+          ...(result.total !== null ? { estimated_total: result.total } : {}),
+        },
       });
     },
     getRole: async (request: FastifyRequest, _reply: FastifyReply) => {
@@ -41,23 +45,30 @@ export function createMemberRoleController(service: MemberRoleService) {
       // sec-new-T3: reject malformed path params before reaching the service layer.
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
-      const roleId = validatePublicIdParam(rawRoleId ?? '', 'role_id');
-      const data = await service.getByPublicId(scope, roleId);
-      return successResponse(data, getRequestIdentifier(request));
+      const roleId = validatePublicIdParam({ value: rawRoleId ?? '', fieldName: 'role_id' });
+      const data = await service.getByPublicId({ scope, role_public_id: roleId });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     createRole: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const organizationId = scope.organizationPublicId;
-      const data = await service.create(scope, request.body, getActingUserPublicId(auth));
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.role.create',
-        resource_type: 'role',
-        organizationPublicId: organizationId,
-        metadata: { role_public_id: data.id },
+      const data = await service.create({
+        scope,
+        body: request.body,
+        created_by_user_public_id: getActingUserPublicId(auth),
       });
-      return successResponse(data, getRequestIdentifier(request));
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.role.create',
+          resource_type: 'role',
+          organizationPublicId: organizationId,
+          metadata: { role_public_id: data.id },
+        },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     updateRole: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
@@ -67,16 +78,24 @@ export function createMemberRoleController(service: MemberRoleService) {
       // sec-new-T3: reject malformed path params before reaching the service layer.
       const scope = requireOrganizationScope(request);
       const organizationId = scope.organizationPublicId;
-      const roleId = validatePublicIdParam(rawUpdateRoleId ?? '', 'role_id');
-      const data = await service.update(scope, roleId, request.body, getActingUserPublicId(auth));
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.role.update',
-        resource_type: 'role',
-        organizationPublicId: organizationId,
-        metadata: { role_public_id: roleId },
+      const roleId = validatePublicIdParam({ value: rawUpdateRoleId ?? '', fieldName: 'role_id' });
+      const data = await service.update({
+        scope,
+        role_public_id: roleId,
+        body: request.body,
+        updated_by_user_public_id: getActingUserPublicId(auth),
       });
-      return successResponse(data, getRequestIdentifier(request));
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.role.update',
+          resource_type: 'role',
+          organizationPublicId: organizationId,
+          metadata: { role_public_id: roleId },
+        },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     deleteRole: async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = requirePrincipal(request);
@@ -86,14 +105,22 @@ export function createMemberRoleController(service: MemberRoleService) {
       // sec-new-T3: reject malformed path params before reaching the service layer.
       const scope = requireOrganizationScope(request);
       const organizationId = scope.organizationPublicId;
-      const roleId = validatePublicIdParam(rawDeleteRoleId ?? '', 'role_id');
-      await service.delete(scope, roleId, request.query, getActingUserPublicId(auth));
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.role.delete',
-        resource_type: 'role',
-        organizationPublicId: organizationId,
-        metadata: { role_public_id: roleId },
+      const roleId = validatePublicIdParam({ value: rawDeleteRoleId ?? '', fieldName: 'role_id' });
+      await service.delete({
+        scope,
+        role_public_id: roleId,
+        query: request.query,
+        deleted_by_user_public_id: getActingUserPublicId(auth),
+      });
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.role.delete',
+          resource_type: 'role',
+          organizationPublicId: organizationId,
+          metadata: { role_public_id: roleId },
+        },
       });
       return reply.code(204).send();
     },
@@ -101,16 +128,23 @@ export function createMemberRoleController(service: MemberRoleService) {
       const auth = requirePrincipal(request);
       const { role_id: rawRestoreRoleId } = (request.params as { role_id?: string }) ?? {};
       const scope = requireOrganizationScope(request);
-      const roleId = validatePublicIdParam(rawRestoreRoleId ?? '', 'role_id');
-      const data = await service.restore(scope, roleId, getActingUserPublicId(auth));
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.role.restore',
-        resource_type: 'role',
-        organizationPublicId: scope.organizationPublicId,
-        metadata: { role_public_id: roleId },
+      const roleId = validatePublicIdParam({ value: rawRestoreRoleId ?? '', fieldName: 'role_id' });
+      const data = await service.restore({
+        scope,
+        role_public_id: roleId,
+        restored_by_user_public_id: getActingUserPublicId(auth),
       });
-      return successResponse(data, getRequestIdentifier(request));
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.role.restore',
+          resource_type: 'role',
+          organizationPublicId: scope.organizationPublicId,
+          metadata: { role_public_id: roleId },
+        },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

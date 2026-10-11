@@ -35,7 +35,10 @@ function redactUrlPassword(url: string): string {
  */
 export function warnWhenBullMqSharesCacheRedisHost(): void {
   const bullMqRedisUrl = resolveBullMqRedisUrl();
-  const isolated = usesSeparateBullMqRedisEndpoint(env.REDIS_URL, bullMqRedisUrl);
+  const isolated = usesSeparateBullMqRedisEndpoint({
+    cacheRedisUrl: env.REDIS_URL,
+    bullMqRedisUrl,
+  });
   const payload = {
     cacheRedisUrl: redactUrlPassword(env.REDIS_URL),
     bullMqRedisUrl: redactUrlPassword(bullMqRedisUrl),

@@ -17,6 +17,7 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { createTestPlan } from '@/tests/factories/plan.factory.js';
 import { createTestSubscription } from '@/domains/billing/__tests__/factories/subscription.factory.js';
+import { subscriptions } from '@/domains/billing/sub-domains/subscription/subscription.schema.js';
 import {
   generateTestToken,
   generateTestTokenWithActiveSession,
@@ -83,6 +84,7 @@ describe('Membership Sub-Domain — Integration', () => {
     const token = await generateTestToken({
       userId: user.public_id,
       organizationPublicId: organization.public_id,
+      stepUp: true,
     });
     return { organization, token, membership, user };
   }
@@ -316,6 +318,108 @@ describe('Membership Sub-Domain — Integration', () => {
       });
     }
 
+    async function createIncompleteSubscriptionContext() {
+      await createTestPlan({ priceMonthly: '0.00', priceYearly: '0.00', includedSeats: 1 });
+      const context = await createSeatLimitedContext(5, true);
+      await getOperatorDatabase()
+        .update(subscriptions)
+        .set({ status: 'INCOMPLETE' })
+        .where(eq(subscriptions.organization_id, context.organization.id));
+      return context;
+    }
+
+    it('denies an incomplete subscription invite without writes, then allows it after local fixture activation', async () => {
+      const { organization, adminToken, memberRole } = await createIncompleteSubscriptionContext();
+      const denied = await inviteMember(adminToken, memberRole.public_id);
+      expect(denied.statusCode).toBe(409);
+      expect((denied.json() as { error: { reason?: string } }).error.reason).toBe(
+        'seat_limit_reached',
+      );
+      const [membershipCount] = await getOperatorDatabase()
+        .select({ count: count() })
+        .from(memberships)
+        .where(eq(memberships.organization_id, organization.id));
+      expect(membershipCount!.count).toBe(1);
+      const invitations = await getOperatorDatabase().select().from(membership_invitations);
+      expect(invitations).toHaveLength(0);
+
+      // This is a local database fixture transition, separate from Stripe reconciliation.
+      await getOperatorDatabase()
+        .update(subscriptions)
+        .set({ status: 'ACTIVE' })
+        .where(eq(subscriptions.organization_id, organization.id));
+      const allowed = await inviteMember(adminToken, memberRole.public_id);
+      expect(allowed.statusCode).toBe(200);
+      const createdId = (allowed.json() as { data: { id: string } }).data.id;
+      const [created] = await getOperatorDatabase()
+        .select()
+        .from(memberships)
+        .where(eq(memberships.public_id, createdId));
+      expect(created!.organization_id).toBe(organization.id);
+      expect(created!.status).toBe('invited');
+      expect(await getOperatorDatabase().select().from(membership_invitations)).toHaveLength(1);
+    });
+
+    it('preserves a suspended member under incomplete billing, then reactivates that member after local fixture activation', async () => {
+      const { organization, adminToken, memberRole } = await createIncompleteSubscriptionContext();
+      const member = await createTestUser();
+      const suspended = await createMembership({
+        userId: member.id,
+        organizationId: organization.id,
+        roleId: memberRole.id,
+        status: 'suspended',
+      });
+      const reactivate = () =>
+        injectAuthenticated(app, {
+          method: 'PATCH',
+          url: testApiPath(`/tenancy/organization/memberships/${suspended.public_id}`),
+          token: adminToken,
+          headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
+          payload: { status: 'active' },
+        });
+      const denied = await reactivate();
+      expect(denied.statusCode).toBe(409);
+      expect((denied.json() as { error: { reason?: string } }).error.reason).toBe(
+        'seat_limit_reached',
+      );
+      const [unchanged] = await getOperatorDatabase()
+        .select()
+        .from(memberships)
+        .where(eq(memberships.id, suspended.id));
+      expect(unchanged!.status).toBe('suspended');
+
+      // The same owned fixture gains its paid allowance only after activation.
+      await getOperatorDatabase()
+        .update(subscriptions)
+        .set({ status: 'ACTIVE' })
+        .where(eq(subscriptions.organization_id, organization.id));
+      const allowed = await reactivate();
+      expect(allowed.statusCode).toBe(200);
+      const [changed] = await getOperatorDatabase()
+        .select()
+        .from(memberships)
+        .where(eq(memberships.id, suspended.id));
+      expect(changed!.status).toBe('active');
+    });
+
+    it('keeps the plan seat limit after seat sync records the billed quantity', async () => {
+      const { organization, adminToken, memberRole } = await createSeatLimitedContext(5, true);
+      expect((await inviteMember(adminToken, memberRole.public_id)).statusCode).toBe(200);
+
+      // The seat-sync worker's write: the billed quantity follows the member count.
+      await app.billingDomain.subscriptionService.syncSeatQuantityForOrganization({
+        organization_public_id: organization.public_id,
+      });
+      const [synced] = await getOperatorDatabase()
+        .select({ seats: subscriptions.seats })
+        .from(subscriptions)
+        .where(eq(subscriptions.organization_id, organization.id));
+      expect(synced!.seats).toBe(2);
+
+      // The synced quantity is not an allowance: the 5-seat plan still admits a third member.
+      expect((await inviteMember(adminToken, memberRole.public_id)).statusCode).toBe(200);
+    });
+
     it('returns 409 seat_limit_reached when the plan seat limit is already filled', async () => {
       // Plan grants 1 seat; the owner already occupies it, so the next add must be rejected.
       const { adminToken, memberRole } = await createSeatLimitedContext(1, true);
@@ -437,16 +541,18 @@ describe('Membership Sub-Domain — Integration', () => {
         // organization context: `tenancy.membership_invitations` is FORCE RLS with WITH CHECK
         // pinned to the active organization, so a context-free create is rejected the moment
         // the pool under test is RLS-subject.
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
-        () =>
-          invitationRepository.create({
-            membership_id: inviteeMembership!.id,
-            email: invitee.email,
-            token_hash: hashInvitationToken(rawToken),
-            invited_by_user_id: admin.id,
-            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
-            created_by_user_id: admin.id,
-          }),
+        {
+          scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
+          callback: () =>
+            invitationRepository.create({
+              membership_id: inviteeMembership!.id,
+              email: invitee.email,
+              token_hash: hashInvitationToken(rawToken),
+              invited_by_user_id: admin.id,
+              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
+              created_by_user_id: admin.id,
+            }),
+        },
       );
       return {
         organization,
@@ -604,16 +710,18 @@ describe('Membership Sub-Domain — Integration', () => {
         // organization context: `tenancy.membership_invitations` is FORCE RLS with WITH CHECK
         // pinned to the active organization, so a context-free create is rejected the moment
         // the pool under test is RLS-subject.
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
-        () =>
-          invitationRepository.create({
-            membership_id: inviteeMembership!.id,
-            email: invitee.email,
-            token_hash: hashInvitationToken(`admin-revoke-token-${randomUUID()}`),
-            invited_by_user_id: admin.id,
-            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
-            created_by_user_id: admin.id,
-          }),
+        {
+          scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
+          callback: () =>
+            invitationRepository.create({
+              membership_id: inviteeMembership!.id,
+              email: invitee.email,
+              token_hash: hashInvitationToken(`admin-revoke-token-${randomUUID()}`),
+              invited_by_user_id: admin.id,
+              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
+              created_by_user_id: admin.id,
+            }),
+        },
       );
       return { organization, adminToken, invitation, inviteeMembership: inviteeMembership! };
     }
@@ -732,16 +840,18 @@ describe('Membership Sub-Domain — Integration', () => {
         // organization context: `tenancy.membership_invitations` is FORCE RLS with WITH CHECK
         // pinned to the active organization, so a context-free create is rejected the moment
         // the pool under test is RLS-subject.
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
-        () =>
-          invitationRepository.create({
-            membership_id: inviteeMembership!.id,
-            email: invitee.email,
-            token_hash: originalTokenHash,
-            invited_by_user_id: admin.id,
-            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
-            created_by_user_id: admin.id,
-          }),
+        {
+          scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
+          callback: () =>
+            invitationRepository.create({
+              membership_id: inviteeMembership!.id,
+              email: invitee.email,
+              token_hash: originalTokenHash,
+              invited_by_user_id: admin.id,
+              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1_000),
+              created_by_user_id: admin.id,
+            }),
+        },
       );
       return {
         organization,
@@ -1059,9 +1169,67 @@ describe('Membership Sub-Domain — Integration', () => {
       });
       expect(response.statusCode, response.body).toBe(400);
     });
+
+    it("refuses a SUSPENDED member's already-issued organization token on GET /tenancy/organization (404)", async () => {
+      // The token below is minted while the membership is ACTIVE and its signed `org` claim stays
+      // valid after the suspension — only the per-request membership check can refuse it.
+      const { organization, token: ownerToken } = await createAuthorizedContext();
+      const member = await createTestUser({ email: `suspended-${randomUUID()}@test.com` });
+      const memberRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [TENANCY_PERMISSIONS.ORGANIZATION_READ],
+      });
+      const membership = await createMembership({
+        userId: member.id,
+        organizationId: organization.id,
+        roleId: memberRole.id,
+      });
+      const memberToken = await generateTestToken({
+        userId: member.public_id,
+        organizationPublicId: organization.public_id,
+      });
+
+      const beforeSuspension = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/tenancy/organization'),
+        token: memberToken,
+      });
+      expect(beforeSuspension.statusCode, beforeSuspension.body).toBe(200);
+
+      const suspend = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/tenancy/organization/memberships/${membership.public_id}`),
+        token: ownerToken,
+        payload: { status: 'suspended' },
+      });
+      expect(suspend.statusCode, suspend.body).toBe(200);
+
+      const afterSuspension = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/tenancy/organization'),
+        token: memberToken,
+      });
+      expect(afterSuspension.statusCode, afterSuspension.body).toBe(404);
+    });
   });
 
   describe('POST /api/v1/tenancy/organization/transfer-ownership (route-coverage gap-fill)', () => {
+    it('requires a recent step-up on this session (a stolen owner token alone is not enough)', async () => {
+      const { organization, user: owner } = await createAuthorizedContext();
+      const token = await generateTestToken({
+        userId: owner.public_id,
+        organizationPublicId: organization.public_id,
+      });
+      const response = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/tenancy/organization/transfer-ownership`),
+        token,
+        headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
+        payload: { new_owner_user_id: owner.public_id },
+      });
+      expect(response.statusCode, response.body).toBe(403);
+    });
+
     it('returns 400 when new_owner_user_id is missing (validator wired at the boundary)', async () => {
       // The DTO rule is unit-proven; no 400 was ever observed on this route, so a validator that
       // stopped being wired in would pass every existing case. Key supplied → the idempotency 422
@@ -1108,6 +1276,56 @@ describe('Membership Sub-Domain — Integration', () => {
       expect(updatedOrg!.owner_user_id).not.toBe(owner.id);
     });
 
+    it('lets the new owner transfer ownership back to the previous owner (200 both ways)', async () => {
+      const { organization, token: ownerToken, user: owner } = await createAuthorizedContext();
+      const newOwner = await createTestUser({ email: `round-trip-owner-${randomUUID()}@test.com` });
+      const memberRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: MEMBERSHIP_PERMISSIONS,
+      });
+      await createMembership({
+        userId: newOwner.id,
+        organizationId: organization.id,
+        roleId: memberRole.id,
+      });
+
+      const transferred = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/tenancy/organization/transfer-ownership`),
+        token: ownerToken,
+        headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
+        payload: { new_owner_user_id: newOwner.public_id },
+      });
+      expect(transferred.statusCode, transferred.body).toBe(200);
+      expect((transferred.json() as { data: { user_id: string } }).data.user_id).toBe(
+        newOwner.public_id,
+      );
+
+      // The previous owner keeps an ACTIVE membership, so it is a valid transfer target.
+      const newOwnerToken = await generateTestToken({
+        userId: newOwner.public_id,
+        organizationPublicId: organization.public_id,
+        stepUp: true,
+      });
+      const transferredBack = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/tenancy/organization/transfer-ownership`),
+        token: newOwnerToken,
+        headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
+        payload: { new_owner_user_id: owner.public_id },
+      });
+      expect(transferredBack.statusCode, transferredBack.body).toBe(200);
+      expect((transferredBack.json() as { data: { user_id: string } }).data.user_id).toBe(
+        owner.public_id,
+      );
+
+      const [organizationAfterRoundTrip] = await getOperatorDatabase()
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, organization.id));
+      expect(organizationAfterRoundTrip!.owner_user_id).toBe(owner.id);
+    });
+
     it('rejects non-owner callers with 403 (errors:onlyOwnerCanTransfer)', async () => {
       const { organization } = await createAuthorizedContext();
       const nonOwner = await createTestUser({ email: `non-owner-${randomUUID()}@test.com` });
@@ -1123,6 +1341,7 @@ describe('Membership Sub-Domain — Integration', () => {
       const nonOwnerToken = await generateTestToken({
         userId: nonOwner.public_id,
         organizationPublicId: organization.public_id,
+        stepUp: true,
       });
       const target = await createTestUser({ email: `target-${randomUUID()}@test.com` });
       await createMembership({
@@ -1198,6 +1417,61 @@ describe('Membership Sub-Domain — Integration', () => {
     });
   });
 
+  describe('GET /api/v1/users/me/organizations after the organization is deleted', () => {
+    it("drops a deleted organization from its former member's organization list", async () => {
+      await seedPermissions([TENANCY_PERMISSIONS.ORGANIZATION_DELETE]);
+      const owner = await createTestUser();
+      const organization = await createTestOrganization({ ownerUserId: owner.id });
+      const ownerRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [TENANCY_PERMISSIONS.ORGANIZATION_DELETE],
+      });
+      await createMembership({
+        userId: owner.id,
+        organizationId: organization.id,
+        roleId: ownerRole.id,
+      });
+      const ownerToken = await generateTestToken({
+        userId: owner.public_id,
+        organizationPublicId: organization.public_id,
+        stepUp: true,
+      });
+      const member = await createTestUser({ email: `former-member-${randomUUID()}@test.com` });
+      const memberRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [TENANCY_PERMISSIONS.ORGANIZATION_READ],
+      });
+      await createMembership({
+        userId: member.id,
+        organizationId: organization.id,
+        roleId: memberRole.id,
+      });
+      const memberToken = await generateTestToken({ userId: member.public_id });
+      const listMemberOrganizationIds = async (): Promise<string[]> => {
+        const response = await injectAuthenticated(app, {
+          method: 'GET',
+          url: testApiPath('/users/me/organizations'),
+          token: memberToken,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return (response.json() as { data: { id: string }[] }).data.map(
+          (listedOrganization) => listedOrganization.id,
+        );
+      };
+
+      expect(await listMemberOrganizationIds()).toContain(organization.public_id);
+
+      const deleteResponse = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath('/tenancy/organization'),
+        token: ownerToken,
+      });
+      expect(deleteResponse.statusCode, deleteResponse.body).toBe(204);
+
+      expect(await listMemberOrganizationIds()).not.toContain(organization.public_id);
+    });
+  });
+
   // A PERSONAL organization is single-member by definition. The service-layer guard rejects
   // every people-sharing entry point with a 409 ConflictError. This is unit-tested in
   // membership.service.unit.test.ts; these tests prove the rejection survives over real HTTP —
@@ -1245,7 +1519,7 @@ describe('Membership Sub-Domain — Integration', () => {
     async function setupPersonalOrganizationOwner() {
       await seedOwnerGrantPermissions();
       const owner = await createTestUser();
-      const provisioned = await provisionPersonalOrganization(owner.id);
+      const provisioned = await provisionPersonalOrganization({ ownerUserId: owner.id });
       const token = await generateTestToken({
         userId: owner.public_id,
         organizationPublicId: provisioned.organization.public_id,

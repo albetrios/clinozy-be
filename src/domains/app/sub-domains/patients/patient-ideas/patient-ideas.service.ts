@@ -38,38 +38,44 @@ export class PatientIdeasService {
   ) {}
 
   /** The plan's ideas for one patient, with where they came from. */
-  async list(
-    scope: OrganizationPrincipalDatabaseScope,
-    params: unknown,
-  ): Promise<PatientIdeasResult> {
+  async list({
+    scope,
+    params,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    params: unknown;
+  }): Promise<PatientIdeasResult> {
     const { patient_id: patientPublicId } = validatePatientIdeasParams(params);
-    return withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationService.requireOrganizationByPublicId(
-        scope.organizationPublicId,
-      );
-      const patient = await this.repository.findPatient(organization.id, patientPublicId);
-      if (!patient) throw new NotFoundError('Patient');
-      const offerings = await this.repository.findActiveOfferings(organization.id);
-      const excluded = new Set(await this.repository.findPlannedOfferingIds(patient.id));
-      if (isPatientIdeasAiEnabled() && patient.hasDataConsent) {
-        const stored = await this.repository.findStoredIdeas(patient.id);
-        const aiIdeas = usableStoredIdeas({ stored, offerings, excluded });
-        if (aiIdeas.length > 0) {
-          const refreshedAt = stored.reduce(
-            (latest, idea) => (idea.createdAt > latest ? idea.createdAt : latest),
-            new Date(0),
-          );
-          return {
-            data: aiIdeas.map(serializePatientIdea),
-            meta: { source: PATIENT_IDEAS_ORIGIN.AI, ai_refreshed_at: refreshedAt.toISOString() },
-          };
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization = await this.organizationService.requireOrganizationByPublicId(
+          scope.organizationPublicId,
+        );
+        const patient = await this.repository.findPatient(organization.id, patientPublicId);
+        if (!patient) throw new NotFoundError('Patient');
+        const offerings = await this.repository.findActiveOfferings(organization.id);
+        const excluded = new Set(await this.repository.findPlannedOfferingIds(patient.id));
+        if (isPatientIdeasAiEnabled() && patient.hasDataConsent) {
+          const stored = await this.repository.findStoredIdeas(patient.id);
+          const aiIdeas = usableStoredIdeas({ stored, offerings, excluded });
+          if (aiIdeas.length > 0) {
+            const refreshedAt = stored.reduce(
+              (latest, idea) => (idea.createdAt > latest ? idea.createdAt : latest),
+              new Date(0),
+            );
+            return {
+              data: aiIdeas.map(serializePatientIdea),
+              meta: { source: PATIENT_IDEAS_ORIGIN.AI, ai_refreshed_at: refreshedAt.toISOString() },
+            };
+          }
         }
-      }
-      const history = await this.repository.findHistory(patient);
-      return {
-        data: ruleIdeas({ history, offerings, excluded }).map(serializePatientIdea),
-        meta: { source: PATIENT_IDEAS_ORIGIN.RULES, ai_refreshed_at: null },
-      };
+        const history = await this.repository.findHistory(patient);
+        return {
+          data: ruleIdeas({ history, offerings, excluded }).map(serializePatientIdea),
+          meta: { source: PATIENT_IDEAS_ORIGIN.RULES, ai_refreshed_at: null },
+        };
+      },
     });
   }
 }

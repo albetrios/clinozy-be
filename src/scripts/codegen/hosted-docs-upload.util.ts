@@ -26,20 +26,29 @@ export function checkHostedUploadCredentials(
 }
 
 /** Emits a single-line warning naming the target and the missing env vars; used by hosted upload scripts when credentials are absent. */
-export function logHostedUploadSkipped(targetName: string, missingVariables: string[]): void {
+export function logHostedUploadSkipped({
+  targetName,
+  missingVariables,
+}: {
+  targetName: string;
+  missingVariables: string[];
+}): void {
   console.warn(
     `Skipping ${targetName} upload: missing ${missingVariables.join(', ')}. Set env vars to publish.`,
   );
 }
 
 /** Returns true when the upload should not run (caller should exit 0). */
-export function shouldSkipHostedUpload(
-  targetName: string,
-  requiredVariableNames: readonly string[],
-): boolean {
+export function shouldSkipHostedUpload({
+  targetName,
+  requiredVariableNames,
+}: {
+  targetName: string;
+  requiredVariableNames: readonly string[];
+}): boolean {
   const check = checkHostedUploadCredentials(requiredVariableNames);
   if (check.skip) {
-    logHostedUploadSkipped(targetName, check.missingVariables);
+    logHostedUploadSkipped({ targetName, missingVariables: check.missingVariables });
     return true;
   }
   return false;

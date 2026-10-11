@@ -54,15 +54,32 @@ function authorizeMetricsRequest(authorizationHeader: string | string[] | undefi
   const environment = getEnv();
   const bearerToken = environment.METRICS_SCRAPE_TOKEN;
   if (environment.METRICS_AUTH_REQUIRED && environment.METRICS_ENABLED) {
-    return Boolean(bearerToken && isBearerTokenValid(resolvedAuthorizationHeader, bearerToken));
+    return Boolean(
+      bearerToken &&
+        isBearerTokenValid({
+          authorizationHeader: resolvedAuthorizationHeader,
+          expectedBearerToken: bearerToken,
+        }),
+    );
   }
   if (bearerToken) {
-    return isBearerTokenValid(resolvedAuthorizationHeader, bearerToken);
+    return isBearerTokenValid({
+      authorizationHeader: resolvedAuthorizationHeader,
+      expectedBearerToken: bearerToken,
+    });
   }
   return true;
 }
 
-function sendJson(response: http.ServerResponse, statusCode: number, body: unknown): void {
+function sendJson({
+  response,
+  statusCode,
+  body,
+}: {
+  response: http.ServerResponse;
+  statusCode: number;
+  body: unknown;
+}): void {
   response.writeHead(statusCode, { 'Content-Type': 'application/json' });
   response.end(JSON.stringify(body));
 }
@@ -86,7 +103,7 @@ function resolveWorkerHealthStatus({
  * independent of worker registration, so a healthy-but-still-warming-up worker is not killed.
  */
 function handleLivenessProbe(response: http.ServerResponse): void {
-  sendJson(response, 200, { status: 'live', role: 'worker' });
+  sendJson({ response, statusCode: 200, body: { status: 'live', role: 'worker' } });
 }
 
 async function handleReadinessProbe(response: http.ServerResponse): Promise<void> {
@@ -95,10 +112,10 @@ async function handleReadinessProbe(response: http.ServerResponse): Promise<void
     readWorkerQueueHeartbeats(WORKER_QUEUE_NAMES),
     readWorkerQueueHeartbeats(WORKER_THROUGHPUT_QUEUE_NAMES),
   ]);
-  const throughputStalled = isWorkerThroughputStalled(
-    throughputHeartbeats,
-    env.WORKER_HEALTH_STALL_TIMEOUT_MS,
-  );
+  const throughputStalled = isWorkerThroughputStalled({
+    heartbeats: throughputHeartbeats,
+    stallTimeoutMs: env.WORKER_HEALTH_STALL_TIMEOUT_MS,
+  });
   // A worker is only "stalled" when heartbeats are stale AND there is queued work waiting — an
   // idle worker with an empty queue is healthy. Queue depth is read only when heartbeats are
   // already stale, so the healthy hot path adds no Redis round-trip; a depth-read failure fails
@@ -123,25 +140,36 @@ async function handleReadinessProbe(response: http.ServerResponse): Promise<void
     dependencyStatus: readiness.status,
   });
 
-  sendJson(response, processReady ? 200 : 503, {
-    status,
-    role: 'worker',
-    database: readiness.database,
-    redis: readiness.redis,
-    bullmq: readiness.bullmq,
-    latencyMs: readiness.latencyMs,
-    workersRegistered: registeredWorkerCount,
-    worker_queues,
-    throughput_waiting: throughputWaiting,
+  sendJson({
+    response,
+    statusCode: processReady ? 200 : 503,
+    body: {
+      status,
+      role: 'worker',
+      database: readiness.database,
+      redis: readiness.redis,
+      bullmq: readiness.bullmq,
+      latencyMs: readiness.latencyMs,
+      workersRegistered: registeredWorkerCount,
+      worker_queues,
+      throughput_waiting: throughputWaiting,
+    },
   });
 }
 
-async function handleMetrics(
-  request: http.IncomingMessage,
-  response: http.ServerResponse,
-): Promise<void> {
+async function handleMetrics({
+  request,
+  response,
+}: {
+  request: http.IncomingMessage;
+  response: http.ServerResponse;
+}): Promise<void> {
   if (!authorizeMetricsRequest(request.headers.authorization)) {
-    sendJson(response, 401, { status: 'error', detail: 'Invalid metrics bearer token' });
+    sendJson({
+      response,
+      statusCode: 401,
+      body: { status: 'error', detail: 'Invalid metrics bearer token' },
+    });
     return;
   }
   await refreshMetricsBeforeScrape();
@@ -150,11 +178,15 @@ async function handleMetrics(
   response.end(body);
 }
 
-async function handleHealthRequest(
-  request: http.IncomingMessage,
-  response: http.ServerResponse,
-  url: string,
-): Promise<void> {
+async function handleHealthRequest({
+  request,
+  response,
+  url,
+}: {
+  request: http.IncomingMessage;
+  response: http.ServerResponse;
+  url: string;
+}): Promise<void> {
   if (request.method !== 'GET') {
     response.writeHead(404);
     response.end();
@@ -170,7 +202,7 @@ async function handleHealthRequest(
     return;
   }
   if (url === '/metrics' && isMetricsEnabled()) {
-    await handleMetrics(request, response);
+    await handleMetrics({ request, response });
     return;
   }
 
@@ -192,10 +224,10 @@ export async function startWorkerHealthServer(): Promise<void> {
 
   healthServer = http.createServer((request, response) => {
     const url = request.url?.split('?')[0] ?? '';
-    void handleHealthRequest(request, response, url).catch((error) => {
+    void handleHealthRequest({ request, response, url }).catch((error) => {
       logger.error({ error, url }, 'worker.health.request.failed');
       if (!response.headersSent) {
-        sendJson(response, 500, { status: 'error' });
+        sendJson({ response, statusCode: 500, body: { status: 'error' } });
       }
     });
   });

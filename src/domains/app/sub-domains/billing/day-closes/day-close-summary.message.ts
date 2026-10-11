@@ -45,8 +45,8 @@ function closedByOf(summary: PendingDayCloseSummary): string {
 export function dayCloseSummaryParameters(summary: PendingDayCloseSummary): string[] {
   const { net } = summary.figures;
   return [
-    templateParameter(summary.branchName, 'the branch'),
-    templateParameter(summary.closeDate, '-'),
+    templateParameter({ value: summary.branchName, fallback: 'the branch' }),
+    templateParameter({ value: summary.closeDate, fallback: '-' }),
     rupees(netTotalOf(summary)),
     rupees(net.cash),
     rupees(net.upi),
@@ -55,7 +55,7 @@ export function dayCloseSummaryParameters(summary: PendingDayCloseSummary): stri
     rupees(summary.expectedCash),
     drawerOf(summary),
     entriesOf(summary),
-    templateParameter(closedByOf(summary), 'closed'),
+    templateParameter({ value: closedByOf(summary), fallback: 'closed' }),
   ];
 }
 

@@ -20,10 +20,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   return {
     ...actual,
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -53,7 +55,6 @@ describe('UploadService offboarding', () => {
       {} as ConstructorParameters<typeof UploadService>[1],
       {} as ConstructorParameters<typeof UploadService>[2],
       { deleteObject } as unknown as ConstructorParameters<typeof UploadService>[3],
-      {} as ConstructorParameters<typeof UploadService>[4],
     );
 
     const count = await service.tombstoneAllByUserId(42);
@@ -62,6 +63,9 @@ describe('UploadService offboarding', () => {
     expect(deleteObject).toHaveBeenCalledTimes(2);
     expect(deleteObject).toHaveBeenCalledWith('avatars/user-1/a.png');
     expect(repository.softDeleteAllByUserId).toHaveBeenCalledWith(42);
+    const lastObjectDelete = deleteObject.mock.invocationCallOrder.at(-1)!;
+    const tombstoneCall = vi.mocked(repository.softDeleteAllByUserId).mock.invocationCallOrder[0]!;
+    expect(lastObjectDelete).toBeLessThan(tombstoneCall);
   });
 
   it('tombstoneAllByUserId streams uploads in bounded keyset batches', async () => {
@@ -86,7 +90,6 @@ describe('UploadService offboarding', () => {
       {} as ConstructorParameters<typeof UploadService>[1],
       {} as ConstructorParameters<typeof UploadService>[2],
       { deleteObject } as unknown as ConstructorParameters<typeof UploadService>[3],
-      {} as ConstructorParameters<typeof UploadService>[4],
     );
 
     const count = await service.tombstoneAllByUserId(9);

@@ -19,17 +19,26 @@ import {
 
 /** Parses an appointment create body (a booking or a walk-in); throws `ValidationError` naming each bad field. */
 export function validateCreateAppointment(data: unknown): CreateAppointmentInput {
-  return withInstants(parseWithSchema(CreateAppointmentDto, data), ['follow_up_at']);
+  return withInstants({
+    values: parseWithSchema({ schema: CreateAppointmentDto, data }),
+    fields: ['follow_up_at'],
+  });
 }
 
 /** Parses the copy's internal create — the create body plus `copied_from_appointment_id` (A7). */
 export function validateCopiedAppointment(data: unknown): Record<string, unknown> {
-  return withInstants(parseWithSchema(CopiedAppointmentDto, data), ['follow_up_at']);
+  return withInstants({
+    values: parseWithSchema({ schema: CopiedAppointmentDto, data }),
+    fields: ['follow_up_at'],
+  });
 }
 
 /** Parses an appointment update body; throws `ValidationError` naming each bad field. */
 export function validateUpdateAppointment(data: unknown): UpdateAppointmentInput {
-  return withInstants(parseWithSchema(UpdateAppointmentDto, data), ['follow_up_at']);
+  return withInstants({
+    values: parseWithSchema({ schema: UpdateAppointmentDto, data }),
+    fields: ['follow_up_at'],
+  });
 }
 
 /**
@@ -38,8 +47,8 @@ export function validateUpdateAppointment(data: unknown): UpdateAppointmentInput
  * `status` and `visit_stage` take several values; the date range is whole days, both inclusive.
  */
 export function validateListAppointmentsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listAppointmentsQueryDto, data);
-  const search = readContactLinkedSearch(query.q);
+  const query = parseWithSchema({ schema: listAppointmentsQueryDto, data });
+  const search = readContactLinkedSearch({ q: query.q });
   return {
     after: query.after,
     limit: query.limit,
@@ -79,10 +88,10 @@ export function validateListAppointmentsQuery(data: unknown): BaseRecordListInpu
 
 /** Parses the body of the `cancel` action. */
 export function validateCancelAppointment(data: unknown): Record<string, unknown> {
-  return parseWithSchema(cancelAppointmentDto, data ?? {});
+  return parseWithSchema({ schema: cancelAppointmentDto, data: data ?? {} });
 }
 
 /** Parses the body of the `stage` action. */
 export function validateStageAppointment(data: unknown): Record<string, unknown> {
-  return parseWithSchema(stageAppointmentDto, data ?? {});
+  return parseWithSchema({ schema: stageAppointmentDto, data: data ?? {} });
 }

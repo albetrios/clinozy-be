@@ -56,7 +56,8 @@ describe('Security: unique-violation conflict handling', () => {
   describe('webhook url collision (PATCH)', () => {
     beforeEach(async () => {
       await cleanupDatabase();
-      await seedPermissions(['webhook:read', 'webhook:manage']);
+      // The factory's webhooks receive `subscription.updated`: changing one needs `subscription:read`.
+      await seedPermissions(['webhook:read', 'webhook:manage', 'subscription:read']);
     });
 
     async function webhookAdminContext() {
@@ -64,7 +65,7 @@ describe('Security: unique-violation conflict handling', () => {
       const organization = await createTestOrganization({ ownerUserId: user.id });
       const role = await createRoleWithPermissions({
         organizationId: organization.id,
-        permissionCodes: ['webhook:read', 'webhook:manage'],
+        permissionCodes: ['webhook:read', 'webhook:manage', 'subscription:read'],
       });
       await createMembership({ userId: user.id, organizationId: organization.id, roleId: role.id });
       // Flat webhook routes resolve the organization from the JWT `org` claim.

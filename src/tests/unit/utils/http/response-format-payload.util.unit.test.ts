@@ -7,33 +7,36 @@ import {
 describe('formatResponsePayload', () => {
   it('returns raw, error, and non-JSON payloads unchanged', () => {
     expect(
-      formatResponsePayload(
-        { ok: true },
-        {
+      formatResponsePayload({
+        payload: { ok: true },
+        context: {
           rawResponse: true,
           statusCode: 200,
           contentType: 'application/json',
           requestId: 'req_1',
         },
-      ),
+      }),
     ).toEqual({ ok: true });
 
     expect(
-      formatResponsePayload(
-        { error: 'bad' },
-        {
+      formatResponsePayload({
+        payload: { error: 'bad' },
+        context: {
           statusCode: 400,
           contentType: 'application/json',
           requestId: 'req_1',
         },
-      ),
+      }),
     ).toEqual({ error: 'bad' });
 
     expect(
-      formatResponsePayload('plain', {
-        statusCode: 200,
-        contentType: 'text/plain',
-        requestId: 'req_1',
+      formatResponsePayload({
+        payload: 'plain',
+        context: {
+          statusCode: 200,
+          contentType: 'text/plain',
+          requestId: 'req_1',
+        },
       }),
     ).toBe('plain');
   });
@@ -44,10 +47,13 @@ describe('formatResponsePayload', () => {
       meta: { request_id: 'existing' },
     };
     expect(
-      formatResponsePayload(envelope, {
-        statusCode: 200,
-        contentType: 'application/json',
-        requestId: 'req_1',
+      formatResponsePayload({
+        payload: envelope,
+        context: {
+          statusCode: 200,
+          contentType: 'application/json',
+          requestId: 'req_1',
+        },
       }),
     ).toBe(envelope);
     expect(isPaddleEnvelope(envelope)).toBe(true);
@@ -55,14 +61,14 @@ describe('formatResponsePayload', () => {
 
   it('wraps JSON object payloads when content-type is application/json', () => {
     expect(
-      formatResponsePayload(
-        { value: 1 },
-        {
+      formatResponsePayload({
+        payload: { value: 1 },
+        context: {
           statusCode: 200,
           contentType: 'application/json',
           requestId: 'req_object',
         },
-      ),
+      }),
     ).toEqual({
       data: { value: 1 },
       meta: { request_id: 'req_object' },
@@ -71,10 +77,13 @@ describe('formatResponsePayload', () => {
 
   it('wraps JSON string payloads and preserves invalid JSON strings', () => {
     expect(
-      formatResponsePayload(JSON.stringify({ value: 2 }), {
-        statusCode: 200,
-        contentType: 'application/json',
-        requestId: 'req_string',
+      formatResponsePayload({
+        payload: JSON.stringify({ value: 2 }),
+        context: {
+          statusCode: 200,
+          contentType: 'application/json',
+          requestId: 'req_string',
+        },
       }),
     ).toBe(
       JSON.stringify({
@@ -84,20 +93,26 @@ describe('formatResponsePayload', () => {
     );
 
     expect(
-      formatResponsePayload('{not-json', {
-        statusCode: 200,
-        contentType: 'application/json',
-        requestId: 'req_invalid',
+      formatResponsePayload({
+        payload: '{not-json',
+        context: {
+          statusCode: 200,
+          contentType: 'application/json',
+          requestId: 'req_invalid',
+        },
       }),
     ).toBe('{not-json');
   });
 
   it('does not wrap when content-type is not a string', () => {
     expect(
-      formatResponsePayload(JSON.stringify({ ok: true }), {
-        statusCode: 200,
-        contentType: ['application/json'],
-        requestId: 'req_1',
+      formatResponsePayload({
+        payload: JSON.stringify({ ok: true }),
+        context: {
+          statusCode: 200,
+          contentType: ['application/json'],
+          requestId: 'req_1',
+        },
       }),
     ).toBe('{"ok":true}');
   });

@@ -65,7 +65,11 @@ export function describeAppRecordServiceContract(
         ? 'has no generic create — refused before any database work'
         : 'refuses a create body with an unknown field (400)',
       async () => {
-        const call = service.create(UNREACHED_SCOPE, { not_a_field: true }, undefined);
+        const call = service.create({
+          scope: UNREACHED_SCOPE,
+          body: { not_a_field: true },
+          actingUserPublicId: undefined,
+        });
         if (options.refusesCreate) await expectRefusedWithoutDatabase(call, options.refusesCreate);
         else await expect(call).rejects.toBeInstanceOf(ValidationError);
       },
@@ -76,26 +80,32 @@ export function describeAppRecordServiceContract(
         ? 'is never changed — refused before any database work'
         : 'refuses a change with an unknown field (400)',
       async () => {
-        const call = service.update(
-          UNREACHED_SCOPE,
-          UNREACHED_RECORD_ID,
-          { not_a_field: true },
-          undefined,
-        );
+        const call = service.update({
+          scope: UNREACHED_SCOPE,
+          publicId: UNREACHED_RECORD_ID,
+          body: { not_a_field: true },
+          actingUserPublicId: undefined,
+        });
         if (options.refusesUpdate) await expectRefusedWithoutDatabase(call, options.refusesUpdate);
         else await expect(call).rejects.toBeInstanceOf(ValidationError);
       },
     );
 
     it('refuses a list query with an unknown filter (400)', async () => {
-      await expect(service.list(UNREACHED_SCOPE, { not_a_filter: 'x' })).rejects.toBeInstanceOf(
-        ValidationError,
-      );
+      await expect(
+        service.list({ scope: UNREACHED_SCOPE, query: { not_a_filter: 'x' } }),
+      ).rejects.toBeInstanceOf(ValidationError);
     });
 
     it('answers an action the table does not have as not found (404)', async () => {
       await expect(
-        service.transition(UNREACHED_SCOPE, UNREACHED_RECORD_ID, 'not-an-action', {}, undefined),
+        service.transition({
+          scope: UNREACHED_SCOPE,
+          publicId: UNREACHED_RECORD_ID,
+          action: 'not-an-action',
+          body: {},
+          actingUserPublicId: undefined,
+        }),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });

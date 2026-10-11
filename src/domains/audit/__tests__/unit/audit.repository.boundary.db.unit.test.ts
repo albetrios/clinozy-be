@@ -1,9 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
-import { sql } from '@/infrastructure/database/connection.js';
 import { AuditRepository } from '@/domains/audit/audit.repository.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 const ACTION = 'audit.boundary.test';
 const RESOURCE_TYPE = 'audit-boundary';
@@ -12,7 +18,8 @@ const RESOURCE_TYPE = 'audit-boundary';
  * Inserts a single `audit.logs` row at an explicit `created_at` for boundary assertions.
  */
 async function insertAuditLogAt(actorUserId: number, createdAt: Date): Promise<number> {
-  const rows = await sql<{ id: number }[]>`
+  const rows = rowsOf<{ id: number }>(
+    await database.execute(sql`
     INSERT INTO audit.logs (public_id, actor_user_id, action, resource_type, resource_id, created_at)
     VALUES (
       ${generatePublicId('auditLog')},
@@ -23,7 +30,8 @@ async function insertAuditLogAt(actorUserId: number, createdAt: Date): Promise<n
       ${createdAt.toISOString()}::timestamptz
     )
     RETURNING id
-  `;
+  `),
+  );
   const idRow = rows[0];
   if (idRow === undefined) {
     throw new Error('audit log row not returned after insert');

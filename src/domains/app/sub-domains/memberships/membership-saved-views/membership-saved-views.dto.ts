@@ -20,14 +20,14 @@ const filtersSchema = z.record(z.string(), z.unknown());
 
 /** The columns a view hides. */
 const hiddenColumnsSchema = z
-  .array(trimmedStringMinMax(1, 60))
+  .array(trimmedStringMinMax({ min: 1, max: 60 }))
   .max(MEMBERSHIP_SAVED_VIEW_HIDDEN_COLUMNS_MAX);
 
 /** Body of `POST /app/memberships/me/saved-views` — a list's filters under a label (launch U5). */
 export const createMembershipSavedViewDto = z
   .object({
     list_key: z.enum(MEMBERSHIP_SAVED_VIEW_LIST_KEYS),
-    label: trimmedStringMinMax(1, 60),
+    label: trimmedStringMinMax({ min: 1, max: 60 }),
     filters: filtersSchema,
     hidden_columns: hiddenColumnsSchema.optional(),
   })
@@ -39,7 +39,7 @@ export const createMembershipSavedViewDto = z
  */
 export const updateMembershipSavedViewDto = z
   .object({
-    label: trimmedStringMinMax(1, 60).optional(),
+    label: trimmedStringMinMax({ min: 1, max: 60 }).optional(),
     filters: filtersSchema.optional(),
     hidden_columns: hiddenColumnsSchema.optional(),
     expected_updated_at: expectedUpdatedAtSchema,

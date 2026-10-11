@@ -17,19 +17,19 @@ function readInstant(value: string | undefined): Date | undefined {
 export function validateCreatePatientOfferingSuggestion(
   data: unknown,
 ): CreatePatientOfferingSuggestionInput {
-  return parseWithSchema(CreatePatientOfferingSuggestionDto, data);
+  return parseWithSchema({ schema: CreatePatientOfferingSuggestionDto, data });
 }
 
 /** Parses a plan row update body; throws `ValidationError` naming each bad field. */
 export function validateUpdatePatientOfferingSuggestion(
   data: unknown,
 ): UpdatePatientOfferingSuggestionInput {
-  return parseWithSchema(UpdatePatientOfferingSuggestionDto, data);
+  return parseWithSchema({ schema: UpdatePatientOfferingSuggestionDto, data });
 }
 
 /** Parses a patient's plan query into a list input (routes-final 7.M.8 #68). */
 export function validateListPatientOfferingSuggestionsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listPatientOfferingSuggestionsQueryDto, data);
+  const query = parseWithSchema({ schema: listPatientOfferingSuggestionsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

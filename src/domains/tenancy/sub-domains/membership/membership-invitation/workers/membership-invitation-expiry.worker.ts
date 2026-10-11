@@ -34,7 +34,7 @@ export function createMembershipInvitationExpiryWorker(
 ): WorkerHandle {
   const worker = new Worker(
     MEMBERSHIP_INVITATION_EXPIRY_QUEUE_NAME,
-    async () => runMembershipInvitationExpiryJob(service),
+    async () => runMembershipInvitationExpiryJob({ service }),
     {
       connection: getBullMQConnectionOptions(),
       prefix: getBullMQKeyPrefix(),
@@ -50,5 +50,5 @@ export function createMembershipInvitationExpiryWorker(
     );
   });
 
-  return buildWorkerHandle(worker, MEMBERSHIP_INVITATION_EXPIRY_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: MEMBERSHIP_INVITATION_EXPIRY_QUEUE_NAME });
 }

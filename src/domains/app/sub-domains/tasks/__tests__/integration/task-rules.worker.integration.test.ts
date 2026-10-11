@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { Queue, QueueEvents } from 'bullmq';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import {
   getBullMQConnectionOptions,
   getBullMQKeyPrefix,
@@ -121,7 +121,7 @@ describe('Task rules worker — a lead hold running out (A3, D40)', () => {
       owner_membership_id: fixture.members.counsellor.membershipPublicId,
     });
     const lead = flow.last('.data.id');
-    const [hold] = await getOperatorSql()<{ ends_at: string }[]>`
+    const [hold] = await operatorQuery<{ ends_at: string }[]>`
       UPDATE app.leads SET held_until = now() + interval '3 seconds'
       WHERE public_id = ${lead} RETURNING to_char(held_until AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS ends_at
     `;

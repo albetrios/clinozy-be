@@ -22,22 +22,34 @@ type AdminUserAuditAction =
   | 'user.admin.unsuspend';
 
 function getUserIdParam(request: FastifyRequest): string {
-  return validatePublicIdParam((request.params as { user_id: string }).user_id ?? '', 'user_id');
+  return validatePublicIdParam({
+    value: (request.params as { user_id: string }).user_id ?? '',
+    fieldName: 'user_id',
+  });
 }
 
-async function recordAdminUserAudit(
-  request: FastifyRequest,
-  actorUserPublicId: string,
-  action: AdminUserAuditAction,
-  targetUserPublicId: string,
-  severity?: 'WARNING',
-): Promise<void> {
-  await recordScopedAuditEvent(request, {
-    actorUserPublicId,
-    action,
-    resource_type: 'user',
-    ...(severity ? { severity } : {}),
-    metadata: { target_user_public_id: targetUserPublicId },
+async function recordAdminUserAudit({
+  request,
+  actorUserPublicId,
+  action,
+  targetUserPublicId,
+  severity,
+}: {
+  request: FastifyRequest;
+  actorUserPublicId: string;
+  action: AdminUserAuditAction;
+  targetUserPublicId: string;
+  severity?: 'WARNING' | undefined;
+}): Promise<void> {
+  await recordScopedAuditEvent({
+    request,
+    input: {
+      actorUserPublicId,
+      action,
+      resource_type: 'user',
+      ...(severity ? { severity } : {}),
+      metadata: { target_user_public_id: targetUserPublicId },
+    },
   });
 }
 
@@ -45,22 +57,111 @@ async function recordAdminUserAudit(
  * Keeps an analytics consent decision as its own audit row — the decision, the policy version it
  * answered and when: the proof of consent (launch D85). Nothing when the body carried no decision.
  */
-async function recordAnalyticsConsentAudit(
-  request: FastifyRequest,
-  actorUserPublicId: string,
-  settings: UserSettingsOutput,
-): Promise<void> {
+async function recordAnalyticsConsentAudit({
+  request,
+  actorUserPublicId,
+  settings,
+}: {
+  request: FastifyRequest;
+  actorUserPublicId: string;
+  settings: UserSettingsOutput;
+}): Promise<void> {
   if (!listBodyFieldNames(request.body).includes('analytics_consent')) return;
-  await recordScopedAuditEvent(request, {
-    actorUserPublicId,
-    action: 'user.settings.analytics_consent.update',
-    resource_type: 'user_settings',
-    metadata: {
-      analytics_consent: settings.analytics_consent,
-      analytics_consent_version: settings.analytics_consent_version,
-      analytics_consent_at: settings.analytics_consent_at,
+  await recordScopedAuditEvent({
+    request,
+    input: {
+      actorUserPublicId,
+      action: 'user.settings.analytics_consent.update',
+      resource_type: 'user_settings',
+      metadata: {
+        analytics_consent: settings.analytics_consent,
+        analytics_consent_version: settings.analytics_consent_version,
+        analytics_consent_at: settings.analytics_consent_at,
+      },
     },
   });
+}
+
+/** The admin handlers (list/get/update/suspend/unsuspend/delete), each audited via {@link recordAdminUserAudit}. */
+function createUserAdminHandlers({ userService }: Pick<UserContainer, 'userService'>) {
+  return {
+    listUsers: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const result = await userService.listUsers(request.query);
+      return paginatedResponse({
+        data: result.items,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: result.limit,
+          next: result.next_cursor,
+          has_more: result.has_more,
+          ...(result.total !== null ? { estimated_total: result.total } : {}),
+        },
+      });
+    },
+
+    getUser: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const userId = getUserIdParam(request);
+      const data = await userService.getUser(userId);
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
+    },
+
+    updateUser: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const auth = requireAuth(request);
+      const userId = getUserIdParam(request);
+      const data = await userService.adminUpdateUser({ publicId: userId, body: request.body });
+      // sec-U9: every admin user-management action emits an audit row so a rogue
+      // admin cannot wipe accounts without leaving a platform-visible trace.
+      await recordAdminUserAudit({
+        request,
+        actorUserPublicId: auth.userId,
+        action: 'user.admin.update',
+        targetUserPublicId: userId,
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
+    },
+
+    deleteUser: async (request: FastifyRequest, reply: FastifyReply) => {
+      const auth = requireAuth(request);
+      const userId = getUserIdParam(request);
+      await userService.deleteUser(userId);
+      await recordAdminUserAudit({
+        request,
+        actorUserPublicId: auth.userId,
+        action: 'user.admin.delete',
+        targetUserPublicId: userId,
+        severity: 'WARNING',
+      });
+      return reply.status(204).send();
+    },
+
+    suspendUser: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const auth = requireAuth(request);
+      const userId = getUserIdParam(request);
+      const data = await userService.suspendUser(userId);
+      await recordAdminUserAudit({
+        request,
+        actorUserPublicId: auth.userId,
+        action: 'user.admin.suspend',
+        targetUserPublicId: userId,
+        severity: 'WARNING',
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
+    },
+
+    unsuspendUser: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const auth = requireAuth(request);
+      const userId = getUserIdParam(request);
+      const data = await userService.unsuspendUser(userId);
+      await recordAdminUserAudit({
+        request,
+        actorUserPublicId: auth.userId,
+        action: 'user.admin.unsuspend',
+        targetUserPublicId: userId,
+        severity: 'WARNING',
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
+    },
+  };
 }
 
 /**
@@ -87,21 +188,25 @@ export function createUserController({
     /**
      * `GET /users/me/organizations` — the organizations the caller belongs to.
      *
-     * The data is tenancy's, the scope is the caller's, and the scope is what decides where the
-     * route lives: `/users/me/...` is this API's home for "mine", exactly as the collection root
-     * is its home for the admin view (`GET /users`, `GET /audit/logs`). The mirror image of
-     * `/tenancy/organization/audit-logs`, which mounts audit-domain data under tenancy because the
-     * active organization scopes it.
+     * The data is tenancy's; the caller's scope decides where the route lives: `/users/me/...` is
+     * this API's home for "mine", as the collection root is for the admin view (`GET /users`). The
+     * mirror image of `/tenancy/organization/audit-logs`, scoped by the active organization.
      */
     listMyOrganizations: async (request: FastifyRequest, _reply: FastifyReply) => {
       if (!organizationService) throw new Error('Organization service not configured');
-      const auth = requireAuth(request);
-      const result = await organizationService.listForUser(request.query, auth.userId);
-      return paginatedResponse(result.items, getRequestIdentifier(request), {
-        per_page: result.limit,
-        next: result.next_cursor,
-        has_more: result.has_more,
-        ...(result.total !== null ? { estimated_total: result.total } : {}),
+      const result = await organizationService.listForUser({
+        query: request.query,
+        user_public_id: requireAuth(request).userId,
+      });
+      return paginatedResponse({
+        data: result.items,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: result.limit,
+          next: result.next_cursor,
+          has_more: result.has_more,
+          ...(result.total !== null ? { estimated_total: result.total } : {}),
+        },
       });
     },
 
@@ -114,48 +219,61 @@ export function createUserController({
         throw new Error('Membership invitation service not configured');
       }
       const auth = requireAuth(request);
-      const result = await membershipInvitationService.listMine(request.query, auth.userId);
-      return paginatedResponse(result.items, getRequestIdentifier(request), {
-        per_page: result.limit,
-        next: result.next_cursor,
-        has_more: result.has_more,
+      const result = await membershipInvitationService.listMine({
+        query: request.query,
+        actingUserPublicId: auth.userId,
+      });
+      return paginatedResponse({
+        data: result.items,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: result.limit,
+          next: result.next_cursor,
+          has_more: result.has_more,
+        },
       });
     },
 
     getMe: async (request: FastifyRequest, _reply: FastifyReply) => {
       const _auth = requireAuth(request);
       const data = await userService.getMe(requireUserScope(request));
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
 
     patchMe: async (request: FastifyRequest, _reply: FastifyReply) => {
       const _auth = requireAuth(request);
-      const data = await userService.updateMe(requireUserScope(request), request.body);
-      return successResponse(data, getRequestIdentifier(request));
+      const scope = requireUserScope(request);
+      const data = await userService.updateMe({ scope, body: request.body });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
 
     // requireUserScope is the auth check here: it throws the same 401 requireAuth would.
     putMyPresence: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const data = await userService.updateMyPresence(requireUserScope(request), request.body);
-      return successResponse(data, getRequestIdentifier(request));
+      const data = await userService.updateMyPresence({
+        scope: requireUserScope(request),
+        body: request.body,
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
 
     completeOnboardingMe: async (request: FastifyRequest, _reply: FastifyReply) => {
       const _auth = requireAuth(request);
       const data = await userService.completeOnboarding(requireUserScope(request));
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
 
     deleteMe: async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = requireAuth(request);
       await userService.deleteMe(auth.userId);
-      // sec-U9: audit self-initiated account offboarding at WARNING so support can
-      // distinguish "user deleted their own account" from "admin deleted it".
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'user.self.delete',
-        resource_type: 'user',
-        severity: 'WARNING',
+      // sec-U9: self-initiated offboarding is audited at WARNING, apart from an admin delete.
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'user.self.delete',
+          resource_type: 'user',
+          severity: 'WARNING',
+        },
       });
       return reply.status(204).send();
     },
@@ -163,40 +281,46 @@ export function createUserController({
     getSettings: async (request: FastifyRequest, _reply: FastifyReply) => {
       const _auth = requireAuth(request);
       const data = await userSettingsService.get(requireUserScope(request));
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
 
     patchSettings: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
-      const data = await userSettingsService.update(requireUserScope(request), request.body);
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'user.settings.update',
-        resource_type: 'user_settings',
+      const scope = requireUserScope(request);
+      const data = await userSettingsService.update({ scope, body: request.body });
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'user.settings.update',
+          resource_type: 'user_settings',
+        },
       });
-      await recordAnalyticsConsentAudit(request, auth.userId, data);
-      return successResponse(data, getRequestIdentifier(request));
+      await recordAnalyticsConsentAudit({
+        request,
+        actorUserPublicId: auth.userId,
+        settings: data,
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
 
     getNotificationPreferences: async (request: FastifyRequest, _reply: FastifyReply) => {
       const _auth = requireAuth(request);
       const data = await userNotificationPreferencesService.get(requireUserScope(request));
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
 
     putNotificationPreferences: async (request: FastifyRequest, _reply: FastifyReply) => {
       const _auth = requireAuth(request);
-      const data = await userNotificationPreferencesService.put(
-        requireUserScope(request),
-        request.body,
-      );
-      return successResponse(data, getRequestIdentifier(request));
+      const scope = requireUserScope(request);
+      const data = await userNotificationPreferencesService.put({ scope, body: request.body });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
 
     uploadAvatar: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
-      const data = await userService.uploadAvatar(auth.userId, request.body);
-      return successResponse(data, getRequestIdentifier(request));
+      const data = await userService.uploadAvatar({ publicId: auth.userId, body: request.body });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
 
     deleteAvatar: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -205,56 +329,6 @@ export function createUserController({
       return reply.code(204).send();
     },
 
-    // ── Admin ─────────────────────────────────────────────────
-
-    listUsers: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const result = await userService.listUsers(request.query);
-      return paginatedResponse(result.items, getRequestIdentifier(request), {
-        per_page: result.limit,
-        next: result.next_cursor,
-        has_more: result.has_more,
-        ...(result.total !== null ? { estimated_total: result.total } : {}),
-      });
-    },
-
-    getUser: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const userId = getUserIdParam(request);
-      const data = await userService.getUser(userId);
-      return successResponse(data, getRequestIdentifier(request));
-    },
-
-    updateUser: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const auth = requireAuth(request);
-      const userId = getUserIdParam(request);
-      const data = await userService.adminUpdateUser(userId, request.body);
-      // sec-U9: every admin user-management action emits an audit row so a rogue
-      // admin cannot wipe accounts without leaving a platform-visible trace.
-      await recordAdminUserAudit(request, auth.userId, 'user.admin.update', userId);
-      return successResponse(data, getRequestIdentifier(request));
-    },
-
-    deleteUser: async (request: FastifyRequest, reply: FastifyReply) => {
-      const auth = requireAuth(request);
-      const userId = getUserIdParam(request);
-      await userService.deleteUser(userId);
-      await recordAdminUserAudit(request, auth.userId, 'user.admin.delete', userId, 'WARNING');
-      return reply.status(204).send();
-    },
-
-    suspendUser: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const auth = requireAuth(request);
-      const userId = getUserIdParam(request);
-      const data = await userService.suspendUser(userId);
-      await recordAdminUserAudit(request, auth.userId, 'user.admin.suspend', userId, 'WARNING');
-      return successResponse(data, getRequestIdentifier(request));
-    },
-
-    unsuspendUser: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const auth = requireAuth(request);
-      const userId = getUserIdParam(request);
-      const data = await userService.unsuspendUser(userId);
-      await recordAdminUserAudit(request, auth.userId, 'user.admin.unsuspend', userId, 'WARNING');
-      return successResponse(data, getRequestIdentifier(request));
-    },
+    ...createUserAdminHandlers({ userService }),
   };
 }

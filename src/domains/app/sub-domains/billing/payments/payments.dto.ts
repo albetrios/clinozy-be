@@ -47,7 +47,7 @@ const moneySplitsSchema = splitsSchema.refine(
 
 /** Up to five upload keys, each once — confirmed uploads of the organization. */
 const attachmentKeysSchema = z
-  .array(trimmedStringMinMax(1, 512))
+  .array(trimmedStringMinMax({ min: 1, max: 512 }))
   .max(PAYMENT_ATTACHMENT_KEYS_MAX)
   .refine(distinct, { message: 'Each attachment once' });
 
@@ -58,10 +58,10 @@ const paymentFields = {
   invoice_id: recordIdSchema.nullable(),
   stock_purchase_id: recordIdSchema.nullable(),
   medical_purchase_order_id: recordIdSchema.nullable(),
-  payee_name: trimmedStringMinMax(1, 120).nullable(),
+  payee_name: trimmedStringMinMax({ min: 1, max: 120 }).nullable(),
   expense_category: z.enum(PAYMENT_EXPENSE_CATEGORY_VALUES).nullable(),
-  reference: trimmedStringMinMax(1, 60).nullable(),
-  note: trimmedStringMinMax(1, 280).nullable(),
+  reference: trimmedStringMinMax({ min: 1, max: 60 }).nullable(),
+  note: trimmedStringMinMax({ min: 1, max: 280 }).nullable(),
   attachment_keys: attachmentKeysSchema,
 };
 
@@ -128,7 +128,7 @@ export const UpdatePaymentDto = z
 /** Body of `POST /app/payments/{payment_id}/reverse` (8.C.8 #18): why, and the reversal's day. */
 export const ReversePaymentDto = z
   .object({
-    reason: trimmedStringMinMax(1, 280),
+    reason: trimmedStringMinMax({ min: 1, max: 280 }),
     paid_at: instantSchema.optional(),
   })
   .strict();

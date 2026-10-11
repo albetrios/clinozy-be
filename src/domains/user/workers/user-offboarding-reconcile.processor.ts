@@ -1,9 +1,8 @@
-import { and, isNotNull, isNull, lt } from 'drizzle-orm';
 import {
   MAINTENANCE_SCOPE,
   withMaintenanceDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
-import { users } from '@/domains/user/user.schema.js';
+import { findUsersStuckInOffboarding } from '@/domains/user/user.repository.js';
 import { captureException } from '@/infrastructure/observability/sentry/sentry.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { MILLISECONDS_PER_MINUTE } from '@/shared/constants/index.js';
@@ -62,21 +61,14 @@ export async function runUserOffboardingReconcileJob(
     Date.now() - USER_OFFBOARDING_STUCK_AFTER_MINUTES * MILLISECONDS_PER_MINUTE,
   );
 
-  const stuck = await withMaintenanceDatabaseContext(
-    MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-    (databaseHandle) =>
-      databaseHandle
-        .select({ public_id: users.public_id })
-        .from(users)
-        .where(
-          and(
-            isNotNull(users.deletion_started_at),
-            isNull(users.deleted_at),
-            lt(users.deletion_started_at, cutoff),
-          ),
-        )
-        .limit(USER_OFFBOARDING_RECONCILE_BATCH),
-  );
+  const stuck = await withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+    callback: (databaseHandle) =>
+      findUsersStuckInOffboarding(databaseHandle, {
+        startedBefore: cutoff,
+        limit: USER_OFFBOARDING_RECONCILE_BATCH,
+      }),
+  });
 
   let resumed = 0;
   let failed = 0;
@@ -87,9 +79,12 @@ export async function runUserOffboardingReconcileJob(
     } catch (error) {
       failed += 1;
       logger.warn({ error, publicId: public_id }, 'user-offboarding-reconcile.resume_failed');
-      captureException(error, {
-        userId: public_id,
-        tags: { source: 'user-offboarding-reconcile' },
+      captureException({
+        error,
+        context: {
+          userId: public_id,
+          tags: { source: 'user-offboarding-reconcile' },
+        },
       });
     }
   }

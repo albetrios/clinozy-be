@@ -18,9 +18,12 @@ export function buildPublicApiPrefix(versionSegment: string): string {
 }
 
 /** Sets {@link PUBLIC_API_VERSION_HEADER} on stable major-version public API responses. */
-export function applyPublicApiVersionHeader(
-  reply: FastifyReply,
-  versionValue: string = PUBLIC_API_VERSION_VALUE_V1,
-): void {
+export function applyPublicApiVersionHeader({
+  reply,
+  versionValue = PUBLIC_API_VERSION_VALUE_V1,
+}: {
+  reply: FastifyReply;
+  versionValue?: string | undefined;
+}): void {
   reply.header(PUBLIC_API_VERSION_HEADER, versionValue);
 }

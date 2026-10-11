@@ -40,10 +40,13 @@ vi.mock('@/infrastructure/storage/s3-adapter.js', () => {
       url: 'https://fake-s3.local/upload',
       fields: { key: 'fake-policy-key' },
     }),
-    verifyUploadedObject: async (
-      _key: string,
-      expected: { contentType: string; contentLength: number },
-    ) => ({
+    verifyUploadedObject: async ({
+      key: _key,
+      expected,
+    }: {
+      key: string;
+      expected: { contentType: string; contentLength: number };
+    }) => ({
       contentType: expected.contentType,
       contentLength: expected.contentLength,
       eTag: '"fake-etag"',

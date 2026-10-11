@@ -45,5 +45,5 @@ export function createWebhookDeliveryReclaimWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME });
 }

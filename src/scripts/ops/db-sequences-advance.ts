@@ -10,7 +10,11 @@
 import '@/shared/config/load-env-files.js';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import postgres, { type Sql } from 'postgres';
+import pg from 'pg';
+import {
+  resolveDatabaseSsl,
+  withoutSslQueryParameters,
+} from '@/infrastructure/database/utils/connection-url.util.js';
 
 /**
  * How far a restore moves each id sequence: more ids than any lost window could have issued, and
@@ -44,15 +48,17 @@ export interface AdvancedIdSequence {
  *   restore step passes none.
  */
 export async function advanceIdSequences(options: {
-  sql: Sql;
+  client: pg.ClientBase;
   schemaNames?: readonly string[];
 }): Promise<AdvancedIdSequence[]> {
-  const { sql, schemaNames } = options;
-  const schemaFilter =
-    schemaNames === undefined ? sql`` : sql`AND schemaname IN ${sql([...schemaNames])}`;
-  const sequences = await sql<
-    { sequence_name: string; last_value: string | null; is_readable: boolean }[]
-  >`
+  const { client, schemaNames } = options;
+  const schemaFilter = schemaNames === undefined ? '' : 'AND schemaname = ANY($1::text[])';
+  const { rows: sequences } = await client.query<{
+    sequence_name: string;
+    last_value: string | null;
+    is_readable: boolean;
+  }>(
+    `
     SELECT
       format('%I.%I', schemaname, sequencename) AS sequence_name,
       last_value,
@@ -62,7 +68,9 @@ export async function advanceIdSequences(options: {
       AND data_type = 'bigint'::regtype
       ${schemaFilter}
     ORDER BY schemaname, sequencename
-  `;
+  `,
+    schemaNames === undefined ? [] : [[...schemaNames]],
+  );
 
   const unreadableSequenceNames = sequences
     .filter((sequence) => !sequence.is_readable)
@@ -77,7 +85,10 @@ export async function advanceIdSequences(options: {
   for (const sequence of sequences) {
     const previousValue = BigInt(sequence.last_value ?? '0');
     const advancedValue = previousValue + ID_SEQUENCE_RESTORE_GAP;
-    await sql`SELECT setval(${sequence.sequence_name}::regclass, ${advancedValue.toString()}::bigint)`;
+    await client.query('SELECT setval($1::regclass, $2::bigint)', [
+      sequence.sequence_name,
+      advancedValue.toString(),
+    ]);
     advancedSequences.push({ sequenceName: sequence.sequence_name, previousValue, advancedValue });
   }
   return advancedSequences;
@@ -90,9 +101,19 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const sql = postgres(connectionUrl, { max: 1, connect_timeout: 15 });
+  const client = new pg.Client({
+    connectionString: withoutSslQueryParameters(connectionUrl),
+    ssl: resolveDatabaseSsl({
+      databaseUrl: connectionUrl,
+      sslEnabledByDefault: false,
+      rejectUnauthorizedOverride: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'true',
+    }),
+    connectionTimeoutMillis: 15_000,
+  });
+  client.on('error', (error) => console.error('Database connection error', error));
+  await client.connect();
   try {
-    const advancedSequences = await advanceIdSequences({ sql });
+    const advancedSequences = await advanceIdSequences({ client });
     for (const sequence of advancedSequences) {
       console.log(
         `${sequence.sequenceName}: ${sequence.previousValue.toString()} -> ${sequence.advancedValue.toString()}`,
@@ -100,7 +121,7 @@ async function main(): Promise<void> {
     }
     console.log(`Advanced ${String(advancedSequences.length)} id sequences.`);
   } finally {
-    await sql.end({ timeout: 5 });
+    await client.end();
   }
 }
 

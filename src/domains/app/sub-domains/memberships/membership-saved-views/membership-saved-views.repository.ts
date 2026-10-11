@@ -1,4 +1,4 @@
-import { and, count, eq, sql } from 'drizzle-orm';
+import { and, count, eq, getTableColumns, sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import {
   RESOURCE_QUOTA_LOCK_NAMESPACE,
@@ -10,6 +10,7 @@ import {
   finishKeysetPage,
   resolveKeysetSort,
 } from '@/shared/utils/http/list-query.util.js';
+import { cursorTimestampSelection } from '@/shared/utils/http/pagination.util.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { membership_saved_views } from './membership-saved-views.schema.js';
@@ -42,7 +43,7 @@ export class MembershipSavedViewsRepository {
     const where = and(
       eq(membership_saved_views.membership_id, membership_id),
       query.listKey === undefined ? undefined : eq(membership_saved_views.list_key, query.listKey),
-      buildSearchCondition([membership_saved_views.label], query.q),
+      buildSearchCondition({ columns: [membership_saved_views.label], q: query.q }),
     );
     const { orderBy, cursorCondition, sortValueFor, filterFingerprint } =
       resolveKeysetSort<MembershipSavedViewRow>({
@@ -63,12 +64,20 @@ export class MembershipSavedViewsRepository {
         after: query.after,
       });
     const rows = await getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(membership_saved_views),
+        cursor_created_at: cursorTimestampSelection(membership_saved_views.created_at),
+      })
       .from(membership_saved_views)
       .where(and(where, cursorCondition))
       .orderBy(...orderBy)
       .limit(query.limit + 1);
-    const page = finishKeysetPage(rows, { limit: query.limit, sortValueFor, filterFingerprint });
+    const page = finishKeysetPage({
+      rows,
+      args: { limit: query.limit, sortValueFor, filterFingerprint },
+    });
+    // The cursor's timestamp column is the cursor's, not the view's.
+    const items = page.items.map(({ cursor_created_at: _cursorCreatedAt, ...row }) => row);
     const total =
       query.after === undefined
         ? await countWithCap({
@@ -77,7 +86,7 @@ export class MembershipSavedViewsRepository {
             where,
           })
         : null;
-    return { ...page, total };
+    return { ...page, items, total };
   }
 
   /** The membership's view with this public id, if it is theirs. */
@@ -103,10 +112,10 @@ export class MembershipSavedViewsRepository {
    * insert see the same rows.
    */
   async acquireListLock(membership_id: number, list_key: string): Promise<void> {
-    await acquireResourceQuotaLock(
-      RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBERSHIP_SAVED_VIEW,
-      `${membership_id}:${list_key}`,
-    );
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBERSHIP_SAVED_VIEW,
+      key: `${membership_id}:${list_key}`,
+    });
   }
 
   /** How many views the membership has on a list. */
@@ -133,24 +142,26 @@ export class MembershipSavedViewsRepository {
     hidden_columns: string[];
     user_id: number;
   }): Promise<MembershipSavedViewRow> {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const rows = await getRequestDatabase()
-        .insert(membership_saved_views)
-        .values({
-          public_id: generatePublicId('membershipSavedView'),
-          organization_id: values.organization_id,
-          membership_id: values.membership_id,
-          list_key: values.list_key,
-          label: values.label,
-          filters: values.filters,
-          hidden_columns: values.hidden_columns,
-          created_by_user_id: values.user_id,
-          updated_by_user_id: values.user_id,
-        })
-        .returning();
-      const row = rows[0];
-      if (!row) throw new Error('membership_saved_views insert returned no row');
-      return row;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const rows = await getRequestDatabase()
+          .insert(membership_saved_views)
+          .values({
+            public_id: generatePublicId('membershipSavedView'),
+            organization_id: values.organization_id,
+            membership_id: values.membership_id,
+            list_key: values.list_key,
+            label: values.label,
+            filters: values.filters,
+            hidden_columns: values.hidden_columns,
+            created_by_user_id: values.user_id,
+            updated_by_user_id: values.user_id,
+          })
+          .returning();
+        const row = rows[0];
+        if (!row) throw new Error('membership_saved_views insert returned no row');
+        return row;
+      },
     });
   }
 

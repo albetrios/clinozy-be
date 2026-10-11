@@ -1,12 +1,12 @@
 import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
-import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.js';
 import type { ContactMessageTemplateOutput } from './contact-message-templates.types.js';
 
 /** Shapes an `app.contact_message_templates` row as the API returns it. */
-export function serializeContactMessageTemplate(
-  row: BaseRecordRow,
-  _references: BaseRecordReferenceLookup,
-): ContactMessageTemplateOutput {
+export function serializeContactMessageTemplate({
+  row,
+}: {
+  row: BaseRecordRow;
+}): ContactMessageTemplateOutput {
   return {
     id: row.public_id,
     name: row.name as string,

@@ -10,7 +10,13 @@ const PROCEDURE_GST_PERCENT = 18;
 const CONSULTATION: (typeof OFFERING_CATEGORY_VALUES)[number] = 'consultation';
 
 /** The 400 naming the price field that breaks `min_price` ≤ `offer_price` ≤ `price` (O4). */
-function priceOrderError(field: 'offer_price' | 'min_price', messageKey: string): ValidationError {
+function priceOrderError({
+  field,
+  messageKey,
+}: {
+  field: 'offer_price' | 'min_price';
+  messageKey: string;
+}): ValidationError {
   return fieldValidationError({ field, messageKey });
 }
 
@@ -29,13 +35,22 @@ export function assertOfferingPriceOrder(values: Record<string, unknown>): void 
   const offerPrice = values.offer_price == null ? null : Number(values.offer_price);
   const minPrice = values.min_price == null ? 0 : Number(values.min_price);
   if (offerPrice !== null && offerPrice > price) {
-    throw priceOrderError('offer_price', 'errors:validation.offeringOfferPriceAbovePrice');
+    throw priceOrderError({
+      field: 'offer_price',
+      messageKey: 'errors:validation.offeringOfferPriceAbovePrice',
+    });
   }
   if (offerPrice !== null && minPrice > offerPrice) {
-    throw priceOrderError('min_price', 'errors:validation.offeringMinPriceAboveOfferPrice');
+    throw priceOrderError({
+      field: 'min_price',
+      messageKey: 'errors:validation.offeringMinPriceAboveOfferPrice',
+    });
   }
   if (offerPrice === null && minPrice > price) {
-    throw priceOrderError('min_price', 'errors:validation.offeringMinPriceAbovePrice');
+    throw priceOrderError({
+      field: 'min_price',
+      messageKey: 'errors:validation.offeringMinPriceAbovePrice',
+    });
   }
 }
 

@@ -33,7 +33,12 @@ describe('runDayCloseAutoCloseJob', () => {
     repository.openUnopenedDay.mockResolvedValue(12);
     repository.closeAsExpected.mockResolvedValue(true);
 
-    expect(await runDayCloseAutoCloseJob({} as never, ORGANIZATION)).toEqual({
+    expect(
+      await runDayCloseAutoCloseJob({
+        databaseHandle: {} as never,
+        organizationPublicId: ORGANIZATION,
+      }),
+    ).toEqual({
       closedCount: 2,
       openedCount: 1,
     });
@@ -55,7 +60,12 @@ describe('runDayCloseAutoCloseJob', () => {
     repository.openUnopenedDay.mockResolvedValue(null);
     repository.closeAsExpected.mockResolvedValue(false);
 
-    expect(await runDayCloseAutoCloseJob({} as never, ORGANIZATION)).toEqual({
+    expect(
+      await runDayCloseAutoCloseJob({
+        databaseHandle: {} as never,
+        organizationPublicId: ORGANIZATION,
+      }),
+    ).toEqual({
       closedCount: 0,
       openedCount: 0,
     });
@@ -64,7 +74,12 @@ describe('runDayCloseAutoCloseJob', () => {
   it('an organization that is gone closes nothing', async () => {
     repository.findOrganizationId.mockResolvedValue(null);
 
-    expect(await runDayCloseAutoCloseJob({} as never, ORGANIZATION)).toEqual({
+    expect(
+      await runDayCloseAutoCloseJob({
+        databaseHandle: {} as never,
+        organizationPublicId: ORGANIZATION,
+      }),
+    ).toEqual({
       closedCount: 0,
       openedCount: 0,
     });

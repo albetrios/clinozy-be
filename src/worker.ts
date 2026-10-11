@@ -1,16 +1,12 @@
 import '@/shared/config/load-env-files.js';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
 import {
   initSentry,
   captureException,
   flushSentry,
 } from '@/infrastructure/observability/sentry/sentry.js';
-import {
-  initOpenTelemetry,
-  shutdownOpenTelemetry,
-} from '@/infrastructure/observability/tracing/otel.js';
 import { initPostHog, shutdownPostHog } from '@/infrastructure/observability/posthog/posthog.js';
 import { closeBullMQMetricsQueues } from '@/infrastructure/observability/metrics/bullmq-metrics.js';
-import { OTEL_SERVICE_NAME_WORKER } from '@/shared/constants/project-identity.constants.js';
 import { createUnhandledRejectionHandler } from '@/infrastructure/observability/unhandled-rejection.handler.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { closeRedis, connectRedis, redisConnection } from '@/infrastructure/cache/redis.client.js';
@@ -28,7 +24,7 @@ import {
 } from '@/infrastructure/database/safety/assert-database-rls-safety.js';
 import { assertDatabaseTlsVerification } from '@/infrastructure/database/safety/assert-database-tls-safety.js';
 import { assertRedisTlsVerification } from '@/infrastructure/cache/assert-redis-tls-safety.js';
-import { assertRedisEvictionPolicy } from '@/infrastructure/cache/assert-redis-eviction-policy.js';
+import { assertRedisEndpointsEvictionPolicy } from '@/infrastructure/cache/assert-redis-eviction-policy.js';
 import { usesSeparateBullMqRedisDatabase } from '@/infrastructure/cache/redis-url.util.js';
 import { computeWorkerPostgresPoolDemand } from '@/infrastructure/queue/worker-runtime/worker-connection-budget.js';
 import { setWorkerPostgresPoolDemandContext } from '@/infrastructure/queue/worker-runtime/worker-pool-demand-context.js';
@@ -45,7 +41,10 @@ import {
   startWorkerHealthServer,
   stopWorkerHealthServer,
 } from '@/infrastructure/queue/worker-runtime/worker-health.server.js';
-import { getShutdownWatchdogMs } from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
+import {
+  getShutdownWatchdogMs,
+  startShutdownBudget,
+} from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
 import { closeStripeWebhookQueue } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 import { closeSubscriptionSeatSyncQueue } from '@/domains/billing/sub-domains/subscription/queues/subscription-seat-sync.queue.js';
 import { closeDayCloseAutoCloseQueue } from '@/domains/app/sub-domains/billing/day-closes/queues/day-close-auto-close.queue.js';
@@ -60,14 +59,11 @@ import { closeUserDataExportQueue } from '@/domains/user/sub-domains/user-data-e
 
 // Initialize Sentry before anything else
 initSentry();
-// audit M5: start OpenTelemetry for the worker process (no-op unless
-// OTEL_EXPORTER_OTLP_ENDPOINT is set).
-initOpenTelemetry(OTEL_SERVICE_NAME_WORKER);
 // Product analytics (no-op unless POSTHOG_KEY is set).
 initPostHog();
 
 process.on('uncaughtException', (error) => {
-  captureException(error, { tags: { source: 'worker_uncaughtException' } });
+  captureException({ error, context: { tags: { source: 'worker_uncaughtException' } } });
   logger.fatal({ error }, 'uncaughtException');
   void flushSentry().finally(() => process.exit(1));
 });
@@ -99,13 +95,15 @@ async function main() {
    * "Stream isn't writeable" before the lazy connect completes. */
   await connectRedis();
   await connectBullMqRedis();
+  // Notification emails are rendered here, in the recipient's language.
+  await initializeI18nextForBackgroundWork();
   warnWhenBullMqSharesCacheRedisHost();
-  // BullMQ loses job data and lock keys on an evicting Redis — refuse to start on one.
-  await assertRedisEvictionPolicy(
-    usesSeparateBullMqRedisDatabase()
-      ? { client: bullmqRedisConnection, endpointName: 'REDIS_BULLMQ_URL' }
-      : { client: redisConnection, endpointName: 'REDIS_URL' },
-  );
+  // An evicting Redis drops job data, locks and idempotency entries — refuse to start on one.
+  await assertRedisEndpointsEvictionPolicy({
+    cacheClient: redisConnection,
+    queueClient: bullmqRedisConnection,
+    queuesOnSeparateInstance: usesSeparateBullMqRedisDatabase(),
+  });
   setWorkerPostgresPoolDemandContext(computeWorkerPostgresPoolDemand());
   await assertPostgresConnectionBudget({ assertWorkerConcurrency: true });
   await assertDatabaseRoleRlsSafety();
@@ -122,6 +120,8 @@ async function main() {
     logger.info({ signal }, 'Worker shutdown requested');
     stopRssMonitoring();
 
+    // Every close step below draws on one budget; the watchdog fires its buffer after it ends.
+    startShutdownBudget();
     const watchdogMs = getShutdownWatchdogMs();
     const watchdogTimer = setTimeout(() => {
       logger.error({ watchdogMs }, 'Worker shutdown timeout exceeded');
@@ -155,9 +155,6 @@ async function main() {
       // shared connections go.
       await closeBullMQMetricsQueues();
       await Promise.allSettled([closeRedis(), closeBullMqRedis(), closeDatabase()]);
-      // audit M5: tear down the OpenTelemetry SDK (no-op when never started)
-      // before the Sentry flush so pending OTLP spans flush on shutdown.
-      await shutdownOpenTelemetry();
       // Flush pending product-analytics events (no-op when PostHog is disabled).
       await shutdownPostHog();
       await flushSentry();
@@ -177,7 +174,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  captureException(error, { tags: { source: 'worker_startup' } });
+  captureException({ error, context: { tags: { source: 'worker_startup' } } });
   // sec-r5-runtime: explicit message/stack/name fields are required because
   // pino's default behaviour serialises `Error` objects as `{}` (non-enumerable
   // properties). Without these, the worker startup error in production logs

@@ -48,7 +48,7 @@ const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'DemoPassword123!';
 export async function ensureDemoAdmin(): Promise<void> {
   await seedPermissions();
 
-  const demoUser = await seedDemoUser(DEMO_EMAIL, DEMO_PASSWORD);
+  const demoUser = await seedDemoUser({ email: DEMO_EMAIL, password: DEMO_PASSWORD });
   if (!demoUser) throw new Error('ensure-demo-admin: failed to upsert demo user');
 
   const demoOrganization = await seedOrganization({
@@ -66,11 +66,11 @@ export async function ensureDemoAdmin(): Promise<void> {
   });
   if (!adminRole) throw new Error('ensure-demo-admin: failed to upsert admin role');
 
-  await seedRolePermissions(
-    adminRole.id,
-    SYSTEM_PERMISSIONS.map((permission) => permission.code),
-    demoUser.id,
-  );
+  await seedRolePermissions({
+    roleId: adminRole.id,
+    permissionCodes: SYSTEM_PERMISSIONS.map((permission) => permission.code),
+    createdByUserId: demoUser.id,
+  });
 
   await seedMembership({
     user_id: demoUser.id,
@@ -88,7 +88,7 @@ export async function ensureDemoAdmin(): Promise<void> {
 
 /**
  * `closeDatabase` always runs (success or failure). Without it, a thrown error here
- * would `process.exit(1)` before the postgres.js pool finishes draining and leave
+ * would `process.exit(1)` before the database pool finishes draining and leave
  * aborted connections behind in Postgres.
  */
 ensureDemoAdmin()

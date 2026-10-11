@@ -106,18 +106,22 @@ export function getTransactionDurationMs(input: TransactionTailInput): number | 
  * Head sampling: baseline `defaultTracesSampleRate`, always sample errors,
  * 5xx, slow requests, and billing/webhook routes. Health checks are not sampled.
  */
-export function resolveTracesSampleRate(
-  samplingContext: TracesSamplingContext,
-  defaultTracesSampleRate: number,
-  slowTransactionThresholdMs: number,
-): number {
+export function resolveTracesSampleRate({
+  samplingContext,
+  defaultTracesSampleRate,
+  slowTransactionThresholdMs,
+}: {
+  samplingContext: TracesSamplingContext;
+  defaultTracesSampleRate: number;
+  slowTransactionThresholdMs: number;
+}): number {
   const transactionName = samplingContext.name ?? '';
 
   if (isHealthCheckTransaction(transactionName)) {
     return 0;
   }
 
-  if (shouldAlwaysSampleTraceAtHead(samplingContext, slowTransactionThresholdMs)) {
+  if (shouldAlwaysSampleTraceAtHead({ samplingContext, slowTransactionThresholdMs })) {
     return 1.0;
   }
 
@@ -128,10 +132,13 @@ export function resolveTracesSampleRate(
   return defaultTracesSampleRate;
 }
 
-function shouldAlwaysSampleTraceAtHead(
-  samplingContext: TracesSamplingContext,
-  slowTransactionThresholdMs: number,
-): boolean {
+function shouldAlwaysSampleTraceAtHead({
+  samplingContext,
+  slowTransactionThresholdMs,
+}: {
+  samplingContext: TracesSamplingContext;
+  slowTransactionThresholdMs: number;
+}): boolean {
   const statusCode = readNumericAttribute(
     samplingContext.attributes?.['http.response.status_code'],
   );
@@ -158,10 +165,13 @@ function shouldAlwaysSampleTraceAtHead(
  * Tail sampling after the transaction completes: always keep errors, slow paths,
  * and billing/webhook traffic; apply the baseline rate to successful fast requests.
  */
-export function shouldAlwaysKeepTransactionAtTail(
-  input: TransactionTailInput,
-  slowTransactionThresholdMs: number,
-): boolean {
+export function shouldAlwaysKeepTransactionAtTail({
+  input,
+  slowTransactionThresholdMs,
+}: {
+  input: TransactionTailInput;
+  slowTransactionThresholdMs: number;
+}): boolean {
   const transactionName = input.transaction ?? '';
   const statusCode = extractHttpResponseStatusCode(input);
   if (statusCode !== undefined && statusCode >= 400) {
@@ -179,7 +189,13 @@ export function shouldAlwaysKeepTransactionAtTail(
   return durationMs !== undefined && durationMs >= slowTransactionThresholdMs;
 }
 
-function deterministicTailKeep(eventKey: string, baselineTracesSampleRate: number): boolean {
+function deterministicTailKeep({
+  eventKey,
+  baselineTracesSampleRate,
+}: {
+  eventKey: string;
+  baselineTracesSampleRate: number;
+}): boolean {
   const normalizedRate = Math.min(1, Math.max(0, baselineTracesSampleRate));
   if (normalizedRate >= 1) {
     return true;
@@ -202,33 +218,40 @@ function deterministicTailKeep(eventKey: string, baselineTracesSampleRate: numbe
  * traffic, and otherwise applies a deterministic hash of the event id so the
  * baseline rate is honoured without per-event randomness drift.
  */
-export function resolveTailTransactionDecision(
-  input: TransactionTailInput,
-  baselineTracesSampleRate: number,
-  slowTransactionThresholdMs: number,
-): TailTransactionDecision {
+export function resolveTailTransactionDecision({
+  input,
+  baselineTracesSampleRate,
+  slowTransactionThresholdMs,
+}: {
+  input: TransactionTailInput;
+  baselineTracesSampleRate: number;
+  slowTransactionThresholdMs: number;
+}): TailTransactionDecision {
   const transactionName = input.transaction ?? '';
   if (isHealthCheckTransaction(transactionName)) {
     return 'drop';
   }
 
-  if (shouldAlwaysKeepTransactionAtTail(input, slowTransactionThresholdMs)) {
+  if (shouldAlwaysKeepTransactionAtTail({ input, slowTransactionThresholdMs })) {
     return 'keep';
   }
 
   const eventKey =
     input.event_id ??
     `${transactionName}:${String(input.start_timestamp ?? '')}:${String(input.timestamp ?? '')}`;
-  return deterministicTailKeep(eventKey, baselineTracesSampleRate) ? 'keep' : 'drop';
+  return deterministicTailKeep({ eventKey, baselineTracesSampleRate }) ? 'keep' : 'drop';
 }
 
 /**
  * Tags slow transactions for Sentry Performance filters (does not affect keep/drop).
  */
-export function annotateSlowTransactionIfNeeded(
-  input: TransactionTailInput,
-  slowTransactionThresholdMs: number,
-): Record<string, string | number | boolean> | undefined {
+export function annotateSlowTransactionIfNeeded({
+  input,
+  slowTransactionThresholdMs,
+}: {
+  input: TransactionTailInput;
+  slowTransactionThresholdMs: number;
+}): Record<string, string | number | boolean> | undefined {
   const durationMs = getTransactionDurationMs(input);
   if (durationMs === undefined || durationMs < slowTransactionThresholdMs) {
     return undefined;

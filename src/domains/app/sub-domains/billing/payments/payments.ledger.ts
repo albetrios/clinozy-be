@@ -74,12 +74,15 @@ export function columnsToSplits(row: Readonly<Record<string, unknown>>): Payment
 }
 
 /** The organization's calendar day a moment falls on (its time zone) — a payment's day (B6). */
-export async function organizationDayOf(
-  context: BaseRecordWriteContext,
-  at: Date,
-): Promise<string> {
+export async function organizationDayOf({
+  context,
+  at,
+}: {
+  context: BaseRecordWriteContext;
+  at: Date;
+}): Promise<string> {
   const { timezone } = await context.ports.organizationSettings(context.scope);
-  return calendarDateInTimeZone(timezone, at);
+  return calendarDateInTimeZone({ timeZone: timezone, at });
 }
 
 /**
@@ -109,11 +112,9 @@ export async function requirePaymentBranchId(options: {
           userId: context.userId,
         });
   if (branchId === undefined || !(allBranches || mine.includes(branchId))) {
-    throw new ValidationError(
-      'errors:validation.branchNotYours',
-      { field },
-      { [field]: ['This is not one of your branches'] },
-    );
+    throw new ValidationError('errors:validation.branchNotYours', { field }, undefined, [
+      { field: field, messageKey: 'errors:validation.branchNotYours' },
+    ]);
   }
   return branchId;
 }
@@ -127,7 +128,7 @@ export async function assertPaymentDayOpen(options: {
   branchId: number;
   paidAt: Date;
 }): Promise<void> {
-  const date = await organizationDayOf(options.context, options.paidAt);
+  const date = await organizationDayOf({ context: options.context, at: options.paidAt });
   const day = await paymentsRepository.lockDay({ branchId: options.branchId, date });
   if (day?.status === DAY_CLOSE_STATUS.CLOSED) {
     throw new ConflictError('errors:paymentDayClosed', { date }).withReason('day_closed');
@@ -138,14 +139,17 @@ export async function assertPaymentDayOpen(options: {
  * What a payment does to its invoice's paid amount (8.10): a receipt adds, a refund takes away, a
  * reversal undoes what it reverses; nothing else touches it.
  */
-export function invoiceEffect(
-  row: Readonly<Record<string, unknown>>,
-  reversed?: BaseRecordRow,
-): number {
+export function invoiceEffect({
+  row,
+  reversed,
+}: {
+  row: Readonly<Record<string, unknown>>;
+  reversed?: BaseRecordRow | undefined;
+}): number {
   const amount = toAmount(row.amount) ?? 0;
   if (row.kind === PAYMENT_KIND.RECEIPT) return amount;
   if (row.kind === PAYMENT_KIND.REFUND) return -amount;
-  if (row.kind === PAYMENT_KIND.REVERSAL && reversed) return -invoiceEffect(reversed);
+  if (row.kind === PAYMENT_KIND.REVERSAL && reversed) return -invoiceEffect({ row: reversed });
   return 0;
 }
 
@@ -174,14 +178,19 @@ export async function applyInvoicePaid(options: {
  * What a payment does to the paid amount of the purchase `field` names (S11, MD7): a supplier bill
  * adds, its reversal takes it away; nothing else touches it.
  */
-export function purchaseEffect(
-  row: Readonly<Record<string, unknown>>,
-  field: SupplierBillPurchaseField,
-  reversed?: BaseRecordRow,
-): number {
+export function purchaseEffect({
+  row,
+  field,
+  reversed,
+}: {
+  row: Readonly<Record<string, unknown>>;
+  field: SupplierBillPurchaseField;
+  reversed?: BaseRecordRow | undefined;
+}): number {
   if (typeof row[field] !== 'number') return 0;
   if (row.kind === PAYMENT_KIND.SUPPLIER_BILL) return toAmount(row.amount) ?? 0;
-  if (row.kind === PAYMENT_KIND.REVERSAL && reversed) return -purchaseEffect(reversed, field);
+  if (row.kind === PAYMENT_KIND.REVERSAL && reversed)
+    return -purchaseEffect({ row: reversed, field });
   return 0;
 }
 
@@ -292,7 +301,7 @@ export async function applyPaymentEffects(options: {
   await applyInvoicePaid({
     context,
     invoiceId: row.invoice_id,
-    delta: sign * invoiceEffect(row, options.reversed),
+    delta: sign * invoiceEffect({ row, reversed: options.reversed }),
   });
   await applyPendingCreditSettled({ context, row, delta: sign * pendingCreditEffect(row) });
   for (const field of SUPPLIER_BILL_PURCHASE_FIELDS) {
@@ -300,7 +309,7 @@ export async function applyPaymentEffects(options: {
       context,
       field,
       purchaseId: row[field],
-      delta: sign * purchaseEffect(row, field, options.reversed),
+      delta: sign * purchaseEffect({ row, field, reversed: options.reversed }),
     });
   }
 }

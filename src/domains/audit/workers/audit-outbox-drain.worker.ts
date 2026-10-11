@@ -41,9 +41,10 @@ export function createAuditOutboxDrainWorker(): WorkerHandle {
   const worker = new Worker(
     AUDIT_OUTBOX_DRAIN_QUEUE_NAME,
     async () =>
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN, (databaseHandle) =>
-        runAuditOutboxDrainJob(databaseHandle),
-      ),
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+        callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+      }),
     {
       connection: getBullMQConnectionOptions(),
       prefix: getBullMQKeyPrefix(),
@@ -56,5 +57,5 @@ export function createAuditOutboxDrainWorker(): WorkerHandle {
     logger.warn({ jobId, queue: AUDIT_OUTBOX_DRAIN_QUEUE_NAME }, 'audit.outbox.drain.stalled');
   });
 
-  return buildWorkerHandle(worker, AUDIT_OUTBOX_DRAIN_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: AUDIT_OUTBOX_DRAIN_QUEUE_NAME });
 }

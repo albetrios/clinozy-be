@@ -79,10 +79,10 @@ export async function runStripeWebhookEventCatchupJob(
     return { scannedCount: 0, missingCount: 0, enqueuedCount: 0 };
   }
 
-  const existingEventIds = await withMaintenanceDatabaseContext(
-    MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
-    () => repository.findExistingStripeEventIds(stripeEventIds),
-  );
+  const existingEventIds = await withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+    callback: () => repository.findExistingStripeEventIds(stripeEventIds),
+  });
   const missingEventIds = stripeEventIds.filter((eventId) => !existingEventIds.has(eventId));
 
   // Enqueued together rather than one after another: each `add` is its own Lua round trip, and a
@@ -93,7 +93,10 @@ export async function runStripeWebhookEventCatchupJob(
   const enqueueOutcomes = await Promise.all(
     missingEventIds.map(async (stripeEventId) => {
       try {
-        await enqueueStripeWebhookByEventIdForReclaim(stripeEventId, CATCHUP_REQUEST_ID);
+        await enqueueStripeWebhookByEventIdForReclaim({
+          stripeEventId,
+          requestId: CATCHUP_REQUEST_ID,
+        });
         return true;
       } catch (error) {
         logger.warn({ error, stripeEventId }, 'stripe-webhook-event-catchup.enqueue.failed');

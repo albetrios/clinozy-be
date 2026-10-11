@@ -26,7 +26,13 @@ const INVITATIONS_PER_ORG = 2;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Deterministic 64-char invitation token hash for a given organization + slot (idempotency marker). */
-function invitationTokenHash(organizationPublicId: string, slot: number): string {
+function invitationTokenHash({
+  organizationPublicId,
+  slot,
+}: {
+  organizationPublicId: string;
+  slot: number;
+}): string {
   return createHash('sha256').update(`seed-invite:${organizationPublicId}:${slot}`).digest('hex');
 }
 
@@ -104,7 +110,7 @@ async function seedOrganizationMembershipInvitations(options: {
   if (adminRoleId === null) return 0;
 
   const slotHashes = Array.from({ length: INVITATIONS_PER_ORG }, (_, slot) =>
-    invitationTokenHash(organization.public_id, slot),
+    invitationTokenHash({ organizationPublicId: organization.public_id, slot }),
   );
   const existingInvites = await database
     .select({ token_hash: membership_invitations.token_hash })

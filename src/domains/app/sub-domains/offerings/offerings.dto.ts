@@ -25,7 +25,7 @@ export const offeringsIdParamsDto = z
  */
 export const CreateOfferingDto = z
   .object({
-    name: trimmedStringMinMax(1, 120),
+    name: trimmedStringMinMax({ min: 1, max: 120 }),
     category: z.enum(OFFERING_CATEGORY_VALUES).optional(),
     specialty: z.enum(OFFERING_SPECIALTY_VALUES).optional(),
     tone: chipToneSchema.optional(),
@@ -46,7 +46,10 @@ export const CreateOfferingDto = z
       .refine(distinct, { message: 'Each id once' })
       .optional(),
     is_gst_inclusive: z.boolean().optional(),
-    search_terms: z.array(trimmedStringMinMax(1, 60)).max(20).optional(),
+    search_terms: z
+      .array(trimmedStringMinMax({ min: 1, max: 60 }))
+      .max(20)
+      .optional(),
     description: trimmedString().max(1000).nullable().optional(),
   })
   .strict();
@@ -57,7 +60,7 @@ export const CreateOfferingDto = z
  */
 export const UpdateOfferingDto = z
   .object({
-    name: trimmedStringMinMax(1, 120).optional(),
+    name: trimmedStringMinMax({ min: 1, max: 120 }).optional(),
     category: z.enum(OFFERING_CATEGORY_VALUES).optional(),
     specialty: z.enum(OFFERING_SPECIALTY_VALUES).optional(),
     tone: chipToneSchema.optional(),
@@ -78,7 +81,10 @@ export const UpdateOfferingDto = z
       .refine(distinct, { message: 'Each id once' })
       .optional(),
     is_gst_inclusive: z.boolean().optional(),
-    search_terms: z.array(trimmedStringMinMax(1, 60)).max(20).optional(),
+    search_terms: z
+      .array(trimmedStringMinMax({ min: 1, max: 60 }))
+      .max(20)
+      .optional(),
     description: trimmedString().max(1000).nullable().optional(),
     expected_updated_at: expectedUpdatedAtSchema,
   })

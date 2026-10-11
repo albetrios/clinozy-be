@@ -12,9 +12,9 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ callback }: { callback: () => Promise<unknown> }) => callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
+    withAppDatabaseContext: vi.fn(async ({ callback }: { callback: () => Promise<unknown> }) =>
       callback(),
     ),
   };
@@ -120,7 +120,10 @@ describe('MemberRoleService', () => {
   });
 
   it('list returns roles', async () => {
-    const result = await service.list(asScope(organization.public_id), { limit: 20, order: 'asc' });
+    const result = await service.list({
+      scope: asScope(organization.public_id),
+      pagination: { limit: 20, order: 'asc' },
+    });
     expect(result.items).toHaveLength(1);
   });
 
@@ -128,7 +131,10 @@ describe('MemberRoleService', () => {
     vi.mocked(memberRoleRepository.countMembersByRoleForOrganization).mockResolvedValue(
       new Map([[roleRow.id, 4]]),
     );
-    const result = await service.list(asScope(organization.public_id), { limit: 20, order: 'asc' });
+    const result = await service.list({
+      scope: asScope(organization.public_id),
+      pagination: { limit: 20, order: 'asc' },
+    });
     expect(result.items[0]).toMatchObject({ id: roleRow.public_id, member_count: 4 });
     // One grouped query for the whole page — never the per-role count.
     expect(memberRoleRepository.countMembersByRoleForOrganization).toHaveBeenCalledTimes(1);
@@ -137,22 +143,28 @@ describe('MemberRoleService', () => {
 
   it('list defaults member_count to 0 for a role absent from the aggregate', async () => {
     vi.mocked(memberRoleRepository.countMembersByRoleForOrganization).mockResolvedValue(new Map());
-    const result = await service.list(asScope(organization.public_id), { limit: 20, order: 'asc' });
+    const result = await service.list({
+      scope: asScope(organization.public_id),
+      pagination: { limit: 20, order: 'asc' },
+    });
     expect(result.items[0]!.member_count).toBe(0);
   });
 
   it('getByPublicId includes member_count from the single-role count', async () => {
     vi.mocked(memberRoleRepository.countMembersForRole).mockResolvedValue(2);
-    const result = await service.getByPublicId(asScope(organization.public_id), roleRow.public_id);
+    const result = await service.getByPublicId({
+      scope: asScope(organization.public_id),
+      role_public_id: roleRow.public_id,
+    });
     expect(result).toMatchObject({ id: roleRow.public_id, member_count: 2 });
   });
 
   it('create returns member_count 0 for the brand-new role without an aggregate query', async () => {
-    const result = await service.create(
-      asScope(organization.public_id),
-      { name: 'Editor' },
-      'creator_public',
-    );
+    const result = await service.create({
+      scope: asScope(organization.public_id),
+      body: { name: 'Editor' },
+      created_by_user_public_id: 'creator_public',
+    });
     expect(result.member_count).toBe(0);
     expect(memberRoleRepository.countMembersForRole).not.toHaveBeenCalled();
     expect(memberRoleRepository.countMembersByRoleForOrganization).not.toHaveBeenCalled();
@@ -160,17 +172,20 @@ describe('MemberRoleService', () => {
 
   it('update returns the refreshed member_count for the updated role', async () => {
     vi.mocked(memberRoleRepository.countMembersForRole).mockResolvedValue(5);
-    const result = await service.update(
-      asScope(organization.public_id),
-      roleRow.public_id,
-      { name: 'Updated' },
-      'updater_public',
-    );
+    const result = await service.update({
+      scope: asScope(organization.public_id),
+      role_public_id: roleRow.public_id,
+      body: { name: 'Updated' },
+      updated_by_user_public_id: 'updater_public',
+    });
     expect(result).toMatchObject({ id: roleRow.public_id, member_count: 5 });
   });
 
   it('getByPublicId returns role', async () => {
-    const result = await service.getByPublicId(asScope(organization.public_id), roleRow.public_id);
+    const result = await service.getByPublicId({
+      scope: asScope(organization.public_id),
+      role_public_id: roleRow.public_id,
+    });
     expect(result.id).toBe(roleRow.public_id);
   });
 
@@ -179,16 +194,20 @@ describe('MemberRoleService', () => {
       new NotFoundError('Organization'),
     );
     await expect(
-      service.create(asScope(organization.public_id), { name: 'Editor' }, 'creator_public'),
+      service.create({
+        scope: asScope(organization.public_id),
+        body: { name: 'Editor' },
+        created_by_user_public_id: 'creator_public',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('create adds role', async () => {
-    await service.create(
-      asScope(organization.public_id),
-      { name: 'Editor', description: 'Can edit' },
-      'creator_public',
-    );
+    await service.create({
+      scope: asScope(organization.public_id),
+      body: { name: 'Editor', description: 'Can edit' },
+      created_by_user_public_id: 'creator_public',
+    });
     expect(memberRoleRepository.create).toHaveBeenCalled();
   });
 
@@ -198,13 +217,21 @@ describe('MemberRoleService', () => {
       type: 'PERSONAL',
     } as never);
     await expect(
-      service.create(asScope(organization.public_id), { name: 'Editor' }, 'creator_public'),
+      service.create({
+        scope: asScope(organization.public_id),
+        body: { name: 'Editor' },
+        created_by_user_public_id: 'creator_public',
+      }),
     ).rejects.toMatchObject({ messageKey: 'errors:personalOrganizationNoRoles' });
     expect(memberRoleRepository.create).not.toHaveBeenCalled();
   });
 
   it('create omits optional description and is_system defaults', async () => {
-    await service.create(asScope(organization.public_id), { name: 'Minimal' }, 'creator_public');
+    await service.create({
+      scope: asScope(organization.public_id),
+      body: { name: 'Minimal' },
+      created_by_user_public_id: 'creator_public',
+    });
     expect(memberRoleRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Minimal' }),
     );
@@ -218,11 +245,11 @@ describe('MemberRoleService', () => {
       authorizationService.resolveUserOrganizationPermissionsFromDatabase,
     ).mockResolvedValue(['organization:read']);
 
-    await service.create(
-      asScope(organization.public_id),
-      { name: 'Editor', permission_codes: ['organization:read'] },
-      'creator_public',
-    );
+    await service.create({
+      scope: asScope(organization.public_id),
+      body: { name: 'Editor', permission_codes: ['organization:read'] },
+      created_by_user_public_id: 'creator_public',
+    });
 
     expect(memberRoleRepository.create).toHaveBeenCalled();
     expect(memberRolePermissionRepository.replace).toHaveBeenCalledWith(
@@ -242,11 +269,11 @@ describe('MemberRoleService', () => {
     ).mockResolvedValue([]);
 
     await expect(
-      service.create(
-        asScope(organization.public_id),
-        { name: 'Escalate', permission_codes: ['subscription:manage'] },
-        'creator_public',
-      ),
+      service.create({
+        scope: asScope(organization.public_id),
+        body: { name: 'Escalate', permission_codes: ['subscription:manage'] },
+        created_by_user_public_id: 'creator_public',
+      }),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     // The guard runs BEFORE the insert, so neither the role nor its grants are written.
@@ -255,24 +282,27 @@ describe('MemberRoleService', () => {
   });
 
   it('requireRoleRecordByPublicId returns role row', async () => {
-    const record = await service.requireRoleRecordByPublicId(
-      organization.public_id,
-      roleRow.public_id,
-    );
+    const record = await service.requireRoleRecordByPublicId({
+      organization_public_id: organization.public_id,
+      role_public_id: roleRow.public_id,
+    });
     expect(record.public_id).toBe(roleRow.public_id);
   });
 
   it('requireRoleRecordForOrganization skips organization lookup', async () => {
-    const record = await service.requireRoleRecordForOrganization(
-      organization.id,
-      roleRow.public_id,
-    );
+    const record = await service.requireRoleRecordForOrganization({
+      organization_id: organization.id,
+      role_public_id: roleRow.public_id,
+    });
     expect(record.public_id).toBe(roleRow.public_id);
     expect(organizationService.requireOrganizationRecordByPublicId).not.toHaveBeenCalled();
   });
 
   it('resolveRolePublicIdForOrganization skips organization lookup', async () => {
-    const publicId = await service.resolveRolePublicIdForOrganization(organization.id, roleRow.id);
+    const publicId = await service.resolveRolePublicIdForOrganization({
+      organization_id: organization.id,
+      role_internal_id: roleRow.id,
+    });
     expect(publicId).toBe(roleRow.public_id);
     expect(organizationService.requireOrganizationRecordByPublicId).not.toHaveBeenCalled();
   });
@@ -280,60 +310,66 @@ describe('MemberRoleService', () => {
   it('resolveRolePublicIdForOrganization throws when role is missing', async () => {
     vi.mocked(memberRoleRepository.findByInternalId).mockResolvedValue(null);
     await expect(
-      service.resolveRolePublicIdForOrganization(organization.id, 999),
+      service.resolveRolePublicIdForOrganization({
+        organization_id: organization.id,
+        role_internal_id: 999,
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('resolveRolePublicIdByInternalId resolves via organization membership', async () => {
-    const publicId = await service.resolveRolePublicIdByInternalId(
-      organization.public_id,
-      roleRow.id,
-    );
+    const publicId = await service.resolveRolePublicIdByInternalId({
+      organization_public_id: organization.public_id,
+      role_internal_id: roleRow.id,
+    });
     expect(publicId).toBe(roleRow.public_id);
     expect(organizationService.requireOrganizationRecordByPublicId).toHaveBeenCalled();
   });
 
   it('update and delete mutate role', async () => {
-    await service.update(
-      asScope(organization.public_id),
-      roleRow.public_id,
-      { name: 'Updated' },
-      'updater_public',
-    );
-    await service.delete(
-      asScope(organization.public_id),
-      roleRow.public_id,
-      DELETE_QUERY,
-      undefined,
-    );
+    await service.update({
+      scope: asScope(organization.public_id),
+      role_public_id: roleRow.public_id,
+      body: { name: 'Updated' },
+      updated_by_user_public_id: 'updater_public',
+    });
+    await service.delete({
+      scope: asScope(organization.public_id),
+      role_public_id: roleRow.public_id,
+      query: DELETE_QUERY,
+      deleted_by_user_public_id: undefined,
+    });
     expect(memberRoleRepository.update).toHaveBeenCalled();
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).toHaveBeenCalled();
   });
 
   it('delete invalidates the entire organization permission namespace', async () => {
-    await service.delete(
-      asScope(organization.public_id),
-      roleRow.public_id,
-      DELETE_QUERY,
-      undefined,
-    );
+    await service.delete({
+      scope: asScope(organization.public_id),
+      role_public_id: roleRow.public_id,
+      query: DELETE_QUERY,
+      deleted_by_user_public_id: undefined,
+    });
     expect(invalidateOrganizationPermissions).toHaveBeenCalledWith(organization.public_id);
   });
 
   it('update does not invalidate the permission cache (no permission change)', async () => {
-    await service.update(
-      asScope(organization.public_id),
-      roleRow.public_id,
-      { name: 'X' },
-      'updater',
-    );
+    await service.update({
+      scope: asScope(organization.public_id),
+      role_public_id: roleRow.public_id,
+      body: { name: 'X' },
+      updated_by_user_public_id: 'updater',
+    });
     expect(invalidateOrganizationPermissions).not.toHaveBeenCalled();
   });
 
   it('requireRoleRecordByPublicId throws when missing', async () => {
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(null);
     await expect(
-      service.requireRoleRecordByPublicId(organization.public_id, 'missing'),
+      service.requireRoleRecordByPublicId({
+        organization_public_id: organization.public_id,
+        role_public_id: 'missing',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -342,25 +378,31 @@ describe('MemberRoleService', () => {
       new NotFoundError('Organization'),
     );
     await expect(
-      service.list(asScope(organization.public_id), { limit: 20, order: 'asc' }),
+      service.list({
+        scope: asScope(organization.public_id),
+        pagination: { limit: 20, order: 'asc' },
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('getByPublicId throws when role is missing', async () => {
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(null);
     await expect(
-      service.getByPublicId(asScope(organization.public_id), roleRow.public_id),
+      service.getByPublicId({
+        scope: asScope(organization.public_id),
+        role_public_id: roleRow.public_id,
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('update passes null updater when user id cannot be resolved', async () => {
     vi.mocked(organizationService.resolveUserInternalIdByPublicId).mockResolvedValue(null);
-    await service.update(
-      asScope(organization.public_id),
-      roleRow.public_id,
-      { name: 'X' },
-      'missing',
-    );
+    await service.update({
+      scope: asScope(organization.public_id),
+      role_public_id: roleRow.public_id,
+      body: { name: 'X' },
+      updated_by_user_public_id: 'missing',
+    });
     expect(memberRoleRepository.update).toHaveBeenCalledWith(
       roleRow.public_id,
       organization.id,
@@ -372,7 +414,12 @@ describe('MemberRoleService', () => {
   it('update throws when repository returns null', async () => {
     vi.mocked(memberRoleRepository.update).mockResolvedValue(null);
     await expect(
-      service.update(asScope(organization.public_id), roleRow.public_id, { name: 'X' }, 'updater'),
+      service.update({
+        scope: asScope(organization.public_id),
+        role_public_id: roleRow.public_id,
+        body: { name: 'X' },
+        updated_by_user_public_id: 'updater',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -381,7 +428,12 @@ describe('MemberRoleService', () => {
     // concurrent delete), which the service surfaces as the actionable roleHasActiveMembers conflict.
     vi.mocked(memberRoleRepository.softDeleteIfNoActiveMembers).mockResolvedValue(null);
     await expect(
-      service.delete(asScope(organization.public_id), roleRow.public_id, DELETE_QUERY, undefined),
+      service.delete({
+        scope: asScope(organization.public_id),
+        role_public_id: roleRow.public_id,
+        query: DELETE_QUERY,
+        deleted_by_user_public_id: undefined,
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
@@ -389,22 +441,22 @@ describe('MemberRoleService', () => {
     // sec-T3 removed `is_system` from createMemberRoleDto; clients that still send it
     // get a ValidationError before the repository is touched.
     await expect(
-      service.create(
-        asScope(organization.public_id),
-        { name: 'System', description: null, is_system: true },
-        'missing_creator',
-      ),
+      service.create({
+        scope: asScope(organization.public_id),
+        body: { name: 'System', description: null, is_system: true },
+        created_by_user_public_id: 'missing_creator',
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
     expect(memberRoleRepository.create).not.toHaveBeenCalled();
   });
 
   it('create persists with null created_by_user_id when the creator id cannot be resolved', async () => {
     vi.mocked(organizationService.resolveUserInternalIdByPublicId).mockResolvedValue(null);
-    await service.create(
-      asScope(organization.public_id),
-      { name: 'Custom', description: null },
-      'missing_creator',
-    );
+    await service.create({
+      scope: asScope(organization.public_id),
+      body: { name: 'Custom', description: null },
+      created_by_user_public_id: 'missing_creator',
+    });
     expect(memberRoleRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Custom', created_by_user_id: null }),
     );
@@ -418,17 +470,28 @@ describe('MemberRoleService', () => {
       new NotFoundError('Organization'),
     );
     await expect(
-      service.getByPublicId(asScope(organization.public_id), roleRow.public_id),
+      service.getByPublicId({
+        scope: asScope(organization.public_id),
+        role_public_id: roleRow.public_id,
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
     await expect(
-      service.requireRoleRecordByPublicId(organization.public_id, roleRow.public_id),
+      service.requireRoleRecordByPublicId({
+        organization_public_id: organization.public_id,
+        role_public_id: roleRow.public_id,
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('update throws when role is missing', async () => {
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(null);
     await expect(
-      service.update(asScope(organization.public_id), roleRow.public_id, { name: 'X' }, 'updater'),
+      service.update({
+        scope: asScope(organization.public_id),
+        role_public_id: roleRow.public_id,
+        body: { name: 'X' },
+        updated_by_user_public_id: 'updater',
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -437,7 +500,12 @@ describe('MemberRoleService', () => {
       new NotFoundError('Organization'),
     );
     await expect(
-      service.delete(asScope(organization.public_id), roleRow.public_id, DELETE_QUERY, undefined),
+      service.delete({
+        scope: asScope(organization.public_id),
+        role_public_id: roleRow.public_id,
+        query: DELETE_QUERY,
+        deleted_by_user_public_id: undefined,
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 });

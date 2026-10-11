@@ -14,7 +14,7 @@ import {
  * stored `token_hash` by the service (none: the verified, matching email alone, launch D84 (2)).
  */
 export function validateAcceptMembershipInvitation(data: unknown): AcceptMembershipInvitationInput {
-  return parseWithSchema(acceptMembershipInvitationDto, data);
+  return parseWithSchema({ schema: acceptMembershipInvitationDto, data });
 }
 
 /**
@@ -22,7 +22,7 @@ export function validateAcceptMembershipInvitation(data: unknown): AcceptMembers
  * against {@link resendMembershipInvitationDto}.
  */
 export function validateResendMembershipInvitation(data: unknown): ResendMembershipInvitationInput {
-  return parseWithSchema(resendMembershipInvitationDto, data);
+  return parseWithSchema({ schema: resendMembershipInvitationDto, data });
 }
 
 /**
@@ -32,5 +32,5 @@ export function validateResendMembershipInvitation(data: unknown): ResendMembers
 export function validateListMyMembershipInvitationsQuery(
   data: unknown,
 ): ListMyMembershipInvitationsQueryInput {
-  return parseWithSchema(listMyMembershipInvitationsQueryDto, data);
+  return parseWithSchema({ schema: listMyMembershipInvitationsQueryDto, data });
 }

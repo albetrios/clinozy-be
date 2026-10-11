@@ -20,19 +20,21 @@ describe('AppMembershipsService', () => {
   const service = new AppMembershipsService({} as never, {} as never);
 
   it('refuses a list query with an unknown filter (400)', async () => {
-    await expect(service.list(SCOPE, { not_a_filter: 'x' })).rejects.toBeInstanceOf(
-      ValidationError,
-    );
+    await expect(
+      service.list({ scope: SCOPE, query: { not_a_filter: 'x' } }),
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('refuses a list limit out of range (400)', async () => {
-    await expect(service.list(SCOPE, { limit: '0' })).rejects.toBeInstanceOf(ValidationError);
+    await expect(service.list({ scope: SCOPE, query: { limit: '0' } })).rejects.toBeInstanceOf(
+      ValidationError,
+    );
   });
 
   it('refuses a holds code longer than any permission code (400)', async () => {
-    await expect(service.list(SCOPE, { holds: 'x'.repeat(101) })).rejects.toBeInstanceOf(
-      ValidationError,
-    );
+    await expect(
+      service.list({ scope: SCOPE, query: { holds: 'x'.repeat(101) } }),
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('hands holds to the directory as the permission code (T8)', async () => {
@@ -47,15 +49,17 @@ describe('AppMembershipsService', () => {
       { listDirectory } as unknown as MembershipService,
       {} as never,
     );
-    await withDirectory.list(SCOPE, { holds: 'task:read' });
-    expect(listDirectory).toHaveBeenCalledWith(
-      SCOPE,
-      expect.objectContaining({ holdsPermissionCode: 'task:read', includeEnded: false }),
-    );
+    await withDirectory.list({ scope: SCOPE, query: { holds: 'task:read' } });
+    expect(listDirectory).toHaveBeenCalledWith({
+      scope: SCOPE,
+      query: expect.objectContaining({ holdsPermissionCode: 'task:read', includeEnded: false }),
+    });
   });
 
   it('refuses a roles query with a filter (400) — the directory is paged only', async () => {
-    await expect(service.listRoles(SCOPE, { q: 'Doctor' })).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      service.listRoles({ scope: SCOPE, query: { q: 'Doctor' } }),
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('shapes each role as a directory entry — no codes, counts or dates', async () => {
@@ -86,8 +90,11 @@ describe('AppMembershipsService', () => {
       {} as never,
       { listDirectory } as unknown as MemberRoleService,
     );
-    const page = await withRoles.listRoles(SCOPE, { limit: '100' });
-    expect(listDirectory).toHaveBeenCalledWith(SCOPE, { limit: 100, after: undefined });
+    const page = await withRoles.listRoles({ scope: SCOPE, query: { limit: '100' } });
+    expect(listDirectory).toHaveBeenCalledWith({
+      scope: SCOPE,
+      pagination: { limit: 100, after: undefined },
+    });
     expect(page).toEqual({
       items: [
         {

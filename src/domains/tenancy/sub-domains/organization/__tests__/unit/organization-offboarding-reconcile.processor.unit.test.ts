@@ -13,8 +13,9 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   const inner = vi.fn() as unknown as (...parameters: unknown[]) => unknown;
   return {
     ...actual,
-    withMaintenanceDatabaseContext: vi.fn((_scope: unknown, ...parameters: unknown[]) =>
-      inner(...parameters),
+    withMaintenanceDatabaseContext: vi.fn(
+      ({ callback, options }: { scope: unknown; callback: unknown; options?: unknown }) =>
+        inner(callback, options),
     ),
   };
 });
@@ -54,9 +55,12 @@ describe('runOrganizationOffboardingReconcileJob (TEN-06)', () => {
     // The failed organization offboarding is reported to Sentry with its public id and the reconcile source
     // tag (mirrors the user-offboarding reconcile twin), so a stuck teardown is not lost silently.
     expect(captureException).toHaveBeenCalledTimes(1);
-    expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
-      organizationId: 'org_a',
-      tags: { source: 'organization-offboarding-reconcile' },
+    expect(captureException).toHaveBeenCalledWith({
+      error: expect.any(Error),
+      context: {
+        organizationId: 'org_a',
+        tags: { source: 'organization-offboarding-reconcile' },
+      },
     });
   });
 

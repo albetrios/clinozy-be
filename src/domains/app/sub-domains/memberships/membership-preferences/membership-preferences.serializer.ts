@@ -5,10 +5,13 @@ import type {
 } from './membership-preferences.types.js';
 
 /** Shapes a `app.membership_preferences` row and its branch filter as the API returns them. */
-export function serializeMembershipPreferences(
-  row: MembershipPreferencesRow,
-  branchPublicIds: string[],
-): MembershipPreferencesOutput {
+export function serializeMembershipPreferences({
+  row,
+  branchPublicIds,
+}: {
+  row: MembershipPreferencesRow;
+  branchPublicIds: string[];
+}): MembershipPreferencesOutput {
   return {
     id: row.public_id,
     pinned_sections: row.pinned_sections,

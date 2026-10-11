@@ -12,7 +12,7 @@ import {
 export const LogPatientFeedbackActionDto = z
   .object({
     action: z.enum(PATIENT_FEEDBACK_ACTION_VALUES),
-    note: trimmedStringMinMax(1, 280).optional(),
+    note: trimmedStringMinMax({ min: 1, max: 280 }).optional(),
   })
   .strict()
   .refine((value) => value.action !== PATIENT_FEEDBACK_ACTION.OTHER || value.note !== undefined, {

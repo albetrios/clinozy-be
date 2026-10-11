@@ -22,28 +22,28 @@ export const organizationSlugParamsDto = z
 /** Path params for member-role routes scoped under the active organization (`/organization/roles/:role_id`). */
 export const roleIdParamsDto = z
   .object({
-    role_id: trimmedStringMinMax(1, 28),
+    role_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
 /** Path params for organization API-key routes (`/organization/api-keys/:api_key_id`). */
 export const apiKeyIdParamsDto = z
   .object({
-    api_key_id: trimmedStringMinMax(1, 28),
+    api_key_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
 /** Path params for notification-policy routes (`/organization/notification-policies/:notification_policy_id`). */
 export const notificationPolicyIdParamsDto = z
   .object({
-    notification_policy_id: trimmedStringMinMax(1, 28),
+    notification_policy_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
 /** Zod schema for the `POST /api/v1/organizations` request body (name + URL-friendly slug). */
 export const createOrganizationDto = z
   .object({
-    name: trimmedStringMinMax(1, 255),
+    name: trimmedStringMinMax({ min: 1, max: 255 }),
     slug: trimmedSlug(),
   })
   .strict();
@@ -55,7 +55,7 @@ export const createOrganizationDto = z
  */
 export const updateOrganizationDto = z
   .object({
-    name: trimmedStringMinMax(1, 255).optional(),
+    name: trimmedStringMinMax({ min: 1, max: 255 }).optional(),
     slug: trimmedSlug().optional(),
     status: z.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']).optional(),
     specialties: z
@@ -68,7 +68,7 @@ export const updateOrganizationDto = z
         message: 'Each specialty once',
       })
       .optional(),
-    timezone: trimmedStringMinMax(1, 64)
+    timezone: trimmedStringMinMax({ min: 1, max: 64 })
       .refine(isKnownTimeZone, { message: 'Not an IANA time zone (e.g. Asia/Kolkata)' })
       .optional(),
   })
@@ -84,12 +84,12 @@ export const listOrganizationsQueryDto = cursorPaginationSchema.strict();
  */
 export const uploadLogoDto = z
   .object({
-    key: trimmedStringMinMax(1, 512)
+    key: trimmedStringMinMax({ min: 1, max: 512 })
       .refine((key) => key.startsWith('organization-logos/'), {
-        message: 'Key must start with organization-logos/',
+        message: 'errors:validation.organizationLogoKeyPrefix',
       })
       .refine(isTraversalFreeStorageKey, {
-        message: 'Key must not contain path traversal',
+        message: 'errors:validation.storageKeyPathTraversal',
       }),
   })
   .strict();

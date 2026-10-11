@@ -13,7 +13,7 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a clinical note create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePatientClinicalNote(data: unknown): CreatePatientClinicalNoteInput {
-  return parseWithSchema(CreatePatientClinicalNoteDto, data);
+  return parseWithSchema({ schema: CreatePatientClinicalNoteDto, data });
 }
 
 /** Clinical notes are never edited (P12) — a wrong one is deleted and written again. */
@@ -23,7 +23,7 @@ export function refusePatientClinicalNoteUpdate(): Record<string, unknown> {
 
 /** Parses a patient's clinical-notes query into a list input (routes-final 7.B.8 #8). */
 export function validateListPatientClinicalNotesQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listPatientClinicalNotesQueryDto, data);
+  const query = parseWithSchema({ schema: listPatientClinicalNotesQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

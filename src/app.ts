@@ -171,9 +171,12 @@ export async function buildApp(options?: BuildAppOptions) {
   if (getEnv().ENABLE_MCP_SERVER) {
     try {
       const { registerMcpRoute } = await import('@/infrastructure/mcp/mcp-server.js');
-      await registerMcpRoute(app, {
-        name: API_SERVER_NAME,
-        version: API_SERVER_VERSION,
+      await registerMcpRoute({
+        app,
+        options: {
+          name: API_SERVER_NAME,
+          version: API_SERVER_VERSION,
+        },
       });
     } catch (error) {
       logger.error({ error }, 'Failed to load MCP server module');

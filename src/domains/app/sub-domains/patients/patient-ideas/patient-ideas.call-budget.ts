@@ -22,7 +22,13 @@ return next_count
 `;
 
 /** The organization's counter for the UTC day of `now`. */
-export function ideasCallBudgetKey(organizationPublicId: string, now = new Date()): string {
+export function ideasCallBudgetKey({
+  organizationPublicId,
+  now = new Date(),
+}: {
+  organizationPublicId: string;
+  now?: Date | undefined;
+}): string {
   return `patient-ideas:calls:${organizationPublicId}:${now.toISOString().slice(0, 10)}`;
 }
 
@@ -42,7 +48,7 @@ export async function reserveIdeasCall(organizationPublicId: string): Promise<bo
     const result = await redisConnection.eval(
       RESERVE_CALL_LUA,
       1,
-      ideasCallBudgetKey(organizationPublicId),
+      ideasCallBudgetKey({ organizationPublicId }),
       String(env.PATIENT_IDEAS_DAILY_CALL_LIMIT),
       String(CALL_BUDGET_TTL_SECONDS),
     );

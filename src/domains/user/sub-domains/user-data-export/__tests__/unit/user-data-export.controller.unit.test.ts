@@ -69,8 +69,11 @@ describe('createUserDataExportController', () => {
       reply,
     );
 
-    expect(service.requestExport).toHaveBeenCalledWith(expect.objectContaining({ userPublicId }), {
-      requestId: 'request-id',
+    expect(service.requestExport).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ userPublicId }),
+      options: {
+        requestId: 'request-id',
+      },
     });
     expect(reply.status).toHaveBeenCalledWith(202);
   });
@@ -99,10 +102,10 @@ describe('createUserDataExportController', () => {
       mockReply(),
     );
 
-    expect(service.getExportStatus).toHaveBeenCalledWith(
-      expect.objectContaining({ userPublicId }),
-      exportId,
-    );
+    expect(service.getExportStatus).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ userPublicId }),
+      exportPublicId: exportId,
+    });
     expect(response).toMatchObject({
       data: { id: exportId, status: USER_DATA_EXPORT_STATUSES.COMPLETED },
     });
@@ -139,15 +142,15 @@ describe('createUserDataExportController', () => {
       mockReply(),
     );
 
-    expect(recordScopedAuditEventSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
+    expect(recordScopedAuditEventSpy).toHaveBeenCalledWith({
+      request: expect.anything(),
+      input: expect.objectContaining({
         actorUserPublicId: userPublicId,
         action: 'user.data_export.url_minted',
         resource_type: 'user_data_export',
         metadata: expect.objectContaining({ export_public_id: exportId }),
       }),
-    );
+    });
   });
 
   it('does NOT record an audit event when no download_url is returned (status != COMPLETED)', async () => {

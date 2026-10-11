@@ -13,10 +13,13 @@ export type AuditContainer = {
  * Wires the audit repository and {@link AuditService} with its cross-domain
  * dependencies (tenancy + user services for public-id resolution).
  */
-export function createAuditContainer(
-  organizationService: OrganizationService,
-  userService: UserService,
-): AuditContainer {
+export function createAuditContainer({
+  organizationService,
+  userService,
+}: {
+  organizationService: OrganizationService;
+  userService: UserService;
+}): AuditContainer {
   const auditRepository = new AuditRepository();
   const auditService = new AuditService(auditRepository, organizationService, userService);
   return { auditService };
@@ -29,5 +32,5 @@ export function createAuditContainer(
 export function registerAuditContainer(application: FastifyInstance): void {
   const { organizationService } = application.tenancyDomain;
   const { userService } = application.userDomain;
-  application.decorate('auditDomain', createAuditContainer(organizationService, userService));
+  application.decorate('auditDomain', createAuditContainer({ organizationService, userService }));
 }

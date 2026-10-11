@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { runOrganizationScopedWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { runTaskRulesJob } from '@/domains/app/sub-domains/tasks/workers/task-rules.processor.js';
 import {
@@ -86,9 +86,10 @@ describe('Tasks — integration (routes-final §10)', () => {
   /** One run of the task rules for the fixture organization, now. */
   async function runTaskRules(): Promise<void> {
     const organizationPublicId = fixture.organization.publicId;
-    await runOrganizationScopedWorkerJob({ organizationPublicId }, (databaseHandle) =>
-      runTaskRulesJob(databaseHandle, organizationPublicId),
-    );
+    await runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: (databaseHandle) => runTaskRulesJob({ databaseHandle, organizationPublicId }),
+    });
   }
 
   /** The rule's tasks for a record (`filter`: `lead_id=…`), everyone's. */
@@ -496,7 +497,7 @@ describe('Tasks — integration (routes-final §10)', () => {
       '[.data.status, .data.snooze_label, .data.outcome] | map(tostring) | join(",")',
       'snoozed,No answer,null',
     );
-    const [snooze] = await getOperatorSql()<{ hours: string }[]>`
+    const [snooze] = await operatorQuery<{ hours: string }[]>`
       SELECT round(extract(epoch FROM snoozed_until - now()) / 3600)::text AS hours
       FROM app.tasks WHERE public_id = ${callLab}
     `;
@@ -610,7 +611,7 @@ describe('Tasks — integration (routes-final §10)', () => {
     }
     expect(ashaVisit, 'book Asha').not.toBe('');
     const tomorrow = calendarDay(fixture, 1);
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.appointments SET appointment_date = ${tomorrow} WHERE public_id = ${ashaVisit}
     `;
 
@@ -710,7 +711,7 @@ describe('Tasks — integration (routes-final §10)', () => {
       `/app/tasks/${followUpTask}/snooze`,
       { snoozed_until: instant(60_000) },
     );
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.tasks SET snoozed_until = now() - interval '1 second'
       WHERE public_id = ${followUpTask}
     `;
@@ -744,7 +745,7 @@ describe('Tasks — integration (routes-final §10)', () => {
       follow_up_at: instant(7 * DAY),
     });
     await runTaskRules();
-    const [closedFollowUp] = await getOperatorSql()<{ state: string }[]>`
+    const [closedFollowUp] = await operatorQuery<{ state: string }[]>`
       SELECT t.status || ',' || t.result_text AS state FROM app.tasks t
       WHERE t.public_id = ${followUpTask}
     `;
@@ -759,7 +760,7 @@ describe('Tasks — integration (routes-final §10)', () => {
       { follow_up_at: instant(-DAY) },
     );
     await runTaskRules();
-    const [openFollowUps] = await getOperatorSql()<{ count: string }[]>`
+    const [openFollowUps] = await operatorQuery<{ count: string }[]>`
       SELECT count(*)::text AS count FROM app.tasks t JOIN app.leads l ON l.id = t.lead_id
       WHERE l.public_id = ${belaLead} AND t.rule_key = 'follow_up' AND t.status <> 'done'
     `;
@@ -897,7 +898,7 @@ describe('Tasks — integration (routes-final §10)', () => {
       owner_membership_id: frontDesk,
     });
     const chandniLead = flow.last('.data.id');
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.leads SET held_until = now() - interval '1 minute' WHERE public_id = ${chandniLead}
     `;
     await runTaskRules();

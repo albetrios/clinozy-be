@@ -1,8 +1,15 @@
-import { and, asc, count, desc, eq, gt, isNull, lt, type SQL } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
-import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import { and, asc, count, desc, eq, gt, isNull, lt, sql, type SQL } from 'drizzle-orm';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
+import {
+  assertWorkerDatabaseContext,
+  getContextFreeDatabase,
+  getRequestDatabase,
+} from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
+import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
+import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import {
@@ -16,6 +23,7 @@ import type {
 import {
   buildAscendingCreatedAtIdCursorCondition,
   createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 
@@ -32,6 +40,13 @@ export interface MembershipInvitationOrganizationLookupRow {
   membership_public_id: string;
   membership_id: number;
 }
+
+type MembershipInvitationOrganizationLookupDatabaseRow = {
+  organization_public_id: string;
+  organization_id: string | number;
+  membership_public_id: string;
+  membership_id: string | number;
+};
 
 /**
  * Cursor-pagination options for {@link MembershipInvitationRepository.findByOrganizationId}.
@@ -63,17 +78,18 @@ export class MembershipInvitationRepository {
       isNull(memberships.deleted_at),
     ];
     const countWhere = and(...filterConditions);
-    const cursorCondition = buildAscendingCreatedAtIdCursorCondition(
-      membership_invitations.created_at,
-      membership_invitations.id,
-      parseListCursor(after),
-    );
+    const cursorCondition = buildAscendingCreatedAtIdCursorCondition({
+      createdAtColumn: membership_invitations.created_at,
+      idColumn: membership_invitations.id,
+      cursor: parseListCursor(after),
+    });
     const where =
       cursorCondition !== undefined ? and(...filterConditions, cursorCondition) : countWhere;
 
     const rowsPromise = getRequestDatabase()
       .select({
         invitation: membership_invitations,
+        cursor_created_at: cursorTimestampSelection(membership_invitations.created_at),
         membership_public_id: memberships.public_id,
       })
       .from(membership_invitations)
@@ -92,20 +108,12 @@ export class MembershipInvitationRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    const hasMore = fetchedRows.length > limit;
-    const rows = hasMore ? fetchedRows.slice(0, limit) : fetchedRows;
-    const items = rows.map((row) => ({
+    const rows = fetchedRows.map((row) => ({
       ...row.invitation,
+      cursor_created_at: row.cursor_created_at,
       membership_public_id: row.membership_public_id,
     }));
-    const lastItem = items.at(-1);
-    return {
-      items,
-      total,
-      limit,
-      has_more: hasMore,
-      next_cursor: hasMore && lastItem !== undefined ? createOpaqueCursorFromRow(lastItem) : null,
-    };
+    return finishKeysetPage({ rows, args: { limit, total } });
   }
 
   async findByPublicId(public_id: string): Promise<MembershipInvitationRow | null> {
@@ -158,10 +166,10 @@ export class MembershipInvitationRepository {
    * {@link MembershipInvitationRepository.countPendingByOrganization}.
    */
   async acquireCreationQuotaLock(organization_id: number): Promise<void> {
-    await acquireResourceQuotaLock(
-      RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBERSHIP_INVITATION,
-      organization_id,
-    );
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBERSHIP_INVITATION,
+      key: organization_id,
+    });
   }
 
   /**
@@ -175,21 +183,13 @@ export class MembershipInvitationRepository {
   async lookupOrganizationByInvitationPublicId(
     invitation_public_id: string,
   ): Promise<MembershipInvitationOrganizationLookupRow | null> {
-    const rows = await sql<
-      Array<{
-        organization_public_id: string;
-        organization_id: string | number;
-        membership_public_id: string;
-        membership_id: string | number;
-      }>
-    >`
-      SELECT
-        organization_public_id,
-        organization_id,
-        membership_public_id,
-        membership_id
-      FROM tenancy.resolve_membership_invitation_lookup_by_public_id(${invitation_public_id})
-    `;
+    const result =
+      await getContextFreeDatabase().execute<MembershipInvitationOrganizationLookupDatabaseRow>(
+        sql`SELECT organization_public_id, organization_id, membership_public_id, membership_id FROM tenancy.resolve_membership_invitation_lookup_by_public_id(${invitation_public_id})`,
+      );
+    const rows = (
+      Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? [])
+    ) as MembershipInvitationOrganizationLookupDatabaseRow[];
     const row = rows[0];
     if (!row) return null;
     return {
@@ -210,7 +210,8 @@ export class MembershipInvitationRepository {
    *   `tenancy.list_pending_membership_invitations_for_email` (the invitee is not a member of the
    *   inviting organization, whose row-level security hides every row), keyset-paged on
    *   `(created_at, id)`: one row past `limit` says whether there is more.
-   * - **Notes:** the caller passes a verified email only — the function trusts its argument.
+   * - **Notes:** the caller passes a verified email only — the function trusts its argument — and
+   *   runs it in the invitee's own user context.
    */
   async listPendingForEmail(
     email: string,
@@ -222,24 +223,23 @@ export class MembershipInvitationRepository {
     next_cursor: string | null;
   }> {
     const cursor = parseListCursor(pagination.after);
-    // ISO text: this client binds no Date parameters in a raw tagged template.
-    const afterCreatedAt = cursor?.id === undefined ? null : cursor.created_at.toISOString();
+    // The cursor's exact microsecond text, cast back to a timestamp in the query.
+    const afterCreatedAt = cursor?.id === undefined ? null : cursor.created_at;
     const afterId = cursor?.id ?? null;
-    const rows = await sql<
-      Array<{
-        invitation_id: string | number;
-        invitation_public_id: string;
-        organization_public_id: string;
-        organization_name: string;
-        organization_slug: string | null;
-        organization_logo_url: string | null;
-        membership_public_id: string;
-        role_names: string[] | null;
-        inviter_name: string | null;
-        invitation_expires_at: Date;
-        invitation_created_at: Date;
-      }>
-    >`
+    const result = await getRequestDatabase().execute<{
+      invitation_id: string | number;
+      invitation_public_id: string;
+      organization_public_id: string;
+      organization_name: string;
+      organization_slug: string | null;
+      organization_logo_url: string | null;
+      membership_public_id: string;
+      role_names: string[] | null;
+      inviter_name: string | null;
+      invitation_expires_at: Date | string;
+      invitation_created_at: Date | string;
+      cursor_created_at: string;
+    }>(sql`
       SELECT
         invitation_id,
         invitation_public_id,
@@ -251,14 +251,16 @@ export class MembershipInvitationRepository {
         role_names,
         inviter_name,
         invitation_expires_at,
-        invitation_created_at
+        invitation_created_at,
+        to_char(invitation_created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_created_at
       FROM tenancy.list_pending_membership_invitations_for_email(
         ${email},
         ${pagination.limit + 1},
-        ${afterCreatedAt},
-        ${afterId}
+        ${afterCreatedAt}::timestamptz,
+        ${afterId}::bigint
       )
-    `;
+    `);
+    const rows = result.rows;
     const hasMore = rows.length > pagination.limit;
     const items = (hasMore ? rows.slice(0, pagination.limit) : rows).map((row) => ({
       invitation_id: Number(row.invitation_id),
@@ -273,16 +275,16 @@ export class MembershipInvitationRepository {
       expires_at: new Date(row.invitation_expires_at),
       created_at: new Date(row.invitation_created_at),
     }));
-    const lastItem = items.at(-1);
+    const lastRow = hasMore ? rows[pagination.limit - 1] : undefined;
     return {
       items,
       limit: pagination.limit,
       has_more: hasMore,
       next_cursor:
-        hasMore && lastItem !== undefined
+        lastRow !== undefined
           ? createOpaqueCursorFromRow({
-              created_at: lastItem.created_at,
-              id: lastItem.invitation_id,
+              cursor_created_at: lastRow.cursor_created_at,
+              id: Number(lastRow.invitation_id),
             })
           : null,
     };
@@ -296,24 +298,26 @@ export class MembershipInvitationRepository {
     expires_at: Date;
     created_by_user_id?: number | null;
   }) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('membershipInvitation');
-      const rows = await getRequestDatabase()
-        .insert(membership_invitations)
-        .values({
-          public_id,
-          membership_id: data.membership_id,
-          email: data.email,
-          token_hash: data.token_hash,
-          invited_by_user_id: data.invited_by_user_id,
-          expires_at: data.expires_at,
-          ...(data.created_by_user_id !== undefined &&
-            data.created_by_user_id !== null && {
-              created_by_user_id: data.created_by_user_id,
-            }),
-        })
-        .returning();
-      return rows[0]! as MembershipInvitationRow;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const public_id = generatePublicId('membershipInvitation');
+        const rows = await getRequestDatabase()
+          .insert(membership_invitations)
+          .values({
+            public_id,
+            membership_id: data.membership_id,
+            email: data.email,
+            token_hash: data.token_hash,
+            invited_by_user_id: data.invited_by_user_id,
+            expires_at: data.expires_at,
+            ...(data.created_by_user_id !== undefined &&
+              data.created_by_user_id !== null && {
+                created_by_user_id: data.created_by_user_id,
+              }),
+          })
+          .returning();
+        return rows[0]! as MembershipInvitationRow;
+      },
     });
   }
 
@@ -385,4 +389,44 @@ export class MembershipInvitationRepository {
       .returning();
     return (rows[0] ?? null) as MembershipInvitationRow | null;
   }
+}
+
+/**
+ * Still-`invited` memberships of live organizations whose latest invitation is open (not accepted,
+ * not revoked) and expired before `expiredBefore`, oldest expiry first — the invitation expiry
+ * sweep's read, across tenants (retention maintenance context).
+ */
+export async function findInvitedMembershipsDueForSeatRelease(
+  databaseHandle: WorkerDatabaseHandle,
+  options: { expiredBefore: Date; limit: number },
+): Promise<Array<{ membership_public_id: string; organization_public_id: string }>> {
+  assertWorkerDatabaseContext(['global_retention_cleanup']);
+  return databaseHandle
+    .select({
+      membership_public_id: memberships.public_id,
+      organization_public_id: organizations.public_id,
+    })
+    .from(membership_invitations)
+    .innerJoin(memberships, eq(memberships.id, membership_invitations.membership_id))
+    .innerJoin(organizations, eq(organizations.id, memberships.organization_id))
+    .where(
+      and(
+        eq(memberships.status, MEMBERSHIP_STATUS.INVITED),
+        isNull(memberships.deleted_at),
+        isNull(organizations.deleted_at),
+        isNull(membership_invitations.accepted_at),
+        isNull(membership_invitations.revoked_at),
+        lt(membership_invitations.expires_at, options.expiredBefore),
+        // The membership's latest invitation only — a member removed and invited again keeps the
+        // earlier row.
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${membership_invitations} AS newer_invitation
+          WHERE newer_invitation.membership_id = ${membership_invitations.membership_id}
+            AND (newer_invitation.created_at, newer_invitation.id)
+              > (${membership_invitations.created_at}, ${membership_invitations.id})
+        )`,
+      ),
+    )
+    .orderBy(asc(membership_invitations.expires_at), asc(membership_invitations.id))
+    .limit(options.limit);
 }

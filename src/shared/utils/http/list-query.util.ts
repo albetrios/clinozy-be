@@ -25,6 +25,7 @@ import {
   buildDescendingCreatedAtIdCursorCondition,
   buildDescendingTextIdCursorCondition,
   createOpaqueCursorFromRow,
+  type CursorTimestampRow,
   cursorPaginationSchema,
   type ParsedListCursor,
   parseListCursor,
@@ -67,10 +68,13 @@ export function buildContainsLikePattern(term: string): string {
  * expressions such as a text array joined into one string. Returns `undefined` when `q` is empty so
  * callers can spread it into `and(...)` unconditionally.
  */
-export function buildSearchCondition(
-  columns: readonly (AnyColumn | SQL)[],
-  q: string | undefined,
-): SQL | undefined {
+export function buildSearchCondition({
+  columns,
+  q,
+}: {
+  columns: readonly (AnyColumn | SQL)[];
+  q: string | undefined;
+}): SQL | undefined {
   if (!q || columns.length === 0) {
     return undefined;
   }
@@ -162,14 +166,22 @@ export function resolveKeysetSort<Row>(args: {
       ? {
           sortField,
           orderBy: [desc(column), desc(args.idColumn)],
-          cursorCondition: buildDescendingCreatedAtIdCursorCondition(column, args.idColumn, cursor),
+          cursorCondition: buildDescendingCreatedAtIdCursorCondition({
+            createdAtColumn: column,
+            idColumn: args.idColumn,
+            cursor,
+          }),
           sortValueFor,
           filterFingerprint,
         }
       : {
           sortField,
           orderBy: [asc(column), idAsc],
-          cursorCondition: buildAscendingCreatedAtIdCursorCondition(column, args.idColumn, cursor),
+          cursorCondition: buildAscendingCreatedAtIdCursorCondition({
+            createdAtColumn: column,
+            idColumn: args.idColumn,
+            cursor,
+          }),
           sortValueFor,
           filterFingerprint,
         };
@@ -180,14 +192,22 @@ export function resolveKeysetSort<Row>(args: {
     ? {
         sortField,
         orderBy: [desc(column), idAsc],
-        cursorCondition: buildDescendingTextIdCursorCondition(column, args.idColumn, cursor),
+        cursorCondition: buildDescendingTextIdCursorCondition({
+          textColumn: column,
+          idColumn: args.idColumn,
+          cursor,
+        }),
         sortValueFor,
         filterFingerprint,
       }
     : {
         sortField,
         orderBy: [asc(column), idAsc],
-        cursorCondition: buildAscendingTextIdCursorCondition(column, args.idColumn, cursor),
+        cursorCondition: buildAscendingTextIdCursorCondition({
+          textColumn: column,
+          idColumn: args.idColumn,
+          cursor,
+        }),
         sortValueFor,
         filterFingerprint,
       };
@@ -195,31 +215,53 @@ export function resolveKeysetSort<Row>(args: {
 
 /**
  * Turns a `limit + 1` fetch into a page result: slices to `limit`, computes `has_more`, and mints
- * the next opaque cursor (embedding `sort_value` + `filter_fingerprint`). Rows must expose
- * `created_at` + `id` for the cursor.
+ * the next opaque cursor from the last row (embedding `sort_value` / `filter_fingerprint` when the
+ * list has them). Rows must expose `id` and `cursor_created_at` (selected with
+ * `cursorTimestampSelection`, keeping PostgreSQL microseconds). The one page builder for every
+ * keyset list — plain `(created_at, id)` lists pass only `limit` (and `total` when counted).
  */
-export function finishKeysetPage<Row extends { created_at: Date; id: number; public_id?: string }>(
-  rows: Row[],
+export function finishKeysetPage<
+  Row extends CursorTimestampRow & { id: number; public_id?: string },
+>({
+  rows,
+  args,
+}: {
+  rows: Row[];
   args: {
     limit: number;
-    sortValueFor: (row: Row) => string | undefined;
-    filterFingerprint: string;
-  },
-): { items: Row[]; total: null; limit: number; has_more: boolean; next_cursor: string | null } {
+    total?: number | null;
+    sortValueFor?: (row: Row) => string | undefined;
+    filterFingerprint?: string;
+  };
+}): {
+  items: Row[];
+  total: number | null;
+  limit: number;
+  has_more: boolean;
+  next_cursor: string | null;
+} {
   const hasMore = rows.length > args.limit;
   const items = hasMore ? rows.slice(0, args.limit) : rows;
   const last = items.at(-1);
   let next_cursor: string | null = null;
   if (hasMore && last !== undefined) {
-    const sortValue = args.sortValueFor(last);
+    const sortValue = args.sortValueFor?.(last);
     // exactOptionalPropertyTypes: omit undefined-valued optional keys rather than pass `undefined`.
     next_cursor = createOpaqueCursorFromRow({
-      created_at: last.created_at,
+      cursor_created_at: last.cursor_created_at,
       id: last.id,
       ...(last.public_id !== undefined ? { public_id: last.public_id } : {}),
       ...(sortValue !== undefined ? { sort_value: sortValue } : {}),
-      filter_fingerprint: args.filterFingerprint,
+      ...(args.filterFingerprint !== undefined
+        ? { filter_fingerprint: args.filterFingerprint }
+        : {}),
     });
   }
-  return { items, total: null, limit: args.limit, has_more: hasMore, next_cursor };
+  return {
+    items,
+    total: args.total ?? null,
+    limit: args.limit,
+    has_more: hasMore,
+    next_cursor,
+  };
 }

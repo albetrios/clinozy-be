@@ -14,10 +14,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -59,11 +61,14 @@ describe('AuthMeContextService.getContext', () => {
     expect(userService.getMe).toHaveBeenCalledWith(
       expect.objectContaining({ userPublicId: 'usr_1' }),
     );
-    expect(organizationService.getByPublicId).toHaveBeenCalledWith('org_active', 'usr_1');
-    expect(authorizationService.resolveUserOrganizationPermissions).toHaveBeenCalledWith(
-      'usr_1',
-      'org_active',
-    );
+    expect(organizationService.getByPublicId).toHaveBeenCalledWith({
+      public_id: 'org_active',
+      user_public_id: 'usr_1',
+    });
+    expect(authorizationService.resolveUserOrganizationPermissions).toHaveBeenCalledWith({
+      userPublicId: 'usr_1',
+      organizationPublicId: 'org_active',
+    });
     expect(data.activeOrganization).toBe(activeOrganization);
     expect(data.myPermissions).toEqual(['organization:read']);
     // The switcher list moved to `GET /users/me/organizations`, which pages.

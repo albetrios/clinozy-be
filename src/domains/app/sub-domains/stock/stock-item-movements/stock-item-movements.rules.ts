@@ -71,7 +71,7 @@ async function changeOf(values: Record<string, unknown>): Promise<number> {
  */
 async function revertMovement(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing, context } = input;
-  const body = parseWithSchema(RevertStockItemMovementDto, input.input);
+  const body = parseWithSchema({ schema: RevertStockItemMovementDto, data: input.input });
   const repository = input.repository as StockItemMovementsRepository;
   if (
     existing.type === STOCK_ITEM_MOVEMENT_TYPE.REVERTED ||

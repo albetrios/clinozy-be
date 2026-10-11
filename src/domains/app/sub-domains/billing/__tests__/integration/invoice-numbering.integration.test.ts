@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import {
   type AppFixture,
   createAppFixture,
@@ -72,7 +72,7 @@ describe('Invoice numbering — integration (B11)', () => {
     const financialYear = flow.last('.data.financial_year');
     flow.expectEqual('padded to four digits', first, `${financialYear}/0001`);
 
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.record_counters SET last_value = 9999
       WHERE organization_id = ${fixture.organization.id}
         AND counter_key = ${`invoices:${fixture.branchIds.vesu}:${financialYear}`}

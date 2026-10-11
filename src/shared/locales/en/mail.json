@@ -1,5 +1,21 @@
 {
   "verificationCodeSubject": "Sign in to your account",
   "passwordResetSubject": "Reset your password",
-  "passwordResetHtml": "Click <a href=\"{{resetUrl}}\">here</a> to reset your password. This link expires in {{expiresInMinutes}} minutes."
+  "passwordResetHtml": "Click <a href=\"{{resetUrl}}\">here</a> to reset your password. This link expires in {{expiresInMinutes}} minutes.",
+  "verificationCodeHeading": "Sign in to your account",
+  "verificationCodePreheader": "Your sign-in code is {{code}} — expires in {{expiresInMinutes}} minutes.",
+  "verificationCodeBody": "Enter the code below to securely sign in. This code expires in {{expiresInMinutes}} minutes.",
+  "ignoreIfNotRequested": "If you didn't request this, you can safely ignore this email.",
+  "invitationSubject": "You've been invited to join {{organizationName}}",
+  "invitationTitle": "You're invited to join {{organizationName}}",
+  "invitationPreheader": "{{inviterName}} invited you to join {{organizationName}}.",
+  "invitationHeading": "You've been invited",
+  "invitationBody": "<strong>{{inviterName}}</strong> has invited you to join <strong>{{organizationName}}</strong>.",
+  "invitationExpiry": "Click the button below to accept the invitation. This link expires in {{expiresInDays}} days.",
+  "invitationAccept": "Accept Invitation",
+  "invitationIgnore": "If you weren't expecting this invitation, you can safely ignore this email.",
+  "invitationFallbackInviter": "A team member",
+  "copyUrlPrompt": "Or copy and paste this URL into your browser:",
+  "automatedFooter": "This is an automated message. Please do not reply.",
+  "notificationViewDetails": "View Details"
 }

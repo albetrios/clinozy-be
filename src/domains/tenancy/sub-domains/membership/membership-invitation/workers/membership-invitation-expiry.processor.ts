@@ -1,13 +1,9 @@
-import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
 import {
   MAINTENANCE_SCOPE,
   withMaintenanceDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
 import { captureException } from '@/infrastructure/observability/sentry/sentry.js';
-import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
-import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
-import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
+import { findInvitedMembershipsDueForSeatRelease } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.repository.js';
 import { MILLISECONDS_PER_DAY } from '@/shared/constants/index.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
@@ -63,46 +59,25 @@ export interface MembershipInvitationExpiryResult {
  *   admin can invite the person again at any time. Scheduled daily via
  *   `infrastructure/queue/scheduler.ts`.
  */
-export async function runMembershipInvitationExpiryJob(
-  service: MembershipInvitationExpiryService,
-  now: Date = new Date(),
-): Promise<MembershipInvitationExpiryResult> {
+export async function runMembershipInvitationExpiryJob({
+  service,
+  now = new Date(),
+}: {
+  service: MembershipInvitationExpiryService;
+  now?: Date | undefined;
+}): Promise<MembershipInvitationExpiryResult> {
   const expiredBefore = new Date(
     now.getTime() - MEMBERSHIP_INVITATION_SEAT_RELEASE_DAYS * MILLISECONDS_PER_DAY,
   );
 
-  const due = await withMaintenanceDatabaseContext(
-    MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-    (databaseHandle) =>
-      databaseHandle
-        .select({
-          membership_public_id: memberships.public_id,
-          organization_public_id: organizations.public_id,
-        })
-        .from(membership_invitations)
-        .innerJoin(memberships, eq(memberships.id, membership_invitations.membership_id))
-        .innerJoin(organizations, eq(organizations.id, memberships.organization_id))
-        .where(
-          and(
-            eq(memberships.status, MEMBERSHIP_STATUS.INVITED),
-            isNull(memberships.deleted_at),
-            isNull(organizations.deleted_at),
-            isNull(membership_invitations.accepted_at),
-            isNull(membership_invitations.revoked_at),
-            lt(membership_invitations.expires_at, expiredBefore),
-            // The membership's latest invitation only — a member removed and invited again
-            // keeps the earlier row.
-            sql`NOT EXISTS (
-              SELECT 1 FROM ${membership_invitations} AS newer_invitation
-              WHERE newer_invitation.membership_id = ${membership_invitations.membership_id}
-                AND (newer_invitation.created_at, newer_invitation.id)
-                  > (${membership_invitations.created_at}, ${membership_invitations.id})
-            )`,
-          ),
-        )
-        .orderBy(asc(membership_invitations.expires_at), asc(membership_invitations.id))
-        .limit(MEMBERSHIP_INVITATION_EXPIRY_BATCH),
-  );
+  const due = await withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+    callback: (databaseHandle) =>
+      findInvitedMembershipsDueForSeatRelease(databaseHandle, {
+        expiredBefore,
+        limit: MEMBERSHIP_INVITATION_EXPIRY_BATCH,
+      }),
+  });
 
   let ended = 0;
   let skipped = 0;
@@ -122,9 +97,12 @@ export async function runMembershipInvitationExpiryJob(
         { error, membershipPublicId: row.membership_public_id },
         'membership-invitation-expiry.end_failed',
       );
-      captureException(error, {
-        organizationId: row.organization_public_id,
-        tags: { source: 'membership-invitation-expiry' },
+      captureException({
+        error,
+        context: {
+          organizationId: row.organization_public_id,
+          tags: { source: 'membership-invitation-expiry' },
+        },
       });
     }
   }

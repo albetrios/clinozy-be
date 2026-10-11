@@ -32,8 +32,8 @@ export const VERIFICATION_CODE_RESEND_COOLDOWN_SECONDS = 60;
  *
  * @remarks
  * A constant rather than configuration: the value is not a secret — the flag is what carries the
- * risk, and the env schema only permits that flag on a developer machine or the development
- * deploy target. Drawn from {@link VERIFICATION_CODE_CHARSET} at {@link VERIFICATION_CODE_LENGTH}
+ * risk, and the env schema only permits that flag on the `local` target (a developer machine or a
+ * throwaway CI runner), never on a deployed one. Drawn from {@link VERIFICATION_CODE_CHARSET} at {@link VERIFICATION_CODE_LENGTH}
  * so it is indistinguishable in shape from a real issued code.
  */
 export const STATIC_VERIFICATION_CODE = 'TEST24';
@@ -104,7 +104,7 @@ export function hashVerificationCode(options: {
 }
 
 /** Constant-time comparison of two hex digests of equal length (defence-in-depth for hash matching). */
-export function verificationHashesEqual(left: string, right: string): boolean {
+export function verificationHashesEqual({ left, right }: { left: string; right: string }): boolean {
   if (left.length !== right.length) return false;
   return timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
 }

@@ -60,10 +60,10 @@ export class OrganizationNotificationPolicyRepository {
    * {@link countActiveByOrganization}.
    */
   async acquireCreationQuotaLock(organization_id: number): Promise<void> {
-    await acquireResourceQuotaLock(
-      RESOURCE_QUOTA_LOCK_NAMESPACE.ORGANIZATION_NOTIFICATION_POLICY,
-      organization_id,
-    );
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.ORGANIZATION_NOTIFICATION_POLICY,
+      key: organization_id,
+    });
   }
 
   async findByOrganizationId(organization_id: number) {

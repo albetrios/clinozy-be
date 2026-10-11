@@ -10,8 +10,14 @@ import type { PatientIdeasService } from './patient-ideas.service.js';
 export function createPatientIdeasController(service: PatientIdeasService) {
   return {
     list: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const result = await service.list(requireOrganizationScope(request), request.params);
-      const body = successResponse(result.data, getRequestIdentifier(request));
+      const result = await service.list({
+        scope: requireOrganizationScope(request),
+        params: request.params,
+      });
+      const body = successResponse({
+        data: result.data,
+        request_id: getRequestIdentifier(request),
+      });
       return { ...body, meta: { ...body.meta, ...result.meta } };
     },
   };

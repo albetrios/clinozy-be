@@ -19,7 +19,7 @@ const suggestionFields = {
   quantity: z.number().int().min(1).max(PATIENT_OFFERING_SUGGESTION_QUANTITY_MAX),
   price: moneySchema.nullable(),
   status: z.enum(PATIENT_OFFERING_SUGGESTION_STATUS_VALUES),
-  reason: trimmedStringMinMax(1, PATIENT_OFFERING_SUGGESTION_REASON_MAX).nullable(),
+  reason: trimmedStringMinMax({ min: 1, max: PATIENT_OFFERING_SUGGESTION_REASON_MAX }).nullable(),
 };
 
 /** Path params of the by-id `patient-offering-suggestions` routes (nested under the patient). */

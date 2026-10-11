@@ -8,10 +8,13 @@ import type { MedicalRepsRepository } from './medical-reps.repository.js';
 import { medical_reps } from './medical-reps.schema.js';
 
 /** MD17: a next visit set by hand falls today to 120 days on — else a 400 `next_visit_on`. */
-async function assertNextVisitWindow(
-  value: unknown,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function assertNextVisitWindow({
+  value,
+  context,
+}: {
+  value: unknown;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   if (typeof value !== 'string') return;
   const today = await organizationToday(context);
   const last = addDaysToCalendarDate({ date: today, days: MEDICAL_REP_NEXT_VISIT_DAYS_MAX });
@@ -37,9 +40,10 @@ async function assertNextVisitWindow(
  */
 export function createMedicalRepsRules(repository: MedicalRepsRepository): BaseRecordRules {
   return {
-    prepareCreate: (values, context) => assertNextVisitWindow(values.next_visit_on, context),
+    prepareCreate: (values, context) =>
+      assertNextVisitWindow({ value: values.next_visit_on, context }),
     prepareUpdate: (values, _existing, context) =>
-      assertNextVisitWindow(values.next_visit_on, context),
+      assertNextVisitWindow({ value: values.next_visit_on, context }),
     decorate: async (outputs, context) => {
       const idsByPublicId = await resolveRecordIds({
         table: medical_reps,

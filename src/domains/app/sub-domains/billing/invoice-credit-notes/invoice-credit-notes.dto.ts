@@ -37,7 +37,7 @@ export const invoiceCreditNotesIdParamsDto = z
 export const CreateInvoiceCreditNoteDto = z
   .object({
     amount: moneySchema.refine((amount) => amount > 0, { message: 'More than 0' }),
-    reason: trimmedStringMinMax(1, INVOICE_CREDIT_NOTE_REASON_MAX),
+    reason: trimmedStringMinMax({ min: 1, max: INVOICE_CREDIT_NOTE_REASON_MAX }),
     splits: z
       .array(invoicePaymentSplitDto)
       .min(1)
@@ -46,8 +46,8 @@ export const CreateInvoiceCreditNoteDto = z
         message: 'Each mode once',
       }),
     paid_at: instantSchema.optional(),
-    reference: trimmedStringMinMax(1, 60).nullable().optional(),
-    note: trimmedStringMinMax(1, 280).nullable().optional(),
+    reference: trimmedStringMinMax({ min: 1, max: 60 }).nullable().optional(),
+    note: trimmedStringMinMax({ min: 1, max: 280 }).nullable().optional(),
   })
   .strict()
   .refine(

@@ -33,9 +33,14 @@ Seat-ceiling table by billing state:
 
 | Org billing state | Seat ceiling |
 | ----------------- | ------------ |
-| Active entitlement — `ACTIVE` / `TRIALING` (or a dunning status still **within** grace) | plan `included_seats`, raised by a Stripe quantity bought above it — `max(included_seats, seats)` (`included_seats` `null` ⇒ unlimited) |
+| Active entitlement — `ACTIVE` / `TRIALING` (or a dunning status still **within** grace) | plan `included_seats` (`null` ⇒ unlimited) |
 | **No subscription** (never subscribed, or `CANCELED` / `INCOMPLETE_EXPIRED`) | **Free-tier ceiling** — the `included_seats` of the cheapest active plan (the "Free" plan) |
-| **Dunning past grace** — `PAST_DUE` / `UNPAID` / `INCOMPLETE` and `now > current_period_end + BILLING_DUNNING_GRACE_DAYS` | **Free-tier ceiling** (entitlement lapses to free) |
+| **Unpaid** — `INCOMPLETE` (first payment pending) / `PAUSED` (trial ended without a payment method) | **Free-tier ceiling** until payment lands |
+| **Dunning past grace** — `PAST_DUE` / `UNPAID` and `now > current_period_end + BILLING_DUNNING_GRACE_DAYS` | **Free-tier ceiling** (entitlement lapses to free) |
+
+`subscriptions.seats` is **not** an allowance: it is the quantity billed in Stripe, which seat sync keeps
+equal to the ACTIVE + INVITED member count. Reading it as the ceiling capped every organization at its
+current headcount after the first sync, so the next invite returned `409 seat_limit_reached`.
 
 - **F3 — unsubscribed organizations are capped at the Free tier** (decision: *cap at Free-tier seats*). Previously
   an organization with no active subscription resolved to `null` (unlimited), so a brand-new team organization or a

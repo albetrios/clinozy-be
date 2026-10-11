@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import type { WorkerHandle } from '@/infrastructure/queue/bootstrap.js';
 import { runOrganizationScopedWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { createTaskRulesWorker } from '@/domains/app/sub-domains/tasks/workers/task-rules.worker.js';
@@ -134,14 +134,15 @@ describe('Task rules — the run a write asks for (D81 T7, WC-48)', () => {
     }
     expect(visit, 'book Esha').not.toBe('');
     // Tomorrow (moved in the database — any weekday), then one run opens its Confirm task.
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.appointments SET appointment_date = ${calendarDay(fixture, 1)}
       WHERE public_id = ${visit}
     `;
     const organizationPublicId = fixture.organization.publicId;
-    await runOrganizationScopedWorkerJob({ organizationPublicId }, (databaseHandle) =>
-      runTaskRulesJob(databaseHandle, organizationPublicId),
-    );
+    await runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: (databaseHandle) => runTaskRulesJob({ databaseHandle, organizationPublicId }),
+    });
     await flow.expect(
       200,
       'the Confirm task',

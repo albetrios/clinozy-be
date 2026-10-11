@@ -37,10 +37,13 @@ function assertPerformedNotFuture(performedAt: unknown): void {
  * offering, not past `valid_until` (the organization's today), with a session left — in one guarded
  * `sessions_used + 1`; the session takes its offering and its new count.
  */
-async function spendBoughtSession(
-  values: Record<string, unknown>,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function spendBoughtSession({
+  values,
+  context,
+}: {
+  values: Record<string, unknown>;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   if (typeof values.patient_offering_id !== 'number') return;
   const bought = await patientOfferingsRepository.findById(values.patient_offering_id);
   if (!bought || bought.patient_id !== values.patient_id) {
@@ -74,7 +77,13 @@ async function spendBoughtSession(
 }
 
 /** TR7: a linked session keeps its number and its offering — reverse it and record it again. */
-function assertLinkedFieldsKept(values: Record<string, unknown>, existing: BaseRecordRow): void {
+function assertLinkedFieldsKept({
+  values,
+  existing,
+}: {
+  values: Record<string, unknown>;
+  existing: BaseRecordRow;
+}): void {
   if (typeof existing.patient_offering_id !== 'number') return;
   if ('session_number' in values) {
     throw fieldValidationError({
@@ -94,11 +103,15 @@ function assertLinkedFieldsKept(values: Record<string, unknown>, existing: BaseR
  * TR6: a reverse gives the spent session back through the `RESTRICT` link — never a silent miss —
  * and clears the link in the same write.
  */
-async function giveBoughtSessionBack(
-  values: Record<string, unknown>,
-  existing: BaseRecordRow,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function giveBoughtSessionBack({
+  values,
+  existing,
+  context,
+}: {
+  values: Record<string, unknown>;
+  existing: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   if (typeof existing.patient_offering_id !== 'number') return;
   const returned = await patientOfferingsRepository.adjust({
     id: existing.patient_offering_id,
@@ -115,11 +128,15 @@ async function giveBoughtSessionBack(
 }
 
 /** P4: the patient's first session converts the file (it stays editable). */
-async function convertOnFirstSession(
-  repository: PatientTreatmentsRepository,
-  row: BaseRecordRow,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function convertOnFirstSession({
+  repository,
+  row,
+  context,
+}: {
+  repository: PatientTreatmentsRepository;
+  row: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const patientId = row.patient_id as number;
   if ((await repository.countForPatient(patientId)) !== 1) return;
   await patientsRepository.update(
@@ -157,14 +174,14 @@ export function createPatientTreatmentsRules(
         patientId: values.patient_id as number,
         requireVisit: true,
       });
-      await assertOfferingActive(values.offering_id);
-      await spendBoughtSession(values, context);
+      await assertOfferingActive({ offeringId: values.offering_id });
+      await spendBoughtSession({ values, context });
     },
     prepareUpdate: async (values, existing) => {
       if (existing.status === PATIENT_TREATMENT_STATUS.REVERSED) {
         throw new ConflictError('errors:treatmentReversed').withReason('treatment_reversed');
       }
-      assertLinkedFieldsKept(values, existing);
+      assertLinkedFieldsKept({ values, existing });
       assertPerformedNotFuture(values.performed_at);
       await assertAppointmentOfPatient({
         appointmentId: values.appointment_id,
@@ -172,17 +189,17 @@ export function createPatientTreatmentsRules(
         requireVisit: true,
       });
       if (values.offering_id !== existing.offering_id) {
-        await assertOfferingActive(values.offering_id);
+        await assertOfferingActive({ offeringId: values.offering_id });
       }
     },
     prepareTransition: async (action, values, existing, context) => {
-      if (action === REVERSE) await giveBoughtSessionBack(values, existing, context);
+      if (action === REVERSE) await giveBoughtSessionBack({ values, existing, context });
     },
     afterWrite: async (row, change, context) => {
       const patientId = row.patient_id as number;
       const link = { patient_treatment_id: row.id };
       if (change.kind === 'create') {
-        await convertOnFirstSession(repository, row, context);
+        await convertOnFirstSession({ repository, row, context });
         await writePatientFileActivity({
           context,
           patientId,

@@ -38,10 +38,13 @@ export function computeCatalogWeakEtag(envelope: unknown): string {
 /**
  * Returns true when the If-None-Match header matches the current ETag.
  */
-export function ifNoneMatchSatisfies(
-  ifNoneMatchHeader: string | string[] | undefined,
-  etag: string,
-): boolean {
+export function ifNoneMatchSatisfies({
+  ifNoneMatchHeader,
+  etag,
+}: {
+  ifNoneMatchHeader: string | string[] | undefined;
+  etag: string;
+}): boolean {
   if (!ifNoneMatchHeader) {
     return false;
   }
@@ -61,16 +64,20 @@ export function ifNoneMatchSatisfies(
  * Sets ETag and Cache-Control on a catalog GET response.
  * Returns true when If-None-Match matches and the handler should send 304 with no body.
  */
-export function applyCatalogCacheHeaders(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  payload: unknown,
-): boolean {
+export function applyCatalogCacheHeaders({
+  request,
+  reply,
+  payload,
+}: {
+  request: FastifyRequest;
+  reply: FastifyReply;
+  payload: unknown;
+}): boolean {
   const etag = computeCatalogWeakEtag(payload);
   reply.header('ETag', etag);
   reply.header('Cache-Control', CATALOG_CACHE_CONTROL);
 
-  if (ifNoneMatchSatisfies(request.headers['if-none-match'], etag)) {
+  if (ifNoneMatchSatisfies({ ifNoneMatchHeader: request.headers['if-none-match'], etag })) {
     reply.status(304).send();
     return true;
   }

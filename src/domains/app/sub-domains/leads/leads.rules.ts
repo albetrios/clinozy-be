@@ -22,7 +22,13 @@ function isOpen(status: unknown): boolean {
 }
 
 /** The caller's membership in the organization — 403 for a caller who is not a member. */
-async function requireMembership(organizationId: number, userId: number | null): Promise<number> {
+async function requireMembership({
+  organizationId,
+  userId,
+}: {
+  organizationId: number;
+  userId: number | null;
+}): Promise<number> {
   const membershipId = await findMembershipIdOfUser({ organizationId, userId });
   if (membershipId === null) {
     throw new ForbiddenError('errors:forbidden').withReason('not_a_member');
@@ -57,7 +63,10 @@ function leadHeldError(heldUntil: Date): ConflictError {
 function createClaimLead(leadsRepository: LeadsRepository) {
   return async ({ existing, context }: BaseRecordActionInput): Promise<BaseRecordRow> => {
     if (!isOpen(existing.status)) throw leadClosedError('errors:leadClosed');
-    const membershipId = await requireMembership(context.organizationId, context.userId);
+    const membershipId = await requireMembership({
+      organizationId: context.organizationId,
+      userId: context.userId,
+    });
     const heldUntil = existing.held_until as Date | null;
     const heldByOther =
       existing.owner_membership_id !== null &&
@@ -86,7 +95,10 @@ async function releaseLead({
   repository: records,
 }: BaseRecordActionInput): Promise<BaseRecordRow> {
   if (!isOpen(existing.status)) throw leadClosedError('errors:leadClosed');
-  const membershipId = await requireMembership(context.organizationId, context.userId);
+  const membershipId = await requireMembership({
+    organizationId: context.organizationId,
+    userId: context.userId,
+  });
   if (existing.owner_membership_id !== membershipId) {
     throw new ForbiddenError('errors:leadNotYours').withReason('lead_not_yours');
   }
@@ -147,7 +159,13 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
   const contactMembersRepository = new ContactMembersRepository();
 
   /** Refuses a second open lead for the contact, naming the one it has (L6). */
-  const assertNoOtherOpenLead = async (contactId: number, exceptLeadId?: number) => {
+  const assertNoOtherOpenLead = async ({
+    contactId,
+    exceptLeadId,
+  }: {
+    contactId: number;
+    exceptLeadId?: number | undefined;
+  }) => {
     const open = await repository.findOpenLeadOfContact({ contactId, exceptLeadId });
     if (!open) return;
     const contact = await contactsRepository.findById(contactId);
@@ -159,11 +177,15 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
   };
 
   /** The owner is not also involved, the owner it replaced stays involved, both handle the contact. */
-  const settleTeam = async (
-    row: BaseRecordRow,
-    before: BaseRecordRow | undefined,
-    context: BaseRecordWriteContext,
-  ): Promise<void> => {
+  const settleTeam = async ({
+    row,
+    before,
+    context,
+  }: {
+    row: BaseRecordRow;
+    before: BaseRecordRow | undefined;
+    context: BaseRecordWriteContext;
+  }): Promise<void> => {
     const owner = row.owner_membership_id as number | null;
     const previous = (before?.owner_membership_id as number | null | undefined) ?? null;
     if (previous !== null && previous !== owner) {
@@ -192,7 +214,7 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
         throw leadClosedError('errors:leadVisitedByCheckInOnly');
       }
       if (isOpen(values.status ?? LEAD_STATUS.NEW)) {
-        await assertNoOtherOpenLead(values.contact_id as number);
+        await assertNoOtherOpenLead({ contactId: values.contact_id as number });
       }
       if (typeof values.owner_membership_id === 'number')
         values.held_until = await holdEnd(context);
@@ -207,7 +229,10 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
           throw leadClosedError('errors:leadVisitedByCheckInOnly');
         }
         if (isOpen(status) && !isOpen(existing.status)) {
-          await assertNoOtherOpenLead(existing.contact_id as number, existing.id);
+          await assertNoOtherOpenLead({
+            contactId: existing.contact_id as number,
+            exceptLeadId: existing.id,
+          });
         }
       }
       if (
@@ -223,11 +248,14 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
         throw new ConflictError('errors:leadContactRemoved').withReason('record_restore_conflict');
       }
       if (isOpen(deleted.status))
-        await assertNoOtherOpenLead(deleted.contact_id as number, deleted.id);
+        await assertNoOtherOpenLead({
+          contactId: deleted.contact_id as number,
+          exceptLeadId: deleted.id,
+        });
     },
     afterWrite: async (row, change, context) => {
       if (change.kind === 'delete') return;
-      await settleTeam(row, change.before, context);
+      await settleTeam({ row, before: change.before, context });
     },
     decorate: decorateLeads,
     actions: { claim: createClaimLead(repository), release: releaseLead },

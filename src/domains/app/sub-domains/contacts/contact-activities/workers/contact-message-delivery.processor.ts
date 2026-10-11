@@ -65,10 +65,13 @@ export interface ContactMessageDeliveryCounts {
 }
 
 /** A message's fate before any call: why it cannot go out, or `null` when it can. */
-function refusalOf(
-  message: ClaimedContactMessage,
-  organization: MessagingOrganization,
-): string | null {
+function refusalOf({
+  message,
+  organization,
+}: {
+  message: ClaimedContactMessage;
+  organization: MessagingOrganization;
+}): string | null {
   if (message.attachments.length < message.attachmentKeyCount) {
     return CONTACT_MESSAGE_FAILURE_ATTACHMENT_MISSING;
   }
@@ -97,7 +100,12 @@ async function mediaOf(message: ClaimedContactMessage): Promise<MetaMediaAttachm
     media.push({
       kind: CONTACT_MESSAGE_IMAGE_MIME_TYPES.has(attachment.mimeType) ? 'image' : 'document',
       // A short-lived signed link Meta fetches the file from (the media read TTL, 1 hour)
-      url: String(await resolveStoredMediaReadUrl(storage, attachment.fileKey)),
+      url: String(
+        await resolveStoredMediaReadUrl({
+          objectStorage: storage,
+          storedValue: attachment.fileKey,
+        }),
+      ),
       fileName: attachment.fileName,
     });
   }
@@ -115,14 +123,17 @@ interface SentOutcome {
  * 24 hours or more, and the notice carrying its template's parameters (one queued before them goes
  * as free text). Null for free text.
  */
-function noticeTemplateOf(
-  message: ClaimedContactMessage,
-  media: readonly MetaMediaAttachment[],
-): WhatsAppNoticeTemplate | null {
+function noticeTemplateOf({
+  message,
+  media,
+}: {
+  message: ClaimedContactMessage;
+  media: readonly MetaMediaAttachment[];
+}): WhatsAppNoticeTemplate | null {
   if (!isWhatsAppTemplatesEnabled() || message.automationKind === null || media.length > 0) {
     return null;
   }
-  if (!isOutsideServiceWindow(message.lastReceivedAt)) return null;
+  if (!isOutsideServiceWindow({ lastReceivedAt: message.lastReceivedAt })) return null;
   const template = WHATSAPP_NOTICE_TEMPLATES[message.automationKind];
   return message.templateParameters.length === templateParameterCount(template) ? template : null;
 }
@@ -132,12 +143,16 @@ function noticeTemplateOf(
  * template (D32); else its text, or — with files — each file as media, the text as the first one's
  * caption (WC-11). Answers the first message's id (its reports follow the entry).
  */
-async function sendWhatsApp(
-  message: ClaimedContactMessage,
-  phoneNumberId: string,
-  media: readonly MetaMediaAttachment[],
-): Promise<SentOutcome> {
-  const template = noticeTemplateOf(message, media);
+async function sendWhatsApp({
+  message,
+  phoneNumberId,
+  media,
+}: {
+  message: ClaimedContactMessage;
+  phoneNumberId: string;
+  media: readonly MetaMediaAttachment[];
+}): Promise<SentOutcome> {
+  const template = noticeTemplateOf({ message, media });
   if (template !== null) {
     const sent = await sendWhatsAppTemplateMessage({
       phoneNumberId,
@@ -147,7 +162,10 @@ async function sendWhatsApp(
     });
     return {
       providerMessageId: sent.providerMessageId,
-      templateBody: renderWhatsAppTemplate(template, message.templateParameters),
+      templateBody: renderWhatsAppTemplate({
+        notice: template,
+        parameters: message.templateParameters,
+      }),
     };
   }
   if (media.length === 0) {
@@ -172,11 +190,15 @@ async function sendWhatsApp(
 }
 
 /** Sends one Instagram message: its text, then each file (Instagram has no captions — WC-11). */
-async function sendInstagram(
-  message: ClaimedContactMessage,
-  accountId: string,
-  media: readonly MetaMediaAttachment[],
-): Promise<SentOutcome> {
+async function sendInstagram({
+  message,
+  accountId,
+  media,
+}: {
+  message: ClaimedContactMessage;
+  accountId: string;
+  media: readonly MetaMediaAttachment[];
+}): Promise<SentOutcome> {
   const recipientId = String(message.instagramRecipientId);
   const sent = await sendInstagramTextMessage({ accountId, recipientId, body: message.body });
   for (const attachment of media) {
@@ -186,18 +208,27 @@ async function sendInstagram(
 }
 
 /** Sends one message through the Graph API — the caller has ruled out every refusal. */
-async function send(
-  message: ClaimedContactMessage,
-  organization: MessagingOrganization,
-): Promise<SentOutcome> {
+async function send({
+  message,
+  organization,
+}: {
+  message: ClaimedContactMessage;
+  organization: MessagingOrganization;
+}): Promise<SentOutcome> {
   const media = await mediaOf(message);
   return message.type === 'whatsapp'
-    ? sendWhatsApp(message, String(organization.whatsappPhoneNumberId), media)
-    : sendInstagram(message, String(organization.instagramAccountId), media);
+    ? sendWhatsApp({ message, phoneNumberId: String(organization.whatsappPhoneNumberId), media })
+    : sendInstagram({ message, accountId: String(organization.instagramAccountId), media });
 }
 
 /** Meta throttling or down: the error that pauses the queue (or the one to retry). */
-async function outageOf(error: unknown, graphError: MetaGraphApiError | null): Promise<unknown> {
+async function outageOf({
+  error,
+  graphError,
+}: {
+  error: unknown;
+  graphError: MetaGraphApiError | null;
+}): Promise<unknown> {
   if (graphError?.isRateLimited) {
     return new ProviderOutageError({
       provider: 'meta',
@@ -244,19 +275,20 @@ async function sendClaimedMessages(options: {
       repository: ReturnType<typeof createWorkerContactMessageDeliveryRepository>,
     ) => Promise<void>,
   ) =>
-    runOrganizationScopedWorkerJob({ organizationPublicId }, (handle) =>
-      work(createWorkerContactMessageDeliveryRepository(handle)),
-    );
+    runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: (handle) => work(createWorkerContactMessageDeliveryRepository(handle)),
+    });
 
   for (const [index, message] of messages.entries()) {
-    const refusal = refusalOf(message, organization);
+    const refusal = refusalOf({ message, organization });
     if (refusal !== null) {
       await write((repository) => repository.markFailed({ id: message.id, reason: refusal }));
       countOutcome({ message, outcome: 'failed', counts, notices });
       continue;
     }
     try {
-      const sent = await send(message, organization);
+      const sent = await send({ message, organization });
       await write((repository) =>
         repository.markSent({
           id: message.id,
@@ -278,7 +310,7 @@ async function sendClaimedMessages(options: {
       // queued for the next try.
       const unsent = messages.slice(index).map((pending) => pending.id);
       await write((repository) => repository.releaseClaims(unsent));
-      throw await outageOf(error, graphError);
+      throw await outageOf({ error, graphError });
     }
   }
 }
@@ -295,13 +327,16 @@ async function sendDayCloseSummaries(options: {
   const { organizationPublicId, organization } = options;
   const phoneNumberId = organization.whatsappPhoneNumberId;
   if (phoneNumberId === null) return 0;
-  const pending = await runOrganizationScopedWorkerJob({ organizationPublicId }, async (handle) => {
-    const summaries = createWorkerDayCloseSummaryRepository(handle);
-    const days = await summaries.findPending(organization.id);
-    return {
-      days,
-      phones: days.length === 0 ? [] : await summaries.findRecipientPhones(organization.id),
-    };
+  const pending = await runOrganizationScopedWorkerJob({
+    job: { organizationPublicId },
+    processor: async (handle) => {
+      const summaries = createWorkerDayCloseSummaryRepository(handle);
+      const days = await summaries.findPending(organization.id);
+      return {
+        days,
+        phones: days.length === 0 ? [] : await summaries.findRecipientPhones(organization.id),
+      };
+    },
   });
   let summaryCount = 0;
   for (const day of pending.days) {
@@ -320,16 +355,17 @@ async function sendDayCloseSummaries(options: {
           : sendWhatsAppTextMessage({ phoneNumberId, to: phone, body }));
       } catch (error) {
         const graphError = findMetaGraphApiError(error);
-        if (!graphError?.isMessageRejection) throw await outageOf(error, graphError);
+        if (!graphError?.isMessageRejection) throw await outageOf({ error, graphError });
         logger.warn(
           { organizationPublicId, dayCloseId: day.id, reason: graphError.reason },
           'day-close-summary.recipient_refused',
         );
       }
     }
-    await runOrganizationScopedWorkerJob({ organizationPublicId }, (handle) =>
-      createWorkerDayCloseSummaryRepository(handle).markSent(day.id),
-    );
+    await runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: (handle) => createWorkerDayCloseSummaryRepository(handle).markSent(day.id),
+    });
     summaryCount += 1;
   }
   return summaryCount;
@@ -362,15 +398,18 @@ async function sendDayCloseSummaries(options: {
 export async function runContactMessageDeliveryJob(
   organizationPublicId: string,
 ): Promise<ContactMessageDeliveryCounts> {
-  const claimed = await runOrganizationScopedWorkerJob({ organizationPublicId }, async (handle) => {
-    const repository = createWorkerContactMessageDeliveryRepository(handle);
-    const organization = await repository.findOrganization(organizationPublicId);
-    if (!organization) return null;
-    const messages = await repository.claimBatch({
-      organizationId: organization.id,
-      limit: CONTACT_MESSAGE_DELIVERY_BATCH,
-    });
-    return { organization, messages };
+  const claimed = await runOrganizationScopedWorkerJob({
+    job: { organizationPublicId },
+    processor: async (handle) => {
+      const repository = createWorkerContactMessageDeliveryRepository(handle);
+      const organization = await repository.findOrganization(organizationPublicId);
+      if (!organization) return null;
+      const messages = await repository.claimBatch({
+        organizationId: organization.id,
+        limit: CONTACT_MESSAGE_DELIVERY_BATCH,
+      });
+      return { organization, messages };
+    },
   });
   const counts: ContactMessageDeliveryCounts = { sentCount: 0, failedCount: 0, summaryCount: 0 };
   if (!claimed) return counts;

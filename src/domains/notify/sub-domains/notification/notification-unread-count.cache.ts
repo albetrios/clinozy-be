@@ -20,7 +20,7 @@ const UNREAD_COUNT_CACHE_NAME = 'notify_unread_count';
  * not a shortcut.
  *
  * @remarks
- * `notify.notifications` carries two permissive RLS policies, OR'd: `notifications_owner_access`
+ * `notify.notifications` carries two permissive RLS policies, OR'd: `notifications_owner_select`
  * (rows whose `user_id` is the current user GUC) and `notifications_tenant_isolation` (rows in the
  * active organization). The count query additionally filters `user_id = <me>` in SQL, so the
  * tenant arm can only ever add rows the app-level predicate then removes. The visible set is
@@ -47,13 +47,13 @@ function buildUnreadCountCacheKey(userPublicId: string): string {
 export async function getCachedUnreadNotificationCount(
   userPublicId: string,
 ): Promise<number | null> {
-  const cached = await readTombstonedCacheEntry(
-    buildUnreadCountCacheKey(userPublicId),
-    UNREAD_COUNT_CACHE_NAME,
-  );
+  const cached = await readTombstonedCacheEntry({
+    key: buildUnreadCountCacheKey(userPublicId),
+    metricName: UNREAD_COUNT_CACHE_NAME,
+  });
   const parsed = cached === null ? Number.NaN : Number(cached);
   const hit = Number.isInteger(parsed);
-  recordReadCacheRequest(UNREAD_COUNT_CACHE_NAME, hit ? 'hit' : 'miss');
+  recordReadCacheRequest({ cache: UNREAD_COUNT_CACHE_NAME, result: hit ? 'hit' : 'miss' });
   return hit ? parsed : null;
 }
 
@@ -70,10 +70,13 @@ export async function getCachedUnreadNotificationCount(
  *   sweep (deletes by `created_at`) and the enqueue-rollback delete (knows only a row id) — and
  *   the TTL is what bounds staleness from those.
  */
-export async function setCachedUnreadNotificationCount(
-  userPublicId: string,
-  count: number,
-): Promise<void> {
+export async function setCachedUnreadNotificationCount({
+  userPublicId,
+  count,
+}: {
+  userPublicId: string;
+  count: number;
+}): Promise<void> {
   await populateTombstonedCacheEntry({
     key: buildUnreadCountCacheKey(userPublicId),
     value: String(count),

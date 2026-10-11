@@ -63,7 +63,7 @@ describe.runIf(runRedisTests)('Integration: BullMQ Prometheus metrics', () => {
       },
       { connection, prefix: getBullMQKeyPrefix() },
     );
-    attachBullMQJobMetrics(worker, queueName);
+    attachBullMQJobMetrics({ worker, queueName });
     await worker.waitUntilReady();
     await refreshMetricsBeforeScrape();
 

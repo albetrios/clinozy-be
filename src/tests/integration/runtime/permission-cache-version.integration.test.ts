@@ -34,15 +34,31 @@ describe.runIf(runRedisTests)('Integration: permission cache version invalidatio
   it.runIf(() => redisAvailable)(
     'treats stale entries as miss after organization version INCR',
     async () => {
-      await setCachedPermissions(userId, organizationPublicId, ['billing:read'], 3_600);
-      expect(await getCachedPermissions(userId, organizationPublicId)).toEqual(['billing:read']);
+      await setCachedPermissions({
+        userId,
+        organizationId: organizationPublicId,
+        codes: ['billing:read'],
+        ttlSeconds: 3_600,
+      });
+      expect(await getCachedPermissions({ userId, organizationId: organizationPublicId })).toEqual([
+        'billing:read',
+      ]);
 
       await invalidateOrganizationPermissions(organizationPublicId);
       expect(await redisConnection.get(versionKey)).toBe('1');
-      expect(await getCachedPermissions(userId, organizationPublicId)).toBeNull();
+      expect(
+        await getCachedPermissions({ userId, organizationId: organizationPublicId }),
+      ).toBeNull();
 
-      await setCachedPermissions(userId, organizationPublicId, ['billing:manage'], 3_600);
-      expect(await getCachedPermissions(userId, organizationPublicId)).toEqual(['billing:manage']);
+      await setCachedPermissions({
+        userId,
+        organizationId: organizationPublicId,
+        codes: ['billing:manage'],
+        ttlSeconds: 3_600,
+      });
+      expect(await getCachedPermissions({ userId, organizationId: organizationPublicId })).toEqual([
+        'billing:manage',
+      ]);
 
       await redisConnection.del(`perm:1:${userId}:${organizationPublicId}`, versionKey);
     },
@@ -51,7 +67,12 @@ describe.runIf(runRedisTests)('Integration: permission cache version invalidatio
   it.runIf(() => redisAvailable)(
     'supports concurrent organization invalidations via INCR',
     async () => {
-      await setCachedPermissions(userId, organizationPublicId, ['tenancy:read'], 3_600);
+      await setCachedPermissions({
+        userId,
+        organizationId: organizationPublicId,
+        codes: ['tenancy:read'],
+        ttlSeconds: 3_600,
+      });
       await Promise.all([
         invalidateOrganizationPermissions(organizationPublicId),
         invalidateOrganizationPermissions(organizationPublicId),
@@ -59,7 +80,9 @@ describe.runIf(runRedisTests)('Integration: permission cache version invalidatio
       ]);
       const version = Number(await redisConnection.get(versionKey));
       expect(version).toBe(3);
-      expect(await getCachedPermissions(userId, organizationPublicId)).toBeNull();
+      expect(
+        await getCachedPermissions({ userId, organizationId: organizationPublicId }),
+      ).toBeNull();
 
       await redisConnection.del(versionKey);
     },

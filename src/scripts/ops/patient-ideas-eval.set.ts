@@ -14,13 +14,19 @@ export interface PatientIdeasEvalCase {
 }
 
 /** A menu offering of the evaluation clinic. */
-function offering(
-  index: number,
-  name: string,
-  category: string,
-  price: string,
+function offering({
+  index,
+  name,
+  category,
+  price,
   sessions = 1,
-): IdeaOffering {
+}: {
+  index: number;
+  name: string;
+  category: string;
+  price: string;
+  sessions?: number | undefined;
+}): IdeaOffering {
   return {
     id: index,
     publicId: `ofr_eval${String(index).padStart(17, '0')}`,
@@ -33,21 +39,54 @@ function offering(
 
 /** The evaluation clinic's active menu (a dermatology and aesthetics clinic, as the launch's). */
 export const EVAL_MENU: readonly IdeaOffering[] = [
-  offering(1, 'Consultation', 'Consultation', '500.00'),
-  offering(2, 'Chemical peel', 'Skin', '2500.00'),
-  offering(3, 'Acne peel package', 'Skin', '9000.00', 4),
-  offering(4, 'Hydrafacial', 'Skin', '4500.00'),
-  offering(5, 'Microneedling', 'Skin', '6000.00'),
-  offering(6, 'PRP for hair', 'Hair', '6000.00'),
-  offering(7, 'PRP hair package', 'Hair', '20000.00', 4),
-  offering(8, 'GFC for hair', 'Hair', '9000.00'),
-  offering(9, 'Laser hair reduction — full face', 'Laser', '3500.00'),
-  offering(10, 'Laser hair reduction package — full face', 'Laser', '18000.00', 6),
-  offering(11, 'Q-switch laser for pigmentation', 'Laser', '5000.00'),
-  offering(12, 'Botox — forehead', 'Injectables', '12000.00'),
-  offering(13, 'Dermal filler — under eye', 'Injectables', '22000.00'),
-  offering(14, 'Mole removal', 'Procedures', '3000.00'),
-  offering(15, 'Skin tag removal', 'Procedures', '1500.00'),
+  offering({ index: 1, name: 'Consultation', category: 'Consultation', price: '500.00' }),
+  offering({ index: 2, name: 'Chemical peel', category: 'Skin', price: '2500.00' }),
+  offering({
+    index: 3,
+    name: 'Acne peel package',
+    category: 'Skin',
+    price: '9000.00',
+    sessions: 4,
+  }),
+  offering({ index: 4, name: 'Hydrafacial', category: 'Skin', price: '4500.00' }),
+  offering({ index: 5, name: 'Microneedling', category: 'Skin', price: '6000.00' }),
+  offering({ index: 6, name: 'PRP for hair', category: 'Hair', price: '6000.00' }),
+  offering({
+    index: 7,
+    name: 'PRP hair package',
+    category: 'Hair',
+    price: '20000.00',
+    sessions: 4,
+  }),
+  offering({ index: 8, name: 'GFC for hair', category: 'Hair', price: '9000.00' }),
+  offering({
+    index: 9,
+    name: 'Laser hair reduction — full face',
+    category: 'Laser',
+    price: '3500.00',
+  }),
+  offering({
+    index: 10,
+    name: 'Laser hair reduction package — full face',
+    category: 'Laser',
+    price: '18000.00',
+    sessions: 6,
+  }),
+  offering({
+    index: 11,
+    name: 'Q-switch laser for pigmentation',
+    category: 'Laser',
+    price: '5000.00',
+  }),
+  offering({ index: 12, name: 'Botox — forehead', category: 'Injectables', price: '12000.00' }),
+  offering({
+    index: 13,
+    name: 'Dermal filler — under eye',
+    category: 'Injectables',
+    price: '22000.00',
+  }),
+  offering({ index: 14, name: 'Mole removal', category: 'Procedures', price: '3000.00' }),
+  offering({ index: 15, name: 'Skin tag removal', category: 'Procedures', price: '1500.00' }),
 ];
 
 /**

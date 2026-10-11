@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import {
   type AppFixture,
   createAppFixture,
@@ -454,7 +454,7 @@ describe('Contact activity — integration (routes-final §4.C–4.D)', () => {
       '.error.reason',
       'transition_not_allowed',
     );
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.contact_activities SET delivery_status = 'failed',
         failure_reason = 'Number not on WhatsApp', failed_at = now()
       WHERE public_id = ${firstMessage}

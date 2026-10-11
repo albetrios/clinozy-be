@@ -29,10 +29,13 @@ export interface ContactMessagingSweepCounts {
 }
 
 /** The organizations a delivery job should run for: a queued message, or a day waiting for its summary. */
-async function findOrganizationsWithDelivery(
-  handle: WorkerDatabaseHandle,
-  afterId: number,
-): Promise<{ id: number; publicId: string }[]> {
+async function findOrganizationsWithDelivery({
+  handle,
+  afterId,
+}: {
+  handle: WorkerDatabaseHandle;
+  afterId: number;
+}): Promise<{ id: number; publicId: string }[]> {
   const queued = await findOrganizationsWithQueuedMessages(handle, afterId);
   const summaries = await findOrganizationsWithPendingDayCloseSummaries(handle, {
     afterId,
@@ -48,10 +51,10 @@ async function findOrganizationsWithDelivery(
 
 /** Pages through organizations the `find` read returns and enqueues each; answers the counts. */
 async function sweep(options: {
-  find: (
-    handle: WorkerDatabaseHandle,
-    afterId: number,
-  ) => Promise<{ id: number; publicId: string }[]>;
+  find: (options: {
+    handle: WorkerDatabaseHandle;
+    afterId: number;
+  }) => Promise<{ id: number; publicId: string }[]>;
   enqueue: (organizationPublicId: string) => Promise<void>;
   label: string;
 }): Promise<{ enqueuedCount: number; failedCount: number }> {
@@ -59,7 +62,7 @@ async function sweep(options: {
   let failedCount = 0;
   let afterId = 0;
   for (;;) {
-    const batch = await runGlobalRetentionWorkerJob((handle) => options.find(handle, afterId));
+    const batch = await runGlobalRetentionWorkerJob((handle) => options.find({ handle, afterId }));
     for (const organization of batch) {
       try {
         await options.enqueue(organization.publicId);
@@ -102,7 +105,7 @@ export async function runContactMessagingSweepJob(): Promise<ContactMessagingSwe
     : { enqueuedCount: 0, failedCount: 0 };
   const events = isMetaWebhookIngressConfigured()
     ? await sweep({
-        find: findOrganizationsWithPendingMessagingEvents,
+        find: ({ handle, afterId }) => findOrganizationsWithPendingMessagingEvents(handle, afterId),
         enqueue: enqueueMessagingWebhookEventProcessing,
         label: 'messaging-webhook-event',
       })

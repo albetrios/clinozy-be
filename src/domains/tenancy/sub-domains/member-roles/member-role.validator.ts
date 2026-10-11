@@ -17,7 +17,7 @@ import type {
  * (the reason, and a note for `other`).
  */
 export function validateDeleteMemberRoleQuery(data: unknown): DeleteMemberRoleQueryInput {
-  return parseWithSchema(deleteMemberRoleQueryDto, data);
+  return parseWithSchema({ schema: deleteMemberRoleQueryDto, data });
 }
 
 /**
@@ -26,7 +26,7 @@ export function validateDeleteMemberRoleQuery(data: unknown): DeleteMemberRoleQu
  * with per-field details on failure.
  */
 export function validateCreateMemberRole(data: unknown): CreateMemberRoleInput {
-  return parseWithSchema(createMemberRoleDto, data);
+  return parseWithSchema({ schema: createMemberRoleDto, data });
 }
 
 /**
@@ -35,7 +35,7 @@ export function validateCreateMemberRole(data: unknown): CreateMemberRoleInput {
  * with per-field details on failure.
  */
 export function validateUpdateMemberRole(data: unknown): UpdateMemberRoleInput {
-  return parseWithSchema(updateMemberRoleDto, data);
+  return parseWithSchema({ schema: updateMemberRoleDto, data });
 }
 
 /**
@@ -44,5 +44,5 @@ export function validateUpdateMemberRole(data: unknown): UpdateMemberRoleInput {
  * invalid-input copy (USERS-M5: a bad `sort` is not a paging error), the field named in `errors[]`.
  */
 export function validateListMemberRolesQuery(data: unknown): ListMemberRolesQueryInput {
-  return parseWithSchema(listMemberRolesQueryDto, data);
+  return parseWithSchema({ schema: listMemberRolesQueryDto, data });
 }

@@ -15,17 +15,17 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses an MR create body; throws `ValidationError` naming each bad field. */
 export function validateCreateMedicalRep(data: unknown): CreateMedicalRepInput {
-  return parseWithSchema(CreateMedicalRepDto, data);
+  return parseWithSchema({ schema: CreateMedicalRepDto, data });
 }
 
 /** Parses an MR change body; throws `ValidationError` naming each bad field. */
 export function validateUpdateMedicalRep(data: unknown): UpdateMedicalRepInput {
-  return parseWithSchema(UpdateMedicalRepDto, data);
+  return parseWithSchema({ schema: UpdateMedicalRepDto, data });
 }
 
 /** Parses the MRs tab's query into a list input (routes-final 11.F.8 #33). */
 export function validateListMedicalRepsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listMedicalRepsQueryDto, data);
+  const query = parseWithSchema({ schema: listMedicalRepsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

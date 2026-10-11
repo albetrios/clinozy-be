@@ -174,17 +174,18 @@ idempotent (`deletion_started_at` watermark) and correctly ordered (Stripe cance
 **re-invoking the delete endpoint safely resumes** a partial offboarding. The
 reconciler adds the missing *automatic* retry of a stuck offboarding.
 
-### AUTH-03 / AUTH-08 (public send-email atomicity) — intentionally swallowing
+### AUTH-03 / AUTH-08 (public send-email atomicity) — atomic issue, uniform answer
 
-`email/send-code` and `password/forgot` deliberately use the swallowing `eventBus.emit`
-for the email side effect: these are anti-enumeration endpoints that must return a
-constant response regardless of whether the account exists. Switching to
-`emitStrict` would surface an outbox failure as a 503 for a *known* email while an
-*unknown* email still returns 200 — a status oracle during outbox outages. The
-outbox row is still written inside the request context; only the rare INSERT-failure
-case is swallowed (the user simply retries). **Left as-is by design**; documented
-here so it is not "fixed" into an enumeration regression. AUTH-19
-(resend-verification) is authenticated and could be tightened if desired.
+`email/send-code` and `password/forgot` issue their token and record its email in ONE transaction
+(`emitStrict` inside it), so a code or reset link never exists without its email. They stay
+anti-enumeration endpoints with a constant response:
+
+- `email/send-code` creates the account for an unknown email, so both cases run the same issue —
+  an outbox failure answers the same for every email.
+- `password/forgot` issues only for a known account, so a failure there would be a status oracle
+  (503 for a known email, 200 for an unknown one) during an outbox outage. The issue is wrapped:
+  a failure is logged (`auth.password_reset.issue_failed`), reported to Sentry, the per-email
+  cooldown is released so the user can retry, and the answer is the same 200.
 
 ### Retention upper bounds
 

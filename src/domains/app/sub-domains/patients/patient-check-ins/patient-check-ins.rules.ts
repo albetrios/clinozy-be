@@ -101,7 +101,13 @@ export async function createCallBackTask(options: {
 }
 
 /** The links a check-in's write checks: the visit and the session are the patient's (TR3). */
-async function assertLinks(values: Record<string, unknown>, patientId: number): Promise<void> {
+async function assertLinks({
+  values,
+  patientId,
+}: {
+  values: Record<string, unknown>;
+  patientId: number;
+}): Promise<void> {
   if ('appointment_id' in values) {
     await assertAppointmentOfPatient({ appointmentId: values.appointment_id, patientId });
   }
@@ -136,7 +142,7 @@ export function createPatientCheckInsRules(repository: PatientCheckInsRepository
         messageKey: 'errors:validation.patientCheckInDateFuture',
         context,
       });
-      await assertLinks(values, values.patient_id as number);
+      await assertLinks({ values, patientId: values.patient_id as number });
       values.context ??= await defaultContext(values);
     },
     prepareUpdate: async (values, existing, context) => {
@@ -146,7 +152,7 @@ export function createPatientCheckInsRules(repository: PatientCheckInsRepository
         messageKey: 'errors:validation.patientCheckInDateFuture',
         context,
       });
-      await assertLinks(values, existing.patient_id as number);
+      await assertLinks({ values, patientId: existing.patient_id as number });
     },
     afterWrite: async (row, change, context) => {
       const turnedOn =

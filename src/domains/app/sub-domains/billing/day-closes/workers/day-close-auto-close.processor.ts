@@ -17,10 +17,13 @@ import { createWorkerDayCloseAutoCloseRepository } from '@/domains/app/sub-domai
  *   yesterday.
  * - **Side effects:** inserts and updates on `app.day_closes`, inserts on `app.day_close_events`.
  */
-export async function runDayCloseAutoCloseJob(
-  databaseHandle: WorkerDatabaseHandle,
-  organizationPublicId: string,
-): Promise<{ closedCount: number; openedCount: number }> {
+export async function runDayCloseAutoCloseJob({
+  databaseHandle,
+  organizationPublicId,
+}: {
+  databaseHandle: WorkerDatabaseHandle;
+  organizationPublicId: string;
+}): Promise<{ closedCount: number; openedCount: number }> {
   const repository = createWorkerDayCloseAutoCloseRepository(databaseHandle);
   const organizationId = await repository.findOrganizationId(organizationPublicId);
   if (organizationId === null) return { closedCount: 0, openedCount: 0 };

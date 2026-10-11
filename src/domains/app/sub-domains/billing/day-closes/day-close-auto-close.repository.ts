@@ -99,7 +99,12 @@ export class DayCloseAutoCloseRepository {
 
   /** The organization's days to close, in branch and date order (one job's worth). */
   async findDueDays(organizationId: number): Promise<DayToAutoClose[]> {
-    const rows = (await this.databaseHandle.execute(sql`
+    const rows = (
+      await this.databaseHandle.execute<{
+        day_close_id: string | null;
+        branch_id: string;
+        close_date: string;
+      }>(sql`
       select ${day_closes.id} as day_close_id, ${day_closes.branch_id} as branch_id, ${day_closes.close_date}::text as close_date
         from ${day_closes} join ${organizations} on ${organizations.id} = ${day_closes.organization_id}
         where ${day_closes.organization_id} = ${organizationId}
@@ -111,7 +116,8 @@ export class DayCloseAutoCloseRepository {
         where ${payments.organization_id} = ${organizationId} and ${UNOPENED_PAYMENT_DAYS}
       order by 2, 3
       limit ${DAY_CLOSE_AUTO_CLOSE_DAYS_PER_JOB}
-    `)) as unknown as { day_close_id: string | null; branch_id: string; close_date: string }[];
+    `)
+    ).rows;
     return rows.map((row) => ({
       dayCloseId: row.day_close_id === null ? null : Number(row.day_close_id),
       branchId: Number(row.branch_id),

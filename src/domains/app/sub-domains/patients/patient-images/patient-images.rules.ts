@@ -29,7 +29,13 @@ const SHARED_ALBUMS = PATIENT_IMAGE_ALBUM_VALUES.filter(
 );
 
 /** Refuses a photo into the private album from a caller without the album code (P23). */
-async function assertAlbumAllowed(album: unknown, context: BaseRecordWriteContext): Promise<void> {
+async function assertAlbumAllowed({
+  album,
+  context,
+}: {
+  album: unknown;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   if (album !== PATIENT_IMAGE_ALBUM.PRIVATE) return;
   if (!(await context.can(APP_PERMISSIONS.PATIENT_PRIVATE_ALBUM_READ))) {
     throw new ForbiddenError('errors:fieldNeedsPermission', {
@@ -43,10 +49,13 @@ async function assertAlbumAllowed(album: unknown, context: BaseRecordWriteContex
  * The upload is a confirmed JPG or PNG of the organization, up to 15 MB (P19, P25) — else a 400 on
  * `file_key`; returns its file name, cut to the column.
  */
-async function requirePhotoUpload(
-  fileKey: string,
-  context: BaseRecordWriteContext,
-): Promise<string> {
+async function requirePhotoUpload({
+  fileKey,
+  context,
+}: {
+  fileKey: string;
+  context: BaseRecordWriteContext;
+}): Promise<string> {
   const [upload] = await requireConfirmedUploads({
     fileKeys: [fileKey],
     field: 'file_key',
@@ -68,7 +77,13 @@ async function requirePhotoUpload(
 }
 
 /** The links a photo's write checks: its visit (checked in or completed) and its session. */
-async function assertLinks(values: Record<string, unknown>, patientId: number): Promise<void> {
+async function assertLinks({
+  values,
+  patientId,
+}: {
+  values: Record<string, unknown>;
+  patientId: number;
+}): Promise<void> {
   if ('appointment_id' in values) {
     await assertAppointmentOfPatient({
       appointmentId: values.appointment_id,
@@ -105,8 +120,8 @@ export function createPatientImagesRules(repository: PatientImagesRepository): B
         ? undefined
         : { album: SHARED_ALBUMS },
     prepareCreate: async (values, context) => {
-      await assertAlbumAllowed(values.album, context);
-      values.file_name = await requirePhotoUpload(String(values.file_key), context);
+      await assertAlbumAllowed({ album: values.album, context });
+      values.file_name = await requirePhotoUpload({ fileKey: String(values.file_key), context });
       values.taken_on ??= await organizationToday(context);
       await assertDateNotFuture({
         date: values.taken_on,
@@ -114,17 +129,17 @@ export function createPatientImagesRules(repository: PatientImagesRepository): B
         messageKey: 'errors:validation.patientImageTakenOnFuture',
         context,
       });
-      await assertLinks(values, values.patient_id as number);
+      await assertLinks({ values, patientId: values.patient_id as number });
     },
     prepareUpdate: async (values, existing, context) => {
-      await assertAlbumAllowed(values.album, context);
+      await assertAlbumAllowed({ album: values.album, context });
       await assertDateNotFuture({
         date: values.taken_on,
         field: 'taken_on',
         messageKey: 'errors:validation.patientImageTakenOnFuture',
         context,
       });
-      await assertLinks(values, existing.patient_id as number);
+      await assertLinks({ values, patientId: existing.patient_id as number });
     },
     afterWrite: async (row, change, context) => {
       const isPrivate = row.album === PATIENT_IMAGE_ALBUM.PRIVATE;

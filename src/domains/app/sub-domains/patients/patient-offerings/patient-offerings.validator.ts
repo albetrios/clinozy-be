@@ -13,7 +13,7 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a patient offering update body; throws `ValidationError` naming each bad field. */
 export function validateUpdatePatientOffering(data: unknown): UpdatePatientOfferingInput {
-  return parseWithSchema(UpdatePatientOfferingDto, data);
+  return parseWithSchema({ schema: UpdatePatientOfferingDto, data });
 }
 
 /** No create route — a patient offering is bought only by invoicing it (PK4, sub-domain 8). */
@@ -23,7 +23,7 @@ export function refusePatientOfferingCreate(): Record<string, unknown> {
 
 /** Parses a patient's bought offerings query into a list input (routes-final 7.L.8 #65). */
 export function validateListPatientOfferingsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listPatientOfferingsQueryDto, data);
+  const query = parseWithSchema({ schema: listPatientOfferingsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

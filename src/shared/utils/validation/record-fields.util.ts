@@ -317,10 +317,13 @@ export const signedMoneySchema = z
  *   fields pass through.
  * - **Failure modes:** none — the DTO already checked the format.
  */
-export function withInstants<T extends Record<string, unknown>>(
-  values: T,
-  fields: readonly string[],
-): T {
+export function withInstants<T extends Record<string, unknown>>({
+  values,
+  fields,
+}: {
+  values: T;
+  fields: readonly string[];
+}): T {
   const out: Record<string, unknown> = { ...values };
   for (const field of fields) {
     const value = out[field];
@@ -333,7 +336,13 @@ export function withInstants<T extends Record<string, unknown>>(
  * The calendar date (`YYYY-MM-DD`) it is at `at` in an IANA time zone — "today" for an
  * organization whose timed work runs in its own zone (D41).
  */
-export function calendarDateInTimeZone(timeZone: string, at: Date = new Date()): string {
+export function calendarDateInTimeZone({
+  timeZone,
+  at = new Date(),
+}: {
+  timeZone: string;
+  at?: Date | undefined;
+}): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone,
     year: 'numeric',
@@ -353,7 +362,13 @@ export function isKnownTimeZone(value: string): boolean {
 }
 
 /** The wall-clock time (`HH:mm`, 24-hour) it is at `at` in an IANA time zone — a clinic's "now". */
-export function clockTimeInTimeZone(timeZone: string, at: Date = new Date()): string {
+export function clockTimeInTimeZone({
+  timeZone,
+  at = new Date(),
+}: {
+  timeZone: string;
+  at?: Date | undefined;
+}): string {
   return new Intl.DateTimeFormat('en-GB', {
     timeZone,
     hour: '2-digit',
@@ -404,7 +419,7 @@ export function addDaysToCalendarDate(options: { date: string; days: number }): 
 export function instantInTimeZone(options: { date: string; time: string; timeZone: string }): Date {
   const naive = Date.parse(`${options.date}T${options.time.slice(0, 5)}:00Z`);
   const offsetAt = (instant: number): number => {
-    const reading = `${calendarDateInTimeZone(options.timeZone, new Date(instant))}T${clockTimeInTimeZone(options.timeZone, new Date(instant))}:00Z`;
+    const reading = `${calendarDateInTimeZone({ timeZone: options.timeZone, at: new Date(instant) })}T${clockTimeInTimeZone({ timeZone: options.timeZone, at: new Date(instant) })}:00Z`;
     return Date.parse(reading) - instant;
   };
   const firstGuess = naive - offsetAt(naive);

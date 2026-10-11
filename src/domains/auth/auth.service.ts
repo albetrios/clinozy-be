@@ -152,15 +152,18 @@ export class AuthService {
       const key = this.buildIpKey(ipAddress);
       // Atomic INCR + first-increment EXPIRE (route-audit C5) — a crash between a separate INCR and
       // EXPIRE would otherwise leave a no-TTL counter that throttles the IP indefinitely.
-      const count = await incrementWithExpiryOnFirst(
-        this.redis,
+      const count = await incrementWithExpiryOnFirst({
+        redis: this.redis,
         key,
-        IP_FAILED_LOGIN_WINDOW_SECONDS,
-      );
+        ttlSeconds: IP_FAILED_LOGIN_WINDOW_SECONDS,
+      });
       if (count === IP_FAILED_LOGIN_THRESHOLD) {
-        captureMessage('auth.ip_failed_login.threshold_reached', {
-          level: 'warning',
-          extra: { ip_hash: this.buildIpKey(ipAddress), count },
+        captureMessage({
+          message: 'auth.ip_failed_login.threshold_reached',
+          options: {
+            level: 'warning',
+            extra: { ip_hash: this.buildIpKey(ipAddress), count },
+          },
         });
         logger.warn(
           { ip_hash: this.buildIpKey(ipAddress), count },
@@ -172,7 +175,15 @@ export class AuthService {
     }
   }
 
-  async login(body: unknown, ipAddress: string, userAgent?: string): Promise<LoginResult> {
+  async login({
+    body,
+    ipAddress,
+    userAgent,
+  }: {
+    body: unknown;
+    ipAddress: string;
+    userAgent?: string | undefined;
+  }): Promise<LoginResult> {
     const parsed = validateLogin(body);
     if (isDisposableEmailBlocked(parsed.email)) {
       throw new ValidationError('errors:disposableEmail', undefined, undefined, [
@@ -197,9 +208,9 @@ export class AuthService {
       // Run a verification against a fixed dummy hash and discard the result so
       // the "unknown email" path takes the same ~argon2 time as a wrong password,
       // preventing user enumeration via response timing.
-      await verifyPassword(parsed.password, DUMMY_ARGON2_HASH);
+      await verifyPassword({ plaintext: parsed.password, storedHash: DUMMY_ARGON2_HASH });
       await this.recordIpFailedLogin(ipAddress);
-      await enforceMinimumDuration(startedAtMillis);
+      await enforceMinimumDuration({ startedAtMillis });
       throw new UnauthorizedError('errors:invalidEmailOrPassword');
     }
 
@@ -212,18 +223,21 @@ export class AuthService {
       user.account_locked_until && new Date(user.account_locked_until) > new Date(),
     );
 
-    const { valid: isValid, needsRehash } = await verifyPassword(
-      parsed.password,
-      user.password_hash,
-    );
+    const { valid: isValid, needsRehash } = await verifyPassword({
+      plaintext: parsed.password,
+      storedHash: user.password_hash,
+    });
 
     if (!isValid) {
       // Atomic SQL increment + conditional lock — never a read-modify-write — so two
       // simultaneous wrong-password attempts cannot both read the same stale count and
       // collapse two failures into one, which would let an attacker undercount toward lockout.
-      await this.userService.registerFailedLoginAttempt(user.public_id, {
-        maxAttempts: MAX_FAILED_LOGIN_ATTEMPTS,
-        lockoutMinutes: ACCOUNT_LOCKOUT_MINUTES,
+      await this.userService.registerFailedLoginAttempt({
+        public_id: user.public_id,
+        options: {
+          maxAttempts: MAX_FAILED_LOGIN_ATTEMPTS,
+          lockoutMinutes: ACCOUNT_LOCKOUT_MINUTES,
+        },
       });
       await this.recordIpFailedLogin(ipAddress);
       // sec-A finding #23: surface a UNIFORM error message for unknown-email, wrong-
@@ -239,7 +253,7 @@ export class AuthService {
       }
       // audit-#15d: same floor as the unknown-email branch so the extra Postgres write
       // above is not observable as a latency difference.
-      await enforceMinimumDuration(startedAtMillis);
+      await enforceMinimumDuration({ startedAtMillis });
       throw new UnauthorizedError('errors:invalidEmailOrPassword');
     }
 
@@ -254,13 +268,17 @@ export class AuthService {
     // Correct password clears the failure counter and lifts any active lock so the owner is
     // never held out by attacker-driven failed attempts.
     if ((user.failed_login_count ?? 0) > 0 || isLockedOut) {
-      await this.userService.updateLoginAttempt(user.public_id, 0, null);
+      await this.userService.updateLoginAttempt({
+        public_id: user.public_id,
+        failed_login_count: 0,
+        account_locked_until: null,
+      });
     }
 
     if (needsRehash) {
       const { hashPassword } = await import('@/shared/utils/security/password.util.js');
       const newHash = await hashPassword(parsed.password);
-      await this.userService.updatePassword(user.public_id, newHash);
+      await this.userService.updatePassword({ public_id: user.public_id, password_hash: newHash });
     }
 
     return completeFirstFactorAuth({
@@ -297,11 +315,15 @@ export class AuthService {
    * - **Side effects:** the delegate's writes (password, token invalidation, session revoke) plus one
    *   new `auth_sessions` row (unless MFA is required). The caller sets the session cookie + audits.
    */
-  async resetPassword(
-    body: unknown,
-    ipAddress: string,
-    userAgent?: string,
-  ): Promise<PasswordResetResult> {
+  async resetPassword({
+    body,
+    ipAddress,
+    userAgent,
+  }: {
+    body: unknown;
+    ipAddress: string;
+    userAgent?: string | undefined;
+  }): Promise<PasswordResetResult> {
     const user = await this.authMethodService.resetPassword(body);
     // The password was reset, but a suspended/locked/deleted account is never issued a session.
     assertUserAccountActive({
@@ -374,7 +396,10 @@ export class AuthService {
     // never silently move the caller to a different tenant while the UI still shows A.
     const persistedOrganizationPublicId =
       session.organization_id != null
-        ? await findUserActiveOrganizationPublicIdByInternalId(user.id, session.organization_id)
+        ? await findUserActiveOrganizationPublicIdByInternalId({
+            userInternalId: user.id,
+            organizationInternalId: session.organization_id,
+          })
         : undefined;
     const sessionMfaVerified = session.mfa_verified_at != null;
     const organizationPublicId = await this.withoutUnmetOrganizationMfa({
@@ -431,20 +456,20 @@ export class AuthService {
     // `app.current_session_public_id`, a different guc, so it must own its transaction — and
     // nesting it here would hold this checkout open across it, making the request peak at two
     // concurrent connections instead of taking them one after another.
-    const { user, resolved } = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      async () => {
+    const { user, resolved } = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: async () => {
         const record = await this.userService.requireUserRecordByPublicId(userPublicId);
         if (record.status !== 'ACTIVE') throw new UnauthorizedError('errors:accountNotActive');
-        const organization = await findUserActiveOrganizationByPublicId(
-          record.id,
+        const organization = await findUserActiveOrganizationByPublicId({
+          userInternalId: record.id,
           organizationPublicId,
-        );
+        });
         if (!organization) throw new ForbiddenError('errors:insufficientOrganizationPermissions');
         return { user: record, resolved: organization };
       },
-    );
-    return this.mintForActiveOrganization(user, sessionPublicId, resolved);
+    });
+    return this.mintForActiveOrganization({ user, sessionPublicId, organization: resolved });
   }
 
   /**
@@ -466,7 +491,7 @@ export class AuthService {
     // personal organizations are disabled → 404 as before.
     const personal = await ensurePersonalOrganization(user);
     if (!personal) throw new NotFoundError('Personal organization');
-    return this.mintForActiveOrganization(user, sessionPublicId, personal);
+    return this.mintForActiveOrganization({ user, sessionPublicId, organization: personal });
   }
 
   /**
@@ -489,7 +514,9 @@ export class AuthService {
     ) {
       return organizationPublicId;
     }
-    const personalOrganizationPublicId = await resolvePersonalOrganizationPublicId(options.userId);
+    const personalOrganizationPublicId = await resolvePersonalOrganizationPublicId({
+      ownerUserInternalId: options.userId,
+    });
     if (
       personalOrganizationPublicId &&
       personalOrganizationPublicId !== organizationPublicId &&
@@ -511,11 +538,15 @@ export class AuthService {
    * with reason `mfa_required`, and the client completes an MFA step-up (or enrollment) and
    * retries. The minted token carries `amr: ['mfa']` for such a session.
    */
-  private async mintForActiveOrganization(
-    user: UserAuthRecord,
-    sessionPublicId: string,
-    organization: { id: number; public_id: string },
-  ): Promise<{ access_token: string; organization_public_id: string }> {
+  private async mintForActiveOrganization({
+    user,
+    sessionPublicId,
+    organization,
+  }: {
+    user: UserAuthRecord;
+    sessionPublicId: string;
+    organization: { id: number; public_id: string };
+  }): Promise<{ access_token: string; organization_public_id: string }> {
     const session = await this.authSessionService.findActiveSessionByPublicId(sessionPublicId);
     if (!session) throw new UnauthorizedError('errors:invalidOrExpiredSession');
     const sessionMfaVerified = session.mfa_verified_at != null;

@@ -34,6 +34,6 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await app.register(appRoutesPlugin, { prefix: `${apiV1}/app` });
 
   if (getEnv().ENABLE_QUEUE_DASHBOARD) {
-    await registerQueueDashboard(app, { auditService: app.auditDomain.auditService });
+    await registerQueueDashboard({ app, deps: { auditService: app.auditDomain.auditService } });
   }
 }

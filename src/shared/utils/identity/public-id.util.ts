@@ -29,6 +29,8 @@ export const PUBLIC_ID_PREFIXES = {
   upload: 'upl',
   userDataExport: 'exp',
   webhookDeliveryAttempt: 'wda',
+  /** The `id` of an outbound webhook event envelope, shared by every endpoint it is delivered to. */
+  webhookEvent: 'evt',
   auditLog: 'aud',
   membershipSavedView: 'svw',
   offeringGroup: 'ogr',

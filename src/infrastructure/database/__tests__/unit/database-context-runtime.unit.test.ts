@@ -60,33 +60,45 @@ describe('worker database context', () => {
     const scope = PRINCIPAL_SCOPE.JOB({
       organizationPublicId: 'org_public_test',
     });
-    await withAppDatabaseContext(scope, async () => {
-      expect(getWorkerDatabaseContext()?.kind).toBe('organization');
-      expect(getWorkerDatabaseContext()?.organizationPublicId).toBe('org_public_test');
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        expect(getWorkerDatabaseContext()?.kind).toBe('organization');
+        expect(getWorkerDatabaseContext()?.organizationPublicId).toBe('org_public_test');
+      },
     });
   });
 
   it('withMaintenanceDatabaseContext sets global_retention_cleanup kind', async () => {
     process.env.CLINOZY_BE_RUNTIME = 'worker';
-    await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, async () => {
-      expect(getWorkerDatabaseContext()?.kind).toBe('global_retention_cleanup');
+    await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: async () => {
+        expect(getWorkerDatabaseContext()?.kind).toBe('global_retention_cleanup');
+      },
     });
   });
 
   it('MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER sets system_table kind in worker runtime', async () => {
     process.env.CLINOZY_BE_RUNTIME = 'worker';
-    await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, async () => {
-      expect(getWorkerDatabaseContext()?.kind).toBe('system_table');
-      expect(() => getRequestDatabase()).not.toThrow();
+    await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      callback: async () => {
+        expect(getWorkerDatabaseContext()?.kind).toBe('system_table');
+        expect(() => getRequestDatabase()).not.toThrow();
+      },
     });
   });
 
   it('assertWorkerForceRlsTableAccess rejects system_table for FORCE RLS tables', async () => {
     process.env.CLINOZY_BE_RUNTIME = 'worker';
-    await runWithWorkerDatabaseContext({ kind: 'system_table' }, async () => {
-      expect(() =>
-        assertWorkerForceRlsTableAccess({ schemaName: 'billing', tableName: 'subscriptions' }),
-      ).toThrow(WorkerDatabaseContextError);
+    await runWithWorkerDatabaseContext({
+      context: { kind: 'system_table' },
+      callback: async () => {
+        expect(() =>
+          assertWorkerForceRlsTableAccess({ schemaName: 'billing', tableName: 'subscriptions' }),
+        ).toThrow(WorkerDatabaseContextError);
+      },
     });
   });
 
@@ -95,18 +107,24 @@ describe('worker database context', () => {
     const scope = PRINCIPAL_SCOPE.JOB({
       organizationPublicId: 'org_public_test',
     });
-    await withAppDatabaseContext(scope, async () => {
-      expect(() =>
-        assertWorkerForceRlsTableAccess({ schemaName: 'billing', tableName: 'subscriptions' }),
-      ).not.toThrow();
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        expect(() =>
+          assertWorkerForceRlsTableAccess({ schemaName: 'billing', tableName: 'subscriptions' }),
+        ).not.toThrow();
+      },
     });
   });
 
   it('sec-new-Q4: MAINTENANCE_SCOPE.SYSTEM_TABLE_RETENTION sets system_table kind in worker runtime', async () => {
     process.env.CLINOZY_BE_RUNTIME = 'worker';
-    await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_RETENTION, async () => {
-      expect(getWorkerDatabaseContext()?.kind).toBe('system_table');
-      expect(() => getRequestDatabase()).not.toThrow();
+    await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_RETENTION,
+      callback: async () => {
+        expect(getWorkerDatabaseContext()?.kind).toBe('system_table');
+        expect(() => getRequestDatabase()).not.toThrow();
+      },
     });
   });
 
@@ -114,8 +132,11 @@ describe('worker database context', () => {
     process.env.CLINOZY_BE_RUNTIME = 'worker';
     const { database: mockedDatabase } = await import('@/infrastructure/database/connection.js');
     mockExecute.mockClear();
-    await withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_RETENTION, async () => {
-      /* pure-DB callback */
+    await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_RETENTION,
+      callback: async () => {
+        /* pure-DB callback */
+      },
     });
     // A transaction must be opened (so SET LOCAL statement_timeout takes effect)
     expect(mockedDatabase.transaction).toHaveBeenCalled();

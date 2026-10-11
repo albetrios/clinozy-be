@@ -8,11 +8,10 @@ import type { FastifyInstance } from 'fastify';
 import type { TestRequestAgent, TestRequestResponse } from '@/tests/helpers/test-app.js';
 
 /**
- * N+1 query detection tests.
- * These tests create multiple records and verify that list endpoints
- * complete within a reasonable time, catching potential N+1 patterns.
+ * Small-fixture response-time and in-process concurrency checks.
+ * Timing ceilings do not establish query-count bounds or absence of N+1 queries.
  */
-describe('Performance: N+1 Detection', () => {
+describe('Performance: small-fixture response budgets', () => {
   let app: FastifyInstance;
   let request: TestRequestAgent;
 
@@ -30,7 +29,7 @@ describe('Performance: N+1 Detection', () => {
     await cleanupDatabase();
   });
 
-  it('should list many organizations without N+1 query degradation', {
+  it('lists 20 organizations within the local response-time budget', {
     timeout: 30000,
   }, async () => {
     const user = await createTestUser();
@@ -57,7 +56,7 @@ describe('Performance: N+1 Detection', () => {
     expect(duration).toBeLessThan(15000);
   });
 
-  it('should list many users without N+1 query degradation (admin)', {
+  it('lists a 21-user fixture within the local admin response-time budget', {
     timeout: 15000,
   }, async () => {
     // Create 20 users
@@ -76,7 +75,9 @@ describe('Performance: N+1 Detection', () => {
     expect(duration).toBeLessThan(2000);
   });
 
-  it('should handle concurrent requests without degradation', { timeout: 15000 }, async () => {
+  it('all 50 concurrent injected liveness requests succeed within the budget', {
+    timeout: 15000,
+  }, async () => {
     const CONCURRENT_REQUESTS = 50;
     const promises: Array<PromiseLike<TestRequestResponse>> = [];
 
@@ -85,18 +86,12 @@ describe('Performance: N+1 Detection', () => {
     }
 
     const start = performance.now();
-    let responses: TestRequestResponse[];
-    try {
-      responses = await Promise.all(promises);
-    } catch (error) {
-      // ECONNRESET can occur when server is closing; require most requests to have completed
-      expect((error as NodeJS.ErrnoException).code).toBe('ECONNRESET');
-      return;
-    }
+    const responses = await Promise.all(promises);
     const duration = performance.now() - start;
 
     const okCount = responses.filter((r) => r.status === 200).length;
-    expect(okCount).toBeGreaterThanOrEqual(CONCURRENT_REQUESTS - 2);
+    expect(responses).toHaveLength(CONCURRENT_REQUESTS);
+    expect(okCount).toBe(CONCURRENT_REQUESTS);
 
     expect(duration).toBeLessThan(8000);
   });

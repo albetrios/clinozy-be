@@ -52,22 +52,29 @@ export class StockItemsService extends BaseRecordService<StockItemOutput> {
   }
 
   /** S6: adds an item and answers with it as its opening movement left it. */
-  override async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    parentPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    createName?: string,
-  ): Promise<StockItemOutput> {
-    const created = await super.create(
+  override async create({
+    scope,
+    body,
+    actingUserPublicId,
+    parentPublicId,
+    visibility,
+    createName,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    parentPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    createName?: string | undefined;
+  }): Promise<StockItemOutput> {
+    const created = await super.create({
       scope,
       body,
       actingUserPublicId,
       parentPublicId,
       visibility,
       createName,
-    );
-    return this.get(scope, created.id, actingUserPublicId, visibility);
+    });
+    return this.get({ scope, publicId: created.id, actingUserPublicId, visibility });
   }
 }

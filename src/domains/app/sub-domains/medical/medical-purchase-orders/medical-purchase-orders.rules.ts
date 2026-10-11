@@ -40,7 +40,13 @@ function paiseOf(value: unknown): number {
 }
 
 /** MD15: a received order is read-only — a 409 `transition_not_allowed`. */
-function assertNotReceived(existing: BaseRecordRow, action: string): void {
+function assertNotReceived({
+  existing,
+  action,
+}: {
+  existing: BaseRecordRow;
+  action: string;
+}): void {
   if (existing.stage === MEDICAL_PURCHASE_ORDER_STAGE.RECEIVED) {
     throw new ConflictError('errors:recordTransitionNotAllowed', {
       action,
@@ -50,7 +56,13 @@ function assertNotReceived(existing: BaseRecordRow, action: string): void {
 }
 
 /** An order date is not after the organization's today — else a 400 `order_date`. */
-async function assertOrderDate(date: unknown, context: BaseRecordWriteContext): Promise<void> {
+async function assertOrderDate({
+  date,
+  context,
+}: {
+  date: unknown;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   if (typeof date === 'string' && date > (await organizationToday(context))) {
     throw fieldValidationError({
       field: 'order_date',
@@ -220,8 +232,8 @@ async function receiveLine(options: {
 async function receiveOrder(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing: order, context } = input;
   const repository = input.repository as MedicalPurchaseOrdersRepository;
-  assertNotReceived(order, 'receive');
-  const body = parseWithSchema(ReceiveMedicalPurchaseOrderDto, input.input);
+  assertNotReceived({ existing: order, action: 'receive' });
+  const body = parseWithSchema({ schema: ReceiveMedicalPurchaseOrderDto, data: input.input });
   const lines = await repository.lockItems(order.id);
   const sent = new Map((body.items ?? []).map((item) => [item.id, item]));
   const unknown = [...sent.keys()].find((id) => !lines.some((line) => line.public_id === id));
@@ -329,19 +341,19 @@ export function createMedicalPurchaseOrdersRules(
   return {
     prepareCreate: async (values, context) => {
       values.order_date ??= await organizationToday(context);
-      await assertOrderDate(values.order_date, context);
+      await assertOrderDate({ date: values.order_date, context });
       await holdLines({ values, supplierId: values.supplier_id as number, context });
     },
     prepareUpdate: async (values, existing, context) => {
-      assertNotReceived(existing, 'change');
-      await assertOrderDate(values.order_date, context);
+      assertNotReceived({ existing, action: 'change' });
+      await assertOrderDate({ date: values.order_date, context });
       await holdLines({
         values,
         supplierId: (values.supplier_id ?? existing.supplier_id) as number,
         context,
       });
     },
-    prepareRemove: (existing) => assertNotReceived(existing, 'cancel'),
+    prepareRemove: (existing) => assertNotReceived({ existing, action: 'cancel' }),
     afterWrite: async (row, change, context) => {
       if (change.kind !== 'create' && change.kind !== 'update') return;
       const lines = pendingLines.get(context);

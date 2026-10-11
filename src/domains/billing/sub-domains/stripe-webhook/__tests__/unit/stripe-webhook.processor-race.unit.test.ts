@@ -6,6 +6,21 @@ import type { SubscriptionService } from '@/domains/billing/sub-domains/subscrip
 import type { StripeWebhookEventRepository } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.js';
 import type { StripeWebhookJobData } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 
+// The duplicate/race fixtures have no stored watermark; database reconciliation is
+// covered by the service units and real repository/database tests.
+vi.mock(
+  '@/domains/billing/sub-domains/subscription/subscription.repository.js',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('@/domains/billing/sub-domains/subscription/subscription.repository.js')
+    >()),
+    createWorkerSubscriptionRepository: vi.fn((databaseHandle) => ({
+      databaseHandle,
+      findStripeProviderOrderingState: vi.fn().mockResolvedValue(null),
+    })),
+  }),
+);
+
 const retrieveStripeEventMock = vi.fn();
 
 vi.mock('@/infrastructure/payment/stripe.client.js', () => ({
@@ -14,11 +29,15 @@ vi.mock('@/infrastructure/payment/stripe.client.js', () => ({
 
 vi.mock('@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-organization.util.js', () => ({
   runStripeWebhookHandlerWithOrganizationContext: vi.fn(
-    async (
-      _event: Stripe.Event,
-      _repository: unknown,
-      handler: (databaseHandle: unknown) => Promise<void>,
-    ) => handler({} as never),
+    async ({
+      event: _event,
+      repository: _repository,
+      handler,
+    }: {
+      event: Stripe.Event;
+      repository: unknown;
+      handler: (databaseHandle: unknown) => Promise<void>;
+    }) => handler({} as never),
   ),
 }));
 
@@ -54,6 +73,9 @@ describe('stripe-webhook.processor race', () => {
     subscriptionService = {
       syncFromStripeProviderSubscription: vi.fn().mockResolvedValue({ id: 1 }),
       markCanceledByStripeProviderSubscriptionId: vi.fn(),
+      emitSubscriptionEvent: vi.fn().mockResolvedValue(undefined),
+      findStripeSubscriptionPublicState: vi.fn().mockResolvedValue(null),
+      enforceFreeSeatCeilingAfterCommitIfEntitlementLost: vi.fn().mockResolvedValue(undefined),
     } as unknown as SubscriptionService;
 
     stripeWebhookEventRepository = {
@@ -79,7 +101,7 @@ describe('stripe-webhook.processor race', () => {
 
     await Promise.all(
       Array.from({ length: 10 }, (_, index) =>
-        processStripeWebhookJob(jobData, stripeWebhookService, `job-${index}`),
+        processStripeWebhookJob({ jobData, stripeWebhookService, jobId: `job-${index}` }),
       ),
     );
 

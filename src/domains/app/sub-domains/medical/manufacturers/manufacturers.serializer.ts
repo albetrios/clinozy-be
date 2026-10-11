@@ -5,7 +5,7 @@ import type { ManufacturerOutput } from './manufacturers.types.js';
  * Shapes an `app.manufacturers` row as the API returns it (routes-final 11.A.6). The medicine
  * count and the linked suppliers and MRs are the rules' `decorate`.
  */
-export function serializeManufacturer(row: BaseRecordRow): ManufacturerOutput {
+export function serializeManufacturer({ row }: { row: BaseRecordRow }): ManufacturerOutput {
   return {
     id: row.public_id,
     name: row.name as string,

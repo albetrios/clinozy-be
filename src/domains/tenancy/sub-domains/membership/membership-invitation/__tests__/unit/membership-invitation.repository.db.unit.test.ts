@@ -12,10 +12,51 @@ import {
 import { MembershipInvitationRepository } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.repository.js';
 import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
 import { hashInvitationToken } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.token.js';
+import {
+  PRINCIPAL_SCOPE,
+  withAppDatabaseContext,
+} from '@/infrastructure/database/contexts/database-context.js';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1_000;
+
+describe('MembershipInvitationRepository transaction-bound public lookup', () => {
+  beforeEach(async () => {
+    await cleanupDatabase();
+  });
+
+  it('resolves a newly inserted invitation before its caller transaction commits', async () => {
+    const { owner, organization, membership } = await setupOrganizationWithMembership();
+    const repository = new MembershipInvitationRepository();
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({
+        userPublicId: owner.public_id,
+        organizationPublicId: organization.public_id,
+      }),
+      callback: async () => {
+        const invitation = await repository.create({
+          membership_id: membership.id,
+          email: 'transaction-invitation@test.com',
+          token_hash: hashInvitationToken('transaction-invitation-token'),
+          invited_by_user_id: owner.id,
+          expires_at: new Date(Date.now() + ONE_DAY_MS),
+          created_by_user_id: owner.id,
+        });
+        // A lookup on a second pooled connection cannot see this uncommitted row.
+        expect(
+          await repository.lookupOrganizationByInvitationPublicId(invitation.public_id),
+        ).toEqual({
+          organization_public_id: organization.public_id,
+          organization_id: organization.id,
+          membership_public_id: membership.public_id,
+          membership_id: membership.id,
+        });
+      },
+    });
+    expect(await repository.lookupOrganizationByInvitationPublicId('inv_missing')).toBeNull();
+  });
+});
 
 async function setupOrganizationWithMembership() {
   const owner = await createTestUser({ email: `owner-${Date.now()}-${Math.random()}@test.com` });

@@ -38,7 +38,7 @@ describe('Auth e2e: organization switch', () => {
 
   it('switch-to-personal re-mints the token and returns the active-organization delta (200)', async () => {
     const user = await createTestUser();
-    const { organization } = await provisionPersonalOrganization(user.id);
+    const { organization } = await provisionPersonalOrganization({ ownerUserId: user.id });
     const { token } = await generateTestTokenAndSession({
       userId: user.public_id,
     });
@@ -115,7 +115,7 @@ describe('Auth e2e: organization switch', () => {
 
   it('switch-to-organization re-mints for an organization the caller is a member of (200)', async () => {
     const user = await createTestUser();
-    const { organization } = await provisionPersonalOrganization(user.id);
+    const { organization } = await provisionPersonalOrganization({ ownerUserId: user.id });
     const { token } = await generateTestTokenAndSession({
       userId: user.public_id,
     });
@@ -144,7 +144,7 @@ describe('Auth e2e: organization switch', () => {
   it('switch-to-organization returns 403 for an organization the caller does not belong to', async () => {
     const member = await createTestUser();
     const stranger = await createTestUser();
-    const { organization } = await provisionPersonalOrganization(member.id);
+    const { organization } = await provisionPersonalOrganization({ ownerUserId: member.id });
     const { token } = await generateTestTokenAndSession({
       userId: stranger.public_id,
     });
@@ -260,7 +260,7 @@ describe('Auth e2e: organization switch', () => {
       // The user owns a personal organization (so the account resolves), and holds a SUSPENDED
       // membership in a separate TEAM organization they must not be able to switch into.
       const user = await createTestUser();
-      await provisionPersonalOrganization(user.id);
+      await provisionPersonalOrganization({ ownerUserId: user.id });
 
       const owner = await createTestUser();
       const team = await provisionOrganizationWithOwner({
@@ -301,7 +301,7 @@ describe('Auth e2e: organization switch', () => {
       // membership gate requires a non-deleted organization, so the switch must be refused even
       // though an ACTIVE membership row still exists.
       const user = await createTestUser();
-      await provisionPersonalOrganization(user.id);
+      await provisionPersonalOrganization({ ownerUserId: user.id });
       const team = await provisionOrganizationWithOwner({
         name: 'M2 Deleted Team',
         slug: `m2-del-${generatePublicId('organization').slice(4, 14)}`,

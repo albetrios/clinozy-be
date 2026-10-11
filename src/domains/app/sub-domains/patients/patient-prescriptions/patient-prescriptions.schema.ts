@@ -32,7 +32,7 @@ import {
 } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.constants.js';
 
 /** `char_length(column) <= max` — a text column's length CHECK. */
-function textAtMost(column: AnyPgColumn, max: number): SQL {
+function textAtMost({ column, max }: { column: AnyPgColumn; max: number }): SQL {
   return sql`char_length(${column}) <= ${sql.raw(String(max))}`;
 }
 
@@ -145,15 +145,15 @@ export const patient_prescriptions = appSchema
       ),
       check(
         'chk_patient_prescriptions_advice',
-        textAtMost(table.advice, PATIENT_PRESCRIPTION_TEXT_MAX),
+        textAtMost({ column: table.advice, max: PATIENT_PRESCRIPTION_TEXT_MAX }),
       ),
       check(
         'chk_patient_prescriptions_lab_report',
-        textAtMost(table.lab_report, PATIENT_PRESCRIPTION_TEXT_MAX),
+        textAtMost({ column: table.lab_report, max: PATIENT_PRESCRIPTION_TEXT_MAX }),
       ),
       check(
         'chk_patient_prescriptions_procedure_today',
-        textAtMost(table.procedure_today, PATIENT_PRESCRIPTION_TEXT_MAX),
+        textAtMost({ column: table.procedure_today, max: PATIENT_PRESCRIPTION_TEXT_MAX }),
       ),
       check(
         'chk_patient_prescriptions_print_language',

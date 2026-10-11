@@ -78,9 +78,10 @@ describe('Medical store — integration (routes-final §11)', () => {
   /** One run of the task rules for the fixture organization, now. */
   async function runTaskRules(): Promise<void> {
     const organizationPublicId = fixture.organization.publicId;
-    await runOrganizationScopedWorkerJob({ organizationPublicId }, (databaseHandle) =>
-      runTaskRulesJob(databaseHandle, organizationPublicId),
-    );
+    await runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: (databaseHandle) => runTaskRulesJob({ databaseHandle, organizationPublicId }),
+    });
   }
 
   beforeAll(async () => {

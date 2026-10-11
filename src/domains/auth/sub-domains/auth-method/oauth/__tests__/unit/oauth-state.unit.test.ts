@@ -42,7 +42,7 @@ describe('oauth-state', () => {
   });
 
   it('createOAuthState stores a JSON payload with provider, verifier, and nonce hash', async () => {
-    const result = await createOAuthState(redis, 'google');
+    const result = await createOAuthState({ redis, provider: 'google' });
     expect(result.state.length).toBeGreaterThan(10);
     expect(result.codeVerifier.length).toBeGreaterThan(0);
     expect(result.nonce.length).toBeGreaterThan(0);
@@ -61,59 +61,74 @@ describe('oauth-state', () => {
   });
 
   it('consumeOAuthState rejects missing state', async () => {
-    await expect(consumeOAuthState(redis, 'google', undefined, 'nonce')).rejects.toThrow(
-      UnauthorizedError,
-    );
+    await expect(
+      consumeOAuthState({ redis, provider: 'google', nonce: 'nonce', state: undefined }),
+    ).rejects.toThrow(UnauthorizedError);
   });
 
   it('consumeOAuthState rejects empty state string', async () => {
-    await expect(consumeOAuthState(redis, 'google', '', 'nonce')).rejects.toThrow(
-      UnauthorizedError,
-    );
+    await expect(
+      consumeOAuthState({ redis, provider: 'google', state: '', nonce: 'nonce' }),
+    ).rejects.toThrow(UnauthorizedError);
   });
 
   it('consumeOAuthState rejects expired or missing Redis state', async () => {
     vi.mocked(redis.getdel).mockResolvedValue(null);
-    await expect(consumeOAuthState(redis, 'google', 'state-token', 'nonce')).rejects.toThrow(
-      UnauthorizedError,
-    );
+    await expect(
+      consumeOAuthState({ redis, provider: 'google', state: 'state-token', nonce: 'nonce' }),
+    ).rejects.toThrow(UnauthorizedError);
   });
 
   it('consumeOAuthState rejects malformed payloads', async () => {
     vi.mocked(redis.getdel).mockResolvedValue('not-json');
-    await expect(consumeOAuthState(redis, 'google', 'state-token', 'nonce')).rejects.toThrow(
-      UnauthorizedError,
-    );
+    await expect(
+      consumeOAuthState({ redis, provider: 'google', state: 'state-token', nonce: 'nonce' }),
+    ).rejects.toThrow(UnauthorizedError);
   });
 
   it('consumeOAuthState rejects provider mismatch', async () => {
     const { raw } = buildStatePayload({ provider: 'github' });
     vi.mocked(redis.getdel).mockResolvedValue(raw);
     await expect(
-      consumeOAuthState(redis, 'google', 'state-token', 'browser-nonce'),
+      consumeOAuthState({
+        redis,
+        provider: 'google',
+        state: 'state-token',
+        nonce: 'browser-nonce',
+      }),
     ).rejects.toThrow(UnauthorizedError);
   });
 
   it('consumeOAuthState rejects a missing browser nonce (login-CSRF defence)', async () => {
     const { raw } = buildStatePayload({});
     vi.mocked(redis.getdel).mockResolvedValue(raw);
-    await expect(consumeOAuthState(redis, 'google', 'state-token', undefined)).rejects.toThrow(
-      UnauthorizedError,
-    );
+    await expect(
+      consumeOAuthState({ redis, provider: 'google', state: 'state-token', nonce: undefined }),
+    ).rejects.toThrow(UnauthorizedError);
   });
 
   it('consumeOAuthState rejects a mismatched browser nonce', async () => {
     const { raw } = buildStatePayload({});
     vi.mocked(redis.getdel).mockResolvedValue(raw);
     await expect(
-      consumeOAuthState(redis, 'google', 'state-token', 'attacker-nonce'),
+      consumeOAuthState({
+        redis,
+        provider: 'google',
+        state: 'state-token',
+        nonce: 'attacker-nonce',
+      }),
     ).rejects.toThrow(UnauthorizedError);
   });
 
   it('consumeOAuthState returns provider + verifier when state, provider, and nonce all match', async () => {
     const { raw, nonce } = buildStatePayload({ code_verifier: 'the-verifier' });
     vi.mocked(redis.getdel).mockResolvedValue(raw);
-    const result = await consumeOAuthState(redis, 'google', 'state-token-123', nonce);
+    const result = await consumeOAuthState({
+      redis,
+      provider: 'google',
+      state: 'state-token-123',
+      nonce,
+    });
     expect(result.provider).toBe('google');
     expect(result.codeVerifier).toBe('the-verifier');
     expect(redis.getdel).toHaveBeenCalledWith(`${OAUTH_STATE_KEY_PREFIX}state-token-123`);
@@ -122,21 +137,28 @@ describe('oauth-state', () => {
   it('consumeOAuthState rejects replayed state after first successful consume', async () => {
     const { raw, nonce } = buildStatePayload({});
     vi.mocked(redis.getdel).mockResolvedValueOnce(raw);
-    await expect(consumeOAuthState(redis, 'google', 'replay-state', nonce)).resolves.toMatchObject({
+    await expect(
+      consumeOAuthState({ redis, provider: 'google', state: 'replay-state', nonce }),
+    ).resolves.toMatchObject({
       provider: 'google',
     });
 
     vi.mocked(redis.getdel).mockResolvedValueOnce(null);
-    await expect(consumeOAuthState(redis, 'google', 'replay-state', nonce)).rejects.toThrow(
-      UnauthorizedError,
-    );
+    await expect(
+      consumeOAuthState({ redis, provider: 'google', state: 'replay-state', nonce }),
+    ).rejects.toThrow(UnauthorizedError);
   });
 
   it('consumeOAuthState deletes state before validating provider mismatch', async () => {
     const { raw } = buildStatePayload({ provider: 'google' });
     vi.mocked(redis.getdel).mockResolvedValue(raw);
     await expect(
-      consumeOAuthState(redis, 'github', 'cross-provider', 'browser-nonce'),
+      consumeOAuthState({
+        redis,
+        provider: 'github',
+        state: 'cross-provider',
+        nonce: 'browser-nonce',
+      }),
     ).rejects.toThrow(UnauthorizedError);
     expect(redis.getdel).toHaveBeenCalledWith(`${OAUTH_STATE_KEY_PREFIX}cross-provider`);
   });
@@ -151,8 +173,8 @@ describe('oauth-state', () => {
     });
 
     const results = await Promise.allSettled([
-      consumeOAuthState(redis, 'google', 'race-state', nonce),
-      consumeOAuthState(redis, 'google', 'race-state', nonce),
+      consumeOAuthState({ redis, provider: 'google', state: 'race-state', nonce }),
+      consumeOAuthState({ redis, provider: 'google', state: 'race-state', nonce }),
     ]);
 
     const fulfilled = results.filter((result) => result.status === 'fulfilled');
@@ -163,8 +185,8 @@ describe('oauth-state', () => {
 
   it('createOAuthState generates unique state tokens across invocations', async () => {
     mockedRedisSet(redis.set).mockResolvedValue('OK' as never);
-    const stateA = await createOAuthState(redis, 'google');
-    const stateB = await createOAuthState(redis, 'google');
+    const stateA = await createOAuthState({ redis, provider: 'google' });
+    const stateB = await createOAuthState({ redis, provider: 'google' });
     expect(stateA.state).not.toBe(stateB.state);
     expect(stateA.nonce).not.toBe(stateB.nonce);
     expect(stateA.codeVerifier).not.toBe(stateB.codeVerifier);

@@ -62,11 +62,11 @@ export function createStripeWebhookWorker(
         job,
         queueName: STRIPE_WEBHOOK_QUEUE_NAME,
       });
-      await runWithPropagatedTraceContext(
-        { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
-        job.name,
-        () => processStripeWebhookJob(jobData, stripeWebhookService, job.id),
-      );
+      await runWithPropagatedTraceContext({
+        carrier: { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
+        spanName: job.name,
+        callback: () => processStripeWebhookJob({ jobData, stripeWebhookService, jobId: job.id }),
+      });
     },
     workerOptions: {
       connection: getBullMQConnectionOptions(),
@@ -82,7 +82,7 @@ export function createStripeWebhookWorker(
     logger.warn({ jobId, queueName: STRIPE_WEBHOOK_QUEUE_NAME }, 'stripe.webhook.worker.stalled');
   });
 
-  return buildWorkerHandle(worker, STRIPE_WEBHOOK_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: STRIPE_WEBHOOK_QUEUE_NAME });
 }
 
 /**

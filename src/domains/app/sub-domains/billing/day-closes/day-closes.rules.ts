@@ -40,7 +40,13 @@ function paiseOf(value: number): number {
 }
 
 /** B25: the expected cash — the opening, plus the cash received, less the cash paid that day. */
-export function expectedCashOf(openingCash: number, figures: DayCloseFigures): number {
+export function expectedCashOf({
+  openingCash,
+  figures,
+}: {
+  openingCash: number;
+  figures: DayCloseFigures;
+}): number {
   return (paiseOf(openingCash) + paiseOf(figures.cash_in) - paiseOf(figures.cash_out)) / 100;
 }
 
@@ -95,7 +101,13 @@ async function prepareDayOpen(options: {
 }
 
 /** B25: reopens a closed day — the count cleared, the reason kept on its event. */
-function prepareDayReopen(values: Record<string, unknown>, context: BaseRecordWriteContext): void {
+function prepareDayReopen({
+  values,
+  context,
+}: {
+  values: Record<string, unknown>;
+  context: BaseRecordWriteContext;
+}): void {
   pendingEvents.set(context, [
     { kind: DAY_CLOSE_EVENT_KIND.REOPENED, text: String(values.reason) },
   ]);
@@ -124,7 +136,7 @@ async function prepareDayClose(options: {
   const figures =
     (await repository.findFigures([existing.id], context.organizationId)).get(existing.id) ??
     EMPTY_DAY_CLOSE_FIGURES;
-  const expected = expectedCashOf(toAmount(existing.opening_cash) ?? 0, figures);
+  const expected = expectedCashOf({ openingCash: toAmount(existing.opening_cash) ?? 0, figures });
   const counted = Number(values.counted_cash);
   if (paiseOf(counted) === paiseOf(expected)) {
     values.difference_reason = null;
@@ -165,7 +177,7 @@ export function createDayClosesRules(repository: DayClosesRepository): BaseRecor
     prepareCreate: (values, context) => prepareDayOpen({ repository, values, context }),
     prepareTransition: (action, values, existing, context) =>
       action === 'reopen'
-        ? prepareDayReopen(values, context)
+        ? prepareDayReopen({ values, context })
         : prepareDayClose({ repository, values, existing, context }),
     afterWrite: async (row, change, context) => {
       if (change.kind === 'transition' && change.action === 'close') {
@@ -207,7 +219,10 @@ export function createDayClosesRules(repository: DayClosesRepository): BaseRecor
         output.entry_count = day.entry_count;
         output.by_member = members.get(id) ?? [];
         if (output.status === DAY_CLOSE_STATUS.OPEN) {
-          output.expected_cash = expectedCashOf(Number(output.opening_cash), day);
+          output.expected_cash = expectedCashOf({
+            openingCash: Number(output.opening_cash),
+            figures: day,
+          });
         }
         output.events = (events.get(id) ?? []).map((event) => ({
           id: event.id,

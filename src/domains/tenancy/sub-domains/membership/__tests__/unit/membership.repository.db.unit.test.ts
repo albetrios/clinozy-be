@@ -245,6 +245,39 @@ describe('MembershipRepository (database)', () => {
     expect(await repository.softDelete('missing_membership', organization.id)).toBeNull();
   });
 
+  it('reactivating a suspended member keeps the date they first joined', async () => {
+    const owner = await createTestUser({ email: 'rejoin-owner@test.com' });
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+    const role = await createRoleWithPermissions({
+      organizationId: organization.id,
+      permissionCodes: [],
+    });
+    const member = await createTestUser({ email: 'rejoin-member@test.com' });
+    const membership = await createMembership({
+      userId: member.id,
+      organizationId: organization.id,
+      roleId: role.id,
+    });
+    const firstJoinedAt = membership.joined_at!;
+
+    await repository.update(
+      membership.public_id,
+      organization.id,
+      { status: 'suspended' },
+      owner.id,
+    );
+    const reactivated = await repository.update(
+      membership.public_id,
+      organization.id,
+      { status: 'active' },
+      owner.id,
+    );
+
+    // joined_at orders who is suspended first when seats must be shed (most recently joined first):
+    // a reactivation that re-stamped it would put a long-standing member at the front.
+    expect(reactivated?.joined_at?.toISOString()).toBe(firstJoinedAt.toISOString());
+  });
+
   it('route-audit-#1: activateForInvitationAccept only activates an INVITED membership', async () => {
     const owner = await createTestUser({ email: 'activate-owner@test.com' });
     const organization = await createTestOrganization({ ownerUserId: owner.id });

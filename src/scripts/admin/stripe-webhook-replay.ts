@@ -47,7 +47,13 @@ async function listUnprocessedEvents(): Promise<void> {
   console.log(`Total: ${rows.length}`);
 }
 
-async function retryEvent(stripeEventId: string, dryRun: boolean): Promise<void> {
+async function retryEvent({
+  stripeEventId,
+  dryRun,
+}: {
+  stripeEventId: string;
+  dryRun: boolean;
+}): Promise<void> {
   if (dryRun) {
     console.log(`[dry-run] Would reset and enqueue ${stripeEventId}`);
     return;
@@ -60,7 +66,10 @@ async function retryEvent(stripeEventId: string, dryRun: boolean): Promise<void>
     return;
   }
   await connectRedis();
-  await enqueueStripeWebhookByEventIdForReclaim(stripeEventId, 'stripe-webhook-replay');
+  await enqueueStripeWebhookByEventIdForReclaim({
+    stripeEventId,
+    requestId: 'stripe-webhook-replay',
+  });
   console.log(`Reset and enqueued ${stripeEventId}.`);
 }
 
@@ -80,7 +89,7 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  await retryEvent(stripeEventId, dryRun);
+  await retryEvent({ stripeEventId, dryRun });
 }
 
 main()

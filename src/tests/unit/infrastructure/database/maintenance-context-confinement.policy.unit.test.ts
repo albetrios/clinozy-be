@@ -27,6 +27,9 @@ const ALLOWED_PATH_FRAGMENTS: Record<MaintenanceContextKind, readonly string[]> 
     // The retention arm is on the policy's USING and WITH CHECK and covers organization-scoped
     // and user-scoped rows alike. Entered from offboarding only; S3 I/O stays outside it.
     'upload/upload.service.ts',
+    // Account deletion: a departing user's membership rows span tenants, so they are listed under
+    // the retention arm (read only); each removal then runs under its organization's own context.
+    'membership/membership.service.ts',
   ],
   SESSION_RETENTION_CLEANUP: ['auth-session/workers/'],
   GLOBAL_ADMIN: [

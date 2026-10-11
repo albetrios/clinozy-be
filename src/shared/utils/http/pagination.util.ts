@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import { and, eq, gt, lt, ne, or, type AnyColumn, type SQL } from 'drizzle-orm';
+import { and, eq, gt, lt, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
 import { AES_GCM_ALGORITHM, AES_GCM_IV_LENGTH } from '@/shared/constants/security.constants.js';
@@ -60,13 +60,13 @@ export const listCursorPayloadSchema = z
 export type ListCursorPayload = z.infer<typeof listCursorPayloadSchema>;
 
 /**
- * Result of {@link parseListCursor}: a validated opaque cursor payload with
- * `Date`-typed `created_at`. Returns `null` (first page) for any `after` value
- * that cannot be decoded as a valid opaque cursor.
+ * Result of {@link parseListCursor}: a validated opaque cursor payload whose `created_at`
+ * is the row's PostgreSQL timestamp as UTC ISO text with microseconds (a JS `Date` would
+ * truncate to milliseconds and skip or repeat rows created within one millisecond).
  */
 export type ParsedListCursor = {
   kind: 'opaque';
-  created_at: Date;
+  created_at: string;
   sort_value?: string;
   public_id?: string;
   id?: number;
@@ -145,7 +145,7 @@ export function parseListCursor(after: string | undefined): ParsedListCursor | n
   if (opaque) {
     return omitUndefined({
       kind: 'opaque' as const,
-      created_at: new Date(opaque.created_at),
+      created_at: opaque.created_at,
       sort_value: opaque.sort_value,
       public_id: opaque.public_id,
       id: opaque.id,
@@ -155,17 +155,33 @@ export function parseListCursor(after: string | undefined): ParsedListCursor | n
   return null;
 }
 
-/** Builds an opaque cursor string from a row's pagination columns; serializes `created_at` as ISO 8601. */
-export function createOpaqueCursorFromRow(row: {
-  created_at: Date;
-  sort_value?: string;
-  public_id?: string;
-  id: number;
-  filter_fingerprint?: string;
-}): string {
+/**
+ * Projects the PostgreSQL timestamp as UTC ISO text without losing microseconds.
+ * Select it as `cursor_created_at` alongside public row fields; serializers omit it.
+ * The underlying timestamp remains the indexed ORDER BY and comparison column.
+ */
+export function cursorTimestampSelection(createdAtColumn: AnyColumn): SQL<string> {
+  return sql<string>`to_char(${createdAtColumn} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+}
+
+/** A list row that selected {@link cursorTimestampSelection} as `cursor_created_at`. */
+export type CursorTimestampRow = { cursor_created_at: string };
+
+/**
+ * Builds an encrypted cursor from a row that selected `cursor_created_at` via
+ * {@link cursorTimestampSelection} — required, so a list that forgets it fails to compile.
+ */
+export function createOpaqueCursorFromRow(
+  row: CursorTimestampRow & {
+    sort_value?: string;
+    public_id?: string;
+    id: number;
+    filter_fingerprint?: string;
+  },
+): string {
   return encodeListCursor(
     omitUndefined({
-      created_at: row.created_at.toISOString(),
+      created_at: row.cursor_created_at,
       sort_value: row.sort_value,
       public_id: row.public_id,
       id: row.id,
@@ -183,10 +199,13 @@ export function resolveAscendingIdAfter(cursor: ParsedListCursor | null): number
 }
 
 /** Builds a Drizzle `WHERE` clause for ascending-by-id pagination; returns `undefined` for the first page. */
-export function buildAscendingIdCursorCondition(
-  idColumn: AnyColumn,
-  cursor: ParsedListCursor | null,
-): SQL | undefined {
+export function buildAscendingIdCursorCondition({
+  idColumn,
+  cursor,
+}: {
+  idColumn: AnyColumn;
+  cursor: ParsedListCursor | null;
+}): SQL | undefined {
   const afterId = resolveAscendingIdAfter(cursor);
   if (afterId === undefined) {
     return undefined;
@@ -196,27 +215,29 @@ export function buildAscendingIdCursorCondition(
 
 /**
  * Builds a Drizzle `WHERE` clause for ascending pagination on
- * `(created_at, id)`. Excludes the boundary row by id so PostgreSQL's
- * microsecond precision (vs JavaScript's millisecond) cannot repeat the
- * cursor row across pages.
+ * `(created_at, id)`. Compares the full ISO timestamp retained by the opaque
+ * cursor, including PostgreSQL microseconds, with the id as an exact tie-breaker.
  */
-export function buildAscendingCreatedAtIdCursorCondition(
-  createdAtColumn: AnyColumn,
-  idColumn: AnyColumn,
-  cursor: ParsedListCursor | null,
-): SQL | undefined {
+export function buildAscendingCreatedAtIdCursorCondition({
+  createdAtColumn,
+  idColumn,
+  cursor,
+}: {
+  createdAtColumn: AnyColumn;
+  idColumn: AnyColumn;
+  cursor: ParsedListCursor | null;
+}): SQL | undefined {
   if (cursor === null) {
     return undefined;
   }
+  const timestamp = sql`${cursor.created_at}::timestamptz`;
   const cursorId = cursor.id;
   if (cursorId === undefined) {
-    return gt(createdAtColumn, cursor.created_at);
+    return gt(createdAtColumn, timestamp);
   }
-  // PostgreSQL stores microseconds, while JavaScript Date serializes milliseconds.
-  // Exclude the boundary row by id so precision loss cannot repeat it.
   return or(
-    and(gt(createdAtColumn, cursor.created_at), ne(idColumn, cursorId)),
-    and(eq(createdAtColumn, cursor.created_at), gt(idColumn, cursorId)),
+    gt(createdAtColumn, timestamp),
+    and(eq(createdAtColumn, timestamp), gt(idColumn, cursorId)),
   )!;
 }
 
@@ -225,11 +246,15 @@ export function buildAscendingCreatedAtIdCursorCondition(
  * `(text_column, id)`, e.g. sort by name then id. Requires `sort_value` and
  * `id` to be present in the cursor.
  */
-export function buildAscendingTextIdCursorCondition(
-  textColumn: AnyColumn,
-  idColumn: AnyColumn,
-  cursor: ParsedListCursor | null,
-): SQL | undefined {
+export function buildAscendingTextIdCursorCondition({
+  textColumn,
+  idColumn,
+  cursor,
+}: {
+  textColumn: AnyColumn;
+  idColumn: AnyColumn;
+  cursor: ParsedListCursor | null;
+}): SQL | undefined {
   if (cursor === null) {
     return undefined;
   }
@@ -245,23 +270,26 @@ export function buildAscendingTextIdCursorCondition(
  * `(created_at, id)`. Mirrors {@link buildAscendingCreatedAtIdCursorCondition}
  * but uses `<` so newer rows come first.
  */
-export function buildDescendingCreatedAtIdCursorCondition(
-  createdAtColumn: AnyColumn,
-  idColumn: AnyColumn,
-  cursor: ParsedListCursor | null,
-): SQL | undefined {
+export function buildDescendingCreatedAtIdCursorCondition({
+  createdAtColumn,
+  idColumn,
+  cursor,
+}: {
+  createdAtColumn: AnyColumn;
+  idColumn: AnyColumn;
+  cursor: ParsedListCursor | null;
+}): SQL | undefined {
   if (cursor === null) {
     return undefined;
   }
+  const timestamp = sql`${cursor.created_at}::timestamptz`;
   const cursorId = cursor.id;
   if (cursorId === undefined) {
-    return lt(createdAtColumn, cursor.created_at);
+    return lt(createdAtColumn, timestamp);
   }
-  // PostgreSQL stores microseconds, while JavaScript Date serializes milliseconds.
-  // Exclude the boundary row by id so precision loss cannot repeat it.
   return or(
-    and(lt(createdAtColumn, cursor.created_at), ne(idColumn, cursorId)),
-    and(eq(createdAtColumn, cursor.created_at), lt(idColumn, cursorId)),
+    lt(createdAtColumn, timestamp),
+    and(eq(createdAtColumn, timestamp), lt(idColumn, cursorId)),
   )!;
 }
 
@@ -270,11 +298,15 @@ export function buildDescendingCreatedAtIdCursorCondition(
  * Mirrors {@link buildAscendingTextIdCursorCondition} but uses `<` (id still tie-breaks
  * ascending, matching a `ORDER BY text DESC, id ASC` page). Requires `sort_value` + `id`.
  */
-export function buildDescendingTextIdCursorCondition(
-  textColumn: AnyColumn,
-  idColumn: AnyColumn,
-  cursor: ParsedListCursor | null,
-): SQL | undefined {
+export function buildDescendingTextIdCursorCondition({
+  textColumn,
+  idColumn,
+  cursor,
+}: {
+  textColumn: AnyColumn;
+  idColumn: AnyColumn;
+  cursor: ParsedListCursor | null;
+}): SQL | undefined {
   if (cursor === null) {
     return undefined;
   }

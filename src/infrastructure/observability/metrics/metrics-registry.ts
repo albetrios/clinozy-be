@@ -1,4 +1,4 @@
-import { collectDefaultMetrics, Registry } from 'prom-client';
+import { collectDefaultMetrics, Registry } from '@prometheus-io/client';
 import { getEnv } from '@/shared/config/env.config.js';
 import { PROJECT_SLUG } from '@/shared/constants/project-identity.constants.js';
 

@@ -9,10 +9,13 @@ import type {
  * organization id for the org's public id and serialising timestamps as
  * ISO 8601 strings.
  */
-export function serializeOrganizationNotificationPolicy(
-  row: OrganizationNotificationPolicyRow,
-  organization_public_id: string,
-): OrganizationNotificationPolicyOutput {
+export function serializeOrganizationNotificationPolicy({
+  row,
+  organization_public_id,
+}: {
+  row: OrganizationNotificationPolicyRow;
+  organization_public_id: string;
+}): OrganizationNotificationPolicyOutput {
   return {
     // sec-T5: emit the 21-char public_id, NOT the internal bigserial. The
     // schema already provisions public_id and the unique index keeps the

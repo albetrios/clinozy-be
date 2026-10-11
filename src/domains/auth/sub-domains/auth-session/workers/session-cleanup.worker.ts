@@ -49,9 +49,9 @@ export function createSessionCleanupWorker(): WorkerHandle {
         'session-cleanup.starting',
       );
 
-      return withMaintenanceDatabaseContext(
-        MAINTENANCE_SCOPE.SESSION_RETENTION_CLEANUP,
-        async (databaseHandle) => {
+      return withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.SESSION_RETENTION_CLEANUP,
+        callback: async (databaseHandle) => {
           const { deletedCount, blockedCount } = await deleteInBatchesByCondition({
             databaseHandle,
             table: sessions,
@@ -68,7 +68,7 @@ export function createSessionCleanupWorker(): WorkerHandle {
 
           return { deletedCount, blockedCount };
         },
-      );
+      });
     },
     {
       connection: getBullMQConnectionOptions(),
@@ -82,5 +82,5 @@ export function createSessionCleanupWorker(): WorkerHandle {
     logger.warn({ jobId, queue: SESSION_CLEANUP_QUEUE_NAME }, 'session-cleanup.stalled');
   });
 
-  return buildWorkerHandle(worker, SESSION_CLEANUP_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: SESSION_CLEANUP_QUEUE_NAME });
 }

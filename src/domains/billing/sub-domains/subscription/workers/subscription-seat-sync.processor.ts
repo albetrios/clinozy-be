@@ -12,10 +12,10 @@ import type { SubscriptionSeatSyncJobData } from '@/domains/billing/sub-domains/
  *   depend on the full container surface.
  */
 export type SubscriptionSeatSyncService = {
-  syncSeatQuantityForOrganization(
-    organizationPublicId: string,
-    idempotencyKey?: string,
-  ): Promise<void>;
+  syncSeatQuantityForOrganization(options: {
+    organization_public_id: string;
+    idempotencyKey?: string | undefined;
+  }): Promise<void>;
 };
 
 /**
@@ -33,10 +33,16 @@ export type SubscriptionSeatSyncService = {
  * - **Notes:** the job carries `organizationPublicId`; the service (not this processor) establishes
  *   the organization RLS context, so no worker repository handle is threaded here.
  */
-export async function processSubscriptionSeatSyncJob(
-  jobData: SubscriptionSeatSyncJobData,
-  service: SubscriptionSeatSyncService,
-): Promise<void> {
+export async function processSubscriptionSeatSyncJob({
+  jobData,
+  service,
+}: {
+  jobData: SubscriptionSeatSyncJobData;
+  service: SubscriptionSeatSyncService;
+}): Promise<void> {
   const { organizationPublicId, idempotencyKey } = jobData;
-  await service.syncSeatQuantityForOrganization(organizationPublicId, idempotencyKey);
+  await service.syncSeatQuantityForOrganization({
+    organization_public_id: organizationPublicId,
+    idempotencyKey,
+  });
 }

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import {
   type AppFixture,
   createAppFixture,
@@ -425,7 +425,7 @@ describe('Leads — integration (routes-final §5)', () => {
       `/app/leads?q=${lastName}&ownership=releasing_today`,
     );
     flow.expectValue('releasing today: none', '.data | length', 0);
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.leads l SET held_until = greatest(now() + interval '1 minute',
         ((date_trunc('day', now() AT TIME ZONE o.timezone) + interval '1 day') AT TIME ZONE o.timezone)
           - interval '1 minute')
@@ -749,7 +749,7 @@ describe('Leads — integration (routes-final §5)', () => {
       status: 'no_response',
     });
     // clinic_visited is set by check-in (sub-domain 6) — here by SQL
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.leads SET status = 'clinic_visited' WHERE public_id = ${meeraLead}
     `;
     await flow.expect(
@@ -813,7 +813,7 @@ describe('Leads — integration (routes-final §5)', () => {
       `/app/leads/${kabirLead}/release`,
     );
     flow.expectValue('not yours: reason', '.error.reason', 'lead_not_yours');
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.leads SET held_until = now() - interval '1 minute' WHERE public_id = ${kabirLead}
     `;
     await flow.expect(

@@ -75,10 +75,42 @@ describe('db-pool-alert.service', () => {
       clusterActiveConnections: 0,
       allowedApplicationConnections: 100,
     });
-    expect(captureMessage).toHaveBeenCalledWith(
-      'database.pool.exhaustion.critical',
-      expect.objectContaining({ level: 'error' }),
-    );
+    expect(captureMessage).toHaveBeenCalledWith({
+      message: 'database.pool.exhaustion.critical',
+      options: expect.objectContaining({ level: 'error' }),
+    });
+  });
+
+  it("attaches this process's live pool counts to the alert", () => {
+    for (let index = 0; index < 10; index += 1) {
+      incrementOrganizationRlsCheckoutCount();
+    }
+    const poolStatistics = [
+      { pool: 'primary' as const, maxConnections: 10, inUse: 10, idle: 0, waiting: 4 },
+      { pool: 'maintenance' as const, maxConnections: 5, inUse: 1, idle: 2, waiting: 0 },
+    ];
+
+    for (let poll = 0; poll < 2; poll += 1) {
+      evaluatePoolExhaustionAndAlert({
+        clusterActiveConnections: 0,
+        allowedApplicationConnections: 100,
+        poolStatistics,
+      });
+    }
+
+    expect(captureMessage).toHaveBeenCalledWith({
+      message: 'database.pool.exhaustion.critical',
+      options: expect.objectContaining({
+        extra: expect.objectContaining({
+          primaryPoolInUse: 10,
+          primaryPoolIdle: 0,
+          primaryPoolWaiting: 4,
+          primaryPoolMax: 10,
+          maintenancePoolInUse: 1,
+          maintenancePoolWaiting: 0,
+        }),
+      }),
+    });
   });
 
   it('resets consecutive poll counter when pressure drops', () => {

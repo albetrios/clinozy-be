@@ -3,7 +3,7 @@ import type { OrganizationPrincipalDatabaseScope } from '@/infrastructure/databa
 import { withAppDatabaseContext } from '@/infrastructure/database/contexts/database-context.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import type { BaseRecordVisibility } from '@/domains/app/base-record.types.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { branch_machines } from '@/domains/app/sub-domains/branches/branch-machines/branch-machines.schema.js';
 import { branch_rooms } from '@/domains/app/sub-domains/branches/branch-rooms/branch-rooms.schema.js';
@@ -80,8 +80,8 @@ export class AppointmentsService extends BaseRecordService<AppointmentOutput> {
         { field: 'contact_id', table: contacts, label: 'contact' },
         { field: 'branch_id', table: branches, label: 'branch' },
         { field: 'offering_id', table: offerings, label: 'offering' },
-        { field: 'doctor_membership_id', table: memberships, label: 'team member' },
-        { field: 'therapist_membership_id', table: memberships, label: 'team member' },
+        memberReference('doctor_membership_id'),
+        memberReference('therapist_membership_id'),
         { field: 'branch_room_id', table: branch_rooms, label: 'room' },
         { field: 'branch_machine_id', table: branch_machines, label: 'machine' },
         { field: 'copied_from_appointment_id', table: appointments, label: 'appointment' },
@@ -145,39 +145,51 @@ export class AppointmentsService extends BaseRecordService<AppointmentOutput> {
    * service and length at the new `appointment_date` and `start_time`, through the create path —
    * the slot rules and the clash 409s — with `copied_from_appointment_id`. Works on any live booking.
    */
-  async copy(
-    scope: OrganizationPrincipalDatabaseScope,
-    publicId: string,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    visibility?: BaseRecordVisibility,
-  ): Promise<AppointmentOutput> {
-    const { appointment_date, start_time } = parseWithSchema(copyAppointmentDto, body ?? {});
-    return withAppDatabaseContext(scope, async () => {
-      const source = await this.get(scope, publicId, actingUserPublicId, visibility);
-      return this.create(
-        scope,
-        {
-          contact_id: source.contact_id,
-          branch_id: source.branch_id,
-          doctor_membership_id: source.doctor_membership_id,
-          appointment_date,
-          start_time,
-          type: source.type,
-          offering_id: source.offering_id,
-          service_label: source.service_label,
-          therapist_membership_id: source.therapist_membership_id,
-          branch_room_id: source.branch_room_id,
-          branch_machine_id: source.branch_machine_id,
-          duration_minutes: source.duration_minutes,
-          reason: source.reason,
-          copied_from_appointment_id: source.id,
-        },
-        actingUserPublicId,
-        undefined,
-        visibility,
-        'copy',
-      );
+  async copy({
+    scope,
+    publicId,
+    body,
+    actingUserPublicId,
+    visibility,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    publicId: string;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+  }): Promise<AppointmentOutput> {
+    const { appointment_date, start_time } = parseWithSchema({
+      schema: copyAppointmentDto,
+      data: body ?? {},
+    });
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const source = await this.get({ scope, publicId, actingUserPublicId, visibility });
+        return this.create({
+          scope,
+          body: {
+            contact_id: source.contact_id,
+            branch_id: source.branch_id,
+            doctor_membership_id: source.doctor_membership_id,
+            appointment_date,
+            start_time,
+            type: source.type,
+            offering_id: source.offering_id,
+            service_label: source.service_label,
+            therapist_membership_id: source.therapist_membership_id,
+            branch_room_id: source.branch_room_id,
+            branch_machine_id: source.branch_machine_id,
+            duration_minutes: source.duration_minutes,
+            reason: source.reason,
+            copied_from_appointment_id: source.id,
+          },
+          actingUserPublicId,
+          parentPublicId: undefined,
+          visibility,
+          createName: 'copy',
+        });
+      },
     });
   }
 }

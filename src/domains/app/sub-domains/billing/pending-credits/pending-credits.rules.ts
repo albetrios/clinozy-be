@@ -76,7 +76,13 @@ function assertNothingSettled(existing: BaseRecordRow): void {
 }
 
 /** The branch a money settlement is paid at — one of the organization's (a 400 otherwise). */
-async function resolveBranchId(context: BaseRecordWriteContext, publicId: string): Promise<number> {
+async function resolveBranchId({
+  context,
+  publicId,
+}: {
+  context: BaseRecordWriteContext;
+  publicId: string;
+}): Promise<number> {
   const ids = await resolveRecordIds({
     table: branches,
     organizationId: context.organizationId,
@@ -100,7 +106,7 @@ async function settleByRefund(options: {
   context: BaseRecordWriteContext;
 }): Promise<void> {
   const { credit, body, context } = options;
-  const branchId = await resolveBranchId(context, body.branch_id as string);
+  const branchId = await resolveBranchId({ context, publicId: body.branch_id as string });
   const invoice =
     typeof credit.invoice_id === 'number'
       ? await invoicesRepository.findById(credit.invoice_id)
@@ -148,7 +154,7 @@ async function settleByMoneyBack(options: {
     values: {
       kind: PAYMENT_KIND.MONEY_BACK,
       direction: PAYMENT_DIRECTION.RECEIVED,
-      branch_id: await resolveBranchId(context, body.branch_id as string),
+      branch_id: await resolveBranchId({ context, publicId: body.branch_id as string }),
       contact_id: credit.contact_id,
       pending_credit_id: credit.id,
       paid_at: body.paid_at === undefined ? new Date() : new Date(body.paid_at),
@@ -217,7 +223,7 @@ async function assertCanGiveBack(context: BaseRecordWriteContext): Promise<void>
  */
 async function settlePendingCredit(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing, context } = input;
-  const body = parseWithSchema(SettlePendingCreditDto, input.input);
+  const body = parseWithSchema({ schema: SettlePendingCreditDto, data: input.input });
   const give = existing.direction === PENDING_CREDIT_DIRECTION.GIVE;
   if (give) await assertCanGiveBack(context);
   if (existing.status !== PENDING_CREDIT_STATUS.OPEN) {

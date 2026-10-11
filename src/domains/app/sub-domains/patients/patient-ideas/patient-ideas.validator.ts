@@ -3,5 +3,5 @@ import { type PatientIdeasParams, patientIdeasParamsDto } from './patient-ideas.
 
 /** Parses the ideas route's path params; throws `ValidationError` naming each bad field. */
 export function validatePatientIdeasParams(data: unknown): PatientIdeasParams {
-  return parseWithSchema(patientIdeasParamsDto, data);
+  return parseWithSchema({ schema: patientIdeasParamsDto, data });
 }

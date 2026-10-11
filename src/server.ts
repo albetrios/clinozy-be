@@ -4,12 +4,16 @@ import {
   captureException,
   flushSentry,
 } from '@/infrastructure/observability/sentry/sentry.js';
-import { initOpenTelemetry } from '@/infrastructure/observability/tracing/otel.js';
 import { initPostHog } from '@/infrastructure/observability/posthog/posthog.js';
-import { OTEL_SERVICE_NAME_API } from '@/shared/constants/project-identity.constants.js';
 import { createUnhandledRejectionHandler } from '@/infrastructure/observability/unhandled-rejection.handler.js';
-import { connectRedis } from '@/infrastructure/cache/redis.client.js';
-import { connectBullMqRedis } from '@/infrastructure/cache/bullmq-redis.client.js';
+import { connectRedis, redisConnection } from '@/infrastructure/cache/redis.client.js';
+import { primeDatabasePool } from '@/infrastructure/database/connection.js';
+import {
+  bullmqRedisConnection,
+  connectBullMqRedis,
+} from '@/infrastructure/cache/bullmq-redis.client.js';
+import { assertRedisEndpointsEvictionPolicy } from '@/infrastructure/cache/assert-redis-eviction-policy.js';
+import { usesSeparateBullMqRedisDatabase } from '@/infrastructure/cache/redis-url.util.js';
 import { warnWhenBullMqSharesCacheRedisHost } from '@/infrastructure/cache/redis-topology-warn.util.js';
 import { assertPostgresConnectionBudget } from '@/infrastructure/database/safety/assert-connection-budget.js';
 import {
@@ -28,14 +32,11 @@ import { buildApp } from '@/app.js';
 
 // Initialize Sentry before anything else
 initSentry();
-// audit M5: actually start OpenTelemetry (no-op unless OTEL_EXPORTER_OTLP_ENDPOINT
-// is set) so the validated OTLP env config is not silently inert in production.
-initOpenTelemetry(OTEL_SERVICE_NAME_API);
 // Product analytics (no-op unless POSTHOG_KEY is set).
 initPostHog();
 
 process.on('uncaughtException', (error) => {
-  captureException(error, { tags: { source: 'uncaughtException' } });
+  captureException({ error, context: { tags: { source: 'uncaughtException' } } });
   logger.fatal({ error }, 'uncaughtException');
   void flushSentry().finally(() => process.exit(1));
 });
@@ -74,9 +75,17 @@ async function main() {
   await connectRedis();
   await connectBullMqRedis();
   warnWhenBullMqSharesCacheRedisHost();
+  // Idempotency entries and rate-limit counters live on REDIS_URL: refuse an evicting instance.
+  await assertRedisEndpointsEvictionPolicy({
+    cacheClient: redisConnection,
+    queueClient: bullmqRedisConnection,
+    queuesOnSeparateInstance: usesSeparateBullMqRedisDatabase(),
+  });
   await assertPostgresConnectionBudget();
   await assertDatabaseRoleRlsSafety();
   await assertMaintenanceDatabaseRoleRlsSafety();
+  // Open the pool before listening, so the first burst does not pay every connection handshake.
+  await primeDatabasePool();
   registerPostgresPoolMetrics();
   startProcessMemoryMonitoring({
     processLabel: 'api',
@@ -93,7 +102,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  captureException(error, { tags: { source: 'server_startup' } });
+  captureException({ error, context: { tags: { source: 'server_startup' } } });
   const message = error instanceof Error ? error.message : String(error);
   const stack = error instanceof Error ? error.stack : undefined;
   logger.error({ error: message, stack }, 'Server failed to start');

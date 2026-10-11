@@ -24,7 +24,7 @@ export const branchMachinesParentParamsDto = z
 /** Body of the create route — a new machine. */
 export const CreateBranchMachineDto = z
   .object({
-    name: trimmedStringMinMax(1, 60),
+    name: trimmedStringMinMax({ min: 1, max: 60 }),
     is_active: z.boolean().optional(),
   })
   .strict();
@@ -32,7 +32,7 @@ export const CreateBranchMachineDto = z
 /** Body of `PATCH /app/branches/{branch_id}/machines/{branch_machine_id}` — any field (null clears an optional one); `expected_updated_at` refuses a stale save (D43). */
 export const UpdateBranchMachineDto = z
   .object({
-    name: trimmedStringMinMax(1, 60).optional(),
+    name: trimmedStringMinMax({ min: 1, max: 60 }).optional(),
     is_active: z.boolean().optional(),
     expected_updated_at: expectedUpdatedAtSchema,
   })

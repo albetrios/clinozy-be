@@ -2,14 +2,25 @@ import { createHash } from 'node:crypto';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
-import { IP_FAILED_LOGIN_THRESHOLD } from '@/shared/constants/index.js';
+import { IP_FAILED_LOGIN_THRESHOLD, SECONDS_PER_DAY } from '@/shared/constants/index.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
-import { injectUnauthenticated, injectRoute } from '@/tests/helpers/test-http-inject.helper.js';
+import {
+  injectAuthenticated,
+  injectUnauthenticated,
+  injectRoute,
+} from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { eq } from 'drizzle-orm';
 import { createTestUserWithPassword } from '@/tests/factories/user.factory.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { users } from '@/domains/user/user.schema.js';
+import {
+  CSRF_COOKIE_NAME,
+  CSRF_HEADER_NAME,
+  SESSION_COOKIE_NAME,
+} from '@/domains/auth/auth.http.util.js';
+import { env } from '@/shared/config/env.config.js';
+import esSuccess from '@/shared/locales/es/success.json' with { type: 'json' };
 import type { FastifyInstance } from 'fastify';
 
 const AUTH_LOGIN_PATH = '/auth/login';
@@ -233,6 +244,31 @@ describe('Auth Domain — Response contract (integration)', () => {
       expect(cookiePairFromLoginResponse(loginHeaders, 'csrf_token')).toMatch(/^csrf_token=/);
     });
 
+    it('sends both cookies with the attributes the browser enforces', async () => {
+      const loginHeaders = await loginAndGetResponseHeaders();
+      const raw = loginHeaders['set-cookie'];
+      const cookies = Array.isArray(raw) ? raw : [String(raw)];
+      const attributesOf = (cookieName: string) => {
+        const cookie = cookies.find((candidate) => candidate.startsWith(`${cookieName}=`));
+        expect(cookie).toBeDefined();
+        return String(cookie)
+          .split(';')
+          .slice(1)
+          .map((attribute) => attribute.trim().toLowerCase());
+      };
+      const session = attributesOf(SESSION_COOKIE_NAME);
+      const csrf = attributesOf(CSRF_COOKIE_NAME);
+      for (const attributes of [session, csrf]) {
+        expect(attributes).toContain(`path=${testApiPath('/auth')}`);
+        expect(attributes).toContain(`samesite=${env.COOKIE_SAMESITE}`);
+        expect(attributes).toContain(`max-age=${env.AUTH_SESSION_MAX_AGE_DAYS * SECONDS_PER_DAY}`);
+        expect(attributes.includes('secure')).toBe(env.COOKIE_SECURE);
+      }
+      // Page scripts must never read the refresh secret, and must read the CSRF token to echo it.
+      expect(session).toContain('httponly');
+      expect(csrf).not.toContain('httponly');
+    });
+
     it('should return 403 when Origin header is not in ALLOWED_ORIGINS', async () => {
       const loginHeaders = await loginAndGetResponseHeaders();
       const cookiePair = sessionIdCookiePairFromLoginResponse(loginHeaders);
@@ -311,6 +347,85 @@ describe('Auth Domain — Response contract (integration)', () => {
       const body = refreshResponse.json() as { data?: { access_token?: string } };
       expect(body.data).toHaveProperty('access_token');
     });
+
+    it('should return 401 when the session cookie is replayed after logout', async () => {
+      const { user, password } = await createTestUserWithPassword();
+      const loginResponse = await injectUnauthenticated(app, {
+        method: 'POST',
+        url: testApiPath(AUTH_LOGIN_PATH),
+        payload: { email: user.email, password },
+      });
+      expect(loginResponse.statusCode).toBe(200);
+      const cookieHeader = authCookieHeaderFromLoginResponse(loginResponse.headers);
+      const accessToken = (loginResponse.json() as { data: { access_token: string } }).data
+        .access_token;
+
+      const logoutResponse = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/logout'),
+        token: accessToken,
+      });
+      expect(logoutResponse.statusCode).toBe(200);
+
+      const refreshResponse = await app.inject({
+        method: 'POST',
+        url: testApiPath('/auth/refresh'),
+        headers: {
+          cookie: cookieHeader,
+          referer: 'http://localhost:3000/',
+        },
+        payload: {},
+      });
+      expect(refreshResponse.statusCode).toBe(401);
+    });
+
+    // Production requires the double-submit CSRF token whenever Origin is absent; the harness
+    // turns that off (Referer fallback), so these cases switch it back on.
+    describe('originless refresh with SESSION_ORIGIN_CSRF_REQUIRED', () => {
+      let originalSessionOriginCsrfRequired: boolean;
+
+      beforeEach(() => {
+        originalSessionOriginCsrfRequired = env.SESSION_ORIGIN_CSRF_REQUIRED;
+        env.SESSION_ORIGIN_CSRF_REQUIRED = true;
+      });
+
+      afterEach(() => {
+        env.SESSION_ORIGIN_CSRF_REQUIRED = originalSessionOriginCsrfRequired;
+      });
+
+      it('should return 403 when X-CSRF-Token does not match the csrf_token cookie', async () => {
+        const loginHeaders = await loginAndGetResponseHeaders();
+
+        const refreshResponse = await app.inject({
+          method: 'POST',
+          url: testApiPath('/auth/refresh'),
+          headers: {
+            cookie: authCookieHeaderFromLoginResponse(loginHeaders),
+            [CSRF_HEADER_NAME]: 'incorrect-csrf-token',
+          },
+          payload: {},
+        });
+        expect(refreshResponse.statusCode).toBe(403);
+      });
+
+      it('should return 200 when X-CSRF-Token matches the csrf_token cookie', async () => {
+        const loginHeaders = await loginAndGetResponseHeaders();
+        const csrfPair = cookiePairFromLoginResponse(loginHeaders, CSRF_COOKIE_NAME);
+
+        const refreshResponse = await app.inject({
+          method: 'POST',
+          url: testApiPath('/auth/refresh'),
+          headers: {
+            cookie: authCookieHeaderFromLoginResponse(loginHeaders),
+            [CSRF_HEADER_NAME]: csrfPair.slice(`${CSRF_COOKIE_NAME}=`.length),
+          },
+          payload: {},
+        });
+        expect(refreshResponse.statusCode).toBe(200);
+        const body = refreshResponse.json() as { data?: { access_token?: string } };
+        expect(body.data).toHaveProperty('access_token');
+      });
+    });
   });
 
   // ─── i18n (Accept-Language) ────────────────────────────────────
@@ -325,10 +440,9 @@ describe('Auth Domain — Response contract (integration)', () => {
       });
       expect(response.statusCode).toBe(200);
       expect((response.json() as { data: Record<string, unknown> }).data.message).toBeDefined();
-      expect([
-        'If an account exists with this email, you will receive a sign-in code shortly.',
-        'Si existe una cuenta con este correo, recibirás un código de inicio de sesión en breve.',
-      ]).toContain((response.json() as { data: Record<string, unknown> }).data.message);
+      expect((response.json() as { data: Record<string, unknown> }).data.message).toBe(
+        esSuccess.verificationCodeSent,
+      );
     });
 
     it('returns 404 error detail in English with Accept-Language: en', async () => {

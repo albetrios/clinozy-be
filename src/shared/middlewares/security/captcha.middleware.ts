@@ -34,7 +34,10 @@ function alertCaptchaProviderUnavailable(reason: CaptchaUnavailableReason): void
     return;
   }
   lastCaptchaProviderUnavailableAlertAtMs = now;
-  captureMessage('captcha.provider_unavailable', { level: 'error', extra: { reason } });
+  captureMessage({
+    message: 'captcha.provider_unavailable',
+    options: { level: 'error', extra: { reason } },
+  });
 }
 
 function firstHeaderValue(rawHeader: string | string[] | undefined): string | undefined {

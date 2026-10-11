@@ -59,7 +59,7 @@ describe('i18n.middleware (onRequest hook)', () => {
 
     const response = await application.inject({ method: 'GET', url: '/fallback' });
     expect(response.statusCode).toBe(200);
-    expect(response.json().translated).toBeTruthy();
+    expect(response.json().translated).toBe('Route not found');
   });
 
   it('propagates i18next handler errors through the onRequest hook', async () => {

@@ -29,13 +29,13 @@ const positiveMoneySchema = moneySchema.refine((amount) => amount > 0, { message
 const pendingCreditFields = {
   direction: z.enum(PENDING_CREDIT_DIRECTION_VALUES),
   amount: positiveMoneySchema,
-  reason: trimmedStringMinMax(1, 280),
+  reason: trimmedStringMinMax({ min: 1, max: 280 }),
   contact_id: recordIdSchema.nullable(),
-  party_name: trimmedStringMinMax(1, 120).nullable(),
+  party_name: trimmedStringMinMax({ min: 1, max: 120 }).nullable(),
   invoice_id: recordIdSchema.nullable(),
   source_payment_id: recordIdSchema.nullable(),
   settle_by: calendarDateSchema.nullable(),
-  note: trimmedStringMinMax(1, PENDING_CREDIT_NOTE_MAX).nullable(),
+  note: trimmedStringMinMax({ min: 1, max: PENDING_CREDIT_NOTE_MAX }).nullable(),
 };
 
 /** Path params of the by-id pending-credit routes. */

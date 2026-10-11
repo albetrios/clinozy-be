@@ -8,14 +8,17 @@ import type { LeadOutput } from './leads.types.js';
  * The contact summary, the patient file and the contact's activity fields are the rules' `decorate`
  * (one read per page) — empty here.
  */
-export function serializeLead(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): LeadOutput {
+export function serializeLead({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): LeadOutput {
   return {
     id: row.public_id,
     lead_number: row.lead_number as number,
-    contact_id: references.publicIdOf('contact_id', row) ?? '',
+    contact_id: references.publicIdOf({ field: 'contact_id', row }) ?? '',
     contact: null,
     patient_id: null,
     status: row.status as string,
@@ -23,11 +26,11 @@ export function serializeLead(
     interests: row.interests as string[],
     kind: row.kind as string,
     retarget_reason: row.retarget_reason as string | null,
-    owner_membership_id: references.publicIdOf('owner_membership_id', row),
-    involved_membership_ids: references.listOf('involved_membership_ids', row),
+    owner_membership_id: references.publicIdOf({ field: 'owner_membership_id', row }),
+    involved_membership_ids: references.listOf({ field: 'involved_membership_ids', row }),
     held_until: toInstant(row.held_until),
     follow_up_at: toInstant(row.follow_up_at),
-    branch_id: references.publicIdOf('branch_id', row),
+    branch_id: references.publicIdOf({ field: 'branch_id', row }),
     notes: row.notes as string | null,
     last_activity_at: null,
     is_awaiting_reply: false,

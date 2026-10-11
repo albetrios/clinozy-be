@@ -14,6 +14,7 @@ import { createListeningChaosTestApplicationHarness } from '@/tests/chaos/helper
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
+import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 
 describe('Chaos resilience: Redis idempotency', () => {
   let chaosFastifyApplicationInstance: FastifyInstance;
@@ -36,7 +37,7 @@ describe('Chaos resilience: Redis idempotency', () => {
     return `${prefix}-${randomUUID()}`;
   }
 
-  it('serves replayed payloads when Redis recovers despite artificial latency overhead', async () => {
+  it('serves the replayed payload while every Redis command is delayed by 2 s', async () => {
     const userWaitingForIsolation = await createTestUser();
     const authenticationTokenWaitingForIsolation = await generateTestToken({
       userId: userWaitingForIsolation.public_id,
@@ -44,21 +45,21 @@ describe('Chaos resilience: Redis idempotency', () => {
     const idempotencyKeyWaitingForIsolation = uniqueIdempotencyKeyForChaosScenario('replay');
     const firstSlugAwaitingIsolation = uniqueSlugForChaosIsolation('replay-first');
 
-    const firstHttpResponseAwaitingIsolation = await chaosFastifyApplicationInstance.inject({
-      method: 'POST',
-      url: testApiPath('/tenancy/organizations'),
-      headers: {
-        authorization: `Bearer ${authenticationTokenWaitingForIsolation}`,
-        'x-idempotency-key': idempotencyKeyWaitingForIsolation,
-        'content-type': 'application/json',
+    const firstHttpResponseAwaitingIsolation = await injectAuthenticated(
+      chaosFastifyApplicationInstance,
+      {
+        token: authenticationTokenWaitingForIsolation,
+        method: 'POST',
+        url: testApiPath('/tenancy/organizations'),
+        headers: {
+          'x-idempotency-key': idempotencyKeyWaitingForIsolation,
+          'content-type': 'application/json',
+        },
+        payload: { name: 'Replay Organization', slug: firstSlugAwaitingIsolation },
       },
-      payload: { name: 'Replay Organization', slug: firstSlugAwaitingIsolation },
-    });
+    );
 
-    expect(firstHttpResponseAwaitingIsolation.statusCode).toBeLessThan(500);
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 200);
-    });
+    expect(firstHttpResponseAwaitingIsolation.statusCode).toBe(200);
 
     await removeEveryToxinAttachedToListeningChaosTestingProxyDefinition(CHAOS_REDIS_PROXY_NAME);
     await setChaosTestingListeningProxyEnabledAdministrativeSwitch(CHAOS_REDIS_PROXY_NAME, true);
@@ -73,44 +74,62 @@ describe('Chaos resilience: Redis idempotency', () => {
     });
 
     try {
-      const secondHttpResponseAwaitingIsolation = await chaosFastifyApplicationInstance.inject({
-        method: 'POST',
-        url: testApiPath('/tenancy/organizations'),
-        headers: {
-          authorization: `Bearer ${authenticationTokenWaitingForIsolation}`,
-          'x-idempotency-key': idempotencyKeyWaitingForIsolation,
-          'content-type': 'application/json',
+      const replayStartedAt = performance.now();
+      const secondHttpResponseAwaitingIsolation = await injectAuthenticated(
+        chaosFastifyApplicationInstance,
+        {
+          token: authenticationTokenWaitingForIsolation,
+          method: 'POST',
+          url: testApiPath('/tenancy/organizations'),
+          headers: {
+            'x-idempotency-key': idempotencyKeyWaitingForIsolation,
+            'content-type': 'application/json',
+          },
+          payload: { name: 'Replay Organization', slug: firstSlugAwaitingIsolation },
         },
-        payload: { name: 'Replay Organization', slug: firstSlugAwaitingIsolation },
-      });
+      );
 
-      expect(secondHttpResponseAwaitingIsolation.statusCode).toBeLessThan(500);
+      // Proves the toxin was on the replay path rather than silently bypassed.
+      expect(performance.now() - replayStartedAt).toBeGreaterThanOrEqual(1_950);
+      expect(secondHttpResponseAwaitingIsolation.statusCode).toBe(200);
       expect(secondHttpResponseAwaitingIsolation.headers['x-idempotency-replay']).toBe('true');
+      expect((secondHttpResponseAwaitingIsolation.json() as { data: unknown }).data).toEqual(
+        (firstHttpResponseAwaitingIsolation.json() as { data: unknown }).data,
+      );
     } finally {
       await resetChaosTestingListeningProxyFailuresGloballyViaToxiproxy();
     }
   });
 
   it('fails closed when Redis is partitioned while issuing an X-Idempotency-Key', async () => {
+    const userWaitingForIsolation = await createTestUser();
+    const authenticationTokenWaitingForIsolation = await generateTestToken({
+      userId: userWaitingForIsolation.public_id,
+    });
+    const slugWaitingForIsolation = uniqueSlugForChaosIsolation('redis-down-org');
+    const healthyResponse = await injectAuthenticated(chaosFastifyApplicationInstance, {
+      token: authenticationTokenWaitingForIsolation,
+      method: 'GET',
+      url: testApiPath('/users/me'),
+    });
+    expect(healthyResponse.statusCode).toBe(200);
+
     await withTemporaryListeningProxyAdministrativelyDisabledForChaosAssertion(
       CHAOS_REDIS_PROXY_NAME,
       async () => {
-        const userWaitingForIsolation = await createTestUser();
-        const authenticationTokenWaitingForIsolation = await generateTestToken({
-          userId: userWaitingForIsolation.public_id,
-        });
-        const slugWaitingForIsolation = uniqueSlugForChaosIsolation('redis-down-org');
-
-        const httpResponseAwaitingIsolation = await chaosFastifyApplicationInstance.inject({
-          method: 'POST',
-          url: testApiPath('/tenancy/organizations'),
-          headers: {
-            authorization: `Bearer ${authenticationTokenWaitingForIsolation}`,
-            'x-idempotency-key': uniqueIdempotencyKeyForChaosScenario('redis-downidem'),
-            'content-type': 'application/json',
+        const httpResponseAwaitingIsolation = await injectAuthenticated(
+          chaosFastifyApplicationInstance,
+          {
+            token: authenticationTokenWaitingForIsolation,
+            method: 'POST',
+            url: testApiPath('/tenancy/organizations'),
+            headers: {
+              'x-idempotency-key': uniqueIdempotencyKeyForChaosScenario('redis-downidem'),
+              'content-type': 'application/json',
+            },
+            payload: { name: 'Chaos Postgres Organization', slug: slugWaitingForIsolation },
           },
-          payload: { name: 'Chaos Postgres Organization', slug: slugWaitingForIsolation },
-        });
+        );
 
         expect(httpResponseAwaitingIsolation.statusCode).toBe(503);
         const body = JSON.parse(httpResponseAwaitingIsolation.body) as {

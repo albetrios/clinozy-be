@@ -73,17 +73,27 @@ export class PatientImagesService extends BaseRecordService<PatientImageOutput> 
    * the shared create path files it. A storage failure files nothing (the photo is never shown
    * with its location).
    */
-  override async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    parentPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    createName?: string,
-  ): Promise<PatientImageOutput> {
+  override async create({
+    scope,
+    body,
+    actingUserPublicId,
+    parentPublicId,
+    visibility,
+    createName,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    parentPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    createName?: string | undefined;
+  }): Promise<PatientImageOutput> {
     if (env.PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED) {
       const { file_key: fileKey } = validateCreatePatientImage(body);
-      const organizationId = await withAppDatabaseContext(scope, () => this.organizationId(scope));
+      const organizationId = await withAppDatabaseContext({
+        scope,
+        callback: () => this.organizationId(scope),
+      });
       try {
         await this.ports.removeImageLocation({ scope, organizationId, fileKey });
       } catch (error) {
@@ -91,40 +101,54 @@ export class PatientImagesService extends BaseRecordService<PatientImageOutput> 
         if (!(error instanceof ValidationError)) throw error;
       }
     }
-    return super.create(scope, body, actingUserPublicId, parentPublicId, visibility, createName);
+    return super.create({
+      scope,
+      body,
+      actingUserPublicId,
+      parentPublicId,
+      visibility,
+      createName,
+    });
   }
 
   /** One page of the patient's photos, with `meta.album_counts` for the tabs (P26). */
-  override async list(
-    scope: OrganizationPrincipalDatabaseScope,
-    query: unknown,
-    options: {
+  override async list({
+    scope,
+    query,
+    options = {},
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    query: unknown;
+    options?: {
       parentPublicId?: string | undefined;
       actingUserPublicId?: string | undefined;
       visibility?: BaseRecordVisibility | undefined;
       withTotal?: boolean | undefined;
       referenceIn?: Readonly<Record<string, readonly string[]>> | undefined;
-    } = {},
-  ): Promise<BaseRecordListResult<PatientImageOutput>> {
-    const page = await super.list(scope, query, options);
+    };
+  }): Promise<BaseRecordListResult<PatientImageOutput>> {
+    const page = await super.list({ scope, query, options });
     if (options.parentPublicId === undefined) return page;
     const parentPublicId = options.parentPublicId;
-    const albumCounts = await withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const patientId = (
-        await resolveRecordIds({ table: patients, organizationId, publicIds: [parentPublicId] })
-      ).get(parentPublicId);
-      const counts =
-        patientId === undefined
-          ? new Map<string, number>()
-          : await this.imagesRepository.countLiveByAlbum(patientId);
-      const canSeePrivate =
-        (await options.visibility?.can?.(APP_PERMISSIONS.PATIENT_PRIVATE_ALBUM_READ)) ?? true;
-      return {
-        general: counts.get(PATIENT_IMAGE_ALBUM.GENERAL) ?? 0,
-        lhr: counts.get(PATIENT_IMAGE_ALBUM.LHR) ?? 0,
-        ...(canSeePrivate ? { private: counts.get(PATIENT_IMAGE_ALBUM.PRIVATE) ?? 0 } : {}),
-      };
+    const albumCounts = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const patientId = (
+          await resolveRecordIds({ table: patients, organizationId, publicIds: [parentPublicId] })
+        ).get(parentPublicId);
+        const counts =
+          patientId === undefined
+            ? new Map<string, number>()
+            : await this.imagesRepository.countLiveByAlbum(patientId);
+        const canSeePrivate =
+          (await options.visibility?.can?.(APP_PERMISSIONS.PATIENT_PRIVATE_ALBUM_READ)) ?? true;
+        return {
+          general: counts.get(PATIENT_IMAGE_ALBUM.GENERAL) ?? 0,
+          lhr: counts.get(PATIENT_IMAGE_ALBUM.LHR) ?? 0,
+          ...(canSeePrivate ? { private: counts.get(PATIENT_IMAGE_ALBUM.PRIVATE) ?? 0 } : {}),
+        };
+      },
     });
     return { ...page, meta: { album_counts: albumCounts } };
   }

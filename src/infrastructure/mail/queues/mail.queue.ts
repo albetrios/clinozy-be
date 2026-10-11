@@ -91,22 +91,25 @@ function getMailQueue(): Queue<MailJobData> {
  *   job per row, all of them sent — or skipped — once Resend came back. A re-enqueue that does not
  *   know the lane (the sweeper, a replay) uses `transactional`.
  */
-export async function enqueueMailOutboxJob(
-  mailOutboxToken: string,
-  options?: { requestId?: string; lane?: MailDeliveryLane },
-): Promise<void> {
+export async function enqueueMailOutboxJob({
+  mailOutboxToken,
+  options,
+}: {
+  mailOutboxToken: string;
+  options?: { requestId?: string; lane?: MailDeliveryLane } | undefined;
+}): Promise<void> {
   let deadlineTimer: NodeJS.Timeout | undefined;
   try {
     const queue = getMailQueue();
-    const jobData = parseBullMQJobData(
-      mailJobDataSchema,
-      omitUndefined({
+    const jobData = parseBullMQJobData({
+      schema: mailJobDataSchema,
+      data: omitUndefined({
         mailOutboxToken,
         requestId: options?.requestId,
         ...captureTraceContextForPropagation(),
       }),
-      MAIL_QUEUE_NAME,
-    );
+      queueName: MAIL_QUEUE_NAME,
+    });
     await new Promise<void>((resolve, reject) => {
       const enqueueJobPromise = queue.add('send-email', jobData, {
         deduplication: { id: mailOutboxToken },
@@ -147,11 +150,14 @@ export async function recordOutboxEmail(data: MailEnqueueInput): Promise<string>
 /**
  * Enqueues async delivery for an existing mail_outbox row (post-commit side effect).
  */
-export async function dispatchOutboxEmail(
-  mailOutboxToken: string,
-  options?: { requestId?: string; lane?: MailDeliveryLane },
-): Promise<void> {
-  await enqueueMailOutboxJob(mailOutboxToken, options);
+export async function dispatchOutboxEmail({
+  mailOutboxToken,
+  options,
+}: {
+  mailOutboxToken: string;
+  options?: { requestId?: string; lane?: MailDeliveryLane } | undefined;
+}): Promise<void> {
+  await enqueueMailOutboxJob({ mailOutboxToken, options });
 }
 
 /**

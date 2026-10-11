@@ -10,7 +10,7 @@ import { deletedRowsForStatuses } from './medical-sales.constants.js';
 
 /** Parses a sale body; throws `ValidationError` naming each bad field. */
 export function validateCreateMedicalSale(data: unknown): CreateMedicalSaleInput {
-  return parseWithSchema(CreateMedicalSaleDto, data);
+  return parseWithSchema({ schema: CreateMedicalSaleDto, data });
 }
 
 /** A sale is never edited (MD19 — "changed by a return") — there is no change route. */
@@ -20,7 +20,7 @@ export function refuseMedicalSaleUpdate(): Record<string, unknown> {
 
 /** Parses the Sales tab's (and CSV's) query into a list input (routes-final 11.H.8 #44). */
 export function validateListMedicalSalesQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listMedicalSalesQueryDto, data);
+  const query = parseWithSchema({ schema: listMedicalSalesQueryDto, data });
   const statuses = query.status?.split(',');
   return {
     after: query.after,

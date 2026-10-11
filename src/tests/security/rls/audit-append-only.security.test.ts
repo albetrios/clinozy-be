@@ -4,7 +4,6 @@ import {
   withMaintenanceDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
 import { sql as drizzleSql, eq } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
 import { database } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -15,6 +14,11 @@ import {
   executeAsClinozyBeAppTenant,
 } from '@/tests/helpers/rls-matrix.helper.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Regression for sec-U3 (High): `audit.logs` was RLS-isolated with a single
@@ -38,7 +42,8 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
  * can purge old rows.
  */
 async function isPolicySplitMigrationApplied(): Promise<boolean> {
-  const rows = await sql<{ has_split: boolean }[]>`
+  const rows = rowsOf<{ has_split: boolean }>(
+    await database.execute(drizzleSql`
     SELECT EXISTS (
       SELECT 1
       FROM pg_policies
@@ -46,7 +51,8 @@ async function isPolicySplitMigrationApplied(): Promise<boolean> {
         AND tablename = 'logs'
         AND policyname = 'audit_logs_tenant_isolation_insert'
     ) AS has_split
-  `;
+  `),
+  );
   return rows[0]?.has_split === true;
 }
 
@@ -107,7 +113,7 @@ describe('Security: audit.logs is append-only at the DB layer (sec-U3)', () => {
       String((caught as { cause?: unknown }).cause ?? ''),
       String((caught as { message?: string }).message ?? ''),
     ].join(' ');
-    // postgres-js surfaces the SQLSTATE 42501 with `permission denied for table logs`.
+    // node-postgres surfaces the SQLSTATE 42501 with `permission denied for table logs`.
     expect(errorChain).toMatch(/permission denied/i);
 
     // Row metadata is unchanged.
@@ -140,13 +146,13 @@ describe('Security: audit.logs is append-only at the DB layer (sec-U3)', () => {
     const organization = await createTestOrganization({ ownerUserId: owner.id });
     const rowId = await seedAuditRowForOrganization(organization.id);
 
-    await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      async (databaseHandle) => {
+    await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: async (databaseHandle) => {
         await databaseHandle.execute(drizzleSql`DELETE FROM audit.logs WHERE id = ${rowId}`);
       },
-      { useMaintenanceDatabaseRole: true },
-    );
+      options: { useMaintenanceDatabaseRole: true },
+    });
 
     const after = await database.select({ id: logs.id }).from(logs).where(eq(logs.id, rowId));
     expect(after).toHaveLength(0);

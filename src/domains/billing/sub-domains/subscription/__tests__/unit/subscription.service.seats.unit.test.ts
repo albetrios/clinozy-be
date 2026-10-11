@@ -16,10 +16,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -101,31 +103,89 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(3);
   });
 
-  it('list() decorates rows with seats_total (plan.included_seats, raised by seats bought above it) and seats_used', async () => {
+  it('list() decorates rows with seats_total (plan.included_seats) and seats_used', async () => {
     vi.mocked(repository.listByOrganization).mockResolvedValue([
       baseRow({ seats: null, plan_included_seats: 10 }),
-      baseRow({ public_id: 'sub_2', seats: 50, plan_included_seats: 10 }),
+      baseRow({ public_id: 'sub_2', seats: 3, plan_included_seats: 10 }),
     ] as never);
 
     const rows = await service.list(scope);
 
-    // First row: no purchased seats → falls back to plan.included_seats.
+    // The plan sets the allowance; `seats` is only the billed quantity seat sync wrote.
     expect(rows[0]!.seats_total).toBe(10);
-    // Second row: a quantity bought above the plan raises it.
-    expect(rows[1]!.seats_total).toBe(50);
+    expect(rows[1]!.seats_total).toBe(10);
     // seats_used is the organization membership count, shared across rows; resolved once.
     expect(rows[0]!.seats_used).toBe(3);
     expect(rows[1]!.seats_used).toBe(3);
     expect(membershipSeatUsage.countActiveMembers).toHaveBeenCalledTimes(1);
   });
 
-  it('get() seats_total is null when both subscription.seats and plan.included_seats are null (unlimited)', async () => {
+  it('get() seats_total is null when the plan is unlimited, whatever quantity is billed', async () => {
     vi.mocked(repository.findByPublicId).mockResolvedValue(
-      baseRow({ seats: null, plan_included_seats: null }) as never,
+      baseRow({ seats: 4, plan_included_seats: null }) as never,
     );
-    const row = await service.get(scope, 'sub_public');
+    const row = await service.get({ scope, subscription_public_id: 'sub_public' });
     expect(row.seats_total).toBeNull();
     expect(row.seats_used).toBe(3);
+  });
+
+  it.each(['INCOMPLETE', 'PAUSED', 'PAST_DUE', 'UNPAID'])(
+    'list and get report the enforced Free ceiling for %s without earned entitlement',
+    async (status) => {
+      const row = baseRow({
+        status,
+        seats: 99,
+        current_period_end: new Date('2000-01-01'),
+      });
+      vi.mocked(planService.getFreePlanSeatCeiling).mockResolvedValue(1);
+      vi.mocked(repository.listByOrganization).mockResolvedValue([row, row] as never);
+      vi.mocked(repository.findByPublicId).mockResolvedValue(row as never);
+      vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValue(
+        row as never,
+      );
+
+      const rows = await service.list(scope);
+      expect(rows.map((item) => item.seats_total)).toEqual([1, 1]);
+      expect(planService.getFreePlanSeatCeiling).toHaveBeenCalledTimes(1);
+      expect((await service.get({ scope, subscription_public_id: 'sub_public' })).seats_total).toBe(
+        1,
+      );
+      await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(1);
+    },
+  );
+
+  it.each(['ACTIVE', 'TRIALING', 'PAST_DUE', 'UNPAID'])(
+    'list and enforcement retain paid seats for %s with current entitlement',
+    async (status) => {
+      const row = baseRow({
+        status,
+        seats: 3,
+        plan_included_seats: 25,
+        current_period_end: new Date(Date.now() + 86_400_000),
+      });
+      vi.mocked(repository.listByOrganization).mockResolvedValue([row] as never);
+      vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValue(
+        row as never,
+      );
+      expect((await service.list(scope))[0]!.seats_total).toBe(25);
+      await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(25);
+      expect(planService.getFreePlanSeatCeiling).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps a finite paid allowance when grace expires during response decoration', async () => {
+    vi.mocked(repository.listByOrganization).mockResolvedValue([
+      baseRow({ status: 'PAST_DUE', plan_included_seats: 25, current_period_end: new Date(0) }),
+    ] as never);
+    const clock = vi.spyOn(Date, 'now').mockReturnValueOnce(0).mockReturnValue(4_102_444_800_000);
+    try {
+      const rows = await service.list(scope);
+      expect(rows[0]!.seats_total).toBe(25);
+      expect(planService.getFreePlanSeatCeiling).not.toHaveBeenCalled();
+      expect(clock).toHaveBeenCalledTimes(1);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it('reserveSeatCeilingForMemberAdd falls back to the Free-tier ceiling when the organization has no active subscription (F3)', async () => {
@@ -135,17 +195,16 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     expect(planService.getFreePlanSeatCeiling).toHaveBeenCalledTimes(1);
   });
 
-  it('reserveSeatCeilingForMemberAdd takes seats bought above the plan, else plan included_seats (active sub)', async () => {
+  it('reserveSeatCeilingForMemberAdd uses plan included_seats, never the synced billed quantity (active sub)', async () => {
+    // Seat sync writes the member count to `subscriptions.seats`; that quantity never caps adds.
     vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
-      seats: 7,
-      plan_included_seats: 3,
+      plan_included_seats: 25,
       status: 'ACTIVE',
       current_period_end: new Date('2026-06-01'),
     });
-    await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(7);
+    await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(25);
 
     vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
-      seats: null,
       plan_included_seats: 3,
       status: 'ACTIVE',
       current_period_end: new Date('2026-06-01'),
@@ -154,43 +213,30 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     expect(planService.getFreePlanSeatCeiling).not.toHaveBeenCalled();
   });
 
-  it('reserveSeatCeilingForMemberAdd never lowers the plan ceiling to the synced headcount (ROUTE #165)', async () => {
-    // The seat sync wrote the member count (2) into `seats`; the plan still includes 5.
-    vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
-      seats: 2,
-      plan_included_seats: 5,
-      status: 'ACTIVE',
-      current_period_end: new Date('2026-06-01'),
-    });
-    await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(5);
+  it.each([
+    { status: 'INCOMPLETE', plan_included_seats: 25 },
+    { status: 'INCOMPLETE', plan_included_seats: null },
+    { status: 'PAUSED', plan_included_seats: 25 },
+    { status: 'PAUSED', plan_included_seats: null },
+  ])(
+    'unpaid $status subscription uses Free ceiling for plan seats $plan_included_seats',
+    async ({ status, plan_included_seats }) => {
+      vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
+        plan_included_seats,
+        status,
+        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      });
+      vi.mocked(planService.getFreePlanSeatCeiling).mockResolvedValue(1);
 
-    // An unlimited plan stays unlimited whatever quantity is billed.
-    vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
-      seats: 4,
-      plan_included_seats: null,
-      status: 'ACTIVE',
-      current_period_end: new Date('2026-06-01'),
-    });
-    await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBeNull();
-  });
-
-  it('seats_total follows the same ceiling as the add check (ROUTE #165, §1.3)', async () => {
-    vi.mocked(repository.listByOrganization).mockResolvedValue([
-      baseRow({ seats: 2, plan_included_seats: 5 }),
-      baseRow({ public_id: 'sub_2', seats: 4, plan_included_seats: null }),
-    ] as never);
-
-    const rows = await service.list(scope);
-
-    expect(rows[0]!.seats_total).toBe(5);
-    expect(rows[1]!.seats_total).toBeNull();
-  });
+      await expect(service.reserveSeatCeilingForMemberAdd(1)).resolves.toBe(1);
+      expect(planService.getFreePlanSeatCeiling).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('reserveSeatCeilingForMemberAdd keeps the plan ceiling for a dunning sub WITHIN grace (F4)', async () => {
     // PAST_DUE, period ended yesterday — well within the default 14-day grace window.
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
     vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
-      seats: null,
       plan_included_seats: 5,
       status: 'PAST_DUE',
       current_period_end: yesterday,
@@ -203,7 +249,6 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     // UNPAID, period ended 30 days ago — past the 14-day grace window.
     const longAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     vi.mocked(repository.findActiveSeatStateByOrganizationForUpdate).mockResolvedValueOnce({
-      seats: 99,
       plan_included_seats: 25,
       status: 'UNPAID',
       current_period_end: longAgo,
@@ -217,42 +262,77 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     vi.mocked(repository.findActiveByOrganization).mockResolvedValue(baseRow() as never);
     vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(4);
 
-    await service.syncSeatQuantityForOrganization('org_public', 'idem-1');
+    await service.syncSeatQuantityForOrganization({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'idem-1',
+    });
 
     // The Stripe key is the stable base token scoped by the resolved quantity, so a retry of the
     // SAME job (same quantity) reuses ONE key (Stripe dedups → no duplicate proration).
-    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenCalledWith(
-      'sub_x',
-      4,
-      'idem-1:qty:4',
-    );
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenCalledWith({
+      providerSubscriptionId: 'sub_x',
+      quantity: 4,
+      idempotencyKey: 'idem-1:qty:4',
+    });
     expect(repository.update).toHaveBeenCalledWith('sub_public', 1, { seats: 4 });
+  });
+
+  it('clamps zero members to one seat and reuses the quantity key on retry', async () => {
+    vi.mocked(repository.findActiveByOrganization).mockResolvedValue(baseRow() as never);
+    vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(0);
+
+    await service.syncSeatQuantityForOrganization({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'zero-seat-retry',
+    });
+    await service.syncSeatQuantityForOrganization({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'zero-seat-retry',
+    });
+
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenCalledTimes(2);
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(1, {
+      providerSubscriptionId: 'sub_x',
+      quantity: 1,
+      idempotencyKey: 'zero-seat-retry:qty:1',
+    });
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(2, {
+      providerSubscriptionId: 'sub_x',
+      quantity: 1,
+      idempotencyKey: 'zero-seat-retry:qty:1',
+    });
+    expect(repository.update).toHaveBeenCalledTimes(2);
+    expect(repository.update).toHaveBeenCalledWith('sub_public', 1, { seats: 1 });
   });
 
   it('syncSeatQuantityForOrganization derives a DIFFERENT key when the recomputed quantity changes (no Stripe param-mismatch on retry)', async () => {
     vi.mocked(repository.findActiveByOrganization).mockResolvedValue(baseRow() as never);
 
     vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(6);
-    await service.syncSeatQuantityForOrganization('org_public', 'tok-A');
+    await service.syncSeatQuantityForOrganization({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'tok-A',
+    });
     vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(5);
-    await service.syncSeatQuantityForOrganization('org_public', 'tok-A');
+    await service.syncSeatQuantityForOrganization({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'tok-A',
+    });
 
-    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(
-      1,
-      'sub_x',
-      6,
-      'tok-A:qty:6',
-    );
-    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(
-      2,
-      'sub_x',
-      5,
-      'tok-A:qty:5',
-    );
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(1, {
+      providerSubscriptionId: 'sub_x',
+      quantity: 6,
+      idempotencyKey: 'tok-A:qty:6',
+    });
+    expect(paymentProvider.updateSubscriptionQuantity).toHaveBeenNthCalledWith(2, {
+      providerSubscriptionId: 'sub_x',
+      quantity: 5,
+      idempotencyKey: 'tok-A:qty:5',
+    });
   });
 
   it('enqueueSeatQuantitySync stamps a stable per-enqueue token when the hot path passes none (audit #1)', () => {
-    service.enqueueSeatQuantitySync('org_public');
+    service.enqueueSeatQuantitySync({ organization_public_id: 'org_public' });
     const call = vi.mocked(seatSyncMocks.enqueueSubscriptionSeatSyncBestEffort).mock
       .calls[0]![0] as {
       idempotencyKey?: string;
@@ -261,7 +341,10 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
   });
 
   it('enqueueSeatQuantitySync namespaces an explicit caller key by organization before Stripe (changePlan path)', () => {
-    service.enqueueSeatQuantitySync('org_public', 'client-key-123');
+    service.enqueueSeatQuantitySync({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'client-key-123',
+    });
     const call = vi.mocked(seatSyncMocks.enqueueSubscriptionSeatSyncBestEffort).mock
       .calls[0]![0] as {
       idempotencyKey?: string;
@@ -274,7 +357,7 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
 
   it('syncSeatQuantityForOrganization is a no-op when there is no active subscription', async () => {
     vi.mocked(repository.findActiveByOrganization).mockResolvedValue(null);
-    await service.syncSeatQuantityForOrganization('org_public');
+    await service.syncSeatQuantityForOrganization({ organization_public_id: 'org_public' });
     expect(paymentProvider.updateSubscriptionQuantity).not.toHaveBeenCalled();
     expect(repository.update).not.toHaveBeenCalled();
   });
@@ -285,7 +368,9 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     vi.mocked(organizationService.requireOrganizationByPublicId).mockRejectedValue(
       new NotFoundError('Organization'),
     );
-    await expect(service.syncSeatQuantityForOrganization('org_public')).resolves.toBeUndefined();
+    await expect(
+      service.syncSeatQuantityForOrganization({ organization_public_id: 'org_public' }),
+    ).resolves.toBeUndefined();
     expect(repository.findActiveByOrganization).not.toHaveBeenCalled();
     expect(paymentProvider.updateSubscriptionQuantity).not.toHaveBeenCalled();
     expect(repository.update).not.toHaveBeenCalled();
@@ -295,9 +380,9 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     vi.mocked(organizationService.requireOrganizationByPublicId).mockRejectedValue(
       new Error('connection terminated'),
     );
-    await expect(service.syncSeatQuantityForOrganization('org_public')).rejects.toThrow(
-      'connection terminated',
-    );
+    await expect(
+      service.syncSeatQuantityForOrganization({ organization_public_id: 'org_public' }),
+    ).rejects.toThrow('connection terminated');
   });
 
   it('syncSeatQuantityForOrganization reconciles seats locally but skips Stripe for a subscription with no provider id', async () => {
@@ -308,7 +393,10 @@ describe('SubscriptionService seat counters (REQ-4)', () => {
     );
     vi.mocked(membershipSeatUsage.countActiveMembers).mockResolvedValue(4);
 
-    await service.syncSeatQuantityForOrganization('org_public', 'idem-local');
+    await service.syncSeatQuantityForOrganization({
+      organization_public_id: 'org_public',
+      idempotencyKey: 'idem-local',
+    });
 
     expect(paymentProvider.updateSubscriptionQuantity).not.toHaveBeenCalled();
     // The ledger is still updated to the recomputed max(1, memberCount).

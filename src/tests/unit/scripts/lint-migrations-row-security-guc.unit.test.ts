@@ -6,7 +6,10 @@ describe('lint-migrations: disable_row_security_guc', () => {
     const sql = `CREATE TABLE IF NOT EXISTS public.foo (id BIGINT);
 SET row_security = off;
 `;
-    const { violations } = lintMigrationFileContent('20990101000001_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '20990101000001_test.sql',
+      fileContent: sql,
+    });
     const matched = violations.filter(
       (violation) => violation.ruleId === 'disable_row_security_guc',
     );
@@ -18,7 +21,10 @@ SET row_security = off;
     const sql = `SET LOCAL row_security = off;
 SET SESSION row_security TO off;
 `;
-    const { violations } = lintMigrationFileContent('20990101000002_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '20990101000002_test.sql',
+      fileContent: sql,
+    });
     const matched = violations.filter(
       (violation) => violation.ruleId === 'disable_row_security_guc',
     );
@@ -28,7 +34,10 @@ SET SESSION row_security TO off;
   it('flags RESET row_security', () => {
     const sql = `RESET row_security;
 `;
-    const { violations } = lintMigrationFileContent('20990101000003_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '20990101000003_test.sql',
+      fileContent: sql,
+    });
     expect(violations.some((violation) => violation.ruleId === 'disable_row_security_guc')).toBe(
       true,
     );
@@ -45,7 +54,10 @@ AS $$
   SELECT TRUE;
 $$;
 `;
-    const { violations } = lintMigrationFileContent('20990101000004_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '20990101000004_test.sql',
+      fileContent: sql,
+    });
     const matched = violations.filter(
       (violation) => violation.ruleId === 'disable_row_security_guc',
     );
@@ -57,7 +69,10 @@ $$;
     const sql = `-- migration-safety: allow disable_row_security_guc reason="trying to escape the ban"
 SET row_security = off;
 `;
-    const { violations, headerErrors } = lintMigrationFileContent('20990101000005_test.sql', sql);
+    const { violations, headerErrors } = lintMigrationFileContent({
+      filename: '20990101000005_test.sql',
+      fileContent: sql,
+    });
     expect(headerErrors).toEqual([]);
     expect(violations.some((violation) => violation.ruleId === 'disable_row_security_guc')).toBe(
       true,
@@ -68,7 +83,10 @@ SET row_security = off;
     const sql = `-- historical note: an earlier draft used SET row_security = off here
 CREATE TABLE IF NOT EXISTS public.bar (id BIGINT);
 `;
-    const { violations } = lintMigrationFileContent('20990101000006_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '20990101000006_test.sql',
+      fileContent: sql,
+    });
     expect(violations.some((violation) => violation.ruleId === 'disable_row_security_guc')).toBe(
       false,
     );
@@ -79,7 +97,10 @@ CREATE TABLE IF NOT EXISTS public.bar (id BIGINT);
 SET LOCAL statement_timeout = '10s';
 SET TIME ZONE 'UTC';
 `;
-    const { violations } = lintMigrationFileContent('20990101000007_test.sql', sql);
+    const { violations } = lintMigrationFileContent({
+      filename: '20990101000007_test.sql',
+      fileContent: sql,
+    });
     expect(violations.some((violation) => violation.ruleId === 'disable_row_security_guc')).toBe(
       false,
     );

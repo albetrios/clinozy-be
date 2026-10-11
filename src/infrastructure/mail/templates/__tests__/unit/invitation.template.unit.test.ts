@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll } from 'vitest';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
 import { invitationTemplate } from '@/infrastructure/mail/templates/invitation.template.js';
+
+// Email copy comes from the locale files, as in the API and the worker.
+beforeAll(async () => {
+  await initializeI18nextForBackgroundWork();
+});
 
 describe('invitationTemplate HTML escaping', () => {
   const baseData = {
@@ -50,5 +56,23 @@ describe('invitationTemplate HTML escaping', () => {
 
     expect(html).not.toContain('?token=t1&ref=email');
     expect(html).toContain('?token=t1&amp;ref=email');
+  });
+
+  it("renders the copy in the recipient's language", () => {
+    const html = invitationTemplate({
+      ...baseData,
+      inviterName: 'Ada Lovelace',
+      organizationName: 'Acme',
+      locale: 'es',
+    });
+
+    expect(html).toContain('<html lang="es">');
+    expect(html).toContain('Has recibido una invitación');
+    expect(html).toContain(
+      '<strong>Ada Lovelace</strong> te ha invitado a unirte a <strong>Acme</strong>.',
+    );
+    expect(html).toContain('Aceptar invitación');
+    expect(html).toContain('caduca en 7 días');
+    expect(html).not.toContain('Accept Invitation');
   });
 });

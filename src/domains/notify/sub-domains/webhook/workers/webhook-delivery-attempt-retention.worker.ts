@@ -35,9 +35,10 @@ export function createWebhookDeliveryAttemptRetentionWorker(): WorkerHandle {
   const worker = new Worker(
     WEBHOOK_DELIVERY_ATTEMPT_RETENTION_QUEUE_NAME,
     async () =>
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, (databaseHandle) =>
-        runWebhookDeliveryAttemptRetentionJob(databaseHandle),
-      ),
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: (databaseHandle) => runWebhookDeliveryAttemptRetentionJob(databaseHandle),
+      }),
     {
       connection: getBullMQConnectionOptions(),
       prefix: getBullMQKeyPrefix(),
@@ -53,5 +54,5 @@ export function createWebhookDeliveryAttemptRetentionWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, WEBHOOK_DELIVERY_ATTEMPT_RETENTION_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: WEBHOOK_DELIVERY_ATTEMPT_RETENTION_QUEUE_NAME });
 }

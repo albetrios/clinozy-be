@@ -25,11 +25,15 @@ function isReviewFlagged(row: Readonly<Record<string, unknown>>): boolean {
 }
 
 /** The checks a review's write runs: the date, the visit, the files (TR11). */
-async function assertReviewValues(
-  values: Record<string, unknown>,
-  patientId: number,
-  context: Parameters<NonNullable<BaseRecordRules['prepareCreate']>>[1],
-): Promise<void> {
+async function assertReviewValues({
+  values,
+  patientId,
+  context,
+}: {
+  values: Record<string, unknown>;
+  patientId: number;
+  context: Parameters<NonNullable<BaseRecordRules['prepareCreate']>>[1];
+}): Promise<void> {
   await assertDateNotFuture({
     date: values.review_date,
     field: 'review_date',
@@ -62,10 +66,10 @@ async function assertReviewValues(
 export const patientReviewsRules: BaseRecordRules = {
   prepareCreate: async (values, context) => {
     values.review_date ??= await organizationToday(context);
-    await assertReviewValues(values, values.patient_id as number, context);
+    await assertReviewValues({ values, patientId: values.patient_id as number, context });
   },
   prepareUpdate: async (values, existing, context) => {
-    await assertReviewValues(values, existing.patient_id as number, context);
+    await assertReviewValues({ values, patientId: existing.patient_id as number, context });
   },
   afterWrite: async (row, change, context) => {
     if (change.kind === 'create') {

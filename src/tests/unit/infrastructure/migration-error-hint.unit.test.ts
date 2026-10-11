@@ -10,11 +10,22 @@ describe('describeMigrationConnectionError', () => {
   });
 
   it('explains an unreachable host for connect / timeout / DNS codes', () => {
-    for (const code of ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'CONNECT_TIMEOUT']) {
+    for (const code of ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN']) {
       expect(describeMigrationConnectionError({ code })).toMatch(
         /reach the database host|non-pooler/i,
       );
     }
+  });
+
+  it("explains node-postgres's code-less connect timeout, wrapped or not", () => {
+    expect(describeMigrationConnectionError(new Error('timeout expired'))).toMatch(
+      /reach the database host/i,
+    );
+    expect(
+      describeMigrationConnectionError(
+        new Error('connect failed', { cause: new Error('timeout expired') }),
+      ),
+    ).toMatch(/reach the database host/i);
   });
 
   it('explains a missing database (3D000)', () => {

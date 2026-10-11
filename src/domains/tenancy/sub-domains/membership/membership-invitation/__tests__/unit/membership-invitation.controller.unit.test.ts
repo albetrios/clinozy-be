@@ -29,10 +29,10 @@ describe('createMembershipInvitationController — path-param validation (sec-ne
     declineInvitation: vi.fn().mockResolvedValue(invitation),
   };
 
-  const controller = createMembershipInvitationController(
-    service as never,
-    membershipService as never,
-  );
+  const controller = createMembershipInvitationController({
+    service: service as never,
+    membershipService: membershipService as never,
+  });
 
   function mockUserRequest(params: Record<string, string>): FastifyRequest {
     return attachPrincipalScope({
@@ -72,11 +72,11 @@ describe('createMembershipInvitationController — path-param validation (sec-ne
       mockUserRequest({ membership_invitation_id: invitationPublicId }),
       mockReply(),
     );
-    expect(service.accept).toHaveBeenCalledWith(
-      invitationPublicId,
-      expect.anything(),
-      expect.any(String),
-    );
+    expect(service.accept).toHaveBeenCalledWith({
+      invitation_public_id: invitationPublicId,
+      body: expect.anything(),
+      actingUserPublicId: expect.any(String),
+    });
   });
 
   it('declineMembershipInvitation rejects a malformed membership_invitation_id (sec-new-T2)', async () => {
@@ -112,11 +112,11 @@ describe('createMembershipInvitationController — path-param validation (sec-ne
       mockUserRequest({ membership_id: membershipPublicId }),
       mockReply(),
     );
-    expect(service.resendForMembership).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      membershipPublicId,
-      expect.anything(),
-      expect.objectContaining({ requestId: expect.any(String) }),
-    );
+    expect(service.resendForMembership).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      membership_public_id: membershipPublicId,
+      body: expect.anything(),
+      options: expect.objectContaining({ requestId: expect.any(String) }),
+    });
   });
 });

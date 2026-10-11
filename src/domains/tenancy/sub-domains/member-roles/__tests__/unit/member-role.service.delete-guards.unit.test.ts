@@ -13,9 +13,9 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ callback }: { callback: () => Promise<unknown> }) => callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
+    withAppDatabaseContext: vi.fn(async ({ callback }: { callback: () => Promise<unknown> }) =>
       callback(),
     ),
   };
@@ -125,7 +125,12 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(systemRole as never);
 
     await expect(
-      service.delete(asScope('org_public'), systemRole.public_id, DELETE_QUERY, undefined),
+      service.delete({
+        scope: asScope('org_public'),
+        role_public_id: systemRole.public_id,
+        query: DELETE_QUERY,
+        deleted_by_user_public_id: undefined,
+      }),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).not.toHaveBeenCalled();
@@ -138,7 +143,12 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.softDeleteIfNoActiveMembers).mockResolvedValue(null as never);
 
     await expect(
-      service.delete(asScope('org_public'), customRoleAssigned.public_id, DELETE_QUERY, undefined),
+      service.delete({
+        scope: asScope('org_public'),
+        role_public_id: customRoleAssigned.public_id,
+        query: DELETE_QUERY,
+        deleted_by_user_public_id: undefined,
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
 
     expect(invalidateOrganizationPermissions).not.toHaveBeenCalled();
@@ -148,7 +158,12 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(customRoleEmpty as never);
 
     await expect(
-      service.delete(asScope('org_public'), customRoleEmpty.public_id, DELETE_QUERY, undefined),
+      service.delete({
+        scope: asScope('org_public'),
+        role_public_id: customRoleEmpty.public_id,
+        query: DELETE_QUERY,
+        deleted_by_user_public_id: undefined,
+      }),
     ).resolves.toBeUndefined();
 
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).toHaveBeenCalledWith(
@@ -163,7 +178,12 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(null);
 
     await expect(
-      service.delete(asScope('org_public'), 'role_missing', DELETE_QUERY, undefined),
+      service.delete({
+        scope: asScope('org_public'),
+        role_public_id: 'role_missing',
+        query: DELETE_QUERY,
+        deleted_by_user_public_id: undefined,
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
 
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).not.toHaveBeenCalled();
@@ -234,12 +254,12 @@ describe('MemberRoleService.update — sec-T3 is_system guard', () => {
     vi.mocked(roleRepoForUpdate.findByPublicId).mockResolvedValue(systemRole as never);
 
     await expect(
-      updateService.update(
-        asScope('org_public'),
-        systemRole.public_id,
-        { name: 'Hacked' },
-        undefined,
-      ),
+      updateService.update({
+        scope: asScope('org_public'),
+        role_public_id: systemRole.public_id,
+        body: { name: 'Hacked' },
+        updated_by_user_public_id: undefined,
+      }),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     expect(roleRepoForUpdate.update).not.toHaveBeenCalled();
@@ -251,12 +271,12 @@ describe('MemberRoleService.update — sec-T3 is_system guard', () => {
     vi.mocked(roleRepoForUpdate.update).mockResolvedValue(updatedRole as never);
 
     await expect(
-      updateService.update(
-        asScope('org_public'),
-        customRole.public_id,
-        { name: 'Renamed' },
-        undefined,
-      ),
+      updateService.update({
+        scope: asScope('org_public'),
+        role_public_id: customRole.public_id,
+        body: { name: 'Renamed' },
+        updated_by_user_public_id: undefined,
+      }),
     ).resolves.toBeDefined();
 
     expect(roleRepoForUpdate.update).toHaveBeenCalled();

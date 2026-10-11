@@ -23,7 +23,7 @@
  * gitignored (it contains plaintext passwords). Run the seed before running k6.
  */
 import { SharedArray } from 'k6/data';
-import { login } from './auth.js';
+import { loginScopedToOrganization } from './auth.js';
 
 /**
  * All credential-pool entries loaded from credential-pool.json at init stage.
@@ -49,13 +49,23 @@ export const credentialPool = new SharedArray('credential-pool', () => {
       '[pool.js] credential-pool.json is empty or invalid.\n' + 'Re-run: pnpm db:seed:loadtest',
     );
   }
+  const identities = new Set();
+  for (const entry of pool) {
+    if (!(entry.userPublicId && entry.email && entry.password && entry.organizationPublicId)) {
+      throw new Error('Credential pool entry is missing authentication or tenant fields');
+    }
+    if (identities.has(entry.userPublicId)) {
+      throw new Error('Credential pool contains a repeated user identity; regenerate it');
+    }
+    identities.add(entry.userPublicId);
+  }
   return pool;
 });
 
 /**
  * Mint a JWT for every entry in the pool. Call from setup() once before any VU runs.
  * Returns an array of {token, organizationPublicId, userPublicId} — one per pool entry.
- * Entries whose login fails (null token) are filtered out with a warning.
+ * A failed login or scope switch aborts setup; credentials are never silently dropped.
  *
  * @param {Array<{email: string, password: string, organizationPublicId: string, userPublicId: string}>} pool
  * @returns {Array<{token: string, organizationPublicId: string, userPublicId: string}>}
@@ -63,10 +73,9 @@ export const credentialPool = new SharedArray('credential-pool', () => {
 export function mintTokenPool(pool) {
   const tokens = [];
   for (const cred of pool) {
-    const token = login(cred.email, cred.password);
+    const token = loginScopedToOrganization(cred.email, cred.password, cred.organizationPublicId);
     if (!token) {
-      console.warn(`mintTokenPool: login failed for ${cred.email} — entry skipped`);
-      continue;
+      throw new Error('Credential pool login or scope failed');
     }
     tokens.push({
       token,
@@ -75,20 +84,21 @@ export function mintTokenPool(pool) {
     });
   }
   if (tokens.length === 0) {
-    console.error(
-      'mintTokenPool: all logins failed — ensure db:seed:loadtest ran and the server is up',
-    );
+    throw new Error('Credential pool produced no authenticated identities');
   }
   return tokens;
 }
 
 /**
  * Pick this VU's token entry from the pool minted in setup().
- * Uses round-robin by VU index so every VU gets a distinct identity when pool.length >= maxVUs.
+ * Requires one authenticated identity per VU and fails if the pool is too small.
  *
  * @param {Array<{token: string, organizationPublicId: string, userPublicId: string}>} tokenPool
  * @returns {{token: string, organizationPublicId: string, userPublicId: string}}
  */
 export function vuToken(tokenPool) {
-  return tokenPool[(__VU - 1) % tokenPool.length];
+  if (!Array.isArray(tokenPool) || __VU < 1 || __VU > tokenPool.length) {
+    throw new Error('Credential pool must contain a distinct identity for every VU');
+  }
+  return tokenPool[__VU - 1];
 }

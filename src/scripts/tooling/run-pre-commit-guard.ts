@@ -60,7 +60,13 @@ export function getStagedFiles(): string[] {
 }
 
 /** Returns whether `package.json` defines the given npm script name. */
-export function hasPackageScript(scripts: Record<string, string>, scriptName: string): boolean {
+export function hasPackageScript({
+  scripts,
+  scriptName,
+}: {
+  scripts: Record<string, string>;
+  scriptName: string;
+}): boolean {
   return typeof scripts[scriptName] === 'string';
 }
 
@@ -129,7 +135,13 @@ export function shouldRunSonarScan(stagedFiles: string[]): boolean {
   );
 }
 
-function runPnpm(scriptName: string, scriptArgs: string[] = []): number {
+function runPnpm({
+  scriptName,
+  scriptArgs = [],
+}: {
+  scriptName: string;
+  scriptArgs?: string[] | undefined;
+}): number {
   const result = spawnSync('pnpm', [scriptName, ...scriptArgs], {
     stdio: 'inherit',
     shell: false,
@@ -307,7 +319,7 @@ export function buildGuardSteps(options: {
     },
   ];
 
-  if (hasPackageScript(scripts, 'tool:project-structure-tree')) {
+  if (hasPackageScript({ scripts, scriptName: 'tool:project-structure-tree' })) {
     steps.push({
       id: '6b',
       label: 'Source tree regenerate',
@@ -316,7 +328,7 @@ export function buildGuardSteps(options: {
     });
   }
 
-  if (hasPackageScript(scripts, 'tool:project-structure-tree:check')) {
+  if (hasPackageScript({ scripts, scriptName: 'tool:project-structure-tree:check' })) {
     steps.push({
       id: '6c',
       label: 'Source tree drift check',
@@ -340,7 +352,7 @@ export function buildGuardSteps(options: {
     },
   );
 
-  if (hasPackageScript(scripts, 'validate:test-naming')) {
+  if (hasPackageScript({ scripts, scriptName: 'validate:test-naming' })) {
     steps.push({
       id: '9',
       label: 'Test filename suffixes',
@@ -450,26 +462,27 @@ export function runPreCommitGuard(options: RunGuardOptions = {}): number {
   const runnableSteps: Array<{ label: string; run: () => number }> = [
     {
       label: 'lint-staged (Biome + markdownlint)',
-      run: () => runPnpm('lint-staged', ['--no-stash']),
+      run: () => runPnpm({ scriptName: 'lint-staged', scriptArgs: ['--no-stash'] }),
     },
     {
       label: 'Lockfile in sync',
-      run: () => (shouldRunLockfileCheck(stagedFiles) ? runPnpm('validate:lockfile') : 0),
+      run: () =>
+        shouldRunLockfileCheck(stagedFiles) ? runPnpm({ scriptName: 'validate:lockfile' }) : 0,
     },
-    { label: 'TypeScript typecheck', run: () => runPnpm('typecheck') },
+    { label: 'TypeScript typecheck', run: () => runPnpm({ scriptName: 'typecheck' }) },
     {
       label: 'Domain structure (strict)',
-      run: () => runPnpm('validate:domain:strict'),
+      run: () => runPnpm({ scriptName: 'validate:domain:strict' }),
     },
     {
       label: 'Architecture policy tests',
-      run: () => (shouldRunGlobalTests(stagedFiles) ? runPnpm('test:global') : 0),
+      run: () => (shouldRunGlobalTests(stagedFiles) ? runPnpm({ scriptName: 'test:global' }) : 0),
     },
-    { label: 'Scripts layout', run: () => runPnpm('validate:scripts-layout') },
+    { label: 'Scripts layout', run: () => runPnpm({ scriptName: 'validate:scripts-layout' }) },
     {
       label: 'Route catalog regenerate',
       run: () => {
-        const code = runPnpm('routes:catalog');
+        const code = runPnpm({ scriptName: 'routes:catalog' });
         if (code !== 0) return code;
         gitAdd([ROUTES_CATALOG_PATH]);
         return 0;
@@ -477,16 +490,16 @@ export function runPreCommitGuard(options: RunGuardOptions = {}): number {
     },
     {
       label: 'Route catalog drift check',
-      run: () => runPnpm('routes:catalog:check'),
+      run: () => runPnpm({ scriptName: 'routes:catalog:check' }),
     },
   ];
 
-  if (hasPackageScript(scripts, 'tool:project-structure-tree')) {
+  if (hasPackageScript({ scripts, scriptName: 'tool:project-structure-tree' })) {
     runnableSteps.push({
       label: 'Source tree regenerate',
       run: () => {
         if (!shouldRunStructureTreeCheck(stagedFiles)) return 0;
-        const code = runPnpm('tool:project-structure-tree');
+        const code = runPnpm({ scriptName: 'tool:project-structure-tree' });
         if (code !== 0) return code;
         gitAdd([SRC_STRUCTURE_TREE_PATH]);
         return 0;
@@ -494,12 +507,12 @@ export function runPreCommitGuard(options: RunGuardOptions = {}): number {
     });
   }
 
-  if (hasPackageScript(scripts, 'tool:project-structure-tree:check')) {
+  if (hasPackageScript({ scripts, scriptName: 'tool:project-structure-tree:check' })) {
     runnableSteps.push({
       label: 'Source tree drift check',
       run: () => {
         if (!shouldRunStructureTreeCheck(stagedFiles)) return 0;
-        return runPnpm('tool:project-structure-tree:check');
+        return runPnpm({ scriptName: 'tool:project-structure-tree:check' });
       },
     });
   }
@@ -507,28 +520,29 @@ export function runPreCommitGuard(options: RunGuardOptions = {}): number {
   runnableSteps.push(
     {
       label: 'OpenAPI / Postman drift',
-      run: () => (shouldRunOpenApiCheck(stagedFiles) ? runPnpm('docs:check') : 0),
+      run: () => (shouldRunOpenApiCheck(stagedFiles) ? runPnpm({ scriptName: 'docs:check' }) : 0),
     },
-    { label: 'TSDoc coverage gate', run: () => runPnpm('tsdoc:check') },
+    { label: 'TSDoc coverage gate', run: () => runPnpm({ scriptName: 'tsdoc:check' }) },
   );
 
-  if (hasPackageScript(scripts, 'validate:test-naming')) {
+  if (hasPackageScript({ scripts, scriptName: 'validate:test-naming' })) {
     runnableSteps.push({
       label: 'Test filename suffixes',
-      run: () => runPnpm('validate:test-naming'),
+      run: () => runPnpm({ scriptName: 'validate:test-naming' }),
     });
   }
 
   runnableSteps.push(
     {
       label: 'Migration SQL safety',
-      run: () => (shouldRunMigrationCheck(stagedFiles) ? runPnpm('db:migrate:lint') : 0),
+      run: () =>
+        shouldRunMigrationCheck(stagedFiles) ? runPnpm({ scriptName: 'db:migrate:lint' }) : 0,
     },
     {
       label: 'DBML regenerate',
       run: () => {
         if (!shouldRunMigrationCheck(stagedFiles)) return 0;
-        const code = runPnpm('tool:generate-dbdiagram');
+        const code = runPnpm({ scriptName: 'tool:generate-dbdiagram' });
         if (code !== 0) return code;
         gitAdd([DBML_PATH]);
         return 0;
@@ -536,7 +550,7 @@ export function runPreCommitGuard(options: RunGuardOptions = {}): number {
     },
     {
       label: 'Project identity drift',
-      run: () => runPnpm('tool:generate-project-identity:check'),
+      run: () => runPnpm({ scriptName: 'tool:generate-project-identity:check' }),
     },
     {
       label: 'Env example sync',
@@ -572,7 +586,7 @@ export function runPreCommitGuard(options: RunGuardOptions = {}): number {
       },
       {
         label: 'SonarQube quality gate',
-        run: () => (shouldRunSonarScan(stagedFiles) ? runPnpm('sonar:scan') : 0),
+        run: () => (shouldRunSonarScan(stagedFiles) ? runPnpm({ scriptName: 'sonar:scan' }) : 0),
       },
     );
   }

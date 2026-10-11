@@ -14,20 +14,20 @@ function listIntegrationTestFiles(domainPath: string): string[] {
   if (!existsSync(testsDirectory)) return [];
 
   const files: string[] = [];
-  const walk = (directory: string, relativePrefix: string) => {
+  const walk = ({ directory, relativePrefix }: { directory: string; relativePrefix: string }) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const relativePath = relativePrefix ? `${relativePrefix}/${entry.name}` : entry.name;
       const fullPath = join(directory, entry.name);
       if (entry.isDirectory()) {
         if (relativePath === 'unit' || relativePath.startsWith('unit/')) continue;
-        walk(fullPath, relativePath);
+        walk({ directory: fullPath, relativePrefix: relativePath });
       } else if (entry.name.endsWith('.test.ts')) {
         files.push(relativePath);
       }
     }
   };
 
-  walk(testsDirectory, '');
+  walk({ directory: testsDirectory, relativePrefix: '' });
   return files;
 }
 

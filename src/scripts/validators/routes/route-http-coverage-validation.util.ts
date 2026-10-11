@@ -74,7 +74,13 @@ export function resolveDomainFolder(catalogDomain: string): string {
 }
 
 /** Returns true when `actualPath` matches `pattern`, treating `:param` segments in the pattern as wildcards. */
-export function pathMatchesPattern(actualPath: string, pattern: string): boolean {
+export function pathMatchesPattern({
+  actualPath,
+  pattern,
+}: {
+  actualPath: string;
+  pattern: string;
+}): boolean {
   const patternParts = pattern.split('/').filter((part) => part.length > 0);
   const actualParts = actualPath.split('/').filter((part) => part.length > 0);
   if (patternParts.length !== actualParts.length) return false;
@@ -89,25 +95,36 @@ export function pathMatchesPattern(actualPath: string, pattern: string): boolean
 }
 
 /** Returns true when (`method`, `path`) is in the coverage allowlist (exact match or wildcard pattern match). */
-export function isAllowlisted(
-  method: string,
-  path: string,
-  allowlist: RouteHttpCoverageAllowlistEntry[],
-): boolean {
+export function isAllowlisted({
+  method,
+  path,
+  allowlist,
+}: {
+  method: string;
+  path: string;
+  allowlist: RouteHttpCoverageAllowlistEntry[];
+}): boolean {
   return allowlist.some(
     (entry) =>
-      entry.method === method && (entry.path === path || pathMatchesPattern(path, entry.path)),
+      entry.method === method &&
+      (entry.path === path || pathMatchesPattern({ actualPath: path, pattern: entry.path })),
   );
 }
 
 /** Recursively reads every HTTP test file under `directory` (`*.integration.test.ts`, `*.e2e.test.ts`, `*.security.test.ts`) into `sources`. */
-export function collectHttpTestSources(directory: string, sources: string[]): void {
+export function collectHttpTestSources({
+  directory,
+  sources,
+}: {
+  directory: string;
+  sources: string[];
+}): void {
   if (!existsSync(directory)) return;
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const fullPath = join(directory, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === 'node_modules') continue;
-      collectHttpTestSources(fullPath, sources);
+      collectHttpTestSources({ directory: fullPath, sources });
       continue;
     }
     if (!HTTP_TEST_SUFFIXES.some((suffix) => entry.name.endsWith(suffix))) continue;
@@ -119,7 +136,7 @@ export function collectHttpTestSources(directory: string, sources: string[]): vo
 export function collectDomainHttpSources(catalogDomain: string): string {
   const folder = resolveDomainFolder(catalogDomain);
   const sources: string[] = [];
-  collectHttpTestSources(join(DOMAINS_DIR, folder), sources);
+  collectHttpTestSources({ directory: join(DOMAINS_DIR, folder), sources });
   for (const relativePath of INFRASTRUCTURE_DOMAIN_TEST_FILES[catalogDomain] ?? []) {
     const fullPath = resolve(process.cwd(), relativePath);
     if (existsSync(fullPath)) sources.push(readFileSync(fullPath, 'utf-8'));
@@ -152,7 +169,13 @@ export function requiresValidationStatusCoverage(route: RouteEntry): boolean {
 }
 
 /** Returns true when the literal route path appears (in any quoting) inside the combined HTTP test sources. */
-export function routeLiteralFoundInTests(combined: string, pathLiteral: string): boolean {
+export function routeLiteralFoundInTests({
+  combined,
+  pathLiteral,
+}: {
+  combined: string;
+  pathLiteral: string;
+}): boolean {
   return (
     combined.includes(`'${pathLiteral}'`) ||
     combined.includes(`"${pathLiteral}"`) ||
@@ -166,11 +189,15 @@ export function routeLiteralFoundInTests(combined: string, pathLiteral: string):
  * within ±400 characters of a `pathLiteral` occurrence — a heuristic that the
  * tests actually exercise that method against the path.
  */
-export function mutatingMethodReferencedForPath(
-  combined: string,
-  method: string,
-  pathLiteral: string,
-): boolean {
+export function mutatingMethodReferencedForPath({
+  combined,
+  method,
+  pathLiteral,
+}: {
+  combined: string;
+  method: string;
+  pathLiteral: string;
+}): boolean {
   if (!MUTATING_HTTP_METHODS.has(method)) return true;
 
   const methodNeedle = `method: '${method}'`;
@@ -270,12 +297,17 @@ export type RouteHttpCoverageValidationResult = {
  * routes, missing 400/422 validation assertions for mutating routes, and
  * sub-domain folders missing an integration test entirely.
  */
-export function evaluateRouteHttpCoverage(
-  registry: RouteEntry[],
-  combinedHttpSources: string,
-  allowlist: RouteHttpCoverageAllowlistEntry[],
-  domainsDir: string,
-): RouteHttpCoverageValidationResult {
+export function evaluateRouteHttpCoverage({
+  registry,
+  combinedHttpSources,
+  allowlist,
+  domainsDir,
+}: {
+  registry: RouteEntry[];
+  combinedHttpSources: string;
+  allowlist: RouteHttpCoverageAllowlistEntry[];
+  domainsDir: string;
+}): RouteHttpCoverageValidationResult {
   const domainSmokeCoverage = extractDomainRouteSmokeCoverage(combinedHttpSources);
   const missingRouteLiterals: string[] = [];
   const missingMutatingMethodRefs: string[] = [];
@@ -283,7 +315,7 @@ export function evaluateRouteHttpCoverage(
   const domainsRequiringValidation = new Set<string>();
 
   for (const route of registry) {
-    if (isAllowlisted(route.method, route.path, allowlist)) continue;
+    if (isAllowlisted({ method: route.method, path: route.path, allowlist })) continue;
 
     if (requiresForbiddenStatusCoverage(route)) {
       domainsRequiringForbidden.add(route.domain);
@@ -298,14 +330,20 @@ export function evaluateRouteHttpCoverage(
     if (domainSmokeCoverage.has(route.domain)) continue;
 
     const pathLiteral = route.path;
-    const found = routeLiteralFoundInTests(combinedHttpSources, pathLiteral);
+    const found = routeLiteralFoundInTests({ combined: combinedHttpSources, pathLiteral });
 
     if (!found) {
       missingRouteLiterals.push(`${route.method} ${route.path} (${route.domain})`);
       continue;
     }
 
-    if (!mutatingMethodReferencedForPath(combinedHttpSources, route.method, pathLiteral)) {
+    if (
+      !mutatingMethodReferencedForPath({
+        combined: combinedHttpSources,
+        method: route.method,
+        pathLiteral,
+      })
+    ) {
       missingMutatingMethodRefs.push(`${route.method} ${route.path} (${route.domain})`);
     }
   }

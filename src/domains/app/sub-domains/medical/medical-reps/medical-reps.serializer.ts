@@ -5,7 +5,7 @@ import type { MedicalRepOutput } from './medical-reps.types.js';
  * Shapes an `app.medical_reps` row as the API returns it (routes-final 11.F.6). The latest visit,
  * the overdue flag and the manufacturers are the rules' `decorate`.
  */
-export function serializeMedicalRep(row: BaseRecordRow): MedicalRepOutput {
+export function serializeMedicalRep({ row }: { row: BaseRecordRow }): MedicalRepOutput {
   return {
     id: row.public_id,
     name: row.name as string,

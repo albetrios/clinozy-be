@@ -22,16 +22,23 @@ export class PaymentsController extends BaseRecordController<PaymentOutput> {
 
   /** `GET /payments/{payment_id}/edits` — one page of what changed (B20). */
   readonly edits = async (request: FastifyRequest, _reply: FastifyReply) => {
-    const page = await this.paymentsService.listEdits(
-      requireOrganizationScope(request),
-      this.readId(request),
-      request.query,
-      { actingUserPublicId: this.actor(request), visibility: await this.visibility(request) },
-    );
-    return paginatedResponse(page.items, getRequestIdentifier(request), {
-      per_page: page.limit,
-      next: page.next_cursor,
-      has_more: page.has_more,
+    const page = await this.paymentsService.listEdits({
+      scope: requireOrganizationScope(request),
+      paymentPublicId: this.readId(request),
+      query: request.query,
+      options: {
+        actingUserPublicId: this.actor(request),
+        visibility: await this.visibility(request),
+      },
+    });
+    return paginatedResponse({
+      data: page.items,
+      request_id: getRequestIdentifier(request),
+      pagination: {
+        per_page: page.limit,
+        next: page.next_cursor,
+        has_more: page.has_more,
+      },
     });
   };
 }

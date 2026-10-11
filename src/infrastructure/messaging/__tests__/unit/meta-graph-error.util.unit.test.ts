@@ -86,16 +86,25 @@ describe('the messaging webhook checks (launch D77)', () => {
   const signature = `sha256=${createHmac('sha256', 'test-meta-app-secret').update(body).digest('hex')}`;
 
   it("accepts Meta's signature of the raw body, in any hex case", () => {
-    expect(verifyMetaWebhookSignature(body, signature)).toBe(true);
-    expect(verifyMetaWebhookSignature(body, `sha256=${signature.slice(7).toUpperCase()}`)).toBe(
-      true,
-    );
+    expect(verifyMetaWebhookSignature({ rawBody: body, signatureHeader: signature })).toBe(true);
+    expect(
+      verifyMetaWebhookSignature({
+        rawBody: body,
+        signatureHeader: `sha256=${signature.slice(7).toUpperCase()}`,
+      }),
+    ).toBe(true);
   });
 
   it('refuses another body, a malformed header, or the wrong length', () => {
-    expect(verifyMetaWebhookSignature(Buffer.from('{}'), signature)).toBe(false);
-    expect(verifyMetaWebhookSignature(body, signature.slice(7))).toBe(false);
-    expect(verifyMetaWebhookSignature(body, 'sha256=abc')).toBe(false);
+    expect(
+      verifyMetaWebhookSignature({ rawBody: Buffer.from('{}'), signatureHeader: signature }),
+    ).toBe(false);
+    expect(verifyMetaWebhookSignature({ rawBody: body, signatureHeader: signature.slice(7) })).toBe(
+      false,
+    );
+    expect(verifyMetaWebhookSignature({ rawBody: body, signatureHeader: 'sha256=abc' })).toBe(
+      false,
+    );
   });
 
   it('matches only our verify token', () => {

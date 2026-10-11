@@ -4,6 +4,12 @@ How coverage is **scoped**, **measured**, and **gated** in clinozy-be — and th
 prioritized plan for tightening it. Read this before changing
 `tooling/ci/coverage-thresholds.json` or the coverage CI jobs.
 
+## Assertion quality is separate from coverage
+
+A passing test or executed line does not prove its stated behavior. Review each test's prerequisites, action, observable result, and failure oracle. Positive authorization checks must reject authentication errors and 5xx responses; mutation checks should read persisted state; race checks must inspect rejected executions; boundary checks must exercise the actual boundary predicate. Conditional prerequisites must fail setup or declare an explicit skip, rather than return a green result without exercising the case.
+
+Label evidence by layer: structural policy, mocked unit/wiring, real PostgreSQL/Redis, injected HTTP, and live network load. Timing alone does not prove query counts or absence of N+1; a mock that prescribes claim outcomes does not prove database atomicity. Record semantic review separately from automated declaration/assertion inventory. Use targeted mutation or before/after failure evidence where practical.
+
 ## Scope — what is measured
 
 Coverage is deliberately scoped to the **core business-logic surface**, not the

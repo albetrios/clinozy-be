@@ -62,7 +62,11 @@ async function main(): Promise<void> {
   }
 
   const permissionCodes = SYSTEM_PERMISSIONS.map((permission) => permission.code);
-  await seedRolePermissions(adminRole.id, permissionCodes, demoUser.id);
+  await seedRolePermissions({
+    roleId: adminRole.id,
+    permissionCodes,
+    createdByUserId: demoUser.id,
+  });
   await invalidateOrganizationPermissions(demoOrganization.public_id);
 
   logger.info(
@@ -77,7 +81,7 @@ async function main(): Promise<void> {
 
 /**
  * `closeDatabase` always runs (success or failure). Without it, a thrown error here
- * would `process.exit(1)` before the postgres.js pool finishes draining and leave
+ * would `process.exit(1)` before the database pool finishes draining and leave
  * aborted connections behind in Postgres.
  */
 main()

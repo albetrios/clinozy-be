@@ -12,5 +12,5 @@ import {
 export function validatePutUserNotificationPreferences(
   body: unknown,
 ): PutNotificationPreferencesInput {
-  return parseWithSchema(PutNotificationPreferencesDto, body);
+  return parseWithSchema({ schema: PutNotificationPreferencesDto, data: body });
 }

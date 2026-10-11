@@ -96,7 +96,13 @@ export class StripePaymentProvider implements PaymentProvider {
     return isStripeConfigured();
   }
 
-  getProviderPriceId(plan: PlanRecord, billingCycle: 'monthly' | 'yearly'): string | null {
+  getProviderPriceId({
+    plan,
+    billingCycle,
+  }: {
+    plan: PlanRecord;
+    billingCycle: 'monthly' | 'yearly';
+  }): string | null {
     const priceId =
       billingCycle === 'yearly' ? plan.stripe_price_yearly_id : plan.stripe_price_monthly_id;
     return priceId ?? null;
@@ -106,10 +112,19 @@ export class StripePaymentProvider implements PaymentProvider {
     organization: OrganizationBillingContext;
     plan: PlanRecord;
     billingCycle: 'monthly' | 'yearly';
+    quantity?: number;
     trialEnd?: string;
     idempotencyKey?: string;
   }): Promise<PaymentProviderCreateResult> {
     if (!isStripeConfigured()) return {};
+
+    const stripePriceId = this.getProviderPriceId({
+      plan: input.plan,
+      billingCycle: input.billingCycle,
+    });
+    if (!stripePriceId) {
+      throw new ConfigurationError('Selected billing cycle has no configured Stripe price ID');
+    }
 
     try {
       let stripeCustomerId = input.organization.stripe_customer_id;
@@ -124,26 +139,17 @@ export class StripePaymentProvider implements PaymentProvider {
           idempotencyKey: `customer-create:${input.organization.public_id}`,
         });
         stripeCustomerId = customer.id;
-        await this.organizationService.updateStripeCustomerIdForOrganization(
-          input.organization.public_id,
-          stripeCustomerId,
-        );
-      }
-
-      const stripePriceId = this.getProviderPriceId(input.plan, input.billingCycle);
-
-      if (!stripePriceId) {
-        logger.warn(
-          { planId: input.plan.public_id, billingCycle: input.billingCycle },
-          'Plan missing Stripe price ID — creating local-only subscription',
-        );
-        return { providerCustomerId: stripeCustomerId };
+        await this.organizationService.updateStripeCustomerIdForOrganization({
+          organization_public_id: input.organization.public_id,
+          stripe_customer_id: stripeCustomerId,
+        });
       }
 
       const stripeSubscription = await createStripeSubscription(
         omitUndefined({
           customerId: stripeCustomerId,
           priceId: stripePriceId,
+          quantity: input.quantity,
           trialEnd: input.trialEnd
             ? Math.floor(new Date(input.trialEnd).getTime() / 1000)
             : undefined,
@@ -155,6 +161,7 @@ export class StripePaymentProvider implements PaymentProvider {
       return {
         providerSubscriptionId: stripeSubscription.id,
         providerCustomerId: stripeCustomerId,
+        initialStatus: stripeSubscription.status.toUpperCase(),
       };
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.create.failed');
@@ -162,87 +169,107 @@ export class StripePaymentProvider implements PaymentProvider {
     }
   }
 
-  async cancelSubscriptionAtPeriodEnd(
-    providerSubscriptionId: string,
-    idempotencyKey?: string,
-  ): Promise<void> {
+  async cancelSubscriptionAtPeriodEnd({
+    providerSubscriptionId,
+    idempotencyKey,
+  }: {
+    providerSubscriptionId: string;
+    idempotencyKey?: string | undefined;
+  }): Promise<void> {
     if (!isStripeConfigured()) return;
     try {
-      await cancelStripeSubscription(
-        providerSubscriptionId,
-        true,
-        idempotencyKey !== undefined ? { idempotencyKey } : undefined,
-      );
+      await cancelStripeSubscription({
+        subscriptionId: providerSubscriptionId,
+        cancelAtPeriodEnd: true,
+        options: idempotencyKey !== undefined ? { idempotencyKey } : undefined,
+      });
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.cancel.failed');
       throw toPaymentProviderFailure(error);
     }
   }
 
-  async cancelSubscriptionImmediately(
-    providerSubscriptionId: string,
-    idempotencyKey?: string,
-  ): Promise<void> {
+  async cancelSubscriptionImmediately({
+    providerSubscriptionId,
+    idempotencyKey,
+  }: {
+    providerSubscriptionId: string;
+    idempotencyKey?: string | undefined;
+  }): Promise<void> {
     if (!isStripeConfigured()) return;
     try {
       // reaudit-#6: `false` = cancel now (not at period end), the only meaningful cancel for a
       // never-activated INCOMPLETE subscription.
-      await cancelStripeSubscription(
-        providerSubscriptionId,
-        false,
-        idempotencyKey !== undefined ? { idempotencyKey } : undefined,
-      );
+      await cancelStripeSubscription({
+        subscriptionId: providerSubscriptionId,
+        cancelAtPeriodEnd: false,
+        options: idempotencyKey !== undefined ? { idempotencyKey } : undefined,
+      });
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.cancel_immediate.failed');
       throw toPaymentProviderFailure(error);
     }
   }
 
-  async resumeSubscription(providerSubscriptionId: string, idempotencyKey?: string): Promise<void> {
+  async resumeSubscription({
+    providerSubscriptionId,
+    idempotencyKey,
+  }: {
+    providerSubscriptionId: string;
+    idempotencyKey?: string | undefined;
+  }): Promise<void> {
     if (!isStripeConfigured()) return;
     try {
-      await resumeStripeSubscription(
-        providerSubscriptionId,
-        idempotencyKey !== undefined ? { idempotencyKey } : undefined,
-      );
+      await resumeStripeSubscription({
+        subscriptionId: providerSubscriptionId,
+        options: idempotencyKey !== undefined ? { idempotencyKey } : undefined,
+      });
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.resume.failed');
       throw toPaymentProviderFailure(error);
     }
   }
 
-  async updateSubscriptionPrice(
-    providerSubscriptionId: string,
-    providerPriceId: string,
-    idempotencyKey?: string,
-  ): Promise<void> {
+  async updateSubscriptionPrice({
+    providerSubscriptionId,
+    providerPriceId,
+    idempotencyKey,
+  }: {
+    providerSubscriptionId: string;
+    providerPriceId: string;
+    idempotencyKey?: string | undefined;
+  }): Promise<void> {
     if (!isStripeConfigured()) return;
     try {
-      await updateStripeSubscription(
-        providerSubscriptionId,
-        omitUndefined({
+      await updateStripeSubscription({
+        subscriptionId: providerSubscriptionId,
+        options: omitUndefined({
           priceId: providerPriceId,
           idempotencyKey,
         }),
-      );
+      });
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.change_plan.failed');
       throw toPaymentProviderFailure(error);
     }
   }
 
-  async updateSubscriptionQuantity(
-    providerSubscriptionId: string,
-    quantity: number,
-    idempotencyKey?: string,
-  ): Promise<void> {
+  async updateSubscriptionQuantity({
+    providerSubscriptionId,
+    quantity,
+    idempotencyKey,
+  }: {
+    providerSubscriptionId: string;
+    quantity: number;
+    idempotencyKey?: string | undefined;
+  }): Promise<void> {
     if (!isStripeConfigured()) return;
     try {
-      await updateStripeSubscriptionQuantity(
-        providerSubscriptionId,
+      await updateStripeSubscriptionQuantity({
+        subscriptionId: providerSubscriptionId,
         quantity,
-        idempotencyKey !== undefined ? { idempotencyKey } : undefined,
-      );
+        options: idempotencyKey !== undefined ? { idempotencyKey } : undefined,
+      });
     } catch (error) {
       logger.error({ error }, 'stripe.subscription.update_quantity.failed');
       throw toPaymentProviderFailure(error);
@@ -251,7 +278,10 @@ export class StripePaymentProvider implements PaymentProvider {
 
   async compensateFailedCreate(providerSubscriptionId: string): Promise<void> {
     try {
-      await cancelStripeSubscription(providerSubscriptionId, false);
+      await cancelStripeSubscription({
+        subscriptionId: providerSubscriptionId,
+        cancelAtPeriodEnd: false,
+      });
     } catch (compensationError) {
       logger.error(
         { error: compensationError, providerSubscriptionId },
@@ -260,13 +290,19 @@ export class StripePaymentProvider implements PaymentProvider {
     }
   }
 
-  async compensatePlanChange(
-    providerSubscriptionId: string,
-    previousProviderPriceId: string,
-  ): Promise<void> {
+  async compensatePlanChange({
+    providerSubscriptionId,
+    previousProviderPriceId,
+  }: {
+    providerSubscriptionId: string;
+    previousProviderPriceId: string;
+  }): Promise<void> {
     try {
-      await updateStripeSubscription(providerSubscriptionId, {
-        priceId: previousProviderPriceId,
+      await updateStripeSubscription({
+        subscriptionId: providerSubscriptionId,
+        options: {
+          priceId: previousProviderPriceId,
+        },
       });
     } catch (compensationError) {
       logger.error(

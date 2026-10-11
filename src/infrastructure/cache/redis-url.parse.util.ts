@@ -6,6 +6,8 @@ const DEFAULT_REDIS_PORT = 6379;
 export type ParsedRedisUrl = {
   host: string;
   port: number;
+  /** Redis 6 ACL user — the user part of the URL's credentials; absent means the `default` user. */
+  username?: string;
   password?: string;
   databaseIndex: number;
 };
@@ -71,10 +73,12 @@ export function parseRedisUrl(redisUrl: string): ParsedRedisUrl {
     throw new Error(`redis.invalid_database_index:${redisUrl}`);
   }
   const password = normalizedUrl.password ? decodeURIComponent(normalizedUrl.password) : undefined;
+  const username = normalizedUrl.username ? decodeURIComponent(normalizedUrl.username) : undefined;
 
   return omitUndefined({
     host: normalizedUrl.hostname,
     port: normalizedUrl.port ? Number.parseInt(normalizedUrl.port, 10) : DEFAULT_REDIS_PORT,
+    username,
     password,
     databaseIndex,
   });
@@ -99,18 +103,24 @@ function normalizeRedisUrlForComparison(redisUrl: string): string {
 }
 
 /** True when cache and BullMQ URLs resolve to different Redis hosts. */
-export function usesSeparateBullMqRedisHost(
-  cacheRedisUrl: string,
-  bullMqRedisUrl: string,
-): boolean {
+export function usesSeparateBullMqRedisHost({
+  cacheRedisUrl,
+  bullMqRedisUrl,
+}: {
+  cacheRedisUrl: string;
+  bullMqRedisUrl: string;
+}): boolean {
   return resolveRedisHostFromUrl(cacheRedisUrl) !== resolveRedisHostFromUrl(bullMqRedisUrl);
 }
 
 /** True when cache and BullMQ use different logical databases or hosts. */
-export function usesSeparateBullMqRedisEndpoint(
-  cacheRedisUrl: string,
-  bullMqRedisUrl: string,
-): boolean {
+export function usesSeparateBullMqRedisEndpoint({
+  cacheRedisUrl,
+  bullMqRedisUrl,
+}: {
+  cacheRedisUrl: string;
+  bullMqRedisUrl: string;
+}): boolean {
   return (
     normalizeRedisUrlForComparison(cacheRedisUrl) !== normalizeRedisUrlForComparison(bullMqRedisUrl)
   );
@@ -126,10 +136,13 @@ export function usesSeparateBullMqRedisEndpoint(
  * The only constraint is that an override, when present, must be a parseable
  * `redis://` / `rediss://` URL — a different host or logical database is allowed.
  */
-export function validateProductionRedisTopology(
-  _cacheRedisUrl: string,
-  bullMqRedisUrl: string | undefined,
-): boolean {
+export function validateProductionRedisTopology({
+  _cacheRedisUrl,
+  bullMqRedisUrl,
+}: {
+  _cacheRedisUrl: string;
+  bullMqRedisUrl: string | undefined;
+}): boolean {
   if (!bullMqRedisUrl?.trim()) {
     return true;
   }

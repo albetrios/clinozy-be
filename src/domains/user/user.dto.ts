@@ -10,14 +10,14 @@ import { USER_PRESENCE_VALUES, type UserPresence } from './user.constants.js';
 /** Zod schema for the admin `:user_id` path param (get/update/delete/suspend/unsuspend). */
 export const userIdParamsDto = z
   .object({
-    user_id: trimmedStringMinMax(1, 28),
+    user_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
 /** Zod schema for the `:data_export_id` path param (GET /me/data-export/:data_export_id). */
 export const dataExportIdParamsDto = z
   .object({
-    data_export_id: trimmedStringMinMax(1, 28),
+    data_export_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
@@ -37,10 +37,10 @@ export const UpdateMeDto = z
     avatar_key: trimmedString()
       .max(512)
       .refine((key) => key.startsWith('avatars/'), {
-        message: 'Avatar key must start with "avatars/"',
+        message: 'errors:validation.avatarKeyPrefix',
       })
       .refine(isTraversalFreeStorageKey, {
-        message: 'Avatar key must not contain path traversal',
+        message: 'errors:validation.storageKeyPathTraversal',
       })
       .optional(),
   })
@@ -69,10 +69,10 @@ export const UploadAvatarDto = z
     avatar_key: trimmedString()
       .max(512)
       .refine((key) => key.startsWith('avatars/'), {
-        message: 'Avatar key must start with "avatars/"',
+        message: 'errors:validation.avatarKeyPrefix',
       })
       .refine(isTraversalFreeStorageKey, {
-        message: 'Avatar key must not contain path traversal',
+        message: 'errors:validation.storageKeyPathTraversal',
       }),
   })
   .strict();

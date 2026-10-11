@@ -60,7 +60,7 @@ export async function parseJobDataOrDeadLetter<T>({
     'queue.job.poison_payload',
   );
 
-  await recordDeadLetterFailure(queueName, job, error);
+  await recordDeadLetterFailure({ queueName, job, error });
 
   throw error;
 }

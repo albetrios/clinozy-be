@@ -139,6 +139,30 @@ Document the new mechanism here and in release notes when that happens.
 
 ---
 
+## What the server guarantees vs what the browser enforces
+
+The API's part is the headers; the browser decides from them whether to send a cookie, let a page
+script read one, or hand a cross-origin response to the page. The suites pin the server's part on
+the wire, through real routes:
+
+- **Cookies** — [`auth.integration.test.ts`](../../../src/domains/auth/__tests__/integration/auth.integration.test.ts)
+  reads the login `Set-Cookie` headers: both cookies carry `Path=/api/v1/auth`, the configured
+  `SameSite`, the session `Max-Age` and `Secure` exactly when `COOKIE_SECURE` is on; `session_id`
+  is `HttpOnly` and `csrf_token` is not. The option builders have their own unit suite
+  (`auth.http.util.unit.test.ts`).
+- **CORS** — [`cors.security.test.ts`](../../../src/tests/security/headers/cors.security.test.ts):
+  an allowlisted origin gets an exact `Access-Control-Allow-Origin`, `Allow-Credentials: true`,
+  `Vary: Origin`, the request headers the SPA sends (`Authorization`, `X-CSRF-Token`,
+  `X-Idempotency-Key`, `X-Captcha-Token`) and the response headers it reads; a foreign origin is
+  never reflected — no `Access-Control-Allow-Origin` on the real response, and never its own
+  origin on the preflight.
+- **Origin / Referer** on refresh — the allowlist matrix in the same integration file.
+
+Whether a given browser honours those headers (third-party cookie blocking, `SameSite` defaults) is
+outside the API and is not asserted here.
+
+---
+
 ## Related code
 
 - Frontend integration: [frontend-auth-guide.md](../api/frontend-auth-guide.md) — how a SPA handles refresh + CSRF in practice

@@ -1,5 +1,5 @@
 import http from 'k6/http';
-import { check, sleep } from 'k6';
+import { check, fail, sleep } from 'k6';
 import { API_PREFIX, SMOKE_THRESHOLDS, PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
 import { checkStatus } from '../helpers/checks.js';
 
@@ -33,15 +33,24 @@ export const options = {
   },
   thresholds: {
     ...SMOKE_THRESHOLDS,
+    checks: ['rate==1'],
+    'http_reqs{name:session-journey-refresh-after-logout}': ['count==5'],
+    'http_reqs{name:session-journey-me-after-logout}': ['count==5'],
     'http_req_duration{name:session-journey-login}': ['p(95)<800', 'p(99)<1200'],
     'http_req_duration{name:session-journey-refresh}': ['p(95)<500', 'p(99)<1000'],
     'http_req_duration{name:session-journey-me}': ['p(95)<500', 'p(99)<1000'],
   },
 };
 
+export function setup() {
+  if (!(__ENV.DEMO_EMAIL && __ENV.DEMO_PASSWORD)) {
+    throw new Error('Session journey requires explicit DEMO_EMAIL and DEMO_PASSWORD');
+  }
+}
+
 export function sessionRefreshJourney() {
-  const email = __ENV.DEMO_EMAIL || 'demo@example.com';
-  const password = __ENV.DEMO_PASSWORD || 'DemoPassword123!';
+  const email = __ENV.DEMO_EMAIL;
+  const password = __ENV.DEMO_PASSWORD;
 
   // 1) Login — sets the httpOnly session cookie + readable csrf_token cookie
   //    in this VU's jar and returns the short-lived Bearer token.
@@ -50,14 +59,14 @@ export function sessionRefreshJourney() {
     tags: { name: 'session-journey-login' },
   });
   checkStatus(loginResponse, 200, 'session-journey login');
-  if (loginResponse.status !== 200) {
-    sleep(1);
-    return;
-  }
+  if (loginResponse.status !== 200) fail('Session journey login failed');
   const accessToken = JSON.parse(loginResponse.body).data?.access_token;
-  if (!accessToken) {
-    sleep(1);
-    return;
+  if (
+    !check(accessToken, {
+      'login returns access token': (token) => typeof token === 'string' && token.length > 0,
+    })
+  ) {
+    fail('Login returned no access token');
   }
 
   // 2) Bearer read proves the minted token works.
@@ -71,6 +80,13 @@ export function sessionRefreshJourney() {
   //    csrf_token cookie into X-CSRF-Token exactly as the SPA does (the
   //    double-submit contract; required in production when Origin is absent).
   const csrfCookie = findCookieValue('csrf_token');
+  if (
+    !check(csrfCookie, {
+      'login sets CSRF cookie': (cookie) => typeof cookie === 'string' && cookie.length > 0,
+    })
+  ) {
+    fail('Login did not set CSRF cookie');
+  }
   const refreshResponse = http.post(`${API_PREFIX}/auth/refresh`, null, {
     headers: csrfCookie ? { 'X-CSRF-Token': csrfCookie } : {},
     tags: { name: 'session-journey-refresh' },
@@ -78,6 +94,15 @@ export function sessionRefreshJourney() {
   checkStatus(refreshResponse, 200, 'session-journey refresh');
   const refreshedToken =
     refreshResponse.status === 200 ? JSON.parse(refreshResponse.body).data?.access_token : null;
+
+  if (
+    !check(refreshedToken, {
+      'refresh returns rotated access token': (token) =>
+        typeof token === 'string' && token.length > 0,
+    })
+  ) {
+    fail('Refresh returned no access token');
+  }
 
   // 4) The ROTATED token must be live.
   if (refreshedToken) {
@@ -88,10 +113,22 @@ export function sessionRefreshJourney() {
     checkStatus(refreshedMeResponse, 200, 'session-journey me (refreshed token)');
   }
 
-  // 5) Logout, then prove the dead session cannot refresh. Logout CLEARS both
-  //    cookies (Set-Cookie), so whichever guard trips first rejects: 403 (CSRF
-  //    cookie gone — the double-submit gate), 400 (missing session cookie), or
-  //    401 (revoked-but-present cookie). Either way: no new token after logout.
+  // Preserve the CURRENT rotated cookies before logout clears the client jar.
+  // Replaying them with matching CSRF reaches the session revocation check.
+  const preservedSessionCookie = findCookieValue('session_id');
+  const preservedCsrfCookie = findCookieValue('csrf_token');
+  if (
+    !check(
+      { preservedSessionCookie, preservedCsrfCookie },
+      {
+        'refresh leaves valid session and CSRF cookies': (cookies) =>
+          Boolean(cookies.preservedSessionCookie && cookies.preservedCsrfCookie),
+      },
+    )
+  ) {
+    fail('Cannot test revocation without preserved session cookies');
+  }
+
   const logoutResponse = http.post(`${API_PREFIX}/auth/logout`, null, {
     headers: {
       Authorization: `Bearer ${refreshedToken || accessToken}`,
@@ -101,25 +138,31 @@ export function sessionRefreshJourney() {
   });
   checkStatus(logoutResponse, 200, 'session-journey logout');
 
-  const postLogoutCsrfCookie = findCookieValue('csrf_token');
   const refreshAfterLogoutResponse = http.post(`${API_PREFIX}/auth/refresh`, null, {
-    headers: postLogoutCsrfCookie ? { 'X-CSRF-Token': postLogoutCsrfCookie } : {},
+    headers: { 'X-CSRF-Token': preservedCsrfCookie },
+    cookies: { session_id: preservedSessionCookie, csrf_token: preservedCsrfCookie },
     tags: { name: 'session-journey-refresh-after-logout' },
-    // 429 included: back-to-back local runs share the per-IP refresh window, so
-    // the limiter can answer first — still a rejection, still no token minted.
-    responseCallback: http.expectedStatuses(400, 401, 403, 429),
+    // Missing cookies, failed CSRF and rate-limit rejection cannot prove revocation.
+    responseCallback: http.expectedStatuses(401),
   });
+  checkStatus(refreshAfterLogoutResponse, 401, 'preserved session is revoked after logout');
   check(refreshAfterLogoutResponse, {
-    'session-journey refresh after logout is rejected (400/401/403/429)': (response) =>
-      [400, 401, 403, 429].includes(response.status),
-    'session-journey refresh after logout mints no token': (response) => {
+    'revoked refresh returns JSON error and no access token': (response) => {
       try {
-        return !JSON.parse(response.body).data?.access_token;
+        const body = JSON.parse(response.body);
+        return Boolean(body.error) && !body.data?.access_token;
       } catch {
-        return true;
+        return false;
       }
     },
   });
+
+  const meAfterLogoutResponse = http.get(`${API_PREFIX}/users/me`, {
+    headers: { Authorization: `Bearer ${refreshedToken}` },
+    tags: { name: 'session-journey-me-after-logout' },
+    responseCallback: http.expectedStatuses(401),
+  });
+  checkStatus(meAfterLogoutResponse, 401, 'access token is revoked after logout');
 
   // Fresh session per iteration: clear the jar so the next loop's login starts clean.
   http.cookieJar().clear(`${API_PREFIX}`);

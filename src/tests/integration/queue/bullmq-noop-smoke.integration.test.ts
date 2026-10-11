@@ -89,7 +89,7 @@ describe('Integration: BullMQ runtime under burst, retry and dead-letter', () =>
       concurrency: 10,
       ...getDefaultWorkerOptions(),
     });
-    attachDeadLetterAndAlerting(worker, queueName);
+    attachDeadLetterAndAlerting({ worker, queueName });
     cleanups.push(async () => {
       // Worker first, so nothing is active; then remove every key the case wrote — its queue and
       // its dead-letter queue — so repeated runs leave Redis as they found it.
@@ -109,9 +109,9 @@ describe('Integration: BullMQ runtime under burst, retry and dead-letter', () =>
 
   it('drains a burst thirty times larger than the worker concurrency, losing nothing', async () => {
     const JOB_COUNT = 300;
-    const processed = new Set<number>();
+    const processed = new Map<number, number>();
     const { queue, queueEvents } = await openQueue<{ index: number }>(async ({ index }) => {
-      processed.add(index);
+      processed.set(index, (processed.get(index) ?? 0) + 1);
     });
 
     const jobs = await queue.addBulk(
@@ -121,6 +121,7 @@ describe('Integration: BullMQ runtime under burst, retry and dead-letter', () =>
 
     // Every job ran exactly once, and nothing is left behind in any state.
     expect(processed.size).toBe(JOB_COUNT);
+    expect([...processed.values()]).toEqual(Array(JOB_COUNT).fill(1));
     const counts = await queue.getJobCounts('waiting', 'active', 'delayed', 'failed');
     expect(counts).toEqual({ waiting: 0, active: 0, delayed: 0, failed: 0 });
   }, 60_000);

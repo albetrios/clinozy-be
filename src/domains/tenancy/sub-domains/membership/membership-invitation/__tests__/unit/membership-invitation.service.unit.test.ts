@@ -9,7 +9,15 @@ vi.mock('@/core/events/event-bus.js', () => ({
     emit: vi.fn().mockResolvedValue(undefined),
     emitStrict: vi.fn().mockResolvedValue(undefined),
   },
-  buildDomainEvent: (type: string, payload: unknown, options?: { requestId?: string }) => ({
+  buildDomainEvent: ({
+    type,
+    payload,
+    options,
+  }: {
+    type: string;
+    payload: unknown;
+    options?: { requestId?: string } | undefined;
+  }) => ({
     type,
     payload,
     timestamp: new Date(),
@@ -25,9 +33,9 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ callback }: { callback: () => Promise<unknown> }) => callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
+    withAppDatabaseContext: vi.fn(async ({ callback }: { callback: () => Promise<unknown> }) =>
       callback(),
     ),
   };
@@ -122,13 +130,27 @@ describe('MembershipInvitationService', () => {
       email: 'invitee@example.com',
       is_email_verified: true,
     }),
+    // The inviter an invitation email names.
+    findById: vi.fn().mockResolvedValue({
+      id: 2,
+      first_name: 'Asha',
+      last_name: 'Mehta',
+      email: 'asha@example.com',
+    }),
   } as unknown as UserService;
+
+  // An invitee has no language yet: the email is in the organization's.
+  const organizationSettingsService = {
+    resolveDefaultLocaleForOrganization: vi.fn().mockResolvedValue('es'),
+  };
 
   const service = new MembershipInvitationService(
     organizationRepository,
     membershipRepository,
     invitationRepository,
     userService,
+    undefined,
+    organizationSettingsService,
   );
 
   beforeEach(() => {
@@ -185,7 +207,7 @@ describe('MembershipInvitationService', () => {
       email: 'invitee@example.com',
       expires_in_days: 7,
       invited_by_user_id: 2,
-      inviter_label: 'inviter_public',
+      organization_public_id: 'org_public_abc',
     };
 
     it('creates the invitation and emits a strict event without returning the token (R1/R2)', async () => {
@@ -206,6 +228,16 @@ describe('MembershipInvitationService', () => {
       expect((result as unknown as Record<string, unknown>).token).toBeUndefined();
       // ROUTE #164: the echo flag is off in the harness, so no debug token either.
       expect(result).not.toHaveProperty('debug_invitation_token');
+    });
+
+    it("names the inviter and writes in the organization's language", async () => {
+      await service.createForMembership(params);
+      expect(userService.findById).toHaveBeenCalledWith(2);
+      expect(organizationSettingsService.resolveDefaultLocaleForOrganization).toHaveBeenCalledWith(
+        'org_public_abc',
+      );
+      const [event] = vi.mocked(eventBus.emitStrict).mock.calls[0] ?? [];
+      expect(event?.payload).toMatchObject({ inviter_name: 'Asha Mehta', locale: 'es' });
     });
 
     it('echoes the raw token as debug_invitation_token when its env flag is on (ROUTE #164)', async () => {
@@ -238,7 +270,11 @@ describe('MembershipInvitationService', () => {
     const body = { token: 'raw-token-abc123' };
 
     it('accepts invitation and activates membership', async () => {
-      const result = await service.accept('inv_public_123', body, 'user_public_id');
+      const result = await service.accept({
+        invitation_public_id: 'inv_public_123',
+        body,
+        actingUserPublicId: 'user_public_id',
+      });
       expect(invitationRepository.accept).toHaveBeenCalled();
       expect(membershipRepository.activateForInvitationAccept).toHaveBeenCalled();
       expect(result).toMatchObject({ email: 'invitee@example.com' });
@@ -251,7 +287,13 @@ describe('MembershipInvitationService', () => {
         email: 'attacker@example.com',
         is_email_verified: true,
       } as never);
-      await expect(service.accept('inv_public_123', body, 'user_attacker')).rejects.toMatchObject({
+      await expect(
+        service.accept({
+          invitation_public_id: 'inv_public_123',
+          body,
+          actingUserPublicId: 'user_attacker',
+        }),
+      ).rejects.toMatchObject({
         name: 'ForbiddenError',
       });
     });
@@ -263,7 +305,13 @@ describe('MembershipInvitationService', () => {
         email: 'invitee@example.com',
         is_email_verified: false,
       } as never);
-      await expect(service.accept('inv_public_123', body, 'user_public_id')).rejects.toMatchObject({
+      await expect(
+        service.accept({
+          invitation_public_id: 'inv_public_123',
+          body,
+          actingUserPublicId: 'user_public_id',
+        }),
+      ).rejects.toMatchObject({
         name: 'ForbiddenError',
       });
       // The unverified caller is rejected before the invitation row is even consumed.
@@ -274,43 +322,63 @@ describe('MembershipInvitationService', () => {
       vi.mocked(invitationRepository.lookupOrganizationByInvitationPublicId).mockResolvedValue(
         null,
       );
-      await expect(service.accept('missing_inv', body, 'user_public_id')).rejects.toBeInstanceOf(
-        NotFoundError,
-      );
+      await expect(
+        service.accept({
+          invitation_public_id: 'missing_inv',
+          body,
+          actingUserPublicId: 'user_public_id',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it('throws NotFoundError when invitation row is missing', async () => {
       vi.mocked(invitationRepository.findByPublicId).mockResolvedValue(null);
-      await expect(service.accept('inv_public_123', body, 'user_public_id')).rejects.toBeInstanceOf(
-        NotFoundError,
-      );
+      await expect(
+        service.accept({
+          invitation_public_id: 'inv_public_123',
+          body,
+          actingUserPublicId: 'user_public_id',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it('throws ValidationError when invitation is already revoked', async () => {
       vi.mocked(invitationRepository.findByPublicId).mockResolvedValue(
         makeInvitationRow({ revoked_at: now }) as never,
       );
-      await expect(service.accept('inv_public_123', body, 'user_public_id')).rejects.toBeInstanceOf(
-        ValidationError,
-      );
+      await expect(
+        service.accept({
+          invitation_public_id: 'inv_public_123',
+          body,
+          actingUserPublicId: 'user_public_id',
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
     });
 
     it('throws ValidationError when invitation is already accepted', async () => {
       vi.mocked(invitationRepository.findByPublicId).mockResolvedValue(
         makeInvitationRow({ accepted_at: now }) as never,
       );
-      await expect(service.accept('inv_public_123', body, 'user_public_id')).rejects.toBeInstanceOf(
-        ValidationError,
-      );
+      await expect(
+        service.accept({
+          invitation_public_id: 'inv_public_123',
+          body,
+          actingUserPublicId: 'user_public_id',
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
     });
 
     it('throws ValidationError when invitation is expired', async () => {
       vi.mocked(invitationRepository.findByPublicId).mockResolvedValue(
         makeInvitationRow({ expires_at: new Date('2020-01-01T00:00:00.000Z') }) as never,
       );
-      await expect(service.accept('inv_public_123', body, 'user_public_id')).rejects.toBeInstanceOf(
-        ValidationError,
-      );
+      await expect(
+        service.accept({
+          invitation_public_id: 'inv_public_123',
+          body,
+          actingUserPublicId: 'user_public_id',
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
     });
   });
 
@@ -337,11 +405,11 @@ describe('MembershipInvitationService', () => {
     const body = { expires_in_days: 7 };
 
     it('resends invitation with a new token via strict event, without returning it (R1/R2)', async () => {
-      const result = await service.resendForMembership(
-        asScope('org_public_abc'),
-        'mem_public_xyz',
+      const result = await service.resendForMembership({
+        scope: asScope('org_public_abc'),
+        membership_public_id: 'mem_public_xyz',
         body,
-      );
+      });
       expect(membershipRepository.findByPublicId).toHaveBeenCalledWith('mem_public_xyz', 1);
       expect(invitationRepository.resend).toHaveBeenCalled();
       expect(eventBus.emitStrict).toHaveBeenCalledOnce();
@@ -354,11 +422,11 @@ describe('MembershipInvitationService', () => {
     it('echoes the rotated raw token as debug_invitation_token when its env flag is on (ROUTE #164)', async () => {
       env.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED = true;
       try {
-        const result = await service.resendForMembership(
-          asScope('org_public_abc'),
-          'mem_public_xyz',
+        const result = await service.resendForMembership({
+          scope: asScope('org_public_abc'),
+          membership_public_id: 'mem_public_xyz',
           body,
-        );
+        });
         expect(result.debug_invitation_token).toBe('raw-token-abc123');
       } finally {
         env.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED = false;
@@ -368,14 +436,22 @@ describe('MembershipInvitationService', () => {
     it('throws NotFoundError when the member is unknown or ended', async () => {
       vi.mocked(membershipRepository.findByPublicId).mockResolvedValue(null);
       await expect(
-        service.resendForMembership(asScope('org_public_abc'), 'mem_public_xyz', body),
+        service.resendForMembership({
+          scope: asScope('org_public_abc'),
+          membership_public_id: 'mem_public_xyz',
+          body,
+        }),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it('throws NotFoundError when the member has no invitation', async () => {
       vi.mocked(invitationRepository.findLatestByMembershipId).mockResolvedValue(null);
       await expect(
-        service.resendForMembership(asScope('org_public_abc'), 'mem_public_xyz', body),
+        service.resendForMembership({
+          scope: asScope('org_public_abc'),
+          membership_public_id: 'mem_public_xyz',
+          body,
+        }),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
@@ -384,7 +460,11 @@ describe('MembershipInvitationService', () => {
         makeInvitationRow({ accepted_at: now }) as never,
       );
       await expect(
-        service.resendForMembership(asScope('org_public_abc'), 'mem_public_xyz', body),
+        service.resendForMembership({
+          scope: asScope('org_public_abc'),
+          membership_public_id: 'mem_public_xyz',
+          body,
+        }),
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
@@ -393,7 +473,11 @@ describe('MembershipInvitationService', () => {
         makeInvitationRow({ revoked_at: now }) as never,
       );
       await expect(
-        service.resendForMembership(asScope('org_public_abc'), 'mem_public_xyz', body),
+        service.resendForMembership({
+          scope: asScope('org_public_abc'),
+          membership_public_id: 'mem_public_xyz',
+          body,
+        }),
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
@@ -401,7 +485,11 @@ describe('MembershipInvitationService', () => {
       vi.mocked(invitationRepository.findLatestByMembershipId).mockResolvedValue(
         makeInvitationRow({ expires_at: new Date('2020-01-01T00:00:00.000Z') }) as never,
       );
-      await service.resendForMembership(asScope('org_public_abc'), 'mem_public_xyz', body);
+      await service.resendForMembership({
+        scope: asScope('org_public_abc'),
+        membership_public_id: 'mem_public_xyz',
+        body,
+      });
       expect(invitationRepository.resend).toHaveBeenCalledWith(
         'inv_public_123',
         'hashed-token-abc123',

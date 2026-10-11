@@ -16,9 +16,9 @@ describe('validation.util', () => {
 
   describe('trimmedStringMinMax', () => {
     it('enforces min and max after trim', () => {
-      expect(trimmedStringMinMax(2, 5).parse(' ab ')).toBe('ab');
-      expect(() => trimmedStringMinMax(2, 5).parse(' a ')).toThrow();
-      expect(() => trimmedStringMinMax(2, 5).parse(' abcdef ')).toThrow();
+      expect(trimmedStringMinMax({ min: 2, max: 5 }).parse(' ab ')).toBe('ab');
+      expect(() => trimmedStringMinMax({ min: 2, max: 5 }).parse(' a ')).toThrow();
+      expect(() => trimmedStringMinMax({ min: 2, max: 5 }).parse(' abcdef ')).toThrow();
     });
   });
 

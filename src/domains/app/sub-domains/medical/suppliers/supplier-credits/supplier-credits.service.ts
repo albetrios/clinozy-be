@@ -1,5 +1,5 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import type { OrganizationPrincipalDatabaseScope } from '@/infrastructure/database/contexts/database-context.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import type { BaseRecordVisibility } from '@/domains/app/base-record.types.js';
@@ -44,29 +44,36 @@ export class SupplierCreditsService extends BaseRecordService<SupplierCreditOutp
         { field: 'supplier_id', table: suppliers, label: 'supplier' },
         { field: 'medicine_id', table: medicines, label: 'medicine' },
         { field: 'medicine_batch_id', table: medicine_batches, label: 'medicine batch' },
-        { field: 'created_by_membership_id', table: memberships, label: 'team member' },
+        memberReference('created_by_membership_id'),
       ],
       ...createSupplierCreditsRules(repository),
     });
   }
 
   /** Returns stock — and answers with the credit as applying it to the dues left it (MD11). */
-  override async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    parentPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    createName?: string,
-  ): Promise<SupplierCreditOutput> {
-    const created = await super.create(
+  override async create({
+    scope,
+    body,
+    actingUserPublicId,
+    parentPublicId,
+    visibility,
+    createName,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    parentPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    createName?: string | undefined;
+  }): Promise<SupplierCreditOutput> {
+    const created = await super.create({
       scope,
       body,
       actingUserPublicId,
       parentPublicId,
       visibility,
       createName,
-    );
-    return this.get(scope, created.id, actingUserPublicId, visibility);
+    });
+    return this.get({ scope, publicId: created.id, actingUserPublicId, visibility });
   }
 }

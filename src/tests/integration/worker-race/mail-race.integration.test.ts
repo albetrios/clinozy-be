@@ -35,10 +35,13 @@ describe('Integration: mail worker concurrency race', () => {
 
     const results = await Promise.allSettled(
       Array.from({ length: PARALLEL_WORKER_COUNT }, (_, index) =>
-        processMailOutboxJob(
-          { mailOutboxToken, requestId: `req-mail-race-${String(index)}` },
-          { jobId: `job-mail-race-${String(index)}`, requestId: `req-mail-race-${String(index)}` },
-        ),
+        processMailOutboxJob({
+          jobData: { mailOutboxToken, requestId: `req-mail-race-${String(index)}` },
+          options: {
+            jobId: `job-mail-race-${String(index)}`,
+            requestId: `req-mail-race-${String(index)}`,
+          },
+        }),
       ),
     );
 
@@ -49,6 +52,9 @@ describe('Integration: mail worker concurrency race', () => {
         result.value.messageId === 'msg_race_single',
     );
 
+    expect(results.map((result) => result.status)).toEqual(
+      Array(PARALLEL_WORKER_COUNT).fill('fulfilled'),
+    );
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
     expect(sentOnce).toBe(true);
 

@@ -56,7 +56,7 @@ export async function assertAppointmentOfPatient(options: {
 /** The organization's today (its time zone) — a patient-file date's default and latest day. */
 export async function organizationToday(context: BaseRecordWriteContext): Promise<string> {
   const { timezone } = await context.ports.organizationSettings(context.scope);
-  return calendarDateInTimeZone(timezone);
+  return calendarDateInTimeZone({ timeZone: timezone });
 }
 
 /** A patient-file date is not after the organization's today — else a 400 on `field`. */
@@ -90,10 +90,13 @@ export async function assertTreatmentOfPatient(options: {
 }
 
 /** A sent offering is active (O13, TR8, PK10) — else a 400 on `field` naming it. */
-export async function assertOfferingActive(
-  offeringId: unknown,
+export async function assertOfferingActive({
+  offeringId,
   field = 'offering_id',
-): Promise<void> {
+}: {
+  offeringId: unknown;
+  field?: string | undefined;
+}): Promise<void> {
   if (typeof offeringId !== 'number') return;
   const offering = await offeringsRepository.findById(offeringId);
   if (offering?.is_active !== true) {

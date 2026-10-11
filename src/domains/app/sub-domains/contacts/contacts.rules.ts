@@ -43,7 +43,7 @@ const DATABASE_TIME_ZONE = 'UTC';
 export function assertContactValues(values: Record<string, unknown>): void {
   if (
     typeof values.date_of_birth === 'string' &&
-    values.date_of_birth > calendarDateInTimeZone(DATABASE_TIME_ZONE)
+    values.date_of_birth > calendarDateInTimeZone({ timeZone: DATABASE_TIME_ZONE })
   ) {
     throw fieldValidationError({
       field: 'date_of_birth',
@@ -90,11 +90,17 @@ type ContactVisit = {
 /** The organization's today (its time zone) — a contact's last and next visit split on it. */
 async function organizationToday(context: BaseRecordWriteContext): Promise<string> {
   const { timezone } = await context.ports.organizationSettings(context.scope);
-  return calendarDateInTimeZone(timezone);
+  return calendarDateInTimeZone({ timeZone: timezone });
 }
 
 /** CT7: a live lead, patient file or appointment points at the contact. */
-async function isInUse(repository: ContactsRepository, contactId: number): Promise<boolean> {
+async function isInUse({
+  repository,
+  contactId,
+}: {
+  repository: ContactsRepository;
+  contactId: number;
+}): Promise<boolean> {
   return (
     (await leadsRepository.hasLiveLeadForContact(contactId)) ||
     (await repository.findPatientFile(contactId)) !== null ||
@@ -106,11 +112,15 @@ async function isInUse(repository: ContactsRepository, contactId: number): Promi
  * Adds what a contact reads of the records about it to a page (4.A.6): its open lead (#131), its
  * patient file and its last and next visit (#132) — one read each.
  */
-async function decorateContacts(
-  repository: ContactsRepository,
-  outputs: Record<string, unknown>[],
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function decorateContacts({
+  repository,
+  outputs,
+  context,
+}: {
+  repository: ContactsRepository;
+  outputs: Record<string, unknown>[];
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const ids = outputs.map((output) => String(output.id));
   const openLeads = await leadsRepository.findOpenLeadsOfContacts(ids);
   const patientFiles = await repository.findPatientFiles(ids);
@@ -177,10 +187,13 @@ export function createContactsRules(repository: ContactsRepository): BaseRecordR
   };
 
   /** The household an update moves the contact to — undefined when it stays. */
-  const householdMove = async (
-    values: Record<string, unknown>,
-    existing: BaseRecordRow,
-  ): Promise<number | undefined> => {
+  const householdMove = async ({
+    values,
+    existing,
+  }: {
+    values: Record<string, unknown>;
+    existing: BaseRecordRow;
+  }): Promise<number | undefined> => {
     if (!('household_contact_id' in values)) return undefined;
     const named = values.household_contact_id;
     const target = named === null ? existing.id : await householdOf(named as number);
@@ -210,7 +223,7 @@ export function createContactsRules(repository: ContactsRepository): BaseRecordR
       });
     },
     prepareUpdate: async (values, existing, context) => {
-      const target = await householdMove(values, existing);
+      const target = await householdMove({ values, existing });
       if (target === undefined) delete values.household_contact_id;
       else values.household_contact_id = target;
       const phones = values.phones as ContactPhoneInput[] | undefined;
@@ -229,11 +242,11 @@ export function createContactsRules(repository: ContactsRepository): BaseRecordR
       }
     },
     prepareRemove: async (existing) => {
-      if (await isInUse(repository, existing.id)) {
+      if (await isInUse({ repository, contactId: existing.id })) {
         throw new ConflictError('errors:contactInUse').withReason('contact_in_use');
       }
     },
-    decorate: (outputs, context) => decorateContacts(repository, outputs, context),
+    decorate: (outputs, context) => decorateContacts({ repository, outputs, context }),
     afterWrite: async (row, change, context) => {
       if (change.kind === 'delete') {
         await repository.setPhonesDeletedAt(row.id, row.deleted_at);

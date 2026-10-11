@@ -21,16 +21,18 @@ describe('time-zone helpers', () => {
     // 18:29 UTC is 23:59 in India; 18:30 UTC is the next day there
     const beforeMidnight = new Date('2026-10-09T18:29:00Z');
     const atMidnight = new Date('2026-10-09T18:30:00Z');
-    expect(calendarDateInTimeZone('Asia/Kolkata', beforeMidnight)).toBe('2026-10-09');
-    expect(clockTimeInTimeZone('Asia/Kolkata', beforeMidnight)).toBe('23:59');
-    expect(calendarDateInTimeZone('Asia/Kolkata', atMidnight)).toBe('2026-10-10');
-    expect(clockTimeInTimeZone('Asia/Kolkata', atMidnight)).toBe('00:00');
+    expect(calendarDateInTimeZone({ timeZone: 'Asia/Kolkata', at: beforeMidnight })).toBe(
+      '2026-10-09',
+    );
+    expect(clockTimeInTimeZone({ timeZone: 'Asia/Kolkata', at: beforeMidnight })).toBe('23:59');
+    expect(calendarDateInTimeZone({ timeZone: 'Asia/Kolkata', at: atMidnight })).toBe('2026-10-10');
+    expect(clockTimeInTimeZone({ timeZone: 'Asia/Kolkata', at: atMidnight })).toBe('00:00');
   });
 
   it('gives the same instant two dates in the zones furthest apart', () => {
     const at = new Date('2026-10-09T12:00:00Z');
-    expect(calendarDateInTimeZone('Pacific/Kiritimati', at)).toBe('2026-10-10');
-    expect(calendarDateInTimeZone('Pacific/Pago_Pago', at)).toBe('2026-10-09');
+    expect(calendarDateInTimeZone({ timeZone: 'Pacific/Kiritimati', at })).toBe('2026-10-10');
+    expect(calendarDateInTimeZone({ timeZone: 'Pacific/Pago_Pago', at })).toBe('2026-10-09');
   });
 
   it('turns a wall time in a zone into its instant', () => {
@@ -83,8 +85,8 @@ describe('time-zone helpers', () => {
       timeZone: 'America/New_York',
     });
     expect([
-      calendarDateInTimeZone('America/New_York', resolved),
-      clockTimeInTimeZone('America/New_York', resolved),
+      calendarDateInTimeZone({ timeZone: 'America/New_York', at: resolved }),
+      clockTimeInTimeZone({ timeZone: 'America/New_York', at: resolved }),
     ]).toEqual(['2026-03-08', expect.stringMatching(/^0[13]:30$/)]);
   });
 
@@ -101,12 +103,15 @@ describe('time-zone helpers', () => {
     for (const timeZone of zones) {
       for (let hour = 0; hour < 365 * 24; hour += 7) {
         const at = new Date(start + hour * 3_600_000);
-        const date = calendarDateInTimeZone(timeZone, at);
-        const time = clockTimeInTimeZone(timeZone, at);
+        const date = calendarDateInTimeZone({ timeZone, at });
+        const time = clockTimeInTimeZone({ timeZone, at });
         const back = instantInTimeZone({ date, time, timeZone });
         // An hour repeated by a fall-back may resolve to either reading; the wall time is the same
         expect(
-          [calendarDateInTimeZone(timeZone, back), clockTimeInTimeZone(timeZone, back)],
+          [
+            calendarDateInTimeZone({ timeZone, at: back }),
+            clockTimeInTimeZone({ timeZone, at: back }),
+          ],
           `${timeZone} ${at.toISOString()}`,
         ).toEqual([date, time]);
       }

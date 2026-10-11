@@ -23,10 +23,10 @@ const reviewFields = {
   source: z.enum(PATIENT_REVIEW_SOURCE_VALUES),
   review_date: calendarDateSchema,
   rating: z.number().int().min(1).max(5).nullable(),
-  text: trimmedStringMinMax(1, PATIENT_REVIEW_TEXT_MAX).nullable(),
+  text: trimmedStringMinMax({ min: 1, max: PATIENT_REVIEW_TEXT_MAX }).nullable(),
   link: httpsLinkSchema(500).nullable(),
   file_keys: z
-    .array(trimmedStringMinMax(1, 512))
+    .array(trimmedStringMinMax({ min: 1, max: 512 }))
     .max(PATIENT_REVIEW_FILE_KEYS_MAX)
     .refine(distinct, { message: 'Each file once' }),
   appointment_id: recordIdSchema.nullable(),

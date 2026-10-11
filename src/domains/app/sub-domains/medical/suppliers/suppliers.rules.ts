@@ -32,7 +32,7 @@ function paiseOf(value: unknown): number {
 }
 
 /** Whole days from `from` to `to` (calendar dates). */
-function daysBetween(from: string, to: string): number {
+function daysBetween({ from, to }: { from: string; to: string }): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
 
@@ -40,10 +40,13 @@ function daysBetween(from: string, to: string): number {
  * MD10: takes `paise` out of what is left of the splits, mode by mode in their order — the splits
  * of one order's payment.
  */
-function takeFromSplits(
-  left: { mode: PaymentSplit['mode']; paise: number }[],
-  paise: number,
-): PaymentSplit[] {
+function takeFromSplits({
+  left,
+  paise,
+}: {
+  left: { mode: PaymentSplit['mode']; paise: number }[];
+  paise: number;
+}): PaymentSplit[] {
   const taken: PaymentSplit[] = [];
   let needed = paise;
   for (const split of left) {
@@ -64,7 +67,7 @@ function takeFromSplits(
  */
 async function paySupplier(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing: supplier, context } = input;
-  const body = parseWithSchema(PaySupplierDto, input.input);
+  const body = parseWithSchema({ schema: PaySupplierDto, data: input.input });
   const branchId = await requirePaymentBranchId({
     branchPublicId: body.branch_id,
     field: 'branch_id',
@@ -94,7 +97,7 @@ async function paySupplier(input: BaseRecordActionInput): Promise<BaseRecordRow>
         medical_purchase_order_id: order.id,
         reference: body.reference ?? null,
         note: body.note ?? null,
-        ...splitsToColumns(takeFromSplits(left, take)),
+        ...splitsToColumns(takeFromSplits({ left, paise: take })),
       },
     });
     remaining -= take;
@@ -103,10 +106,13 @@ async function paySupplier(input: BaseRecordActionInput): Promise<BaseRecordRow>
 }
 
 /** MD10: a supplier with something payable, an open credit or an order waiting can't be deleted. */
-async function assertNothingOwed(
-  repository: SuppliersRepository,
-  supplier: BaseRecordRow,
-): Promise<void> {
+async function assertNothingOwed({
+  repository,
+  supplier,
+}: {
+  repository: SuppliersRepository;
+  supplier: BaseRecordRow;
+}): Promise<void> {
   const account = (await repository.findAccounts([supplier.id])).get(supplier.id);
   if (
     (account?.payable ?? 0) > 0 ||
@@ -142,7 +148,12 @@ async function decorateSuppliers(options: {
     output.payable = account?.payable ?? 0;
     output.order_count = account?.order_count ?? 0;
     output.ageing_days =
-      oldest === null ? null : daysBetween(calendarDateInTimeZone(timezone, oldest), today);
+      oldest === null
+        ? null
+        : daysBetween({
+            from: calendarDateInTimeZone({ timeZone: timezone, at: oldest }),
+            to: today,
+          });
     output.manufacturers = manufacturers.get(id) ?? [];
   }
 }
@@ -161,7 +172,7 @@ async function decorateSuppliers(options: {
  */
 export function createSuppliersRules(repository: SuppliersRepository): BaseRecordRules {
   return {
-    prepareRemove: (existing) => assertNothingOwed(repository, existing),
+    prepareRemove: (existing) => assertNothingOwed({ repository, supplier: existing }),
     actions: { payments: paySupplier },
     decorate: (outputs, context) => decorateSuppliers({ repository, outputs, context }),
   };

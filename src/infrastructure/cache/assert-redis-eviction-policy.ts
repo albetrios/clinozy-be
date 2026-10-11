@@ -49,9 +49,33 @@ export async function assertRedisEvictionPolicy(options: {
   }
   throw new Error(
     `redis.eviction_policy.unsafe: ${options.endpointName} runs maxmemory-policy "${policy}" ` +
-      `with a ${maxMemory ?? 'set'}-byte limit. BullMQ needs "${SAFE_EVICTION_POLICY}": an evicting ` +
-      'Redis drops job data and lock keys when memory fills, losing jobs or running them twice. ' +
+      `with a ${maxMemory ?? 'set'}-byte limit. It needs "${SAFE_EVICTION_POLICY}": an evicting ` +
+      'Redis drops keys when memory fills — BullMQ job data and locks (jobs lost or run twice), ' +
+      'idempotency entries (a retried write runs twice) and rate-limit counters. ' +
       'Set maxmemory-policy noeviction on the Redis server. ' +
       'See docs/deployment/runbooks/redis-topology.md.',
   );
+}
+
+/**
+ * Runs {@link assertRedisEvictionPolicy} on every Redis endpoint this process writes to: `REDIS_URL`
+ * (cache, idempotency, rate limits — and the queues, when they share it) always, and
+ * `REDIS_BULLMQ_URL` as well when the queues run on their own instance.
+ *
+ * @remarks
+ * Only the queue endpoint was checked when the two were separate, and the API checked none — an
+ * evicting cache instance dropped idempotency entries under memory pressure unnoticed.
+ */
+export async function assertRedisEndpointsEvictionPolicy(endpoints: {
+  cacheClient: { info(section: string): Promise<string> };
+  queueClient: { info(section: string): Promise<string> };
+  queuesOnSeparateInstance: boolean;
+}): Promise<void> {
+  await assertRedisEvictionPolicy({ client: endpoints.cacheClient, endpointName: 'REDIS_URL' });
+  if (endpoints.queuesOnSeparateInstance) {
+    await assertRedisEvictionPolicy({
+      client: endpoints.queueClient,
+      endpointName: 'REDIS_BULLMQ_URL',
+    });
+  }
 }

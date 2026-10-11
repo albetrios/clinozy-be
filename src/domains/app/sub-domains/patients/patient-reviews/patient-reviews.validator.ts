@@ -16,17 +16,17 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a review create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePatientReview(data: unknown): CreatePatientReviewInput {
-  return parseWithSchema(CreatePatientReviewDto, data);
+  return parseWithSchema({ schema: CreatePatientReviewDto, data });
 }
 
 /** Parses a review update body; throws `ValidationError` naming each bad field. */
 export function validateUpdatePatientReview(data: unknown): UpdatePatientReviewInput {
-  return parseWithSchema(UpdatePatientReviewDto, data);
+  return parseWithSchema({ schema: UpdatePatientReviewDto, data });
 }
 
 /** Parses a patient's reviews query into a list input (routes-final 7.J.8 #57). */
 export function validateListPatientReviewsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listPatientReviewsQueryDto, data);
+  const query = parseWithSchema({ schema: listPatientReviewsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

@@ -8,25 +8,28 @@ import type { OfferOutput } from './offers.types.js';
 const SERIALIZER_TIME_ZONE = 'UTC';
 
 /** Shapes an `app.offers` row as the API returns it (public ids, numbers, the derived status). */
-export function serializeOffer(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): OfferOutput {
+export function serializeOffer({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): OfferOutput {
   return {
     id: row.public_id,
     name: row.name as string,
     code: row.code as string | null,
     kind: row.kind as string,
     value: toAmount(row.value) as number,
-    offering_ids: references.listOf('offering_ids', row),
-    branch_ids: references.listOf('branch_ids', row),
+    offering_ids: references.listOf({ field: 'offering_ids', row }),
+    branch_ids: references.listOf({ field: 'branch_ids', row }),
     starts_on: row.starts_on as string | null,
     ends_on: row.ends_on as string | null,
     is_active: row.is_active as boolean,
-    status: offerStatusOn(
-      { is_active: row.is_active, starts_on: row.starts_on, ends_on: row.ends_on },
-      calendarDateInTimeZone(SERIALIZER_TIME_ZONE),
-    ),
+    status: offerStatusOn({
+      offer: { is_active: row.is_active, starts_on: row.starts_on, ends_on: row.ends_on },
+      today: calendarDateInTimeZone({ timeZone: SERIALIZER_TIME_ZONE }),
+    }),
     tone: row.tone as string,
     note: row.note as string | null,
     created_at: row.created_at.toISOString(),

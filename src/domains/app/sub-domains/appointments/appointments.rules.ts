@@ -103,8 +103,8 @@ async function organizationNow(
   const { timezone: timeZone } = await context.ports.organizationSettings(context.scope);
   return {
     timeZone,
-    today: calendarDateInTimeZone(timeZone),
-    nowMinutes: minutesOfClockTime(clockTimeInTimeZone(timeZone)),
+    today: calendarDateInTimeZone({ timeZone }),
+    nowMinutes: minutesOfClockTime(clockTimeInTimeZone({ timeZone })),
   };
 }
 
@@ -192,7 +192,13 @@ async function bookingWindow(options: {
  * branch's hours or the doctor's (A4). A clash with another booking is the database's — the
  * exclusion constraints (A3), mapped to `slot_taken` by the service.
  */
-async function assertBookable(booking: Booking, context: BaseRecordWriteContext): Promise<void> {
+async function assertBookable({
+  booking,
+  context,
+}: {
+  booking: Booking;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const now = await organizationNow(context);
   const startsInPast =
     booking.date < now.today ||
@@ -234,24 +240,35 @@ async function assertPlaceInBranch(merged: Record<string, unknown>): Promise<voi
 }
 
 /** Whether a write's value differs from the stored one (times compared as `HH:mm`). */
-function changed(field: string, value: unknown, existing: BaseRecordRow): boolean {
+function changed({
+  field,
+  value,
+  existing,
+}: {
+  field: string;
+  value: unknown;
+  existing: BaseRecordRow;
+}): boolean {
   if (value === undefined) return false;
   if (field === 'start_time') return value !== toHourMinute(String(existing.start_time));
   return value !== existing[field];
 }
 
 /** The 409 of a move the floor or the lifecycle does not allow (A5, A11). */
-function notAllowed(action: string, status: string): ConflictError {
+function notAllowed({ action, status }: { action: string; status: string }): ConflictError {
   return new ConflictError('errors:recordTransitionNotAllowed', { action, status }).withReason(
     'transition_not_allowed',
   );
 }
 
 /** A walk-in (A6): today at now (on the 5-minute grid), checked in at once, stage `waiting`. */
-async function placeWalkIn(
-  values: Record<string, unknown>,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function placeWalkIn({
+  values,
+  context,
+}: {
+  values: Record<string, unknown>;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const now = await organizationNow(context);
   const at = new Date();
   values.appointment_date = now.today;
@@ -286,10 +303,13 @@ async function fillServiceLabel(values: Record<string, unknown>): Promise<void> 
  * from the appointment, `lead_id` the lead (P10), not yet converted (P4) — in the check-in's
  * transaction.
  */
-async function convertAtCheckIn(
-  row: BaseRecordRow,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function convertAtCheckIn({
+  row,
+  context,
+}: {
+  row: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const contactId = row.contact_id as number;
   const leadId = await leadsRepository.markVisited({ contactId, userId: context.userId });
   if (leadId !== null) {
@@ -317,10 +337,13 @@ async function convertAtCheckIn(
 }
 
 /** CT11: the appointment's doctor and therapist handle its contact. */
-async function addTeamToContact(
-  row: BaseRecordRow,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function addTeamToContact({
+  row,
+  context,
+}: {
+  row: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const membershipIds = [row.doctor_membership_id, row.therapist_membership_id].filter(
     (id): id is number => typeof id === 'number',
   );
@@ -375,10 +398,13 @@ function countsWindow(input: Record<string, unknown>): { from: string; days: num
  * The free slots of a day (6.8 #3): the branch's hours, working days and holidays, the doctor's
  * days and hours, and the doctor's, room's and machine's bookings — the exclusion rules' read.
  */
-async function slotsOfDay(
-  { input, context, branchScope, resolveReferences }: BaseRecordCollectionInput,
-  repository: AppointmentsRepository,
-): Promise<unknown> {
+async function slotsOfDay({
+  collection: { input, context, branchScope, resolveReferences },
+  repository,
+}: {
+  collection: BaseRecordCollectionInput;
+  repository: AppointmentsRepository;
+}): Promise<unknown> {
   const scope = await branchScope([String(input.branch_id)]);
   const references: Record<string, unknown> = {
     branch_id: input.branch_id,
@@ -393,21 +419,27 @@ async function slotsOfDay(
   const duration = Number(input.duration_minutes);
   const step = Number(input.step_minutes ?? DEFAULT_SLOT_STEP_MINUTES);
   const now = await organizationNow(context);
-  const closed = (reason: string, label: string | null = null) => ({
+  const closed = ({
+    reason,
+    label = null,
+  }: {
+    reason: string;
+    label?: string | null | undefined;
+  }) => ({
     appointment_date: date,
     is_open: false,
     closed_reason: reason,
     closed_label: label,
     slots: [],
   });
-  if (date < now.today) return closed('past');
+  if (date < now.today) return closed({ reason: 'past' });
   const window = await bookingWindow({
     organizationId: context.organizationId,
     branchId,
     date,
     doctorMembershipId: idOf(references.doctor_membership_id),
   });
-  if (window.closure) return closed(window.closure.reason, window.closure.label);
+  if (window.closure) return closed({ reason: window.closure.reason, label: window.closure.label });
   const busy = (
     await repository.findBusySpans({
       organizationId: context.organizationId,
@@ -476,23 +508,27 @@ async function dailyCounts({
 }
 
 /** Checks a move of a booking (6.9): still movable, bookable, and stamped as rescheduled (A5). */
-async function prepareMove(
-  values: Record<string, unknown>,
-  existing: BaseRecordRow,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function prepareMove({
+  values,
+  existing,
+  context,
+}: {
+  values: Record<string, unknown>;
+  existing: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   if (!(APPOINTMENT_MOVABLE_STATUS_VALUES as readonly unknown[]).includes(existing.status)) {
     throw new ConflictError('errors:appointmentNotMovable', {
       status: String(existing.status),
     }).withReason('appointment_not_movable');
   }
-  await assertBookable(
-    bookingOf({ organizationId: context.organizationId, values, existing }),
+  await assertBookable({
+    booking: bookingOf({ organizationId: context.organizationId, values, existing }),
     context,
-  );
+  });
   const moved =
-    changed('appointment_date', values.appointment_date, existing) ||
-    changed('start_time', values.start_time, existing);
+    changed({ field: 'appointment_date', value: values.appointment_date, existing }) ||
+    changed({ field: 'start_time', value: values.start_time, existing });
   if (!moved) return;
   const { timeZone } = await organizationNow(context);
   values.rescheduled_from = instantInTimeZone({
@@ -507,7 +543,13 @@ async function prepareMove(
 }
 
 /** WC-16 (D79): the member who booked the visit joins the involved members of the person's open lead. */
-async function involveBooker(row: BaseRecordRow, context: BaseRecordWriteContext): Promise<void> {
+async function involveBooker({
+  row,
+  context,
+}: {
+  row: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const membershipId = await findMembershipIdOfUser({
     organizationId: context.organizationId,
     userId: context.userId,
@@ -522,7 +564,7 @@ async function involveBooker(row: BaseRecordRow, context: BaseRecordWriteContext
 }
 
 /** Whether a write moved the booking to another day or time — {@link prepareMove} counted it. */
-function wasMoved(row: BaseRecordRow, change: BaseRecordChange): boolean {
+function wasMoved({ row, change }: { row: BaseRecordRow; change: BaseRecordChange }): boolean {
   return (
     change.kind === 'update' &&
     change.before !== undefined &&
@@ -538,7 +580,7 @@ const BOOKING_MESSAGE_STOPPING_ACTIONS: ReadonlySet<string> = new Set([
 ]);
 
 /** Whether a write changed the booking's status — a lifecycle action, or a move back to scheduled. */
-function changedStatus(row: BaseRecordRow, change: BaseRecordChange): boolean {
+function changedStatus({ row, change }: { row: BaseRecordRow; change: BaseRecordChange }): boolean {
   return change.before !== undefined && row.status !== change.before.status;
 }
 
@@ -548,13 +590,18 @@ function changedStatus(row: BaseRecordRow, change: BaseRecordChange): boolean {
  * D81 T7, WC-48) and a delete ask for the rules run right after the commit — it sends the confirm
  * request, and a confirm, a check-in or a cancel closes its task at once.
  */
-async function followBookingMessages(
-  repository: AppointmentsRepository,
-  row: BaseRecordRow,
-  change: BaseRecordChange,
-  context: BaseRecordWriteContext,
-): Promise<void> {
-  const moved = wasMoved(row, change);
+async function followBookingMessages({
+  repository,
+  row,
+  change,
+  context,
+}: {
+  repository: AppointmentsRepository;
+  row: BaseRecordRow;
+  change: BaseRecordChange;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
+  const moved = wasMoved({ row, change });
   const action = change.kind === 'transition' ? change.action : undefined;
   const stops =
     moved ||
@@ -562,7 +609,7 @@ async function followBookingMessages(
     (action !== undefined && BOOKING_MESSAGE_STOPPING_ACTIONS.has(action));
   if (stops) await repository.stopQueuedBookingMessages(Number(row.id));
   const asksForRun =
-    change.kind === 'create' || change.kind === 'delete' || moved || changedStatus(row, change);
+    change.kind === 'create' || change.kind === 'delete' || moved || changedStatus({ row, change });
   if (asksForRun) {
     const { organizationPublicId } = context.scope;
     await runEnqueueAfterCommit(() => requestTaskRulesRun(organizationPublicId));
@@ -570,11 +617,15 @@ async function followBookingMessages(
 }
 
 /** A check-in waits for the booking's day, a no-show for its start (6.9) — 409 `appointment_not_due` before. */
-async function assertDue(
-  action: 'check-in' | 'no-show',
-  existing: BaseRecordRow,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function assertDue({
+  action,
+  existing,
+  context,
+}: {
+  action: 'check-in' | 'no-show';
+  existing: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const now = await organizationNow(context);
   const date = String(existing.appointment_date);
   const started =
@@ -588,20 +639,25 @@ async function assertDue(
 }
 
 /** The lifecycle's own checks (6.9): due dates, the floor's forward-only stage, pause and resume (A5, A11). */
-async function prepareLifecycle(
-  action: string,
-  values: Record<string, unknown>,
-  existing: BaseRecordRow,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function prepareLifecycle({
+  action,
+  values,
+  existing,
+  context,
+}: {
+  action: string;
+  values: Record<string, unknown>;
+  existing: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const status = String(existing.status);
   if (action === 'reinstate') {
-    await assertBookable(
-      bookingOf({ organizationId: context.organizationId, values: {}, existing }),
+    await assertBookable({
+      booking: bookingOf({ organizationId: context.organizationId, values: {}, existing }),
       context,
-    );
+    });
   } else if (action === 'check-in' || action === 'no-show') {
-    await assertDue(action, existing, context);
+    await assertDue({ action, existing, context });
   } else if (
     action === 'undo-check-in' &&
     existing.visit_stage !== APPOINTMENT_VISIT_STAGE_VALUES[0]
@@ -610,12 +666,15 @@ async function prepareLifecycle(
   } else if (action === 'stage') {
     const order = APPOINTMENT_VISIT_STAGE_VALUES as readonly unknown[];
     if (order.indexOf(values.visit_stage) <= order.indexOf(existing.visit_stage)) {
-      throw notAllowed(`stage:${String(values.visit_stage)}`, String(existing.visit_stage));
+      throw notAllowed({
+        action: `stage:${String(values.visit_stage)}`,
+        status: String(existing.visit_stage),
+      });
     }
   } else if (action === 'pause' && existing.visit_paused_at !== null) {
-    throw notAllowed(action, 'paused');
+    throw notAllowed({ action, status: 'paused' });
   } else if (action === 'resume' && existing.visit_paused_at === null) {
-    throw notAllowed(action, status);
+    throw notAllowed({ action, status });
   }
 }
 
@@ -643,33 +702,38 @@ export function createAppointmentsRules(repository: AppointmentsRepository): Bas
       await fillServiceLabel(values);
       await assertPlaceInBranch(values);
       if (values.is_walk_in === true) {
-        await placeWalkIn(values, context);
+        await placeWalkIn({ values, context });
         return;
       }
-      await assertBookable(bookingOf({ organizationId: context.organizationId, values }), context);
+      await assertBookable({
+        booking: bookingOf({ organizationId: context.organizationId, values }),
+        context,
+      });
     },
     prepareUpdate: async (values, existing, context) => {
-      const placing = SLOT_FIELDS.some((field) => changed(field, values[field], existing));
+      const placing = SLOT_FIELDS.some((field) =>
+        changed({ field, value: values[field], existing }),
+      );
       if (!placing) return;
       await assertPlaceInBranch({ ...existing, ...values });
-      await prepareMove(values, existing, context);
+      await prepareMove({ values, existing, context });
     },
     prepareTransition: (action, values, existing, context) =>
-      prepareLifecycle(action, values, existing, context),
+      prepareLifecycle({ action, values, existing, context }),
     afterWrite: async (row, change, context) => {
       const checkedIn =
         (change.kind === 'create' && row.is_walk_in === true) ||
         (change.kind === 'transition' && change.action === 'check-in');
-      if (checkedIn) await convertAtCheckIn(row, context);
+      if (checkedIn) await convertAtCheckIn({ row, context });
       if (checkedIn || change.kind === 'create' || change.kind === 'update') {
-        await addTeamToContact(row, context);
+        await addTeamToContact({ row, context });
       }
-      if (change.kind === 'create') await involveBooker(row, context);
-      await followBookingMessages(repository, row, change, context);
+      if (change.kind === 'create') await involveBooker({ row, context });
+      await followBookingMessages({ repository, row, change, context });
     },
     decorate: decorateAppointments,
     collectionViews: {
-      slots: (input) => slotsOfDay(input, repository),
+      slots: (input) => slotsOfDay({ collection: input, repository }),
       'daily-counts': dailyCounts,
     },
   };

@@ -22,7 +22,7 @@ export const membershipInvitationIdParamsDto = z
  */
 export const acceptMembershipInvitationDto = z
   .object({
-    token: trimmedStringMinMax(1, 512).optional(),
+    token: trimmedStringMinMax({ min: 1, max: 512 }).optional(),
   })
   .strict();
 

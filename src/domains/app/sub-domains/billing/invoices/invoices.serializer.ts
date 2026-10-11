@@ -22,10 +22,13 @@ function money(value: unknown): number {
 }
 
 /** Shapes an `app.invoice_items` row as the API returns it (8.A.6); the treatments it bills are added after. */
-export function serializeInvoiceItem(
-  row: InvoiceItemReadRow,
-  treatmentIds: readonly string[],
-): InvoiceItemOutput {
+export function serializeInvoiceItem({
+  row,
+  treatmentIds,
+}: {
+  row: InvoiceItemReadRow;
+  treatmentIds: readonly string[];
+}): InvoiceItemOutput {
   return {
     id: row.id,
     line_number: row.line_number,
@@ -54,20 +57,23 @@ export function serializeInvoiceItem(
  * contact, the patient file, `is_settled` and who billed it are the rules' `decorate` (one read
  * each per page) — empty here.
  */
-export function serializeInvoice(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): InvoiceOutput {
+export function serializeInvoice({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): InvoiceOutput {
   return {
     id: row.public_id,
     invoice_sequence: Number(row.invoice_sequence),
     invoice_number: row.invoice_number as string,
     financial_year: row.financial_year as string,
     type: row.type as string,
-    branch_id: references.publicIdOf('branch_id', row) ?? '',
-    contact: billedContactRef(references.publicIdOf('contact_id', row)),
+    branch_id: references.publicIdOf({ field: 'branch_id', row }) ?? '',
+    contact: billedContactRef(references.publicIdOf({ field: 'contact_id', row })),
     patient_id: null,
-    member_ids: references.listOf('member_ids', row),
+    member_ids: references.listOf({ field: 'member_ids', row }),
     items: [],
     overall_discount: money(row.overall_discount),
     subtotal: money(row.subtotal),
@@ -81,7 +87,7 @@ export function serializeInvoice(
     is_settled: false,
     invoice_date: row.invoice_date as string,
     remark: row.remark as string | null,
-    patient_prescription_id: references.publicIdOf('patient_prescription_id', row),
+    patient_prescription_id: references.publicIdOf({ field: 'patient_prescription_id', row }),
     created_by_membership_id: null,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
@@ -96,21 +102,30 @@ export interface InvoicePreviewPublicIds {
 }
 
 /** The public id of an internal id a line's values hold, or null. */
-function publicIdOf(map: ReadonlyMap<number, string>, value: unknown): string | null {
+function publicIdOf({
+  map,
+  value,
+}: {
+  map: ReadonlyMap<number, string>;
+  value: unknown;
+}): string | null {
   return typeof value === 'number' ? (map.get(value) ?? null) : null;
 }
 
 /** Shapes one planned line as a preview returns it (D81) — the line the save would write. */
-function serializeInvoicePreviewItem(
-  line: PlannedInvoiceLine,
-  ids: InvoicePreviewPublicIds,
-): InvoicePreviewItemOutput {
+function serializeInvoicePreviewItem({
+  line,
+  ids,
+}: {
+  line: PlannedInvoiceLine;
+  ids: InvoicePreviewPublicIds;
+}): InvoicePreviewItemOutput {
   const { values, amounts } = line;
   return {
     id: line.existing?.public_id ?? null,
     line_number: Number(values.line_number),
-    offering_id: publicIdOf(ids.offerings, values.offering_id),
-    medicine_id: publicIdOf(ids.medicines, values.medicine_id),
+    offering_id: publicIdOf({ map: ids.offerings, value: values.offering_id }),
+    medicine_id: publicIdOf({ map: ids.medicines, value: values.medicine_id }),
     name: typeof values.name === 'string' ? values.name : '',
     pack_size: (values.pack_size as string | null | undefined) ?? null,
     quantity: Number(values.quantity),
@@ -124,10 +139,10 @@ function serializeInvoicePreviewItem(
     amount: amounts.amount,
     sessions_total: line.sessionsTotal,
     offer_ids: [...line.offerIds],
-    patient_offering_suggestion_id: publicIdOf(
-      ids.suggestions,
-      values.patient_offering_suggestion_id,
-    ),
+    patient_offering_suggestion_id: publicIdOf({
+      map: ids.suggestions,
+      value: values.patient_offering_suggestion_id,
+    }),
     batch_number: (values.batch_number as string | null | undefined) ?? null,
   };
 }
@@ -149,7 +164,9 @@ export function serializeInvoicePreview(options: {
   return {
     type: options.type,
     invoice_date: options.invoice_date,
-    items: options.plan.lines.map((line) => serializeInvoicePreviewItem(line, options.public_ids)),
+    items: options.plan.lines.map((line) =>
+      serializeInvoicePreviewItem({ line, ids: options.public_ids }),
+    ),
     overall_discount: options.overall_discount,
     subtotal: totals.subtotal ?? 0,
     discount_total: totals.discount_total ?? 0,

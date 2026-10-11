@@ -40,19 +40,20 @@ export function createDayCloseAutoCloseWorker(): WorkerHandle {
         queueName: DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME,
       });
       const { organizationPublicId } = jobData;
-      return runWithPropagatedTraceContext(
-        { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
-        job.name,
-        async () => {
-          const counts = await runOrganizationScopedWorkerJob(
-            { organizationPublicId },
-            (databaseHandle) => runDayCloseAutoCloseJob(databaseHandle, organizationPublicId),
-          );
+      return runWithPropagatedTraceContext({
+        carrier: { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
+        spanName: job.name,
+        callback: async () => {
+          const counts = await runOrganizationScopedWorkerJob({
+            job: { organizationPublicId },
+            processor: (databaseHandle) =>
+              runDayCloseAutoCloseJob({ databaseHandle, organizationPublicId }),
+          });
           // The closed days' summaries go to the admins now, after the commit (WC-10, D78).
           if (counts.closedCount > 0) await requestContactMessageDelivery(organizationPublicId);
           return counts;
         },
-      );
+      });
     },
     {
       connection: getBullMQConnectionOptions(),
@@ -66,5 +67,5 @@ export function createDayCloseAutoCloseWorker(): WorkerHandle {
     logger.warn({ jobId, queue: DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME }, 'day-close-auto-close.stalled');
   });
 
-  return buildWorkerHandle(worker, DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME });
 }

@@ -28,8 +28,9 @@ describe('Security: CORS', () => {
         'access-control-request-method': 'POST',
       },
     });
-    // CORS preflight should return 204 or 200
-    expect([200, 204]).toContain(response.statusCode);
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+    expect(response.headers['access-control-allow-credentials']).toBe('true');
   });
 
   it('should include Access-Control-Allow-Methods header', async () => {
@@ -42,9 +43,35 @@ describe('Security: CORS', () => {
       },
     });
     const allowMethods = response.headers['access-control-allow-methods'];
-    if (allowMethods) {
-      expect(typeof allowMethods).toBe('string');
-    }
+    expect(response.statusCode).toBe(204);
+    expect(typeof allowMethods).toBe('string');
+    expect(
+      String(allowMethods)
+        .split(',')
+        .map((method) => method.trim())
+        .sort(),
+    ).toEqual(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'].sort());
+  });
+
+  it('permits the CSRF header on a credentialed refresh preflight', async () => {
+    const response = await injectUnauthenticated(app, {
+      method: 'OPTIONS',
+      url: testApiPath('/auth/refresh'),
+      headers: {
+        origin: 'http://localhost:3000',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'content-type,x-csrf-token',
+      },
+    });
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+    expect(response.headers['access-control-allow-credentials']).toBe('true');
+    const advertisedHeaders = String(response.headers['access-control-allow-headers'])
+      .toLowerCase()
+      .split(',')
+      .map((header) => header.trim());
+    expect(advertisedHeaders).toContain('x-csrf-token');
+    expect(advertisedHeaders).toContain('content-type');
   });
 
   it('should handle requests from allowed origins', async () => {
@@ -73,6 +100,71 @@ describe('Security: CORS', () => {
     // Payload is invalid on purpose — the CORS decoration must be present on every
     // response (including error responses), or the browser hides the body from the SPA.
     expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+  });
+
+  it('permits the idempotency and CAPTCHA headers browsers send on protected writes', async () => {
+    const response = await injectUnauthenticated(app, {
+      method: 'OPTIONS',
+      url: testApiPath('/auth/email/send-code'),
+      headers: {
+        origin: 'http://localhost:3000',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers':
+          'authorization,content-type,x-idempotency-key,x-captcha-token',
+      },
+    });
+    expect(response.statusCode).toBe(204);
+    const advertisedHeaders = String(response.headers['access-control-allow-headers'])
+      .toLowerCase()
+      .split(',')
+      .map((header) => header.trim());
+    for (const header of [
+      'authorization',
+      'content-type',
+      'x-idempotency-key',
+      'x-captcha-token',
+    ]) {
+      expect(advertisedHeaders).toContain(header);
+    }
+  });
+
+  it('varies an allowed-origin response on Origin and exposes the headers clients read', async () => {
+    const response = await injectUnauthenticated(app, {
+      method: 'GET',
+      url: '/livez',
+      headers: { origin: 'http://localhost:3000' },
+    });
+    // The allowed origin is reflected, so a shared cache must key the response on Origin or it
+    // would serve one origin's Access-Control-Allow-Origin to another.
+    expect(
+      String(response.headers.vary)
+        .toLowerCase()
+        .split(',')
+        .map((header) => header.trim()),
+    ).toContain('origin');
+    const exposedHeaders = String(response.headers['access-control-expose-headers'])
+      .toLowerCase()
+      .split(',')
+      .map((header) => header.trim());
+    for (const header of [
+      'x-request-id',
+      'x-client-request-id',
+      'x-idempotency-replay',
+      'retry-after',
+    ]) {
+      expect(exposedHeaders).toContain(header);
+    }
+  });
+
+  it('gives a non-allowlisted origin no CORS grant on the actual response', async () => {
+    const response = await injectUnauthenticated(app, {
+      method: 'GET',
+      url: '/livez',
+      headers: { origin: 'https://evil.example.com' },
+    });
+    // Without Access-Control-Allow-Origin the browser withholds the body from the foreign page.
+    // (@fastify/cors still sends Access-Control-Allow-Credentials: true; alone it grants nothing.)
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
   });
 
   it('does not reflect a non-allowlisted origin', async () => {

@@ -1,4 +1,6 @@
 import { getBullMQConnectionOptions } from '@/infrastructure/queue/connection.js';
+import { runSubscriptionSeatReconcileJob } from '@/domains/billing/sub-domains/subscription/workers/subscription-seat-reconcile.processor.js';
+import { SUBSCRIPTION_SEAT_RECONCILE_JOB_NAME } from '@/domains/billing/sub-domains/subscription/workers/subscription-seat-reconcile.constants.js';
 import { getDefaultWorkerOptions } from '@/infrastructure/queue/worker-runtime/worker-options.js';
 import { buildWorkerHandle } from '@/infrastructure/queue/worker-runtime/worker-close.util.js';
 import { createProviderPausableWorker } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
@@ -35,7 +37,9 @@ export type SubscriptionSeatSyncWorkerBillingContainer = Pick<
  * BullMQ worker that reconciles the Stripe subscription quantity to an org's member count (REQ-4).
  *
  * @remarks
- * - **Algorithm:** validates the job payload at the boundary via `parseJobDataOrDeadLetter`, then
+ * - **Algorithm:** the hourly `reconcile-subscription-seats` job runs
+ *   {@link runSubscriptionSeatReconcileJob}; every other job validates its payload at the boundary
+ *   via `parseJobDataOrDeadLetter`, then
  *   propagates the captured trace context and delegates to {@link processSubscriptionSeatSyncJob}.
  *   The subscription service phases its own DB contexts around the Stripe call.
  * - **Failure modes:** while Stripe is down the queue pauses on every replica and probes every
@@ -54,6 +58,11 @@ export function createSubscriptionSeatSyncWorker(
     queueName: SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME,
     provider: 'stripe',
     processor: async (job) => {
+      // The hourly reconcile rides this queue (no worker or pool of its own); it carries no payload.
+      if (job.name === SUBSCRIPTION_SEAT_RECONCILE_JOB_NAME) {
+        await runSubscriptionSeatReconcileJob(subscriptionService);
+        return;
+      }
       const jobData = await parseJobDataOrDeadLetter({
         schema: subscriptionSeatSyncJobDataSchema,
         job,
@@ -66,11 +75,11 @@ export function createSubscriptionSeatSyncWorker(
         { jobId: job.id, organizationPublicId, requestId },
         'subscription.seat_sync.processing',
       );
-      await runWithPropagatedTraceContext(
-        { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
-        job.name,
-        () => processSubscriptionSeatSyncJob(jobData, subscriptionService),
-      );
+      await runWithPropagatedTraceContext({
+        carrier: { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
+        spanName: job.name,
+        callback: () => processSubscriptionSeatSyncJob({ jobData, service: subscriptionService }),
+      });
     },
     workerOptions: {
       connection: getBullMQConnectionOptions(),
@@ -86,5 +95,5 @@ export function createSubscriptionSeatSyncWorker(
     );
   });
 
-  return buildWorkerHandle(worker, SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME });
 }

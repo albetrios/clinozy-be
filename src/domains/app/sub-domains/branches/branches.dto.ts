@@ -12,21 +12,21 @@ import {
 } from '@/shared/utils/validation/record-fields.util.js';
 import { BRANCH_MEMBERSHIP_IDS_MAX, BRANCH_POSTAL_CODE_PATTERN } from './branches.constants.js';
 
-const membershipPublicId = trimmedStringMinMax(1, 28);
+const membershipPublicId = trimmedStringMinMax({ min: 1, max: 28 });
 const httpsLink = httpsLinkSchema(512);
 /** Fields a create accepts (required ones without `.optional()`). */
 const branchCreateFields = {
-  name: trimmedStringMinMax(1, 60),
+  name: trimmedStringMinMax({ min: 1, max: 60 }),
   tone: chipToneSchema.optional(),
   is_main: z.boolean().optional(),
-  address_line_one: trimmedStringMinMax(1, 120),
+  address_line_one: trimmedStringMinMax({ min: 1, max: 120 }),
   address_line_two: trimmedString().max(120).nullable().optional(),
-  area: trimmedStringMinMax(1, 60),
-  city: trimmedStringMinMax(1, 60),
-  state: trimmedStringMinMax(1, 60).optional(),
+  area: trimmedStringMinMax({ min: 1, max: 60 }),
+  city: trimmedStringMinMax({ min: 1, max: 60 }),
+  state: trimmedStringMinMax({ min: 1, max: 60 }).optional(),
   postal_code: trimmedString().regex(new RegExp(BRANCH_POSTAL_CODE_PATTERN), 'Six digits'),
   phone: phoneNumberSchema,
-  email: trimmedStringMinMax(3, 120).pipe(z.email()),
+  email: trimmedStringMinMax({ min: 3, max: 120 }).pipe(z.email()),
   gst_number: gstNumberSchema.nullable().optional(),
   opens_at: hourMinuteSchema.optional(),
   closes_at: hourMinuteSchema.optional(),
@@ -41,10 +41,13 @@ const branchCreateFields = {
 };
 
 /** Rejects a closing time at or before the opening time when both are given. */
-function closesAfterOpens(
-  value: { opens_at?: string | undefined; closes_at?: string | undefined },
-  context: z.RefinementCtx,
-): void {
+function closesAfterOpens({
+  value,
+  context,
+}: {
+  value: { opens_at?: string | undefined; closes_at?: string | undefined };
+  context: z.RefinementCtx;
+}): void {
   addEndAfterStartIssue({
     start: value.opens_at,
     end: value.closes_at,
@@ -57,7 +60,7 @@ function closesAfterOpens(
 /** Path params of the by-id branch routes. */
 export const branchIdParamsDto = z
   .object({
-    branch_id: trimmedStringMinMax(1, 28),
+    branch_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
@@ -75,7 +78,7 @@ export const CreateBranchDto = z
     membership_ids: z.array(membershipPublicId).max(BRANCH_MEMBERSHIP_IDS_MAX).optional(),
   })
   .strict()
-  .superRefine(closesAfterOpens);
+  .superRefine((value, context) => closesAfterOpens({ value, context }));
 
 /**
  * Body of `PATCH /app/branches/{branch_id}` — any field, at least one; `expected_updated_at` refuses
@@ -97,7 +100,7 @@ export const UpdateBranchDto = z
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
     message: 'Send at least one field',
   })
-  .superRefine(closesAfterOpens);
+  .superRefine((value, context) => closesAfterOpens({ value, context }));
 
 /** Parsed {@link listBranchesQueryDto}. */
 export type ListBranchesQueryInput = z.infer<typeof listBranchesQueryDto>;

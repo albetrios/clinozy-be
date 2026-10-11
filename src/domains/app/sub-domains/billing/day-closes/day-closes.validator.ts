@@ -14,7 +14,7 @@ import {
 
 /** Parses a day-open body; throws `ValidationError` naming each bad field. */
 export function validateCreateDayClose(data: unknown): CreateDayCloseInput {
-  return parseWithSchema(CreateDayCloseDto, data);
+  return parseWithSchema({ schema: CreateDayCloseDto, data });
 }
 
 /** A day close is never changed (B25) — there is no change route. */
@@ -24,17 +24,17 @@ export function refuseDayCloseUpdate(): Record<string, unknown> {
 
 /** Parses the body of the `close` action (8.E.8 #31). */
 export function validateCloseDayClose(data: unknown): Record<string, unknown> {
-  return parseWithSchema(CloseDayCloseDto, data ?? {});
+  return parseWithSchema({ schema: CloseDayCloseDto, data: data ?? {} });
 }
 
 /** Parses the body of the `reopen` action (8.E.8 #32). */
 export function validateReopenDayClose(data: unknown): Record<string, unknown> {
-  return parseWithSchema(ReopenDayCloseDto, data ?? {});
+  return parseWithSchema({ schema: ReopenDayCloseDto, data: data ?? {} });
 }
 
 /** Parses the day-close list query into a list input (routes-final 8.E.8 #28). */
 export function validateListDayClosesQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listDayClosesQueryDto, data);
+  const query = parseWithSchema({ schema: listDayClosesQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

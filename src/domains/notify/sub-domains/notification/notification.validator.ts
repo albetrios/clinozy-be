@@ -6,5 +6,5 @@ import { listNotificationsQueryDto, type ListNotificationsQueryInput } from './n
  * (cursor pagination only); throws `ValidationError('errors:invalidInput')` on failure.
  */
 export function validateListNotificationsQuery(query: unknown): ListNotificationsQueryInput {
-  return parseWithSchema(listNotificationsQueryDto, query);
+  return parseWithSchema({ schema: listNotificationsQueryDto, data: query });
 }

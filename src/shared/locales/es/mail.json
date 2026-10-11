@@ -1,5 +1,21 @@
 {
   "verificationCodeSubject": "Inicia sesión en tu cuenta",
   "passwordResetSubject": "Restablece tu contraseña",
-  "passwordResetHtml": "Haz clic <a href=\"{{resetUrl}}\">aquí</a> para restablecer tu contraseña. Este enlace caduca en {{expiresInMinutes}} minutos."
+  "passwordResetHtml": "Haz clic <a href=\"{{resetUrl}}\">aquí</a> para restablecer tu contraseña. Este enlace caduca en {{expiresInMinutes}} minutos.",
+  "verificationCodeHeading": "Inicia sesión en tu cuenta",
+  "verificationCodePreheader": "Tu código de inicio de sesión es {{code}}; caduca en {{expiresInMinutes}} minutos.",
+  "verificationCodeBody": "Introduce el código siguiente para iniciar sesión de forma segura. Este código caduca en {{expiresInMinutes}} minutos.",
+  "ignoreIfNotRequested": "Si no lo solicitaste, puedes ignorar este correo.",
+  "invitationSubject": "Te han invitado a unirte a {{organizationName}}",
+  "invitationTitle": "Te invitan a unirte a {{organizationName}}",
+  "invitationPreheader": "{{inviterName}} te invitó a unirte a {{organizationName}}.",
+  "invitationHeading": "Has recibido una invitación",
+  "invitationBody": "<strong>{{inviterName}}</strong> te ha invitado a unirte a <strong>{{organizationName}}</strong>.",
+  "invitationExpiry": "Haz clic en el botón para aceptar la invitación. Este enlace caduca en {{expiresInDays}} días.",
+  "invitationAccept": "Aceptar invitación",
+  "invitationIgnore": "Si no esperabas esta invitación, puedes ignorar este correo.",
+  "invitationFallbackInviter": "Un miembro del equipo",
+  "copyUrlPrompt": "O copia y pega esta URL en tu navegador:",
+  "automatedFooter": "Este es un mensaje automático. No respondas a este correo.",
+  "notificationViewDetails": "Ver detalles"
 }

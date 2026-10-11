@@ -47,6 +47,7 @@ This domain is the **owner** of `tenant-isolation` and `rls-context`; every othe
 - `organization-invitation-flow` — domain owner.
 - `signup-flow` — invitee may complete signup before accepting the invitation.
 - `subscription-change-flow` / `dunning-flow` — `billing` writes are scoped per-organization through this domain's tenant context.
+- `organization-resource-webhook-flow` — emits the organization and membership events.
 
 ## Lifecycle
 
@@ -74,7 +75,7 @@ stateDiagram-v2
 
 ## Events
 
-- Emits: `MEMBERSHIP_INVITATION_EVENT.CREATED`, `MEMBERSHIP_INVITATION_EVENT.RESENT` (each handler enqueues mail).
+- Emits: `MEMBERSHIP_INVITATION_EVENT.CREATED`, `MEMBERSHIP_INVITATION_EVENT.RESENT` (each handler enqueues mail), `MEMBERSHIP_INVITATION_EVENT.ACCEPTED` / `DECLINED` (in-app notification), and the organization resource events `ORGANIZATION_EVENT.CREATED` / `UPDATED` and `MEMBERSHIP_EVENT.CREATED` / `UPDATED` / `DELETED` with the resource's public JSON — delivered to subscribed webhooks by notify (`organization-resource-webhook-flow` in [src/FLOWS.md](src/FLOWS.md)).
 - Consumes: nothing — tenancy is the source of organization-scope events others react to.
 
 ## Failure modes

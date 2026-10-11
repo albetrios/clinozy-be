@@ -87,10 +87,13 @@ function readStripeCustomerId(
  * direct DB access stays at the repository layer (architecture rule: services
  * and utils call repositories; only repositories own the DB connection).
  */
-export async function resolveOrganizationPublicIdForStripeEvent(
-  event: Stripe.Event,
-  repository: StripeWebhookEventRepository,
-): Promise<string | undefined> {
+export async function resolveOrganizationPublicIdForStripeEvent({
+  event,
+  repository,
+}: {
+  event: Stripe.Event;
+  repository: StripeWebhookEventRepository;
+}): Promise<string | undefined> {
   if (!isStripeSubscriptionEvent(event)) {
     return undefined;
   }
@@ -129,14 +132,17 @@ export async function resolveOrganizationPublicIdForStripeEvent(
 /**
  * Runs billing mutations under SET LOCAL app.current_organization_public_id for RLS policies.
  */
-export async function runWithOrganizationPublicIdForStripeWebhook<T>(
-  organizationPublicId: string,
-  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>,
-): Promise<T> {
-  return withAppDatabaseContext(
-    PRINCIPAL_SCOPE.JOB({ organizationPublicId: organizationPublicId }),
+export async function runWithOrganizationPublicIdForStripeWebhook<T>({
+  organizationPublicId,
+  callback,
+}: {
+  organizationPublicId: string;
+  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>;
+}): Promise<T> {
+  return withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.JOB({ organizationPublicId: organizationPublicId }),
     callback,
-  );
+  });
 }
 
 /**
@@ -146,12 +152,19 @@ export async function runWithOrganizationPublicIdForStripeWebhook<T>(
  * requires tenancy (subscription lifecycle) but no organization could be found,
  * so the caller marks the ledger row failed instead of silently skipping.
  */
-export async function runStripeWebhookHandlerWithOrganizationContext<T>(
-  event: Stripe.Event,
-  repository: StripeWebhookEventRepository,
-  handler: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>,
-): Promise<T | undefined> {
-  const organizationPublicId = await resolveOrganizationPublicIdForStripeEvent(event, repository);
+export async function runStripeWebhookHandlerWithOrganizationContext<T>({
+  event,
+  repository,
+  handler,
+}: {
+  event: Stripe.Event;
+  repository: StripeWebhookEventRepository;
+  handler: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>;
+}): Promise<T | undefined> {
+  const organizationPublicId = await resolveOrganizationPublicIdForStripeEvent({
+    event,
+    repository,
+  });
   if (organizationPublicId === undefined) {
     logger.warn(
       { eventId: event.id, eventType: event.type },
@@ -167,5 +180,5 @@ export async function runStripeWebhookHandlerWithOrganizationContext<T>(
     return undefined;
   }
 
-  return runWithOrganizationPublicIdForStripeWebhook(organizationPublicId, handler);
+  return runWithOrganizationPublicIdForStripeWebhook({ organizationPublicId, callback: handler });
 }

@@ -91,7 +91,7 @@ describe('team organization provisioning (database)', () => {
     // webhooks.
     const user = await createTestUser();
 
-    const result = await provisionPersonalOrganization(user.id);
+    const result = await provisionPersonalOrganization({ ownerUserId: user.id });
 
     const rows = await database
       .select({ permission_code: role_permissions.permission_code })

@@ -20,7 +20,13 @@ const SESSIONS_PER_USER = 2;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Deterministic 64-char session token hash for a given user + slot (idempotency marker). */
-function buildSessionTokenHash(userPublicId: string, slot: number): string {
+function buildSessionTokenHash({
+  userPublicId,
+  slot,
+}: {
+  userPublicId: string;
+  slot: number;
+}): string {
   return createHash('sha256').update(`seed-session:${userPublicId}:${slot}`).digest('hex');
 }
 
@@ -43,7 +49,7 @@ export async function seedAuthSessionsBulk(context: SeedContext): Promise<void> 
   const database = getRequestDatabase();
   const allHashes = users.flatMap((user) =>
     Array.from({ length: SESSIONS_PER_USER }, (_, slot) =>
-      buildSessionTokenHash(user.public_id, slot),
+      buildSessionTokenHash({ userPublicId: user.public_id, slot }),
     ),
   );
   const existingRows = await database
@@ -56,7 +62,7 @@ export async function seedAuthSessionsBulk(context: SeedContext): Promise<void> 
   let inserted = 0;
   for (const user of users) {
     for (let slot = 0; slot < SESSIONS_PER_USER; slot += 1) {
-      const sessionTokenHash = buildSessionTokenHash(user.public_id, slot);
+      const sessionTokenHash = buildSessionTokenHash({ userPublicId: user.public_id, slot });
       if (existingHashes.has(sessionTokenHash)) continue;
       const profile = generateBulkSession(context.faker);
       const isExpiredEdgeCase = context.counts.edgeCases && slot === SESSIONS_PER_USER - 1;

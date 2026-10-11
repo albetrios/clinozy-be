@@ -46,5 +46,5 @@ export function createStripeWebhookEventCatchupWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, STRIPE_WEBHOOK_EVENT_CATCHUP_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: STRIPE_WEBHOOK_EVENT_CATCHUP_QUEUE_NAME });
 }

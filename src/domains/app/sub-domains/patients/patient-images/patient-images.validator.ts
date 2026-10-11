@@ -15,17 +15,17 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a photo create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePatientImage(data: unknown): CreatePatientImageInput {
-  return parseWithSchema(CreatePatientImageDto, data);
+  return parseWithSchema({ schema: CreatePatientImageDto, data });
 }
 
 /** Parses a photo update body; throws `ValidationError` naming each bad field. */
 export function validateUpdatePatientImage(data: unknown): UpdatePatientImageInput {
-  return parseWithSchema(UpdatePatientImageDto, data);
+  return parseWithSchema({ schema: UpdatePatientImageDto, data });
 }
 
 /** Parses a patient's photo query into a list input (routes-final 7.F.8 #33, P26). */
 export function validateListPatientImagesQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listPatientImagesQueryDto, data);
+  const query = parseWithSchema({ schema: listPatientImagesQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

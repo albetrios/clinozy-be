@@ -11,11 +11,24 @@ const drainRepositoryMock = vi.hoisted(() => ({
   getPendingBacklogStats: vi
     .fn()
     .mockResolvedValue({ pendingCount: 0, oldestPendingAgeSeconds: 0, maxAttemptCount: 0 }),
+  deleteRowsCreatedBefore: vi.fn().mockResolvedValue(0),
 }));
 
-vi.mock('@/domains/audit/audit-outbox.repository.js', () => ({
-  createDrainAuditOutboxRepository: vi.fn(() => drainRepositoryMock),
-}));
+// The row bookkeeping is mocked; the id lookups and the audit.logs insert are the real repository
+// methods, running against the fake database handle below.
+vi.mock('@/domains/audit/audit-outbox.repository.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/domains/audit/audit-outbox.repository.js')>();
+  return {
+    ...actual,
+    createDrainAuditOutboxRepository: vi.fn(
+      (databaseHandle: Parameters<typeof actual.createDrainAuditOutboxRepository>[0]) => ({
+        ...actual.createDrainAuditOutboxRepository(databaseHandle),
+        ...drainRepositoryMock,
+      }),
+    ),
+  };
+});
 
 const setLocalDatabaseConfigMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
@@ -187,28 +200,25 @@ describe('runAuditOutboxDrainJob', () => {
 
     expect(result).toEqual({ drained: 1, transientFailed: 0, permanentlyFailed: 0 });
     // First setLocalDatabaseConfig is the global-admin lift for resolution.
-    expect(setLocalDatabaseConfigMock).toHaveBeenNthCalledWith(
-      1,
+    expect(setLocalDatabaseConfigMock).toHaveBeenNthCalledWith(1, {
       databaseHandle,
-      'app.global_admin',
-      'true',
-    );
+      key: 'app.global_admin',
+      value: 'true',
+    });
     // Per-row organization GUC for the audit.logs INSERT RLS.
-    expect(setLocalDatabaseConfigMock).toHaveBeenNthCalledWith(
-      2,
+    expect(setLocalDatabaseConfigMock).toHaveBeenNthCalledWith(2, {
       databaseHandle,
-      'app.current_organization_public_id',
-      'org_a',
-    );
+      key: 'app.current_organization_public_id',
+      value: 'org_a',
+    });
     // …and the system arm is explicitly turned OFF for a tenanted row. Savepoints do NOT restore
     // settings on RELEASE, so leaving it unset would inherit `'true'` from any earlier tenantless
     // row in the same batch and widen `audit_logs_tenant_isolation_insert` for the remainder.
-    expect(setLocalDatabaseConfigMock).toHaveBeenNthCalledWith(
-      3,
+    expect(setLocalDatabaseConfigMock).toHaveBeenNthCalledWith(3, {
       databaseHandle,
-      'app.system_audit_insert',
-      'false',
-    );
+      key: 'app.system_audit_insert',
+      value: 'false',
+    });
     expect(databaseHandle.insert).toHaveBeenCalledTimes(1);
     expect(drainRepositoryMock.markProcessed).toHaveBeenCalledExactlyOnceWith([100]);
   });
@@ -225,19 +235,19 @@ describe('runAuditOutboxDrainJob', () => {
     const result = await runAuditOutboxDrainJob(databaseHandle as never);
 
     expect(result.drained).toBe(1);
-    expect(setLocalDatabaseConfigMock).toHaveBeenCalledWith(
+    expect(setLocalDatabaseConfigMock).toHaveBeenCalledWith({
       databaseHandle,
-      'app.system_audit_insert',
-      'true',
-    );
+      key: 'app.system_audit_insert',
+      value: 'true',
+    });
     // Both identity GUCs are written on EVERY row, never just the one this row needs:
     // `RELEASE SAVEPOINT` keeps whatever the savepoint set, so a one-GUC-per-branch loop
     // inherits the previous row's value and widens the insert policy for the rest of the batch.
-    expect(setLocalDatabaseConfigMock).toHaveBeenCalledWith(
+    expect(setLocalDatabaseConfigMock).toHaveBeenCalledWith({
       databaseHandle,
-      'app.current_organization_public_id',
-      '',
-    );
+      key: 'app.current_organization_public_id',
+      value: '',
+    });
   });
 
   it('marks a row permanently FAILED when the actor public_id no longer resolves', async () => {
@@ -471,5 +481,23 @@ describe('runAuditOutboxDrainJob', () => {
 
     expect(result).toEqual({ drained: 0, transientFailed: 1, permanentlyFailed: 0 });
     expect(drainRepositoryMock.getPendingBacklogStats).toHaveBeenCalled();
+  });
+
+  it('prunes finished rows on every pass, even with nothing to drain', async () => {
+    drainRepositoryMock.claimPendingBatch.mockResolvedValueOnce([]);
+    drainRepositoryMock.deleteRowsCreatedBefore.mockClear();
+
+    await runAuditOutboxDrainJob({} as never);
+
+    const calls = drainRepositoryMock.deleteRowsCreatedBefore.mock.calls.map(
+      ([options]) => options as { status: string; olderThan: Date; limit: number },
+    );
+    expect(calls.map((options) => options.status)).toEqual(['PROCESSED', 'FAILED']);
+    // Drained rows after a day; failed ones after the audit log's own window.
+    expect(Date.now() - calls[0]!.olderThan.getTime()).toBeGreaterThanOrEqual(
+      24 * 60 * 60 * 1000 - 1000,
+    );
+    expect(Date.now() - calls[1]!.olderThan.getTime()).toBeGreaterThan(24 * 60 * 60 * 1000);
+    for (const options of calls) expect(options.limit).toBe(1_000);
   });
 });

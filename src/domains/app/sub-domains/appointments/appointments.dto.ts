@@ -36,7 +36,7 @@ const appointmentFields = {
   branch_id: recordIdSchema,
   type: z.enum(APPOINTMENT_TYPE_VALUES),
   offering_id: recordIdSchema.nullable(),
-  service_label: trimmedStringMinMax(1, 120),
+  service_label: trimmedStringMinMax({ min: 1, max: 120 }),
   doctor_membership_id: recordIdSchema,
   therapist_membership_id: recordIdSchema.nullable(),
   branch_room_id: recordIdSchema.nullable(),
@@ -44,7 +44,7 @@ const appointmentFields = {
   appointment_date: calendarDateSchema,
   start_time: hourMinuteSchema,
   duration_minutes: durationSchema,
-  reason: trimmedStringMinMax(1, 160).nullable(),
+  reason: trimmedStringMinMax({ min: 1, max: 160 }).nullable(),
   notes: trimmedString().max(APPOINTMENT_NOTES_MAX).nullable(),
   follow_up_at: instantSchema.nullable(),
 };
@@ -77,14 +77,17 @@ const createAppointmentShape = {
 };
 
 /** A booking names its date and start; a walk-in does not — the server places it at now (A6). */
-function checkPlacement(
+function checkPlacement({
+  value,
+  context,
+}: {
   value: {
     is_walk_in?: boolean | undefined;
     appointment_date?: string | undefined;
     start_time?: string | undefined;
-  },
-  context: z.RefinementCtx,
-): void {
+  };
+  context: z.RefinementCtx;
+}): void {
   for (const field of ['appointment_date', 'start_time'] as const) {
     if (value.is_walk_in === true && value[field] !== undefined) {
       context.addIssue({ code: 'custom', path: [field], message: 'A walk-in is placed at now' });
@@ -103,7 +106,7 @@ function checkPlacement(
 export const CreateAppointmentDto = z
   .object(createAppointmentShape)
   .strict()
-  .superRefine(checkPlacement);
+  .superRefine((value, context) => checkPlacement({ value, context }));
 
 /**
  * The copy's create (route 17, A7) — the create body plus the booking it was copied from; never a
@@ -112,7 +115,7 @@ export const CreateAppointmentDto = z
 export const CopiedAppointmentDto = z
   .object({ ...createAppointmentShape, copied_from_appointment_id: recordIdSchema })
   .strict()
-  .superRefine(checkPlacement);
+  .superRefine((value, context) => checkPlacement({ value, context }));
 
 /**
  * Body of `PATCH /app/appointments/{appointment_id}` (6.8 #7): any field of the create but
@@ -176,7 +179,7 @@ export const listAppointmentsQueryDto = listSearchSortSchema([
 export const cancelAppointmentDto = z
   .object({
     cancel_reason: z.enum(APPOINTMENT_CANCEL_REASON_VALUES),
-    cancel_note: trimmedStringMinMax(1, 280).optional(),
+    cancel_note: trimmedStringMinMax({ min: 1, max: 280 }).optional(),
   })
   .strict();
 

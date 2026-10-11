@@ -22,7 +22,7 @@ const distinct = (values: readonly unknown[]) => new Set(values).size === values
 
 /** An allergy or contraindication list — up to 30 items, each 1–120. */
 const clinicalList = z
-  .array(trimmedStringMinMax(1, PATIENT_CLINICAL_ITEM_MAX))
+  .array(trimmedStringMinMax({ min: 1, max: PATIENT_CLINICAL_ITEM_MAX }))
   .max(PATIENT_CLINICAL_LIST_MAX);
 
 /** The fields a patient file is written with (7.A.8 #3, #5) — each optional; create and update narrow them. */
@@ -36,7 +36,7 @@ const patientFields = {
   conversion: z.enum(PATIENT_CONVERSION_VALUES),
   doctor_membership_id: recordIdSchema.nullable(),
   follow_up_at: instantSchema.nullable(),
-  notes: trimmedStringMinMax(1, PATIENT_NOTES_MAX).nullable(),
+  notes: trimmedStringMinMax({ min: 1, max: PATIENT_NOTES_MAX }).nullable(),
   has_data_consent: z.boolean(),
   has_photo_consent: z.boolean(),
   allergies: clinicalList,

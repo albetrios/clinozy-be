@@ -10,7 +10,7 @@ describe('escapeHtml', () => {
     expect(escapeHtml('<script>alert(1)</script>')).toBe('&lt;script&gt;alert(1)&lt;/script&gt;');
   });
 
-  it('does not double-escape an ampersand already part of an entity', () => {
+  it('escapes a raw ampersand in ordinary text', () => {
     expect(escapeHtml('Tom & Jerry')).toBe('Tom &amp; Jerry');
   });
 

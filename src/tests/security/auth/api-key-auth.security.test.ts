@@ -39,7 +39,7 @@ describe('Security: Organization API key authentication', () => {
 
   beforeEach(async () => {
     await cleanupDatabase();
-    await seedPermissions(Object.values(TENANCY_PERMISSIONS));
+    await seedPermissions([...Object.values(TENANCY_PERMISSIONS), NOTIFY_PERMISSIONS.WEBHOOK_READ]);
   });
 
   async function createApiKeyWithPermissions(permissionCodes: string[]) {
@@ -109,14 +109,16 @@ describe('Security: Organization API key authentication', () => {
   });
 
   it('authenticates an organization API key end-to-end on a permission-guarded organization route', async () => {
+    // The creator holds webhook:read: a key's effective scopes never exceed its creator's.
     const { rawKey, apiKeyPublicId } = await createApiKeyWithPermissions([
       TENANCY_PERMISSIONS.API_KEY_READ,
       TENANCY_PERMISSIONS.API_KEY_MANAGE,
+      NOTIFY_PERMISSIONS.WEBHOOK_READ,
     ]);
 
     // The key principal carries an empty userId; previously the webhook controller's
-    // requireAuth() rejected it after the permission preHandler passed. Grant the key
-    // the webhook:read scope and confirm the request now succeeds end-to-end.
+    // requireAuth() rejected it after the permission preHandler passed. Narrow the key to the
+    // webhook:read scope and confirm the request succeeds end-to-end.
     await database
       .update(api_keys)
       .set({ scopes: [NOTIFY_PERMISSIONS.WEBHOOK_READ] })
@@ -212,9 +214,13 @@ describe('Security: Organization API key authentication', () => {
     async function suspendableMemberWithKey() {
       const admin = await createTestUser();
       const organization = await createTestOrganization({ ownerUserId: admin.id });
+      // The admin holds every permission the member's role does: a manager acts only on members
+      // whose role is a subset of its own.
       const adminRole = await createRoleWithPermissions({
         organizationId: organization.id,
         permissionCodes: [
+          TENANCY_PERMISSIONS.API_KEY_MANAGE,
+          TENANCY_PERMISSIONS.API_KEY_READ,
           ...MEMBERSHIP_WRITE_PERMISSION_CODES,
           TENANCY_PERMISSIONS.MEMBERSHIP_READ,
         ],
@@ -261,7 +267,9 @@ describe('Security: Organization API key authentication', () => {
       expect(created.statusCode).toBe(200);
       return {
         adminToken,
+        organization,
         member,
+        memberRole,
         membershipPublicId: membership.public_id,
         rawKey: (created.json() as ApiKeyCreateResponse).data.raw_key,
       };
@@ -316,6 +324,53 @@ describe('Security: Organization API key authentication', () => {
       });
       expect(reactivated.statusCode).toBe(200);
       expect((await listMembersWithKey(context.rawKey)).statusCode).toBe(200);
+    });
+
+    it("narrows a demoted creator's key to what the creator still holds, and restores it on promotion", async () => {
+      const context = await suspendableMemberWithKey();
+      // A member with no permissions, for the key to suspend.
+      const target = await createTestUser();
+      const emptyRole = await createRoleWithPermissions({
+        organizationId: context.organization.id,
+        permissionCodes: [],
+      });
+      const targetMembership = await createMembership({
+        userId: target.id,
+        organizationId: context.organization.id,
+        roleId: emptyRole.id,
+      });
+      const suspendTargetWithKey = (status: string) =>
+        injectRoute(app, {
+          method: 'PATCH',
+          url: testApiPath(`/tenancy/organization/memberships/${targetMembership.public_id}`),
+          headers: { authorization: `ApiKey ${context.rawKey}` },
+          payload: { status },
+        });
+      expect((await suspendTargetWithKey('suspended')).statusCode).toBe(200);
+
+      // Demote the creator to read-only: the key keeps `membership:read` but loses `membership:update`.
+      const readOnlyRole = await createRoleWithPermissions({
+        organizationId: context.organization.id,
+        permissionCodes: [TENANCY_PERMISSIONS.MEMBERSHIP_READ],
+      });
+      const demoted = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/tenancy/organization/memberships/${context.membershipPublicId}`),
+        token: context.adminToken,
+        payload: { role_ids: [readOnlyRole.public_id] },
+      });
+      expect(demoted.statusCode, demoted.body).toBe(200);
+      expect((await listMembersWithKey(context.rawKey)).statusCode).toBe(200);
+      expect((await suspendTargetWithKey('active')).statusCode).toBe(403);
+
+      const promoted = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/tenancy/organization/memberships/${context.membershipPublicId}`),
+        token: context.adminToken,
+        payload: { role_ids: [context.memberRole.public_id] },
+      });
+      expect(promoted.statusCode, promoted.body).toBe(200);
+      expect((await suspendTargetWithKey('active')).statusCode).toBe(200);
     });
 
     it('refuses the key once the creator account itself is no longer active', async () => {

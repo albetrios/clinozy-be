@@ -111,7 +111,13 @@ function evaluateNumericExpression(expression: string): number | undefined {
 // eslint-disable-next-line security/detect-unsafe-regex -- anchored single-line source scan in a local validator.
 const MODULE_LEVEL_CONST_PATTERN = /^(?:export\s+)?const\s+\w+\s*=\s*([^;]+);/;
 
-function isLikelyMagicNumberAssignment(trimmedLine: string, rightHandSide: string): boolean {
+function isLikelyMagicNumberAssignment({
+  trimmedLine,
+  rightHandSide,
+}: {
+  trimmedLine: string;
+  rightHandSide: string;
+}): boolean {
   if (trimmedLine.includes('`')) return false;
   if (rightHandSide.includes('/') || rightHandSide.includes('RegExp')) return false;
   if (rightHandSide.includes('(') || rightHandSide.includes('?')) return false;
@@ -136,7 +142,7 @@ function collectNumericLiterals(
     if (!constMatch) continue;
 
     const rightHandSide = constMatch[1]?.trim() ?? '';
-    if (!isLikelyMagicNumberAssignment(trimmed, rightHandSide)) continue;
+    if (!isLikelyMagicNumberAssignment({ trimmedLine: trimmed, rightHandSide })) continue;
 
     const value = evaluateNumericExpression(rightHandSide.replaceAll('_', ''));
     if (value === undefined || value <= 1) continue;
@@ -152,14 +158,17 @@ function collectNumericLiterals(
   return results;
 }
 
-function walkDirectory(
-  directory: string,
-  occurrencesByValue: Map<number, DuplicateLiteralOccurrence[]>,
-): void {
+function walkDirectory({
+  directory,
+  occurrencesByValue,
+}: {
+  directory: string;
+  occurrencesByValue: Map<number, DuplicateLiteralOccurrence[]>;
+}): void {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const fullPath = join(directory, entry.name);
     if (entry.isDirectory()) {
-      walkDirectory(fullPath, occurrencesByValue);
+      walkDirectory({ directory: fullPath, occurrencesByValue });
       continue;
     }
 
@@ -219,7 +228,7 @@ export function findDuplicateLiteralViolations(): DuplicateLiteralViolation[] {
   const occurrencesByValue = new Map<number, DuplicateLiteralOccurrence[]>();
 
   for (const root of getScanRoots()) {
-    walkDirectory(root, occurrencesByValue);
+    walkDirectory({ directory: root, occurrencesByValue });
   }
 
   const canonicalValues = loadCanonicalConstantValues();

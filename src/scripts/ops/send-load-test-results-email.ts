@@ -12,11 +12,15 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
 
-function runCommand(
-  command: string,
-  args: string[],
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+function runCommand({
+  command,
+  args,
+  env = process.env,
+}: {
+  command: string;
+  args: string[];
+  env?: NodeJS.ProcessEnv | undefined;
+}): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd: process.cwd(),
@@ -41,7 +45,7 @@ function runCommand(
   });
 }
 
-function lastLines(text: string, count: number): string {
+function lastLines({ text, count }: { text: string; count: number }): string {
   const lines = text.trim().split('\n');
   return lines.slice(-count).join('\n');
 }
@@ -73,14 +77,22 @@ async function main(): Promise<void> {
   const dateTime = new Date().toISOString();
 
   logger.info('Running health stress...');
-  const healthResult = await runCommand('pnpm', ['load:stress'], {
-    BASE_URL,
+  const healthResult = await runCommand({
+    command: 'pnpm',
+    args: ['load:stress'],
+    env: {
+      BASE_URL,
+    },
   });
   const healthOk = healthResult.exitCode === 0;
 
   logger.info('Fetching credentials for API stress...');
-  const credsResult = await runCommand('pnpm', ['run', 'tool:load-test-credentials'], {
-    BASE_URL,
+  const credsResult = await runCommand({
+    command: 'pnpm',
+    args: ['run', 'tool:load-test-credentials'],
+    env: {
+      BASE_URL,
+    },
   });
   let testToken = '';
   let testOrgId = '';
@@ -92,10 +104,14 @@ async function main(): Promise<void> {
   let apiResult = { stdout: '', stderr: '', exitCode: -1 };
   if (testToken && testOrgId) {
     logger.info('Running API stress...');
-    apiResult = await runCommand('pnpm', ['load:stress:api'], {
-      BASE_URL,
-      TEST_TOKEN: testToken,
-      TEST_ORG_ID: testOrgId,
+    apiResult = await runCommand({
+      command: 'pnpm',
+      args: ['load:stress:api'],
+      env: {
+        BASE_URL,
+        TEST_TOKEN: testToken,
+        TEST_ORG_ID: testOrgId,
+      },
     });
   } else {
     apiResult.stdout = 'Could not get TEST_TOKEN or TEST_ORG_ID; API stress skipped.';
@@ -112,10 +128,10 @@ async function main(): Promise<void> {
     `API stress:   ${apiOk ? 'PASS' : 'FAIL'} (exit ${apiResult.exitCode})`,
     '',
     '--- Health stress (last 50 lines) ---',
-    lastLines(healthResult.stdout + healthResult.stderr, 50),
+    lastLines({ text: healthResult.stdout + healthResult.stderr, count: 50 }),
     '',
     '--- API stress (last 50 lines) ---',
-    lastLines(apiResult.stdout + apiResult.stderr, 50),
+    lastLines({ text: apiResult.stdout + apiResult.stderr, count: 50 }),
   ];
   const text = summaryLines.join('\n');
 
@@ -125,11 +141,11 @@ async function main(): Promise<void> {
     `<p><strong>API stress:</strong> ${apiOk ? 'PASS' : 'FAIL'} (exit ${apiResult.exitCode})</p>`,
     '<h3>Health stress (tail)</h3>',
     '<pre style="white-space:pre-wrap;font-size:12px;">',
-    escapeHtml(lastLines(healthResult.stdout + healthResult.stderr, 50)),
+    escapeHtml(lastLines({ text: healthResult.stdout + healthResult.stderr, count: 50 })),
     '</pre>',
     '<h3>API stress (tail)</h3>',
     '<pre style="white-space:pre-wrap;font-size:12px;">',
-    escapeHtml(lastLines(apiResult.stdout + apiResult.stderr, 50)),
+    escapeHtml(lastLines({ text: apiResult.stdout + apiResult.stderr, count: 50 })),
     '</pre>',
   ].join('\n');
 

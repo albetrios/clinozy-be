@@ -139,7 +139,7 @@ export default {
 | Step | Tool                          | What it catches                                         |
 | ---- | ----------------------------- | ------------------------------------------------------- |
 | 1    | `gitleaks` CLI (binary, v8)   | Full-repo secret scan (AWS keys, tokens, passwords)     |
-| 2    | `semgrep scan --config p/default` | SAST: SQL injection, XSS, insecure crypto, OWASP Top 10 |
+| 2    | `semgrep scan --config p/default --error --baseline-commit <PR base>` | SAST: SQL injection, XSS, insecure crypto, OWASP Top 10 — fails on findings the PR introduces |
 
 Both versions come from `tooling/setup/agent/tool-versions.sh` (the job appends it to
 `$GITHUB_ENV`): gitleaks via `install-gitleaks.sh` (SHA-256-verified), semgrep as

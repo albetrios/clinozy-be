@@ -16,13 +16,31 @@ export interface WebauthnChallengePayload {
   challenge: string;
 }
 
+/** Validates cached ceremony fields while preserving opaque decoy owners and extra metadata. */
+function isWebauthnChallengePayload(payload: unknown): payload is WebauthnChallengePayload {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false;
+  const candidate = payload as Record<string, unknown>;
+  return (
+    (candidate.kind === 'registration' || candidate.kind === 'authentication') &&
+    typeof candidate.user_public_id === 'string' &&
+    candidate.user_public_id.trim().length > 0 &&
+    typeof candidate.challenge === 'string' &&
+    candidate.challenge.trim().length > 0
+  );
+}
+
 /** Mints a 32-byte hex challenge handle, stores `{kind, user_public_id, challenge}` in Redis with {@link WEBAUTHN_CHALLENGE_TTL_SECONDS} TTL, and returns the handle for the client to echo back during verify. */
-export async function createWebauthnChallenge(
-  redis: Redis,
-  kind: WebauthnChallengeKind,
-  userPublicId: string,
-  challenge: string,
-): Promise<string> {
+export async function createWebauthnChallenge({
+  redis,
+  kind,
+  userPublicId,
+  challenge,
+}: {
+  redis: Redis;
+  kind: WebauthnChallengeKind;
+  userPublicId: string;
+  challenge: string;
+}): Promise<string> {
   const challengeToken = randomBytes(32).toString('hex');
   const payload: WebauthnChallengePayload = {
     kind,
@@ -39,11 +57,15 @@ export async function createWebauthnChallenge(
 }
 
 /** Single-use lookup of a WebAuthn challenge: atomically reads-and-deletes the Redis entry (`GETDEL`), parses the JSON payload, and verifies the ceremony kind matches; throws `UnauthorizedError` (`errors:webauthnInvalidChallenge`) on any mismatch. The atomic consume guarantees only one of two concurrent verifies can read a non-null value, preventing challenge replay in a GET-then-DEL race. */
-export async function consumeWebauthnChallenge(
-  redis: Redis,
-  challengeToken: string,
-  expectedKind: WebauthnChallengeKind,
-): Promise<WebauthnChallengePayload> {
+export async function consumeWebauthnChallenge({
+  redis,
+  challengeToken,
+  expectedKind,
+}: {
+  redis: Redis;
+  challengeToken: string;
+  expectedKind: WebauthnChallengeKind;
+}): Promise<WebauthnChallengePayload> {
   if (!challengeToken || challengeToken.length === 0) {
     throw new UnauthorizedError('errors:webauthnInvalidChallenge');
   }
@@ -53,14 +75,14 @@ export async function consumeWebauthnChallenge(
     throw new UnauthorizedError('errors:webauthnInvalidChallenge');
   }
 
-  let storedPayload: WebauthnChallengePayload;
+  let storedPayload: unknown;
   try {
-    storedPayload = JSON.parse(storedPayloadRaw) as WebauthnChallengePayload;
+    storedPayload = JSON.parse(storedPayloadRaw);
   } catch {
     throw new UnauthorizedError('errors:webauthnInvalidChallenge');
   }
 
-  if (storedPayload.kind !== expectedKind) {
+  if (!isWebauthnChallengePayload(storedPayload) || storedPayload.kind !== expectedKind) {
     throw new UnauthorizedError('errors:webauthnInvalidChallenge');
   }
 

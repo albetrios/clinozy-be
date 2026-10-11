@@ -26,7 +26,7 @@ async function main() {
 
 /**
  * `closeDatabase` always runs (success or failure). Without it, a thrown error here
- * would `process.exit(1)` before the postgres.js pool finishes draining and leave
+ * would `process.exit(1)` before the database pool finishes draining and leave
  * aborted connections behind in Postgres.
  */
 main()

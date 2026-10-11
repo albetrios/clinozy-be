@@ -34,8 +34,8 @@ export const CreateMedicalRepVisitDto = z
   .object({
     visit_date: calendarDateSchema.optional(),
     next_visit_on: calendarDateSchema.optional(),
-    samples: trimmedStringMinMax(1, MEDICAL_REP_VISIT_SAMPLES_MAX).optional(),
-    notes: trimmedStringMinMax(1, MEDICAL_REP_VISIT_NOTES_MAX).optional(),
+    samples: trimmedStringMinMax({ min: 1, max: MEDICAL_REP_VISIT_SAMPLES_MAX }).optional(),
+    notes: trimmedStringMinMax({ min: 1, max: MEDICAL_REP_VISIT_NOTES_MAX }).optional(),
   })
   .strict();
 

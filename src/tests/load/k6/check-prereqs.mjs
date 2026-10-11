@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import postgres from 'postgres';
+import pg from 'pg';
 import Redis from 'ioredis';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -179,9 +179,11 @@ if (serverUp && pool.length) {
 // organization context, so the role-cap query below would read 0 on it and always pass.
 const dbUrl = loadTestSetting('DATABASE_OPERATOR_URL') || loadTestSetting('DATABASE_URL');
 if (dbUrl) {
-  const sql = postgres(dbUrl, { max: 1, connect_timeout: 5 });
+  const client = new pg.Client({ connectionString: dbUrl, connectionTimeoutMillis: 5_000 });
+  client.on('error', () => undefined);
   try {
-    const mc = Number((await sql`show max_connections`)[0].max_connections);
+    await client.connect();
+    const mc = Number((await client.query('show max_connections')).rows[0].max_connections);
     mc >= 500
       ? ok('postgres max_connections', `${mc} (≥ 500)`)
       : fail(
@@ -211,8 +213,10 @@ if (dbUrl) {
     const cap = Number(loadTestSetting('MEMBER_ROLE_MAX_PER_ORG') || '50');
     const maxRoles = Number(
       (
-        await sql`select coalesce(max(c),0) m from (select organization_id, count(*) c from tenancy.roles group by organization_id) z`
-      )[0].m,
+        await client.query(
+          'select coalesce(max(c),0) m from (select organization_id, count(*) c from tenancy.roles group by organization_id) z',
+        )
+      ).rows[0].m,
     );
     maxRoles < cap * 0.7
       ? ok('role-cap headroom', `max ${maxRoles} roles/organization < cap ${cap}`)
@@ -224,7 +228,7 @@ if (dbUrl) {
   } catch (e) {
     fail('postgres checks', e.message, 'Ensure Postgres is up and DATABASE_URL is correct');
   } finally {
-    await sql.end();
+    await client.end().catch(() => undefined);
   }
 } else {
   fail(

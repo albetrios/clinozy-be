@@ -14,7 +14,7 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a refund body; throws `ValidationError` naming each bad field. */
 export function validateCreateInvoiceCreditNote(data: unknown): CreateInvoiceCreditNoteInput {
-  return parseWithSchema(CreateInvoiceCreditNoteDto, data);
+  return parseWithSchema({ schema: CreateInvoiceCreditNoteDto, data });
 }
 
 /** Credit notes are never edited (B16) — there is no change route. */
@@ -24,7 +24,7 @@ export function refuseInvoiceCreditNoteUpdate(): Record<string, unknown> {
 
 /** Parses a credit-note list query into a list input (routes-final 8.B.8 #8, #9). */
 export function validateListInvoiceCreditNotesQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listInvoiceCreditNotesInternalQueryDto, data);
+  const query = parseWithSchema({ schema: listInvoiceCreditNotesInternalQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

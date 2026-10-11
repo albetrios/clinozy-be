@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
  *
  * `tenancy.organizations` and `tenancy.memberships` are FORCE RLS, and their policies honor only
  * `app.current_organization_public_id` (`organizations_tenant_isolation`) and `app.current_user_public_id`
- * (`organizations_user_discovery` / `memberships_user_self_discovery`). Unlike the `auth.*` and
+ * (`organizations_user_discovery` / `memberships_user_self_discovery`, read-only). Unlike the `auth.*` and
  * `audit.logs` policies, **none of them carries an `app.global_admin` arm** — so
  * `withMaintenanceDatabaseContext` grants exactly nothing on tenancy tables while looking like it
  * grants everything.
@@ -35,7 +35,7 @@ describe('Global: tenancy code never uses the global-admin RLS escape hatch', ()
    * `MAINTENANCE_SCOPE.GLOBAL_ADMIN` singleton is the only way to enter the hatch
    * since the family unification, so referencing it outside a comment IS the use.
    */
-  const GLOBAL_ADMIN_USE = /^(?!\s*(?:\/\/|\*|\/\*)).*MAINTENANCE_SCOPE\.global_admin/gm;
+  const GLOBAL_ADMIN_USE = /^(?!\s*(?:\/\/|\*|\/\*)).*MAINTENANCE_SCOPE\.GLOBAL_ADMIN\b/gm;
 
   async function* walkTypeScriptFiles(root: string): AsyncGenerator<string> {
     const entries = await fs.readdir(root, { withFileTypes: true });
@@ -52,6 +52,18 @@ describe('Global: tenancy code never uses the global-admin RLS escape hatch', ()
       yield entryPath;
     }
   }
+
+  it('detects the canonical global-admin scope reference and ignores comment-only mentions', () => {
+    GLOBAL_ADMIN_USE.lastIndex = 0;
+    expect(
+      GLOBAL_ADMIN_USE.test(
+        'withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_ADMIN, callback)',
+      ),
+    ).toBe(true);
+    GLOBAL_ADMIN_USE.lastIndex = 0;
+    expect(GLOBAL_ADMIN_USE.test('// MAINTENANCE_SCOPE.GLOBAL_ADMIN is forbidden')).toBe(false);
+    GLOBAL_ADMIN_USE.lastIndex = 0;
+  });
 
   it('no file under src/domains/tenancy uses MAINTENANCE_SCOPE.GLOBAL_ADMIN', async () => {
     const repositoryRoot = process.cwd();

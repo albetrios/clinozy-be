@@ -14,10 +14,10 @@ import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.j
  */
 export const listAppMembershipsQueryDto = cursorPaginationSchema
   .extend({
-    q: trimmedStringMinMax(1, 200).optional(),
+    q: trimmedStringMinMax({ min: 1, max: 200 }).optional(),
     role_id: recordIdSchema.optional(),
     branch_id: recordIdSchema.optional(),
-    holds: trimmedStringMinMax(1, 100)
+    holds: trimmedStringMinMax({ min: 1, max: 100 })
       .meta({
         description:
           'One permission code: only the members one of whose roles grants it (an unknown code lists none).',

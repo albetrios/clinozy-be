@@ -17,7 +17,7 @@ const roleRow = {
 
 describe('member-role serializer', () => {
   it('serializeMemberRole maps role row and echoes the supplied member_count', () => {
-    expect(serializeMemberRole(roleRow, 3)).toEqual({
+    expect(serializeMemberRole({ row: roleRow, member_count: 3 })).toEqual({
       id: 'role-public',
       name: 'Admin',
       description: 'Full access',
@@ -31,6 +31,8 @@ describe('member-role serializer', () => {
   });
 
   it('serializeMemberRole surfaces member_count 0 for a role with no members', () => {
-    expect(serializeMemberRole(roleRow, 0)).toMatchObject({ member_count: 0 });
+    expect(serializeMemberRole({ row: roleRow, member_count: 0 })).toMatchObject({
+      member_count: 0,
+    });
   });
 });

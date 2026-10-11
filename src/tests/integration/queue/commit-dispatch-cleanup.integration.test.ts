@@ -49,11 +49,12 @@ async function readExport(publicId: string) {
 }
 
 /**
- * When a post-commit enqueue fails, the dispatch cleans up the row it was for. Both clean-ups run
- * under the recipient's / owner's own scope, by public id — on the RLS-subject application role
- * (`pnpm test:rls-role`) that scope is what lets the write reach the row. The notification
- * clean-up used to run under the system-table maintenance scope, which no notification policy
- * matches: on that role it deleted nothing and the never-dispatched row stayed in the inbox.
+ * When a post-commit enqueue fails, the dispatch cleans up the notification it was for, under the
+ * recipient's own scope, by public id — on the RLS-subject application role (`pnpm test:rls-role`)
+ * that scope is what lets the write reach the row. The notification clean-up used to run under the
+ * system-table maintenance scope, which no notification policy matches: on that role it deleted
+ * nothing and the never-dispatched row stayed in the inbox. A data export is not cleaned up: its
+ * row is the outbox, left `pending` for the reclaim sweep.
  */
 describe('Integration: post-commit dispatch clean-up after a failed enqueue', () => {
   beforeEach(async () => {
@@ -118,7 +119,7 @@ describe('Integration: post-commit dispatch clean-up after a failed enqueue', ()
     },
   );
 
-  it("fails a still-pending export under its owner's scope", async () => {
+  it('leaves a still-pending export pending, for the reclaim sweep to re-enqueue', async () => {
     const user = await createTestUser();
     const exportRow = await createTestUserDataExport({ userId: user.id });
 
@@ -128,9 +129,10 @@ describe('Integration: post-commit dispatch clean-up after a failed enqueue', ()
       userPublicId: user.public_id,
     });
 
+    // An enqueue error never fails a row-backed job: `reclaim-pending-user-data-exports` re-adds it.
     expect(await readExport(exportRow.public_id)).toEqual({
-      status: 'failed',
-      error_code: 'enqueue_failed',
+      status: 'pending',
+      error_code: null,
     });
   });
 

@@ -33,9 +33,10 @@ export function createAppRecordPurgeWorker(): WorkerHandle {
   const worker = new Worker(
     APP_RECORD_PURGE_QUEUE_NAME,
     async () =>
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, (databaseHandle) =>
-        runAppRecordPurgeJob(databaseHandle),
-      ),
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: (databaseHandle) => runAppRecordPurgeJob(databaseHandle),
+      }),
     {
       connection: getBullMQConnectionOptions(),
       prefix: getBullMQKeyPrefix(),
@@ -48,5 +49,5 @@ export function createAppRecordPurgeWorker(): WorkerHandle {
     logger.warn({ jobId, queue: APP_RECORD_PURGE_QUEUE_NAME }, 'app-record-purge.stalled');
   });
 
-  return buildWorkerHandle(worker, APP_RECORD_PURGE_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: APP_RECORD_PURGE_QUEUE_NAME });
 }

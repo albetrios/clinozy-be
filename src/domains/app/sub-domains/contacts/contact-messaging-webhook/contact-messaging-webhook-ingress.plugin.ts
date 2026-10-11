@@ -32,7 +32,7 @@ export const contactMessagingWebhookIngressPlugin: FastifyPluginAsync = async (a
     }
     const rawBody = request.rawBody;
     if (!rawBody) throw new ValidationError('errors:missingRawBody');
-    if (!verifyMetaWebhookSignature(rawBody, signature)) {
+    if (!verifyMetaWebhookSignature({ rawBody, signatureHeader: signature })) {
       logger.warn({ requestId: request.id }, 'messaging-webhook.verification_failed');
       throw new ValidationError('errors:metaWebhookVerificationFailed');
     }

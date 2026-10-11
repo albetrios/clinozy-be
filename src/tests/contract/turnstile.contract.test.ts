@@ -157,4 +157,32 @@ describe('Cloudflare Turnstile siteverify contract', () => {
     expect(capturedBody).toBeDefined();
     expect(capturedBody!.remoteip).toBeUndefined();
   });
+  test('provider 503 is an availability error and does not silently allow the token', async () => {
+    nock(SITEVERIFY_HOSTNAME).post(SITEVERIFY_PATH).reply(503, { success: false });
+    await expect(verifyTurnstileToken({ token: 'provider-outage' })).rejects.toMatchObject({
+      integration: 'captcha-turnstile',
+      category: 'http_5xx',
+      statusCode: 503,
+    });
+  });
+
+  test('malformed provider JSON fails verification instead of treating the request as successful', async () => {
+    nock(SITEVERIFY_HOSTNAME)
+      .post(SITEVERIFY_PATH)
+      .reply(200, '{invalid', { 'content-type': 'application/json' });
+    await expect(verifyTurnstileToken({ token: 'malformed-response' })).rejects.toMatchObject({
+      integration: 'captcha-turnstile',
+      statusCode: 503,
+    });
+  });
+
+  test('timeout-or-duplicate token verdict stays a failed verification', async () => {
+    nock(SITEVERIFY_HOSTNAME)
+      .post(SITEVERIFY_PATH)
+      .reply(200, { success: false, 'error-codes': ['timeout-or-duplicate'] });
+    await expect(verifyTurnstileToken({ token: 'already-used' })).resolves.toEqual({
+      success: false,
+      errorCodes: ['timeout-or-duplicate'],
+    });
+  });
 });

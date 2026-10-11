@@ -22,7 +22,7 @@ import {
 } from './invoice-credit-notes.validator.js';
 
 /** The list options the base service takes. */
-type ListOptions = Parameters<BaseRecordService<InvoiceCreditNoteOutput>['list']>[2];
+type ListOptions = Parameters<BaseRecordService<InvoiceCreditNoteOutput>['list']>[0]['options'];
 
 /**
  * The organization's credit notes (launch ROUTE #136, routes-final 8.B): every credit note, an
@@ -66,12 +66,12 @@ export class InvoiceCreditNotesService extends BaseRecordService<InvoiceCreditNo
     visibility: BaseRecordVisibility | undefined;
   }): Promise<void> {
     if (options.invoicePublicId === undefined) return;
-    await this.invoicesService.get(
-      options.scope,
-      options.invoicePublicId,
-      options.actingUserPublicId,
-      options.visibility,
-    );
+    await this.invoicesService.get({
+      scope: options.scope,
+      publicId: options.invoicePublicId,
+      actingUserPublicId: options.actingUserPublicId,
+      visibility: options.visibility,
+    });
   }
 
   /** B4: the caller's branches — undefined when every branch is theirs (`branch:read`). */
@@ -81,22 +81,29 @@ export class InvoiceCreditNotesService extends BaseRecordService<InvoiceCreditNo
     visibility: BaseRecordVisibility | undefined;
   }): Promise<number[] | undefined> {
     if (!options.visibility || options.visibility.allBranches) return undefined;
-    return withAppDatabaseContext(options.scope, async () => {
-      const userId = await this.userId(options.actingUserPublicId);
-      if (userId === null) return [];
-      return listVisibleBranchIds({
-        organizationId: await this.organizationId(options.scope),
-        userId,
-      });
+    return withAppDatabaseContext({
+      scope: options.scope,
+      callback: async () => {
+        const userId = await this.userId(options.actingUserPublicId);
+        if (userId === null) return [];
+        return listVisibleBranchIds({
+          organizationId: await this.organizationId(options.scope),
+          userId,
+        });
+      },
     });
   }
 
   /** Every credit note, or an invoice's — within the caller's branches (B4). */
-  override async list(
-    scope: OrganizationPrincipalDatabaseScope,
-    query: unknown,
-    options: ListOptions = {},
-  ): Promise<BaseRecordListResult<InvoiceCreditNoteOutput>> {
+  override async list({
+    scope,
+    query,
+    options = {},
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    query: unknown;
+    options?: ListOptions | undefined;
+  }): Promise<BaseRecordListResult<InvoiceCreditNoteOutput>> {
     await this.assertInvoiceVisible({
       scope,
       invoicePublicId: options.parentPublicId,
@@ -108,47 +115,68 @@ export class InvoiceCreditNotesService extends BaseRecordService<InvoiceCreditNo
       actingUserPublicId: options.actingUserPublicId,
       visibility: options.visibility,
     });
-    return super.list(
+    return super.list({
       scope,
-      visibleBranchIds === undefined
-        ? query
-        : { ...(query as Record<string, unknown>), visible_branch_ids: visibleBranchIds },
+      query:
+        visibleBranchIds === undefined
+          ? query
+          : { ...(query as Record<string, unknown>), visible_branch_ids: visibleBranchIds },
       options,
-    );
+    });
   }
 
   /** One credit note of an invoice the caller sees (B4). */
-  override async get(
-    scope: OrganizationPrincipalDatabaseScope,
-    publicId: string,
-    actingUserPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    parentPublicId?: string,
-  ): Promise<InvoiceCreditNoteOutput> {
+  override async get({
+    scope,
+    publicId,
+    actingUserPublicId,
+    visibility,
+    parentPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    publicId: string;
+    actingUserPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    parentPublicId?: string | undefined;
+  }): Promise<InvoiceCreditNoteOutput> {
     await this.assertInvoiceVisible({
       scope,
       invoicePublicId: parentPublicId,
       actingUserPublicId,
       visibility,
     });
-    return super.get(scope, publicId, actingUserPublicId, visibility, parentPublicId);
+    return super.get({ scope, publicId, actingUserPublicId, visibility, parentPublicId });
   }
 
   /** B16: a refund on an invoice the caller sees — the credit note and its refund payment. */
-  override async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    parentPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    createName?: string,
-  ): Promise<InvoiceCreditNoteOutput> {
+  override async create({
+    scope,
+    body,
+    actingUserPublicId,
+    parentPublicId,
+    visibility,
+    createName,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    parentPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    createName?: string | undefined;
+  }): Promise<InvoiceCreditNoteOutput> {
     await this.assertInvoiceVisible({
       scope,
       invoicePublicId: parentPublicId,
       actingUserPublicId,
       visibility,
     });
-    return super.create(scope, body, actingUserPublicId, parentPublicId, visibility, createName);
+    return super.create({
+      scope,
+      body,
+      actingUserPublicId,
+      parentPublicId,
+      visibility,
+      createName,
+    });
   }
 }

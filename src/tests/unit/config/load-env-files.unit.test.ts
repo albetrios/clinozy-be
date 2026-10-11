@@ -35,27 +35,27 @@ describe('applyDotenvFile', () => {
 
   it('keeps a value the shell set over a blank placeholder (no override)', () => {
     process.env[`${PREFIX}BLANK`] = 'from-the-cloud-environment';
-    applyDotenvFile(file);
+    applyDotenvFile({ envFilePath: file });
     expect(process.env[`${PREFIX}BLANK`]).toBe('from-the-cloud-environment');
   });
 
   it('unsets a key the file leaves blank when nothing else set it', () => {
-    applyDotenvFile(file);
+    applyDotenvFile({ envFilePath: file });
     expect(`${PREFIX}BLANK` in process.env).toBe(false);
     expect(process.env[`${PREFIX}FROM_FILE`]).toBe('file');
   });
 
   it('lets the shell win without override, and the file win with it', () => {
     process.env[`${PREFIX}SHELL_AND_FILE`] = 'shell';
-    applyDotenvFile(file);
+    applyDotenvFile({ envFilePath: file });
     expect(process.env[`${PREFIX}SHELL_AND_FILE`]).toBe('shell');
-    applyDotenvFile(file, true);
+    applyDotenvFile({ envFilePath: file, override: true });
     expect(process.env[`${PREFIX}SHELL_AND_FILE`]).toBe('file');
   });
 
   it('with override, a blank file line still unsets the key', () => {
     process.env[`${PREFIX}BLANK`] = 'shell';
-    applyDotenvFile(file, true);
+    applyDotenvFile({ envFilePath: file, override: true });
     expect(`${PREFIX}BLANK` in process.env).toBe(false);
   });
 });

@@ -26,7 +26,7 @@ export const positiveStockQuantitySchema = stockQuantitySchema.refine((value) =>
 
 /** The fields a create and a change share (routes-final 9.A.8 #3). */
 const stockItemFields = {
-  name: trimmedStringMinMax(1, 120),
+  name: trimmedStringMinMax({ min: 1, max: 120 }),
   category: z.enum(STOCK_ITEM_CATEGORY_VALUES),
   unit: z.enum(STOCK_ITEM_UNIT_VALUES),
   size_per_unit: positiveStockQuantitySchema.nullable(),

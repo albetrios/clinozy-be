@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
@@ -12,12 +13,14 @@ import {
   createMembership,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import {
+  getCachedPermissions,
   invalidatePermissions,
   invalidateOrganizationPermissions,
 } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { resolveUserOrganizationPermissions } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import type { FastifyInstance } from 'fastify';
+import { sql } from 'drizzle-orm';
 
 const ALL_PERMISSION_CODES = Object.values(TENANCY_PERMISSIONS) as string[];
 
@@ -83,10 +86,10 @@ describe('Permission System Validation', () => {
 
     // Verify via the permission resolution service
     const resolved =
-      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions(
-        user.public_id,
-        organization.public_id,
-      );
+      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions({
+        userPublicId: user.public_id,
+        organizationPublicId: organization.public_id,
+      });
     // User has no membership yet, so permissions should be empty
     expect(resolved).toEqual([]);
 
@@ -98,13 +101,13 @@ describe('Permission System Validation', () => {
     });
 
     // Invalidate cache since we just resolved above (empty set cached)
-    await invalidatePermissions(user.public_id, organization.public_id);
+    await invalidatePermissions({ userId: user.public_id, organizationId: organization.public_id });
 
     const resolvedWithMembership =
-      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions(
-        user.public_id,
-        organization.public_id,
-      );
+      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions({
+        userPublicId: user.public_id,
+        organizationPublicId: organization.public_id,
+      });
     expect(resolvedWithMembership.sort()).toEqual(targetCodes.sort());
   });
 
@@ -203,21 +206,38 @@ describe('Permission System Validation', () => {
     });
 
     // First resolution — should cache
-    const first = await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions(
-      user.public_id,
-      organization.public_id,
-    );
+    const first = await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions({
+      userPublicId: user.public_id,
+      organizationPublicId: organization.public_id,
+    });
     expect(first).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
 
-    // Invalidate the cache
-    await invalidatePermissions(user.public_id, organization.public_id);
+    // Revoke the real grant independently of cache invalidation. A no-op
+    // invalidator must leave the stale value visible and fail the final check.
+    expect(
+      await getCachedPermissions({
+        userId: user.public_id,
+        organizationId: organization.public_id,
+      }),
+    ).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
+    await getOperatorDatabase().execute(
+      sql`DELETE FROM tenancy.role_permissions WHERE role_id = ${limitedRole.id}`,
+    );
+    expect(
+      await getCachedPermissions({
+        userId: user.public_id,
+        organizationId: organization.public_id,
+      }),
+    ).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
+
+    await invalidatePermissions({ userId: user.public_id, organizationId: organization.public_id });
 
     // Second resolution after invalidation — should hit DB again
-    const second = await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions(
-      user.public_id,
-      organization.public_id,
-    );
-    expect(second).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
+    const second = await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions({
+      userPublicId: user.public_id,
+      organizationPublicId: organization.public_id,
+    });
+    expect(second).toEqual([]);
   });
 
   // ─── Case 6: Permission resolution — correct 5-table join ─────────────
@@ -240,10 +260,10 @@ describe('Permission System Validation', () => {
     });
 
     const resolved =
-      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions(
-        user.public_id,
-        organization.public_id,
-      );
+      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions({
+        userPublicId: user.public_id,
+        organizationPublicId: organization.public_id,
+      });
 
     expect(resolved.sort()).toEqual([...ALL_PERMISSION_CODES].sort());
   });
@@ -277,14 +297,14 @@ describe('Permission System Validation', () => {
     });
 
     const viaContainer =
-      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions(
-        user.public_id,
-        organization.public_id,
-      );
-    const viaModuleExport = await resolveUserOrganizationPermissions(
-      user.public_id,
-      organization.public_id,
-    );
+      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions({
+        userPublicId: user.public_id,
+        organizationPublicId: organization.public_id,
+      });
+    const viaModuleExport = await resolveUserOrganizationPermissions({
+      userPublicId: user.public_id,
+      organizationPublicId: organization.public_id,
+    });
 
     expect([...viaModuleExport].sort()).toEqual([...viaContainer].sort());
     expect([...viaModuleExport].sort()).toEqual(
@@ -293,11 +313,11 @@ describe('Permission System Validation', () => {
 
     // And a revocation is observed through the module export too — a stale cache on this path
     // would leave `requireOrganizationPermission` granting a permission that no longer exists.
-    await invalidatePermissions(user.public_id, organization.public_id);
-    const afterInvalidation = await resolveUserOrganizationPermissions(
-      user.public_id,
-      organization.public_id,
-    );
+    await invalidatePermissions({ userId: user.public_id, organizationId: organization.public_id });
+    const afterInvalidation = await resolveUserOrganizationPermissions({
+      userPublicId: user.public_id,
+      organizationPublicId: organization.public_id,
+    });
     expect([...afterInvalidation].sort()).toEqual([...viaContainer].sort());
   });
 
@@ -328,35 +348,74 @@ describe('Permission System Validation', () => {
 
     // Resolve for both users — caches both
     const ownerPermissions =
-      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions(
-        owner.public_id,
-        organization.public_id,
-      );
+      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions({
+        userPublicId: owner.public_id,
+        organizationPublicId: organization.public_id,
+      });
     const memberPermissions =
-      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions(
-        member.public_id,
-        organization.public_id,
-      );
+      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions({
+        userPublicId: member.public_id,
+        organizationPublicId: organization.public_id,
+      });
 
     expect(ownerPermissions).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
     expect(memberPermissions).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
 
-    // Invalidate all permissions for the organization
+    // A different tenant is a positive control: its live cache must survive.
+    const otherOrganization = await createTestOrganization({ ownerUserId: owner.id });
+    const otherRole = await createRoleWithPermissions({
+      organizationId: otherOrganization.id,
+      permissionCodes: [TENANCY_PERMISSIONS.ORGANIZATION_READ],
+    });
+    await createMembership({
+      userId: owner.id,
+      organizationId: otherOrganization.id,
+      roleId: otherRole.id,
+    });
+    expect(
+      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions({
+        userPublicId: owner.public_id,
+        organizationPublicId: otherOrganization.public_id,
+      }),
+    ).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
+
+    await getOperatorDatabase().execute(
+      sql`DELETE FROM tenancy.role_permissions WHERE role_id = ${role.id}`,
+    );
+    expect(
+      await getCachedPermissions({
+        userId: owner.public_id,
+        organizationId: organization.public_id,
+      }),
+    ).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
+    expect(
+      await getCachedPermissions({
+        userId: member.public_id,
+        organizationId: organization.public_id,
+      }),
+    ).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
+
     await invalidateOrganizationPermissions(organization.public_id);
 
     // Re-resolve — should hit DB again (cache cleared)
     const ownerPermissionsAfterInvalidation =
-      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions(
-        owner.public_id,
-        organization.public_id,
-      );
+      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions({
+        userPublicId: owner.public_id,
+        organizationPublicId: organization.public_id,
+      });
     const memberPermissionsAfterInvalidation =
-      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions(
-        member.public_id,
-        organization.public_id,
-      );
+      await app.tenancyDomain.authorizationService.resolveUserOrganizationPermissions({
+        userPublicId: member.public_id,
+        organizationPublicId: organization.public_id,
+      });
 
-    expect(ownerPermissionsAfterInvalidation).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
-    expect(memberPermissionsAfterInvalidation).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
+    expect(ownerPermissionsAfterInvalidation).toEqual([]);
+    expect(memberPermissionsAfterInvalidation).toEqual([]);
+    expect(
+      await getCachedPermissions({
+        userId: owner.public_id,
+        organizationId: otherOrganization.public_id,
+      }),
+    ).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
   });
 });

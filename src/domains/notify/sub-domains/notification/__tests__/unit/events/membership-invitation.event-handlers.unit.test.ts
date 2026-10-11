@@ -1,7 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
 
 const createAndDispatchNotificationMock = vi.fn();
 const resolveRecipientPublicIdsMock = vi.fn();
+// No Postgres in the unit lane: each recipient's savepoint runs its callback directly.
+vi.mock('@/infrastructure/database/transaction.js', () => ({
+  withSavepoint: vi.fn(async (callback: () => Promise<unknown>) => callback()),
+}));
+
 vi.mock('@/domains/notify/sub-domains/notification/notification-dispatch.service.js', () => ({
   createAndDispatchNotification: (...arguments_: unknown[]) =>
     createAndDispatchNotificationMock(...arguments_),
@@ -14,6 +20,11 @@ vi.mock('@/domains/notify/sub-domains/notification/notification-unread-count.cac
   invalidateCachedUnreadNotificationCounts: (...arguments_: unknown[]) =>
     invalidateUnreadCountsMock(...arguments_),
 }));
+
+// Email copy comes from the locale files, as in the API and the worker.
+beforeAll(async () => {
+  await initializeI18nextForBackgroundWork();
+});
 
 describe('membership-invitation notification handlers (item #10, launch D84)', () => {
   let emitAccepted: (payload: unknown) => Promise<void>;
@@ -64,8 +75,8 @@ describe('membership-invitation notification handlers (item #10, launch D84)', (
     });
 
     expect(createAndDispatchNotificationMock).toHaveBeenCalledTimes(2);
-    expect(createAndDispatchNotificationMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(createAndDispatchNotificationMock).toHaveBeenCalledWith({
+      input: expect.objectContaining({
         user_id: 11,
         organization_id: 7,
         type: 'membership.invite_accepted',
@@ -74,10 +85,28 @@ describe('membership-invitation notification handlers (item #10, launch D84)', (
         action_url: '/settings/members',
         data: { channels: ['in_app', 'email'] },
       }),
-    );
-    expect(createAndDispatchNotificationMock).toHaveBeenCalledWith(
-      expect.objectContaining({ user_id: 22 }),
-    );
+    });
+    expect(createAndDispatchNotificationMock).toHaveBeenCalledWith({
+      input: expect.objectContaining({ user_id: 22 }),
+    });
+  });
+
+  it("writes the notification in the organization's language and carries it to the email", async () => {
+    await emitAccepted({
+      recipient_user_ids: [11],
+      organization_id: 7,
+      organization_name: 'Acme & Co',
+      invitee_name: 'Dana Scully',
+      locale: 'es',
+    });
+
+    expect(createAndDispatchNotificationMock).toHaveBeenCalledWith({
+      input: expect.objectContaining({
+        title: 'Invitación aceptada',
+        message: 'Dana Scully aceptó tu invitación para unirse a Acme & Co.',
+        data: { channels: ['in_app', 'email'], locale: 'es' },
+      }),
+    });
   });
 
   it('tells the inviter in the app only when an invitation is declined (D84)', async () => {
@@ -88,19 +117,20 @@ describe('membership-invitation notification handlers (item #10, launch D84)', (
       organization_id: 7,
       organization_name: 'Acme',
       invitee_name: 'Dana Scully',
+      locale: 'en',
     });
 
-    expect(createAndDispatchNotificationMock).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
+    expect(createAndDispatchNotificationMock).toHaveBeenCalledExactlyOnceWith({
+      input: expect.objectContaining({
         user_id: 11,
         organization_id: 7,
         type: 'membership.invite_declined',
         title: 'Invitation declined',
         message: 'Dana Scully declined your invitation to join Acme.',
         action_url: '/settings/members',
-        data: { channels: ['in_app'] },
+        data: { channels: ['in_app'], locale: 'en' },
       }),
-    );
+    });
     expect(invalidateUnreadCountsMock).toHaveBeenCalledWith(['usr_inviter']);
   });
 

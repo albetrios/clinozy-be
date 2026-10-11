@@ -42,7 +42,7 @@ const discountPercentSchema = z
 const medicineBatchDto = z
   .object({
     id: recordIdSchema.optional(),
-    batch_number: trimmedStringMinMax(1, 20),
+    batch_number: trimmedStringMinMax({ min: 1, max: 20 }),
     expiry_month: expiryMonthSchema,
     quantity: packsSchema,
     purchase_rate: moneySchema.nullable().optional(),
@@ -81,8 +81,8 @@ const supplierPricesSchema = z
 
 /** The fields a create and a change share (routes-final 11.D.8). */
 const medicineFields = {
-  name: trimmedStringMinMax(1, 120),
-  composition: trimmedStringMinMax(1, 160).nullable(),
+  name: trimmedStringMinMax({ min: 1, max: 120 }),
+  composition: trimmedStringMinMax({ min: 1, max: 160 }).nullable(),
   manufacturer_id: recordIdSchema,
   is_prescription_only: z.boolean(),
   mrp: moneySchema,

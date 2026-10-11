@@ -1,10 +1,16 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { UploadRepository } from '@/domains/upload/upload.repository.js';
 import { UploadService } from '@/domains/upload/upload.service.js';
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
+import { sql } from 'drizzle-orm';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Offboarding's whole job is erasure, and **nothing asserted it happened against a real
@@ -33,49 +39,49 @@ type Seeded = { userId: number; organizationId: number };
 
 async function seed(): Promise<Seeded> {
   const email = 'offboarding-erasure@example.test';
-  const [user] = await getOperatorSql()<{ id: number }[]>`
+  const [user] = rowsOf<{ id: number }>(
+    await getOperatorDatabase().execute(sql`
     INSERT INTO auth.users (public_id, email, email_hash, is_email_verified)
     VALUES ('usr_offboarderasureuser1', ${email},
             ${createHash('sha256').update(email).digest('hex')}, true)
     RETURNING id
-  `;
-  const [organization] = await getOperatorSql()<{ id: number }[]>`
+  `),
+  );
+  const [organization] = rowsOf<{ id: number }>(
+    await getOperatorDatabase().execute(sql`
     INSERT INTO tenancy.organizations (public_id, name, slug, owner_user_id, type)
     VALUES ('org_offboarderasureorg01', 'Offboard Erasure', 'offboard-erasure', ${user!.id}, 'TEAM')
     RETURNING id
-  `;
+  `),
+  );
   const userId = Number(user!.id);
   const organizationId = Number(organization!.id);
 
   // Two organization-scoped uploads and two personal ones — the two policy arms are disjoint,
   // so a sweep that can only see one of them is still a failure.
   for (const [index, orgId] of [organizationId, organizationId, null, null].entries()) {
-    await getOperatorSql()`
+    await getOperatorDatabase().execute(sql`
       INSERT INTO upload.uploads
         (public_id, user_id, organization_id, file_name, file_key, mime_type, file_size, bucket, status)
       VALUES (${`upl_offboarderasure${String(index).padStart(5, '0')}`}, ${userId}, ${orgId},
               ${`f${index}.png`}, ${`uploads/f${index}.png`}, 'image/png', 10, 'test-bucket', 'UPLOADED')
-    `;
+    `);
   }
   return { userId, organizationId };
 }
 
 async function countLiveUploads(): Promise<number> {
-  const [row] = await getOperatorSql()<{ count: number }[]>`
+  const [row] = rowsOf<{ count: number }>(
+    await getOperatorDatabase().execute(sql`
     SELECT count(*)::int AS count FROM upload.uploads WHERE deleted_at IS NULL
-  `;
+  `),
+  );
   return Number(row!.count);
 }
 
 function buildService(): UploadService {
   // Only the repository and storage participate in the tombstone paths.
-  return new UploadService(
-    new UploadRepository(),
-    {} as never,
-    {} as never,
-    storageStub,
-    {} as never,
-  );
+  return new UploadService(new UploadRepository(), {} as never, {} as never, storageStub);
 }
 
 describe('Integration: offboarding actually erases uploads', () => {

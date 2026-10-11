@@ -45,5 +45,5 @@ export function createContactMessagingSweepWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, CONTACT_MESSAGING_SWEEP_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: CONTACT_MESSAGING_SWEEP_QUEUE_NAME });
 }

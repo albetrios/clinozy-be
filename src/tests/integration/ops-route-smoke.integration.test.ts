@@ -39,9 +39,10 @@ describe('Ops route smoke (catalog)', () => {
     });
   }
 
-  describe('happy path with the metrics bearer token', () => {
-    // src/tests/setup.ts pins METRICS_SCRAPE_TOKEN for every test run.
+  describe('happy path with the ops bearer tokens', () => {
+    // src/tests/setup.ts pins METRICS_SCRAPE_TOKEN and OPS_ADMIN_TOKEN for every test run.
     const bearerToken = process.env.METRICS_SCRAPE_TOKEN as string;
+    const adminBearerToken = process.env.OPS_ADMIN_TOKEN as string;
 
     it('GET /internal/ops/circuit-breakers lists managed circuits', async () => {
       const response = await injectRoute(app, {
@@ -58,9 +59,18 @@ describe('Ops route smoke (catalog)', () => {
       const response = await injectRoute(app, {
         method: 'POST',
         url: '/internal/ops/circuit-breakers/stripe/reset',
-        headers: { authorization: `Bearer ${bearerToken}` },
+        headers: { authorization: `Bearer ${adminBearerToken}` },
       });
       expect(response.statusCode, response.body).toBe(200);
+    });
+
+    it('the metrics scrape token cannot reset a circuit (read-only)', async () => {
+      const response = await injectRoute(app, {
+        method: 'POST',
+        url: '/internal/ops/circuit-breakers/stripe/reset',
+        headers: { authorization: `Bearer ${bearerToken}` },
+      });
+      expect(response.statusCode, response.body).toBe(401);
     });
   });
 });

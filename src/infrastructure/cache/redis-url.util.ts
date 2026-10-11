@@ -25,5 +25,8 @@ export function resolveBullMqRedisUrl(): string {
 
 /** True when cache and BullMQ use different logical databases or hosts (env-bound). */
 export function usesSeparateBullMqRedisDatabase(): boolean {
-  return usesSeparateBullMqRedisEndpoint(env.REDIS_URL, resolveBullMqRedisUrl());
+  return usesSeparateBullMqRedisEndpoint({
+    cacheRedisUrl: env.REDIS_URL,
+    bullMqRedisUrl: resolveBullMqRedisUrl(),
+  });
 }

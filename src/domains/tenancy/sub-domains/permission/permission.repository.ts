@@ -12,7 +12,7 @@ import {
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { eq, and, isNull, sql as drizzleSql } from 'drizzle-orm';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
 /**
  * Drizzle data access for the global `tenancy.permissions` catalog and for
@@ -53,7 +53,7 @@ export class PermissionRepository {
   async findPermissionCodesForUserInOrganization(
     userPublicId: string,
     organizationPublicId: string,
-    databaseHandle?: PostgresJsDatabase,
+    databaseHandle?: NodePgDatabase,
   ): Promise<string[]> {
     const database = databaseHandle ?? getRequestDatabase();
 

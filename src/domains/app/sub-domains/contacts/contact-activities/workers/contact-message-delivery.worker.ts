@@ -39,11 +39,11 @@ export function createContactMessageDeliveryWorker(): WorkerHandle {
         job,
         queueName: CONTACT_MESSAGE_DELIVERY_QUEUE_NAME,
       });
-      return runWithPropagatedTraceContext(
-        { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
-        job.name,
-        () => runContactMessageDeliveryJob(jobData.organizationPublicId),
-      );
+      return runWithPropagatedTraceContext({
+        carrier: { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
+        spanName: job.name,
+        callback: () => runContactMessageDeliveryJob(jobData.organizationPublicId),
+      });
     },
     workerOptions: {
       connection: getBullMQConnectionOptions(),
@@ -59,5 +59,5 @@ export function createContactMessageDeliveryWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, CONTACT_MESSAGE_DELIVERY_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: CONTACT_MESSAGE_DELIVERY_QUEUE_NAME });
 }

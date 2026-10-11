@@ -17,7 +17,9 @@ vi.mock('@/domains/auth/shared/complete-first-factor-auth.js', () => ({
 // sendCode/login wrap their writes in withTransaction + runWithPinnedDatabaseHandle; invoke the
 // callbacks directly so the unit test exercises the flow without a real database/transaction.
 vi.mock('@/infrastructure/database/transaction.js', () => ({
-  withTransaction: vi.fn((callback: (transaction: unknown) => unknown) => callback({})),
+  withTransaction: vi.fn(({ callback }: { callback: (transaction: unknown) => unknown }) =>
+    callback({}),
+  ),
 }));
 
 vi.mock(
@@ -26,7 +28,15 @@ vi.mock(
     const actual = await importOriginal<Record<string, unknown>>();
     return {
       ...actual,
-      runWithPinnedDatabaseHandle: vi.fn((_handle: unknown, callback: () => unknown) => callback()),
+      runWithPinnedDatabaseHandle: vi.fn(
+        ({
+          databaseHandle: _handle,
+          callback,
+        }: {
+          databaseHandle: unknown;
+          callback: () => unknown;
+        }) => callback(),
+      ),
       getRequestDatabase: vi.fn(() => ({})),
     };
   },
@@ -158,10 +168,13 @@ describe('EmailLoginService', () => {
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
     vi.mocked(userService.createForEmailCode).mockResolvedValue(user as never);
 
-    const result = await service.sendCode({ email: 'new-user@example.com' });
+    const result = await service.sendCode({ body: { email: 'new-user@example.com' } });
 
     expect(userService.createForEmailCode).toHaveBeenCalledWith({ email: 'new-user@example.com' });
-    expect(authMethodService.createEmailCodeMethod).toHaveBeenCalledWith(user.id, user.public_id);
+    expect(authMethodService.createEmailCodeMethod).toHaveBeenCalledWith({
+      userId: user.id,
+      userPublicId: user.public_id,
+    });
     expect(verificationTokenRepository.create).toHaveBeenCalled();
     expect(vi.mocked(eventBus.emitStrict)).toHaveBeenCalledTimes(1);
     expect(result.messageKey).toBe('success:verificationCodeSent');
@@ -173,7 +186,7 @@ describe('EmailLoginService', () => {
       .mockResolvedValueOnce(user as never);
     vi.mocked(userService.createForEmailCode).mockRejectedValue({ code: '23505' });
 
-    const result = await service.sendCode({ email: user.email });
+    const result = await service.sendCode({ body: { email: user.email } });
 
     // No 409 — email login is auto-signup; it converges on the existing user and still issues a code.
     expect(result.messageKey).toBe('success:verificationCodeSent');
@@ -184,7 +197,7 @@ describe('EmailLoginService', () => {
   it('sendCode issues a single live code, invalidating prior unused codes', async () => {
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
 
-    const result = await service.sendCode({ email: user.email });
+    const result = await service.sendCode({ body: { email: user.email } });
 
     expect(userService.createForEmailCode).not.toHaveBeenCalled();
     // Single live code: a fresh send invalidates the user's prior unused EMAIL_CODE codes so only the
@@ -210,7 +223,7 @@ describe('EmailLoginService', () => {
     // this key is absent everywhere real (see env-schema.unit.test.ts `rejects TEST_MODE=true in production`).
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
 
-    const result = await service.sendCode({ email: user.email });
+    const result = await service.sendCode({ body: { email: user.email } });
 
     const emittedPayload = vi.mocked(eventBus.emitStrict).mock.calls[0]?.[0]?.payload as {
       verification_code: string;
@@ -223,7 +236,7 @@ describe('EmailLoginService', () => {
     mockedRedisSet(redis.set).mockResolvedValueOnce(null); // cooldown already held → no issue, no code
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
 
-    const result = await service.sendCode({ email: user.email });
+    const result = await service.sendCode({ body: { email: user.email } });
 
     expect(result).not.toHaveProperty('debug_verification_code');
   });
@@ -237,7 +250,7 @@ describe('EmailLoginService', () => {
     try {
       vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
 
-      const result = await service.sendCode({ email: user.email });
+      const result = await service.sendCode({ body: { email: user.email } });
 
       expect(vi.mocked(eventBus.emitStrict)).toHaveBeenCalled(); // a code WAS issued + emailed
       expect(result).not.toHaveProperty('debug_verification_code'); // but never returned
@@ -249,7 +262,7 @@ describe('EmailLoginService', () => {
   it('sendCode resets the per-user verify-attempt cap so a fresh code restores the budget', async () => {
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
 
-    await service.sendCode({ email: user.email });
+    await service.sendCode({ body: { email: user.email } });
 
     expect(redis.del).toHaveBeenCalledWith(`auth:email_code_verify_attempts:${user.public_id}`);
   });
@@ -258,7 +271,7 @@ describe('EmailLoginService', () => {
     mockedRedisSet(redis.set).mockResolvedValueOnce(null);
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
 
-    const result = await service.sendCode({ email: user.email });
+    const result = await service.sendCode({ body: { email: user.email } });
 
     expect(result.messageKey).toBe('success:verificationCodeSent');
     expect(userService.findByEmail).not.toHaveBeenCalled();
@@ -273,7 +286,7 @@ describe('EmailLoginService', () => {
     vi.mocked(env).AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED = false;
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
 
-    const result = await service.sendCode({ email: user.email });
+    const result = await service.sendCode({ body: { email: user.email } });
 
     // The SET NX EX claim is the cooldown — with the flag off it must not even be attempted.
     expect(redis.set).not.toHaveBeenCalled();
@@ -287,7 +300,7 @@ describe('EmailLoginService', () => {
     mockedRedisSet(redis.set).mockRejectedValueOnce(new Error("Stream isn't writeable"));
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
 
-    const result = await service.sendCode({ email: user.email });
+    const result = await service.sendCode({ body: { email: user.email } });
 
     expect(result.messageKey).toBe('success:verificationCodeSent');
     expect(verificationTokenRepository.create).toHaveBeenCalled();
@@ -298,7 +311,7 @@ describe('EmailLoginService', () => {
     vi.mocked(redis.del).mockRejectedValueOnce(new Error("Stream isn't writeable"));
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
 
-    const result = await service.sendCode({ email: user.email });
+    const result = await service.sendCode({ body: { email: user.email } });
 
     expect(result.messageKey).toBe('success:verificationCodeSent');
     expect(vi.mocked(eventBus.emitStrict)).toHaveBeenCalledTimes(1);
@@ -310,16 +323,19 @@ describe('EmailLoginService', () => {
     );
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
     vi.mocked(userService.createForEmailCode).mockResolvedValue(user as never);
-    await service.sendCode({ email: 'missing@example.com' });
+    vi.mocked(enforceMinimumDuration).mockClear();
+    await service.sendCode({ body: { email: 'missing@example.com' } });
+    expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
+    vi.mocked(enforceMinimumDuration).mockClear();
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
-    await service.sendCode({ email: user.email });
-    expect(vi.mocked(enforceMinimumDuration)).toHaveBeenCalledTimes(2);
+    await service.sendCode({ body: { email: user.email } });
+    expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
   });
 
   it('sendCode rejects disposable email addresses', async () => {
     const emailUtil = await import('@/shared/utils/text/email.util.js');
     vi.mocked(emailUtil.isDisposableEmailBlocked).mockReturnValueOnce(true);
-    await expect(service.sendCode({ email: 'temp@mailinator.com' })).rejects.toThrow();
+    await expect(service.sendCode({ body: { email: 'temp@mailinator.com' } })).rejects.toThrow();
     expect(userService.createForEmailCode).not.toHaveBeenCalled();
   });
 
@@ -330,11 +346,11 @@ describe('EmailLoginService', () => {
       user_id: user.id,
     } as never);
 
-    const result = await service.login(
-      { email: user.email, code: 'ABCDEF' },
-      '127.0.0.1',
-      'vitest',
-    );
+    const result = await service.login({
+      body: { email: user.email, code: 'ABCDEF' },
+      ipAddress: '127.0.0.1',
+      userAgent: 'vitest',
+    });
     if (!('access_token' in result)) throw new Error('expected access token result');
 
     expect(verificationTokenRepository.consumeOtpForUser).toHaveBeenCalledWith(
@@ -363,7 +379,11 @@ describe('EmailLoginService', () => {
     } as never);
 
     await expect(
-      service.login({ email: user.email, code: 'ABCDEF' }, '127.0.0.1', 'vitest'),
+      service.login({
+        body: { email: user.email, code: 'ABCDEF' },
+        ipAddress: '127.0.0.1',
+        userAgent: 'vitest',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(authSessionService.createSessionForUser).not.toHaveBeenCalled();
   });
@@ -371,7 +391,10 @@ describe('EmailLoginService', () => {
   it('login rejects an unknown email without consuming a code', async () => {
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
     await expect(
-      service.login({ email: 'missing@example.com', code: 'ABCDEF' }, '127.0.0.1'),
+      service.login({
+        body: { email: 'missing@example.com', code: 'ABCDEF' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toThrow();
     expect(verificationTokenRepository.consumeOtpForUser).not.toHaveBeenCalled();
   });
@@ -380,7 +403,7 @@ describe('EmailLoginService', () => {
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
     vi.mocked(redis.eval).mockResolvedValueOnce(99);
     await expect(
-      service.login({ email: user.email, code: 'ABCDEF' }, '127.0.0.1'),
+      service.login({ body: { email: user.email, code: 'ABCDEF' }, ipAddress: '127.0.0.1' }),
     ).rejects.toThrow();
     expect(verificationTokenRepository.consumeOtpForUser).not.toHaveBeenCalled();
   });
@@ -394,29 +417,35 @@ describe('EmailLoginService', () => {
     // latency cannot be distinguished from the slower known-email path (account-existence oracle).
     vi.mocked(userService.findByEmail).mockResolvedValueOnce(null);
     await expect(
-      service.login({ email: 'missing@example.com', code: 'ABCDEF' }, '127.0.0.1'),
+      service.login({
+        body: { email: 'missing@example.com', code: 'ABCDEF' },
+        ipAddress: '127.0.0.1',
+      }),
     ).rejects.toThrow();
+
+    expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
+    vi.mocked(enforceMinimumDuration).mockClear();
 
     // Attempt-cap branch: a known email over the per-user cap.
     vi.mocked(userService.findByEmail).mockResolvedValueOnce(user as never);
     vi.mocked(redis.eval).mockResolvedValueOnce(99);
     await expect(
-      service.login({ email: user.email, code: 'ABCDEF' }, '127.0.0.1'),
+      service.login({ body: { email: user.email, code: 'ABCDEF' }, ipAddress: '127.0.0.1' }),
     ).rejects.toThrow();
 
-    expect(vi.mocked(enforceMinimumDuration)).toHaveBeenCalledTimes(2);
+    expect(enforceMinimumDuration).toHaveBeenCalledTimes(1);
   });
 
   it('login rejects a wrong or expired code', async () => {
     vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
     vi.mocked(verificationTokenRepository.consumeOtpForUser).mockResolvedValue(null);
     await expect(
-      service.login({ email: user.email, code: 'ZZZZZZ' }, '127.0.0.1'),
+      service.login({ body: { email: user.email, code: 'ZZZZZZ' }, ipAddress: '127.0.0.1' }),
     ).rejects.toThrow();
   });
 
   /**
-   * AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED — the local/development escape hatch that lets a
+   * AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED — the local-only escape hatch that lets a
    * caller log in without the `send-code` round trip. The env schema permits the flag only on the
    * `local` and `development` targets, so these paths cannot exist on a deployed production
    * runtime; what the suite pins is that switching it on skips ONLY the stored-code lookup and
@@ -439,7 +468,11 @@ describe('EmailLoginService', () => {
       // No token row exists — send-code was never called. The fixed-code branch must not need one.
       vi.mocked(verificationTokenRepository.consumeOtpForUser).mockResolvedValue(null);
 
-      const result = await service.login({ email: user.email, code: FIXED }, '127.0.0.1', 'vitest');
+      const result = await service.login({
+        body: { email: user.email, code: FIXED },
+        ipAddress: '127.0.0.1',
+        userAgent: 'vitest',
+      });
 
       if (!('access_token' in result)) throw new Error('expected access token result');
       expect(verificationTokenRepository.consumeOtpForUser).not.toHaveBeenCalled();
@@ -452,11 +485,11 @@ describe('EmailLoginService', () => {
       vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
       vi.mocked(verificationTokenRepository.consumeOtpForUser).mockResolvedValue(null);
 
-      const result = await service.login(
-        { email: user.email, code: 'test24' },
-        '127.0.0.1',
-        'vitest',
-      );
+      const result = await service.login({
+        body: { email: user.email, code: 'test24' },
+        ipAddress: '127.0.0.1',
+        userAgent: 'vitest',
+      });
 
       if (!('access_token' in result)) throw new Error('expected access token result');
       expect(verificationTokenRepository.consumeOtpForUser).not.toHaveBeenCalled();
@@ -467,7 +500,7 @@ describe('EmailLoginService', () => {
       vi.mocked(verificationTokenRepository.consumeOtpForUser).mockResolvedValue(null);
 
       await expect(
-        service.login({ email: user.email, code: 'ZZZZZZ' }, '127.0.0.1'),
+        service.login({ body: { email: user.email, code: 'ZZZZZZ' }, ipAddress: '127.0.0.1' }),
       ).rejects.toThrow(UnauthorizedError);
       // The wrong code took the normal path, so the stored-code lookup still ran.
       expect(verificationTokenRepository.consumeOtpForUser).toHaveBeenCalled();
@@ -477,7 +510,10 @@ describe('EmailLoginService', () => {
       vi.mocked(userService.findByEmail).mockResolvedValue(null as never);
 
       await expect(
-        service.login({ email: 'nobody@example.com', code: FIXED }, '127.0.0.1'),
+        service.login({
+          body: { email: 'nobody@example.com', code: FIXED },
+          ipAddress: '127.0.0.1',
+        }),
       ).rejects.toThrow(UnauthorizedError);
       expect(userService.createForEmailCode).not.toHaveBeenCalled();
     });
@@ -487,9 +523,9 @@ describe('EmailLoginService', () => {
       // Over the cap: incrementWithExpiryOnFirst returns a count above the allowed maximum.
       vi.mocked(redis.eval).mockResolvedValueOnce(999 as never);
 
-      await expect(service.login({ email: user.email, code: FIXED }, '127.0.0.1')).rejects.toThrow(
-        UnauthorizedError,
-      );
+      await expect(
+        service.login({ body: { email: user.email, code: FIXED }, ipAddress: '127.0.0.1' }),
+      ).rejects.toThrow(UnauthorizedError);
     });
 
     it('does not bypass the account-active assertion', async () => {
@@ -500,7 +536,7 @@ describe('EmailLoginService', () => {
       vi.mocked(verificationTokenRepository.consumeOtpForUser).mockResolvedValue(null);
 
       await expect(
-        service.login({ email: user.email, code: FIXED }, '127.0.0.1'),
+        service.login({ body: { email: user.email, code: FIXED }, ipAddress: '127.0.0.1' }),
       ).rejects.toThrow();
     });
 
@@ -509,9 +545,9 @@ describe('EmailLoginService', () => {
       vi.mocked(userService.findByEmail).mockResolvedValue(user as never);
       vi.mocked(verificationTokenRepository.consumeOtpForUser).mockResolvedValue(null);
 
-      await expect(service.login({ email: user.email, code: FIXED }, '127.0.0.1')).rejects.toThrow(
-        UnauthorizedError,
-      );
+      await expect(
+        service.login({ body: { email: user.email, code: FIXED }, ipAddress: '127.0.0.1' }),
+      ).rejects.toThrow(UnauthorizedError);
       expect(verificationTokenRepository.consumeOtpForUser).toHaveBeenCalled();
     });
   });
@@ -527,7 +563,7 @@ describe('EmailLoginService', () => {
     vi.mocked(redis.eval).mockResolvedValue(1);
     vi.mocked(verificationTokenRepository.consumeOtpForUser).mockResolvedValue(null);
     await expect(
-      service.login({ email: user.email, code: 'ZZZZZZ' }, '127.0.0.1'),
+      service.login({ body: { email: user.email, code: 'ZZZZZZ' }, ipAddress: '127.0.0.1' }),
     ).rejects.toThrow();
     expect(vi.mocked(enforceMinimumDuration)).toHaveBeenCalledTimes(1);
   });
@@ -540,9 +576,9 @@ describe('EmailLoginService', () => {
     } as never);
     vi.mocked(completeFirstFactorAuth).mockRejectedValueOnce(new Error('session insert failed'));
 
-    await expect(service.login({ email: user.email, code: 'ABCDEF' }, '127.0.0.1')).rejects.toThrow(
-      'session insert failed',
-    );
+    await expect(
+      service.login({ body: { email: user.email, code: 'ABCDEF' }, ipAddress: '127.0.0.1' }),
+    ).rejects.toThrow('session insert failed');
     expect(verificationTokenRepository.consumeOtpForUser).toHaveBeenCalled();
     // The success-only attempt-counter clear must NOT run when login throws.
     expect(redis.del).not.toHaveBeenCalled();
@@ -560,7 +596,11 @@ describe('EmailLoginService', () => {
         user_id: user.id,
       } as never);
 
-      await service.login({ email: user.email, code: 'ABCDEF' }, '127.0.0.1', 'vitest');
+      await service.login({
+        body: { email: user.email, code: 'ABCDEF' },
+        ipAddress: '127.0.0.1',
+        userAgent: 'vitest',
+      });
 
       expect(vi.mocked(ensurePersonalOrganization)).toHaveBeenCalledWith(
         expect.objectContaining({ id: user.id, public_id: user.public_id }),
@@ -582,7 +622,11 @@ describe('EmailLoginService', () => {
         user_id: user.id,
       } as never);
 
-      await service.login({ email: user.email, code: 'ABCDEF' }, '127.0.0.1', 'vitest');
+      await service.login({
+        body: { email: user.email, code: 'ABCDEF' },
+        ipAddress: '127.0.0.1',
+        userAgent: 'vitest',
+      });
 
       expect(vi.mocked(ensurePersonalOrganization)).not.toHaveBeenCalled();
     } finally {
@@ -593,7 +637,7 @@ describe('EmailLoginService', () => {
   it('does not provision a personal organization in team-only mode (env flag off)', async () => {
     vi.mocked(userService.findByEmail).mockResolvedValue(null);
     vi.mocked(userService.createForEmailCode).mockResolvedValue(user as never);
-    await service.sendCode({ email: 'team-only@example.com' });
+    await service.sendCode({ body: { email: 'team-only@example.com' } });
     expect(vi.mocked(ensurePersonalOrganization)).not.toHaveBeenCalled();
   });
 

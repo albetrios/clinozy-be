@@ -15,17 +15,17 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a manufacturer create body; throws `ValidationError` naming each bad field. */
 export function validateCreateManufacturer(data: unknown): CreateManufacturerInput {
-  return parseWithSchema(CreateManufacturerDto, data);
+  return parseWithSchema({ schema: CreateManufacturerDto, data });
 }
 
 /** Parses a manufacturer change body; throws `ValidationError` naming each bad field. */
 export function validateUpdateManufacturer(data: unknown): UpdateManufacturerInput {
-  return parseWithSchema(UpdateManufacturerDto, data);
+  return parseWithSchema({ schema: UpdateManufacturerDto, data });
 }
 
 /** Parses the Manufacturers tab's query into a list input (routes-final 11.A.8 #1). */
 export function validateListManufacturersQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listManufacturersQueryDto, data);
+  const query = parseWithSchema({ schema: listManufacturersQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

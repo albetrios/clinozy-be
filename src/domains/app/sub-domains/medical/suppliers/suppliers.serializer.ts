@@ -5,7 +5,7 @@ import type { SupplierOutput } from './suppliers.types.js';
  * Shapes an `app.suppliers` row as the API returns it (routes-final 11.B.6). The manufacturers and
  * the account (payable, ageing, orders) are the rules' `decorate`.
  */
-export function serializeSupplier(row: BaseRecordRow): SupplierOutput {
+export function serializeSupplier({ row }: { row: BaseRecordRow }): SupplierOutput {
   return {
     id: row.public_id,
     name: row.name as string,

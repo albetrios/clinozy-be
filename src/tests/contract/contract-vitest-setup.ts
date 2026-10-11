@@ -1,11 +1,13 @@
 import nock from 'nock';
 import { vi } from 'vitest';
+import { isLiveProviderContractRun } from '@/tests/helpers/harness-provider-env.js';
 
 /**
  * Lexical `vi.mock` in a Vitest setup file runs before test modules import infrastructure
  * (Vitest does not hoist `vi.mock` from helper modules imported by tests).
  */
-if (!nock.isActive()) {
+// The live provider run (`pnpm test:contract:live`) makes real requests and keeps nock out.
+if (!(isLiveProviderContractRun() || nock.isActive())) {
   nock.activate();
 }
 

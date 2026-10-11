@@ -15,12 +15,14 @@ import { closeMessagingWebhookEventQueue } from '@/domains/app/sub-domains/conta
 import { flushSentry } from '@/infrastructure/observability/sentry/sentry.js';
 import { shutdownPostHog } from '@/infrastructure/observability/posthog/posthog.js';
 import { closeBullMQMetricsQueues } from '@/infrastructure/observability/metrics/bullmq-metrics.js';
-import { shutdownOpenTelemetry } from '@/infrastructure/observability/tracing/otel.js';
 import { THREE_SECONDS_MS } from '@/shared/constants/index.js';
 import { setApplicationDraining } from '@/shared/utils/infrastructure/application-lifecycle.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
-import { getShutdownWatchdogMs } from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
+import {
+  getShutdownWatchdogMs,
+  startShutdownBudget,
+} from '@/infrastructure/queue/worker-runtime/shutdown-timing.util.js';
 
 /**
  * Pause between flipping `/readyz` to 503 (draining) and closing the server, so an
@@ -82,9 +84,6 @@ const shutdownMiddleware: FastifyPluginAsync = async (app) => {
     // connections so the API does not leave Redis sockets open on the way out.
     await closeBullMQMetricsQueues();
     await Promise.allSettled([closeRedis(), closeBullMqRedis(), closeDatabase()]);
-    // audit M5: flush + tear down the OpenTelemetry SDK (no-op when never started)
-    // before the Sentry flush so pending OTLP spans are not dropped on shutdown.
-    await shutdownOpenTelemetry();
     // Flush pending product-analytics events (no-op when PostHog is disabled).
     await shutdownPostHog();
     await flushSentry();
@@ -107,6 +106,8 @@ const shutdownMiddleware: FastifyPluginAsync = async (app) => {
         logger.info({ drainDelayMs }, 'Draining: waiting for load balancer to observe 503');
         await new Promise<void>((resolve) => setTimeout(resolve, drainDelayMs).unref());
       }
+      // The close budget starts after the drain pause: the watchdog adds the pause on top of it.
+      startShutdownBudget();
       await app.close();
       clearTimeout(timer);
       process.exit(0);

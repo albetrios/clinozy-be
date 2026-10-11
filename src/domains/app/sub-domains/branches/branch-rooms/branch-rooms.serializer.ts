@@ -3,13 +3,16 @@ import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.
 import type { BranchRoomOutput } from './branch-rooms.types.js';
 
 /** Shapes a `app.branch_rooms` row as the API returns it (public ids, numbers, ISO times). */
-export function serializeBranchRoom(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): BranchRoomOutput {
+export function serializeBranchRoom({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): BranchRoomOutput {
   return {
     id: row.public_id,
-    branch_id: references.publicIdOf('branch_id', row) ?? '',
+    branch_id: references.publicIdOf({ field: 'branch_id', row }) ?? '',
     name: row.name as string,
     is_active: row.is_active as boolean,
     created_at: row.created_at.toISOString(),

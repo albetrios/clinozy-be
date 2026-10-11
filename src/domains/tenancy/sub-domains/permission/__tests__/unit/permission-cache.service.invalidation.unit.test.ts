@@ -44,14 +44,21 @@ describe('permission-cache service invalidation', () => {
 
   it('getCachedPermissions returns null when Redis throws (graceful failure)', async () => {
     vi.mocked(redisConnection.get).mockRejectedValue(new Error('redis down'));
-    const result = await getCachedPermissions('user_public_id', 'org_public_id');
+    const result = await getCachedPermissions({
+      userId: 'user_public_id',
+      organizationId: 'org_public_id',
+    });
     expect(result).toBeNull();
   });
 
   it('setCachedPermissions stores JSON-encoded codes with TTL and version key (replaces "does nothing when version read fails" — version reader silently returns 0 on Redis errors, so SET still happens with version 0)', async () => {
     vi.mocked(redisConnection.get).mockResolvedValue('3');
     mockedRedisSet(redisConnection.set).mockResolvedValue('OK');
-    await setCachedPermissions('user_public_id', 'org_public_id', ['tenancy:read']);
+    await setCachedPermissions({
+      userId: 'user_public_id',
+      organizationId: 'org_public_id',
+      codes: ['tenancy:read'],
+    });
     expect(redisConnection.set).toHaveBeenCalledTimes(1);
     const callArgs = mockedRedisSet(redisConnection.set).mock.calls[0]!;
     expect(callArgs[0]).toBe('perm:3:user_public_id:org_public_id');
@@ -64,7 +71,7 @@ describe('permission-cache service invalidation', () => {
   it('invalidatePermissions deletes the user+organization cache key and recompute lock (closest equivalent to invalidateUserPermissions — the source exposes per-user+organization invalidation; cross-organization sweep is provided via invalidateOrganizationPermissions)', async () => {
     vi.mocked(redisConnection.get).mockResolvedValue('7');
     vi.mocked(redisConnection.del).mockResolvedValue(2);
-    await invalidatePermissions('user_public_id', 'org_public_id');
+    await invalidatePermissions({ userId: 'user_public_id', organizationId: 'org_public_id' });
     expect(redisConnection.del).toHaveBeenCalledTimes(1);
     const delArgs = vi.mocked(redisConnection.del).mock.calls[0]!;
     expect(delArgs).toContain('perm:7:user_public_id:org_public_id');
@@ -81,9 +88,11 @@ describe('permission-cache service invalidation', () => {
     });
     vi.mocked(redisConnection.eval).mockResolvedValue(1 as never);
 
-    const result = await withPermissionCacheRecomputeLock('user_public_id', 'org_public_id', () =>
-      Promise.resolve(['tenancy:read']),
-    );
+    const result = await withPermissionCacheRecomputeLock({
+      userId: 'user_public_id',
+      organizationId: 'org_public_id',
+      recompute: () => Promise.resolve(['tenancy:read']),
+    });
 
     expect(result).toEqual(['tenancy:read']);
     expect(redisConnection.set).not.toHaveBeenCalledWith(
@@ -126,8 +135,16 @@ describe('permission-cache service invalidation', () => {
     });
 
     const [first, second] = await Promise.all([
-      withPermissionCacheRecomputeLock('user_public_id', 'org_public_id', recompute),
-      withPermissionCacheRecomputeLock('user_public_id', 'org_public_id', recompute),
+      withPermissionCacheRecomputeLock({
+        userId: 'user_public_id',
+        organizationId: 'org_public_id',
+        recompute,
+      }),
+      withPermissionCacheRecomputeLock({
+        userId: 'user_public_id',
+        organizationId: 'org_public_id',
+        recompute,
+      }),
     ]);
 
     expect(first).toEqual(['tenancy:read']);
@@ -146,14 +163,14 @@ describe('permission-cache service invalidation', () => {
       return null; // cache empty → recompute runs
     });
 
-    const result = await withPermissionCacheRecomputeLock(
-      'user_public_id',
-      'org_public_id',
-      async () => {
+    const result = await withPermissionCacheRecomputeLock({
+      userId: 'user_public_id',
+      organizationId: 'org_public_id',
+      recompute: async () => {
         versionBumpedMidRecompute = true;
         return ['tenancy:read'];
       },
-    );
+    });
 
     expect(result).toEqual(['tenancy:read']);
     const commitCall = vi
@@ -171,7 +188,7 @@ describe('permission-cache service invalidation', () => {
     vi.mocked(redisConnection.del).mockRejectedValue(new Error('redis blip'));
     vi.mocked(redisConnection.eval).mockResolvedValue(2 as never);
 
-    await invalidatePermissions('user_public_id', 'org_public_id');
+    await invalidatePermissions({ userId: 'user_public_id', organizationId: 'org_public_id' });
 
     // The failure is not swallowed as success: Sentry fires…
     expect(captureException).toHaveBeenCalledTimes(1);
@@ -187,7 +204,11 @@ describe('permission-cache service invalidation', () => {
     // read fails — it degrades to a safe no-op instead of caching under the wrong namespace.
     vi.mocked(redisConnection.get).mockRejectedValue(new Error('redis down'));
     mockedRedisSet(redisConnection.set).mockResolvedValue('OK');
-    await setCachedPermissions('user_public_id', 'org_public_id', ['tenancy:read']);
+    await setCachedPermissions({
+      userId: 'user_public_id',
+      organizationId: 'org_public_id',
+      codes: ['tenancy:read'],
+    });
     expect(redisConnection.set).not.toHaveBeenCalled();
   });
 
@@ -196,7 +217,10 @@ describe('permission-cache service invalidation', () => {
     // masquerade as version 0. getOrganizationCacheVersion throws, and the read path catches it
     // and returns null so the caller re-resolves from the database under a safe cache-miss.
     vi.mocked(redisConnection.get).mockResolvedValue('not-a-number');
-    const result = await getCachedPermissions('user_public_id', 'org_public_id');
+    const result = await getCachedPermissions({
+      userId: 'user_public_id',
+      organizationId: 'org_public_id',
+    });
     expect(result).toBeNull();
   });
 
@@ -208,7 +232,7 @@ describe('permission-cache service invalidation', () => {
     vi.mocked(redisConnection.get).mockResolvedValue('garbage-version');
     vi.mocked(redisConnection.eval).mockResolvedValue(3 as never);
 
-    await invalidatePermissions('user_public_id', 'org_public_id');
+    await invalidatePermissions({ userId: 'user_public_id', organizationId: 'org_public_id' });
 
     expect(captureException).toHaveBeenCalledTimes(1);
     expect(redisConnection.del).not.toHaveBeenCalled();
@@ -225,11 +249,11 @@ describe('permission-cache service invalidation', () => {
     mockedRedisSet(redisConnection.set).mockRejectedValue(new Error('redis down'));
     const recompute = vi.fn().mockResolvedValue(['tenancy:read']);
 
-    const result = await withPermissionCacheRecomputeLock(
-      'user_public_id',
-      'org_public_id',
+    const result = await withPermissionCacheRecomputeLock({
+      userId: 'user_public_id',
+      organizationId: 'org_public_id',
       recompute,
-    );
+    });
 
     expect(result).toEqual(['tenancy:read']);
     expect(recompute).toHaveBeenCalledTimes(1);

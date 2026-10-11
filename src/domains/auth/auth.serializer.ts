@@ -44,14 +44,17 @@ export const AuthSerializer = {
    * (with capabilities) and the caller's resolved permissions in it, so the client
    * repaints the dashboard without a follow-up `GET /auth/me/context`.
    */
-  accessTokenWithActiveOrganization(
-    token: { access_token: string },
+  accessTokenWithActiveOrganization({
+    token,
+    context,
+  }: {
+    token: { access_token: string };
     context: {
       active_organization: OrganizationOutput;
       my_permissions: string[];
       global_role: GlobalRole | null;
-    },
-  ) {
+    };
+  }) {
     return {
       access_token: token.access_token,
       active_organization: context.active_organization,

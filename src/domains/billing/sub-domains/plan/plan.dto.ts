@@ -4,7 +4,7 @@ import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.j
 /** Zod schema validating the path params for `GET /api/v1/plans/:plan_id`. */
 export const getPlanParamsDto = z
   .object({
-    plan_id: trimmedStringMinMax(1, 28),
+    plan_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 

@@ -26,7 +26,7 @@ export const branchHolidaysParentParamsDto = z
 export const CreateBranchHolidayDto = z
   .object({
     holiday_date: calendarDateSchema,
-    label: trimmedStringMinMax(1, 60),
+    label: trimmedStringMinMax({ min: 1, max: 60 }),
   })
   .strict();
 
@@ -34,7 +34,7 @@ export const CreateBranchHolidayDto = z
 export const UpdateBranchHolidayDto = z
   .object({
     holiday_date: calendarDateSchema.optional(),
-    label: trimmedStringMinMax(1, 60).optional(),
+    label: trimmedStringMinMax({ min: 1, max: 60 }).optional(),
     expected_updated_at: expectedUpdatedAtSchema,
   })
   .strict()

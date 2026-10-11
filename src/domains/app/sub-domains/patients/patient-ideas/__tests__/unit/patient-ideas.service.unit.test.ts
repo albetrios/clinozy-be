@@ -6,7 +6,7 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   ...(await importOriginal<
     typeof import('@/infrastructure/database/contexts/database-context.js')
   >()),
-  withAppDatabaseContext: (_scope: unknown, work: () => unknown) => work(),
+  withAppDatabaseContext: ({ callback }: { callback: () => unknown }) => callback(),
 }));
 vi.mock('@/infrastructure/ai/anthropic-messages.config.js', () => ({
   isPatientIdeasAiEnabled: () => mocks.aiEnabled,
@@ -74,9 +74,14 @@ describe('PatientIdeasService.list', () => {
 
   it('refuses a missing or oversized patient id (400) before any database work', async () => {
     const ideasRepository = repository();
-    await expect(service(ideasRepository).list(SCOPE, {})).rejects.toBeInstanceOf(ValidationError);
     await expect(
-      service(ideasRepository).list(SCOPE, { patient_id: `pat_${'a'.repeat(40)}` }),
+      service(ideasRepository).list({ scope: SCOPE, params: {} }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      service(ideasRepository).list({
+        scope: SCOPE,
+        params: { patient_id: `pat_${'a'.repeat(40)}` },
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
     expect(ideasRepository.findPatient).not.toHaveBeenCalled();
   });
@@ -84,14 +89,17 @@ describe('PatientIdeasService.list', () => {
   it('answers 404 for a patient not in the organization', async () => {
     const ideasRepository = repository({ findPatient: vi.fn().mockResolvedValue(null) });
     await expect(
-      service(ideasRepository).list(SCOPE, { patient_id: PATIENT_PUBLIC_ID }),
+      service(ideasRepository).list({ scope: SCOPE, params: { patient_id: PATIENT_PUBLIC_ID } }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('answers the rules when the AI is off — stored ideas are not read', async () => {
     const ideasRepository = repository();
 
-    const result = await service(ideasRepository).list(SCOPE, { patient_id: PATIENT_PUBLIC_ID });
+    const result = await service(ideasRepository).list({
+      scope: SCOPE,
+      params: { patient_id: PATIENT_PUBLIC_ID },
+    });
 
     expect(result).toEqual({
       data: [
@@ -138,7 +146,10 @@ describe('PatientIdeasService.list', () => {
       ]),
     });
 
-    const result = await service(ideasRepository).list(SCOPE, { patient_id: PATIENT_PUBLIC_ID });
+    const result = await service(ideasRepository).list({
+      scope: SCOPE,
+      params: { patient_id: PATIENT_PUBLIC_ID },
+    });
 
     expect(result.meta).toEqual({ source: 'ai', ai_refreshed_at: '2026-10-02T10:00:00.000Z' });
     expect(result.data.map((idea) => [idea.offering_id, idea.reason, idea.source])).toEqual([
@@ -157,7 +168,10 @@ describe('PatientIdeasService.list', () => {
         ]),
     });
 
-    const result = await service(ideasRepository).list(SCOPE, { patient_id: PATIENT_PUBLIC_ID });
+    const result = await service(ideasRepository).list({
+      scope: SCOPE,
+      params: { patient_id: PATIENT_PUBLIC_ID },
+    });
 
     expect(result.meta.source).toBe('rules');
   });
@@ -168,7 +182,10 @@ describe('PatientIdeasService.list', () => {
       findPatient: vi.fn().mockResolvedValue({ id: 5, contactId: 50, hasDataConsent: false }),
     });
 
-    const result = await service(ideasRepository).list(SCOPE, { patient_id: PATIENT_PUBLIC_ID });
+    const result = await service(ideasRepository).list({
+      scope: SCOPE,
+      params: { patient_id: PATIENT_PUBLIC_ID },
+    });
 
     expect(result.meta.source).toBe('rules');
     expect(ideasRepository.findStoredIdeas).not.toHaveBeenCalled();

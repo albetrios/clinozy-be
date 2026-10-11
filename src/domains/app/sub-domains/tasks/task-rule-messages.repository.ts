@@ -101,7 +101,8 @@ export class TaskRuleMessagesRepository {
   }): Promise<BookingMessageCandidate[]> {
     const { organizationId, timeZone, reminderHour } = options;
     const reminderAt = sql`(((${appointments.appointment_date} - 1) + make_time(${reminderHour}, 0, 0)) at time zone ${timeZone})`;
-    const rows = (await this.databaseHandle.execute(sql`${bookingSelect()}
+    const rows = (
+      await this.databaseHandle.execute<CandidateRow>(sql`${bookingSelect()}
       where ${appointments.organization_id} = ${organizationId}
         and ${appointments.deleted_at} is null
         and ${appointments.is_walk_in} = false
@@ -113,7 +114,8 @@ export class TaskRuleMessagesRepository {
         and now() >= ${reminderAt}
         and ${appointments.created_at} < ${reminderAt}
       order by ${startOf(timeZone)}, ${appointments.id}
-      limit ${TASK_RULES_MESSAGES_PER_KIND}`)) as unknown as CandidateRow[];
+      limit ${TASK_RULES_MESSAGES_PER_KIND}`)
+    ).rows;
     return rows.map(toBooking);
   }
 
@@ -124,7 +126,8 @@ export class TaskRuleMessagesRepository {
   }): Promise<BookingMessageCandidate[]> {
     const { organizationId, timeZone } = options;
     const start = startOf(timeZone);
-    const rows = (await this.databaseHandle.execute(sql`${bookingSelect()}
+    const rows = (
+      await this.databaseHandle.execute<CandidateRow>(sql`${bookingSelect()}
       where ${appointments.organization_id} = ${organizationId}
         and ${appointments.deleted_at} is null
         and ${appointments.is_walk_in} = false
@@ -135,7 +138,8 @@ export class TaskRuleMessagesRepository {
         and ${start} > now() + interval '2 hours'
         and ${start} <= now() + interval '60 days'
       order by ${start}, ${appointments.id}
-      limit ${TASK_RULES_MESSAGES_PER_KIND}`)) as unknown as CandidateRow[];
+      limit ${TASK_RULES_MESSAGES_PER_KIND}`)
+    ).rows;
     return rows.map(toBooking);
   }
 
@@ -149,7 +153,8 @@ export class TaskRuleMessagesRepository {
     const receiptMessage = sql`(select 1 from ${contact_activities}
       where ${contact_activities.payment_id} = ${payments.id}
         and ${contact_activities.automation_kind} = ${CONTACT_ACTIVITY_AUTOMATION_KIND.PAYMENT_RECEIPT})`;
-    const rows = (await this.databaseHandle.execute(sql`select ${payments.id} as payment_id,
+    const rows = (
+      await this.databaseHandle.execute<CandidateRow>(sql`select ${payments.id} as payment_id,
         ${payments.contact_id} as contact_id, ${contacts.first_name} as first_name,
         ${payments.amount}::text as amount, ${invoices.invoice_number} as invoice_number,
         to_char(${payments.paid_at} at time zone ${timeZone}, 'DD Mon') as paid_on
@@ -165,7 +170,8 @@ export class TaskRuleMessagesRepository {
         and not exists ${reversal}
         and not exists ${receiptMessage}
       order by ${payments.created_at}, ${payments.id}
-      limit ${TASK_RULES_MESSAGES_PER_KIND}`)) as unknown as CandidateRow[];
+      limit ${TASK_RULES_MESSAGES_PER_KIND}`)
+    ).rows;
     return rows.map((row) => ({
       paymentId: Number(row.payment_id),
       contactId: Number(row.contact_id),

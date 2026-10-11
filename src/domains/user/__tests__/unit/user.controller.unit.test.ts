@@ -104,7 +104,10 @@ describe('createUserController', () => {
 
       // The caller's own id scopes the read — there is no role branch and no way to ask for
       // someone else's organizations through this route.
-      expect(organizationService.listForUser).toHaveBeenCalledWith({}, callerPublicId);
+      expect(organizationService.listForUser).toHaveBeenCalledWith({
+        query: {},
+        user_public_id: callerPublicId,
+      });
       expect(response).toMatchObject({
         data: [{ id: 'org_1' }],
         meta: {

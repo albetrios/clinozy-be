@@ -10,17 +10,17 @@ import {
 
 /** Parses an offering group create body; throws `ValidationError` naming each bad field. */
 export function validateCreateOfferingGroup(data: unknown): CreateOfferingGroupInput {
-  return parseWithSchema(CreateOfferingGroupDto, data);
+  return parseWithSchema({ schema: CreateOfferingGroupDto, data });
 }
 
 /** Parses an offering group update body; throws `ValidationError` naming each bad field. */
 export function validateUpdateOfferingGroup(data: unknown): UpdateOfferingGroupInput {
-  return parseWithSchema(UpdateOfferingGroupDto, data);
+  return parseWithSchema({ schema: UpdateOfferingGroupDto, data });
 }
 
 /** Parses the `GET /app/offering-groups` query into a list input (filters by column). */
 export function validateListOfferingGroupsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listOfferingGroupsQueryDto, data);
+  const query = parseWithSchema({ schema: listOfferingGroupsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

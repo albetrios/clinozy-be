@@ -41,6 +41,7 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 
 import { StripePaymentProvider } from '@/domains/billing/sub-domains/subscription/stripe-payment-provider.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
+import { ConfigurationError } from '@/shared/errors/index.js';
 
 const baseOrganization = {
   public_id: 'org_pub_abc',
@@ -116,5 +117,104 @@ describe('StripePaymentProvider.createSubscription — sec-B11 customer email', 
     ).rejects.toThrow();
 
     expect(stripeMocks.createStripeCustomer).not.toHaveBeenCalled();
+  });
+});
+
+describe('StripePaymentProvider.createSubscription — configuration and initial state', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    envMock.env.EMAIL_FROM_ADDRESS = 'noreply@platform.example.com';
+    stripeMocks.isStripeConfigured.mockReturnValue(true);
+    stripeMocks.createStripeCustomer.mockResolvedValue({ id: 'cus_new' });
+    stripeMocks.createStripeSubscription.mockResolvedValue({ id: 'sub_new', status: 'incomplete' });
+  });
+
+  it.each(
+    (['monthly', 'yearly'] as const).flatMap((billingCycle) =>
+      [null, ''].flatMap((missingPrice) =>
+        [null, 'cus_existing'].map((stripeCustomerId) => ({
+          billingCycle,
+          missingPrice,
+          stripeCustomerId,
+        })),
+      ),
+    ),
+  )(
+    'rejects missing $billingCycle price $missingPrice before mutations with customer $stripeCustomerId',
+    async ({ billingCycle, missingPrice, stripeCustomerId }) => {
+      const organizationService = {
+        updateStripeCustomerIdForOrganization: vi.fn(),
+      } as unknown as OrganizationService;
+      const provider = new StripePaymentProvider(organizationService);
+      await expect(
+        provider.createSubscription({
+          organization: { ...baseOrganization, stripe_customer_id: stripeCustomerId } as never,
+          plan: {
+            ...basePlan,
+            [billingCycle === 'monthly' ? 'stripe_price_monthly_id' : 'stripe_price_yearly_id']:
+              missingPrice,
+          } as never,
+          billingCycle,
+        }),
+      ).rejects.toBeInstanceOf(ConfigurationError);
+      expect(stripeMocks.createStripeCustomer).not.toHaveBeenCalled();
+      expect(stripeMocks.createStripeSubscription).not.toHaveBeenCalled();
+      expect(organizationService.updateStripeCustomerIdForOrganization).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['monthly', 'yearly'] as const)(
+    'uses the selected valid %s price and returns provider initial state',
+    async (billingCycle) => {
+      const result = await makeProvider().createSubscription({
+        organization: baseOrganization as never,
+        plan: basePlan as never,
+        billingCycle,
+      });
+      expect(stripeMocks.createStripeSubscription).toHaveBeenCalledWith(
+        expect.objectContaining({
+          priceId: billingCycle === 'monthly' ? 'price_monthly' : 'price_yearly',
+        }),
+      );
+      expect(result).toEqual({
+        providerSubscriptionId: 'sub_new',
+        providerCustomerId: 'cus_new',
+        initialStatus: 'INCOMPLETE',
+      });
+    },
+  );
+
+  it.each([
+    'active',
+    'trialing',
+    'incomplete',
+    'past_due',
+    'unpaid',
+    'canceled',
+    'incomplete_expired',
+    'paused',
+  ])(
+    'carries authoritative Stripe creation status %s without inferring activation from plan price',
+    async (status) => {
+      stripeMocks.createStripeSubscription.mockResolvedValueOnce({ id: 'sub_new', status });
+      const result = await makeProvider().createSubscription({
+        organization: baseOrganization as never,
+        plan: basePlan as never,
+        billingCycle: 'monthly',
+      });
+      expect(result).toMatchObject({ initialStatus: status.toUpperCase() });
+    },
+  );
+
+  it('keeps deliberately disabled provider creation as a no-op even without prices', async () => {
+    stripeMocks.isStripeConfigured.mockReturnValue(false);
+    const result = await makeProvider().createSubscription({
+      organization: baseOrganization as never,
+      plan: { ...basePlan, stripe_price_monthly_id: null } as never,
+      billingCycle: 'monthly',
+    });
+    expect(result).toEqual({});
+    expect(stripeMocks.createStripeCustomer).not.toHaveBeenCalled();
+    expect(stripeMocks.createStripeSubscription).not.toHaveBeenCalled();
   });
 });

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { runOrganizationScopedWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import {
   type AppFixture,
@@ -35,9 +35,10 @@ describe('Flow — no-show, cancel and an expired package', () => {
   /** One run of the task rules for the fixture organization. */
   async function runTaskRules(): Promise<void> {
     const organizationPublicId = fixture.organization.publicId;
-    await runOrganizationScopedWorkerJob({ organizationPublicId }, (databaseHandle) =>
-      runTaskRulesJob(databaseHandle, organizationPublicId),
-    );
+    await runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: (databaseHandle) => runTaskRulesJob({ databaseHandle, organizationPublicId }),
+    });
   }
 
   /** A contact of this run; answers its id. */
@@ -98,7 +99,7 @@ describe('Flow — no-show, cancel and an expired package', () => {
     flow.expectValue('not due yet', REASON, 'appointment_not_due');
 
     // The day comes and goes: the visit was yesterday.
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.appointments SET appointment_date = ${calendarDay(fixture, -1)}
       WHERE public_id = ${missed}
     `;
@@ -197,7 +198,7 @@ describe('Flow — no-show, cancel and an expired package', () => {
     flow.expectValue('the third session', '.data.session_number', 3);
 
     // Ninety days pass: the package ended yesterday.
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.patient_offerings SET valid_until = ${calendarDay(fixture, -1)}
       WHERE public_id = ${bought}
     `;

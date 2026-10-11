@@ -54,15 +54,15 @@ const contactPhonesSchema = z
 
 /** The fields a contact is written with — every one optional; create and update narrow it. */
 const contactFields = {
-  first_name: trimmedStringMinMax(1, 60),
-  last_name: trimmedStringMinMax(1, 60).nullable(),
+  first_name: trimmedStringMinMax({ min: 1, max: 60 }),
+  last_name: trimmedStringMinMax({ min: 1, max: 60 }).nullable(),
   gender: z.enum(CONTACT_GENDER_VALUES).nullable(),
   date_of_birth: calendarDateSchema.nullable(),
   phones: contactPhonesSchema,
-  email: trimmedStringMinMax(3, 120).pipe(z.email()).nullable(),
-  address: trimmedStringMinMax(1, 240).nullable(),
+  email: trimmedStringMinMax({ min: 3, max: 120 }).pipe(z.email()).nullable(),
+  address: trimmedStringMinMax({ min: 1, max: 240 }).nullable(),
   instagram_handles: z
-    .array(trimmedStringMinMax(1, 30))
+    .array(trimmedStringMinMax({ min: 1, max: 30 }))
     .max(CONTACT_INSTAGRAM_HANDLES_MAX)
     .refine(distinct, { message: 'Each handle once' }),
   default_channel: z.enum(CONTACT_DEFAULT_CHANNEL_VALUES),
@@ -73,7 +73,7 @@ const contactFields = {
   has_marketing_consent: z.boolean(),
   referral_source: z.enum(CONTACT_REFERRAL_SOURCE_VALUES).nullable(),
   referred_by_contact_id: recordIdSchema.nullable(),
-  referred_by_name: trimmedStringMinMax(1, 120).nullable(),
+  referred_by_name: trimmedStringMinMax({ min: 1, max: 120 }).nullable(),
 };
 
 /** Path params of the by-id `contacts` routes. */

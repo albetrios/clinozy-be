@@ -106,7 +106,8 @@ export async function seedTwoOrganizationsWithSubscriptions(options?: {
 export interface SeedUploadForOrganizationResult {
   public_id: string;
   id: number;
-  user_id: number;
+  /** Nullable: the uploader's account may be deleted (SET NULL). */
+  user_id: number | null;
   organization_id: number | null;
   deleted_at: Date | null;
 }

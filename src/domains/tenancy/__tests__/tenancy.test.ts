@@ -257,6 +257,9 @@ describe('Tenancy Domain — flows (memberships, leave, roles)', () => {
       });
       expect(nextPage.statusCode).toBe(200);
       const nextPageBody = nextPage.json() as { data: Array<{ id: string }> };
+      expect(nextPageBody.data).toHaveLength(2);
+      const allIds = [...firstPageBody.data, ...nextPageBody.data].map((row) => row.id);
+      expect(new Set(allIds).size).toBe(4);
       // No overlap between pages — the keyset advanced past the boundary row.
       const firstPageIds = new Set(firstPageBody.data.map((row) => row.id));
       for (const row of nextPageBody.data) expect(firstPageIds.has(row.id)).toBe(false);
@@ -271,7 +274,16 @@ describe('Tenancy Domain — flows (memberships, leave, roles)', () => {
       });
       expect(reset.statusCode).toBe(200);
       const resetIds = (reset.json() as { data: Array<{ id: string }> }).data.map((row) => row.id);
-      expect(resetIds.length).toBeGreaterThan(0);
+      expect(resetIds).toHaveLength(2);
+      const freshDescending = await injectAuthenticated(app, {
+        url: testApiPath('/tenancy/organization/memberships?sort=name&order=desc&limit=2'),
+        token,
+      });
+      expect(freshDescending.statusCode).toBe(200);
+      const freshIds = (freshDescending.json() as { data: Array<{ id: string }> }).data.map(
+        (row) => row.id,
+      );
+      expect(resetIds).toEqual(freshIds);
     });
   });
 

@@ -80,7 +80,7 @@ const ALL_UPLOAD_PERMISSION_CODES: readonly string[] = Object.values(UPLOAD_PERM
  * render and went blank.
  *
  * `subscription:manage` stays TEAM-only, and that is enforced twice over: the code is not
- * granted here, and `subscription.service.ts` calls `assertTeamOrganization(…, 'BILLING')`
+ * granted here, and `subscription.service.ts` calls `assertTeamOrganization({ organization, capability: 'BILLING' })`
  * on every write path regardless, so a personal organization is refused with 422 even if
  * the code were somehow held.
  */
@@ -226,10 +226,13 @@ export const PERSONAL_ORGANIZATION_NAME = 'Personal';
  * slug-less organization owned by the user, with full owner access. The partial unique
  * index guarantees at most one personal organization per owner.
  */
-export async function provisionPersonalOrganization(
-  ownerUserId: number,
-  name: string = PERSONAL_ORGANIZATION_NAME,
-): Promise<ProvisionOrganizationResult> {
+export async function provisionPersonalOrganization({
+  ownerUserId,
+  name = PERSONAL_ORGANIZATION_NAME,
+}: {
+  ownerUserId: number;
+  name?: string | undefined;
+}): Promise<ProvisionOrganizationResult> {
   return provisionOrganization({
     name,
     slug: null,
@@ -250,9 +253,9 @@ async function provisionOrganization(
   // auth/audit do), so the organization INSERT failed its WITH CHECK with SQLSTATE 42501 under the
   // non-superuser `clinozy_be_app` role in deployed environments.
   const organizationPublicId = generatePublicId('organization');
-  return withAppDatabaseContext(
-    PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
-    async (databaseHandle) => {
+  return withAppDatabaseContext({
+    scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
+    callback: async (databaseHandle) => {
       const [organization] = await databaseHandle
         .insert(organizations)
         .values({
@@ -334,5 +337,5 @@ async function provisionOrganization(
         membershipPublicId: membership!.public_id,
       };
     },
-  );
+  });
 }

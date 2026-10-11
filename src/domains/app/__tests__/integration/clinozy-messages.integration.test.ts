@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { env } from '@/shared/config/env.config.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -117,14 +117,15 @@ describe("The app's messages — integration (launch D78, ROUTE #140–#142)", (
 
   /** The organization's rules run (TK4), as the worker runs it. */
   function runRules() {
-    return runOrganizationScopedWorkerJob({ organizationPublicId }, (handle) =>
-      runTaskRulesJob(handle, organizationPublicId),
-    );
+    return runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: (handle) => runTaskRulesJob({ databaseHandle: handle, organizationPublicId }),
+    });
   }
 
   /** The app's messages about a booking, oldest first. */
   async function bookingMessages(appointment: string) {
-    return getOperatorSql()<
+    return operatorQuery<
       {
         automation_kind: string;
         delivery_status: string;
@@ -199,7 +200,7 @@ describe("The app's messages — integration (launch D78, ROUTE #140–#142)", (
   /** A confirmed upload of the fixture organization; answers its key. */
   async function confirmedUpload(name: string, mimeType: string): Promise<string> {
     const key = `organizations/${organizationPublicId}/uploads/${lastName}-${name}`;
-    await getOperatorSql()`
+    await operatorQuery`
       INSERT INTO upload.uploads (public_id, user_id, organization_id, file_name, file_key, mime_type,
         file_size, bucket, status, uploaded_at)
       VALUES (${generatePublicId('upload')}, ${fixture.members.owner.userId}, ${fixture.organization.id},
@@ -227,7 +228,7 @@ describe("The app's messages — integration (launch D78, ROUTE #140–#142)", (
       whatsapp_phone_number_id: WHATSAPP_ID,
       instagram_account_id: INSTAGRAM_ID,
     });
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE tenancy.memberships SET phone = ${OWNER_PHONE} WHERE id = ${fixture.members.owner.membershipId}
     `;
     asha = await person('Asha', '01');
@@ -310,7 +311,7 @@ describe("The app's messages — integration (launch D78, ROUTE #140–#142)", (
     expect(messages[1]?.body).toContain('at 12:00');
 
     // A stopped message is no failure to chase: no failed_message task for Bela.
-    const failedTasks = await getOperatorSql()<{ count: number }[]>`
+    const failedTasks = await operatorQuery<{ count: number }[]>`
       SELECT count(*)::int AS count FROM app.tasks task
       JOIN app.contacts contact ON contact.id = task.contact_id
       WHERE contact.public_id = ${bela} AND task.rule_key = 'failed_message'
@@ -337,7 +338,7 @@ describe("The app's messages — integration (launch D78, ROUTE #140–#142)", (
     flow.as('front_desk');
     const chiragBooking = await book(chirag, day, '14:00');
     await runRules();
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.appointments
       SET appointment_date = ${tomorrow}, created_at = now() - interval '3 days',
         updated_at = greatest(updated_at, now() - interval '3 days')
@@ -357,7 +358,7 @@ describe("The app's messages — integration (launch D78, ROUTE #140–#142)", (
     expect(await bookingState(chiragBooking)).toBe('scheduled,reminder_sent,false');
 
     // Meta reports the reminder undelivered: the booking shows it failed.
-    const wamid = await getOperatorSql()<{ provider_message_id: string }[]>`
+    const wamid = await operatorQuery<{ provider_message_id: string }[]>`
       SELECT activity.provider_message_id FROM app.contact_activities activity
       JOIN app.appointments booking ON booking.id = activity.appointment_id
       WHERE booking.public_id = ${chiragBooking} AND activity.automation_kind = 'booking_reminder'
@@ -395,14 +396,14 @@ describe("The app's messages — integration (launch D78, ROUTE #140–#142)", (
     });
     await runRules();
     await runRules();
-    const receipts = await getOperatorSql()<{ body: string; delivery_status: string }[]>`
+    const receipts = await operatorQuery<{ body: string; delivery_status: string }[]>`
       SELECT activity.body, activity.delivery_status FROM app.contact_activities activity
       JOIN app.payments payment ON payment.id = activity.payment_id
       WHERE payment.public_id = ${receipt} AND activity.automation_kind = 'payment_receipt'
     `;
     expect(receipts).toHaveLength(1);
     expect(receipts[0]?.body).toMatch(/^Hi Asha, we have received ₹500\.00 on .+\. Thank you!$/);
-    const spendMessages = await getOperatorSql()<{ count: number }[]>`
+    const spendMessages = await operatorQuery<{ count: number }[]>`
       SELECT count(*)::int AS count FROM app.contact_activities WHERE automation_kind = 'payment_receipt'
     `;
     expect(spendMessages[0]?.count).toBe(1);
@@ -427,7 +428,7 @@ describe("The app's messages — integration (launch D78, ROUTE #140–#142)", (
     expect(text).toContain('closed by');
 
     expect((await runContactMessageDeliveryJob(organizationPublicId)).summaryCount).toBe(0);
-    const stamped = await getOperatorSql()<{ summary_sent_at: Date | null }[]>`
+    const stamped = await operatorQuery<{ summary_sent_at: Date | null }[]>`
       SELECT summary_sent_at FROM app.day_closes WHERE public_id = ${dayClose}
     `;
     expect(stamped[0]?.summary_sent_at).not.toBeNull();
@@ -435,7 +436,7 @@ describe("The app's messages — integration (launch D78, ROUTE #140–#142)", (
     await flow.expect(200, 'reopen it', 'POST', `/app/day-closes/${dayClose}/reopen`, {
       reason: 'A late receipt',
     });
-    const reopened = await getOperatorSql()<{ summary_sent_at: Date | null }[]>`
+    const reopened = await operatorQuery<{ summary_sent_at: Date | null }[]>`
       SELECT summary_sent_at FROM app.day_closes WHERE public_id = ${dayClose}
     `;
     expect(reopened[0]?.summary_sent_at).toBeNull();
@@ -487,7 +488,7 @@ describe("The app's messages — integration (launch D78, ROUTE #140–#142)", (
       },
     );
     const missing = flow.last('.data.id');
-    await getOperatorSql()`UPDATE upload.uploads SET deleted_at = now() WHERE file_key = ${gone}`;
+    await operatorQuery`UPDATE upload.uploads SET deleted_at = now() WHERE file_key = ${gone}`;
     await runContactMessageDeliveryJob(organizationPublicId);
     await flow.expect(200, 'the entry', 'GET', `/app/contacts/${asha}/activities/${missing}`);
     flow.expectValue(
@@ -498,7 +499,7 @@ describe("The app's messages — integration (launch D78, ROUTE #140–#142)", (
   });
 
   it('WC-11 on Instagram: the text, then each file', async () => {
-    await getOperatorSql()`
+    await operatorQuery`
       INSERT INTO app.contact_activities (public_id, organization_id, contact_id, type, direction, body,
         provider_message_id, provider_sender_id, occurred_at)
       SELECT ${generatePublicId('contactActivity')}, contact.organization_id, contact.id, 'instagram',

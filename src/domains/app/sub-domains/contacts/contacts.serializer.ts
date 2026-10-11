@@ -19,11 +19,16 @@ export function contactAwaitsReply(times: Readonly<Record<string, unknown>>): bo
  * activity times. The open lead, patient file and visit fields are the rules' `decorate` (one read
  * each per page, #131–#132).
  */
-export function serializeContact(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): ContactOutput {
-  const phones = references.childrenOf('phones', row) as ContactPhoneOutput[] | undefined;
+export function serializeContact({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): ContactOutput {
+  const phones = references.childrenOf({ field: 'phones', row }) as
+    | ContactPhoneOutput[]
+    | undefined;
   return {
     id: row.public_id,
     contact_number: row.contact_number as number,
@@ -40,10 +45,11 @@ export function serializeContact(
     preference_tags: row.preference_tags as string[],
     has_marketing_consent: row.has_marketing_consent as boolean,
     referral_source: row.referral_source as string | null,
-    referred_by_contact_id: references.publicIdOf('referred_by_contact_id', row),
+    referred_by_contact_id: references.publicIdOf({ field: 'referred_by_contact_id', row }),
     referred_by_name: row.referred_by_name as string | null,
-    household_contact_id: references.publicIdOf('household_contact_id', row) ?? row.public_id,
-    member_membership_ids: references.listOf('member_membership_ids', row),
+    household_contact_id:
+      references.publicIdOf({ field: 'household_contact_id', row }) ?? row.public_id,
+    member_membership_ids: references.listOf({ field: 'member_membership_ids', row }),
     patient_id: null,
     patient_number: null,
     open_lead_id: null,

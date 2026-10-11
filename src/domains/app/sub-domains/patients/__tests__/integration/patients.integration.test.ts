@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import {
   type AppFixture,
@@ -93,7 +93,7 @@ describe('Patients — integration (routes-final §7)', () => {
    */
   async function confirmedUpload(name: string, mimeType: string, bytes: number): Promise<string> {
     const key = `organizations/${fixture.organization.publicId}/uploads/${lastName}-${name}`;
-    await getOperatorSql()`
+    await operatorQuery`
       INSERT INTO upload.uploads (public_id, user_id, organization_id, file_name, file_key, mime_type,
         file_size, bucket, status, uploaded_at)
       VALUES (${generatePublicId('upload')}, ${fixture.members.owner.userId}, ${fixture.organization.id},
@@ -105,7 +105,7 @@ describe('Patients — integration (routes-final §7)', () => {
   /** A bill of nothing for the patient's contact at Vesu dated `date`; returns its public id. */
   async function invoiceOn(patientFile: string, date: string): Promise<string> {
     const publicId = generatePublicId('invoice');
-    await getOperatorSql()`
+    await operatorQuery`
       INSERT INTO app.invoices (public_id, organization_id, branch_id, contact_id, invoice_date)
       SELECT ${publicId}, b.organization_id, b.id, p.contact_id, ${date}
       FROM app.branches b, app.patients p
@@ -128,7 +128,7 @@ describe('Patients — integration (routes-final §7)', () => {
   }): Promise<string> {
     const publicId = generatePublicId('patientOffering');
     const invoice = options.invoice ?? (await invoiceOn(options.patientFile, today));
-    await getOperatorSql()`
+    await operatorQuery`
       WITH line AS (
         INSERT INTO app.invoice_items (public_id, organization_id, invoice_id, line_number,
           offering_id, name, quantity, rate, gst_percent, is_gst_inclusive, taxable_amount,
@@ -150,7 +150,7 @@ describe('Patients — integration (routes-final §7)', () => {
 
   /** The bought offering's spent sessions. */
   async function sessionsUsed(bought: string): Promise<string> {
-    const [row] = await getOperatorSql()<{ sessions_used: number }[]>`
+    const [row] = await operatorQuery<{ sessions_used: number }[]>`
       SELECT sessions_used FROM app.patient_offerings WHERE public_id = ${bought}
     `;
     return String(row?.sessions_used);
@@ -158,7 +158,7 @@ describe('Patients — integration (routes-final §7)', () => {
 
   /** The call-back tasks a check-in or review made (TR4). */
   async function callBacks(source: string): Promise<string> {
-    const [row] = await getOperatorSql()<{ count: string }[]>`
+    const [row] = await operatorQuery<{ count: string }[]>`
       SELECT count(*)::text AS count FROM app.tasks t
         LEFT JOIN app.patient_check_ins c ON c.id = t.patient_check_in_id
         LEFT JOIN app.patient_reviews r ON r.id = t.patient_review_id
@@ -1087,7 +1087,7 @@ describe('Patients — integration (routes-final §7)', () => {
     const goneKey = await confirmedUpload('gone.png', 'image/png', 2048);
     await flow.expect(200, 'a photo', 'POST', images, { file_key: goneKey });
     const gonePhoto = flow.last('.data.id');
-    await getOperatorSql()`UPDATE upload.uploads SET deleted_at = now() WHERE file_key = ${goneKey}`;
+    await operatorQuery`UPDATE upload.uploads SET deleted_at = now() WHERE file_key = ${goneKey}`;
     await flow.expect(
       200,
       'the photo after its upload is deleted',
@@ -1989,7 +1989,7 @@ describe('Patients — integration (routes-final §7)', () => {
       total: 1,
       validUntil: inAMonth,
     });
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.patient_offerings SET valid_until = NULL WHERE public_id = ${singleSession}
     `;
     const bought = `/app/patients/${chetanFile}/offerings`;

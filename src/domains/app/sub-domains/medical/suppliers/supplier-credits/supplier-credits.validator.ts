@@ -8,7 +8,7 @@ import {
 
 /** Parses a "Return expiring stock" body; throws `ValidationError` naming each bad field. */
 export function validateCreateSupplierCredit(data: unknown): CreateSupplierCreditInput {
-  return parseWithSchema(CreateSupplierCreditDto, data);
+  return parseWithSchema({ schema: CreateSupplierCreditDto, data });
 }
 
 /** A supplier credit is never changed (MD11) — there is no change route. */
@@ -18,7 +18,7 @@ export function refuseSupplierCreditUpdate(): Record<string, unknown> {
 
 /** Parses the credits list's query into a list input (routes-final 11.C.8 #14). */
 export function validateListSupplierCreditsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listSupplierCreditsQueryDto, data);
+  const query = parseWithSchema({ schema: listSupplierCreditsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

@@ -10,17 +10,17 @@ import {
 
 /** Parses a room create body; throws `ValidationError` naming each bad field. */
 export function validateCreateBranchRoom(data: unknown): CreateBranchRoomInput {
-  return parseWithSchema(CreateBranchRoomDto, data);
+  return parseWithSchema({ schema: CreateBranchRoomDto, data });
 }
 
 /** Parses a room update body; throws `ValidationError` naming each bad field. */
 export function validateUpdateBranchRoom(data: unknown): UpdateBranchRoomInput {
-  return parseWithSchema(UpdateBranchRoomDto, data);
+  return parseWithSchema({ schema: UpdateBranchRoomDto, data });
 }
 
 /** Parses the `GET /app/branches/{branch_id}/rooms` query into a list input (filters by column). */
 export function validateListBranchRoomsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listBranchRoomsQueryDto, data);
+  const query = parseWithSchema({ schema: listBranchRoomsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

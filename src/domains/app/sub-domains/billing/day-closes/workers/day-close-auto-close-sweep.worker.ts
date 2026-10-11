@@ -44,5 +44,5 @@ export function createDayCloseAutoCloseSweepWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME });
 }

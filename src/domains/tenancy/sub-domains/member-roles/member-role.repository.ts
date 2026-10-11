@@ -1,5 +1,9 @@
 import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
-import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import {
+  type CursorTimestampRow,
+  cursorTimestampSelection,
+} from '@/shared/utils/http/pagination.util.js';
+import { getTableColumns, and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
@@ -8,7 +12,6 @@ import {
   membership_additional_roles,
   membershipHoldsRole,
 } from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
-import { BaseRepository } from '@/infrastructure/database/base-repository.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import {
@@ -48,7 +51,7 @@ const MEMBER_COUNT_STATUSES = [MEMBERSHIP_STATUS.ACTIVE, MEMBERSHIP_STATUS.INVIT
  * keyset cursor for stable alphabetical paging. Public ids are generated and
  * retried on collision via {@link runInsertWithPublicIdentifierRetry}.
  */
-export class MemberRoleRepository extends BaseRepository {
+export class MemberRoleRepository {
   /**
    * Counts the active (not soft-deleted) custom roles for the given organization.
    *
@@ -72,7 +75,10 @@ export class MemberRoleRepository extends BaseRepository {
    * {@link countActiveByOrganization}.
    */
   async acquireCreationQuotaLock(organization_id: number): Promise<void> {
-    await acquireResourceQuotaLock(RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBER_ROLE, organization_id);
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.MEMBER_ROLE,
+      key: organization_id,
+    });
   }
 
   async findByOrganizationId(organization_id: number, pagination: MemberRoleListPagination) {
@@ -93,16 +99,19 @@ export class MemberRoleRepository extends BaseRepository {
     const where = and(
       eq(roles.organization_id, organization_id),
       isNull(roles.deleted_at),
-      buildSearchCondition([roles.name], q),
+      buildSearchCondition({ columns: [roles.name], q }),
       cursorCondition,
     );
     const rows = (await getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(roles),
+        cursor_created_at: cursorTimestampSelection(roles.created_at),
+      })
       .from(roles)
       .where(where)
       .orderBy(...orderBy)
-      .limit(limit + 1)) as MemberRoleRow[];
-    return finishKeysetPage(rows, { limit, sortValueFor, filterFingerprint });
+      .limit(limit + 1)) as (MemberRoleRow & CursorTimestampRow)[];
+    return finishKeysetPage({ rows, args: { limit, sortValueFor, filterFingerprint } });
   }
 
   /**
@@ -222,20 +231,22 @@ export class MemberRoleRepository extends BaseRepository {
     tone?: string;
     created_by_user_id?: number | null;
   }) {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const public_id = generatePublicId('memberRole');
-      const row = {
-        public_id,
-        organization_id: data.organization_id,
-        name: data.name,
-        description: data.description ?? null,
-        is_system: data.is_system ?? false,
-        ...(data.tone === undefined ? {} : { tone: data.tone }),
-        created_by_user_id: data.created_by_user_id ?? undefined,
-        updated_by_user_id: data.created_by_user_id ?? undefined,
-      };
-      const rows = await getRequestDatabase().insert(roles).values(row).returning();
-      return rows[0]! as MemberRoleRow;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const public_id = generatePublicId('memberRole');
+        const row = {
+          public_id,
+          organization_id: data.organization_id,
+          name: data.name,
+          description: data.description ?? null,
+          is_system: data.is_system ?? false,
+          ...(data.tone === undefined ? {} : { tone: data.tone }),
+          created_by_user_id: data.created_by_user_id ?? undefined,
+          updated_by_user_id: data.created_by_user_id ?? undefined,
+        };
+        const rows = await getRequestDatabase().insert(roles).values(row).returning();
+        return rows[0]! as MemberRoleRow;
+      },
     });
   }
 

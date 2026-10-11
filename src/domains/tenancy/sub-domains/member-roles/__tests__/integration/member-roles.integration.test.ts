@@ -289,7 +289,7 @@ describe('Member Roles Sub-Domain — Integration', () => {
     it('rejects POST /roles on a PERSONAL organization with 422 (errors:personalOrganizationNoRoles) and creates no role', async () => {
       await seedOwnerGrantPermissions();
       const owner = await createTestUser();
-      const provisioned = await provisionPersonalOrganization(owner.id);
+      const provisioned = await provisionPersonalOrganization({ ownerUserId: owner.id });
       const token = await generateTestToken({
         userId: owner.public_id,
         organizationPublicId: provisioned.organization.public_id,

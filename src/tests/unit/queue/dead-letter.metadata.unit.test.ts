@@ -93,7 +93,11 @@ describe('enqueueDeadLetter metadata', () => {
   it('enqueueDeadLetter routes to <sourceQueue>-dlq queue name', async () => {
     const { enqueueDeadLetter } = await import('@/infrastructure/queue/dlq/dead-letter.js');
 
-    await enqueueDeadLetter('webhook-delivery', buildJob({ id: 'job-route' }), new Error('boom'));
+    await enqueueDeadLetter({
+      sourceQueueName: 'webhook-delivery',
+      job: buildJob({ id: 'job-route' }),
+      error: new Error('boom'),
+    });
 
     expect(queueConstructorMock).toHaveBeenCalledTimes(1);
     expect(queueConstructorMock.mock.calls[0]?.[0]).toBe('webhook-delivery-dlq');
@@ -110,7 +114,7 @@ describe('enqueueDeadLetter metadata', () => {
       opts: { attempts: 4 },
     });
 
-    await enqueueDeadLetter('notification', job, error);
+    await enqueueDeadLetter({ sourceQueueName: 'notification', job, error });
 
     expect(queueAddCalls).toHaveLength(1);
     const [{ jobName, data, options }] = queueAddCalls as [QueueAddCall];
@@ -149,7 +153,7 @@ describe('enqueueDeadLetter metadata', () => {
         '@/infrastructure/queue/dlq/dead-letter.js'
       );
       const fakeWorker = new EventEmitter() as unknown as Worker;
-      attachDeadLetterAndAlerting(fakeWorker, 'mail');
+      attachDeadLetterAndAlerting({ worker: fakeWorker, queueName: 'mail' });
 
       const job = buildJob({ id: 'job-enqueue-fail' });
       const finalError = new Error('handler-final');
@@ -235,11 +239,11 @@ describe('enqueueDeadLetter metadata', () => {
 
     for (const testCase of cases) {
       queueAddCalls.length = 0;
-      await enqueueDeadLetter(
-        testCase.queue,
-        buildJob({ id: `job-${testCase.queue}`, name: testCase.jobName, data: testCase.data }),
-        new Error('boom'),
-      );
+      await enqueueDeadLetter({
+        sourceQueueName: testCase.queue,
+        job: buildJob({ id: `job-${testCase.queue}`, name: testCase.jobName, data: testCase.data }),
+        error: new Error('boom'),
+      });
 
       const [{ data }] = queueAddCalls as [QueueAddCall];
       const summary = data.original_data_summary as Record<string, unknown>;
@@ -261,7 +265,7 @@ describe('enqueueDeadLetter metadata', () => {
       '@/infrastructure/queue/dlq/dead-letter.js'
     );
     const fakeWorker = new EventEmitter() as unknown as Worker;
-    attachDeadLetterAndAlerting(fakeWorker, 'notification');
+    attachDeadLetterAndAlerting({ worker: fakeWorker, queueName: 'notification' });
 
     const finalError = new Error('boom');
     const job = buildJob({ id: 'job-sentry-once', attemptsMade: 3, opts: { attempts: 3 } });

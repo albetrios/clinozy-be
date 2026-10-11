@@ -27,7 +27,7 @@ function hashRefreshSecret(refreshSecret: string): string {
 }
 
 /** Constant-time equality of two hex digests (equal length when both are SHA-256 hex). */
-function refreshHashesEqual(left: string, right: string): boolean {
+function refreshHashesEqual({ left, right }: { left: string; right: string }): boolean {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
@@ -63,10 +63,10 @@ export class AuthSessionService {
   async list(userPublicId: string) {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      (_databaseHandle) => this.sessionRepository.listByUserId(user.id),
-    );
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: (_databaseHandle) => this.sessionRepository.listByUserId(user.id),
+    });
   }
 
   /**
@@ -75,19 +75,26 @@ export class AuthSessionService {
    */
   async listForUserDataExport(options: { userPublicId: string; limit: number }) {
     const user = await this.userService.requireUserRecordByPublicId(options.userPublicId);
-    return withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
-      (_databaseHandle) => this.sessionRepository.listForUserDataExport(user.id, options.limit),
-    );
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
+      callback: (_databaseHandle) =>
+        this.sessionRepository.listForUserDataExport(user.id, options.limit),
+    });
   }
 
-  async revoke(userPublicId: string, sessionPublicId: string) {
+  async revoke({
+    userPublicId,
+    sessionPublicId,
+  }: {
+    userPublicId: string;
+    sessionPublicId: string;
+  }) {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
-    const revoked = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      (_databaseHandle) => this.sessionRepository.revoke(sessionPublicId, user.id),
-    );
+    const revoked = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: (_databaseHandle) => this.sessionRepository.revoke(sessionPublicId, user.id),
+    });
     if (!revoked) throw new NotFoundError('Session');
     if (revoked.token_hash) {
       await invalidateCachedSessionToken(revoked.token_hash);
@@ -108,10 +115,10 @@ export class AuthSessionService {
   async revokeAllSessions(userPublicId: string): Promise<void> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
-    const revokedSessions = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      (_databaseHandle) => this.sessionRepository.revokeAllByUserId(user.id),
-    );
+    const revokedSessions = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: (_databaseHandle) => this.sessionRepository.revokeAllByUserId(user.id),
+    });
     await this.invalidateRevokedSessionCaches(revokedSessions);
   }
 
@@ -141,24 +148,27 @@ export class AuthSessionService {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
     const currentTokenHash = hashAccessToken(currentAccessToken);
-    const revokedSessions = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      (_databaseHandle) =>
+    const revokedSessions = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: (_databaseHandle) =>
         this.sessionRepository.revokeAllByUserIdExcept(user.id, currentTokenHash),
-    );
+    });
     await this.invalidateRevokedSessionCaches(revokedSessions);
   }
 
-  async createSessionForUser(
-    userPublicId: string,
-    data: Omit<AuthSessionCreateData, 'user_id' | 'refresh_token_hash'>,
-  ): Promise<{ public_id: string; refresh_secret: string }> {
+  async createSessionForUser({
+    userPublicId,
+    data,
+  }: {
+    userPublicId: string;
+    data: Omit<AuthSessionCreateData, 'user_id' | 'refresh_token_hash'>;
+  }): Promise<{ public_id: string; refresh_secret: string }> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
     const refreshSecret = generateRefreshSecret({ userPublicId });
-    const { session, evictedSessions } = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
-      async (_databaseHandle) => {
+    const { session, evictedSessions } = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
+      callback: async (_databaseHandle) => {
         // Bound the user's concurrent live sessions. Under a per-user advisory lock (so concurrent
         // logins cannot overshoot), evict the oldest sessions beyond MAX_ACTIVE_SESSIONS_PER_USER - 1
         // so there is room for this new one. Evicting (not rejecting) means a legitimate multi-device
@@ -176,7 +186,7 @@ export class AuthSessionService {
         });
         return { session: created, evictedSessions: evicted };
       },
-    );
+    });
     // Purge the session-token cache for any evicted session so its access token stops authenticating
     // on the next request (a revocation tombstone), mirroring explicit logout/revoke.
     await this.invalidateRevokedSessionCaches(evictedSessions);
@@ -186,10 +196,10 @@ export class AuthSessionService {
   async revokeSessionByAccessToken(token: string): Promise<void> {
     const sessionTokenHash = hashAccessToken(token);
     await invalidateCachedSessionToken(sessionTokenHash);
-    const revoked = await withAppDatabaseContext(
-      SESSION_SCOPE.ARTIFACT({ sessionTokenHash: sessionTokenHash }),
-      (_databaseHandle) => this.sessionRepository.revokeByTokenHash(sessionTokenHash),
-    );
+    const revoked = await withAppDatabaseContext({
+      scope: SESSION_SCOPE.ARTIFACT({ sessionTokenHash: sessionTokenHash }),
+      callback: (_databaseHandle) => this.sessionRepository.revokeByTokenHash(sessionTokenHash),
+    });
     if (!revoked) {
       throw new UnauthorizedError('errors:invalidOrRevokedToken');
     }
@@ -213,10 +223,13 @@ export class AuthSessionService {
    * still-valid access token. The Redis cache caps the propagation window at ≤60 s
    * (same TTL as session validity), down from the prior ≤15 min access-token lifetime.
    */
-  async verifyActiveAccessToken(
-    rawToken: string,
-    userPublicId: string,
-  ): Promise<{ sessionPublicId: string }> {
+  async verifyActiveAccessToken({
+    rawToken,
+    userPublicId,
+  }: {
+    rawToken: string;
+    userPublicId: string;
+  }): Promise<{ sessionPublicId: string }> {
     const sessionTokenHash = hashAccessToken(rawToken);
     const cachedSessionPublicId = await getCachedSessionTokenValid(sessionTokenHash);
     if (cachedSessionPublicId !== null) {
@@ -229,12 +242,14 @@ export class AuthSessionService {
     // a transient managed-Postgres connection drop is safe to retry rather than spuriously 401 an
     // otherwise-authenticated request. Only connection-level errors are retried (see
     // runReadWithTransientRetry); an invalid/expired session still returns null on the first attempt.
-    const session = await runReadWithTransientRetry(() =>
-      withAppDatabaseContext(
-        SESSION_SCOPE.ARTIFACT({ sessionTokenHash: sessionTokenHash }),
-        (_databaseHandle) => this.sessionRepository.findActiveByTokenHash(sessionTokenHash),
-      ),
-    );
+    const session = await runReadWithTransientRetry({
+      read: () =>
+        withAppDatabaseContext({
+          scope: SESSION_SCOPE.ARTIFACT({ sessionTokenHash: sessionTokenHash }),
+          callback: (_databaseHandle) =>
+            this.sessionRepository.findActiveByTokenHash(sessionTokenHash),
+        }),
+    });
 
     if (!session) {
       throw new UnauthorizedError('errors:invalidOrExpiredSession');
@@ -243,9 +258,9 @@ export class AuthSessionService {
     // sec-new-A2: verify the owning user is still active. Runs only on cache miss
     // (first request per 60 s window) to avoid a per-request DB round-trip.
     // findUserRecordByPublicId wraps withAppDatabaseContext (user scope) internally.
-    const user = await runReadWithTransientRetry(() =>
-      this.userService.findUserRecordByPublicId(userPublicId),
-    );
+    const user = await runReadWithTransientRetry({
+      read: () => this.userService.findUserRecordByPublicId(userPublicId),
+    });
     if (user?.status !== 'ACTIVE' || user.deleted_at !== null) {
       throw new UnauthorizedError('errors:accountNotActive');
     }
@@ -267,17 +282,17 @@ export class AuthSessionService {
    * current access token is unchanged — the next switch or refresh mints one with `amr: ['mfa']`.
    */
   async markSessionMfaVerified(sessionPublicId: string): Promise<boolean> {
-    return withAppDatabaseContext(
-      SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
-      (_databaseHandle) => this.sessionRepository.markMfaVerified(sessionPublicId),
-    );
+    return withAppDatabaseContext({
+      scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
+      callback: (_databaseHandle) => this.sessionRepository.markMfaVerified(sessionPublicId),
+    });
   }
 
   async findActiveSessionByPublicId(sessionPublicId: string) {
-    return withAppDatabaseContext(
-      SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
-      (_databaseHandle) => this.sessionRepository.findByPublicId(sessionPublicId),
-    );
+    return withAppDatabaseContext({
+      scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
+      callback: (_databaseHandle) => this.sessionRepository.findByPublicId(sessionPublicId),
+    });
   }
 
   /**
@@ -289,23 +304,30 @@ export class AuthSessionService {
    * to filter revoked rows.
    */
   async findSessionByPublicIdIncludingRevoked(sessionPublicId: string) {
-    return withAppDatabaseContext(
-      SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
-      (_databaseHandle) => this.sessionRepository.findByPublicIdIncludingRevoked(sessionPublicId),
-    );
+    return withAppDatabaseContext({
+      scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
+      callback: (_databaseHandle) =>
+        this.sessionRepository.findByPublicIdIncludingRevoked(sessionPublicId),
+    });
   }
 
-  async rotateSessionTokenHash(sessionPublicId: string, sessionTokenHash: string): Promise<void> {
-    await withAppDatabaseContext(
-      SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
-      async (_databaseHandle) => {
+  async rotateSessionTokenHash({
+    sessionPublicId,
+    sessionTokenHash,
+  }: {
+    sessionPublicId: string;
+    sessionTokenHash: string;
+  }): Promise<void> {
+    await withAppDatabaseContext({
+      scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
+      callback: async (_databaseHandle) => {
         const existing = await this.sessionRepository.findByPublicId(sessionPublicId);
         if (existing?.token_hash) {
           await invalidateCachedSessionToken(existing.token_hash);
         }
         await this.sessionRepository.rotateTokenHash(sessionPublicId, sessionTokenHash);
       },
-    );
+    });
   }
 
   async refreshSessionCredentials({
@@ -323,9 +345,9 @@ export class AuthSessionService {
     const currentRefreshHash = hashRefreshSecret(refreshSecret);
     const nextTokenHash = hashAccessToken(nextAccessToken);
 
-    const nextRefreshSecret = await withAppDatabaseContext(
-      SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
-      async (_databaseHandle) => {
+    const nextRefreshSecret = await withAppDatabaseContext({
+      scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
+      callback: async (_databaseHandle) => {
         const existing = await this.sessionRepository.findByPublicId(sessionPublicId);
         if (!existing?.refresh_token_hash) {
           return null;
@@ -347,7 +369,7 @@ export class AuthSessionService {
         }
         return minted;
       },
-    );
+    });
     if (nextRefreshSecret !== null) {
       return { refresh_secret: nextRefreshSecret };
     }
@@ -363,39 +385,49 @@ export class AuthSessionService {
     // sec-A finding #9: include ALREADY-REVOKED rows in the lookup. A user who clicks "Log out
     // everywhere" revokes the row but an attacker may still hold the stale refresh secret; the
     // replay is still reported (Sentry), separate from whether we re-revoke.
-    const reuseDetection = await withAppDatabaseContext(
-      SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
-      async (_databaseHandle) => {
+    const reuseDetection = await withAppDatabaseContext({
+      scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
+      callback: async (_databaseHandle) => {
         const existing =
           await this.sessionRepository.findByPublicIdIncludingRevoked(sessionPublicId);
         if (!existing?.refresh_token_hash) return null;
-        if (refreshHashesEqual(existing.refresh_token_hash, currentRefreshHash)) return null;
+        if (refreshHashesEqual({ left: existing.refresh_token_hash, right: currentRefreshHash }))
+          return null;
         const provenIssued =
           isIssuedRefreshSecret({ userPublicId, refreshSecret }) ||
           (existing.previous_refresh_token_hash !== null &&
-            refreshHashesEqual(existing.previous_refresh_token_hash, currentRefreshHash));
+            refreshHashesEqual({
+              left: existing.previous_refresh_token_hash,
+              right: currentRefreshHash,
+            }));
         return {
           userId: existing.user_id,
           wasAlreadyRevoked: existing.is_revoked,
           provenIssued,
         };
       },
-    );
+    });
     if (reuseDetection?.provenIssued) {
-      captureMessage('auth.refresh_token.reuse_detected', {
-        level: 'warning',
-        extra: {
-          session_public_id: sessionPublicId,
-          was_already_revoked: reuseDetection.wasAlreadyRevoked,
+      captureMessage({
+        message: 'auth.refresh_token.reuse_detected',
+        options: {
+          level: 'warning',
+          extra: {
+            session_public_id: sessionPublicId,
+            was_already_revoked: reuseDetection.wasAlreadyRevoked,
+          },
         },
       });
       if (!reuseDetection.wasAlreadyRevoked) {
         await this.revokeAllSessionsForReusedRefreshSecret(reuseDetection.userId);
       }
     } else if (reuseDetection !== null) {
-      captureMessage('auth.refresh_token.unrecognized_secret', {
-        level: 'info',
-        extra: { session_public_id: sessionPublicId },
+      captureMessage({
+        message: 'auth.refresh_token.unrecognized_secret',
+        options: {
+          level: 'info',
+          extra: { session_public_id: sessionPublicId },
+        },
       });
     }
     throw new UnauthorizedError('errors:invalidOrExpiredSession');
@@ -427,9 +459,9 @@ export class AuthSessionService {
     activeOrganizationId: number;
   }): Promise<void> {
     const nextTokenHash = hashAccessToken(nextAccessToken);
-    await withAppDatabaseContext(
-      SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
-      async (_databaseHandle) => {
+    await withAppDatabaseContext({
+      scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
+      callback: async (_databaseHandle) => {
         const existing = await this.sessionRepository.findByPublicId(sessionPublicId);
         if (!existing) {
           throw new UnauthorizedError('errors:invalidOrExpiredSession');
@@ -450,7 +482,7 @@ export class AuthSessionService {
         // all for that window — every authenticated request after an organization switch fell
         // through to Postgres for a full minute.
       },
-    );
+    });
   }
 
   /**
@@ -470,10 +502,10 @@ export class AuthSessionService {
   private async revokeAllSessionsForReusedRefreshSecret(userId: number): Promise<void> {
     const user = await this.userService.findById(userId);
     if (!user) return;
-    const revokedSessions = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
-      (_databaseHandle) => this.sessionRepository.revokeAllByUserId(user.id),
-    );
+    const revokedSessions = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }),
+      callback: (_databaseHandle) => this.sessionRepository.revokeAllByUserId(user.id),
+    });
     await this.invalidateRevokedSessionCaches(revokedSessions);
   }
 }

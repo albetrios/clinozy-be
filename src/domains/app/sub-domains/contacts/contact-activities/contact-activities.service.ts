@@ -1,5 +1,5 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import type { BaseRecordReference } from '@/domains/app/base-record.types.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
@@ -91,7 +91,7 @@ export class ContactActivitiesService extends BaseRecordService<ContactActivityO
           table: contact_activities,
           label: 'contact activity',
         },
-        { field: 'author_membership_id', table: memberships, label: 'team member' },
+        memberReference('author_membership_id'),
         ...LINK_REFERENCES,
       ],
       transitions: {

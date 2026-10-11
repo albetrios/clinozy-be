@@ -49,35 +49,49 @@ export class MedicinesService extends BaseRecordService<MedicineOutput> {
   }
 
   /** Adds — and answers with the medicine as its batches left it (MD4). */
-  override async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    parentPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    createName?: string,
-  ): Promise<MedicineOutput> {
-    const created = await super.create(
+  override async create({
+    scope,
+    body,
+    actingUserPublicId,
+    parentPublicId,
+    visibility,
+    createName,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    parentPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    createName?: string | undefined;
+  }): Promise<MedicineOutput> {
+    const created = await super.create({
       scope,
       body,
       actingUserPublicId,
       parentPublicId,
       visibility,
       createName,
-    );
-    return this.get(scope, created.id, actingUserPublicId, visibility);
+    });
+    return this.get({ scope, publicId: created.id, actingUserPublicId, visibility });
   }
 
   /** Changes — and answers with the medicine as its batches left it (MD4). */
-  override async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    publicId: string,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    visibility?: BaseRecordVisibility,
-    parentPublicId?: string,
-  ): Promise<MedicineOutput> {
-    await super.update(scope, publicId, body, actingUserPublicId, visibility, parentPublicId);
-    return this.get(scope, publicId, actingUserPublicId, visibility);
+  override async update({
+    scope,
+    publicId,
+    body,
+    actingUserPublicId,
+    visibility,
+    parentPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    publicId: string;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    parentPublicId?: string | undefined;
+  }): Promise<MedicineOutput> {
+    await super.update({ scope, publicId, body, actingUserPublicId, visibility, parentPublicId });
+    return this.get({ scope, publicId, actingUserPublicId, visibility });
   }
 }

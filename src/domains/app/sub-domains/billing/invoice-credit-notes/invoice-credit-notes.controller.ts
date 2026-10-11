@@ -21,7 +21,10 @@ export class InvoiceCreditNotesController extends BaseRecordController<InvoiceCr
   protected override async visibility(request: FastifyRequest): Promise<BaseRecordVisibility> {
     return {
       ...(await super.visibility(request)),
-      allBranches: await hasOrganizationPermission(request, APP_PERMISSIONS.BRANCH_READ),
+      allBranches: await hasOrganizationPermission({
+        request,
+        permissionCode: APP_PERMISSIONS.BRANCH_READ,
+      }),
     };
   }
 }

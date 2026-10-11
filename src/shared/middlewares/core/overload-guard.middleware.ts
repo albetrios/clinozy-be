@@ -3,7 +3,10 @@ import fp from 'fastify-plugin';
 import { env } from '@/shared/config/env.config.js';
 import { ServiceUnavailableError } from '@/shared/errors/index.js';
 import { getSharedEventLoopHistogram } from '@/shared/utils/infrastructure/event-loop-monitor.js';
-import { getActiveOrganizationRlsCheckoutCount } from '@/infrastructure/database/pool/organization-rls-checkout-counter.js';
+import {
+  getActiveOrganizationRlsCheckoutCount,
+  getOldestConnectionWaitMs,
+} from '@/infrastructure/database/pool/organization-rls-checkout-counter.js';
 
 /** Sampling cadence for the event-loop-delay probe (ms). */
 const OVERLOAD_SAMPLE_INTERVAL_MS = 500;
@@ -26,8 +29,10 @@ const OVERLOAD_ALLOWLISTED_PATHS = new Set(['/livez', '/readyz', '/metrics']);
  * EITHER the recent p99 event-loop delay has reached `thresholdMs` (CPU/sync-stall saturation) OR
  * the in-flight organization-RLS pool checkouts have reached `dbCheckoutShedThreshold` (DB-pool saturation —
  * a distinct mode the event-loop signal cannot see, since waiting on a pooled connection leaves the
- * loop idle). `dbCheckoutShedThreshold <= 0` disables the pool condition. Extracted as a pure
- * function so the decision is unit-testable without driving the real event loop or fake timers.
+ * loop idle) OR the oldest unit of work still waiting for a connection has waited
+ * `connectionWaitShedMs` (a slow database: the queue is short but does not drain).
+ * `dbCheckoutShedThreshold <= 0` / `connectionWaitShedMs <= 0` disable those conditions. Extracted as
+ * a pure function so the decision is unit-testable without driving the real event loop or fake timers.
  */
 export function shouldShedRequest(options: {
   path: string;
@@ -35,17 +40,33 @@ export function shouldShedRequest(options: {
   thresholdMs: number;
   activeDbCheckouts: number;
   dbCheckoutShedThreshold: number;
+  oldestConnectionWaitMs: number;
+  connectionWaitShedMs: number;
 }): boolean {
+  return resolveShedReason(options) !== null;
+}
+
+/** Why a request is shed ({@link shouldShedRequest}), or `null` when it is served. */
+function resolveShedReason(options: Parameters<typeof shouldShedRequest>[0]) {
   if (OVERLOAD_ALLOWLISTED_PATHS.has(options.path)) {
-    return false;
+    return null;
   }
   if (options.recentEventLoopDelayMs >= options.thresholdMs) {
-    return true;
+    return 'event_loop_overload';
   }
-  return (
+  if (
     options.dbCheckoutShedThreshold > 0 &&
     options.activeDbCheckouts >= options.dbCheckoutShedThreshold
-  );
+  ) {
+    return 'database_pool_overload';
+  }
+  if (
+    options.connectionWaitShedMs > 0 &&
+    options.oldestConnectionWaitMs >= options.connectionWaitShedMs
+  ) {
+    return 'database_pool_wait_overload';
+  }
+  return null;
 }
 
 /**
@@ -58,15 +79,20 @@ export function shouldShedRequest(options: {
  *   and reset each tick; the `onRequest` hook reads the cached p99 (no per-request syscall) and
  *   sheds above `env.OVERLOAD_MAX_EVENT_LOOP_DELAY_MS`. (2) DB-pool saturation: the hook reads the
  *   live in-process checkout gauge — units of work running or still waiting for a connection — and
- *   sheds at `ceil(DATABASE_POOL_MAX × shedRatio)`. The default ratio (3) lets a queue twice the
- *   pool's size form first, so a burst the pool drains in milliseconds is served, not shed. Both
- *   throw {@link ServiceUnavailableError} with `Retry-After`.
+ *   sheds at `ceil(DATABASE_POOL_MAX × shedRatio)`. The default ratio (10) lets a queue nine times
+ *   the pool's size form first, so a burst the pool drains in milliseconds is served, not shed.
+ *   (3) A slow database: the oldest unit of work still waiting for a connection has waited
+ *   `env.OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS` — new requests get a fast 503 instead of queuing behind
+ *   it until `DATABASE_POOL_ACQUIRE_TIMEOUT_MS` fails them slowly. All throw
+ *   {@link ServiceUnavailableError} with `Retry-After`.
  * - **Why:** without a valve, a backlog grows an unbounded queue and tail latency runs to multiple
  *   seconds. Shedding bounds the tail — requests the box cannot serve promptly get a fast, cheap
- *   503 instead of occupying a worker for seconds. The event-loop signal alone is blind to pool
+ *   503 instead of occupying a worker for seconds. Rejections carry an internal reason
+ *   (`event_loop_overload`, `database_pool_overload` or `database_pool_wait_overload`) in the
+ *   structured error-handler log;
+ *   the 5xx response does not expose it. The event-loop signal alone is blind to pool
  *   exhaustion: a request awaiting a pooled connection leaves the loop *idle*, so without the pool
- *   condition requests would queue behind postgres.js (which has no acquire timeout of its own)
- *   until `DATABASE_POOL_ACQUIRE_TIMEOUT_MS`. The pool ratio (`env.OVERLOAD_DB_POOL_SHED_RATIO`,
+ *   condition requests would queue for a pooled connection until `DATABASE_POOL_ACQUIRE_TIMEOUT_MS`. The pool ratio (`env.OVERLOAD_DB_POOL_SHED_RATIO`,
  *   `0` disables) is decoupled from the alerter's `DATABASE_POOL_ACTIVE_CRITICAL_RATIO` so shedding
  *   tunes independently.
  * - **Failure modes:** none surfaced to healthy traffic — at sane thresholds the guard is dormant
@@ -103,17 +129,20 @@ const overloadGuardMiddleware: FastifyPluginAsync = async (application) => {
   });
 
   application.addHook('onRequest', async (request) => {
-    const path = request.url.split('?', 1)[0] ?? '';
-    if (
-      shouldShedRequest({
-        path,
-        recentEventLoopDelayMs,
-        thresholdMs: shedThresholdMs,
-        activeDbCheckouts: getActiveOrganizationRlsCheckoutCount(),
-        dbCheckoutShedThreshold,
-      })
-    ) {
-      throw new ServiceUnavailableError().withRetryAfter(OVERLOAD_RETRY_AFTER_SECONDS);
+    const shedReason = resolveShedReason({
+      path: request.url.split('?', 1)[0] ?? '',
+      recentEventLoopDelayMs,
+      thresholdMs: shedThresholdMs,
+      activeDbCheckouts: getActiveOrganizationRlsCheckoutCount(),
+      dbCheckoutShedThreshold,
+      oldestConnectionWaitMs: getOldestConnectionWaitMs(),
+      connectionWaitShedMs: env.OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS,
+    });
+    if (shedReason !== null) {
+      // Internal reason is logged by the error handler; 5xx responses never expose it.
+      throw new ServiceUnavailableError()
+        .withReason(shedReason)
+        .withRetryAfter(OVERLOAD_RETRY_AFTER_SECONDS);
     }
   });
 };

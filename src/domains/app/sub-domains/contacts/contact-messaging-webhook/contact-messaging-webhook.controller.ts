@@ -18,7 +18,7 @@ export function createContactMessagingWebhookController(service: ContactMessagin
     /** `POST /messaging-webhook` — a signed callback. */
     receive: async (request: FastifyRequest, _reply: FastifyReply) => {
       const data = await service.receive(request.body);
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

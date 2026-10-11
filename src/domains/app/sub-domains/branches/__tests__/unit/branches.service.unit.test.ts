@@ -17,17 +17,28 @@ describe('BranchesService', () => {
 
   it('refuses a create body with an unknown field (400)', async () => {
     await expect(
-      service.create(SCOPE, { name: 'Vesu', not_a_field: true }, undefined),
+      service.create({
+        scope: SCOPE,
+        body: { name: 'Vesu', not_a_field: true },
+        actingUserPublicId: undefined,
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('refuses a create body without its name (400)', async () => {
-    await expect(service.create(SCOPE, {}, undefined)).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      service.create({ scope: SCOPE, body: {}, actingUserPublicId: undefined }),
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('refuses a change with an unknown field (400)', async () => {
     await expect(
-      service.update(SCOPE, 'br_aaaaaaaaaaaaaaaaaaaaa', { not_a_field: true }, undefined),
+      service.update({
+        scope: SCOPE,
+        branchPublicId: 'br_aaaaaaaaaaaaaaaaaaaaa',
+        body: { not_a_field: true },
+        actingUserPublicId: undefined,
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 });

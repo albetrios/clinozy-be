@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import {
   type AppFixture,
   createAppFixture,
@@ -41,7 +41,7 @@ describe('Flow 1 — an enquiry becomes a patient (launch ROUTE #148)', () => {
 
   /** "On the day": the booking moves to today's midnight — a state the rules never book into. */
   async function dueToday(appointment: string): Promise<void> {
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.appointments SET appointment_date = ${today}, start_time = '00:00'
       WHERE public_id = ${appointment}
     `;

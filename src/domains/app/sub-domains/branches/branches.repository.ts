@@ -145,12 +145,14 @@ export class BranchesRepository {
 
   /** Inserts a branch; returns its internal and public ids. */
   async create(data: BranchCreateData): Promise<{ id: number; public_id: string }> {
-    return runInsertWithPublicIdentifierRetry(async () => {
-      const rows = await getRequestDatabase()
-        .insert(branches)
-        .values({ ...data, public_id: generatePublicId('branch') })
-        .returning({ id: branches.id, public_id: branches.public_id });
-      return rows[0]!;
+    return runInsertWithPublicIdentifierRetry({
+      insert: async () => {
+        const rows = await getRequestDatabase()
+          .insert(branches)
+          .values({ ...data, public_id: generatePublicId('branch') })
+          .returning({ id: branches.id, public_id: branches.public_id });
+        return rows[0]!;
+      },
     });
   }
 

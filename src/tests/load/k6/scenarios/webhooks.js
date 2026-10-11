@@ -1,105 +1,126 @@
 import http from 'k6/http';
-import { sleep } from 'k6';
-import { API_PREFIX, THRESHOLDS, SCENARIOS } from '../helpers/config.js';
-import { checkResponseTime, checkStatus } from '../helpers/checks.js';
+import { Counter } from 'k6/metrics';
+import { API_PREFIX, THRESHOLDS } from '../helpers/config.js';
+import { assertCondition, requireData, requireScopedCredentials } from '../helpers/checks.js';
 import { authHeaders } from '../helpers/auth.js';
 import { idempotencyKey } from '../helpers/idempotency.js';
 
-/**
- * k6 Scenario: Webhook Operations
- *
- * Simulates webhook management operations:
- * - List webhooks
- * - List webhook events
- */
+/** Owned webhook CRUD without outbound test delivery. Use WEBHOOK_URL_ALLOWLIST=example.com. */
+const target = __ENV.WEBHOOK_TEST_BASE_URL || 'https://example.com';
+const vus = Number(__ENV.VUS || '4');
+const iterations = Number(__ENV.ITERATIONS || '5');
+const completed = new Counter('webhook_journeys_completed');
 export const options = {
-  scenarios: {
-    load: { ...SCENARIOS.pacedWrites, exec: 'webhookOps' },
-  },
+  scenarios: { webhooks: { executor: 'per-vu-iterations', vus, iterations, maxDuration: '2m' } },
   thresholds: {
     ...THRESHOLDS,
-    'http_req_duration{name:list-webhooks}': ['p(95)<500', 'p(99)<1000'],
-    'http_req_duration{name:list-webhook-events}': ['p(95)<500', 'p(99)<1000'],
-    'http_req_duration{name:create-webhook}': ['p(95)<800', 'p(99)<1500'],
+    checks: ['rate==1'],
+    http_req_failed: ['rate==0'],
+    dropped_iterations: ['count==0'],
+    'http_req_duration{name:create-webhook}': ['p(95)<500', 'p(99)<1000'],
     'http_req_duration{name:get-webhook}': ['p(95)<500', 'p(99)<1000'],
-    'http_req_duration{name:update-webhook}': ['p(95)<800', 'p(99)<1500'],
-    'http_req_duration{name:list-webhook-delivery-attempts}': ['p(95)<500', 'p(99)<1000'],
-    'http_req_duration{name:delete-webhook}': ['p(95)<800', 'p(99)<1500'],
+    'http_req_duration{name:update-webhook}': ['p(95)<500', 'p(99)<1000'],
+    'http_req_duration{name:update-webhook-url}': ['p(95)<500', 'p(99)<1000'],
+    'http_req_duration{name:delete-webhook}': ['p(95)<500', 'p(99)<1000'],
+    webhook_journeys_completed: [`count==${vus * iterations}`],
   },
 };
-
-export function webhookOps() {
-  const token = __ENV.TEST_TOKEN;
-  if (!token) {
-    console.error('TEST_TOKEN env var required');
-    return;
-  }
-
-  // TEST_TOKEN must be minted scoped to TEST_ORG_ID — the active organization rides the
-  // token's `org` claim, so the flat webhook routes carry no organization path segment.
-  const headers = authHeaders(token).headers;
-
-  // List webhooks
-  const webhooksResponse = http.get(`${API_PREFIX}/notify/webhooks`, {
-    headers,
-    tags: { name: 'list-webhooks' },
-  });
-  checkResponseTime(webhooksResponse, 500, 'list-webhooks');
-
-  sleep(0.5);
-
-  // List webhook events
-  const eventsResponse = http.get(`${API_PREFIX}/notify/webhook-events`, {
-    headers,
-    tags: { name: 'list-webhook-events' },
-  });
-  checkResponseTime(eventsResponse, 500, 'list-webhook-events');
-
-  // The lifecycle: create → read → update → delivery attempts → delete. Each VU holds at most one
-  // webhook at a time, far under WEBHOOK_MAX_PER_ORG (25). POST /webhooks/:id/test is left out on
-  // purpose: it makes a live signed request to the webhook URL, and a load test must not hammer an
-  // outside host. The target host must be on WEBHOOK_URL_ALLOWLIST (the SSRF guard).
-  const createResponse = http.post(
-    `${API_PREFIX}/notify/webhooks`,
-    JSON.stringify({ url: 'https://example.com/k6-load-test', events: ['subscription.updated'] }),
-    {
-      headers: { ...headers, 'X-Idempotency-Key': idempotencyKey('webhook') },
-      tags: { name: 'create-webhook' },
-    },
-  );
-  checkStatus(createResponse, 200, 'create-webhook');
-  if (createResponse.status !== 200) {
-    sleep(1);
-    return;
-  }
-  const webhookId = JSON.parse(createResponse.body).data.id;
-
-  const getResponse = http.get(`${API_PREFIX}/notify/webhooks/${webhookId}`, {
-    headers,
-    tags: { name: 'get-webhook' },
-  });
-  checkStatus(getResponse, 200, 'get-webhook');
-
-  const updateResponse = http.patch(
-    `${API_PREFIX}/notify/webhooks/${webhookId}`,
-    JSON.stringify({ is_enabled: false }),
-    { headers, tags: { name: 'update-webhook' } },
-  );
-  checkStatus(updateResponse, 200, 'update-webhook');
-
-  const attemptsResponse = http.get(
-    `${API_PREFIX}/notify/webhooks/${webhookId}/delivery-attempts`,
-    { headers, tags: { name: 'list-webhook-delivery-attempts' } },
-  );
-  checkStatus(attemptsResponse, 200, 'list-webhook-delivery-attempts');
-
-  const deleteResponse = http.del(`${API_PREFIX}/notify/webhooks/${webhookId}`, null, {
-    headers,
-    tags: { name: 'delete-webhook' },
-  });
-  checkStatus(deleteResponse, 204, 'delete-webhook');
-
-  sleep(1);
+export function setup() {
+  requireScopedCredentials();
 }
-
-export default webhookOps;
+export default function webhookOps() {
+  const { headers } = authHeaders(__ENV.TEST_TOKEN);
+  let id;
+  let deleted = false;
+  try {
+    const created = requireData(
+      http.post(
+        `${API_PREFIX}/notify/webhooks`,
+        JSON.stringify({
+          url: `${target}/k6-owned-${__VU}-${__ITER}-${Date.now()}`,
+          events: ['subscription.updated'],
+          is_enabled: true,
+        }),
+        {
+          headers: { ...headers, 'X-Idempotency-Key': idempotencyKey('webhook') },
+          tags: { name: 'create-webhook' },
+        },
+      ),
+      'create-webhook',
+    );
+    id = created.id;
+    assertCondition(typeof id === 'string', 'webhook resource id');
+    const before = requireData(
+      http.get(`${API_PREFIX}/notify/webhooks/${id}`, { headers, tags: { name: 'get-webhook' } }),
+      'get-webhook',
+    );
+    assertCondition(
+      before.id === id &&
+        before.is_enabled === true &&
+        before.encrypted_secret === undefined &&
+        before.secret === undefined,
+      'created webhook without leaked signing material',
+    );
+    const updatedUrl = `${target}/k6-updated-${__VU}-${__ITER}-${Date.now()}`;
+    requireData(
+      http.patch(`${API_PREFIX}/notify/webhooks/${id}`, JSON.stringify({ url: updatedUrl }), {
+        headers,
+        tags: { name: 'update-webhook-url' },
+      }),
+      'update-webhook-url',
+    );
+    requireData(
+      http.patch(`${API_PREFIX}/notify/webhooks/${id}`, JSON.stringify({ is_enabled: false }), {
+        headers,
+        tags: { name: 'update-webhook' },
+      }),
+      'update-webhook',
+    );
+    const updated = requireData(
+      http.get(`${API_PREFIX}/notify/webhooks/${id}`, {
+        headers,
+        tags: { name: 'updated-webhook' },
+      }),
+      'updated-webhook',
+    );
+    assertCondition(
+      updated.id === id && updated.url === updatedUrl && updated.is_enabled === false,
+      'webhook URL and disabled state persisted',
+    );
+    const attempts = requireData(
+      http.get(`${API_PREFIX}/notify/webhooks/${id}/delivery-attempts`, {
+        headers,
+        tags: { name: 'list-webhook-delivery-attempts' },
+      }),
+      'list-webhook-delivery-attempts',
+    );
+    assertCondition(
+      Array.isArray(attempts) && attempts.length === 0,
+      'CRUD did not send an outbound delivery',
+    );
+    assertCondition(
+      http.del(`${API_PREFIX}/notify/webhooks/${id}`, null, {
+        headers,
+        tags: { name: 'delete-webhook' },
+      }).status === 204,
+      'webhook deleted',
+    );
+    deleted = true;
+    const absent = http.get(`${API_PREFIX}/notify/webhooks/${id}`, {
+      headers,
+      tags: { name: 'deleted-webhook' },
+      responseCallback: http.expectedStatuses(404),
+    });
+    assertCondition(absent.status === 404, 'deleted webhook absent');
+    completed.add(1);
+  } finally {
+    if (id && !deleted)
+      assertCondition(
+        http.del(`${API_PREFIX}/notify/webhooks/${id}`, null, {
+          headers,
+          tags: { name: 'cleanup-webhook' },
+        }).status === 204,
+        'webhook failure cleanup',
+      );
+  }
+}

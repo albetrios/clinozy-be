@@ -43,10 +43,10 @@ describe('Integration: webhook delivery re-claim', () => {
       payload: { reclaim: true },
     });
     const claimUnderJobScope = () =>
-      withAppDatabaseContext(
-        PRINCIPAL_SCOPE.JOB({ organizationPublicId: organization.public_id }),
-        () => repository.tryMarkSending(deliveryAttempt.id),
-      );
+      withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.JOB({ organizationPublicId: organization.public_id }),
+        callback: () => repository.tryMarkSending(deliveryAttempt.id),
+      });
 
     // The first execution claims and dies before recording an outcome; the next one — no wait,
     // no lease to run out — claims the same row straight away.

@@ -1,11 +1,13 @@
+import type { OrganizationDefaultLocale } from './organization-settings.types.js';
 import { eq, sql } from 'drizzle-orm';
-import { database } from '@/infrastructure/database/connection.js';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
-import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import {
+  getContextFreeDatabase,
+  getRequestDatabase,
+} from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
 
 /** BCP 47 locale tag persisted in `organization_settings.default_locale` (constrained to translated locales). */
-export type OrganizationDefaultLocale = 'en' | 'es';
 
 /** The operating settings a write names (launch #1), money as the `numeric` string Drizzle writes. */
 function operatingSettings(data: {
@@ -54,8 +56,10 @@ function messagingAccounts(data: {
  * tables are FORCE RLS, they delegate to `SECURITY DEFINER` resolvers
  * (`tenancy.resolve_organization_default_locale`,
  * `tenancy.user_has_organization_requiring_mfa`) which bypass RLS by
- * ownership — a plain SELECT under the non-superuser app role would match
- * zero rows and silently disable organization-mandated MFA.
+ * ownership. The accessor reuses an already-pinned transaction, avoiding a second
+ * pooled checkout while the caller holds the first. A plain SELECT under the
+ * non-superuser app role would match zero rows and silently disable
+ * organization-mandated MFA.
  */
 export class OrganizationSettingsRepository {
   /**
@@ -67,7 +71,7 @@ export class OrganizationSettingsRepository {
     // `tenancy.organization_settings`/`organizations` are FORCE RLS and this runs with no
     // tenant GUC (login/middleware), so a plain SELECT under the non-superuser app role would
     // return 0 rows. Delegate to the SECURITY DEFINER resolver (RLS bypass by ownership).
-    const rows = await database.execute(
+    const rows = await getContextFreeDatabase().execute(
       sql`SELECT tenancy.resolve_organization_default_locale(${organizationPublicId}) AS default_locale`,
     );
     const resultRows = (
@@ -151,7 +155,7 @@ export class OrganizationSettingsRepository {
     // no tenant/user GUC, so a plain JOIN under the non-superuser app role would return 0 rows
     // and silently disable organization-mandated MFA in production. Delegate to the SECURITY DEFINER
     // resolver (RLS bypass by ownership), which encodes the strict `mfa_required === true` check.
-    const rows = await database.execute(
+    const rows = await getContextFreeDatabase().execute(
       sql`SELECT tenancy.user_has_organization_requiring_mfa(${userId}) AS requires_mfa`,
     );
     const resultRows = (
@@ -167,7 +171,7 @@ export class OrganizationSettingsRepository {
    * settings and organizations tables are FORCE RLS.
    */
   async organizationRequiresMfa(organizationPublicId: string): Promise<boolean> {
-    const rows = await database.execute(
+    const rows = await getContextFreeDatabase().execute(
       sql`SELECT tenancy.organization_requires_mfa(${organizationPublicId}) AS requires_mfa`,
     );
     const resultRows = (

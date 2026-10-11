@@ -2,7 +2,7 @@ import type { OrganizationService } from '@/domains/tenancy/sub-domains/organiza
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import { PATIENT_PRESCRIPTION_STATUS } from './patient-prescriptions.constants.js';
 import type { PatientPrescriptionsRepository } from './patient-prescriptions.repository.js';
 import { patientPrescriptionsRules } from './patient-prescriptions.rules.js';
@@ -43,8 +43,8 @@ export class PatientPrescriptionsService extends BaseRecordService<PatientPrescr
       references: [
         { field: 'patient_id', table: patients, label: 'patient' },
         { field: 'appointment_id', table: appointments, label: 'appointment' },
-        { field: 'doctor_membership_id', table: memberships, label: 'team member' },
-        { field: 'approved_by_membership_id', table: memberships, label: 'team member' },
+        memberReference('doctor_membership_id'),
+        memberReference('approved_by_membership_id'),
       ],
       parent: { field: 'patient_id', table: patients, label: 'Patient' },
       transitions: {

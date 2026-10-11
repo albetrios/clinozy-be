@@ -26,8 +26,8 @@ const taskOwnerFields = {
 
 /** The fields a task made by hand and its change share (10.A.8 #3, #5). */
 const taskFields = {
-  title: trimmedStringMinMax(1, 120),
-  why: trimmedStringMinMax(1, 280).nullable(),
+  title: trimmedStringMinMax({ min: 1, max: 120 }),
+  why: trimmedStringMinMax({ min: 1, max: 280 }).nullable(),
   due_at: instantSchema,
   priority: z.enum(TASK_PRIORITY_VALUES),
 };
@@ -88,7 +88,7 @@ export const UpdateTaskDto = z
 export const SnoozeTaskDto = z
   .object({
     snoozed_until: instantSchema,
-    snooze_label: trimmedStringMinMax(1, 40).optional(),
+    snooze_label: trimmedStringMinMax({ min: 1, max: 40 }).optional(),
   })
   .strict();
 
@@ -98,7 +98,7 @@ const nextTaskDto = z
     title: taskFields.title,
     due_at: taskFields.due_at,
     ...taskOwnerFields,
-    note: trimmedStringMinMax(1, 280).optional(),
+    note: trimmedStringMinMax({ min: 1, max: 280 }).optional(),
   })
   .strict();
 
@@ -109,8 +109,8 @@ const nextTaskDto = z
 export const ResolveTaskDto = z
   .object({
     outcome: z.enum(TASK_OUTCOME_VALUES),
-    result_text: trimmedStringMinMax(1, 200).optional(),
-    note: trimmedStringMinMax(1, 280).optional(),
+    result_text: trimmedStringMinMax({ min: 1, max: 200 }).optional(),
+    note: trimmedStringMinMax({ min: 1, max: 280 }).optional(),
     next: nextTaskDto.optional(),
   })
   .strict();

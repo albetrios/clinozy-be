@@ -44,12 +44,16 @@ describe('AuthSessionRepository refresh concurrency grace (database — audit-#2
     const publicId = await seedSession(user.id, presentedHash);
 
     const [a, b] = await Promise.all([
-      withAppDatabaseContext(SESSION_SCOPE.ARTIFACT({ sessionPublicId: publicId }), () =>
-        repository.rotateSessionCredentials(publicId, presentedHash, 'tok-a', 'refresh-a'),
-      ),
-      withAppDatabaseContext(SESSION_SCOPE.ARTIFACT({ sessionPublicId: publicId }), () =>
-        repository.rotateSessionCredentials(publicId, presentedHash, 'tok-b', 'refresh-b'),
-      ),
+      withAppDatabaseContext({
+        scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: publicId }),
+        callback: () =>
+          repository.rotateSessionCredentials(publicId, presentedHash, 'tok-a', 'refresh-a'),
+      }),
+      withAppDatabaseContext({
+        scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: publicId }),
+        callback: () =>
+          repository.rotateSessionCredentials(publicId, presentedHash, 'tok-b', 'refresh-b'),
+      }),
     ]);
 
     // Both rotations returned a row — neither was rejected (which would trigger reuse detection).
@@ -76,10 +80,11 @@ describe('AuthSessionRepository refresh concurrency grace (database — audit-#2
     const publicId = await seedSession(user.id, presentedHash);
 
     // First rotation: original → A (original now in the previous slot, rotated = now).
-    const first = await withAppDatabaseContext(
-      SESSION_SCOPE.ARTIFACT({ sessionPublicId: publicId }),
-      () => repository.rotateSessionCredentials(publicId, presentedHash, 'tok-a', 'refresh-a'),
-    );
+    const first = await withAppDatabaseContext({
+      scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: publicId }),
+      callback: () =>
+        repository.rotateSessionCredentials(publicId, presentedHash, 'tok-a', 'refresh-a'),
+    });
     expect(first).not.toBeNull();
 
     // Age the rotation beyond the grace window so the previous-hash branch can no longer match.
@@ -88,10 +93,11 @@ describe('AuthSessionRepository refresh concurrency grace (database — audit-#2
       .set({ refresh_token_rotated_at: new Date(Date.now() - 60_000) })
       .where(eq(sessions.public_id, publicId));
 
-    const replay = await withAppDatabaseContext(
-      SESSION_SCOPE.ARTIFACT({ sessionPublicId: publicId }),
-      () => repository.rotateSessionCredentials(publicId, presentedHash, 'tok-x', 'refresh-x'),
-    );
+    const replay = await withAppDatabaseContext({
+      scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: publicId }),
+      callback: () =>
+        repository.rotateSessionCredentials(publicId, presentedHash, 'tok-x', 'refresh-x'),
+    });
     // Neither current (refresh-a) nor previous-within-grace matches → null → the service revokes.
     expect(replay).toBeNull();
   });

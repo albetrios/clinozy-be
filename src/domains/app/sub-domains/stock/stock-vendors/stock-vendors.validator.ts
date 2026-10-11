@@ -15,17 +15,17 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a stock vendor create body; throws `ValidationError` naming each bad field. */
 export function validateCreateStockVendor(data: unknown): CreateStockVendorInput {
-  return parseWithSchema(CreateStockVendorDto, data);
+  return parseWithSchema({ schema: CreateStockVendorDto, data });
 }
 
 /** Parses a stock vendor change body; throws `ValidationError` naming each bad field. */
 export function validateUpdateStockVendor(data: unknown): UpdateStockVendorInput {
-  return parseWithSchema(UpdateStockVendorDto, data);
+  return parseWithSchema({ schema: UpdateStockVendorDto, data });
 }
 
 /** Parses the vendor picker's query into a list input (routes-final 9.E.8 #23). */
 export function validateListStockVendorsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listStockVendorsQueryDto, data);
+  const query = parseWithSchema({ schema: listStockVendorsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

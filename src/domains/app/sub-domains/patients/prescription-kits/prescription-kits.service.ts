@@ -1,7 +1,7 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import { assertLineMedicinesLive } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.rules.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import type { PrescriptionKitsRepository } from './prescription-kits.repository.js';
 import { serializePrescriptionKit } from './prescription-kits.serializer.js';
 import type { PrescriptionKitOutput } from './prescription-kits.types.js';
@@ -34,7 +34,7 @@ export class PrescriptionKitsService extends BaseRecordService<PrescriptionKitOu
       parseUpdate: validateUpdatePrescriptionKit,
       parseList: validateListPrescriptionKitsQuery,
       serialize: serializePrescriptionKit,
-      references: [{ field: 'owner_membership_id', table: memberships, label: 'team member' }],
+      references: [memberReference('owner_membership_id')],
       ownerMembershipColumn: 'owner_membership_id',
       conflicts: {
         idx_prescription_kits_owner_name_unique: 'errors:recordAlreadyExists',

@@ -58,11 +58,15 @@ function channelOf(type: string): string | null {
  * `<interest>` with the label of the open lead's first interest (empty without one) — 400 on
  * `body` when the filled text runs over 1000.
  */
-function fillPlaceholders(
-  body: string,
-  contact: BaseRecordRow | null,
-  interest: string | null,
-): string {
+function fillPlaceholders({
+  body,
+  contact,
+  interest,
+}: {
+  body: string;
+  contact: BaseRecordRow | null;
+  interest: string | null;
+}): string {
   const interestLabel =
     interest === null
       ? ''
@@ -96,10 +100,13 @@ async function scheduleTaskRules(context: BaseRecordWriteContext): Promise<void>
 }
 
 /** What the composer shows (D77, WC-2): delivery on, Meta up, each channel's account and queue. */
-async function readMessagingStatus(
-  repository: ContactActivitiesRepository,
-  organizationId: number,
-): Promise<ContactMessagingStatusOutput> {
+async function readMessagingStatus({
+  repository,
+  organizationId,
+}: {
+  repository: ContactActivitiesRepository;
+  organizationId: number;
+}): Promise<ContactMessagingStatusOutput> {
   const accounts = await repository.findMessagingAccounts(organizationId);
   const queued = await repository.countQueuedByType(organizationId);
   return {
@@ -117,10 +124,13 @@ async function readMessagingStatus(
 }
 
 /** M9's batch check: every contact named is a live one of the organization — 400 naming the rest. */
-function assertBatchContacts(
-  publicIds: readonly string[],
-  found: ReadonlyMap<string, number>,
-): void {
+function assertBatchContacts({
+  publicIds,
+  found,
+}: {
+  publicIds: readonly string[];
+  found: ReadonlyMap<string, number>;
+}): void {
   const missing = publicIds.filter((publicId) => !found.has(publicId));
   if (missing.length > 0) {
     throw fieldValidationError({
@@ -132,11 +142,15 @@ function assertBatchContacts(
 }
 
 /** WC-16 (D79): whoever wrote the entry worked the person — involved in their open lead. */
-async function involveAuthor(
-  leads: LeadsRepository,
-  row: BaseRecordRow,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function involveAuthor({
+  leads,
+  row,
+  context,
+}: {
+  leads: LeadsRepository;
+  row: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   if (typeof row.author_membership_id !== 'number') return;
   await leads.involveInOpenLead({
     organizationId: context.organizationId,
@@ -173,10 +187,13 @@ export function createContactActivitiesRules(
   const leadsRepository = new LeadsRepository();
 
   /** Checks an entry's references and fills what the server owns, before the insert. */
-  const prepareEntry = async (
-    values: Record<string, unknown>,
-    context: BaseRecordWriteContext,
-  ): Promise<void> => {
+  const prepareEntry = async ({
+    values,
+    context,
+  }: {
+    values: Record<string, unknown>;
+    context: BaseRecordWriteContext;
+  }): Promise<void> => {
     const type = String(values.type);
     const isServerOrReceived =
       type === CONTACT_ACTIVITY_TYPE.SYSTEM ||
@@ -212,11 +229,11 @@ export function createContactActivitiesRules(
     }
     if ((CONTACT_ACTIVITY_MESSAGE_TYPE_VALUES as readonly string[]).includes(type)) {
       const contactId = values.contact_id as number;
-      values.body = fillPlaceholders(
-        String(values.body),
-        await contactsRepository.findById(contactId),
-        await leadsRepository.findOpenLeadInterest(contactId),
-      );
+      values.body = fillPlaceholders({
+        body: String(values.body),
+        contact: await contactsRepository.findById(contactId),
+        interest: await leadsRepository.findOpenLeadInterest(contactId),
+      });
     }
   };
 
@@ -249,11 +266,11 @@ export function createContactActivitiesRules(
         scope.is_private_photo = [false];
       return scope;
     },
-    prepareCreate: prepareEntry,
+    prepareCreate: (values, context) => prepareEntry({ values, context }),
     afterWrite: async (row, change, context) => {
       if (change.kind === 'create') {
         await touchContact(row);
-        await involveAuthor(leadsRepository, row, context);
+        await involveAuthor({ leads: leadsRepository, row, context });
       }
       // A queued message — written, or a failed one resent — goes to the messaging worker (D77).
       if (row.delivery_status === CONTACT_ACTIVITY_DELIVERY_STATUS.QUEUED) {
@@ -264,7 +281,8 @@ export function createContactActivitiesRules(
       if (movesTasks && typeof row.direction === 'string') await scheduleTaskRules(context);
     },
     collectionViews: {
-      'messaging-status': ({ context }) => readMessagingStatus(repository, context.organizationId),
+      'messaging-status': ({ context }) =>
+        readMessagingStatus({ repository, organizationId: context.organizationId }),
     },
     collectionActions: {
       'message-batches': async ({ input, context, present, resolveReferences }) => {
@@ -274,7 +292,7 @@ export function createContactActivitiesRules(
           organizationId: context.organizationId,
           publicIds: batch.contact_ids,
         });
-        assertBatchContacts(batch.contact_ids, contactIds);
+        assertBatchContacts({ publicIds: batch.contact_ids, found: contactIds });
         const shared: Record<string, unknown> = {
           contact_message_template_id: batch.contact_message_template_id,
         };
@@ -289,7 +307,7 @@ export function createContactActivitiesRules(
             body: batch.body,
             contact_message_template_id: shared.contact_message_template_id ?? null,
           };
-          await prepareEntry(values, context);
+          await prepareEntry({ values, context });
           const entry = await repository.insert({
             ...values,
             organization_id: context.organizationId,

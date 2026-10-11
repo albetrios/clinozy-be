@@ -23,27 +23,27 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses an invoice create body; throws `ValidationError` naming each bad field. */
 export function validateCreateInvoice(data: unknown): CreateInvoiceInput {
-  return parseWithSchema(CreateInvoiceDto, data);
+  return parseWithSchema({ schema: CreateInvoiceDto, data });
 }
 
 /** Parses an invoice change body; throws `ValidationError` naming each bad field. */
 export function validateUpdateInvoice(data: unknown): UpdateInvoiceInput {
-  return parseWithSchema(UpdateInvoiceDto, data);
+  return parseWithSchema({ schema: UpdateInvoiceDto, data });
 }
 
 /** Parses an invoice preview body (a bill without "Paid now"); throws `ValidationError` naming each bad field. */
 export function validatePreviewInvoice(data: unknown): PreviewInvoiceInput {
-  return parseWithSchema(PreviewInvoiceDto, data);
+  return parseWithSchema({ schema: PreviewInvoiceDto, data });
 }
 
 /** Parses a change preview body (any change field, none required); throws `ValidationError` naming each bad field. */
 export function validatePreviewInvoiceChange(data: unknown): PreviewInvoiceChangeInput {
-  return parseWithSchema(PreviewInvoiceChangeDto, data ?? {});
+  return parseWithSchema({ schema: PreviewInvoiceChangeDto, data: data ?? {} });
 }
 
 /** Parses the invoice list query into a list input (routes-final 8.A.8 #1, #2). */
 export function validateListInvoicesQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listInvoicesQueryDto, data);
+  const query = parseWithSchema({ schema: listInvoicesQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

@@ -10,7 +10,7 @@ import {
 
 /** The fields a create and a change share (routes-final 9.E.8). */
 const stockVendorFields = {
-  name: trimmedStringMinMax(1, 120),
+  name: trimmedStringMinMax({ min: 1, max: 120 }),
   phone: phoneNumberSchema.nullable(),
 };
 

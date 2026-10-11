@@ -84,7 +84,10 @@ describe('authorization.util', () => {
       mockedResolvePermissions.mockResolvedValue(['membership:read', 'membership:manage']);
       const handler = requireOrganizationPermission('membership:manage');
       await expect(handler(mockRequest(), mockReply)).resolves.toBeUndefined();
-      expect(mockedResolvePermissions).toHaveBeenCalledWith('user-1', 'org-public');
+      expect(mockedResolvePermissions).toHaveBeenCalledWith({
+        userPublicId: 'user-1',
+        organizationPublicId: 'org-public',
+      });
     });
 
     it('throws ForbiddenError when permission is missing', async () => {
@@ -158,7 +161,10 @@ describe('authorization.util', () => {
       await expect(
         handler(mockRequest({ params: pathParameters }), mockReply),
       ).resolves.toBeUndefined();
-      expect(mockedResolvePermissions).toHaveBeenCalledWith('user-1', 'org-public');
+      expect(mockedResolvePermissions).toHaveBeenCalledWith({
+        userPublicId: 'user-1',
+        organizationPublicId: 'org-public',
+      });
     });
 
     it('resolves the organization from the token claim', async () => {
@@ -178,7 +184,10 @@ describe('authorization.util', () => {
           mockReply,
         ),
       ).resolves.toBeUndefined();
-      expect(mockedResolvePermissions).toHaveBeenCalledWith('user-1', 'org-from-claim');
+      expect(mockedResolvePermissions).toHaveBeenCalledWith({
+        userPublicId: 'user-1',
+        organizationPublicId: 'org-from-claim',
+      });
     });
 
     it('throws UnauthorizedError when not authenticated', async () => {

@@ -74,9 +74,9 @@ async function listStripeActiveSubscriptions(): Promise<StripeSubscriptionRecord
 }
 
 async function listLocalStripeSubscriptions(): Promise<LocalSubscriptionRecord[]> {
-  return withMaintenanceDatabaseContext(
-    MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-    async (databaseHandle) => {
+  return withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+    callback: async (databaseHandle) => {
       const rows = await databaseHandle
         .select({
           publicId: subscriptions.public_id,
@@ -99,7 +99,7 @@ async function listLocalStripeSubscriptions(): Promise<LocalSubscriptionRecord[]
           normalizedStatus: row.status.toLowerCase(),
         }));
     },
-  );
+  });
 }
 
 function buildReconciliationReport({

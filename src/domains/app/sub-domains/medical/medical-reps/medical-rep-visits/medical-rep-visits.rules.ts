@@ -9,10 +9,13 @@ import { addDaysToCalendarDate } from '@/shared/utils/validation/record-fields.u
 const repsRepository = new MedicalRepsRepository();
 
 /** MD18: the visit on or before today; the next one after it and at most 120 days on. */
-async function assertVisitDates(
-  values: Record<string, unknown>,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function assertVisitDates({
+  values,
+  context,
+}: {
+  values: Record<string, unknown>;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const today = await organizationToday(context);
   values.visit_date ??= today;
   const visitDate = String(values.visit_date);
@@ -47,7 +50,7 @@ async function assertVisitDates(
  */
 export const medicalRepVisitsRules: BaseRecordRules = {
   prepareCreate: async (values, context) => {
-    await assertVisitDates(values, context);
+    await assertVisitDates({ values, context });
     values.logged_by_membership_id = await findMembershipIdOfUser({
       organizationId: context.organizationId,
       userId: context.userId,

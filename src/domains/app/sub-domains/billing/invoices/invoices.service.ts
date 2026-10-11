@@ -66,44 +66,72 @@ export class InvoicesService extends BaseRecordService<InvoiceOutput> {
    * D81, Q2: what a bill would come to — its lines and totals as `POST /app/invoices` would write
    * them, nothing written (the rules' `preview` collection view).
    */
-  async preview(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    options: { actingUserPublicId?: string | undefined; visibility?: BaseRecordVisibility },
-  ): Promise<InvoicePreviewOutput> {
-    return (await this.collection(scope, 'view', 'preview', body, options)) as InvoicePreviewOutput;
+  async preview({
+    scope,
+    body,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    options: { actingUserPublicId?: string | undefined; visibility?: BaseRecordVisibility };
+  }): Promise<InvoicePreviewOutput> {
+    return (await this.collection({
+      scope,
+      kind: 'view',
+      name: 'preview',
+      input: body,
+      options,
+    })) as InvoicePreviewOutput;
   }
 
   /**
    * D81: what a change would come to — the lines and totals `PATCH /app/invoices/{invoice_id}`
    * would write, nothing written (the rules' `preview` view of the invoice).
    */
-  async previewChange(
-    scope: OrganizationPrincipalDatabaseScope,
-    publicId: string,
-    body: unknown,
-    options: { actingUserPublicId?: string | undefined; visibility?: BaseRecordVisibility },
-  ): Promise<InvoicePreviewOutput> {
-    return (await this.view(scope, publicId, 'preview', body, options)) as InvoicePreviewOutput;
+  async previewChange({
+    scope,
+    publicId,
+    body,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    publicId: string;
+    body: unknown;
+    options: { actingUserPublicId?: string | undefined; visibility?: BaseRecordVisibility };
+  }): Promise<InvoicePreviewOutput> {
+    return (await this.view({
+      scope,
+      publicId,
+      name: 'preview',
+      query: body,
+      options,
+    })) as InvoicePreviewOutput;
   }
 
   /** Bills — and answers with the invoice as "Paid now" left it (its paid amount and status, B13). */
-  override async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    parentPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    createName?: string,
-  ): Promise<InvoiceOutput> {
-    const created = await super.create(
+  override async create({
+    scope,
+    body,
+    actingUserPublicId,
+    parentPublicId,
+    visibility,
+    createName,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    parentPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    createName?: string | undefined;
+  }): Promise<InvoiceOutput> {
+    const created = await super.create({
       scope,
       body,
       actingUserPublicId,
       parentPublicId,
       visibility,
       createName,
-    );
-    return this.get(scope, created.id, actingUserPublicId, visibility);
+    });
+    return this.get({ scope, publicId: created.id, actingUserPublicId, visibility });
   }
 }

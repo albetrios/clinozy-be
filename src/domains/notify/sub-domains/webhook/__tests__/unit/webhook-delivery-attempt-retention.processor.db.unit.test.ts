@@ -62,10 +62,10 @@ describe('runWebhookDeliveryAttemptRetentionJob (database, audit-#3)', () => {
       .set({ created_at: fortyDaysAgo })
       .where(eq(webhook_delivery_attempts.id, old.id));
 
-    const result = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      (databaseHandle) => runWebhookDeliveryAttemptRetentionJob(databaseHandle),
-    );
+    const result = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: (databaseHandle) => runWebhookDeliveryAttemptRetentionJob(databaseHandle),
+    });
 
     expect(result.deletedCount).toBe(1);
 

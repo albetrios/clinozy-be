@@ -44,11 +44,19 @@ describe('route-http-coverage-validation.util', () => {
   });
 
   it('matches allowlist patterns with path parameters', () => {
-    expect(isAllowlisted('POST', '/api/v1/mcp', [{ method: 'POST', path: '/api/v1/mcp' }])).toBe(
+    expect(
+      isAllowlisted({
+        method: 'POST',
+        path: '/api/v1/mcp',
+        allowlist: [{ method: 'POST', path: '/api/v1/mcp' }],
+      }),
+    ).toBe(true);
+    expect(pathMatchesPattern({ actualPath: '/api/v1/foo/bar', pattern: '/api/v1/:id/bar' })).toBe(
       true,
     );
-    expect(pathMatchesPattern('/api/v1/foo/bar', '/api/v1/:id/bar')).toBe(true);
-    expect(pathMatchesPattern('/api/v1/foo/other', '/api/v1/:id/bar')).toBe(false);
+    expect(
+      pathMatchesPattern({ actualPath: '/api/v1/foo/other', pattern: '/api/v1/:id/bar' }),
+    ).toBe(false);
   });
 
   it('detects missing 403 coverage for domains with permission routes', () => {
@@ -56,12 +64,12 @@ describe('route-http-coverage-validation.util', () => {
       sampleRoute({ domain: 'coverage-test-no-forbidden', access: 'organization-permission' }),
       sampleRoute({ domain: 'billing', access: 'authenticated' }),
     ];
-    const result = evaluateRouteHttpCoverage(
+    const result = evaluateRouteHttpCoverage({
       registry,
-      'loadRoutesForDomain("billing")\n',
-      [],
-      DOMAINS_DIR,
-    );
+      combinedHttpSources: 'loadRoutesForDomain("billing")\n',
+      allowlist: [],
+      domainsDir: DOMAINS_DIR,
+    });
     expect(
       result.missingForbiddenByDomain.some((line) => line.startsWith('coverage-test-no-forbidden')),
     ).toBe(true);
@@ -77,7 +85,12 @@ describe('route-http-coverage-validation.util', () => {
         access: 'authenticated',
       }),
     ];
-    const result = evaluateRouteHttpCoverage(registry, '', [], DOMAINS_DIR);
+    const result = evaluateRouteHttpCoverage({
+      registry,
+      combinedHttpSources: '',
+      allowlist: [],
+      domainsDir: DOMAINS_DIR,
+    });
     expect(
       result.missingValidationByDomain.some((line) =>
         line.startsWith('coverage-test-no-validation'),
@@ -90,7 +103,12 @@ describe('route-http-coverage-validation.util', () => {
       requiresValidationStatusCoverage(sampleRoute({ method: 'POST', domain: 'health' })),
     ).toBe(true);
     const registry = [sampleRoute({ method: 'POST', domain: 'mcp', access: 'authenticated' })];
-    const result = evaluateRouteHttpCoverage(registry, '', [], DOMAINS_DIR);
+    const result = evaluateRouteHttpCoverage({
+      registry,
+      combinedHttpSources: '',
+      allowlist: [],
+      domainsDir: DOMAINS_DIR,
+    });
     expect(result.missingValidationByDomain).toHaveLength(0);
   });
 
@@ -103,14 +121,19 @@ describe('route-http-coverage-validation.util', () => {
     ];
     const combined =
       "inject({ method: 'GET', url: '/api/v1/tenancy/organization/memberships/:membership_id' })";
-    const result = evaluateRouteHttpCoverage(registry, combined, [], DOMAINS_DIR);
+    const result = evaluateRouteHttpCoverage({
+      registry,
+      combinedHttpSources: combined,
+      allowlist: [],
+      domainsDir: DOMAINS_DIR,
+    });
     expect(result.missingRouteLiterals[0]).toContain('missing');
     expect(
-      mutatingMethodReferencedForPath(
+      mutatingMethodReferencedForPath({
         combined,
-        'PATCH',
-        '/api/v1/tenancy/organization/memberships/:membership_id/missing',
-      ),
+        method: 'PATCH',
+        pathLiteral: '/api/v1/tenancy/organization/memberships/:membership_id/missing',
+      }),
     ).toBe(false);
   });
 
@@ -126,7 +149,9 @@ describe('route-http-coverage-validation.util', () => {
     expect(domainHasForbiddenStatusCoverage('tenancy')).toBe(true);
     expect(domainHasForbiddenStatusCoverage('users')).toBe(true);
     expect(domainHasValidationStatusCoverage('billing')).toBe(true);
-    expect(routeLiteralFoundInTests("url: '/api/v1/foo'", '/api/v1/foo')).toBe(true);
+    expect(
+      routeLiteralFoundInTests({ combined: "url: '/api/v1/foo'", pathLiteral: '/api/v1/foo' }),
+    ).toBe(true);
   });
 
   it('detects sub-domains with routes but no integration folder', () => {

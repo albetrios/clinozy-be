@@ -18,6 +18,21 @@ vi.mock('@/shared/utils/validation/bullmq-job-validation.util.js', () => ({
   parseBullMQJobData: parseBullMQJobDataSpy,
 }));
 
+// The duplicate/race fixtures have no stored watermark; database reconciliation is
+// covered by the service units and real repository/database tests.
+vi.mock(
+  '@/domains/billing/sub-domains/subscription/subscription.repository.js',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('@/domains/billing/sub-domains/subscription/subscription.repository.js')
+    >()),
+    createWorkerSubscriptionRepository: vi.fn((databaseHandle) => ({
+      databaseHandle,
+      findStripeProviderOrderingState: vi.fn().mockResolvedValue(null),
+    })),
+  }),
+);
+
 const retrieveStripeEventMock = vi.fn();
 
 vi.mock('@/infrastructure/payment/stripe.client.js', () => ({
@@ -26,18 +41,23 @@ vi.mock('@/infrastructure/payment/stripe.client.js', () => ({
 
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  withMaintenanceDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-    callback(),
+  withMaintenanceDatabaseContext: vi.fn(
+    async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+      callback(),
   ),
 }));
 
 vi.mock('@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-organization.util.js', () => ({
   runStripeWebhookHandlerWithOrganizationContext: vi.fn(
-    async (
-      _event: Stripe.Event,
-      _repository: unknown,
-      handler: (databaseHandle: unknown) => Promise<void>,
-    ) => handler({} as never),
+    async ({
+      event: _event,
+      repository: _repository,
+      handler,
+    }: {
+      event: Stripe.Event;
+      repository: unknown;
+      handler: (databaseHandle: unknown) => Promise<void>;
+    }) => handler({} as never),
   ),
 }));
 
@@ -69,6 +89,9 @@ describe('stripe-webhook.processor duplicate job delivery', () => {
   const subscriptionService = {
     syncFromStripeProviderSubscription: vi.fn(),
     markCanceledByStripeProviderSubscriptionId: vi.fn(),
+    emitSubscriptionEvent: vi.fn().mockResolvedValue(undefined),
+    findStripeSubscriptionPublicState: vi.fn().mockResolvedValue(null),
+    enforceFreeSeatCeilingAfterCommitIfEntitlementLost: vi.fn().mockResolvedValue(undefined),
   } as unknown as SubscriptionService;
 
   const stripeWebhookEventRepository = {
@@ -106,10 +129,10 @@ describe('stripe-webhook.processor duplicate job delivery', () => {
   it('does not re-invoke parseBullMQJobData (validation belongs at worker boundary)', async () => {
     vi.mocked(stripeWebhookEventRepository.tryClaimEvent).mockResolvedValueOnce('claimed');
 
-    await processStripeWebhookJob(jobData, stripeWebhookService, 'job-noreparse');
+    await processStripeWebhookJob({ jobData, stripeWebhookService, jobId: 'job-noreparse' });
 
     expect(parseBullMQJobDataSpy).not.toHaveBeenCalled();
-    expect(retrieveStripeEventMock).toHaveBeenCalledWith(jobData.stripeEventId);
+    expect(retrieveStripeEventMock).toHaveBeenCalledWith({ stripeEventId: jobData.stripeEventId });
   });
 
   it('parallel duplicate BullMQ jobs apply subscription side effects only once', async () => {
@@ -118,8 +141,8 @@ describe('stripe-webhook.processor duplicate job delivery', () => {
       .mockResolvedValueOnce('processed_duplicate');
 
     await Promise.all([
-      processStripeWebhookJob(jobData, stripeWebhookService, 'job-duplicate-a'),
-      processStripeWebhookJob(jobData, stripeWebhookService, 'job-duplicate-b'),
+      processStripeWebhookJob({ jobData, stripeWebhookService, jobId: 'job-duplicate-a' }),
+      processStripeWebhookJob({ jobData, stripeWebhookService, jobId: 'job-duplicate-b' }),
     ]);
 
     expect(retrieveStripeEventMock).toHaveBeenCalledTimes(2);
@@ -138,7 +161,7 @@ describe('stripe-webhook.processor duplicate job delivery', () => {
     vi.mocked(stripeWebhookEventRepository.markAbandoned).mockResolvedValueOnce(true);
 
     await expect(
-      processStripeWebhookJob(jobData, stripeWebhookService, 'job-missing'),
+      processStripeWebhookJob({ jobData, stripeWebhookService, jobId: 'job-missing' }),
     ).rejects.toBeInstanceOf(UnrecoverableError);
 
     expect(stripeWebhookEventRepository.markAbandoned).toHaveBeenCalledWith(
@@ -155,9 +178,9 @@ describe('stripe-webhook.processor duplicate job delivery', () => {
     });
     retrieveStripeEventMock.mockRejectedValueOnce(outage);
 
-    await expect(processStripeWebhookJob(jobData, stripeWebhookService, 'job-outage')).rejects.toBe(
-      outage,
-    );
+    await expect(
+      processStripeWebhookJob({ jobData, stripeWebhookService, jobId: 'job-outage' }),
+    ).rejects.toBe(outage);
     expect(stripeWebhookEventRepository.markAbandoned).not.toHaveBeenCalled();
   });
 
@@ -169,9 +192,11 @@ describe('stripe-webhook.processor duplicate job delivery', () => {
     vi.mocked(stripeWebhookEventRepository.markFailed).mockResolvedValueOnce({ attemptCount: 25 });
     vi.mocked(stripeWebhookEventRepository.markAbandoned).mockResolvedValueOnce(true);
 
-    const error = await processStripeWebhookJob(jobData, stripeWebhookService, 'job-last').catch(
-      (caught: unknown) => caught,
-    );
+    const error = await processStripeWebhookJob({
+      jobData,
+      stripeWebhookService,
+      jobId: 'job-last',
+    }).catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(UnrecoverableError);
     expect((error as Error).message).toContain('handler keeps failing');

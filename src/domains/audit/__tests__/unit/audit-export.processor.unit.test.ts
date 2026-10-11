@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { brandWorkerContextDatabaseHandle } from '@/infrastructure/database/utils/database-handle.types.js';
@@ -346,7 +347,9 @@ describe('audit-export.processor', () => {
       expect(lines).toHaveLength(object.row_count);
       expect((JSON.parse(lines[0]!) as { id: string }).id).toMatch(/^aud_[a-z0-9]{21}$/);
       // The object metadata a consumer reads from S3 HEAD must agree with the manifest.
-      expect(part.metadata?.sha256).toBe(object.sha256);
+      const expectedSha256 = createHash('sha256').update(part.body).digest('hex');
+      expect(object.sha256).toBe(expectedSha256);
+      expect(part.metadata?.sha256).toBe(expectedSha256);
       expect(part.metadata?.row_count).toBe(String(object.row_count));
       expect(part.metadata?.schema_version).toBe(AUDIT_EXPORT_SCHEMA_VERSION);
     }

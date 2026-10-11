@@ -64,7 +64,7 @@ describe('per-organization row caps (sec-r5-followup-ratelimit-dos-1/2/3)', () =
 
     it('acquires the MEMBERSHIP_SEAT advisory lock so the free-tier count+insert is serialized', () => {
       expect(source).toMatch(
-        /acquireResourceQuotaLock\(\s*RESOURCE_QUOTA_LOCK_NAMESPACE\.MEMBERSHIP_SEAT/,
+        /acquireResourceQuotaLock\(\{\s*namespace:\s*RESOURCE_QUOTA_LOCK_NAMESPACE\.MEMBERSHIP_SEAT/,
       );
     });
 

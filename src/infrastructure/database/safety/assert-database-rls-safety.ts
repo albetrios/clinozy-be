@@ -1,5 +1,5 @@
 import { sql as drizzleSql } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
+import { database } from '@/infrastructure/database/connection.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
@@ -44,11 +44,12 @@ type SessionRoleSafetyRow = {
  *   to a dedicated login role in production).
  */
 export async function assertDatabaseRoleRlsSafety(): Promise<void> {
-  const rows = await sql<SessionRoleSafetyRow[]>`
-    SELECT rolname, rolsuper, rolbypassrls, current_user AS acting_role
-    FROM pg_roles
-    WHERE rolname = session_user
-  `;
+  const result = await database.execute<SessionRoleSafetyRow>(
+    drizzleSql`SELECT rolname, rolsuper, rolbypassrls, current_user AS acting_role FROM pg_roles WHERE rolname = session_user`,
+  );
+  const rows = Array.isArray(result)
+    ? (result as SessionRoleSafetyRow[])
+    : ((result as { rows?: SessionRoleSafetyRow[] }).rows ?? []);
 
   const row = rows[0];
   if (!row) {

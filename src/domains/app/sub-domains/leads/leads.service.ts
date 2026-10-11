@@ -6,7 +6,7 @@ import type { BaseRecordVisibility } from '@/domains/app/base-record.types.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import type { ContactsService } from '@/domains/app/sub-domains/contacts/contacts.service.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import { LEAD_INVOLVED_MEMBERSHIPS_LINK, type LeadsRepository } from './leads.repository.js';
 import { createLeadsRules } from './leads.rules.js';
 import { serializeLead } from './leads.serializer.js';
@@ -49,7 +49,7 @@ export class LeadsService extends BaseRecordService<LeadOutput> {
       serialize: serializeLead,
       references: [
         { field: 'contact_id', table: contacts, label: 'contact' },
-        { field: 'owner_membership_id', table: memberships, label: 'team member' },
+        memberReference('owner_membership_id'),
         { field: 'branch_id', table: branches, label: 'branch' },
       ],
       referenceLists: [
@@ -74,34 +74,51 @@ export class LeadsService extends BaseRecordService<LeadOutput> {
    * Adds a lead — for `contact_id`, or with a new `contact` created first in the same transaction
    * (L1); the controller lets only `contact:create` holders send `contact`.
    */
-  override async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    parentPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    createName?: string,
-  ): Promise<LeadOutput> {
+  override async create({
+    scope,
+    body,
+    actingUserPublicId,
+    parentPublicId,
+    visibility,
+    createName,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    parentPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    createName?: string | undefined;
+  }): Promise<LeadOutput> {
     if (validateCreateLead(body).contact === undefined) {
-      return super.create(scope, body, actingUserPublicId, parentPublicId, visibility, createName);
-    }
-    const { contact, ...lead } = body as Record<string, unknown>;
-    return withAppDatabaseContext(scope, async () => {
-      const created = await this.contactsService.create(
+      return super.create({
         scope,
-        contact,
-        actingUserPublicId,
-        undefined,
-        visibility,
-      );
-      return super.create(
-        scope,
-        { ...lead, contact_id: created.id },
+        body,
         actingUserPublicId,
         parentPublicId,
         visibility,
         createName,
-      );
+      });
+    }
+    const { contact, ...lead } = body as Record<string, unknown>;
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const created = await this.contactsService.create({
+          scope,
+          body: contact,
+          actingUserPublicId,
+          parentPublicId: undefined,
+          visibility,
+        });
+        return super.create({
+          scope,
+          body: { ...lead, contact_id: created.id },
+          actingUserPublicId,
+          parentPublicId,
+          visibility,
+          createName,
+        });
+      },
     });
   }
 }

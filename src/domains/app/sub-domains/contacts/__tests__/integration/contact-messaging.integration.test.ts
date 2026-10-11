@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { metaCircuit } from '@/infrastructure/resilience/circuit-breaker.js';
 import { ProviderOutageError } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
@@ -284,7 +284,7 @@ describe('Messaging — integration (launch D77, ROUTE #139)', () => {
     );
     expect(throttled).toBeInstanceOf(ProviderOutageError);
     expect((throttled as ProviderOutageError).retryAfterMs).toBe(30_000);
-    const [held] = await getOperatorSql()`
+    const [held] = await operatorQuery`
       select delivery_status, delivery_claimed_at from app.contact_activities
       where public_id = ${undeliverable}`;
     expect([held?.delivery_status, held?.delivery_claimed_at]).toEqual(['queued', null]);
@@ -399,7 +399,7 @@ describe('Messaging — integration (launch D77, ROUTE #139)', () => {
       original?.id,
     ]);
 
-    const [stranger] = await getOperatorSql()`
+    const [stranger] = await operatorQuery`
       select contacts.first_name, contacts.primary_phone, leads.source, leads.status,
         (select body from app.contact_activities where contact_id = contacts.id) as body
       from app.contacts join app.leads on leads.contact_id = contacts.id
@@ -454,7 +454,7 @@ describe('Messaging — integration (launch D77, ROUTE #139)', () => {
       'received',
       'Do you do peels?',
     ]);
-    const [dropped] = await getOperatorSql()`
+    const [dropped] = await operatorQuery`
       select count(*)::int as count from app.contact_activities where provider_message_id = 'mid.IN2'`;
     expect(dropped?.count).toBe(0);
 
@@ -494,7 +494,7 @@ describe('Messaging — integration (launch D77, ROUTE #139)', () => {
     const organizationId = fixture.organization.id;
     flow.as('front_desk');
     await sendMessage(asha, 'whatsapp', 'Waiting for the sweep');
-    await getOperatorSql()`
+    await operatorQuery`
       insert into app.messaging_webhook_events (organization_id, channel, payload, payload_hash, status, received_at, processed_at, created_at, updated_at)
       values
         (${organizationId}, 'whatsapp', '{}'::jsonb, ${'a'.repeat(64)}, 'pending', now(), null, now(), now()),
@@ -517,7 +517,7 @@ describe('Messaging — integration (launch D77, ROUTE #139)', () => {
       purgeOldMessagingWebhookEvents(handle),
     );
     expect(purged.deletedCount).toBe(1);
-    const left = await getOperatorSql()`
+    const left = await operatorQuery`
       select payload_hash from app.messaging_webhook_events
       where payload_hash in (${'a'.repeat(64)}, ${'b'.repeat(64)}, ${'c'.repeat(64)}) order by payload_hash`;
     // The processed one past 30 days is gone; a pending one stays until it is applied.

@@ -58,11 +58,11 @@ export function patientIdeasDeduplication(organizationPublicId: string): Dedupli
  * - **Side effects:** at most one job on the queue per organization at a time.
  */
 export async function enqueuePatientIdeas(organizationPublicId: string): Promise<void> {
-  const jobData = parseBullMQJobData(
-    patientIdeasJobDataSchema,
-    { organizationPublicId, ...captureTraceContextForPropagation() },
-    PATIENT_IDEAS_QUEUE_NAME,
-  );
+  const jobData = parseBullMQJobData({
+    schema: patientIdeasJobDataSchema,
+    data: { organizationPublicId, ...captureTraceContextForPropagation() },
+    queueName: PATIENT_IDEAS_QUEUE_NAME,
+  });
   await getPatientIdeasQueue().add('refresh-patient-ideas', jobData, {
     jobId: `patient-ideas-${organizationPublicId}-${randomUUID()}`,
     deduplication: patientIdeasDeduplication(organizationPublicId),

@@ -29,7 +29,7 @@ const distinct = (values: readonly unknown[]) => new Set(values).size === values
 const medicalPurchaseOrderItemDto = z
   .object({
     medicine_id: recordIdSchema.optional(),
-    new_medicine_name: trimmedStringMinMax(1, 120).optional(),
+    new_medicine_name: trimmedStringMinMax({ min: 1, max: 120 }).optional(),
     quantity: z.number().int().min(1).max(MEDICINE_QUANTITY_MAX),
     free_quantity: z.number().int().min(0).max(MEDICINE_QUANTITY_MAX).optional(),
     rate: moneySchema.refine((rate) => rate > 0, { message: 'More than 0' }),
@@ -46,7 +46,7 @@ const itemsSchema = z
   .max(MEDICAL_PURCHASE_ORDER_ITEMS_MAX);
 
 /** The bill number the supplier wrote. */
-const supplierBillNumberSchema = trimmedStringMinMax(1, 30);
+const supplierBillNumberSchema = trimmedStringMinMax({ min: 1, max: 30 });
 
 /** Path params of the by-id order routes. */
 export const medicalPurchaseOrdersIdParamsDto = z
@@ -98,7 +98,7 @@ export const ReceiveMedicalPurchaseOrderDto = z
           .object({
             id: recordIdSchema,
             is_received: z.boolean().optional(),
-            batch_number: trimmedStringMinMax(1, 20).optional(),
+            batch_number: trimmedStringMinMax({ min: 1, max: 20 }).optional(),
             expiry_month: expiryMonthSchema.optional(),
           })
           .strict(),

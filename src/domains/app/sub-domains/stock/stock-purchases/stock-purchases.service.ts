@@ -48,22 +48,29 @@ export class StockPurchasesService extends BaseRecordService<StockPurchaseOutput
   }
 
   /** S11: records a purchase and answers with it as its "Paid" left it. */
-  override async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    parentPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    createName?: string,
-  ): Promise<StockPurchaseOutput> {
-    const created = await super.create(
+  override async create({
+    scope,
+    body,
+    actingUserPublicId,
+    parentPublicId,
+    visibility,
+    createName,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    parentPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    createName?: string | undefined;
+  }): Promise<StockPurchaseOutput> {
+    const created = await super.create({
       scope,
       body,
       actingUserPublicId,
       parentPublicId,
       visibility,
       createName,
-    );
-    return this.get(scope, created.id, actingUserPublicId, visibility);
+    });
+    return this.get({ scope, publicId: created.id, actingUserPublicId, visibility });
   }
 }

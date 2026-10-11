@@ -20,8 +20,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/infrastructure/queue/worker-runtime/worker-processor.util.js', () => ({
-  runOrganizationScopedWorkerJob: (_options: unknown, work: (handle: unknown) => unknown) =>
-    work({ kind: 'organization' }),
+  runOrganizationScopedWorkerJob: ({
+    processor,
+  }: {
+    processor: (handle: unknown, job: unknown) => unknown;
+  }) => processor({ kind: 'organization' }, {}),
 }));
 vi.mock('@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js', () => {
   class ProviderOutageError extends Error {
@@ -45,7 +48,8 @@ vi.mock('@/infrastructure/storage/s3-adapter.js', () => ({
   getDefaultS3ObjectStorageAdapter: () => ({}),
 }));
 vi.mock('@/shared/utils/infrastructure/media-url.util.js', () => ({
-  resolveStoredMediaReadUrl: async (_storage: unknown, key: string) => `https://signed.test/${key}`,
+  resolveStoredMediaReadUrl: async ({ storedValue: key }: { storedValue: string }) =>
+    `https://signed.test/${key}`,
 }));
 vi.mock(
   '@/domains/app/sub-domains/contacts/contact-activities/contact-message-delivery.repository.js',

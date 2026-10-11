@@ -44,29 +44,37 @@ export class UserNotificationPreferencesService {
 
   async get(scope: UserPrincipalDatabaseScope): Promise<NotificationPreferenceOutput[]> {
     const user_public_id = scope.userPublicId;
-    const rows = await withAppDatabaseContext(scope, async () =>
-      this.repository.listByUserId(await this.requireUserIdInContext(user_public_id)),
-    );
+    const rows = await withAppDatabaseContext({
+      scope,
+      callback: async () =>
+        this.repository.listByUserId(await this.requireUserIdInContext(user_public_id)),
+    });
     return serializeUserNotificationPreferenceList(rows);
   }
 
-  async put(
-    scope: UserPrincipalDatabaseScope,
-    body: unknown,
-  ): Promise<NotificationPreferenceOutput[]> {
+  async put({
+    scope,
+    body,
+  }: {
+    scope: UserPrincipalDatabaseScope;
+    body: unknown;
+  }): Promise<NotificationPreferenceOutput[]> {
     const user_public_id = scope.userPublicId;
     const parsed = validatePutUserNotificationPreferences(body);
-    const rows = await withAppDatabaseContext(scope, async () => {
-      const userId = await this.requireUserIdInContext(user_public_id);
-      return this.repository.replaceAll(
-        userId,
-        parsed.preferences.map((preference) => ({
-          notification_type: preference.notification_type,
-          channel: preference.channel,
-          is_enabled: preference.is_enabled,
-        })),
-        userId,
-      );
+    const rows = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const userId = await this.requireUserIdInContext(user_public_id);
+        return this.repository.replaceAll(
+          userId,
+          parsed.preferences.map((preference) => ({
+            notification_type: preference.notification_type,
+            channel: preference.channel,
+            is_enabled: preference.is_enabled,
+          })),
+          userId,
+        );
+      },
     });
     return serializeUserNotificationPreferenceList(rows);
   }

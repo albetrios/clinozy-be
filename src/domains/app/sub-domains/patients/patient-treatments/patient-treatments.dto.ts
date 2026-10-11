@@ -26,7 +26,7 @@ const PARAMETERS_MAX = 30;
 
 /** The fields a session is written with (7.H.8 #47, #49) — each optional; create and update narrow them. */
 const treatmentFields = {
-  name: trimmedStringMinMax(1, 120),
+  name: trimmedStringMinMax({ min: 1, max: 120 }),
   appointment_id: recordIdSchema.nullable(),
   offering_id: recordIdSchema.nullable(),
   template: z.enum(PATIENT_TREATMENT_TEMPLATE_VALUES),
@@ -39,11 +39,14 @@ const treatmentFields = {
     .refine(distinct, { message: 'Each body part once' }),
   session_number: z.number().int().min(1).max(PATIENT_TREATMENT_SESSION_MAX),
   parameters: z
-    .record(trimmedStringMinMax(1, 40), z.string().max(PATIENT_TREATMENT_PARAMETER_VALUE_MAX))
+    .record(
+      trimmedStringMinMax({ min: 1, max: 40 }),
+      z.string().max(PATIENT_TREATMENT_PARAMETER_VALUE_MAX),
+    )
     .refine((value) => Object.keys(value).length <= PARAMETERS_MAX, {
       message: `Up to ${PARAMETERS_MAX} parameters`,
     }),
-  remark: trimmedStringMinMax(1, PATIENT_TREATMENT_REMARK_MAX).nullable(),
+  remark: trimmedStringMinMax({ min: 1, max: PATIENT_TREATMENT_REMARK_MAX }).nullable(),
   aftercare_call: z.enum(PATIENT_TREATMENT_AFTERCARE_CALL_VALUES),
 };
 
@@ -119,7 +122,7 @@ export const UpdatePatientTreatmentDto = z
 /** Body of `POST …/treatments/{patient_treatment_id}/reverse` (7.H.8 #50): `reason*` (1–280). */
 export const ReversePatientTreatmentDto = z
   .object({
-    reason: trimmedStringMinMax(1, 280),
+    reason: trimmedStringMinMax({ min: 1, max: 280 }),
   })
   .strict();
 

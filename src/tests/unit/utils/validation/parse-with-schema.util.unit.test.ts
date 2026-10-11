@@ -11,12 +11,12 @@ const schema = z.object({ name: z.string() });
 describe('parse-with-schema.util', () => {
   describe('parseWithSchema', () => {
     it('returns the typed value when data matches the schema', () => {
-      expect(parseWithSchema(schema, { name: 'acme' })).toEqual({ name: 'acme' });
+      expect(parseWithSchema({ schema, data: { name: 'acme' } })).toEqual({ name: 'acme' });
     });
 
     it('throws a 400 ValidationError with the default key and flattened field errors', () => {
       try {
-        parseWithSchema(schema, {});
+        parseWithSchema({ schema, data: {} });
         expect.fail('expected ValidationError');
       } catch (error) {
         expect(error).toBeInstanceOf(ValidationError);
@@ -30,7 +30,11 @@ describe('parse-with-schema.util', () => {
 
     it('uses the provided error key when validation fails', () => {
       try {
-        parseWithSchema(schema, { name: 123 }, 'errors:validation.invalidPagination');
+        parseWithSchema({
+          schema,
+          data: { name: 123 },
+          errorKey: 'errors:validation.invalidPagination',
+        });
         expect.fail('expected ValidationError');
       } catch (error) {
         expect((error as ValidationError).messageKey).toBe('errors:validation.invalidPagination');

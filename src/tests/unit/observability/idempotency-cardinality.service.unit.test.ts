@@ -105,14 +105,17 @@ describe('sampleIdempotencyCardinality', () => {
     mockScan.mockResolvedValueOnce(['0', ['a', 'b', 'c', 'd', 'e']]);
     const result = await sampleIdempotencyCardinality();
     expect(result.observedCount).toBe(5);
-    expect(mockCaptureMessage).toHaveBeenCalledWith('idempotency.cache.cardinality.high', {
-      level: 'warning',
-      extra: expect.objectContaining({
-        observedCount: 5,
-        warnThreshold: 5,
-        criticalThreshold: 20,
-        scanTruncated: false,
-      }),
+    expect(mockCaptureMessage).toHaveBeenCalledWith({
+      message: 'idempotency.cache.cardinality.high',
+      options: {
+        level: 'warning',
+        extra: expect.objectContaining({
+          observedCount: 5,
+          warnThreshold: 5,
+          criticalThreshold: 20,
+          scanTruncated: false,
+        }),
+      },
     });
   });
 
@@ -123,13 +126,16 @@ describe('sampleIdempotencyCardinality', () => {
 
     await sampleIdempotencyCardinality();
 
-    expect(mockCaptureMessage).toHaveBeenCalledWith('idempotency.cache.cardinality.critical', {
-      level: 'error',
-      extra: expect.objectContaining({ observedCount: 5 }),
+    expect(mockCaptureMessage).toHaveBeenCalledWith({
+      message: 'idempotency.cache.cardinality.critical',
+      options: {
+        level: 'error',
+        extra: expect.objectContaining({ observedCount: 5 }),
+      },
     });
-    expect(mockCaptureMessage).not.toHaveBeenCalledWith(
-      'idempotency.cache.cardinality.high',
-      expect.anything(),
-    );
+    expect(mockCaptureMessage).not.toHaveBeenCalledWith({
+      message: 'idempotency.cache.cardinality.high',
+      options: expect.anything(),
+    });
   });
 });

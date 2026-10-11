@@ -30,11 +30,15 @@ import { StripeWebhookEventAbandonedError } from '@/domains/billing/sub-domains/
  * - **Notes:** Re-fetching keeps Redis payloads small and ensures every retry
  *   sees the current Stripe representation of the event.
  */
-export async function processStripeWebhookJob(
-  jobData: StripeWebhookJobData,
-  stripeWebhookService: StripeWebhookService,
-  jobId?: string,
-): Promise<void> {
+export async function processStripeWebhookJob({
+  jobData,
+  stripeWebhookService,
+  jobId,
+}: {
+  jobData: StripeWebhookJobData;
+  stripeWebhookService: StripeWebhookService;
+  jobId?: string | undefined;
+}): Promise<void> {
   // sec-r4-Q1: jobData is already validated by parseJobDataOrDeadLetter at the
   // worker boundary (stripe-webhook.worker.ts). Re-parsing here was redundant
   // and would bypass the dead-letter path for invalid payloads.
@@ -42,7 +46,7 @@ export async function processStripeWebhookJob(
 
   let eventPayload: Stripe.Event;
   try {
-    eventPayload = await retrieveStripeEvent(stripeEventId);
+    eventPayload = await retrieveStripeEvent({ stripeEventId });
   } catch (error) {
     if (!isStripeResourceMissing(error)) throw error;
     await stripeWebhookService.abandonEvent({
@@ -58,7 +62,10 @@ export async function processStripeWebhookJob(
   );
 
   try {
-    await stripeWebhookService.handleEvent(eventPayload, omitUndefined({ requestId }));
+    await stripeWebhookService.handleEvent({
+      event: eventPayload,
+      context: omitUndefined({ requestId }),
+    });
   } catch (error) {
     if (error instanceof StripeWebhookEventAbandonedError) {
       throw new UnrecoverableError(error.message);

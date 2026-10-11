@@ -216,16 +216,21 @@ describe('opaque keyset cursor (property)', () => {
           noInvalidDate: true,
         }),
         fc.integer({ min: 1, max: 2_000_000 }),
-        (createdAt, id) => {
+        fc.integer({ min: 0, max: 999 }),
+        (createdAt, id, microseconds) => {
+          // PostgreSQL keeps microseconds; the cursor must carry them exactly.
+          const createdAtText = createdAt
+            .toISOString()
+            .replace('Z', `${String(microseconds).padStart(3, '0')}Z`);
           const cursor = createOpaqueCursorFromRow({
-            created_at: createdAt,
+            cursor_created_at: createdAtText,
             id,
             public_id: generatePublicId('membership'),
           });
           const parsed = parseListCursor(cursor);
           expect(parsed).not.toBeNull();
           expect(parsed?.kind).toBe('opaque');
-          expect(parsed?.created_at.toISOString()).toBe(createdAt.toISOString());
+          expect(parsed?.created_at).toBe(createdAtText);
           expect(parsed?.id).toBe(id);
         },
       ),
@@ -256,7 +261,7 @@ describe('opaque keyset cursor (property)', () => {
     );
   });
 
-  it('rejects a cursor whose payload was tampered with after decoding', () => {
+  it('rejects an encrypted cursor whose payload contains an invalid id', () => {
     fc.assert(
       fc.property(
         fc.date({
@@ -271,15 +276,31 @@ describe('opaque keyset cursor (property)', () => {
           // page", never as a partially-trusted cursor.
           const tampered = encodeListCursor({
             created_at: createdAt.toISOString(),
+            id: 0,
           } as never);
-          const decoded = decodeListCursor(tampered);
-          // Either it validates cleanly or it is rejected outright — never a half-populated object.
-          if (decoded !== null) {
-            expect(decoded.created_at).toBe(createdAt.toISOString());
-          }
-          expect(() => parseListCursor(tampered)).not.toThrow();
+          expect(decodeListCursor(tampered)).toBeNull();
+          expect(parseListCursor(tampered)).toBeNull();
         },
       ),
+      propertyOptions,
+    );
+  });
+
+  it('rejects an authenticated cursor after a ciphertext byte is modified', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 1_000_000 }), (id) => {
+        const cursor = createOpaqueCursorFromRow({
+          cursor_created_at: '2026-01-01T00:00:00.000000Z',
+          id,
+        });
+        expect(parseListCursor(cursor)?.id).toBe(id);
+        const corrupted = Buffer.from(cursor, 'base64url');
+        const lastIndex = corrupted.length - 1;
+        corrupted[lastIndex] = corrupted[lastIndex]! ^ 1;
+        const tampered = corrupted.toString('base64url');
+        expect(decodeListCursor(tampered)).toBeNull();
+        expect(parseListCursor(tampered)).toBeNull();
+      }),
       propertyOptions,
     );
   });

@@ -350,11 +350,15 @@ export const webauthnRegisterVerifySchema = {
   type: 'object',
   properties: {
     verified: { type: 'boolean' },
-    credential_id: { type: 'string' },
+    // The stored passkey's public id — the same value DELETE .../credentials/{credential_id} takes.
+    credential_id: { type: 'string', pattern: '^wac_[a-z0-9]{21}$' },
   },
 };
 
-export const webauthnRegisterVerifyExample = { verified: true, credential_id: 'credential-id' };
+export const webauthnRegisterVerifyExample = {
+  verified: true,
+  credential_id: 'wac_k3m9p2x7q4r8t1v6w5y0z',
+};
 
 export const webauthnCredentialSchema = {
   type: 'object',

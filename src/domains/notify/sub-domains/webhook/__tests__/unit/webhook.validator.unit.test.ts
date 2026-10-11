@@ -6,17 +6,50 @@ import {
   validateListWebhooksQuery,
   validateUpdateWebhook,
 } from '@/domains/notify/sub-domains/webhook/webhook.validator.js';
+import { WEBHOOK_EVENT_TYPES } from '@/domains/notify/sub-domains/webhook/webhook-event/webhook-event.constants.js';
 
 describe('webhook.validator', () => {
   it('validateCreateWebhook accepts url and events', () => {
     const input = {
       url: 'https://example.com/webhook',
-      events: ['user.created'],
+      events: ['membership.created'],
     };
     const result = validateCreateWebhook(input);
     expect(result.url).toBe(input.url);
-    expect(result.events).toEqual(['user.created']);
+    expect(result.events).toEqual(['membership.created']);
     expect(result.is_enabled).toBe(true);
+  });
+
+  it('accepts every catalog event type, on create and update', () => {
+    expect(
+      validateCreateWebhook({
+        url: 'https://example.com/webhook',
+        events: [...WEBHOOK_EVENT_TYPES],
+      }).events,
+    ).toEqual([...WEBHOOK_EVENT_TYPES]);
+    expect(validateUpdateWebhook({ events: ['subscription.cancelled'] }).events).toEqual([
+      'subscription.cancelled',
+    ]);
+  });
+
+  it('rejects an event outside the catalog on the events field, on create and update', () => {
+    // A typo used to be stored, and the subscription then never fired.
+    for (const attempt of [
+      () =>
+        validateCreateWebhook({
+          url: 'https://example.com/webhook',
+          events: ['membership.update'],
+        }),
+      () => validateUpdateWebhook({ events: ['webhook.test'] }),
+    ]) {
+      try {
+        attempt();
+        expect.unreachable('expected a ValidationError');
+      } catch (error) {
+        expect(error).toBeInstanceOf(ValidationError);
+        expect((error as ValidationError).errors?.map((item) => item.field)).toContain('events');
+      }
+    }
   });
 
   it('validateUpdateWebhook accepts partial fields', () => {

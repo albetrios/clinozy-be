@@ -29,25 +29,52 @@ describe('recent-step-up util — factor gating', () => {
   it.each(['password', 'mfa'] as const)(
     'a %s step-up satisfies both the normal and the strong gate',
     async (factor) => {
-      await recordRecentStepUp(mockRedis, 'u', 's', factor);
-      await expect(hasRecentStepUp(mockRedis, 'u', 's')).resolves.toBe(true);
-      await expect(hasRecentStrongStepUp(mockRedis, 'u', 's')).resolves.toBe(true);
+      await recordRecentStepUp({
+        redis: mockRedis,
+        userPublicId: 'u',
+        sessionPublicId: 's',
+        factor,
+      });
+      await expect(
+        hasRecentStepUp({ redis: mockRedis, userPublicId: 'u', sessionPublicId: 's' }),
+      ).resolves.toBe(true);
+      await expect(
+        hasRecentStrongStepUp({ redis: mockRedis, userPublicId: 'u', sessionPublicId: 's' }),
+      ).resolves.toBe(true);
     },
   );
 
   it('an email_code step-up satisfies the normal (enroll) gate but NOT the strong gate', async () => {
-    await recordRecentStepUp(mockRedis, 'u', 's', 'email_code');
-    await expect(hasRecentStepUp(mockRedis, 'u', 's')).resolves.toBe(true);
-    await expect(hasRecentStrongStepUp(mockRedis, 'u', 's')).resolves.toBe(false);
+    await recordRecentStepUp({
+      redis: mockRedis,
+      userPublicId: 'u',
+      sessionPublicId: 's',
+      factor: 'email_code',
+    });
+    await expect(
+      hasRecentStepUp({ redis: mockRedis, userPublicId: 'u', sessionPublicId: 's' }),
+    ).resolves.toBe(true);
+    await expect(
+      hasRecentStrongStepUp({ redis: mockRedis, userPublicId: 'u', sessionPublicId: 's' }),
+    ).resolves.toBe(false);
   });
 
   it('hasRecentStrongStepUp fails closed with no session id', async () => {
-    await recordRecentStepUp(mockRedis, 'u', 's', 'password');
-    await expect(hasRecentStrongStepUp(mockRedis, 'u', undefined)).resolves.toBe(false);
+    await recordRecentStepUp({
+      redis: mockRedis,
+      userPublicId: 'u',
+      sessionPublicId: 's',
+      factor: 'password',
+    });
+    await expect(
+      hasRecentStrongStepUp({ redis: mockRedis, userPublicId: 'u', sessionPublicId: undefined }),
+    ).resolves.toBe(false);
   });
 
   it('fails the strong gate closed on a stored value that is not a strong factor', async () => {
     store.set('step-up:u:s', 'not-a-factor');
-    await expect(hasRecentStrongStepUp(mockRedis, 'u', 's')).resolves.toBe(false);
+    await expect(
+      hasRecentStrongStepUp({ redis: mockRedis, userPublicId: 'u', sessionPublicId: 's' }),
+    ).resolves.toBe(false);
   });
 });

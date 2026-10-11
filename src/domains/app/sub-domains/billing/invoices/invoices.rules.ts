@@ -91,10 +91,13 @@ async function requirePatientFile(options: {
  * MDC18: a medical sale's invoice is the sale's — `/invoices` neither changes, deletes nor
  * restores it (the sale's void and restore do); a 409 `invoice_of_sale`.
  */
-async function assertNotSaleInvoice(
-  repository: InvoicesRepository,
-  invoiceId: number,
-): Promise<void> {
+async function assertNotSaleInvoice({
+  repository,
+  invoiceId,
+}: {
+  repository: InvoicesRepository;
+  invoiceId: number;
+}): Promise<void> {
   if ((await repository.findSaleState(invoiceId)) !== null) {
     throw new ConflictError('errors:invoiceOfSale').withReason('invoice_of_sale');
   }
@@ -258,10 +261,13 @@ async function planNewInvoice(options: {
 }
 
 /** Plans a new invoice and keeps the plan for its write: the totals on the row, the lines after (B8–B13). */
-async function prepareInvoiceCreate(
-  values: Record<string, unknown>,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function prepareInvoiceCreate({
+  values,
+  context,
+}: {
+  values: Record<string, unknown>;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const { plan, patientId } = await planNewInvoice({ values, context });
   Object.assign(values, plan.totals);
   pendingSaves.set(context, {
@@ -286,7 +292,7 @@ async function planInvoiceChange(options: {
   replanAlways?: boolean;
 }): Promise<{ plan: InvoiceLinePlan | null; patientId: number | null; contactChanges: boolean }> {
   const { values, existing, context } = options;
-  await assertNotSaleInvoice(options.repository, existing.id);
+  await assertNotSaleInvoice({ repository: options.repository, invoiceId: existing.id });
   const contactChanges = 'contact_id' in values && values.contact_id !== existing.contact_id;
   await assertInvoiceChangeable({ values, existing, contactChanges, context });
   const patientId = await requirePatientFile({
@@ -445,10 +451,13 @@ async function previewInvoice(input: BaseRecordCollectionInput): Promise<Invoice
  * stored ones) and the totals — nothing written; it refuses what the change would (settled, a
  * sale's, a total under what is paid, a spent session).
  */
-async function previewInvoiceChange(
-  repository: InvoicesRepository,
-  input: BaseRecordActionInput,
-): Promise<InvoicePreviewOutput> {
+async function previewInvoiceChange({
+  repository,
+  input,
+}: {
+  repository: InvoicesRepository;
+  input: BaseRecordActionInput;
+}): Promise<InvoicePreviewOutput> {
   const { existing, context } = input;
   const { member_ids: _memberIds, ...parsed } = validatePreviewInvoiceChange(input.input);
   const values: Record<string, unknown> = { ...parsed };
@@ -501,7 +510,7 @@ export async function recordInvoice(options: {
 }): Promise<BaseRecordRow> {
   const { repository, context } = options;
   const { member_ids: memberIds = [], ...values } = options.values;
-  await prepareInvoiceCreate(values, context);
+  await prepareInvoiceCreate({ values, context });
   const row = await repository.insert({
     ...values,
     organization_id: context.organizationId,
@@ -541,11 +550,11 @@ export async function recordInvoice(options: {
  */
 export function createInvoicesRules(repository: InvoicesRepository): BaseRecordRules {
   return {
-    prepareCreate: prepareInvoiceCreate,
+    prepareCreate: (values, context) => prepareInvoiceCreate({ values, context }),
     prepareUpdate: (values, existing, context) =>
       prepareInvoiceUpdate({ repository, values, existing, context }),
     prepareRemove: async (existing) => {
-      await assertNotSaleInvoice(repository, existing.id);
+      await assertNotSaleInvoice({ repository, invoiceId: existing.id });
       if (
         (toAmount(existing.paid_amount) ?? 0) > 0 ||
         (await repository.hasLiveCreditNote(existing.id))
@@ -556,11 +565,11 @@ export function createInvoicesRules(repository: InvoicesRepository): BaseRecordR
         throw new ConflictError('errors:invoiceOfferingInUse').withReason('offering_in_use');
       }
     },
-    prepareRestore: (deleted) => assertNotSaleInvoice(repository, deleted.id),
+    prepareRestore: (deleted) => assertNotSaleInvoice({ repository, invoiceId: deleted.id }),
     afterWrite: (row, change, context) =>
       afterInvoiceWrite({ repository, row, kind: change.kind, context }),
     collectionViews: { preview: previewInvoice },
-    views: { preview: (input) => previewInvoiceChange(repository, input) },
+    views: { preview: (input) => previewInvoiceChange({ repository, input }) },
     decorate: async (outputs, context) => {
       const idsByPublicId = await resolveRecordIds({
         table: invoices,
@@ -585,10 +594,12 @@ export function createInvoicesRules(repository: InvoicesRepository): BaseRecordR
         output.items = items
           .filter((item) => item.invoice_id === id)
           .map((item) =>
-            serializeInvoiceItem(
-              item,
-              item.patient_offering_id ? (billed.get(item.patient_offering_id) ?? []) : [],
-            ),
+            serializeInvoiceItem({
+              row: item,
+              treatmentIds: item.patient_offering_id
+                ? (billed.get(item.patient_offering_id) ?? [])
+                : [],
+            }),
           );
         output.is_settled = id !== undefined && settled.has(id);
         output.created_by_membership_id = id === undefined ? null : (recordedBy.get(id) ?? null);

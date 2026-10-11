@@ -37,7 +37,7 @@ const stockPurchaseItemDto = z
     stock_item_id: recordIdSchema.optional(),
     new_item: z
       .object({
-        name: trimmedStringMinMax(1, 120),
+        name: trimmedStringMinMax({ min: 1, max: 120 }),
         unit: z.enum(STOCK_ITEM_UNIT_VALUES).optional(),
       })
       .strict()
@@ -65,14 +65,14 @@ const stockPurchasePaymentDto = z
         message: 'Each mode once',
       }),
     paid_at: instantSchema.optional(),
-    reference: trimmedStringMinMax(1, 60).optional(),
+    reference: trimmedStringMinMax({ min: 1, max: 60 }).optional(),
   })
   .strict();
 
 /** The bill details a create and a change share (9.D.8 #18, #20). */
 const stockPurchaseFields = {
   stock_vendor_id: recordIdSchema,
-  bill_number: trimmedStringMinMax(1, 30).nullable(),
+  bill_number: trimmedStringMinMax({ min: 1, max: 30 }).nullable(),
   purchase_date: calendarDateSchema,
   bill_amount: moneySchema,
 };

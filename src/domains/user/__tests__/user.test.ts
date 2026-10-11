@@ -182,7 +182,7 @@ describe('User Domain — flows', () => {
   describe('Onboarding then account deletion', () => {
     it('completes onboarding, then self-deletes and loses access to the profile', async () => {
       const user = await createTestUser();
-      const token = await generateTestToken({ userId: user.public_id });
+      const token = await generateTestToken({ userId: user.public_id, stepUp: true });
 
       const onboarding = await injectAuthenticated(app, {
         method: 'POST',

@@ -45,17 +45,27 @@ function dateFromMilliseconds(milliseconds: number | undefined): Date {
 }
 
 /** A received message's text — its body, or what it carries when it is not text (`(image)`). */
-function inboundBody(text: string | undefined, kind: string | undefined): string {
+function inboundBody({
+  text,
+  kind,
+}: {
+  text: string | undefined;
+  kind: string | undefined;
+}): string {
   const trimmed = text?.trim() ?? '';
   return trimmed.length > 0 ? trimmed : `(${kind ?? 'message'})`;
 }
 
 /** Applies a WhatsApp change: its delivery reports, then the messages people sent. */
-async function applyWhatsAppValue(
-  inbound: ContactMessagingInboundRepository,
-  organizationId: number,
-  value: WhatsAppChangeValue,
-): Promise<void> {
+async function applyWhatsAppValue({
+  inbound,
+  organizationId,
+  value,
+}: {
+  inbound: ContactMessagingInboundRepository;
+  organizationId: number;
+  value: WhatsAppChangeValue;
+}): Promise<void> {
   for (const report of value.statuses ?? []) {
     if (typeof report.id !== 'string' || !DELIVERY_STATUSES.has(String(report.status))) continue;
     const firstError = report.errors?.[0];
@@ -73,7 +83,7 @@ async function applyWhatsAppValue(
     ),
   );
   for (const message of value.messages ?? []) {
-    await applyWhatsAppMessage(inbound, organizationId, message, profileNames);
+    await applyWhatsAppMessage({ inbound, organizationId, message, profileNames });
   }
 }
 
@@ -82,12 +92,17 @@ async function applyWhatsAppValue(
  * "yes" confirms the person's next booking that was asked (WC-8, D78); STOP stops the automated
  * messages to them and START lets them start again (D32, Meta's opt-out policy).
  */
-async function applyWhatsAppMessage(
-  inbound: ContactMessagingInboundRepository,
-  organizationId: number,
-  message: WhatsAppInboundMessage,
-  profileNames: ReadonlyMap<string, string>,
-): Promise<void> {
+async function applyWhatsAppMessage({
+  inbound,
+  organizationId,
+  message,
+  profileNames,
+}: {
+  inbound: ContactMessagingInboundRepository;
+  organizationId: number;
+  message: WhatsAppInboundMessage;
+  profileNames: ReadonlyMap<string, string>;
+}): Promise<void> {
   if (typeof message.id !== 'string' || typeof message.from !== 'string') return;
   const phone = `+${message.from.replace(/\D/g, '')}`;
   const profileName = profileNames.get(message.from);
@@ -98,7 +113,7 @@ async function applyWhatsAppMessage(
       phone,
       firstName: profileName !== undefined && profileName.length > 0 ? profileName : phone,
     }));
-  const body = inboundBody(message.text?.body, message.type);
+  const body = inboundBody({ text: message.text?.body, kind: message.type });
   const isNew = await inbound.insertReceivedMessage({
     organizationId,
     contactId,
@@ -118,12 +133,17 @@ async function applyWhatsAppMessage(
 }
 
 /** Applies an Instagram event: a read receipt, or a message to the clinic from a known person. */
-async function applyInstagramEvent(
-  inbound: ContactMessagingInboundRepository,
-  organizationId: number,
-  event: InstagramMessagingEvent,
-  usernames: ReadonlyMap<string, string | null>,
-): Promise<void> {
+async function applyInstagramEvent({
+  inbound,
+  organizationId,
+  event,
+  usernames,
+}: {
+  inbound: ContactMessagingInboundRepository;
+  organizationId: number;
+  event: InstagramMessagingEvent;
+  usernames: ReadonlyMap<string, string | null>;
+}): Promise<void> {
   const at = dateFromMilliseconds(event.timestamp);
   if (event.read?.mid) {
     await inbound.advanceDeliveryStatus({
@@ -152,7 +172,7 @@ async function applyInstagramEvent(
     organizationId,
     contactId,
     type: MESSAGING_WEBHOOK_CHANNEL.INSTAGRAM,
-    body: inboundBody(message.text, 'attachment'),
+    body: inboundBody({ text: message.text, kind: 'attachment' }),
     providerMessageId: message.mid,
     providerSenderId: senderId,
     occurredAt: at,
@@ -161,11 +181,15 @@ async function applyInstagramEvent(
 }
 
 /** The Instagram senders of the batch no contact has written as yet — they need a name lookup. */
-async function unknownInstagramSenders(
-  inbound: ContactMessagingInboundRepository,
-  organizationId: number,
-  events: readonly ClaimedMessagingWebhookEvent[],
-): Promise<string[]> {
+async function unknownInstagramSenders({
+  inbound,
+  organizationId,
+  events,
+}: {
+  inbound: ContactMessagingInboundRepository;
+  organizationId: number;
+  events: readonly ClaimedMessagingWebhookEvent[];
+}): Promise<string[]> {
   const unknown = new Set<string>();
   for (const event of events) {
     if (event.channel !== MESSAGING_WEBHOOK_CHANNEL.INSTAGRAM) continue;
@@ -201,19 +225,22 @@ export async function runMessagingWebhookEventJob(
   organizationPublicId: string,
 ): Promise<MessagingWebhookRunCounts> {
   const counts: MessagingWebhookRunCounts = { processedCount: 0, failedCount: 0 };
-  const claimed = await runOrganizationScopedWorkerJob({ organizationPublicId }, async (handle) => {
-    const inbound = createWorkerContactMessagingInboundRepository(handle);
-    const organizationId = await inbound.findOrganizationId(organizationPublicId);
-    if (organizationId === null) return null;
-    const events = await createWorkerContactMessagingWebhookRepository(handle).claimBatch({
-      organizationId,
-      limit: MESSAGING_WEBHOOK_EVENTS_PER_JOB,
-    });
-    return {
-      organizationId,
-      events,
-      unknownSenders: await unknownInstagramSenders(inbound, organizationId, events),
-    };
+  const claimed = await runOrganizationScopedWorkerJob({
+    job: { organizationPublicId },
+    processor: async (handle) => {
+      const inbound = createWorkerContactMessagingInboundRepository(handle);
+      const organizationId = await inbound.findOrganizationId(organizationPublicId);
+      if (organizationId === null) return null;
+      const events = await createWorkerContactMessagingWebhookRepository(handle).claimBatch({
+        organizationId,
+        limit: MESSAGING_WEBHOOK_EVENTS_PER_JOB,
+      });
+      return {
+        organizationId,
+        events,
+        unknownSenders: await unknownInstagramSenders({ inbound, organizationId, events }),
+      };
+    },
   });
   if (!claimed || claimed.events.length === 0) return counts;
   const { organizationId, events } = claimed;
@@ -227,30 +254,39 @@ export async function runMessagingWebhookEventJob(
         usernames.set(senderId, null);
         continue;
       }
-      await runOrganizationScopedWorkerJob({ organizationPublicId }, (handle) =>
-        createWorkerContactMessagingWebhookRepository(handle).releaseClaims(
-          events.map((event) => event.id),
-        ),
-      );
+      await runOrganizationScopedWorkerJob({
+        job: { organizationPublicId },
+        processor: (handle) =>
+          createWorkerContactMessagingWebhookRepository(handle).releaseClaims(
+            events.map((event) => event.id),
+          ),
+      });
       throw (await toProviderOutageError({ error, provider: 'meta' })) ?? error;
     }
   }
 
   for (const event of events) {
     try {
-      await runOrganizationScopedWorkerJob({ organizationPublicId }, async (handle) => {
-        const inbound = createWorkerContactMessagingInboundRepository(handle);
-        if (event.channel === MESSAGING_WEBHOOK_CHANNEL.WHATSAPP) {
-          await applyWhatsAppValue(inbound, organizationId, event.payload as WhatsAppChangeValue);
-        } else {
-          await applyInstagramEvent(
-            inbound,
-            organizationId,
-            event.payload as InstagramMessagingEvent,
-            usernames,
-          );
-        }
-        await createWorkerContactMessagingWebhookRepository(handle).markProcessed(event.id);
+      await runOrganizationScopedWorkerJob({
+        job: { organizationPublicId },
+        processor: async (handle) => {
+          const inbound = createWorkerContactMessagingInboundRepository(handle);
+          if (event.channel === MESSAGING_WEBHOOK_CHANNEL.WHATSAPP) {
+            await applyWhatsAppValue({
+              inbound,
+              organizationId,
+              value: event.payload as WhatsAppChangeValue,
+            });
+          } else {
+            await applyInstagramEvent({
+              inbound,
+              organizationId,
+              event: event.payload as InstagramMessagingEvent,
+              usernames,
+            });
+          }
+          await createWorkerContactMessagingWebhookRepository(handle).markProcessed(event.id);
+        },
       });
       counts.processedCount += 1;
     } catch (error) {
@@ -258,12 +294,14 @@ export async function runMessagingWebhookEventJob(
         { error, organizationPublicId, eventId: event.id },
         'messaging-webhook-event.apply_failed',
       );
-      await runOrganizationScopedWorkerJob({ organizationPublicId }, (handle) =>
-        createWorkerContactMessagingWebhookRepository(handle).recordFailure({
-          id: event.id,
-          reason: error instanceof Error ? error.message : 'The update could not be applied',
-        }),
-      );
+      await runOrganizationScopedWorkerJob({
+        job: { organizationPublicId },
+        processor: (handle) =>
+          createWorkerContactMessagingWebhookRepository(handle).recordFailure({
+            id: event.id,
+            reason: error instanceof Error ? error.message : 'The update could not be applied',
+          }),
+      });
       counts.failedCount += 1;
     }
   }

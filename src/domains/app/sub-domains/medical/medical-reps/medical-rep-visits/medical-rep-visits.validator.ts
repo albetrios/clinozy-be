@@ -8,7 +8,7 @@ import {
 
 /** Parses a visit's body; throws `ValidationError` naming each bad field. */
 export function validateCreateMedicalRepVisit(data: unknown): CreateMedicalRepVisitInput {
-  return parseWithSchema(CreateMedicalRepVisitDto, data);
+  return parseWithSchema({ schema: CreateMedicalRepVisitDto, data });
 }
 
 /** A visit is never changed (MD18) — there is no change route. */
@@ -18,6 +18,6 @@ export function refuseMedicalRepVisitUpdate(): Record<string, unknown> {
 
 /** Parses an MR's visits query into a list input (routes-final 11.G.8 #39). */
 export function validateListMedicalRepVisitsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listMedicalRepVisitsQueryDto, data);
+  const query = parseWithSchema({ schema: listMedicalRepVisitsQueryDto, data });
   return { after: query.after, limit: query.limit, sort: query.sort, order: query.order };
 }

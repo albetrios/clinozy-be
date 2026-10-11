@@ -12,6 +12,9 @@ import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { randomUUID } from 'node:crypto';
 
 /** Fresh X-Idempotency-Key for the idempotencyRequired POST /uploads write. */
+/** Not an upload public id (uppercase): rejected with 400 before any lookup, never a 404. */
+const malformedUploadPublicId = 'upl_ABCDEFGHIJKLMNOPQRSTU';
+
 const idempotencyHeaders = (): Record<string, string> => ({
   'x-idempotency-key': `idem-${randomUUID()}`,
 });
@@ -93,6 +96,18 @@ describe('Upload Domain — Integration', () => {
       });
       expect(response.statusCode).toBe(404);
     });
+
+    it('should return 400 for a malformed upload id', async () => {
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      const response = await injectAuthenticated(app, {
+        url: testApiPath(`/uploads/${malformedUploadPublicId}`),
+        token,
+      });
+      expect(response.statusCode).toBe(400);
+      const body = response.json() as { error: { errors: Array<{ field: string }> } };
+      expect(body.error.errors).toEqual([expect.objectContaining({ field: 'upload_id' })]);
+    });
   });
 
   // The confirm route is the one endpoint this e2e walk used to skip, so
@@ -122,6 +137,20 @@ describe('Upload Domain — Integration', () => {
       });
       expect(response.statusCode).toBe(404);
     });
+
+    it('should return 400 for a malformed upload id', async () => {
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      const response = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/uploads/${malformedUploadPublicId}/confirm`),
+        token,
+        payload: {},
+      });
+      expect(response.statusCode).toBe(400);
+      const body = response.json() as { error: { errors: Array<{ field: string }> } };
+      expect(body.error.errors).toEqual([expect.objectContaining({ field: 'upload_id' })]);
+    });
   });
 
   describe('DELETE /api/v1/uploads/:publicId', () => {
@@ -144,6 +173,19 @@ describe('Upload Domain — Integration', () => {
         token,
       });
       expect(response.statusCode).toBe(404);
+    });
+
+    it('should return 400 for a malformed upload id', async () => {
+      const user = await createTestUser();
+      const token = await generateTestToken({ userId: user.public_id });
+      const response = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath(`/uploads/${malformedUploadPublicId}`),
+        token,
+      });
+      expect(response.statusCode).toBe(400);
+      const body = response.json() as { error: { errors: Array<{ field: string }> } };
+      expect(body.error.errors).toEqual([expect.objectContaining({ field: 'upload_id' })]);
     });
   });
 });

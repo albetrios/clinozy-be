@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import {
   type AppFixture,
   createAppFixture,
@@ -67,7 +67,7 @@ describe('Appointments — the status machine (A5)', () => {
   async function setStatus(status: Status, paused = false): Promise<void> {
     const checkedIn = status === 'checked_in' || status === 'completed';
     const onFloor = status === 'checked_in';
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.appointments SET
         status = ${status},
         checked_in_at = ${checkedIn ? new Date().toISOString() : null},

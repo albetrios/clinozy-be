@@ -111,9 +111,12 @@ describe('Amazon S3 contract (`S3ObjectStorageAdapter`)', () => {
       });
 
     const adapter = getDefaultS3ObjectStorageAdapter();
-    const verdict = await adapter.verifyUploadedObject(objectKeyOutbound, {
-      contentType: headObjectOutboundMetadataFixture.contentType,
-      contentLength: Number(headObjectOutboundMetadataFixture.contentLength),
+    const verdict = await adapter.verifyUploadedObject({
+      key: objectKeyOutbound,
+      expected: {
+        contentType: headObjectOutboundMetadataFixture.contentType,
+        contentLength: Number(headObjectOutboundMetadataFixture.contentLength),
+      },
     });
 
     expect(verdict).toEqual({

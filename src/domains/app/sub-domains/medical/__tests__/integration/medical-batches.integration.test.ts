@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import {
   type AppFixture,
   createAppFixture,
@@ -33,7 +33,7 @@ describe('Medical store — batches, sales and returns (MD5, MD21)', () => {
 
   /** Each batch's packs left, `<batch>:<quantity>` in batch-number order. */
   async function stockOf(medicine: string): Promise<string> {
-    const rows = await getOperatorSql()<{ batch_number: string; quantity: number }[]>`
+    const rows = await operatorQuery<{ batch_number: string; quantity: number }[]>`
       SELECT b.batch_number, b.quantity FROM app.medicine_batches b
       JOIN app.medicines m ON m.id = b.medicine_id
       WHERE m.public_id = ${medicine} ORDER BY b.batch_number
@@ -94,7 +94,7 @@ describe('Medical store — batches, sales and returns (MD5, MD21)', () => {
     const medicine = flow.last('.data.id');
     // C expires this month (still sellable); X expired last month.
     const zone = fixture.organization.timezone;
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.medicine_batches b
       SET expiry_month = CASE b.batch_number
         WHEN 'C' THEN date_trunc('month', now() AT TIME ZONE ${zone})::date

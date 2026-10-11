@@ -130,11 +130,15 @@ export async function seedMembership(payload: SeedMembershipPayload) {
  * permission codes to a role. Uses `ON CONFLICT DO NOTHING` so it is safe to
  * re-run against an already-seeded database.
  */
-export async function seedRolePermissions(
-  roleId: number,
-  permissionCodes: string[],
-  createdByUserId: number,
-) {
+export async function seedRolePermissions({
+  roleId,
+  permissionCodes,
+  createdByUserId,
+}: {
+  roleId: number;
+  permissionCodes: string[];
+  createdByUserId: number;
+}) {
   return getRequestDatabase()
     .insert(role_permissions)
     .values(

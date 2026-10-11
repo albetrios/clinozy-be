@@ -18,12 +18,18 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a patient create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePatient(data: unknown): CreatePatientInput {
-  return withInstants(parseWithSchema(CreatePatientDto, data), ['follow_up_at']);
+  return withInstants({
+    values: parseWithSchema({ schema: CreatePatientDto, data }),
+    fields: ['follow_up_at'],
+  });
 }
 
 /** Parses a patient update body; throws `ValidationError` naming each bad field. */
 export function validateUpdatePatient(data: unknown): UpdatePatientInput {
-  return withInstants(parseWithSchema(UpdatePatientDto, data), ['follow_up_at']);
+  return withInstants({
+    values: parseWithSchema({ schema: UpdatePatientDto, data }),
+    fields: ['follow_up_at'],
+  });
 }
 
 /**
@@ -32,7 +38,7 @@ export function validateUpdatePatient(data: unknown): UpdatePatientInput {
  * references by public id.
  */
 export function validateListPatientsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listPatientsQueryDto, data);
+  const query = parseWithSchema({ schema: listPatientsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,
@@ -48,7 +54,10 @@ export function validateListPatientsQuery(data: unknown): BaseRecordListInput {
       contact_id: query.contact_id,
     },
     derived: {
-      search: readContactLinkedSearch(query.q, { recordPrefix: PATIENT_NUMBER_PREFIX }),
+      search: readContactLinkedSearch({
+        q: query.q,
+        options: { recordPrefix: PATIENT_NUMBER_PREFIX },
+      }),
       types: query.types?.split(','),
     },
     ranges: {

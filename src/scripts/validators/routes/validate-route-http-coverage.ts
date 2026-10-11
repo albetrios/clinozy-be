@@ -30,15 +30,15 @@ const DOMAINS_DIR = join(SRC_DIR, 'domains');
 function main(): void {
   const registry = loadRouteRegistryFromCatalog();
   const sources: string[] = [];
-  collectHttpTestSources(SRC_DIR, sources);
+  collectHttpTestSources({ directory: SRC_DIR, sources });
   const combined = sources.join('\n');
 
-  const result = evaluateRouteHttpCoverage(
+  const result = evaluateRouteHttpCoverage({
     registry,
-    combined,
-    ROUTE_HTTP_COVERAGE_ALLOWLIST,
-    DOMAINS_DIR,
-  );
+    combinedHttpSources: combined,
+    allowlist: ROUTE_HTTP_COVERAGE_ALLOWLIST,
+    domainsDir: DOMAINS_DIR,
+  });
 
   const failures = [
     ...result.missingSubdomainIntegration,

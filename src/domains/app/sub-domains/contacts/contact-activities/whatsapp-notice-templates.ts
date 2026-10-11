@@ -1,4 +1,5 @@
 import type { MetaWhatsAppTemplate } from '@/infrastructure/messaging/meta-graph.client.js';
+import { MILLISECONDS_PER_DAY } from '@/shared/constants/ttl.constants.js';
 import {
   CONTACT_ACTIVITY_AUTOMATION_KIND,
   type ContactActivityAutomationKind,
@@ -8,7 +9,7 @@ import {
 export const WHATSAPP_TEMPLATE_LANGUAGE = 'en';
 
 /** How long after the person's last message a free-text WhatsApp message is still delivered. */
-export const WHATSAPP_SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const WHATSAPP_SERVICE_WINDOW_MS = MILLISECONDS_PER_DAY;
 
 /** An approved template: its name and language, and the text submitted in Meta Business Manager. */
 export interface WhatsAppNoticeTemplate extends MetaWhatsAppTemplate {
@@ -17,7 +18,7 @@ export interface WhatsAppNoticeTemplate extends MetaWhatsAppTemplate {
 }
 
 /** A template in English, named as its notice. */
-function template(name: string, text: string): WhatsAppNoticeTemplate {
+function template({ name, text }: { name: string; text: string }): WhatsAppNoticeTemplate {
   return { name, languageCode: WHATSAPP_TEMPLATE_LANGUAGE, text };
 }
 
@@ -29,36 +30,36 @@ function template(name: string, text: string): WhatsAppNoticeTemplate {
 export const WHATSAPP_NOTICE_TEMPLATES: Readonly<
   Record<ContactActivityAutomationKind, WhatsAppNoticeTemplate>
 > = {
-  [CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_CONFIRM]: template(
-    'booking_confirm',
-    'Hi {{1}}, please confirm your visit on {{2}} at {{3}}. Reply YES to confirm.',
-  ),
-  [CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_REMINDER]: template(
-    'booking_reminder',
-    'Hi {{1}}, a reminder of your visit at {{2}} tomorrow, {{3}} at {{4}}. Reply YES to confirm, or reply here to change it.',
-  ),
-  [CONTACT_ACTIVITY_AUTOMATION_KIND.PAYMENT_RECEIPT]: template(
-    'payment_receipt',
-    'Hi {{1}}, we have received {{2}} for {{3}} on {{4}}. Thank you!',
-  ),
-  [CONTACT_ACTIVITY_AUTOMATION_KIND.PAYMENT_REMINDER]: template(
-    'payment_reminder',
-    'Hi {{1}}, {{2}} is still due on invoice {{3}}. You can pay at your next visit, or reply here and we will help.',
-  ),
-  [CONTACT_ACTIVITY_AUTOMATION_KIND.FEEDBACK_REQUEST]: template(
-    'feedback_request',
-    'Hi {{1}}, thank you for visiting us. How was your visit? Reply with a number from 1 (poor) to 5 (great).',
-  ),
+  [CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_CONFIRM]: template({
+    name: 'booking_confirm',
+    text: 'Hi {{1}}, please confirm your visit on {{2}} at {{3}}. Reply YES to confirm.',
+  }),
+  [CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_REMINDER]: template({
+    name: 'booking_reminder',
+    text: 'Hi {{1}}, a reminder of your visit at {{2}} tomorrow, {{3}} at {{4}}. Reply YES to confirm, or reply here to change it.',
+  }),
+  [CONTACT_ACTIVITY_AUTOMATION_KIND.PAYMENT_RECEIPT]: template({
+    name: 'payment_receipt',
+    text: 'Hi {{1}}, we have received {{2}} for {{3}} on {{4}}. Thank you!',
+  }),
+  [CONTACT_ACTIVITY_AUTOMATION_KIND.PAYMENT_REMINDER]: template({
+    name: 'payment_reminder',
+    text: 'Hi {{1}}, {{2}} is still due on invoice {{3}}. You can pay at your next visit, or reply here and we will help.',
+  }),
+  [CONTACT_ACTIVITY_AUTOMATION_KIND.FEEDBACK_REQUEST]: template({
+    name: 'feedback_request',
+    text: 'Hi {{1}}, thank you for visiting us. How was your visit? Reply with a number from 1 (poor) to 5 (great).',
+  }),
 };
 
 /**
  * The admins' day-close summary (launch D78, WC-10) as a template — sent as one always when
  * templates are on: the admins' 24-hour window is not known.
  */
-export const WHATSAPP_DAY_CLOSE_SUMMARY_TEMPLATE: WhatsAppNoticeTemplate = template(
-  'day_close_summary',
-  'Day closed at {{1}} on {{2}}. Net {{3}}: cash {{4}}, UPI {{5}}, card {{6}}. Cash counted {{7}} against {{8}} expected ({{9}}). {{10}}, {{11}}. This summary goes to the clinic admins.',
-);
+export const WHATSAPP_DAY_CLOSE_SUMMARY_TEMPLATE: WhatsAppNoticeTemplate = template({
+  name: 'day_close_summary',
+  text: 'Day closed at {{1}} on {{2}}. Net {{3}}: cash {{4}}, UPI {{5}}, card {{6}}. Cash counted {{7}} against {{8}} expected ({{9}}). {{10}}, {{11}}. This summary goes to the clinic admins.',
+});
 
 /** How many parameters a template takes — its highest `{{n}}`. */
 export function templateParameterCount(notice: WhatsAppNoticeTemplate): number {
@@ -73,16 +74,25 @@ export function templateParameterCount(notice: WhatsAppNoticeTemplate): number {
  * A value as a template parameter: Meta refuses new lines, tabs, four spaces in a row and an empty
  * parameter — the value on one line, else `fallback`.
  */
-export function templateParameter(value: string | null | undefined, fallback: string): string {
+export function templateParameter({
+  value,
+  fallback,
+}: {
+  value: string | null | undefined;
+  fallback: string;
+}): string {
   const flat = (value ?? '').replace(/\s+/g, ' ').trim();
   return flat.length > 0 ? flat : fallback;
 }
 
 /** The template's text with its parameters in — what the person reads, and what the stream keeps. */
-export function renderWhatsAppTemplate(
-  notice: WhatsAppNoticeTemplate,
-  parameters: readonly string[],
-): string {
+export function renderWhatsAppTemplate({
+  notice,
+  parameters,
+}: {
+  notice: WhatsAppNoticeTemplate;
+  parameters: readonly string[];
+}): string {
   return notice.text.replace(/\{\{(\d+)\}\}/g, (placeholder, position: string) => {
     return parameters[Number(position) - 1] ?? placeholder;
   });
@@ -92,7 +102,13 @@ export function renderWhatsAppTemplate(
  * Whether a notice to someone whose last message came at `lastReceivedAt` goes as its template:
  * never messaged, or not in the last 24 hours (Meta delivers free text only inside that window).
  */
-export function isOutsideServiceWindow(lastReceivedAt: Date | null, now = new Date()): boolean {
+export function isOutsideServiceWindow({
+  lastReceivedAt,
+  now = new Date(),
+}: {
+  lastReceivedAt: Date | null;
+  now?: Date | undefined;
+}): boolean {
   return (
     lastReceivedAt === null ||
     now.getTime() - lastReceivedAt.getTime() >= WHATSAPP_SERVICE_WINDOW_MS

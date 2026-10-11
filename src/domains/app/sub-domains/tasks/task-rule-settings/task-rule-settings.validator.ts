@@ -3,5 +3,5 @@ import { ReplaceTaskRulesDto, type ReplaceTaskRulesInput } from './task-rule-set
 
 /** Parses a save of the rule switches; throws `ValidationError` naming each bad field. */
 export function validateReplaceTaskRules(data: unknown): ReplaceTaskRulesInput {
-  return parseWithSchema(ReplaceTaskRulesDto, data);
+  return parseWithSchema({ schema: ReplaceTaskRulesDto, data });
 }

@@ -39,11 +39,11 @@ describe('lint-migrations rollback pairing', () => {
 
   it('lintMigrationRollbackPairing flags orphan .down.sql', () => {
     const folder = resolve(fixturesRoot, 'orphan-down');
-    const violations = lintMigrationRollbackPairing(
-      folder,
-      [],
-      new Map([['20260101000003_orphan.down.sql', 'SELECT 1;']]),
-    );
+    const violations = lintMigrationRollbackPairing({
+      _migrationsFolder: folder,
+      upMigrationFilenames: [],
+      fileContentsByFilename: new Map([['20260101000003_orphan.down.sql', 'SELECT 1;']]),
+    });
     expect(violations.some((v) => v.ruleId === 'orphan_down_migration')).toBe(true);
   });
 });

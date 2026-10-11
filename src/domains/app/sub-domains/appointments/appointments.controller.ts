@@ -27,15 +27,18 @@ export class AppointmentsController extends BaseRecordController<AppointmentOutp
   /** `POST …/{appointment_id}/copy` — the new booking; audited as a copy of the source. */
   readonly copy = async (request: FastifyRequest, _reply: FastifyReply) => {
     const publicId = this.readId(request);
-    const data = await this.appointments.copy(
-      requireOrganizationScope(request),
+    const data = await this.appointments.copy({
+      scope: requireOrganizationScope(request),
       publicId,
-      request.body,
-      this.actor(request),
-      await this.visibility(request),
-    );
-    await this.audit(request, 'copy', publicId, { copy_public_id: data.id });
-    return successResponse(await this.present(request, data), getRequestIdentifier(request));
+      body: request.body,
+      actingUserPublicId: this.actor(request),
+      visibility: await this.visibility(request),
+    });
+    await this.audit({ request, verb: 'copy', publicId, metadata: { copy_public_id: data.id } });
+    return successResponse({
+      data: await this.present({ request, output: data }),
+      request_id: getRequestIdentifier(request),
+    });
   };
 }
 

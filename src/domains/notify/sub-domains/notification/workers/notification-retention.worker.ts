@@ -35,9 +35,10 @@ export function createNotificationRetentionWorker(): WorkerHandle {
   const worker = new Worker(
     NOTIFICATION_RETENTION_QUEUE_NAME,
     async () =>
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, (databaseHandle) =>
-        runNotificationRetentionJob(databaseHandle),
-      ),
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: (databaseHandle) => runNotificationRetentionJob(databaseHandle),
+      }),
     {
       connection: getBullMQConnectionOptions(),
       prefix: getBullMQKeyPrefix(),
@@ -53,5 +54,5 @@ export function createNotificationRetentionWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, NOTIFICATION_RETENTION_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: NOTIFICATION_RETENTION_QUEUE_NAME });
 }

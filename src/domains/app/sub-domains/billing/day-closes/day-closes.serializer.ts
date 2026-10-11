@@ -7,22 +7,25 @@ import type { DayCloseOutput } from './day-closes.types.js';
  * Shapes an `app.day_closes` row as the API returns it (routes-final 8.E.6). The live figures, the
  * members and the events are the rules' `decorate`.
  */
-export function serializeDayClose(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): DayCloseOutput {
+export function serializeDayClose({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): DayCloseOutput {
   return {
     id: row.public_id,
-    branch_id: references.publicIdOf('branch_id', row) ?? '',
+    branch_id: references.publicIdOf({ field: 'branch_id', row }) ?? '',
     close_date: row.close_date as string,
     status: row.status as string,
     opening_cash: toAmount(row.opening_cash) ?? 0,
     opening_source: row.opening_source as string,
     opening_accepted_at: toInstant(row.opening_accepted_at) as string,
-    opening_accepted_by_membership_id: references.publicIdOf(
-      'opening_accepted_by_membership_id',
+    opening_accepted_by_membership_id: references.publicIdOf({
+      field: 'opening_accepted_by_membership_id',
       row,
-    ),
+    }),
     cash_in: 0,
     cash_out: 0,
     expected_cash: toAmount(row.expected_cash),
@@ -31,7 +34,7 @@ export function serializeDayClose(
     difference_reason: (row.difference_reason as string | null) ?? null,
     close_kind: (row.close_kind as string | null) ?? null,
     closed_at: toInstant(row.closed_at),
-    closed_by_membership_id: references.publicIdOf('closed_by_membership_id', row),
+    closed_by_membership_id: references.publicIdOf({ field: 'closed_by_membership_id', row }),
     net_by_mode: { cash: 0, upi: 0, card: 0, credit: 0 },
     by_member: [],
     entry_count: 0,

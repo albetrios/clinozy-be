@@ -28,14 +28,14 @@ export const membershipIdParamsDto = z
 
 /** Up to {@link MEMBERSHIP_ROLE_IDS_MAX} distinct role ids, the main role first (D5). */
 const roleIds = z
-  .array(trimmedStringMinMax(1, 28))
+  .array(trimmedStringMinMax({ min: 1, max: 28 }))
   .min(1)
   .max(MEMBERSHIP_ROLE_IDS_MAX)
   .refine((ids) => new Set(ids).size === ids.length, { message: 'Each role once' });
 
 /** Branch ids the member works in (`brn_…`); `[]` for none. */
 const branchIds = z
-  .array(trimmedStringMinMax(1, 28))
+  .array(trimmedStringMinMax({ min: 1, max: 28 }))
   .max(100)
   .refine((ids) => new Set(ids).size === ids.length, { message: 'Each branch once' });
 
@@ -56,10 +56,13 @@ const staffProfileFields = {
 };
 
 /** Rejects working hours that end at or before they start, when both are given. */
-function workEndsAfterStarts(
-  value: { work_starts_at?: string | undefined; work_ends_at?: string | undefined },
-  context: z.RefinementCtx,
-): void {
+function workEndsAfterStarts({
+  value,
+  context,
+}: {
+  value: { work_starts_at?: string | undefined; work_ends_at?: string | undefined };
+  context: z.RefinementCtx;
+}): void {
   addEndAfterStartIssue({
     start: value.work_starts_at,
     end: value.work_ends_at,
@@ -86,7 +89,7 @@ export const createMembershipDto = z
     ...staffProfileFields,
   })
   .strict()
-  .superRefine(workEndsAfterStarts);
+  .superRefine((value, context) => workEndsAfterStarts({ value, context }));
 
 /**
  * Zod schema for the `PATCH /organization/memberships/:membership_id` request body (launch §2.B.8):
@@ -99,7 +102,10 @@ export const updateMembershipDto = z
   .object({
     status: z.enum([MEMBERSHIP_STATUS.ACTIVE, MEMBERSHIP_STATUS.SUSPENDED]).optional(),
     role_ids: roleIds.optional(),
-    display_name: trimmedStringMinMax(1, MEMBERSHIP_DISPLAY_NAME_MAX_LENGTH).optional(),
+    display_name: trimmedStringMinMax({
+      min: 1,
+      max: MEMBERSHIP_DISPLAY_NAME_MAX_LENGTH,
+    }).optional(),
     expected_updated_at: expectedUpdatedAtSchema,
     ...staffProfileFields,
   })
@@ -107,7 +113,7 @@ export const updateMembershipDto = z
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
     message: 'Send at least one field',
   })
-  .superRefine(workEndsAfterStarts);
+  .superRefine((value, context) => workEndsAfterStarts({ value, context }));
 
 /**
  * Query of `DELETE /organization/memberships/:membership_id` — why the member is removed
@@ -137,7 +143,7 @@ export const listMembershipsQueryDto = listSearchSortSchema(['name', 'created_at
  */
 export const transferOwnershipDto = z
   .object({
-    new_owner_user_id: trimmedStringMinMax(1, 28),
+    new_owner_user_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 

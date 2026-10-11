@@ -18,8 +18,8 @@ export const contactMessageTemplatesIdParamsDto = z
 /** Body of `POST /app/contact-message-templates` — a template (routes-final 4.D.8 #18). */
 export const CreateContactMessageTemplateDto = z
   .object({
-    name: trimmedStringMinMax(1, 60),
-    body: trimmedStringMinMax(1, CONTACT_ACTIVITY_BODY_MAX),
+    name: trimmedStringMinMax({ min: 1, max: 60 }),
+    body: trimmedStringMinMax({ min: 1, max: CONTACT_ACTIVITY_BODY_MAX }),
     type: z.enum(CONTACT_MESSAGE_TEMPLATE_TYPE_VALUES).optional(),
   })
   .strict();
@@ -30,8 +30,8 @@ export const CreateContactMessageTemplateDto = z
  */
 export const UpdateContactMessageTemplateDto = z
   .object({
-    name: trimmedStringMinMax(1, 60).optional(),
-    body: trimmedStringMinMax(1, CONTACT_ACTIVITY_BODY_MAX).optional(),
+    name: trimmedStringMinMax({ min: 1, max: 60 }).optional(),
+    body: trimmedStringMinMax({ min: 1, max: CONTACT_ACTIVITY_BODY_MAX }).optional(),
     type: z.enum(CONTACT_MESSAGE_TEMPLATE_TYPE_VALUES).optional(),
     expected_updated_at: expectedUpdatedAtSchema,
   })

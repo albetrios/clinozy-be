@@ -95,10 +95,13 @@ async function resolveSaveSuppliers(options: {
 }
 
 /** Takes the batches and prices out of a save's values and keeps them for `afterWrite`. */
-async function holdBatchesAndPrices(
-  values: Record<string, unknown>,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function holdBatchesAndPrices({
+  values,
+  context,
+}: {
+  values: Record<string, unknown>;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const batches = values.batches as MedicineBatchInput[] | undefined;
   const prices = values.supplier_prices as MedicineSupplierPriceInput[] | undefined;
   delete values.batches;
@@ -111,10 +114,13 @@ async function holdBatchesAndPrices(
 }
 
 /** MD13: every kept batch (`id`) is one of this medicine's — 400 on `batches` otherwise. */
-function assertBatchesOfMedicine(
-  batches: readonly MedicineBatchInput[],
-  byPublicId: ReadonlyMap<string, unknown>,
-): void {
+function assertBatchesOfMedicine({
+  batches,
+  byPublicId,
+}: {
+  batches: readonly MedicineBatchInput[];
+  byPublicId: ReadonlyMap<string, unknown>;
+}): void {
   for (const batch of batches) {
     if (batch.id !== undefined && !byPublicId.has(batch.id)) {
       throw fieldValidationError({
@@ -127,10 +133,13 @@ function assertBatchesOfMedicine(
 }
 
 /** MD13: a batch number a left-out batch keeps is not free — 409 `record_already_exists`. */
-function assertBatchNumbersFree(
-  batches: readonly MedicineBatchInput[],
-  leftOut: readonly { batch_number: string }[],
-): void {
+function assertBatchNumbersFree({
+  batches,
+  leftOut,
+}: {
+  batches: readonly MedicineBatchInput[];
+  leftOut: readonly { batch_number: string }[];
+}): void {
   const taken = new Set(leftOut.map((batch) => batch.batch_number.toLowerCase()));
   for (const batch of batches) {
     if (taken.has(batch.batch_number.toLowerCase())) {
@@ -142,10 +151,13 @@ function assertBatchNumbersFree(
 }
 
 /** A batch's stored details — the rate and the supplier only when the save sent them. */
-function batchDetails(
-  batch: MedicineBatchInput,
-  supplierIds: ReadonlyMap<string, number>,
-): Omit<MedicineBatchValues, 'quantity'> & { batch_number: string; expiry_month: string } {
+function batchDetails({
+  batch,
+  supplierIds,
+}: {
+  batch: MedicineBatchInput;
+  supplierIds: ReadonlyMap<string, number>;
+}): Omit<MedicineBatchValues, 'quantity'> & { batch_number: string; expiry_month: string } {
   const details: Omit<MedicineBatchValues, 'quantity'> & {
     batch_number: string;
     expiry_month: string;
@@ -179,15 +191,15 @@ async function syncBatches(options: {
   const name = String(medicine.name);
   const stored = await repository.lockBatches(medicine.id);
   const byPublicId = new Map(stored.map((batch) => [batch.public_id, batch]));
-  assertBatchesOfMedicine(options.batches, byPublicId);
+  assertBatchesOfMedicine({ batches: options.batches, byPublicId });
   const keptIds = new Set(options.batches.flatMap((batch) => (batch.id ? [batch.id] : [])));
   const leftOut = stored.filter((batch) => !keptIds.has(batch.public_id));
-  assertBatchNumbersFree(options.batches, leftOut);
+  assertBatchNumbersFree({ batches: options.batches, leftOut });
   for (const batch of leftOut) {
     await moveMedicineBatch({ context, batchId: batch.id, change: -batch.quantity, name });
   }
   for (const batch of options.batches) {
-    const details = batchDetails(batch, options.supplierIds);
+    const details = batchDetails({ batch, supplierIds: options.supplierIds });
     const kept = batch.id === undefined ? undefined : byPublicId.get(batch.id);
     if (kept) {
       await repository.updateBatch({ id: kept.id, values: details, userId: context.userId });
@@ -314,7 +326,7 @@ async function decorateMedicines(options: {
 
 /** MD14: "Sell all at 20% off" / "Remove near-expiry discount" — how many changed. */
 async function setNearExpiryDiscount(input: BaseRecordCollectionInput): Promise<unknown> {
-  const body = parseWithSchema(NearExpiryDiscountDto, input.input);
+  const body = parseWithSchema({ schema: NearExpiryDiscountDto, data: input.input });
   const updated = await (input.repository as MedicinesRepository).setNearExpiryDiscount({
     organizationId: input.context.organizationId,
     withinDays: body.expiring_within_days,
@@ -346,7 +358,7 @@ export function createMedicinesRules(repository: MedicinesRepository): BaseRecor
       values.is_quick ??= false;
       if (values.is_quick === true) values.mrp ??= 0;
       assertMedicineComplete(values);
-      await holdBatchesAndPrices(values, context);
+      await holdBatchesAndPrices({ values, context });
     },
     prepareUpdate: async (values, existing, context) => {
       const merged = { ...existing, ...values };
@@ -358,7 +370,7 @@ export function createMedicinesRules(repository: MedicinesRepository): BaseRecor
       ) {
         values.is_quick = false;
       }
-      await holdBatchesAndPrices(values, context);
+      await holdBatchesAndPrices({ values, context });
     },
     prepareRemove: (existing) => {
       if (Number(existing.quantity) > 0) {

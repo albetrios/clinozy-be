@@ -53,27 +53,30 @@ async function readRefreshBatch(organizationPublicId: string): Promise<{
   offerings: IdeaOffering[];
   items: RefreshItem[];
 } | null> {
-  return runOrganizationScopedWorkerJob({ organizationPublicId }, async (databaseHandle) => {
-    const repository = createWorkerPatientIdeasRepository(databaseHandle);
-    const organizationId = await repository.findOrganizationId(organizationPublicId);
-    if (organizationId === null) return null;
-    const offerings = await repository.findActiveOfferings(organizationId);
-    const items: RefreshItem[] = [];
-    for (const patient of await repository.findStalePatients(
-      organizationId,
-      PATIENT_IDEAS_REFRESH_BATCH,
-    )) {
-      if (!patient.hasDataConsent) {
-        items.push({ patient, summary: null, excluded: new Set() });
-        continue;
+  return runOrganizationScopedWorkerJob({
+    job: { organizationPublicId },
+    processor: async (databaseHandle) => {
+      const repository = createWorkerPatientIdeasRepository(databaseHandle);
+      const organizationId = await repository.findOrganizationId(organizationPublicId);
+      if (organizationId === null) return null;
+      const offerings = await repository.findActiveOfferings(organizationId);
+      const items: RefreshItem[] = [];
+      for (const patient of await repository.findStalePatients(
+        organizationId,
+        PATIENT_IDEAS_REFRESH_BATCH,
+      )) {
+        if (!patient.hasDataConsent) {
+          items.push({ patient, summary: null, excluded: new Set() });
+          continue;
+        }
+        items.push({
+          patient,
+          summary: await repository.findSummary(patient),
+          excluded: new Set(await repository.findPlannedOfferingIds(patient.id)),
+        });
       }
-      items.push({
-        patient,
-        summary: await repository.findSummary(patient),
-        excluded: new Set(await repository.findPlannedOfferingIds(patient.id)),
-      });
-    }
-    return { organizationId, offerings, items };
+      return { organizationId, offerings, items };
+    },
   });
 }
 
@@ -167,9 +170,9 @@ export async function runPatientIdeasJob(
             offerings: batch.offerings,
             excluded: item.excluded,
           });
-    const written = await runOrganizationScopedWorkerJob(
-      { organizationPublicId },
-      async (databaseHandle) => {
+    const written = await runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: async (databaseHandle) => {
         const repository = createWorkerPatientIdeasRepository(databaseHandle);
         const cleared = await repository.clearStaleMark({
           patientId: item.patient.id,
@@ -186,7 +189,7 @@ export async function runPatientIdeasJob(
         });
         return true;
       },
-    );
+    });
     if (!written) counts.supersededCount += 1;
     else if (item.summary === null) counts.removedCount += 1;
     else if (ideas === null) counts.unreadCount += 1;

@@ -52,11 +52,15 @@ export type TenancyContainer = {
  * permission, and settings services, which is why instances are created top-
  * down before the membership service.
  */
-export function createTenancyContainer(
-  userService: UserService,
-  objectStorage: ObjectStoragePort,
-  userSettingsService?: UserSettingsService,
-): TenancyContainer {
+export function createTenancyContainer({
+  userService,
+  objectStorage,
+  userSettingsService,
+}: {
+  userService: UserService;
+  objectStorage: ObjectStoragePort;
+  userSettingsService?: UserSettingsService | undefined;
+}): TenancyContainer {
   const organizationRepository = new OrganizationRepository();
   const organizationSettingsRepository = new OrganizationSettingsRepository();
   const organizationNotificationPolicyRepository = new OrganizationNotificationPolicyRepository();
@@ -105,6 +109,10 @@ export function createTenancyContainer(
     membershipRepository,
     membershipInvitationRepository,
     userService,
+    // D84: presign the clinic logo on the invitee's own invitation list.
+    objectStorage,
+    // An invitee has no language yet: invitations are written in the organization's.
+    organizationSettingsService,
   );
   const membershipService = new MembershipService(
     organizationService,
@@ -123,6 +131,8 @@ export function createTenancyContainer(
     userService,
     membershipInvitationService,
   );
+  // Accept changes a membership too; it emits through MembershipService's serializer.
+  membershipInvitationService.wireMembershipEvents(membershipService);
 
   return {
     organizationService,
@@ -148,10 +158,10 @@ export function registerTenancyContainer(application: FastifyInstance): void {
   const objectStorage = getDefaultS3ObjectStorageAdapter();
   application.decorate(
     'tenancyDomain',
-    createTenancyContainer(
-      application.userDomain.userService,
+    createTenancyContainer({
+      userService: application.userDomain.userService,
       objectStorage,
-      application.userDomain.userSettingsService,
-    ),
+      userSettingsService: application.userDomain.userSettingsService,
+    }),
   );
 }

@@ -17,7 +17,7 @@ import {
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 
 const PERMISSIONS = [TENANCY_PERMISSIONS.ORGANIZATION_READ, TENANCY_PERMISSIONS.MEMBERSHIP_READ];
 
@@ -128,7 +128,7 @@ describe('GET /api/v1/auth/me/context — Integration', () => {
       organizationId: organization.id,
       roleId: mainRole.id,
     });
-    const operatorSql = getOperatorSql();
+    const operatorSql = operatorQuery;
     await operatorSql`UPDATE tenancy.roles SET tone = 'lav', is_system = true WHERE id = ${extraRole.id}`;
     await operatorSql`UPDATE tenancy.roles SET deleted_at = now() WHERE id = ${deletedRole.id}`;
     await operatorSql`

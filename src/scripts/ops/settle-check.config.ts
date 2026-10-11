@@ -10,7 +10,13 @@
  * absent, non-numeric, zero, or negative. Used for the timeout and poll-interval
  * knobs so a malformed override can never produce a non-positive loop bound.
  */
-export function parsePositiveIntegerEnv(rawValue: string | undefined, fallback: number): number {
+export function parsePositiveIntegerEnv({
+  rawValue,
+  fallback,
+}: {
+  rawValue: string | undefined;
+  fallback: number;
+}): number {
   if (rawValue === undefined) {
     return fallback;
   }
@@ -24,10 +30,13 @@ export function parsePositiveIntegerEnv(rawValue: string | undefined, fallback: 
  * an absent, blank, or all-blank override falls back to `defaults` so the check
  * never runs against an empty queue set (which would pass vacuously).
  */
-export function resolveQueueNames(
-  override: string | undefined,
-  defaults: readonly string[],
-): string[] {
+export function resolveQueueNames({
+  override,
+  defaults,
+}: {
+  override: string | undefined;
+  defaults: readonly string[];
+}): string[] {
   if (override === undefined || override.trim() === '') {
     return [...defaults];
   }

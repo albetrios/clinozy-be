@@ -10,5 +10,5 @@ import {
  * `errors:invalidInput`) with per-field details on failure.
  */
 export function validatePutMemberRolePermissions(data: unknown): PutMemberRolePermissionsInput {
-  return parseWithSchema(putMemberRolePermissionsDto, data);
+  return parseWithSchema({ schema: putMemberRolePermissionsDto, data });
 }

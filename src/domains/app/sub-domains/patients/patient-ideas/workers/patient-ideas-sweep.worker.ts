@@ -38,5 +38,5 @@ export function createPatientIdeasSweepWorker(): WorkerHandle {
     logger.warn({ jobId, queue: PATIENT_IDEAS_SWEEP_QUEUE_NAME }, 'patient-ideas-sweep.stalled');
   });
 
-  return buildWorkerHandle(worker, PATIENT_IDEAS_SWEEP_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: PATIENT_IDEAS_SWEEP_QUEUE_NAME });
 }

@@ -75,7 +75,13 @@ function readSnapshots(filePaths: string[]): Map<string, string> {
   return snapshots;
 }
 
-function findDriftedFiles(before: Map<string, string>, filePaths: string[]): string[] {
+function findDriftedFiles({
+  before,
+  filePaths,
+}: {
+  before: Map<string, string>;
+  filePaths: string[];
+}): string[] {
   const drifted: string[] = [];
   for (const filePath of filePaths) {
     const previous = before.get(filePath);
@@ -120,7 +126,7 @@ function checkOpenApiDrift(): string[] {
 
   execSync('pnpm docs:generate:multilang', { stdio: 'inherit', cwd: process.cwd() });
 
-  const drifted = findDriftedFiles(snapshots, filePaths);
+  const drifted = findDriftedFiles({ before: snapshots, filePaths });
 
   if (drifted.length > 0) {
     restoreSnapshots(snapshots);

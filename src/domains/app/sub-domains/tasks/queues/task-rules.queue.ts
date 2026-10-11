@@ -58,11 +58,11 @@ export function taskRulesDeduplication(organizationPublicId: string): Deduplicat
  * - **Side effects:** at most one waiting job per organization, and one more while it runs.
  */
 export async function enqueueTaskRules(organizationPublicId: string): Promise<void> {
-  const jobData = parseBullMQJobData(
-    taskRulesJobDataSchema,
-    { organizationPublicId, ...captureTraceContextForPropagation() },
-    TASK_RULES_QUEUE_NAME,
-  );
+  const jobData = parseBullMQJobData({
+    schema: taskRulesJobDataSchema,
+    data: { organizationPublicId, ...captureTraceContextForPropagation() },
+    queueName: TASK_RULES_QUEUE_NAME,
+  });
   await getTaskRulesQueue().add('run-task-rules', jobData, {
     jobId: `task-rules-${organizationPublicId}-${randomUUID()}`,
     deduplication: taskRulesDeduplication(organizationPublicId),

@@ -59,7 +59,7 @@ const DOING_WELL_SCORE = 8;
 const nextTasks = new WeakMap<BaseRecordWriteContext, string>();
 
 /** A task that is done takes no more actions (`409 transition_not_allowed`). */
-function assertNotDone(existing: BaseRecordRow, action: string): void {
+function assertNotDone({ existing, action }: { existing: BaseRecordRow; action: string }): void {
   if (existing.status !== TASK_STATUS.DONE) return;
   throw new ConflictError('errors:recordTransitionNotAllowed', {
     action,
@@ -77,7 +77,13 @@ function assertMadeByHand(existing: BaseRecordRow): void {
  * D81 TASKS-M2: the outcomes a task offers — its rule's, or a task made by hand's — else a 400 on
  * `outcome` naming them (a feedback outcome on another task would write its effect there).
  */
-function assertOutcomeOffered(existing: BaseRecordRow, outcome: TaskOutcome): void {
+function assertOutcomeOffered({
+  existing,
+  outcome,
+}: {
+  existing: BaseRecordRow;
+  outcome: TaskOutcome;
+}): void {
   const offered =
     existing.kind === TASK_KIND.RULE
       ? (TASK_RULE_OUTCOMES[existing.rule_key as TaskRule] ?? [])
@@ -178,10 +184,13 @@ async function memberIdOf(options: {
  * TK3, TK5: at most one record (400 on the second link), the person's (400 on the link when another
  * contact's); the task takes the record's person when none is sent, and its branch.
  */
-async function linkRecord(
-  values: Record<string, unknown>,
-  repository: TasksRepository,
-): Promise<void> {
+async function linkRecord({
+  values,
+  repository,
+}: {
+  values: Record<string, unknown>;
+  repository: TasksRepository;
+}): Promise<void> {
   const links = TASK_RECORD_LINK_VALUES.filter((link) => typeof values[link] === 'number');
   if (links.length > 1) {
     throw fieldValidationError({
@@ -233,7 +242,13 @@ async function logDoingWell(options: {
 }
 
 /** 10.10: an `unhappy` feedback task opens a call-back — due 18:00 today, the visit's doctor. */
-async function openUnhappyCallBack(task: BaseRecordRow, context: BaseRecordWriteContext) {
+async function openUnhappyCallBack({
+  task,
+  context,
+}: {
+  task: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}) {
   const { timezone } = await context.ports.organizationSettings(context.scope);
   const visit =
     typeof task.appointment_id === 'number'
@@ -256,7 +271,13 @@ async function openUnhappyCallBack(task: BaseRecordRow, context: BaseRecordWrite
 }
 
 /** 10.10 "Claim it": a done `claim` task gives the lead to the caller, with a fresh hold. */
-async function claimLeadOfTask(task: BaseRecordRow, context: BaseRecordWriteContext) {
+async function claimLeadOfTask({
+  task,
+  context,
+}: {
+  task: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}) {
   if (typeof task.lead_id !== 'number') return;
   const membershipId = await findMembershipIdOfUser({
     organizationId: context.organizationId,
@@ -364,9 +385,9 @@ async function resolvedValues(options: {
 async function resolveTask(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing, context } = input;
   const repository = input.repository as TasksRepository;
-  assertNotDone(existing, 'resolve');
-  const body = parseWithSchema(ResolveTaskDto, input.input);
-  assertOutcomeOffered(existing, body.outcome);
+  assertNotDone({ existing, action: 'resolve' });
+  const body = parseWithSchema({ schema: ResolveTaskDto, data: input.input });
+  assertOutcomeOffered({ existing, outcome: body.outcome });
   const claimsLead =
     body.outcome === TASK_OUTCOME.DONE &&
     existing.rule_key === TASK_RULE.CLAIM &&
@@ -395,9 +416,9 @@ async function resolveTask(input: BaseRecordActionInput): Promise<BaseRecordRow>
     await logDoingWell({ task: updated, patientId, context });
   }
   if (body.outcome === TASK_OUTCOME.UNHAPPY && existing.rule_key === TASK_RULE.FEEDBACK) {
-    await openUnhappyCallBack(updated, context);
+    await openUnhappyCallBack({ task: updated, context });
   }
-  if (claimsLead) await claimLeadOfTask(existing, context);
+  if (claimsLead) await claimLeadOfTask({ task: existing, context });
   if (body.next) await setNextTask({ task: updated, next: body.next, repository, context });
   return updated;
 }
@@ -410,8 +431,8 @@ async function resolveTask(input: BaseRecordActionInput): Promise<BaseRecordRow>
 async function reassignTask(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing, context } = input;
   const repository = input.repository as TasksRepository;
-  assertNotDone(existing, 'reassign');
-  const body = parseWithSchema(ReassignTaskDto, input.input);
+  assertNotDone({ existing, action: 'reassign' });
+  const body = parseWithSchema({ schema: ReassignTaskDto, data: input.input });
   if (typeof existing.lead_id === 'number') await assertCanMoveLead(context);
   const memberId = await memberIdOf({
     publicId: body.owner_membership_id,
@@ -524,7 +545,7 @@ export function createTasksRules(repository: TasksRepository): BaseRecordRules {
         memberId: values.owner_membership_id,
         role: values.owner_role,
       });
-      await linkRecord(values, repository);
+      await linkRecord({ values, repository });
     },
     prepareUpdate: (_values, existing) => assertMadeByHand(existing),
     prepareRemove: (existing) => assertMadeByHand(existing),

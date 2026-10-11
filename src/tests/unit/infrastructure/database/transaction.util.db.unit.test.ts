@@ -13,11 +13,13 @@ describe('withTransaction', () => {
 
   it('commits when callback resolves', async () => {
     const user = await createTestUser({ email: 'txn-commit@example.com' });
-    await withTransaction(async (transaction) => {
-      await (transaction as typeof database)
-        .update(users)
-        .set({ first_name: 'Committed' })
-        .where(eq(users.id, user.id));
+    await withTransaction({
+      callback: async (transaction) => {
+        await (transaction as typeof database)
+          .update(users)
+          .set({ first_name: 'Committed' })
+          .where(eq(users.id, user.id));
+      },
     });
 
     const [row] = await database.select().from(users).where(eq(users.id, user.id));
@@ -27,12 +29,14 @@ describe('withTransaction', () => {
   it('rolls back when callback throws', async () => {
     const user = await createTestUser({ email: 'txn-rollback@example.com' });
     await expect(
-      withTransaction(async (transaction) => {
-        await (transaction as typeof database)
-          .update(users)
-          .set({ first_name: 'ShouldRollback' })
-          .where(eq(users.id, user.id));
-        throw new Error('force rollback');
+      withTransaction({
+        callback: async (transaction) => {
+          await (transaction as typeof database)
+            .update(users)
+            .set({ first_name: 'ShouldRollback' })
+            .where(eq(users.id, user.id));
+          throw new Error('force rollback');
+        },
       }),
     ).rejects.toThrow('force rollback');
 
@@ -42,24 +46,28 @@ describe('withTransaction', () => {
 
   it('propagates the original error message', async () => {
     await expect(
-      withTransaction(async () => {
-        throw new Error('original-txn-error');
+      withTransaction({
+        callback: async () => {
+          throw new Error('original-txn-error');
+        },
       }),
     ).rejects.toThrow('original-txn-error');
   });
 
   it('sets local statement_timeout inside the transaction', async () => {
     let timeoutSetting: string | null = null;
-    await withTransaction(
-      async (transaction) => {
-        const result = await (transaction as typeof database).execute(
+    await withTransaction({
+      callback: async (transaction) => {
+        const result = await (transaction as typeof database).execute<{ timeout: string }>(
           sql`SELECT current_setting('statement_timeout', true) AS timeout`,
         );
-        const rows = result as unknown as { timeout: string }[];
+        const rows = Array.isArray(result)
+          ? (result as { timeout: string }[])
+          : ((result as { rows?: { timeout: string }[] }).rows ?? []);
         timeoutSetting = rows[0]?.timeout ?? null;
       },
-      { timeoutMs: 5_000 },
-    );
+      options: { timeoutMs: 5_000 },
+    });
     expect(timeoutSetting === '5000ms' || timeoutSetting === '5s').toBe(true);
   });
 });

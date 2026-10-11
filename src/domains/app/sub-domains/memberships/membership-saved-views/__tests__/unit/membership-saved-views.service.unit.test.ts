@@ -16,18 +16,25 @@ describe('MembershipSavedViewsService', () => {
   const service = new MembershipSavedViewsService({} as never, {} as never);
 
   it('refuses a list query with an unknown filter (400)', async () => {
-    await expect(service.list(SCOPE, { not_a_filter: 'x' }, undefined)).rejects.toBeInstanceOf(
-      ValidationError,
-    );
+    await expect(
+      service.list({ scope: SCOPE, query: { not_a_filter: 'x' }, actingUserPublicId: undefined }),
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('refuses a create without its list and label (400)', async () => {
-    await expect(service.create(SCOPE, {}, undefined)).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      service.create({ scope: SCOPE, body: {}, actingUserPublicId: undefined }),
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('refuses a change with an unknown field (400)', async () => {
     await expect(
-      service.update(SCOPE, 'sv_aaaaaaaaaaaaaaaaaaaaa', { not_a_field: true }, undefined),
+      service.update({
+        scope: SCOPE,
+        savedViewPublicId: 'sv_aaaaaaaaaaaaaaaaaaaaa',
+        body: { not_a_field: true },
+        actingUserPublicId: undefined,
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 });

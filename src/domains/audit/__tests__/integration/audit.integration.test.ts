@@ -55,10 +55,10 @@ describe('Audit Domain — Integration', () => {
   // `pnpm test:rls-role` the pool under test is `clinozy_be_app`, whose tenant-scoped INSERT
   // policy would reject a fixture written with no organization context.
   const seedAuditRow = (row: Parameters<AuditRepository['insert']>[0]) =>
-    runWithPinnedDatabaseHandle(
-      getOperatorDatabase() as unknown as RequestScopedPostgresDatabase,
-      () => repository.insert(row),
-    );
+    runWithPinnedDatabaseHandle({
+      databaseHandle: getOperatorDatabase() as unknown as RequestScopedPostgresDatabase,
+      callback: () => repository.insert(row),
+    });
 
   beforeAll(async () => {
     const testApp = await createTestApp();

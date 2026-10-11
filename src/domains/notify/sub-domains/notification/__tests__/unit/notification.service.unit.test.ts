@@ -16,10 +16,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -72,7 +74,7 @@ describe('NotificationService', () => {
   });
 
   it('listForUser returns keyset paginated notifications', async () => {
-    const result = await service.listForUser(scope, { limit: 50 });
+    const result = await service.listForUser({ scope, options: { limit: 50 } });
     expect(result.items).toHaveLength(1);
     expect(result.has_more).toBe(false);
     expect(result.next_cursor).toBeNull();
@@ -80,10 +82,13 @@ describe('NotificationService', () => {
   });
 
   it('listForUser forwards keyset options to the repository', async () => {
-    await service.listForUser(scope, {
-      after: 'cursor_prev',
-      limit: 25,
-      include_total: true,
+    await service.listForUser({
+      scope,
+      options: {
+        after: 'cursor_prev',
+        limit: 25,
+        include_total: true,
+      },
     });
     expect(repository.findByUser).toHaveBeenLastCalledWith(1, {
       after: 'cursor_prev',
@@ -93,19 +98,19 @@ describe('NotificationService', () => {
   });
 
   it('get returns notification for user', async () => {
-    const result = await service.get('notif_public', scope);
+    const result = await service.get({ public_id: 'notif_public', scope });
     expect(result?.public_id).toBe('notif_public');
   });
 
   it('resolveUserId throws when user missing', async () => {
     vi.mocked(userService.resolveInternalIdByPublicId).mockResolvedValue(null);
-    await expect(service.listForUser(missingUserScope, { limit: 50 })).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      service.listForUser({ scope: missingUserScope, options: { limit: 50 } }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('markRead updates notification', async () => {
-    await service.markRead('notif_public', scope);
+    await service.markRead({ public_id: 'notif_public', scope });
     expect(repository.markRead).toHaveBeenCalled();
   });
 
@@ -116,7 +121,7 @@ describe('NotificationService', () => {
 
   it('markAllRead and deleteNotification delegate to repository', async () => {
     await service.markAllRead(scope);
-    await service.deleteNotification('notif_public', scope);
+    await service.deleteNotification({ public_id: 'notif_public', scope });
     expect(repository.markAllReadForUser).toHaveBeenCalled();
     expect(repository.deleteByPublicIdForUser).toHaveBeenCalled();
   });

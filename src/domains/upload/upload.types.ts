@@ -1,5 +1,22 @@
 import type { UploadPurpose, UploadTarget } from './upload.constants.js';
 
+/**
+ * Who acts on an upload: the user, their active organization (`null` in their personal space), and
+ * the route's organization authorization.
+ *
+ * @remarks
+ * `authorizeOrganization` is called for every organization upload — creating one, and reading,
+ * confirming or deleting one — and admits only the active organization, checked exactly as every
+ * organization route checks a permission (`upload:manage` through `assertOrganizationPermission`:
+ * API-key scopes, the organization's MFA requirement, a deny audit row). A service-side permission
+ * lookup used to skip the MFA requirement.
+ */
+export interface UploadPrincipal {
+  userPublicId: string;
+  organizationPublicId: string | null;
+  authorizeOrganization: (organizationPublicId: string) => Promise<void>;
+}
+
 /** Validated payload accepted by {@link UploadService.createUpload}; mirrors {@link createUploadDto}. */
 export interface CreateUploadInput {
   purpose: UploadPurpose;

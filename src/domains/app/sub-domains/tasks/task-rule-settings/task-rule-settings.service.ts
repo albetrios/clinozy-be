@@ -33,15 +33,19 @@ export class TaskRuleSettingsService {
 
   /** Every rule with its switches, in the Rules popover's order. */
   async listRules(scope: OrganizationPrincipalDatabaseScope): Promise<TaskRuleSettingOutput[]> {
-    return withAppDatabaseContext(scope, async () => this.readRules(scope));
+    return withAppDatabaseContext({ scope, callback: async () => this.readRules(scope) });
   }
 
   /** Saves the sent rules' switches in one transaction and answers with every rule. */
-  async replaceRules(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-  ): Promise<TaskRuleSettingOutput[]> {
+  async replaceRules({
+    scope,
+    body,
+    actingUserPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+  }): Promise<TaskRuleSettingOutput[]> {
     const { rules } = validateReplaceTaskRules(body);
     rules.forEach((rule, index) => {
       if (
@@ -55,21 +59,24 @@ export class TaskRuleSettingsService {
         });
       }
     });
-    return withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const userId =
-        (await this.organizationService.resolveUserInternalIdByPublicId(actingUserPublicId)) ??
-        null;
-      for (const rule of rules) {
-        await this.repository.upsert({
-          organizationId,
-          ruleKey: rule.rule_key,
-          isOn: rule.is_on,
-          isAutomatic: rule.is_automatic,
-          userId,
-        });
-      }
-      return this.readRules(scope);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const userId =
+          (await this.organizationService.resolveUserInternalIdByPublicId(actingUserPublicId)) ??
+          null;
+        for (const rule of rules) {
+          await this.repository.upsert({
+            organizationId,
+            ruleKey: rule.rule_key,
+            isOn: rule.is_on,
+            isAutomatic: rule.is_automatic,
+            userId,
+          });
+        }
+        return this.readRules(scope);
+      },
     });
   }
 

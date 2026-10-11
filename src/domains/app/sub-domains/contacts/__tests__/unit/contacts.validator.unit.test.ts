@@ -70,14 +70,14 @@ describe('contacts.validator — the contact search', () => {
 
 describe('contacts.validator — a list about a contact (leads L7, patients P9)', () => {
   it('keeps #n as the record number and C-n as the contact number', () => {
-    expect(readContactLinkedSearch('#2371')).toEqual({ recordNumber: 2371 });
-    expect(readContactLinkedSearch('C-12')).toEqual({ contactNumber: 12 });
+    expect(readContactLinkedSearch({ q: '#2371' })).toEqual({ recordNumber: 2371 });
+    expect(readContactLinkedSearch({ q: 'C-12' })).toEqual({ contactNumber: 12 });
   });
 
   it('reads the record prefix when the list has one', () => {
-    expect(readContactLinkedSearch('PT-0412', { recordPrefix: 'PT' })).toEqual({
+    expect(readContactLinkedSearch({ q: 'PT-0412', options: { recordPrefix: 'PT' } })).toEqual({
       recordNumber: 412,
     });
-    expect(readContactLinkedSearch('PT-0412')).toEqual({ text: 'PT-0412' });
+    expect(readContactLinkedSearch({ q: 'PT-0412' })).toEqual({ text: 'PT-0412' });
   });
 });

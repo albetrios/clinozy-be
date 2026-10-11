@@ -25,12 +25,15 @@ function pathParams(request: FastifyRequest): Record<string, string | undefined>
 }
 
 /** Whether the caller holds at least one of `codes` (each read from the request's memoized set). */
-async function holdsAnyPermission(
-  request: FastifyRequest,
-  codes: readonly string[],
-): Promise<boolean> {
+async function holdsAnyPermission({
+  request,
+  codes,
+}: {
+  request: FastifyRequest;
+  codes: readonly string[];
+}): Promise<boolean> {
   for (const code of codes) {
-    if (await hasOrganizationPermission(request, code)) return true;
+    if (await hasOrganizationPermission({ request, permissionCode: code })) return true;
   }
   return false;
 }
@@ -83,10 +86,10 @@ export class BaseRecordController<Output extends { id: string }> {
 
   /** The by-id path param of the request. */
   protected readId(request: FastifyRequest): string {
-    return validatePublicIdParam(
-      pathParams(request)[this.options.idParam] ?? '',
-      this.options.idParam,
-    );
+    return validatePublicIdParam({
+      value: pathParams(request)[this.options.idParam] ?? '',
+      fieldName: this.options.idParam,
+    });
   }
 
   /** The parent path param — only when the path has it (a table listed on its own and nested). */
@@ -95,7 +98,7 @@ export class BaseRecordController<Output extends { id: string }> {
     const value = parentParam === undefined ? undefined : pathParams(request)[parentParam];
     return value === undefined || parentParam === undefined
       ? undefined
-      : validatePublicIdParam(value, parentParam);
+      : validatePublicIdParam({ value, fieldName: parentParam });
   }
 
   /**
@@ -105,26 +108,34 @@ export class BaseRecordController<Output extends { id: string }> {
   protected async visibility(request: FastifyRequest): Promise<BaseRecordVisibility> {
     return {
       allBranches: this.service.branchScoped
-        ? await hasOrganizationPermission(request, APP_PERMISSIONS.BRANCH_READ)
+        ? await hasOrganizationPermission({ request, permissionCode: APP_PERMISSIONS.BRANCH_READ })
         : true,
-      can: (code) => hasOrganizationPermission(request, code),
+      can: (code) => hasOrganizationPermission({ request, permissionCode: code }),
     };
   }
 
   /** Records the `app.<resource>.<verb>` audit row of a write. */
-  protected async audit(
-    request: FastifyRequest,
-    verb: string,
-    publicId: string,
-    metadata: Record<string, unknown> = {},
-  ): Promise<void> {
+  protected async audit({
+    request,
+    verb,
+    publicId,
+    metadata = {},
+  }: {
+    request: FastifyRequest;
+    verb: string;
+    publicId: string;
+    metadata?: Record<string, unknown> | undefined;
+  }): Promise<void> {
     const auth = requirePrincipal(request);
-    await recordScopedAuditEvent(request, {
-      ...buildAuditActorFields(auth),
-      action: `app.${this.options.resource}.${verb}`,
-      resource_type: this.options.resource,
-      organizationPublicId: requireOrganizationScope(request).organizationPublicId,
-      metadata: { [`${this.options.resource}_public_id`]: publicId, ...metadata },
+    await recordScopedAuditEvent({
+      request,
+      input: {
+        ...buildAuditActorFields(auth),
+        action: `app.${this.options.resource}.${verb}`,
+        resource_type: this.options.resource,
+        organizationPublicId: requireOrganizationScope(request).organizationPublicId,
+        metadata: { [`${this.options.resource}_public_id`]: publicId, ...metadata },
+      },
     });
   }
 
@@ -133,13 +144,18 @@ export class BaseRecordController<Output extends { id: string }> {
    * {@link BaseRecordControllerOptions.hiddenFields} — a field with a code list shows when the caller
    * holds any of them.
    */
-  protected async present<Item extends Output | Output[]>(
-    request: FastifyRequest,
-    output: Item,
-  ): Promise<Item> {
+  protected async present<Item extends Output | Output[]>({
+    request,
+    output,
+  }: {
+    request: FastifyRequest;
+    output: Item;
+  }): Promise<Item> {
     const hidden: string[] = [];
     for (const [field, codes] of Object.entries(this.options.hiddenFields ?? {})) {
-      if (!(await holdsAnyPermission(request, typeof codes === 'string' ? [codes] : codes))) {
+      if (
+        !(await holdsAnyPermission({ request, codes: typeof codes === 'string' ? [codes] : codes }))
+      ) {
         hidden.push(field);
       }
     }
@@ -153,7 +169,7 @@ export class BaseRecordController<Output extends { id: string }> {
   protected async assertFieldsAllowed(request: FastifyRequest): Promise<void> {
     const body = (request.body ?? {}) as Record<string, unknown>;
     for (const [field, code] of Object.entries(this.options.guardedFields ?? {})) {
-      if (field in body && !(await hasOrganizationPermission(request, code))) {
+      if (field in body && !(await hasOrganizationPermission({ request, permissionCode: code }))) {
         throw new ForbiddenError('errors:fieldNeedsPermission', {
           field,
           permission: code,
@@ -169,91 +185,120 @@ export class BaseRecordController<Output extends { id: string }> {
 
   /** `GET` — one page of the table (under the parent when nested). */
   readonly list = async (request: FastifyRequest, _reply: FastifyReply) => {
-    const page = await this.service.list(requireOrganizationScope(request), request.query, {
-      parentPublicId: this.readParentId(request),
-      actingUserPublicId: this.actor(request),
-      visibility: await this.visibility(request),
-      ...(this.options.listDerived ? { derived: this.options.listDerived } : {}),
+    const page = await this.service.list({
+      scope: requireOrganizationScope(request),
+      query: request.query,
+      options: {
+        parentPublicId: this.readParentId(request),
+        actingUserPublicId: this.actor(request),
+        visibility: await this.visibility(request),
+        ...(this.options.listDerived ? { derived: this.options.listDerived } : {}),
+      },
     });
-    return paginatedResponse(
-      await this.present(request, page.items),
-      getRequestIdentifier(request),
-      {
+    return paginatedResponse({
+      data: await this.present({ request, output: page.items }),
+      request_id: getRequestIdentifier(request),
+      pagination: {
         per_page: page.limit,
         next: page.next_cursor,
         has_more: page.has_more,
         ...(page.total === null ? {} : { estimated_total: page.total }),
       },
-      page.meta,
-    );
+      extraMeta: page.meta,
+    });
   };
 
   /** `GET …/{id}` — one live record. */
   readonly get = async (request: FastifyRequest, _reply: FastifyReply) => {
-    const data = await this.service.get(
-      requireOrganizationScope(request),
-      this.readId(request),
-      this.actor(request),
-      await this.visibility(request),
-      this.readParentId(request),
-    );
-    return successResponse(await this.present(request, data), getRequestIdentifier(request));
+    const data = await this.service.get({
+      scope: requireOrganizationScope(request),
+      publicId: this.readId(request),
+      actingUserPublicId: this.actor(request),
+      visibility: await this.visibility(request),
+      parentPublicId: this.readParentId(request),
+    });
+    return successResponse({
+      data: await this.present({ request, output: data }),
+      request_id: getRequestIdentifier(request),
+    });
   };
 
   /** `POST` — creates a record (under the parent when nested). */
   readonly create = async (request: FastifyRequest, _reply: FastifyReply) =>
-    this.createRecord(request, undefined);
+    this.createRecord({ request, createName: undefined });
 
   /** `POST …/<name>` — a named create with its own body (`send-message`, `add-note`). */
   readonly createNamed = (name: string) => async (request: FastifyRequest, _reply: FastifyReply) =>
-    this.createRecord(request, name);
+    this.createRecord({ request, createName: name });
 
   /** Creates a record with the table's create body or a named one; audited as a create. */
-  private async createRecord(request: FastifyRequest, createName: string | undefined) {
+  private async createRecord({
+    request,
+    createName,
+  }: {
+    request: FastifyRequest;
+    createName: string | undefined;
+  }) {
     await this.assertFieldsAllowed(request);
-    const data = await this.service.create(
-      requireOrganizationScope(request),
-      request.body,
-      this.actor(request),
-      this.readParentId(request),
-      await this.visibility(request),
+    const data = await this.service.create({
+      scope: requireOrganizationScope(request),
+      body: request.body,
+      actingUserPublicId: this.actor(request),
+      parentPublicId: this.readParentId(request),
+      visibility: await this.visibility(request),
       createName,
-    );
-    await this.audit(request, createName ?? 'create', data.id);
-    return successResponse(await this.present(request, data), getRequestIdentifier(request));
+    });
+    await this.audit({ request, verb: createName ?? 'create', publicId: data.id });
+    return successResponse({
+      data: await this.present({ request, output: data }),
+      request_id: getRequestIdentifier(request),
+    });
   }
 
   /** `PATCH …/{id}` — changes a live record. */
   readonly update = async (request: FastifyRequest, _reply: FastifyReply) => {
     await this.assertFieldsAllowed(request);
     const publicId = this.readId(request);
-    const data = await this.service.update(
-      requireOrganizationScope(request),
+    const data = await this.service.update({
+      scope: requireOrganizationScope(request),
       publicId,
-      request.body,
-      this.actor(request),
-      await this.visibility(request),
-      this.readParentId(request),
-    );
-    await this.audit(request, 'update', publicId, {
-      changed_fields: listBodyFieldNames(request.body),
+      body: request.body,
+      actingUserPublicId: this.actor(request),
+      visibility: await this.visibility(request),
+      parentPublicId: this.readParentId(request),
     });
-    return successResponse(await this.present(request, data), getRequestIdentifier(request));
+    await this.audit({
+      request,
+      verb: 'update',
+      publicId,
+      metadata: {
+        changed_fields: listBodyFieldNames(request.body),
+      },
+    });
+    return successResponse({
+      data: await this.present({ request, output: data }),
+      request_id: getRequestIdentifier(request),
+    });
   };
 
   /** `DELETE …/{id}?reason=&note=` — soft-deletes with why; 204. */
   readonly remove = async (request: FastifyRequest, reply: FastifyReply) => {
     const publicId = this.readId(request);
-    await this.service.remove(
-      requireOrganizationScope(request),
+    await this.service.remove({
+      scope: requireOrganizationScope(request),
       publicId,
-      request.query,
-      this.actor(request),
-      await this.visibility(request),
-      this.readParentId(request),
-    );
-    await this.audit(request, 'delete', publicId, {
-      delete_reason: (request.query as { reason?: string }).reason,
+      query: request.query,
+      actingUserPublicId: this.actor(request),
+      visibility: await this.visibility(request),
+      parentPublicId: this.readParentId(request),
+    });
+    await this.audit({
+      request,
+      verb: 'delete',
+      publicId,
+      metadata: {
+        delete_reason: (request.query as { reason?: string }).reason,
+      },
     });
     return reply.code(204).send();
   };
@@ -261,70 +306,93 @@ export class BaseRecordController<Output extends { id: string }> {
   /** `POST …/{id}/restore` — undoes a soft delete. */
   readonly restore = async (request: FastifyRequest, _reply: FastifyReply) => {
     const publicId = this.readId(request);
-    const data = await this.service.restore(
-      requireOrganizationScope(request),
+    const data = await this.service.restore({
+      scope: requireOrganizationScope(request),
       publicId,
-      this.actor(request),
-      await this.visibility(request),
-      this.readParentId(request),
-    );
-    await this.audit(request, 'restore', publicId);
-    return successResponse(await this.present(request, data), getRequestIdentifier(request));
+      actingUserPublicId: this.actor(request),
+      visibility: await this.visibility(request),
+      parentPublicId: this.readParentId(request),
+    });
+    await this.audit({ request, verb: 'restore', publicId });
+    return successResponse({
+      data: await this.present({ request, output: data }),
+      request_id: getRequestIdentifier(request),
+    });
   };
 
   /** `GET …/{id}/<view>` — a read view of one record (a table rule). */
   readonly view = (name: string) => async (request: FastifyRequest, _reply: FastifyReply) => {
-    const data = await this.service.view(
-      requireOrganizationScope(request),
-      this.readId(request),
+    const data = await this.service.view({
+      scope: requireOrganizationScope(request),
+      publicId: this.readId(request),
       name,
-      request.query,
-      { actingUserPublicId: this.actor(request), visibility: await this.visibility(request) },
-    );
-    return successResponse(data, getRequestIdentifier(request));
+      query: request.query,
+      options: {
+        actingUserPublicId: this.actor(request),
+        visibility: await this.visibility(request),
+      },
+    });
+    return successResponse({ data, request_id: getRequestIdentifier(request) });
   };
 
   /** `GET /<module>/<name>` — a read of the collection (a table rule). */
   readonly collectionView =
     (name: string) => async (request: FastifyRequest, _reply: FastifyReply) => {
-      const data = await this.service.collection(
-        requireOrganizationScope(request),
-        'view',
+      const data = await this.service.collection({
+        scope: requireOrganizationScope(request),
+        kind: 'view',
         name,
-        request.query,
-        { actingUserPublicId: this.actor(request), visibility: await this.visibility(request) },
-      );
-      return successResponse(data, getRequestIdentifier(request));
+        input: request.query,
+        options: {
+          actingUserPublicId: this.actor(request),
+          visibility: await this.visibility(request),
+        },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     };
 
   /** `POST /<module>/<name>` — a write on the collection (a table rule), audited. */
   readonly collectionAction =
     (name: string) => async (request: FastifyRequest, _reply: FastifyReply) => {
-      const data = await this.service.collection(
-        requireOrganizationScope(request),
-        'action',
+      const data = await this.service.collection({
+        scope: requireOrganizationScope(request),
+        kind: 'action',
         name,
-        request.body,
-        { actingUserPublicId: this.actor(request), visibility: await this.visibility(request) },
-      );
-      await this.audit(request, name, 'collection', {
-        changed_fields: listBodyFieldNames(request.body),
+        input: request.body,
+        options: {
+          actingUserPublicId: this.actor(request),
+          visibility: await this.visibility(request),
+        },
       });
-      return successResponse(data, getRequestIdentifier(request));
+      await this.audit({
+        request,
+        verb: name,
+        publicId: 'collection',
+        metadata: {
+          changed_fields: listBodyFieldNames(request.body),
+        },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     };
 
   /** `GET …/exports` — the list as a CSV download (D18 "Export lists"), same filters as the list. */
   readonly export = async (request: FastifyRequest, _reply: FastifyReply) => {
     const { readPermission } = this.options;
-    if (readPermission && !(await hasOrganizationPermission(request, readPermission))) {
+    if (
+      readPermission &&
+      !(await hasOrganizationPermission({ request, permissionCode: readPermission }))
+    ) {
       throw new ForbiddenError('errors:forbidden').withReason(MISSING_PERMISSION_REASON);
     }
-    const { rows, is_truncated } = await this.service.exportRows(
-      requireOrganizationScope(request),
-      request.query,
-      { actingUserPublicId: this.actor(request), visibility: await this.visibility(request) },
-    );
-    const presented = await this.present(request, rows);
+    const { rows, is_truncated } = await this.service.exportRows({
+      scope: requireOrganizationScope(request),
+      query: request.query,
+      options: {
+        actingUserPublicId: this.actor(request),
+        visibility: await this.visibility(request),
+      },
+    });
+    const presented = await this.present({ request, output: rows });
     const data: BaseRecordExportOutput = {
       file_name: `${this.options.exportName ?? this.options.resource}-${new Date().toISOString().slice(0, 10)}.csv`,
       content_type: 'text/csv',
@@ -332,23 +400,26 @@ export class BaseRecordController<Output extends { id: string }> {
       is_truncated,
       content: toCsv(presented as unknown as Record<string, unknown>[]),
     };
-    return successResponse(data, getRequestIdentifier(request));
+    return successResponse({ data, request_id: getRequestIdentifier(request) });
   };
 
   /** The handler of one lifecycle action route (`POST …/{id}/<action>`). */
   readonly transition =
     (action: string) => async (request: FastifyRequest, _reply: FastifyReply) => {
       const publicId = this.readId(request);
-      const data = await this.service.transition(
-        requireOrganizationScope(request),
+      const data = await this.service.transition({
+        scope: requireOrganizationScope(request),
         publicId,
         action,
-        request.body,
-        this.actor(request),
-        await this.visibility(request),
-        this.readParentId(request),
-      );
-      await this.audit(request, action, publicId);
-      return successResponse(await this.present(request, data), getRequestIdentifier(request));
+        body: request.body,
+        actingUserPublicId: this.actor(request),
+        visibility: await this.visibility(request),
+        parentPublicId: this.readParentId(request),
+      });
+      await this.audit({ request, verb: action, publicId });
+      return successResponse({
+        data: await this.present({ request, output: data }),
+        request_id: getRequestIdentifier(request),
+      });
     };
 }

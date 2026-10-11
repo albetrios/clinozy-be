@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
+import { cleanupTestRedis } from '@/tests/helpers/test-redis.js';
 import { buildIdempotencyCacheKey } from '@/shared/utils/idempotency/idempotency-key.util.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
@@ -21,10 +22,7 @@ describe('Integration: idempotency in-flight returns 409', () => {
   });
 
   beforeEach(async () => {
-    const keys = await redisConnection.keys('*idempotency*');
-    if (keys.length > 0) {
-      await redisConnection.del(...keys);
-    }
+    await cleanupTestRedis();
   });
 
   it('returns 409 conflict_in_flight for an entry it cannot read (never replays or overwrites it)', async () => {
@@ -33,13 +31,19 @@ describe('Integration: idempotency in-flight returns 409', () => {
     const idempotencyKey = `test-in-flight-${Date.now()}`;
     const requestUrl = testApiPath('/tenancy/organizations');
     const payload = { name: 'Org', slug: `org-${Date.now()}` };
-    const cacheKey = buildIdempotencyCacheKey(idempotencyKey, { userId: user.public_id });
+    const cacheKey = buildIdempotencyCacheKey({
+      idempotencyKey,
+      scope: { userId: user.public_id },
+    });
     await redisConnection.set(
       cacheKey,
       JSON.stringify({ statusCode: 202, body: '{}', headers: {} }),
       'EX',
       60,
     );
+
+    const originalEntry = await redisConnection.get(cacheKey);
+    expect(originalEntry).not.toBeNull();
 
     const response = await application.inject({
       method: 'POST',
@@ -53,6 +57,7 @@ describe('Integration: idempotency in-flight returns 409', () => {
     });
 
     expect(response.statusCode).toBe(409);
+    expect(await redisConnection.get(cacheKey)).toBe(originalEntry);
     const body = response.json() as { error?: { code?: string } };
     expect(body.error?.code).toBe('conflict_in_flight');
   });
@@ -63,7 +68,10 @@ describe('Integration: idempotency in-flight returns 409', () => {
     const idempotencyKey = `test-in-flight-explicit-${Date.now()}`;
     const requestUrl = testApiPath('/tenancy/organizations');
     const payload = { name: 'Org 2', slug: `org2-${Date.now()}` };
-    const cacheKey = buildIdempotencyCacheKey(idempotencyKey, { userId: user.public_id });
+    const cacheKey = buildIdempotencyCacheKey({
+      idempotencyKey,
+      scope: { userId: user.public_id },
+    });
     await redisConnection.set(
       cacheKey,
       buildInFlightIdempotencyEntry({
@@ -75,6 +83,9 @@ describe('Integration: idempotency in-flight returns 409', () => {
       60,
     );
 
+    const originalEntry = await redisConnection.get(cacheKey);
+    expect(originalEntry).not.toBeNull();
+
     const response = await application.inject({
       method: 'POST',
       url: requestUrl,
@@ -87,5 +98,6 @@ describe('Integration: idempotency in-flight returns 409', () => {
     });
 
     expect(response.statusCode).toBe(409);
+    expect(await redisConnection.get(cacheKey)).toBe(originalEntry);
   });
 });

@@ -16,17 +16,17 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a check-in create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePatientCheckIn(data: unknown): CreatePatientCheckInInput {
-  return parseWithSchema(CreatePatientCheckInDto, data);
+  return parseWithSchema({ schema: CreatePatientCheckInDto, data });
 }
 
 /** Parses a check-in update body; throws `ValidationError` naming each bad field. */
 export function validateUpdatePatientCheckIn(data: unknown): UpdatePatientCheckInInput {
-  return parseWithSchema(UpdatePatientCheckInDto, data);
+  return parseWithSchema({ schema: UpdatePatientCheckInDto, data });
 }
 
 /** Parses a patient's check-ins query into a list input (routes-final 7.I.8 #51). */
 export function validateListPatientCheckInsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listPatientCheckInsQueryDto, data);
+  const query = parseWithSchema({ schema: listPatientCheckInsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

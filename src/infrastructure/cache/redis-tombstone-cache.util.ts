@@ -21,10 +21,13 @@ const CACHE_INVALIDATION_TOMBSTONE = '__invalidated__';
  * - **Notes:** `key` is the LOGICAL key; ioredis prepends the configured key prefix itself, so
  *   callers must not include it.
  */
-export async function readTombstonedCacheEntry(
-  key: string,
-  metricName: string,
-): Promise<string | null> {
+export async function readTombstonedCacheEntry({
+  key,
+  metricName,
+}: {
+  key: string;
+  metricName: string;
+}): Promise<string | null> {
   try {
     const cached = await redisConnection.get(key);
     if (cached === null || cached.length === 0) return null;

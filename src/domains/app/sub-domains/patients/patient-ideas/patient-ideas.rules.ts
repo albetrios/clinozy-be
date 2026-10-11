@@ -52,19 +52,37 @@ export function ruleIdeas(options: {
   const ideas: PatientIdea[] = [];
   const isFree = (offering: IdeaOffering) =>
     !(excluded.has(offering.id) || ideas.some((idea) => idea.offering.id === offering.id));
-  const find = (pattern: RegExp, packageOnly = false) =>
+  const find = ({
+    pattern,
+    packageOnly = false,
+  }: {
+    pattern: RegExp;
+    packageOnly?: boolean | undefined;
+  }) =>
     offerings.find(
       (offering) =>
         pattern.test(offering.name) && (!packageOnly || offering.sessions > 1) && isFree(offering),
     );
-  const push = (offering: IdeaOffering | undefined, reason: string, source: PatientIdeaSource) => {
+  const push = ({
+    offering,
+    reason,
+    source,
+  }: {
+    offering: IdeaOffering | undefined;
+    reason: string;
+    source: PatientIdeaSource;
+  }) => {
     if (offering && isFree(offering)) ideas.push({ offering, reason, source });
   };
 
   for (const note of history.treatmentSuggestions) {
     const keyword = SUGGESTION_KEYWORDS.find((entry) => entry.note.test(note));
     if (keyword)
-      push(find(keyword.offering), `Doctor's note · “${note}”`, PATIENT_IDEA_SOURCE.NOTE);
+      push({
+        offering: find({ pattern: keyword.offering }),
+        reason: `Doctor's note · “${note}”`,
+        source: PATIENT_IDEA_SOURCE.NOTE,
+      });
   }
   const concerns = new Set(
     concernLabels([...history.complaints, ...history.diagnoses, ...history.treatmentSuggestions]),
@@ -74,28 +92,36 @@ export function ruleIdeas(options: {
     // The prototype names pigmentation by the first complaint
     const label =
       entry.concern === 'pigmentation' ? (history.complaints[0] ?? entry.concern) : entry.concern;
-    push(find(entry.offering), `Complaint · ${label}`, PATIENT_IDEA_SOURCE.HISTORY);
+    push({
+      offering: find({ pattern: entry.offering }),
+      reason: `Complaint · ${label}`,
+      source: PATIENT_IDEA_SOURCE.HISTORY,
+    });
   }
   if (history.visitCount >= PATIENT_IDEAS_PACKAGE_VISITS && history.lastServiceName !== null) {
     const service = history.lastServiceName;
     const family = PACKAGE_KEYWORDS.find((entry) => entry.service.test(service));
     if (family) {
-      push(
-        find(family.offering, true),
-        `${history.visitCount} visits so far · a package saves on each session`,
-        PATIENT_IDEA_SOURCE.CONSISTENCY,
-      );
+      push({
+        offering: find({ pattern: family.offering, packageOnly: true }),
+        reason: `${history.visitCount} visits so far · a package saves on each session`,
+        source: PATIENT_IDEA_SOURCE.CONSISTENCY,
+      });
     }
   }
   for (const offeringId of history.packagesAlmostUsedOfferingIds) {
-    push(
-      offerings.find((offering) => offering.id === offeringId),
-      'Package almost used up · renew',
-      PATIENT_IDEA_SOURCE.RENEW,
-    );
+    push({
+      offering: offerings.find((offering) => offering.id === offeringId),
+      reason: 'Package almost used up · renew',
+      source: PATIENT_IDEA_SOURCE.RENEW,
+    });
   }
   if (history.visitCount === 0 && ideas.length === 0) {
-    push(find(/consult/i), 'First visit · start with a consultation', PATIENT_IDEA_SOURCE.FIRST);
+    push({
+      offering: find({ pattern: /consult/i }),
+      reason: 'First visit · start with a consultation',
+      source: PATIENT_IDEA_SOURCE.FIRST,
+    });
   }
   return ideas.slice(0, PATIENT_IDEAS_MAX);
 }

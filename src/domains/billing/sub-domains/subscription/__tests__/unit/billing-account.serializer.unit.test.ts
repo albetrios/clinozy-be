@@ -134,7 +134,10 @@ describe('billing-account.serializer', () => {
 
   describe('paymentMethod', () => {
     it('emits the documented snake_case allowlist and nothing else', () => {
-      const result = BillingAccountSerializer.paymentMethod(makePaymentMethod(), false);
+      const result = BillingAccountSerializer.paymentMethod({
+        row: makePaymentMethod(),
+        is_default: false,
+      });
 
       expect(Object.keys(result).sort()).toEqual(
         ['brand', 'exp_month', 'exp_year', 'id', 'is_default', 'last4'].sort(),
@@ -142,8 +145,8 @@ describe('billing-account.serializer', () => {
     });
 
     it('drops billing_details PII and the card fingerprint', () => {
-      const result = BillingAccountSerializer.paymentMethod(
-        makePaymentMethod({
+      const result = BillingAccountSerializer.paymentMethod({
+        row: makePaymentMethod({
           customer: 'cus_secret',
           billing_details: { email: 'card.holder@example.com', name: 'Card Holder' },
           card: {
@@ -155,8 +158,8 @@ describe('billing-account.serializer', () => {
             country: 'US',
           },
         }),
-        false,
-      );
+        is_default: false,
+      });
 
       expect(result).not.toHaveProperty('billing_details');
       expect(result).not.toHaveProperty('customer');
@@ -167,10 +170,10 @@ describe('billing-account.serializer', () => {
     });
 
     it('falls back to safe placeholders for a non-card payment method', () => {
-      const result = BillingAccountSerializer.paymentMethod(
-        makePaymentMethod({ card: undefined }),
-        false,
-      );
+      const result = BillingAccountSerializer.paymentMethod({
+        row: makePaymentMethod({ card: undefined }),
+        is_default: false,
+      });
 
       expect(result).toEqual({
         id: 'pm_1234567890',
@@ -183,10 +186,10 @@ describe('billing-account.serializer', () => {
     });
 
     it('paymentMethods() flags exactly the customer default', () => {
-      const result = BillingAccountSerializer.paymentMethods(
-        [makePaymentMethod({ id: 'pm_a' }), makePaymentMethod({ id: 'pm_b' })],
-        'pm_b',
-      );
+      const result = BillingAccountSerializer.paymentMethods({
+        rows: [makePaymentMethod({ id: 'pm_a' }), makePaymentMethod({ id: 'pm_b' })],
+        default_payment_method_id: 'pm_b',
+      });
 
       expect(result.map((entry) => [entry.id, entry.is_default])).toEqual([
         ['pm_a', false],
@@ -197,10 +200,10 @@ describe('billing-account.serializer', () => {
     it('paymentMethods() flags nothing as default when the customer has none', () => {
       // Guards against a truthiness regression where `null === row.id` (both nullish-ish in a
       // loose comparison) would mark an unexpected card as the default.
-      const result = BillingAccountSerializer.paymentMethods(
-        [makePaymentMethod({ id: 'pm_a' }), makePaymentMethod({ id: 'pm_b' })],
-        null,
-      );
+      const result = BillingAccountSerializer.paymentMethods({
+        rows: [makePaymentMethod({ id: 'pm_a' }), makePaymentMethod({ id: 'pm_b' })],
+        default_payment_method_id: null,
+      });
 
       expect(result.every((entry) => entry.is_default === false)).toBe(true);
     });

@@ -17,21 +17,21 @@ describe('MembershipPreferencesService', () => {
 
   it('refuses a change with an unknown field (400)', async () => {
     await expect(
-      service.updateMine(
-        SCOPE,
-        { not_a_field: true },
-        { actingUserPublicId: undefined, allBranches: true },
-      ),
+      service.updateMine({
+        scope: SCOPE,
+        body: { not_a_field: true },
+        options: { actingUserPublicId: undefined, allBranches: true },
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('refuses a theme that is not one (400)', async () => {
     await expect(
-      service.updateMine(
-        SCOPE,
-        { theme: 'neon' },
-        { actingUserPublicId: undefined, allBranches: true },
-      ),
+      service.updateMine({
+        scope: SCOPE,
+        body: { theme: 'neon' },
+        options: { actingUserPublicId: undefined, allBranches: true },
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 });

@@ -17,18 +17,23 @@ describe('BranchMembersService', () => {
 
   it('refuses a replace without its member list (400)', async () => {
     await expect(
-      service.replace(SCOPE, 'br_aaaaaaaaaaaaaaaaaaaaa', {}, undefined),
+      service.replace({
+        scope: SCOPE,
+        branchPublicId: 'br_aaaaaaaaaaaaaaaaaaaaa',
+        body: {},
+        actingUserPublicId: undefined,
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('refuses a list that names a member twice (400)', async () => {
     await expect(
-      service.replace(
-        SCOPE,
-        'br_aaaaaaaaaaaaaaaaaaaaa',
-        { membership_ids: ['mbr_aaaaaaaaaaaaaaaaaaaaa', 'mbr_aaaaaaaaaaaaaaaaaaaaa'] },
-        undefined,
-      ),
+      service.replace({
+        scope: SCOPE,
+        branchPublicId: 'br_aaaaaaaaaaaaaaaaaaaaa',
+        body: { membership_ids: ['mbr_aaaaaaaaaaaaaaaaaaaaa', 'mbr_aaaaaaaaaaaaaaaaaaaaa'] },
+        actingUserPublicId: undefined,
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 });

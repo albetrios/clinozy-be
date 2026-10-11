@@ -10,7 +10,10 @@ import type {
  * the external membership public id for the internal numeric `membership_id`
  * and converts timestamps to ISO-8601; the raw `token_hash` is never exposed.
  */
-export function serializeMembershipInvitation(
+export function serializeMembershipInvitation({
+  row,
+  membership_public_id,
+}: {
   row: {
     public_id: string;
     membership_id: number;
@@ -19,9 +22,9 @@ export function serializeMembershipInvitation(
     accepted_at: Date | null;
     revoked_at: Date | null;
     created_at: Date;
-  },
-  membership_public_id: string,
-): MembershipInvitationOutput {
+  };
+  membership_public_id: string;
+}): MembershipInvitationOutput {
   return {
     id: row.public_id,
     membership_id: membership_public_id,
@@ -38,10 +41,13 @@ export function serializeMembershipInvitation(
  * `GET /users/me/membership-invitations` — public ids only, timestamps ISO-8601, the clinic logo
  * as the read URL the caller resolved (`null` when there is none).
  */
-export function serializeMyMembershipInvitation(
-  row: PendingInvitationForEmailRow,
-  logo_url: string | null,
-): MyMembershipInvitationOutput {
+export function serializeMyMembershipInvitation({
+  row,
+  logo_url,
+}: {
+  row: PendingInvitationForEmailRow;
+  logo_url: string | null;
+}): MyMembershipInvitationOutput {
   return {
     id: row.invitation_public_id,
     organization: {
@@ -65,10 +71,13 @@ export function serializeMyMembershipInvitation(
  */
 export function attachInvitationTokenEcho<
   TMembership extends { invitation: MembershipInvitationRef | null },
->(
-  membership: TMembership,
-  issued: Pick<MembershipInvitationOutput, 'debug_invitation_token'>,
-): TMembership {
+>({
+  membership,
+  issued,
+}: {
+  membership: TMembership;
+  issued: Pick<MembershipInvitationOutput, 'debug_invitation_token'>;
+}): TMembership {
   if (issued.debug_invitation_token === undefined || membership.invitation === null) {
     return membership;
   }

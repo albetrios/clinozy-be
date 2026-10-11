@@ -20,12 +20,12 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a prescription create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePatientPrescription(data: unknown): CreatePatientPrescriptionInput {
-  return parseWithSchema(CreatePatientPrescriptionDto, data);
+  return parseWithSchema({ schema: CreatePatientPrescriptionDto, data });
 }
 
 /** Parses a prescription update body; throws `ValidationError` naming each bad field. */
 export function validateUpdatePatientPrescription(data: unknown): UpdatePatientPrescriptionInput {
-  return parseWithSchema(UpdatePatientPrescriptionDto, data);
+  return parseWithSchema({ schema: UpdatePatientPrescriptionDto, data });
 }
 
 /**
@@ -33,7 +33,7 @@ export function validateUpdatePatientPrescription(data: unknown): UpdatePatientP
  * (a 400 otherwise); the prescription-date range is inclusive of its last day.
  */
 export function validateListPatientPrescriptionsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listPatientPrescriptionsQueryDto, data);
+  const query = parseWithSchema({ schema: listPatientPrescriptionsQueryDto, data });
   if (query.q !== undefined && !PRESCRIPTION_NUMBER_QUERY.test(query.q)) {
     throw fieldValidationError({
       field: 'q',

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, beforeAll } from 'vitest';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
 import {
   processNotificationDispatchJob,
   processNotificationJob,
@@ -12,7 +13,13 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // Per-kind dispatch: only global_admin routes to its spy (the dispatch must never enter it);
     // system_table_worker (the mail-outbox write) is a plain passthrough.
     withMaintenanceDatabaseContext: vi.fn(
-      (scope: { kind: string }, callback: (handle: unknown) => Promise<unknown>) =>
+      ({
+        scope,
+        callback,
+      }: {
+        scope: { kind: string };
+        callback: (handle: unknown) => Promise<unknown>;
+      }) =>
         scope.kind === 'GLOBAL_ADMIN'
           ? (globalAdminMaintenanceContextMock as unknown as (...parameters: unknown[]) => unknown)(
               callback,
@@ -22,10 +29,13 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // Arg-shift adapter: the organization-branch spy keeps its (organizationPublicId, callback)
     // signature so the existing implementations and assertions stay valid.
     withAppDatabaseContext: vi.fn(
-      (
-        scope: { organizationPublicId?: string; userPublicId?: string },
-        callback: (handle: unknown) => Promise<unknown>,
-      ) =>
+      ({
+        scope,
+        callback,
+      }: {
+        scope: { organizationPublicId?: string; userPublicId?: string };
+        callback: (handle: unknown) => Promise<unknown>;
+      }) =>
         scope.organizationPublicId !== undefined
           ? organizationPrincipalContextMock(scope.organizationPublicId, callback)
           : userPrincipalContextMock(scope.userPublicId, callback),
@@ -108,6 +118,11 @@ function buildNotificationRow(overrides: Record<string, unknown> = {}): Record<s
   };
 }
 
+// Email copy comes from the locale files, as in the API and the worker.
+beforeAll(async () => {
+  await initializeI18nextForBackgroundWork();
+});
+
 describe('notification.worker', () => {
   beforeEach(() => {
     recordOutboxEmailMock.mockReset();
@@ -139,9 +154,12 @@ describe('notification.worker', () => {
       }),
     );
     // Fan-out email rides the bulk lane, behind sign-in codes and password resets.
-    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN, {
-      lane: 'bulk',
-      requestId: 'request-1',
+    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith({
+      mailOutboxToken: MAIL_OUTBOX_TOKEN,
+      options: {
+        lane: 'bulk',
+        requestId: 'request-1',
+      },
     });
     expect(result).toEqual({
       outcome: 'dispatched',

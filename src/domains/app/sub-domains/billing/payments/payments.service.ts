@@ -82,38 +82,49 @@ export class PaymentsService extends BaseRecordService<PaymentOutput> {
    * - **Failure modes:** `NotFoundError('Payment')` — not here, or another branch without
    *   `branch:read`; `ValidationError` for a bad query.
    */
-  async listEdits(
-    scope: OrganizationPrincipalDatabaseScope,
-    paymentPublicId: string,
-    query: unknown,
-    options: { actingUserPublicId?: string | undefined; visibility?: BaseRecordVisibility },
-  ): Promise<BaseRecordListResult<PaymentEditOutput>> {
-    const { limit, after } = parseWithSchema(listPaymentEditsQueryDto, query ?? {});
-    return withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const userId = await this.userId(options.actingUserPublicId);
-      const payment = await this.requireRow(
-        organizationId,
-        paymentPublicId,
-        userId,
-        options.visibility,
-      );
-      const afterId =
-        after === undefined ? undefined : await this.paymentsRepository.findEditId(after);
-      const rows = await this.paymentsRepository.listEdits({
-        paymentId: payment.id,
-        limit: limit + 1,
-        after: afterId,
-      });
-      const page = rows.slice(0, limit);
-      const hasMore = rows.length > limit;
-      return {
-        items: page.map(serializePaymentEdit),
-        total: null,
-        limit,
-        has_more: hasMore,
-        next_cursor: hasMore ? (page.at(-1)?.id ?? null) : null,
-      };
+  async listEdits({
+    scope,
+    paymentPublicId,
+    query,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    paymentPublicId: string;
+    query: unknown;
+    options: { actingUserPublicId?: string | undefined; visibility?: BaseRecordVisibility };
+  }): Promise<BaseRecordListResult<PaymentEditOutput>> {
+    const { limit, after } = parseWithSchema({
+      schema: listPaymentEditsQueryDto,
+      data: query ?? {},
+    });
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const userId = await this.userId(options.actingUserPublicId);
+        const payment = await this.requireRow({
+          organizationId,
+          publicId: paymentPublicId,
+          userId,
+          visibility: options.visibility,
+        });
+        const afterId =
+          after === undefined ? undefined : await this.paymentsRepository.findEditId(after);
+        const rows = await this.paymentsRepository.listEdits({
+          paymentId: payment.id,
+          limit: limit + 1,
+          after: afterId,
+        });
+        const page = rows.slice(0, limit);
+        const hasMore = rows.length > limit;
+        return {
+          items: page.map(serializePaymentEdit),
+          total: null,
+          limit,
+          has_more: hasMore,
+          next_cursor: hasMore ? (page.at(-1)?.id ?? null) : null,
+        };
+      },
     });
   }
 }

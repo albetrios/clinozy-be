@@ -1,5 +1,5 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import type { OrganizationPrincipalDatabaseScope } from '@/infrastructure/database/contexts/database-context.js';
 import { withAppDatabaseContext } from '@/infrastructure/database/contexts/database-context.js';
 import { resolveRecordIds } from '@/domains/app/base-record.repository.js';
@@ -54,7 +54,7 @@ export class PatientOfferingSuggestionsService extends BaseRecordService<Patient
         { field: 'offering_id', table: offerings, label: 'offering' },
         { field: 'appointment_id', table: appointments, label: 'appointment' },
         { field: 'patient_check_in_id', table: patient_check_ins, label: 'check-in' },
-        { field: 'suggested_by_membership_id', table: memberships, label: 'team member' },
+        memberReference('suggested_by_membership_id'),
       ],
       parent: { field: 'patient_id', table: patients, label: 'Patient' },
       ...createPatientOfferingSuggestionsRules(suggestionsRepository),
@@ -62,26 +62,33 @@ export class PatientOfferingSuggestionsService extends BaseRecordService<Patient
   }
 
   /** One page of the patient's plan, with `meta.plan_total` (PK9). */
-  override async list(
-    scope: OrganizationPrincipalDatabaseScope,
-    query: unknown,
-    options: {
+  override async list({
+    scope,
+    query,
+    options = {},
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    query: unknown;
+    options?: {
       parentPublicId?: string | undefined;
       actingUserPublicId?: string | undefined;
       visibility?: BaseRecordVisibility | undefined;
       withTotal?: boolean | undefined;
       referenceIn?: Readonly<Record<string, readonly string[]>> | undefined;
-    } = {},
-  ): Promise<BaseRecordListResult<PatientOfferingSuggestionOutput>> {
-    const page = await super.list(scope, query, options);
+    };
+  }): Promise<BaseRecordListResult<PatientOfferingSuggestionOutput>> {
+    const page = await super.list({ scope, query, options });
     if (options.parentPublicId === undefined) return page;
     const parentPublicId = options.parentPublicId;
-    const planTotal = await withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const patientId = (
-        await resolveRecordIds({ table: patients, organizationId, publicIds: [parentPublicId] })
-      ).get(parentPublicId);
-      return patientId === undefined ? 0 : this.suggestionsRepository.planTotal(patientId);
+    const planTotal = await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const patientId = (
+          await resolveRecordIds({ table: patients, organizationId, publicIds: [parentPublicId] })
+        ).get(parentPublicId);
+        return patientId === undefined ? 0 : this.suggestionsRepository.planTotal(patientId);
+      },
     });
     return { ...page, meta: { plan_total: planTotal } };
   }

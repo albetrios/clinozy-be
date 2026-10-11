@@ -1,8 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { OrganizationRepository } from '@/domains/tenancy/sub-domains/organization/organization.repository.js';
+import {
+  PRINCIPAL_SCOPE,
+  withAppDatabaseContext,
+} from '@/infrastructure/database/contexts/database-context.js';
+import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
 import {
   createMembership,
   createRoleWithPermissions,
@@ -11,6 +17,57 @@ import {
 
 describe('OrganizationRepository (database)', () => {
   const repository = new OrganizationRepository();
+
+  beforeAll(async () => {
+    await grantClinozyBeAppRoleForTests();
+  });
+
+  it('checks owner and active-member access under FORCE RLS even when the tenant claim exposes the row', async () => {
+    const owner = await createTestUser();
+    const organization = await createTestOrganization({ ownerUserId: owner.id });
+    const role = await createRoleWithPermissions({
+      organizationId: organization.id,
+      permissionCodes: [],
+    });
+    const actors = [{ user: owner, allowed: true }];
+    for (const status of ['active', 'invited', 'suspended'] as const) {
+      const user = await createTestUser();
+      await createMembership({
+        userId: user.id,
+        organizationId: organization.id,
+        roleId: role.id,
+        status,
+      });
+      actors.push({ user, allowed: status === 'active' });
+    }
+    actors.push({ user: await createTestUser(), allowed: false });
+    for (const { user, allowed } of actors) {
+      for (const includeTenantClaim of [false, true]) {
+        await withAppDatabaseContext({
+          scope: PRINCIPAL_SCOPE.VERIFIED({
+            userPublicId: user.public_id,
+            ...(includeTenantClaim ? { organizationPublicId: organization.public_id } : {}),
+          }),
+          callback: async (handle) => {
+            await setLocalApplicationRole(handle);
+            const result = await repository.userCanAccessOrganization(
+              user.public_id,
+              organization.public_id,
+            );
+            expect(result?.public_id ?? null).toBe(allowed ? organization.public_id : null);
+            expect(
+              await repository.userCanAccessOrganization('usr_missing', organization.public_id),
+            ).toBeNull();
+          },
+        });
+      }
+    }
+    await repository.markDeletionStarted(organization.public_id);
+    expect(await repository.softDelete(organization.public_id)).not.toBeNull();
+    expect(
+      await repository.userCanAccessOrganization(owner.public_id, organization.public_id),
+    ).toBeNull();
+  });
 
   beforeEach(async () => {
     await cleanupDatabase();
@@ -28,14 +85,54 @@ describe('OrganizationRepository (database)', () => {
     expect(emptyPage.total).toBeNull();
   });
 
+  it('lists exactly the owned and ACTIVE-member organizations, each once, across pages', async () => {
+    const caller = await createTestUser({ email: 'lister@example.com' });
+    const other = await createTestUser({ email: 'other-owner@example.com' });
+    // Owned only, owned AND a member (must appear once), member only, suspended member, deleted.
+    const owned = await createTestOrganization({ ownerUserId: caller.id, name: 'Owned' });
+    const ownedAndMember = await createTestOrganization({ ownerUserId: caller.id, name: 'Both' });
+    const memberOnly = await createTestOrganization({ ownerUserId: other.id, name: 'Member' });
+    const suspended = await createTestOrganization({ ownerUserId: other.id, name: 'Suspended' });
+    const notMine = await createTestOrganization({ ownerUserId: other.id, name: 'Not mine' });
+    for (const [organization, status] of [
+      [ownedAndMember, 'active'],
+      [memberOnly, 'active'],
+      [suspended, 'suspended'],
+    ] as const) {
+      const role = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [],
+      });
+      await createMembership({
+        userId: caller.id,
+        organizationId: organization.id,
+        roleId: role.id,
+        status,
+      });
+    }
+
+    const firstPage = await repository.findAllForUser(caller.public_id, { limit: 2 });
+    expect(firstPage.has_more).toBe(true);
+    const secondPage = await repository.findAllForUser(caller.public_id, {
+      limit: 2,
+      after: firstPage.next_cursor!,
+    });
+    expect(secondPage.has_more).toBe(false);
+
+    const listed = [...firstPage.items, ...secondPage.items].map((row) => row.public_id);
+    // In creation order, the owned-and-member organization once (the UNION deduplicates).
+    expect(listed).toEqual([owned.public_id, ownedAndMember.public_id, memberOnly.public_id]);
+    expect(listed).not.toContain(suspended.public_id);
+    expect(listed).not.toContain(notMine.public_id);
+  });
+
   it('creates, queries, updates, and soft-deletes organizations', async () => {
     const owner = await createTestUser({ email: 'org-owner@example.com' });
 
-    const created = await repository.create({
+    const created = await createTestOrganization({
+      ownerUserId: owner.id,
       name: 'Acme Corp',
       slug: 'acme-corp',
-      owner_user_id: owner.id,
-      created_by_user_id: owner.id,
     });
 
     const byPublicId = await repository.findByPublicId(created.public_id);
@@ -88,14 +185,6 @@ describe('OrganizationRepository (database)', () => {
     expect(await repository.findById(created.id)).toBeNull();
     expect(await repository.resolveUserIdByPublicId('missing_user_public_id')).toBeNull();
 
-    const withoutCreator = await repository.create({
-      name: 'No Creator Org',
-      slug: 'no-creator-org',
-      owner_user_id: owner.id,
-      created_by_user_id: null,
-    });
-    expect(withoutCreator.name).toBe('No Creator Org');
-
     expect(await repository.update('missing_org', { name: 'X' }, owner.id)).toBeNull();
     expect(await repository.updateOwner('missing_org', owner.id)).toBeNull();
   });
@@ -106,11 +195,10 @@ describe('OrganizationRepository (database)', () => {
   // and attach a new subscription to a deleted tenant.
   it('updateStripeCustomerId returns null for a soft-deleted organization (sec-new-D1)', async () => {
     const owner = await createTestUser({ email: 'stripe-cid-deleted@example.com' });
-    const organization = await repository.create({
+    const organization = await createTestOrganization({
+      ownerUserId: owner.id,
       name: 'Deleted Stripe Org',
       slug: 'deleted-stripe-org',
-      owner_user_id: owner.id,
-      created_by_user_id: owner.id,
     });
 
     // Soft-delete requires marking deletion as started first.
@@ -124,11 +212,10 @@ describe('OrganizationRepository (database)', () => {
 
   it('updateOwner transfers only to a member who is still active (atomic TOCTOU guard)', async () => {
     const owner = await createTestUser({ email: 'transfer-owner@example.com' });
-    const organization = await repository.create({
+    const organization = await createTestOrganization({
+      ownerUserId: owner.id,
       name: 'Transfer Org',
       slug: 'transfer-org',
-      owner_user_id: owner.id,
-      created_by_user_id: owner.id,
     });
     const role = await createRoleWithPermissions({
       organizationId: organization.id,

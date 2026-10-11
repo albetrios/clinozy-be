@@ -36,5 +36,5 @@ export function createTaskRulesSweepWorker(): WorkerHandle {
     logger.warn({ jobId, queue: TASK_RULES_SWEEP_QUEUE_NAME }, 'task-rules-sweep.stalled');
   });
 
-  return buildWorkerHandle(worker, TASK_RULES_SWEEP_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: TASK_RULES_SWEEP_QUEUE_NAME });
 }

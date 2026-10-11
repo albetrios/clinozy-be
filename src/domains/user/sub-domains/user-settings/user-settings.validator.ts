@@ -12,7 +12,7 @@ import { UpdateUserSettingsDto, type UpdateUserSettingsInput } from './user-sett
  *   alone is a 400 on `analytics_consent_version`.
  */
 export function validateUpdateUserSettings(body: unknown): UpdateUserSettingsInput {
-  const parsed = parseWithSchema(UpdateUserSettingsDto, body);
+  const parsed = parseWithSchema({ schema: UpdateUserSettingsDto, data: body });
   if (
     (parsed.analytics_consent === undefined) !==
     (parsed.analytics_consent_version === undefined)

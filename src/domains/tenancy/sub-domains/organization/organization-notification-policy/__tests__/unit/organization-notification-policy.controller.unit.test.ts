@@ -72,10 +72,10 @@ describe('createOrganizationNotificationPolicyController', () => {
       }),
       mockReply(),
     );
-    expect(service.getByPublicId).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      'pol_a1b2c3d4e5f6g7h8i9j0k',
-    );
+    expect(service.getByPublicId).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      policy_public_id: 'pol_a1b2c3d4e5f6g7h8i9j0k',
+    });
     expect(response).toMatchObject({ data: policyRow });
   });
 
@@ -115,11 +115,11 @@ describe('createOrganizationNotificationPolicyController', () => {
     // The controller no longer sets an explicit status: the uniform method-status policy
     // (POST -> 200) owns the code, so the handler must leave reply.code untouched.
     expect(reply.code).not.toHaveBeenCalled();
-    expect(service.create).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
+    expect(service.create).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
       body,
-      userId,
-    );
+      created_by_user_public_id: userId,
+    });
     expect(response).toMatchObject({ data: policyRow });
   });
 
@@ -148,12 +148,12 @@ describe('createOrganizationNotificationPolicyController', () => {
       }),
       mockReply(),
     );
-    expect(service.update).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      'pol_a1b2c3d4e5f6g7h8i9j0k',
+    expect(service.update).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      policy_public_id: 'pol_a1b2c3d4e5f6g7h8i9j0k',
       body,
-      userId,
-    );
+      updated_by_user_public_id: userId,
+    });
     expect(response).toMatchObject({ data: policyRow });
   });
 
@@ -198,10 +198,10 @@ describe('createOrganizationNotificationPolicyController', () => {
       }),
       reply,
     );
-    expect(service.delete).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      'pol_a1b2c3d4e5f6g7h8i9j0k',
-    );
+    expect(service.delete).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      policy_public_id: 'pol_a1b2c3d4e5f6g7h8i9j0k',
+    });
     expect(reply.code).toHaveBeenCalledWith(204);
     expect(reply.send).toHaveBeenCalled();
   });

@@ -17,11 +17,10 @@ interface SubscriptionRow {
   /** Joined `billing.plans.public_id` — surfaced as `plan_id` in the response (sec-re-07). */
   plan_public_id: string | null;
   /**
-   * REQ-4: total seats available on the subscription — the plan's `included_seats`, raised by a
-   * Stripe quantity bought above it (`subscription.seats`), or `null` when the plan grants unlimited
-   * seats; the same ceiling the add-member check enforces. Computed by {@link SubscriptionService} and
-   * attached to the row before serialization (the repository row carries the raw `seats` +
-   * `plan_included_seats` that feed it).
+   * REQ-4: total seats available on the subscription — the plan's `included_seats` (or the Free
+   * ceiling while the entitlement is unpaid or lapsed), `null` when the plan grants unlimited seats.
+   * Computed by {@link SubscriptionService} and attached to the row before serialization;
+   * `subscriptions.seats` is only the quantity billed in Stripe and never feeds it.
    */
   seats_total: number | null;
   /**

@@ -32,10 +32,13 @@ function isHeld(status: unknown): boolean {
 }
 
 /** PK8: where a plan row came from — the check-in, else the visit, else the patient file. */
-function sourceLabel(
-  output: Readonly<Record<string, unknown>>,
-  sources: PatientOfferingSuggestionSources,
-): string {
+function sourceLabel({
+  output,
+  sources,
+}: {
+  output: Readonly<Record<string, unknown>>;
+  sources: PatientOfferingSuggestionSources;
+}): string {
   const checkInDate = sources.checkInDates.get(String(output.patient_check_in_id));
   if (checkInDate !== undefined) return `Check-in · ${shortCalendarDate(checkInDate)}`;
   const visit = sources.visits.get(String(output.appointment_id));
@@ -66,7 +69,13 @@ export function createPatientOfferingSuggestionsRules(
   repository: PatientOfferingSuggestionsRepository,
 ): BaseRecordRules {
   /** PK9: no second live row holding the offering in the patient's plan. */
-  async function assertNotInPlan(row: Readonly<Record<string, unknown>>, exceptId?: number) {
+  async function assertNotInPlan({
+    row,
+    exceptId,
+  }: {
+    row: Readonly<Record<string, unknown>>;
+    exceptId?: number | undefined;
+  }) {
     const held = await repository.hasHeldRow({
       patientId: row.patient_id as number,
       offeringId: row.offering_id as number,
@@ -81,7 +90,7 @@ export function createPatientOfferingSuggestionsRules(
 
   return {
     prepareCreate: async (values, context) => {
-      await assertOfferingActive(values.offering_id);
+      await assertOfferingActive({ offeringId: values.offering_id });
       await assertAppointmentOfPatient({
         appointmentId: values.appointment_id,
         patientId: values.patient_id as number,
@@ -91,7 +100,7 @@ export function createPatientOfferingSuggestionsRules(
         userId: context.userId,
       });
       if (isHeld(values.status ?? PATIENT_OFFERING_SUGGESTION_STATUS.PLANNED)) {
-        await assertNotInPlan(values);
+        await assertNotInPlan({ row: values });
       }
     },
     prepareUpdate: async (values, existing) => {
@@ -108,11 +117,11 @@ export function createPatientOfferingSuggestionsRules(
         }
       }
       if (!isHeld(existing.status) && isHeld(values.status)) {
-        await assertNotInPlan(existing, existing.id);
+        await assertNotInPlan({ row: existing, exceptId: existing.id });
       }
     },
     prepareRestore: async (deleted: BaseRecordRow) => {
-      if (isHeld(deleted.status)) await assertNotInPlan(deleted, deleted.id);
+      if (isHeld(deleted.status)) await assertNotInPlan({ row: deleted, exceptId: deleted.id });
     },
     decorate: async (outputs, context) => {
       const idsByPublicId = await resolveRecordIds({
@@ -135,7 +144,7 @@ export function createPatientOfferingSuggestionsRules(
       for (const output of outputs) {
         const offering = summaries.get(String(output.offering_id));
         output.offering_name = offering?.name ?? '';
-        output.source_label = sourceLabel(output, sources);
+        output.source_label = sourceLabel({ output, sources });
         output.is_below_lowest_price =
           typeof output.price === 'number' &&
           offering !== undefined &&

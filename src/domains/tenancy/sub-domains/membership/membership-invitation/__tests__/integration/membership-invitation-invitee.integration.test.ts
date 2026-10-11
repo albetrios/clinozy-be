@@ -424,7 +424,9 @@ describe('An invited person signs in (launch D84)', () => {
         expiredDaysAgo: 8,
       });
 
-      const result = await runMembershipInvitationExpiryJob(app.tenancyDomain.membershipService);
+      const result = await runMembershipInvitationExpiryJob({
+        service: app.tenancyDomain.membershipService,
+      });
 
       expect(result).toEqual({ scanned: 1, ended: 1, skipped: 0, failed: 0 });
       const ended = await readMembership(dueInvitation.membershipPublicId);
@@ -436,7 +438,9 @@ describe('An invited person signs in (launch D84)', () => {
       expect((await readMembership(acceptedInvitation.membershipPublicId))?.status).toBe('active');
 
       // Safe to run twice: nothing is left due.
-      expect(await runMembershipInvitationExpiryJob(app.tenancyDomain.membershipService)).toEqual({
+      expect(
+        await runMembershipInvitationExpiryJob({ service: app.tenancyDomain.membershipService }),
+      ).toEqual({
         scanned: 0,
         ended: 0,
         skipped: 0,

@@ -84,7 +84,7 @@ export const SUPPLEMENTAL_ROUTES: ParsedRoute[] = [
   {
     method: 'POST',
     fullPath: '/internal/ops/circuit-breakers/:circuit_name/reset',
-    access: 'TOKEN: metrics',
+    access: 'TOKEN: ops-admin',
     domainKey: '/internal/ops',
     domain: 'ops',
   },

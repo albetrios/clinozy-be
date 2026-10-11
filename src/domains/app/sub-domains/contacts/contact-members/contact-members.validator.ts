@@ -6,5 +6,5 @@ import {
 
 /** Parses a contact members body; throws `ValidationError` on a bad value. */
 export function validateReplaceContactMembers(data: unknown): ReplaceContactMembersInput {
-  return parseWithSchema(ReplaceContactMembersDto, data);
+  return parseWithSchema({ schema: ReplaceContactMembersDto, data });
 }

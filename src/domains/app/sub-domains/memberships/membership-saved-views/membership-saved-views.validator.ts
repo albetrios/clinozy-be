@@ -17,17 +17,17 @@ const FILTER_NOT_TAKEN_KEY = 'errors:validation.savedViewFilterNotTaken';
 
 /** Parses a saved-view create body; throws `ValidationError` naming each bad field. */
 export function validateCreateMembershipSavedView(data: unknown): CreateMembershipSavedViewInput {
-  return parseWithSchema(createMembershipSavedViewDto, data);
+  return parseWithSchema({ schema: createMembershipSavedViewDto, data });
 }
 
 /** Parses a saved-view update body; throws `ValidationError` naming each bad field. */
 export function validateUpdateMembershipSavedView(data: unknown): UpdateMembershipSavedViewInput {
-  return parseWithSchema(updateMembershipSavedViewDto, data);
+  return parseWithSchema({ schema: updateMembershipSavedViewDto, data });
 }
 
 /** Parses the `GET /app/memberships/me/saved-views` query. */
 export function validateListMembershipSavedViewsQuery(data: unknown): MembershipSavedViewListQuery {
-  const query = parseWithSchema(listMembershipSavedViewsQueryDto, data);
+  const query = parseWithSchema({ schema: listMembershipSavedViewsQueryDto, data });
   return {
     listKey: query.list_key,
     q: query.q,

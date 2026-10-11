@@ -6,7 +6,8 @@ import { database } from '@/infrastructure/database/connection.js';
  * Role-taxonomy locks (migration 20260827050000): five named roles with one
  * semantic each, `clinozy_be_owner` owning every app table, and SECURITY DEFINER
  * functions deliberately NOT owned by it (a non-exempt definer owner is bound by
- * FORCE RLS and every resolver would silently return zero rows).
+ * FORCE RLS and every resolver would silently return zero rows) and executable by
+ * the two runtime roles only (migration 20261010135529).
  */
 async function queryRows<T extends Record<string, unknown>>(
   statement: ReturnType<typeof drizzleSql>,
@@ -72,6 +73,36 @@ describe('role taxonomy (owner / operator / migrator / app / maintenance)', () =
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
       expect(row.owner, `${row.proname} definer owner`).not.toBe('clinozy_be_owner');
+    }
+  });
+
+  it('SECURITY DEFINER functions are executable by the two runtime roles only, never PUBLIC', async () => {
+    // They run as their RLS-exempt owner (one returns a password hash): PUBLIC would hand that to
+    // every role that can log in.
+    const rows = await queryRows<{
+      signature: string;
+      public_can_execute: boolean;
+      app_can_execute: boolean;
+      maintenance_can_execute: boolean;
+    }>(
+      drizzleSql`SELECT p.oid::regprocedure::text AS signature,
+                        EXISTS (
+                          SELECT 1 FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) AS acl
+                          WHERE acl.grantee = 0 AND acl.privilege_type = 'EXECUTE'
+                        ) AS public_can_execute,
+                        has_function_privilege('clinozy_be_app', p.oid, 'EXECUTE') AS app_can_execute,
+                        has_function_privilege('clinozy_be_maintenance', p.oid, 'EXECUTE') AS maintenance_can_execute
+                 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                 WHERE p.prosecdef AND n.nspname IN ('auth','tenancy','billing','notify','audit','upload')`,
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.public_can_execute, `${row.signature}: REVOKE EXECUTE … FROM PUBLIC`).toBe(false);
+      expect(row.app_can_execute, `${row.signature}: GRANT EXECUTE … TO clinozy_be_app`).toBe(true);
+      expect(
+        row.maintenance_can_execute,
+        `${row.signature}: GRANT EXECUTE … TO clinozy_be_maintenance`,
+      ).toBe(true);
     }
   });
 });

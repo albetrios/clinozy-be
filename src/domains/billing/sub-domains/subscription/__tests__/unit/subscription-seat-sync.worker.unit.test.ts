@@ -65,7 +65,7 @@ vi.mock('@/infrastructure/queue/connection.js', () => ({
 }));
 
 vi.mock('@/infrastructure/queue/worker-runtime/worker-close.util.js', () => ({
-  buildWorkerHandle: (worker: unknown, queueName: string) => ({
+  buildWorkerHandle: ({ worker, queueName }: { worker: unknown; queueName: string }) => ({
     worker,
     queueName,
     close: async () => undefined,
@@ -88,6 +88,15 @@ vi.mock(
   () => ({
     processSubscriptionSeatSyncJob: (...arguments_: unknown[]) =>
       processSubscriptionSeatSyncJobMock(...arguments_),
+  }),
+);
+
+const runSubscriptionSeatReconcileJobMock = vi.fn();
+vi.mock(
+  '@/domains/billing/sub-domains/subscription/workers/subscription-seat-reconcile.processor.js',
+  () => ({
+    runSubscriptionSeatReconcileJob: (...arguments_: unknown[]) =>
+      runSubscriptionSeatReconcileJobMock(...arguments_),
   }),
 );
 
@@ -133,7 +142,15 @@ describe('subscription-seat-sync.worker', () => {
     });
     processSubscriptionSeatSyncJobMock.mockResolvedValue(undefined);
     runWithPropagatedTraceContextMock.mockImplementation(
-      async (_context: unknown, _name: string, callback: () => Promise<unknown>) => callback(),
+      async ({
+        carrier: _context,
+        spanName: _name,
+        callback,
+      }: {
+        carrier: unknown;
+        spanName: string;
+        callback: () => Promise<unknown>;
+      }) => callback(),
     );
   });
 
@@ -188,9 +205,8 @@ describe('subscription-seat-sync.worker', () => {
     await workerState.processor?.(makeJob({ data: { organizationPublicId: 'raw-untrusted' } }));
 
     expect(processSubscriptionSeatSyncJobMock).toHaveBeenCalledOnce();
-    const [jobData, service] = processSubscriptionSeatSyncJobMock.mock.calls[0] as [
-      { organizationPublicId: string },
-      unknown,
+    const [{ jobData, service }] = processSubscriptionSeatSyncJobMock.mock.calls[0] as [
+      { jobData: { organizationPublicId: string }; service: unknown },
     ];
     expect(jobData.organizationPublicId).toBe('org_a1b2c3d4e5f6g7h8i9j0k');
     expect(service).toBe(subscriptionService);
@@ -202,15 +218,28 @@ describe('subscription-seat-sync.worker', () => {
     await workerState.processor?.(makeJob());
 
     expect(runWithPropagatedTraceContextMock).toHaveBeenCalledOnce();
-    const [traceContext, spanName] = runWithPropagatedTraceContextMock.mock.calls[0] as [
-      { traceparent?: string; tracestate?: string },
-      string,
-    ];
+    const [{ carrier: traceContext, spanName }] = runWithPropagatedTraceContextMock.mock
+      .calls[0] as [{ carrier: { traceparent?: string; tracestate?: string }; spanName: string }];
     expect(traceContext).toEqual({
       traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
       tracestate: 'vendor=value',
     });
     expect(spanName).toBe('sync-subscription-seats');
+  });
+
+  it('runs the hourly reconcile for its job name, without a payload to validate', async () => {
+    createSubscriptionSeatSyncWorker(billingContainer as never);
+    runSubscriptionSeatReconcileJobMock.mockResolvedValueOnce({
+      quantityDriftCount: 0,
+      entitlementLapsedCount: 0,
+    });
+
+    await workerState.processor?.(makeJob({ name: 'reconcile-subscription-seats' }));
+
+    expect(runSubscriptionSeatReconcileJobMock).toHaveBeenCalledWith(subscriptionService);
+    // The scheduler's job carries no organization: it must never be dead-lettered as poison.
+    expect(parseJobDataOrDeadLetterMock).not.toHaveBeenCalled();
+    expect(processSubscriptionSeatSyncJobMock).not.toHaveBeenCalled();
   });
 
   it('never runs the processor when the payload is rejected as poison', async () => {

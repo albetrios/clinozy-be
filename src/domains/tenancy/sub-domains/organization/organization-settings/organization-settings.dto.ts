@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SUPPORTED_LANGUAGES } from '@/shared/constants/i18n.constants.js';
 import { moneySchema } from '@/shared/utils/validation/record-fields.util.js';
 
 /**
@@ -26,7 +27,7 @@ export const PROTO_POLLUTION_KEYS = new Set(['__proto__', 'constructor', 'protot
 export const updateOrganizationSettingsDto = z
   .object({
     is_email_notifications_enabled: z.boolean().optional(),
-    default_locale: z.enum(['en', 'es']).optional(),
+    default_locale: z.enum(SUPPORTED_LANGUAGES).optional(),
     default_day_float: moneySchema.optional(),
     lead_hold_days: z.number().int().min(1).max(30).optional(),
     reminder_hour: z.number().int().min(0).max(23).optional(),
@@ -48,11 +49,12 @@ export const updateOrganizationSettingsDto = z
         z.string().min(1).max(100),
         z.union([z.string().max(500), z.number(), z.boolean(), z.null()]),
       )
-      .refine((record) => Object.keys(record).length <= 50, 'security_policy: max 50 keys allowed')
-      .refine(
-        (record) => !Object.keys(record).some((key) => PROTO_POLLUTION_KEYS.has(key)),
-        'security_policy: keys __proto__, constructor, and prototype are not allowed',
-      )
+      .refine((record) => Object.keys(record).length <= 50, {
+        message: 'errors:validation.securityPolicyTooManyKeys',
+      })
+      .refine((record) => !Object.keys(record).some((key) => PROTO_POLLUTION_KEYS.has(key)), {
+        message: 'errors:validation.reservedSecurityPolicyKey',
+      })
       .optional(),
   })
   .strict();

@@ -66,7 +66,10 @@ export function organizationClock(options: {
   time: string;
   now?: Date;
 }): Date {
-  const today = calendarDateInTimeZone(options.timeZone, options.now ?? new Date());
+  const today = calendarDateInTimeZone({
+    timeZone: options.timeZone,
+    at: options.now ?? new Date(),
+  });
   return instantInTimeZone({
     date: addDaysToCalendarDate({ date: today, days: options.days }),
     time: options.time,

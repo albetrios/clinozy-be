@@ -11,6 +11,8 @@
  *   RLS-scoped context is a new KIND in one of the three registries here,
  *   never a new file or wrapper.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { runInCommitUnit } from '@/core/events/on-commit-scope.js';
 import { sql as drizzleSql } from 'drizzle-orm';
 import * as databaseConnection from '@/infrastructure/database/connection.js';
 import { database } from '@/infrastructure/database/connection.js';
@@ -36,12 +38,14 @@ function resolveMaintenancePool(): typeof database {
 }
 import {
   applyWorkerStatementTimeout,
+  assertTransactionNotFailed,
   getOrganizationRequestDatabaseSession,
   isWorkerRuntime,
   runWithPinnedDatabaseHandle,
   runWithPinnedOrganizationDatabaseSession,
   runWithWorkerDatabaseContext,
   setLocalMaintenanceRole,
+  exchangeLocalDatabaseConfig,
   setLocalDatabaseConfig,
   workerDatabaseContextForOrganization,
   workerDatabaseContextForUser,
@@ -49,7 +53,9 @@ import {
   type WorkerDatabaseContextKind,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import {
+  beginConnectionWait,
   decrementOrganizationRlsCheckoutCount,
+  endConnectionWait,
   incrementOrganizationRlsCheckoutCount,
   type OrganizationRlsCheckoutPath,
   observeOrganizationRlsCheckoutHold,
@@ -62,6 +68,7 @@ import {
 import { getEnv } from '@/shared/config/env.config.js';
 import { ConfigurationError, ServiceUnavailableError } from '@/shared/errors/index.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { isDatabaseUnavailableError } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { trace } from '@opentelemetry/api';
 
 declare const PRINCIPAL_SCOPE_BRAND: unique symbol;
@@ -200,6 +207,64 @@ export const PRINCIPAL_SCOPE: {
     createPrincipalDatabaseScope({ ...identity, source: 'verified' })) as PrincipalScopeMinter,
 });
 
+// Only the original identity of a fresh principal transaction may be reused.
+// Once a different user is requested, optimization stays disabled until the
+// transaction ends, including after a savepoint rollback or concurrent layering.
+const principalIdentityReuseStorage = new AsyncLocalStorage<{
+  databaseHandle: RequestScopedPostgresDatabase;
+  userPublicId: string | undefined;
+  identityChanged: boolean;
+}>();
+
+/**
+ * Runs `callback` with the user identity layered onto a reused transaction, and puts the previous
+ * identity back when it ends.
+ *
+ * @remarks
+ * A `SET LOCAL` lasts for the whole transaction (and RELEASE SAVEPOINT keeps it), so without the
+ * restore the outer unit of work would carry on as the inner user. The restore runs whether the
+ * callback succeeds or fails; when it failed and the transaction is already aborted, the restore's
+ * own failure is dropped so the callback's error surfaces.
+ */
+async function runWithLayeredUserIdentity<T>(options: {
+  databaseHandle: RequestScopedPostgresDatabase;
+  userPublicId: string;
+  callback: () => Promise<T>;
+}): Promise<T> {
+  const original = principalIdentityReuseStorage.getStore();
+  if (
+    original !== undefined &&
+    !original.identityChanged &&
+    original.databaseHandle === options.databaseHandle &&
+    original.userPublicId === options.userPublicId
+  ) {
+    return options.callback();
+  }
+  if (original !== undefined) original.identityChanged = true;
+  const previousUserPublicId = await exchangeLocalDatabaseConfig({
+    databaseHandle: options.databaseHandle,
+    key: 'app.current_user_public_id',
+    value: options.userPublicId,
+  });
+  if (previousUserPublicId === options.userPublicId) return options.callback();
+  const restoreOuterIdentity = () =>
+    setLocalDatabaseConfig({
+      databaseHandle: options.databaseHandle,
+      key: 'app.current_user_public_id',
+      value: previousUserPublicId ?? '',
+    });
+  let result: T;
+  try {
+    result = await options.callback();
+  } catch (error) {
+    // An aborted transaction refuses the restore too; the callback's error is the one to surface.
+    await restoreOuterIdentity().catch(() => undefined);
+    throw error;
+  }
+  await restoreOuterIdentity();
+  return result;
+}
+
 // The principal branch of withAppDatabaseContext: same-organization reuse, user-GUC
 // layering, and a fresh transaction with both identity GUCs in one round trip
 // otherwise. Only reachable through the exported app wrapper.
@@ -208,25 +273,28 @@ export const PRINCIPAL_SCOPE: {
  * overload guard reads, the hold-time sample, and a deadline on getting the connection.
  *
  * @remarks
- * postgres.js has no acquire timeout. With no connection open, a query waits while the pool keeps
- * reconnecting for as long as the database stays unreachable — `connect_timeout` bounds each attempt,
- * not the wait — so a unit of work could outlive the HTTP request that started it and commit after
- * the client had been told the request failed. `openTransaction` calls `claimConnection` first thing
- * inside the transaction. When `DATABASE_POOL_ACQUIRE_TIMEOUT_MS` passes before it does, the unit of
- * work is abandoned: the caller gets a 503 with `Retry-After`, and a connection that arrives later
- * throws out of `claimConnection`, so the transaction rolls back before running anything. Once the
- * transaction has started, the deadline no longer applies; `statement_timeout` bounds the work. The
+ * node-postgres fails a checkout at once when the database refuses the connection, and after
+ * `connectionTimeoutMillis` when it does not answer or no pooled connection frees up. A unit of work
+ * that fails that way before its transaction started ({@link isDatabaseUnavailableError}) answers
+ * 503 with `Retry-After`: the database is unavailable, the request is not wrong. `openTransaction`
+ * calls `claimConnection` first thing inside the transaction. When `DATABASE_POOL_ACQUIRE_TIMEOUT_MS`
+ * passes before it does, the unit of work is abandoned with the same 503, and a connection that
+ * arrives later throws out of `claimConnection`, so the transaction rolls back before running
+ * anything — a unit of work never outlives the request that started it and commits after the client
+ * was told it failed. Once the transaction has started, neither applies; `statement_timeout` bounds
+ * the work. The
  * gauge and the hold sample follow the transaction itself, so an abandoned waiter keeps counting as
- * in flight — and the overload guard keeps shedding — until the pool lets it go.
+ * in flight — and the overload guard keeps shedding — until the pool lets it go. Every pooled unit
+ * counts, user-only and `withTransaction` ones included: an uncounted unit holds a connection the
+ * guard cannot see. The wait itself is tracked until the connection is claimed, so the guard can
+ * also shed on how long the oldest waiter has waited (`OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS`).
  */
-async function runPooledUnitOfWork<T>(options: {
+export async function runPooledUnitOfWork<T>(options: {
   path: OrganizationRlsCheckoutPath;
-  countsAsCheckout: boolean;
   openTransaction: (claimConnection: () => void) => Promise<T>;
 }): Promise<T> {
-  if (options.countsAsCheckout) {
-    incrementOrganizationRlsCheckoutCount();
-  }
+  incrementOrganizationRlsCheckoutCount();
+  const waitToken = beginConnectionWait();
   const checkoutStartedAtNanoseconds = process.hrtime.bigint();
   let started = false;
   let abandoned = false;
@@ -235,19 +303,26 @@ async function runPooledUnitOfWork<T>(options: {
       throw new Error('Unit of work abandoned: its connection arrived after the acquire deadline');
     }
     started = true;
+    endConnectionWait(waitToken);
   };
   // Called from an async function, a synchronous throw from openTransaction becomes a rejection,
   // so the gauge below is still released, as the per-site try/finally did.
-  const transaction = (async () => options.openTransaction(claimConnection))();
+  // The unit's after-commit tasks survive only if it commits (see runInCommitUnit).
+  const transaction = runInCommitUnit(() => options.openTransaction(claimConnection)).catch(
+    (error: unknown) => {
+      if (started || !isDatabaseUnavailableError(error)) throw error;
+      logger.warn({ path: options.path, error }, 'database.acquire_failed');
+      throw new ServiceUnavailableError().withRetryAfter(DATABASE_ACQUIRE_RETRY_AFTER_SECONDS);
+    },
+  );
   const unitOfWork = transaction.finally(() => {
-    if (options.countsAsCheckout) {
-      decrementOrganizationRlsCheckoutCount();
-      observeOrganizationRlsCheckoutHold({
-        path: options.path,
-        durationSeconds:
-          Number(process.hrtime.bigint() - checkoutStartedAtNanoseconds) / 1_000_000_000,
-      });
-    }
+    endConnectionWait(waitToken);
+    decrementOrganizationRlsCheckoutCount();
+    observeOrganizationRlsCheckoutHold({
+      path: options.path,
+      durationSeconds:
+        Number(process.hrtime.bigint() - checkoutStartedAtNanoseconds) / 1_000_000_000,
+    });
   });
 
   const deadlineMs = getEnv().DATABASE_POOL_ACQUIRE_TIMEOUT_MS;
@@ -275,10 +350,13 @@ async function runPooledUnitOfWork<T>(options: {
   }
 }
 
-async function runPrincipalDatabaseContext<T>(
-  scope: PrincipalDatabaseScope,
-  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>,
-): Promise<T> {
+async function runPrincipalDatabaseContext<T>({
+  scope,
+  callback,
+}: {
+  scope: PrincipalDatabaseScope;
+  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>;
+}): Promise<T> {
   const { userPublicId, organizationPublicId } = scope;
   const workerContext =
     organizationPublicId !== undefined
@@ -291,15 +369,18 @@ async function runPrincipalDatabaseContext<T>(
     organizationPublicId !== undefined &&
     activeSession.organizationPublicId === organizationPublicId
   ) {
-    return runWithWorkerDatabaseContext(workerContext, async () => {
-      if (userPublicId !== undefined) {
-        await setLocalDatabaseConfig(
-          activeSession.databaseHandle,
-          'app.current_user_public_id',
-          userPublicId,
-        );
-      }
-      return callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle));
+    return runWithWorkerDatabaseContext({
+      context: workerContext,
+      callback: () => {
+        const run = () => callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle));
+        return userPublicId === undefined
+          ? run()
+          : runWithLayeredUserIdentity({
+              databaseHandle: activeSession.databaseHandle,
+              userPublicId,
+              callback: run,
+            });
+      },
     });
   }
 
@@ -314,30 +395,32 @@ async function runPrincipalDatabaseContext<T>(
     organizationPublicId === undefined &&
     userPublicId !== undefined
   ) {
-    return runWithWorkerDatabaseContext(workerContext, async () => {
-      await setLocalDatabaseConfig(
-        activeSession.databaseHandle,
-        'app.current_user_public_id',
-        userPublicId,
-      );
-      return callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle));
+    return runWithWorkerDatabaseContext({
+      context: workerContext,
+      callback: () =>
+        runWithLayeredUserIdentity({
+          databaseHandle: activeSession.databaseHandle,
+          userPublicId,
+          callback: () => callback(brandWorkerContextDatabaseHandle(activeSession.databaseHandle)),
+        }),
     });
   }
 
   return runPooledUnitOfWork({
     path: 'scoped_context',
-    countsAsCheckout: organizationPublicId !== undefined,
     openTransaction: (claimConnection) =>
-      runWithWorkerDatabaseContext(workerContext, () =>
-        database.transaction((transaction) =>
-          runPrincipalTransaction({
-            databaseHandle: transaction as unknown as RequestScopedPostgresDatabase,
-            claimConnection,
-            scope,
-            callback,
-          }),
-        ),
-      ),
+      runWithWorkerDatabaseContext({
+        context: workerContext,
+        callback: () =>
+          database.transaction((transaction) =>
+            runPrincipalTransaction({
+              databaseHandle: transaction as unknown as RequestScopedPostgresDatabase,
+              claimConnection,
+              scope,
+              callback,
+            }),
+          ),
+      }),
   });
 }
 
@@ -362,10 +445,27 @@ async function runPrincipalTransaction<T>(options: {
     await applyWorkerStatementTimeout(databaseHandle);
   }
   await databaseHandle.execute(buildIdentityGucStatement({ userPublicId, organizationPublicId }));
-  const runCallback = () => callback(brandWorkerContextDatabaseHandle(databaseHandle));
-  return organizationPublicId !== undefined
-    ? runWithPinnedOrganizationDatabaseSession(organizationPublicId, databaseHandle, runCallback)
-    : runWithPinnedDatabaseHandle(databaseHandle, runCallback);
+  // The cache is bookkeeping, never an authorization source. It follows nested
+  // pinned savepoint handles too: layering there invalidates the outer shortcut,
+  // since RELEASE SAVEPOINT preserves its identity settings.
+  const originalIdentity = { databaseHandle, userPublicId, identityChanged: false };
+  const runCallback = () =>
+    principalIdentityReuseStorage.run(originalIdentity, () =>
+      callback(brandWorkerContextDatabaseHandle(databaseHandle)),
+    );
+  try {
+    const result = await (organizationPublicId !== undefined
+      ? runWithPinnedOrganizationDatabaseSession({
+          organizationPublicId,
+          databaseHandle,
+          callback: runCallback,
+        })
+      : runWithPinnedDatabaseHandle({ databaseHandle, callback: runCallback }));
+    await assertTransactionNotFailed(databaseHandle);
+    return result;
+  } finally {
+    originalIdentity.identityChanged = true;
+  }
 }
 
 /**
@@ -462,25 +562,30 @@ export const SESSION_SCOPE: {
 // The session branch of withAppDatabaseContext: exactly one session-artifact
 // GUC (the field present names it), always a fresh transaction (pre-auth flows
 // never nest), HTTP timeouts kept. Only reachable through the exported app wrapper.
-async function runSessionDatabaseContext<T>(
-  scope: SessionDatabaseScope,
-  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>,
-): Promise<T> {
+async function runSessionDatabaseContext<T>({
+  scope,
+  callback,
+}: {
+  scope: SessionDatabaseScope;
+  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>;
+}): Promise<T> {
   const armed =
     scope.sessionPublicId !== undefined
       ? { guc: SESSION_CONTEXTS.sessionPublicId.guc, value: scope.sessionPublicId }
       : { guc: SESSION_CONTEXTS.sessionTokenHash.guc, value: scope.sessionTokenHash as string };
   return runPooledUnitOfWork({
     path: 'session_context',
-    countsAsCheckout: true,
     openTransaction: (claimConnection) =>
       database.transaction(async (transaction) => {
         claimConnection();
         const databaseHandle = transaction as unknown as RequestScopedPostgresDatabase;
-        await setLocalDatabaseConfig(databaseHandle, armed.guc, armed.value);
-        return runWithPinnedDatabaseHandle(databaseHandle, () =>
-          callback(brandWorkerContextDatabaseHandle(databaseHandle)),
-        );
+        await setLocalDatabaseConfig({ databaseHandle, key: armed.guc, value: armed.value });
+        const result = await runWithPinnedDatabaseHandle({
+          databaseHandle,
+          callback: () => callback(brandWorkerContextDatabaseHandle(databaseHandle)),
+        });
+        await assertTransactionNotFailed(databaseHandle);
+        return result;
       }),
   });
 }
@@ -583,14 +688,17 @@ function recordScopeOnActiveSpan(
  * source and runs under the session context. The scope is recorded on the active span before
  * either arm runs, so a query's tenancy stays visible in the trace even when the callback throws.
  */
-export async function withAppDatabaseContext<T>(
-  scope: AppDatabaseScope,
-  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>,
-): Promise<T> {
+export async function withAppDatabaseContext<T>({
+  scope,
+  callback,
+}: {
+  scope: AppDatabaseScope;
+  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>;
+}): Promise<T> {
   recordScopeOnActiveSpan(scope);
   return 'source' in scope
-    ? runPrincipalDatabaseContext(scope, callback)
-    : runSessionDatabaseContext(scope, callback);
+    ? runPrincipalDatabaseContext({ scope, callback })
+    : runSessionDatabaseContext({ scope, callback });
 }
 
 /** One row of the maintenance-context registry — the GUC it arms and how its transaction is tuned. */
@@ -742,11 +850,15 @@ export type MaintenanceDatabaseContextOptions = {
  *   processors, admin-authorized routes, and trusted system flows. Never enter
  *   from a self-service request path.
  */
-export async function withMaintenanceDatabaseContext<T>(
-  scope: MaintenanceDatabaseScope,
-  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>,
-  options?: MaintenanceDatabaseContextOptions,
-): Promise<T> {
+export async function withMaintenanceDatabaseContext<T>({
+  scope,
+  callback,
+  options,
+}: {
+  scope: MaintenanceDatabaseScope;
+  callback: (databaseHandle: WorkerContextDatabaseHandle) => Promise<T>;
+  options?: MaintenanceDatabaseContextOptions | undefined;
+}): Promise<T> {
   recordScopeOnActiveSpan(scope);
   const definition = MAINTENANCE_CONTEXTS[scope.kind];
   if (!definition.opensTransaction) {
@@ -764,31 +876,36 @@ export async function withMaintenanceDatabaseContext<T>(
         ),
       );
     }
-    return runWithWorkerDatabaseContext({ kind: definition.workerContextKind }, () =>
-      runWithPinnedDatabaseHandle(maintenancePool as unknown as RequestScopedPostgresDatabase, () =>
-        callback(
-          brandWorkerContextDatabaseHandle(
-            maintenancePool as unknown as RequestScopedPostgresDatabase,
-          ),
-        ),
-      ),
-    );
+    return runWithWorkerDatabaseContext({
+      context: { kind: definition.workerContextKind },
+      callback: () =>
+        runWithPinnedDatabaseHandle({
+          databaseHandle: maintenancePool as unknown as RequestScopedPostgresDatabase,
+          callback: () =>
+            callback(
+              brandWorkerContextDatabaseHandle(
+                maintenancePool as unknown as RequestScopedPostgresDatabase,
+              ),
+            ),
+        }),
+    });
   }
   return runPooledUnitOfWork({
     path: 'maintenance_context',
-    countsAsCheckout: true,
     openTransaction: (claimConnection) =>
-      runWithWorkerDatabaseContext({ kind: definition.workerContextKind }, () =>
-        resolveMaintenancePool().transaction((transaction) =>
-          runMaintenanceTransaction({
-            databaseHandle: transaction as unknown as RequestScopedPostgresDatabase,
-            claimConnection,
-            definition,
-            useMaintenanceDatabaseRole: options?.useMaintenanceDatabaseRole === true,
-            callback,
-          }),
-        ),
-      ),
+      runWithWorkerDatabaseContext({
+        context: { kind: definition.workerContextKind },
+        callback: () =>
+          resolveMaintenancePool().transaction((transaction) =>
+            runMaintenanceTransaction({
+              databaseHandle: transaction as unknown as RequestScopedPostgresDatabase,
+              claimConnection,
+              definition,
+              useMaintenanceDatabaseRole: options?.useMaintenanceDatabaseRole === true,
+              callback,
+            }),
+          ),
+      }),
   });
 }
 
@@ -813,9 +930,12 @@ async function runMaintenanceTransaction<T>(options: {
     await applyWorkerStatementTimeout(databaseHandle);
   }
   if (definition.guc !== null) {
-    await setLocalDatabaseConfig(databaseHandle, definition.guc, 'true');
+    await setLocalDatabaseConfig({ databaseHandle, key: definition.guc, value: 'true' });
   }
-  return runWithPinnedDatabaseHandle(databaseHandle, () =>
-    callback(brandWorkerContextDatabaseHandle(databaseHandle)),
-  );
+  const result = await runWithPinnedDatabaseHandle({
+    databaseHandle,
+    callback: () => callback(brandWorkerContextDatabaseHandle(databaseHandle)),
+  });
+  await assertTransactionNotFailed(databaseHandle);
+  return result;
 }

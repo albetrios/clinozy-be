@@ -51,6 +51,16 @@ export type StripeWebhookEventClaimResult =
   | 'abandoned'
   | 'still_processing_within_lease';
 
+/**
+ * What the HTTP ingress found for an event: it wrote the ledger row (`recorded`), the row was
+ * already there and still to be processed (`already_recorded`), or it is terminal.
+ */
+export type StripeWebhookIngressResult =
+  | 'recorded'
+  | 'already_recorded'
+  | 'processed_duplicate'
+  | 'abandoned';
+
 function stripeWebhookLedgerDatabase() {
   if (isWorkerRuntime()) {
     assertWorkerDatabaseContext(['system_table']);
@@ -94,6 +104,42 @@ function stripeSubscriptionTombstoneDatabase() {
  *   intentionally separate from any business-side subscription mutations.
  */
 export class StripeWebhookEventRepository {
+  /**
+   * The HTTP ingress's durability write: inserts the ledger row, or classifies the one already there
+   * — and never claims it. Claiming is the worker's: an ingress that reclaimed a row still waiting
+   * for its first run (a Stripe redelivery) spent that first claim, and the worker then found the
+   * event "in flight" and backed off until the stuck-processing lease expired (15–20 minutes).
+   */
+  async recordAtIngress(input: {
+    stripe_event_id: string;
+    event_type: string;
+    stripe_created_at: Date;
+    request_id?: string;
+  }): Promise<StripeWebhookIngressResult> {
+    const insertedRows = await stripeWebhookLedgerDatabase()
+      .insert(stripe_webhook_events)
+      .values({
+        stripe_event_id: input.stripe_event_id,
+        event_type: input.event_type,
+        stripe_created_at: input.stripe_created_at,
+        processing_status: 'processing',
+        request_id: input.request_id,
+        attempt_count: 0,
+      })
+      .onConflictDoNothing()
+      .returning({ stripe_event_id: stripe_webhook_events.stripe_event_id });
+    if (insertedRows.length > 0) return 'recorded';
+
+    const [existing] = await stripeWebhookLedgerDatabase()
+      .select({ processing_status: stripe_webhook_events.processing_status })
+      .from(stripe_webhook_events)
+      .where(eq(stripe_webhook_events.stripe_event_id, input.stripe_event_id))
+      .limit(1);
+    if (existing?.processing_status === 'processed') return 'processed_duplicate';
+    if (existing?.processing_status === 'abandoned') return 'abandoned';
+    return 'already_recorded';
+  }
+
   async tryClaimEvent(input: {
     stripe_event_id: string;
     event_type: string;
@@ -512,10 +558,9 @@ export class StripeWebhookEventRepository {
     provider_subscription_id: string,
     deleted_event_created_at: Date,
   ): Promise<void> {
-    // The raw `sql` template binds parameters straight through postgres.js, which
-    // rejects a JS `Date` instance (`TypeError: ... Received an instance of Date`).
-    // The Drizzle `.values()` path still gets the `Date` (the date-mode timestamptz
-    // column maps it); only the GREATEST() template needs a serialized ISO string.
+    // The raw `sql` template binds parameters as they are, without the column's date
+    // mapping, so the GREATEST() template gets an unambiguous UTC ISO string. The Drizzle
+    // `.values()` path still gets the `Date` (the date-mode timestamptz column maps it).
     const deleted_at_iso = deleted_event_created_at.toISOString();
     await stripeSubscriptionTombstoneDatabase()
       .insert(stripe_subscription_tombstones)

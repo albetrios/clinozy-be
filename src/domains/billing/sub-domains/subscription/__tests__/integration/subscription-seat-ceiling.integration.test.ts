@@ -31,7 +31,8 @@ import { createWorkerContainers } from '@/worker-containers.js';
  * `subscriptions.seats` (the Stripe quantity the clinic is billed for). The add check used to read
  * that same column as the limit (`seats ?? included_seats`), so one add plus one sync capped a
  * subscribed organization at its current size — and an unlimited plan at its headcount. The
- * ceiling is now the plan's `included_seats`, raised only by a quantity paid for above it.
+ * ceiling is now the plan's `included_seats` alone — the billed quantity never raises it (more
+ * seats come with a bigger plan).
  *
  * Drives the real add route and the real seat-sync processor (a local-only subscription, so the
  * sync persists `seats` without calling Stripe).
@@ -102,10 +103,10 @@ describe('Subscription seat ceiling after the seat sync (ROUTE #165)', () => {
 
   /** Runs the seat-sync job the add enqueued, as the worker would. */
   async function runSeatSync(organizationPublicId: string) {
-    await processSubscriptionSeatSyncJob(
-      { organizationPublicId },
-      createWorkerContainers().billingDomain.subscriptionService,
-    );
+    await processSubscriptionSeatSyncJob({
+      jobData: { organizationPublicId },
+      service: createWorkerContainers().billingDomain.subscriptionService,
+    });
   }
 
   async function readSyncedSeats(subscriptionId: number) {
@@ -163,16 +164,18 @@ describe('Subscription seat ceiling after the seat sync (ROUTE #165)', () => {
     expect((await addMember(token, memberRole.public_id)).statusCode).toBe(200);
   });
 
-  it('honours a quantity paid for above the plan seats', async () => {
+  it('ignores a billed quantity above the plan seats — the plan is the ceiling', async () => {
     const { subscription, token, memberRole } = await createSubscribedOrganization(1);
-    // The clinic bought 2 seats on a 1-seat plan (a Stripe quantity above the plan, synced in).
+    // A Stripe quantity of 2 on a 1-seat plan, synced in: the owner already holds the one seat.
     await getOperatorDatabase()
       .update(subscriptions)
       .set({ seats: 2 })
       .where(eq(subscriptions.id, subscription.id));
 
-    expect((await addMember(token, memberRole.public_id)).statusCode).toBe(200);
     const refused = await addMember(token, memberRole.public_id);
     expect(refused.statusCode).toBe(409);
+    expect((refused.json() as { error: { reason?: string } }).error.reason).toBe(
+      'seat_limit_reached',
+    );
   });
 });

@@ -1,17 +1,32 @@
 import { createHash } from 'node:crypto';
+import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
-import { and, asc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
+import {
+  getTableColumns,
+  and,
+  asc,
+  eq,
+  ilike,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+  type SQL,
+  lt,
+} from 'drizzle-orm';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
 import {
   getContextFreeDatabase,
   getRequestDatabase,
+  assertWorkerDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { users } from '@/domains/user/user.schema.js';
 import type { UserPresence } from '@/domains/user/user.constants.js';
 import { escapeLikePattern } from '@/shared/utils/validation/validation.util.js';
 import {
   buildAscendingCreatedAtIdCursorCondition,
-  createOpaqueCursorFromRow,
+  cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 
@@ -19,9 +34,8 @@ import {
 type UserRow = typeof users.$inferSelect;
 
 /**
- * Normalises a raw SECURITY DEFINER resolver row (postgres.js returns the `bigint` `id` column as a
- * string) into the typed {@link UserRow} the application consumes. All other columns already arrive
- * as the correct JavaScript types (timestamptz → Date, int4 → number, bool → boolean).
+ * Normalises a raw SECURITY DEFINER resolver row (node-postgres returns the `bigint` `id` column as
+ * a string) into the typed {@link UserRow} the application consumes.
  */
 function mapResolverRowToUserRow(row: Record<string, unknown>): UserRow {
   return { ...(row as UserRow), id: Number((row as { id: unknown }).id) };
@@ -273,17 +287,20 @@ export class UserRepository {
       filterConditions.push(or(ilike(users.email, pattern), sql`${displayName} ILIKE ${pattern}`)!);
     }
     const countWhere = and(...filterConditions);
-    const cursorCondition = buildAscendingCreatedAtIdCursorCondition(
-      users.created_at,
-      users.id,
-      parseListCursor(after),
-    );
+    const cursorCondition = buildAscendingCreatedAtIdCursorCondition({
+      createdAtColumn: users.created_at,
+      idColumn: users.id,
+      cursor: parseListCursor(after),
+    });
     const where =
       cursorCondition !== undefined ? and(...filterConditions, cursorCondition) : countWhere;
 
     // Fetch one extra row so has_more is accurate without depending on count(*).
     const rowsPromise = getRequestDatabase()
-      .select()
+      .select({
+        ...getTableColumns(users),
+        cursor_created_at: cursorTimestampSelection(users.created_at),
+      })
       .from(users)
       .where(where)
       .orderBy(asc(users.created_at), asc(users.id))
@@ -294,18 +311,7 @@ export class UserRepository {
       : Promise.resolve(null);
 
     const [fetchedRows, total] = await Promise.all([rowsPromise, countPromise]);
-    const hasMore = fetchedRows.length > limit;
-    const items = hasMore ? fetchedRows.slice(0, limit) : fetchedRows;
-    const lastItem = items.at(-1);
-    const nextCursor =
-      hasMore && lastItem !== undefined ? createOpaqueCursorFromRow(lastItem) : null;
-    return {
-      items,
-      total,
-      limit,
-      has_more: hasMore,
-      next_cursor: nextCursor,
-    };
+    return finishKeysetPage({ rows: fetchedRows, args: { limit, total } });
   }
 
   async adminUpdate(
@@ -411,4 +417,26 @@ export class UserRepository {
       .returning();
     return rows[0] ?? null;
   }
+}
+
+/**
+ * Users whose account deletion started before `startedBefore` and never finished (a crash
+ * mid-teardown) — the offboarding reconcile's read (retention maintenance context).
+ */
+export async function findUsersStuckInOffboarding(
+  databaseHandle: WorkerDatabaseHandle,
+  options: { startedBefore: Date; limit: number },
+): Promise<Array<{ public_id: string }>> {
+  assertWorkerDatabaseContext(['global_retention_cleanup']);
+  return databaseHandle
+    .select({ public_id: users.public_id })
+    .from(users)
+    .where(
+      and(
+        isNotNull(users.deletion_started_at),
+        isNull(users.deleted_at),
+        lt(users.deletion_started_at, options.startedBefore),
+      ),
+    )
+    .limit(options.limit);
 }

@@ -10,7 +10,7 @@ type TrustProxyFunction = Extract<
 import type { IncomingMessage } from 'node:http';
 import { env } from '@/shared/config/env.config.js';
 import { DEFAULT_BODY_LIMIT_BYTES } from '@/shared/constants/limits.constants.js';
-import { TEN_SECONDS_MS, THIRTY_SECONDS_MS } from '@/shared/constants/ttl.constants.js';
+import { THIRTY_SECONDS_MS } from '@/shared/constants/ttl.constants.js';
 import {
   redactSensitive,
   SENSITIVE_KEY_FRAGMENTS,
@@ -197,7 +197,9 @@ export function buildFastifyServerOptions(): FastifyServerOptions {
     genReqId: (request) => resolveIncomingRequestIdentifier(request),
     bodyLimit: DEFAULT_BODY_LIMIT_BYTES,
     requestTimeout: env.FASTIFY_REQUEST_TIMEOUT_MS ?? THIRTY_SECONDS_MS,
-    connectionTimeout: env.FASTIFY_CONNECTION_TIMEOUT_MS ?? TEN_SECONDS_MS,
+    // A socket inactivity timeout: off unless set (see FASTIFY_CONNECTION_TIMEOUT_MS) — at 10 s it cut
+    // handlers waiting on the pool (10 s deadline) or Stripe (30 s) before they could answer.
+    connectionTimeout: env.FASTIFY_CONNECTION_TIMEOUT_MS ?? 0,
     // On shutdown, keep-alive sockets sitting idle between requests are closed by Node itself
     // (native `server.close()` reaps idle connections on Node >= 19), while in-flight requests
     // drain normally. Must stay `false`: fastify 5.9.0 (fastify/fastify#6669) made the previous

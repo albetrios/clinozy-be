@@ -75,10 +75,13 @@ async function assertPrescriptionOfContact(options: {
 }
 
 /** "Prescribed by": active members of the organization — their ids; else a 400 `member_ids`. */
-async function resolveMemberIds(
-  publicIds: readonly string[] | undefined,
-  context: BaseRecordWriteContext,
-): Promise<number[]> {
+async function resolveMemberIds({
+  publicIds,
+  context,
+}: {
+  publicIds: readonly string[] | undefined;
+  context: BaseRecordWriteContext;
+}): Promise<number[]> {
   if (!publicIds || publicIds.length === 0) return [];
   const ids = await resolveRecordIds({
     table: memberships,
@@ -143,13 +146,19 @@ async function drawSaleLines(options: {
  * invoice written through the invoice ledger (its lines, team, "Paid now" and activity entry), and
  * the sale pointing at it; one transaction.
  */
-async function prepareSale(
-  values: Record<string, unknown>,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function prepareSale({
+  values,
+  context,
+}: {
+  values: Record<string, unknown>;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const contactId = values.contact_id as number;
   await assertPrescriptionOfContact({ prescriptionId: values.patient_prescription_id, contactId });
-  const memberIds = await resolveMemberIds(values.member_ids as string[] | undefined, context);
+  const memberIds = await resolveMemberIds({
+    publicIds: values.member_ids as string[] | undefined,
+    context,
+  });
   const items = await drawSaleLines({
     items: values.items as CreateMedicalSaleInput['items'],
     context,
@@ -178,10 +187,13 @@ async function prepareSale(
 }
 
 /** MD20: a sale is voided only with nothing paid on its invoice and nothing returned. */
-async function assertVoidable(
-  repository: MedicalSalesRepository,
-  sale: BaseRecordRow,
-): Promise<void> {
+async function assertVoidable({
+  repository,
+  sale,
+}: {
+  repository: MedicalSalesRepository;
+  sale: BaseRecordRow;
+}): Promise<void> {
   const invoice = await invoicesRepository.findById(sale.invoice_id as number);
   if (
     paiseOf(invoice?.paid_amount) > 0 ||
@@ -258,7 +270,7 @@ function returnedLine(options: {
 async function returnSale(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing: sale, context } = input;
   const repository = input.repository as MedicalSalesRepository;
-  const body = parseWithSchema(ReturnMedicalSaleDto, input.input);
+  const body = parseWithSchema({ schema: ReturnMedicalSaleDto, data: input.input });
   const invoice = await invoicesRepository.findById(sale.invoice_id as number);
   const credited = await repository.findCreditedAmount(sale.invoice_id as number);
   if (
@@ -341,7 +353,13 @@ function lineOutput(line: MedicalSaleLineRow): Record<string, unknown> {
 }
 
 /** MD21: a live sale's status — returned (any return), else paid or unpaid by its invoice's due. */
-function liveStatus(hasReturns: boolean, dueAmount: unknown): string {
+function liveStatus({
+  hasReturns,
+  dueAmount,
+}: {
+  hasReturns: boolean;
+  dueAmount: unknown;
+}): string {
   if (hasReturns) return MEDICAL_SALE_STATUS.RETURNED;
   return paiseOf(dueAmount) <= 0 ? MEDICAL_SALE_STATUS.PAID : MEDICAL_SALE_STATUS.UNPAID;
 }
@@ -406,7 +424,10 @@ async function decorateSales(options: {
     output.margin_percent =
       salePaise > 0 ? Math.round(((salePaise - costPaise) / salePaise) * 10000) / 100 : null;
     if (row.deleted_at === null) {
-      output.status = liveStatus(ownReturns.length > 0, invoice?.due_amount);
+      output.status = liveStatus({
+        hasReturns: ownReturns.length > 0,
+        dueAmount: invoice?.due_amount,
+      });
     }
   }
   await attachBilledContacts(outputs);
@@ -430,9 +451,9 @@ async function decorateSales(options: {
  */
 export function createMedicalSalesRules(repository: MedicalSalesRepository): BaseRecordRules {
   return {
-    prepareCreate: prepareSale,
+    prepareCreate: (values, context) => prepareSale({ values, context }),
     prepareRemove: async (existing, context) => {
-      await assertVoidable(repository, existing);
+      await assertVoidable({ repository, sale: existing });
       await moveSaleStock({ repository, sale: existing, sign: 1, context });
     },
     prepareRestore: (deleted, context) =>

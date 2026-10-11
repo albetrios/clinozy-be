@@ -1,7 +1,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { successResponse } from '@/shared/utils/http/response.util.js';
 import { getRequestIdentifier } from '@/shared/utils/http/request.util.js';
-import { getIpAddress, getUserAgent, setSessionCookie } from '@/domains/auth/auth.http.util.js';
+import { getIpAddress, setSessionCookie } from '@/domains/auth/auth.http.util.js';
+import { getUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import { AuthSerializer } from '@/domains/auth/auth.serializer.js';
 import {
   recordLoginAuditEvent,
@@ -19,25 +20,39 @@ export function createAuthLoginHandlers({ authService }: AuthLoginHandlersDepend
       const userAgent = getUserAgent(request);
       let data: Awaited<ReturnType<typeof authService.login>>;
       try {
-        data = await authService.login(request.body, ipAddress, userAgent ?? undefined);
+        data = await authService.login({
+          body: request.body,
+          ipAddress,
+          userAgent: userAgent ?? undefined,
+        });
       } catch (error) {
         // sec-A8 follow-up: record the failure side of the auth.overview.md invariant
         // ("every login (success or failure) records a row"). The helper is
         // best-effort and never throws — we always re-raise the original error
         // so the global error handler maps it to the right HTTP status.
-        await recordLoginFailureAuditEvent(request, 'password', error);
+        await recordLoginFailureAuditEvent({ request, source: 'password', error });
         throw error;
       }
 
       if ('mfa_required' in data) {
-        return successResponse(AuthSerializer.mfaRequired(data), getRequestIdentifier(request));
+        return successResponse({
+          data: AuthSerializer.mfaRequired(data),
+          request_id: getRequestIdentifier(request),
+        });
       }
 
-      setSessionCookie(reply, data.session_public_id, data.session_refresh_secret);
+      setSessionCookie({
+        reply,
+        sessionPublicId: data.session_public_id,
+        refreshSecret: data.session_refresh_secret,
+      });
 
-      await recordLoginAuditEvent(request, data, 'password');
+      await recordLoginAuditEvent({ request, loginResult: data, source: 'password' });
 
-      return successResponse(AuthSerializer.accessToken(data), getRequestIdentifier(request));
+      return successResponse({
+        data: AuthSerializer.accessToken(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
   };
 }

@@ -41,20 +41,21 @@ export function createTaskRulesWorker(): WorkerHandle {
         queueName: TASK_RULES_QUEUE_NAME,
       });
       const { organizationPublicId } = jobData;
-      return runWithPropagatedTraceContext(
-        { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
-        job.name,
-        async () => {
-          const counts = await runOrganizationScopedWorkerJob(
-            { organizationPublicId },
-            (databaseHandle) => runTaskRulesJob(databaseHandle, organizationPublicId),
-          );
+      return runWithPropagatedTraceContext({
+        carrier: { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
+        spanName: job.name,
+        callback: async () => {
+          const counts = await runOrganizationScopedWorkerJob({
+            job: { organizationPublicId },
+            processor: (databaseHandle) =>
+              runTaskRulesJob({ databaseHandle, organizationPublicId }),
+          });
           // The app's steps queued messages (TK10): send them now, after the commit (D77).
           if (counts.handledCount + counts.messageCount > 0)
             await requestContactMessageDelivery(organizationPublicId);
           return counts;
         },
-      );
+      });
     },
     {
       connection: getBullMQConnectionOptions(),
@@ -68,5 +69,5 @@ export function createTaskRulesWorker(): WorkerHandle {
     logger.warn({ jobId, queue: TASK_RULES_QUEUE_NAME }, 'task-rules.stalled');
   });
 
-  return buildWorkerHandle(worker, TASK_RULES_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: TASK_RULES_QUEUE_NAME });
 }

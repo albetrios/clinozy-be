@@ -14,26 +14,29 @@ function isBilled(row: BaseRecordRow): boolean | null {
  * Shapes an `app.patient_treatments` row as the API returns it (routes-final 7.H.6). The latest
  * check-in is the rules' `decorate` (one read per page) — empty here.
  */
-export function serializePatientTreatment(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): PatientTreatmentOutput {
+export function serializePatientTreatment({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): PatientTreatmentOutput {
   return {
     id: row.public_id,
-    patient_id: references.publicIdOf('patient_id', row) ?? '',
-    appointment_id: references.publicIdOf('appointment_id', row),
-    offering_id: references.publicIdOf('offering_id', row),
+    patient_id: references.publicIdOf({ field: 'patient_id', row }) ?? '',
+    appointment_id: references.publicIdOf({ field: 'appointment_id', row }),
+    offering_id: references.publicIdOf({ field: 'offering_id', row }),
     name: row.name as string,
     template: row.template as string,
     performed_at: toInstant(row.performed_at) as string,
-    doctor_membership_id: references.publicIdOf('doctor_membership_id', row),
-    therapist_membership_id: references.publicIdOf('therapist_membership_id', row),
+    doctor_membership_id: references.publicIdOf({ field: 'doctor_membership_id', row }),
+    therapist_membership_id: references.publicIdOf({ field: 'therapist_membership_id', row }),
     body_parts: row.body_parts as string[],
     session_number: row.session_number as number,
     parameters: row.parameters as Record<string, string>,
     remark: row.remark as string | null,
     aftercare_call: row.aftercare_call as string,
-    patient_offering_id: references.publicIdOf('patient_offering_id', row),
+    patient_offering_id: references.publicIdOf({ field: 'patient_offering_id', row }),
     is_billed: isBilled(row),
     status: row.status as string,
     reversed_reason: row.reversed_reason as string | null,

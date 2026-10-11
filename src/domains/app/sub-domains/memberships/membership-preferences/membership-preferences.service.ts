@@ -56,18 +56,31 @@ export class MembershipPreferencesService {
    *   member can still see (a branch taken away since the save drops out, D9).
    * - **Failure modes:** `ForbiddenError` without a membership.
    */
-  async getMine(
-    scope: OrganizationPrincipalDatabaseScope,
-    options: { actingUserPublicId: string | undefined; allBranches: boolean },
-  ): Promise<MembershipPreferencesOutput> {
-    return withAppDatabaseContext(scope, async () => {
-      const caller = await this.requireCaller(scope, options.actingUserPublicId);
-      const row = await this.repository.findByMembershipId(caller.membershipId);
-      if (!row) return defaultMembershipPreferences();
-      return serializeMembershipPreferences(
-        row,
-        await this.visibleBranchFilter({ caller, rowId: row.id, allBranches: options.allBranches }),
-      );
+  async getMine({
+    scope,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    options: { actingUserPublicId: string | undefined; allBranches: boolean };
+  }): Promise<MembershipPreferencesOutput> {
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const caller = await this.requireCaller({
+          scope,
+          actingUserPublicId: options.actingUserPublicId,
+        });
+        const row = await this.repository.findByMembershipId(caller.membershipId);
+        if (!row) return defaultMembershipPreferences();
+        return serializeMembershipPreferences({
+          row,
+          branchPublicIds: await this.visibleBranchFilter({
+            caller,
+            rowId: row.id,
+            allBranches: options.allBranches,
+          }),
+        });
+      },
     });
   }
 
@@ -82,60 +95,74 @@ export class MembershipPreferencesService {
    * - **Failure modes:** `ValidationError` (`branch_ids` naming a branch they can't see);
    *   `ConflictError` `record_changed`.
    */
-  async updateMine(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    options: { actingUserPublicId: string | undefined; allBranches: boolean },
-  ): Promise<MembershipPreferencesOutput> {
+  async updateMine({
+    scope,
+    body,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    options: { actingUserPublicId: string | undefined; allBranches: boolean };
+  }): Promise<MembershipPreferencesOutput> {
     const parsed = validateUpdateMembershipPreferences(body);
-    return withAppDatabaseContext(scope, async () => {
-      const caller = await this.requireCaller(scope, options.actingUserPublicId);
-      const existing = await this.repository.findByMembershipId(caller.membershipId);
-      if (existing) {
-        await assertRecordNotChangedSince({
-          row: existing,
-          expected: parsed.expected_updated_at,
-          resolveUserPublicId: (userInternalId) =>
-            this.organizationService.resolveUserPublicIdByInternalId(userInternalId),
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const caller = await this.requireCaller({
+          scope,
+          actingUserPublicId: options.actingUserPublicId,
         });
-      }
-      const branchIds =
-        parsed.branch_ids === undefined
-          ? undefined
-          : await this.resolveVisibleBranchIds({
-              caller,
-              branchPublicIds: parsed.branch_ids,
-              allBranches: options.allBranches,
-            });
-      const fields: MembershipPreferencesFields = {
-        ...(parsed.pinned_sections === undefined
-          ? {}
-          : { pinned_sections: parsed.pinned_sections }),
-        ...(parsed.theme === undefined ? {} : { theme: parsed.theme }),
-        ...(parsed.patient_file_pins === undefined
-          ? {}
-          : { patient_file_pins: parsed.patient_file_pins }),
-        ...(parsed.recent_picks === undefined
-          ? {}
-          : { recent_picks: trimRecentPicks(parsed.recent_picks) }),
-      };
-      const row = await this.repository.upsert({
-        organization_id: caller.organizationId,
-        membership_id: caller.membershipId,
-        fields,
-        user_id: caller.userId,
-      });
-      if (branchIds !== undefined) {
-        await this.repository.replaceBranches({
-          membership_preference_id: row.id,
+        const existing = await this.repository.findByMembershipId(caller.membershipId);
+        if (existing) {
+          await assertRecordNotChangedSince({
+            row: existing,
+            expected: parsed.expected_updated_at,
+            resolveUserPublicId: (userInternalId) =>
+              this.organizationService.resolveUserPublicIdByInternalId(userInternalId),
+          });
+        }
+        const branchIds =
+          parsed.branch_ids === undefined
+            ? undefined
+            : await this.resolveVisibleBranchIds({
+                caller,
+                branchPublicIds: parsed.branch_ids,
+                allBranches: options.allBranches,
+              });
+        const fields: MembershipPreferencesFields = {
+          ...(parsed.pinned_sections === undefined
+            ? {}
+            : { pinned_sections: parsed.pinned_sections }),
+          ...(parsed.theme === undefined ? {} : { theme: parsed.theme }),
+          ...(parsed.patient_file_pins === undefined
+            ? {}
+            : { patient_file_pins: parsed.patient_file_pins }),
+          ...(parsed.recent_picks === undefined
+            ? {}
+            : { recent_picks: trimRecentPicks(parsed.recent_picks) }),
+        };
+        const row = await this.repository.upsert({
           organization_id: caller.organizationId,
-          branch_ids: branchIds,
+          membership_id: caller.membershipId,
+          fields,
+          user_id: caller.userId,
         });
-      }
-      return serializeMembershipPreferences(
-        row,
-        await this.visibleBranchFilter({ caller, rowId: row.id, allBranches: options.allBranches }),
-      );
+        if (branchIds !== undefined) {
+          await this.repository.replaceBranches({
+            membership_preference_id: row.id,
+            organization_id: caller.organizationId,
+            branch_ids: branchIds,
+          });
+        }
+        return serializeMembershipPreferences({
+          row,
+          branchPublicIds: await this.visibleBranchFilter({
+            caller,
+            rowId: row.id,
+            allBranches: options.allBranches,
+          }),
+        });
+      },
     });
   }
 
@@ -153,10 +180,13 @@ export class MembershipPreferencesService {
     return this.repository.listBranchPublicIds(options.rowId, visible);
   }
 
-  private requireCaller(
-    scope: OrganizationPrincipalDatabaseScope,
-    actingUserPublicId: string | undefined,
-  ): Promise<CallerMembership> {
+  private requireCaller({
+    scope,
+    actingUserPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    actingUserPublicId: string | undefined;
+  }): Promise<CallerMembership> {
     return requireCallerMembership({
       organizationService: this.organizationService,
       scope,

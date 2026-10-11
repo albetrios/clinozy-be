@@ -9,6 +9,7 @@ describe('plan.serializer shape (regression-guard)', () => {
     description: 'For growing teams',
     price_monthly: '29.00',
     price_yearly: '290.00',
+    billing_cycles: ['monthly', 'yearly'],
     currency: 'USD',
     is_active: true,
     // REQ-4: features map + typed seat limit are part of the public shape.
@@ -22,6 +23,7 @@ describe('plan.serializer shape (regression-guard)', () => {
     const result = PlanSerializer.one(samplePlan);
     expect(Object.keys(result).sort()).toEqual(
       [
+        'billing_cycles',
         'created_at',
         'currency',
         'description',

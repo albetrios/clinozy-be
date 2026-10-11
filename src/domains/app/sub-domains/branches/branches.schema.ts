@@ -35,7 +35,7 @@ import {
 } from './branches.constants.js';
 
 /** `<column> IN ('a', 'b', …)` from a value list. */
-function inList(column: AnyPgColumn, values: readonly string[]): SQL {
+function inList({ column, values }: { column: AnyPgColumn; values: readonly string[] }): SQL {
   return sql`${column} IN (${sql.join(
     values.map((value) => sql`${value}`),
     sql`, `,
@@ -161,7 +161,7 @@ export const branches = appSchema
         columns: [table.organization_id, table.default_pharmacist_membership_id],
         foreignColumns: [memberships.organization_id, memberships.id],
       }).onDelete('set null'),
-      check('chk_branches_tone', inList(table.tone, CHIP_TONE_VALUES)),
+      check('chk_branches_tone', inList({ column: table.tone, values: CHIP_TONE_VALUES })),
       check(
         'chk_branches_postal_code',
         sql`${table.postal_code} ~ ${sqlLiteral(BRANCH_POSTAL_CODE_PATTERN)}`,

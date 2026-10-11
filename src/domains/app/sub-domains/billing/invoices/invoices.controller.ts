@@ -22,26 +22,29 @@ export class InvoicesController extends BaseRecordController<InvoiceOutput> {
 
   /** `POST /invoices/preview` — what a bill would come to; nothing is written, so nothing is audited (D81). */
   readonly preview = async (request: FastifyRequest, _reply: FastifyReply) => {
-    const data = await this.invoicesService.preview(
-      requireOrganizationScope(request),
-      request.body,
-      {
+    const data = await this.invoicesService.preview({
+      scope: requireOrganizationScope(request),
+      body: request.body,
+      options: {
         actingUserPublicId: this.actor(request),
         visibility: await this.visibility(request),
       },
-    );
-    return successResponse(data, getRequestIdentifier(request));
+    });
+    return successResponse({ data, request_id: getRequestIdentifier(request) });
   };
 
   /** `POST /invoices/{invoice_id}/preview` — what a change would come to; nothing is written (D81). */
   readonly previewChange = async (request: FastifyRequest, _reply: FastifyReply) => {
-    const data = await this.invoicesService.previewChange(
-      requireOrganizationScope(request),
-      this.readId(request),
-      request.body,
-      { actingUserPublicId: this.actor(request), visibility: await this.visibility(request) },
-    );
-    return successResponse(data, getRequestIdentifier(request));
+    const data = await this.invoicesService.previewChange({
+      scope: requireOrganizationScope(request),
+      publicId: this.readId(request),
+      body: request.body,
+      options: {
+        actingUserPublicId: this.actor(request),
+        visibility: await this.visibility(request),
+      },
+    });
+    return successResponse({ data, request_id: getRequestIdentifier(request) });
   };
 }
 

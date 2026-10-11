@@ -78,14 +78,14 @@ describe('BullMQ trace-context propagation (API enqueue → worker processing)',
     await tracer.startActiveSpan('http.request', async (parentSpan) => {
       const carrier = captureTraceContextForPropagation();
 
-      await runWithPropagatedTraceContext(
+      await runWithPropagatedTraceContext({
         carrier,
-        'notification.dispatch-notification',
-        async () => {
+        spanName: 'notification.dispatch-notification',
+        callback: async () => {
           const activeSpan = trace.getActiveSpan();
           expect(activeSpan?.spanContext().traceId).toBe(parentSpan.spanContext().traceId);
         },
-      );
+      });
 
       parentSpan.end();
     });

@@ -38,7 +38,7 @@ function toPaise(rupees: number): number {
  * off is ₹1,148 — the screen's "Billed today"), an amount off never goes below 0, a fixed price
  * never raises the base; an extra-sessions offer leaves the price.
  */
-function priceAfter(base: number, offer: InvoiceOfferCandidate): number {
+function priceAfter({ base, offer }: { base: number; offer: InvoiceOfferCandidate }): number {
   switch (offer.kind) {
     case OFFER_KIND.PERCENT:
       return Math.round(base * (1 - offer.value / 100));
@@ -79,7 +79,7 @@ export function billedPriceOf(options: {
   let extraSessions = 0;
   let extraOfferId: string | null = null;
   for (const offer of options.offers) {
-    if (offerStatusOn(offer, options.day) !== OFFER_STATUS.LIVE) continue;
+    if (offerStatusOn({ offer, today: options.day }) !== OFFER_STATUS.LIVE) continue;
     if (offer.kind === OFFER_KIND.EXTRA) {
       if (offer.value > extraSessions) {
         extraSessions = offer.value;
@@ -87,7 +87,7 @@ export function billedPriceOf(options: {
       }
       continue;
     }
-    const after = priceAfter(base, offer);
+    const after = priceAfter({ base, offer });
     if (toPaise(after) < toPaise(rate)) {
       rate = after;
       priceOfferId = offer.id;

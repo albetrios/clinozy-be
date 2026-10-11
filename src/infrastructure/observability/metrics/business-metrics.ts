@@ -23,9 +23,10 @@ export async function refreshBusinessMetricsGauges(): Promise<void> {
   }
 
   const [mailOutboxPending, dlqDepth] = await Promise.all([
-    withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER, () =>
-      countPendingMailOutbox(),
-    ),
+    withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.SYSTEM_TABLE_WORKER,
+      callback: () => countPendingMailOutbox(),
+    }),
     getTotalDeadLetterJobCount(),
   ]);
   setBusinessMetricCounts({ mailOutboxPending, dlqDepth });

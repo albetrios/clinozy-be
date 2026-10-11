@@ -16,17 +16,23 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a payment create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePayment(data: unknown): CreatePaymentInput {
-  return withInstants(parseWithSchema(CreatePaymentDto, data), ['paid_at']);
+  return withInstants({
+    values: parseWithSchema({ schema: CreatePaymentDto, data }),
+    fields: ['paid_at'],
+  });
 }
 
 /** Parses a payment change body; throws `ValidationError` naming each bad field. */
 export function validateUpdatePayment(data: unknown): UpdatePaymentInput {
-  return withInstants(parseWithSchema(UpdatePaymentDto, data), ['paid_at']);
+  return withInstants({
+    values: parseWithSchema({ schema: UpdatePaymentDto, data }),
+    fields: ['paid_at'],
+  });
 }
 
 /** Parses the ledger query into a list input (routes-final 8.C.8 #12, #13). */
 export function validateListPaymentsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listPaymentsQueryDto, data);
+  const query = parseWithSchema({ schema: listPaymentsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

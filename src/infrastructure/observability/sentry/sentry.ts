@@ -132,6 +132,7 @@ export function initSentry(): void {
     Sentry.httpIntegration(),
     Sentry.fastifyIntegration({ shouldHandleError: shouldCaptureErrorInSentry }),
     ...(profilingEnabled ? [nodeProfilingIntegration()] : []),
+    // `postgresIntegration` instruments node-postgres (`pg`), the driver this service uses.
     ...(tracingEnabled ? [Sentry.postgresIntegration(), Sentry.redisIntegration()] : []),
   ];
 
@@ -166,7 +167,11 @@ export function initSentry(): void {
     // Env var override → code default (0.05 prod) → tracesSampler boosts errors/5xx
     tracesSampleRate: defaultTracesSampleRate,
     tracesSampler: (samplingContext) =>
-      resolveTracesSampleRate(samplingContext, defaultTracesSampleRate, slowTransactionThresholdMs),
+      resolveTracesSampleRate({
+        samplingContext,
+        defaultTracesSampleRate,
+        slowTransactionThresholdMs,
+      }),
 
     // ── Profiling ───────────────────────────────────────────────────
     // Session-level sampling: decides once at SDK init whether this
@@ -187,18 +192,18 @@ export function initSentry(): void {
     },
 
     beforeSendTransaction(event) {
-      const tailDecision = resolveTailTransactionDecision(
-        event,
-        defaultTracesSampleRate,
+      const tailDecision = resolveTailTransactionDecision({
+        input: event,
+        baselineTracesSampleRate: defaultTracesSampleRate,
         slowTransactionThresholdMs,
-      );
+      });
       if (tailDecision === 'drop') {
         return null;
       }
-      const slowTransactionTags = annotateSlowTransactionIfNeeded(
-        event,
+      const slowTransactionTags = annotateSlowTransactionIfNeeded({
+        input: event,
         slowTransactionThresholdMs,
-      );
+      });
       if (slowTransactionTags !== undefined) {
         event.tags = slowTransactionTags;
       }
@@ -227,15 +232,20 @@ export function initSentry(): void {
 /**
  * Capture an exception in Sentry with optional context.
  */
-export function captureException(
-  error: unknown,
-  context?: {
-    userId?: string;
-    organizationId?: string;
-    requestId?: string;
-    tags?: Record<string, string>;
-  },
-): void {
+export function captureException({
+  error,
+  context,
+}: {
+  error: unknown;
+  context?:
+    | {
+        userId?: string;
+        organizationId?: string;
+        requestId?: string;
+        tags?: Record<string, string>;
+      }
+    | undefined;
+}): void {
   if (!initialized) return;
 
   Sentry.withScope((scope) => {
@@ -254,13 +264,18 @@ export function captureException(
 /**
  * Capture a Sentry message (for cardinality / ops signals where no Error exists).
  */
-export function captureMessage(
-  message: string,
-  options?: {
-    level?: 'fatal' | 'error' | 'warning' | 'log' | 'info' | 'debug';
-    extra?: Record<string, unknown>;
-  },
-): void {
+export function captureMessage({
+  message,
+  options,
+}: {
+  message: string;
+  options?:
+    | {
+        level?: 'fatal' | 'error' | 'warning' | 'log' | 'info' | 'debug';
+        extra?: Record<string, unknown>;
+      }
+    | undefined;
+}): void {
   if (!initialized) return;
 
   const captureContext = omitUndefined({

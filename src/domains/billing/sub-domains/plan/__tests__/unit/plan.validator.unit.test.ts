@@ -25,7 +25,7 @@ describe('plan.validator', () => {
   });
 
   it('rejects an empty (or whitespace-only) plan_id', () => {
-    // `trimmedStringMinMax(1, 28)` trims first, so a whitespace-only param collapses to '' and
+    // `trimmedStringMinMax({ min: 1, max: 28 })` trims first, so a whitespace-only param collapses to '' and
     // fails the min(1) bound rather than reaching the repository as a blank lookup key.
     expect(() => validateGetPlanParams({ plan_id: '' })).toThrow(ValidationError);
     expect(() => validateGetPlanParams({ plan_id: '   ' })).toThrow(ValidationError);
@@ -42,14 +42,14 @@ describe('plan.validator', () => {
   });
 
   it('surfaces the failing field name in the ValidationError details', () => {
-    // The error handler expands `details` into the Paddle-style `errors[]` list, so the
+    // The error handler renders the Paddle-style `errors[]` list from these entries, so the
     // snake_case field name is part of the public API contract, not an internal detail.
     try {
       validateGetPlanParams({});
       expect.unreachable('expected validateGetPlanParams to throw');
     } catch (error) {
       expect(error).toBeInstanceOf(ValidationError);
-      expect(Object.keys((error as ValidationError).details ?? {})).toContain('plan_id');
+      expect((error as ValidationError).errors?.map((item) => item.field)).toContain('plan_id');
     }
   });
 });

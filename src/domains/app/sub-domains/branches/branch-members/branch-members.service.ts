@@ -35,46 +35,63 @@ export class BranchMembersService implements MembershipBranchAccessPort {
     private readonly branchMembersRepository: BranchMembersRepository,
   ) {}
 
-  async list(scope: OrganizationPrincipalDatabaseScope, branchPublicId: string) {
-    return withAppDatabaseContext(scope, async () => {
-      const ids = await this.requireBranchId(scope, branchPublicId);
-      return BranchMembersSerializer.many(
-        await this.branchMembersRepository.listForBranch(ids.branch),
-      );
+  async list({
+    scope,
+    branchPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    branchPublicId: string;
+  }) {
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const ids = await this.requireBranchId({ scope, branchPublicId });
+        return BranchMembersSerializer.many(
+          await this.branchMembersRepository.listForBranch(ids.branch),
+        );
+      },
     });
   }
 
-  async replace(
-    scope: OrganizationPrincipalDatabaseScope,
-    branchPublicId: string,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-  ) {
+  async replace({
+    scope,
+    branchPublicId,
+    body,
+    actingUserPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    branchPublicId: string;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+  }) {
     const parsed = validateReplaceBranchMembers(body);
-    return withAppDatabaseContext(scope, async () => {
-      const ids = await this.requireBranchId(scope, branchPublicId);
-      const resolved = await resolveMembershipIds({
-        membershipService: this.membershipService,
-        organizationId: ids.organization,
-        membershipPublicIds: parsed.membership_ids,
-      });
-      const userId =
-        (await this.organizationService.resolveUserInternalIdByPublicId(actingUserPublicId)) ??
-        undefined;
-      await this.branchMembersRepository.replaceForBranch({
-        branch_id: ids.branch,
-        organization_id: ids.organization,
-        membership_ids: [...resolved.values()],
-        created_by_user_id: userId,
-      });
-      // C15 / D14: a default-staff field names one of the branch's members.
-      await this.branchesRepository.clearDefaultStaffNotWorkingThere({
-        organization_id: ids.organization,
-        branch_id: ids.branch,
-      });
-      return BranchMembersSerializer.many(
-        await this.branchMembersRepository.listForBranch(ids.branch),
-      );
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const ids = await this.requireBranchId({ scope, branchPublicId });
+        const resolved = await resolveMembershipIds({
+          membershipService: this.membershipService,
+          organizationId: ids.organization,
+          membershipPublicIds: parsed.membership_ids,
+        });
+        const userId =
+          (await this.organizationService.resolveUserInternalIdByPublicId(actingUserPublicId)) ??
+          undefined;
+        await this.branchMembersRepository.replaceForBranch({
+          branch_id: ids.branch,
+          organization_id: ids.organization,
+          membership_ids: [...resolved.values()],
+          created_by_user_id: userId,
+        });
+        // C15 / D14: a default-staff field names one of the branch's members.
+        await this.branchesRepository.clearDefaultStaffNotWorkingThere({
+          organization_id: ids.organization,
+          branch_id: ids.branch,
+        });
+        return BranchMembersSerializer.many(
+          await this.branchMembersRepository.listForBranch(ids.branch),
+        );
+      },
     });
   }
 
@@ -152,10 +169,13 @@ export class BranchMembersService implements MembershipBranchAccessPort {
   }
 
   /** The organization's and the live branch's internal ids; 404 when the branch is not here. */
-  private async requireBranchId(
-    scope: OrganizationPrincipalDatabaseScope,
-    branchPublicId: string,
-  ): Promise<{ organization: number; branch: number }> {
+  private async requireBranchId({
+    scope,
+    branchPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    branchPublicId: string;
+  }): Promise<{ organization: number; branch: number }> {
     const organization = await this.organizationService.requireOrganizationByPublicId(
       scope.organizationPublicId,
     );

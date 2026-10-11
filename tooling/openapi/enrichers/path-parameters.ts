@@ -23,6 +23,7 @@ const ENTITY_LABELS: Record<PublicIdEntity, string> = {
   upload: 'upload',
   userDataExport: 'data export',
   webhookDeliveryAttempt: 'webhook delivery attempt',
+  webhookEvent: 'webhook event',
   auditLog: 'audit log entry',
   contactActivity: 'contact activity',
   taskRuleSetting: 'task rule setting',

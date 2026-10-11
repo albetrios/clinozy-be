@@ -67,7 +67,7 @@ export async function runFullSeed(): Promise<void> {
   logger.info('seed.full: plans seeded');
 
   const demoPassword = getDemoPassword();
-  const demoUser = await seedDemoUser(DEMO_EMAIL, demoPassword);
+  const demoUser = await seedDemoUser({ email: DEMO_EMAIL, password: demoPassword });
   if (!demoUser) throw new Error('seed.full: failed to create demo user');
   logger.info({ userId: demoUser.public_id }, 'seed.full: demo user created');
 
@@ -90,7 +90,11 @@ export async function runFullSeed(): Promise<void> {
   });
   if (!adminRole) throw new Error('seed.full: failed to create admin role');
 
-  await seedRolePermissions(adminRole.id, ADMIN_PERMISSION_CODES, demoUser.id);
+  await seedRolePermissions({
+    roleId: adminRole.id,
+    permissionCodes: ADMIN_PERMISSION_CODES,
+    createdByUserId: demoUser.id,
+  });
   logger.info('seed.full: admin role permissions assigned');
 
   await seedMembership({
@@ -185,7 +189,7 @@ export async function runFullSeed(): Promise<void> {
 /**
  * Auto-run only when executed directly (`tsx src/scripts/seed/full.ts`), never on import — so a
  * test can import {@link runFullSeed} without triggering a seed or tearing down the shared pool.
- * `closeDatabase` always runs (success or failure) so the postgres.js pool drains before exit;
+ * `closeDatabase` always runs (success or failure) so the database pool drains before exit;
  * without it a thrown error would `process.exit(1)` and leave aborted connections behind in Postgres.
  */
 if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {

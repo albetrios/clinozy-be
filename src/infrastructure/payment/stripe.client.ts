@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { globalAgent as httpsGlobalAgent } from 'node:https';
 import { env } from '@/shared/config/env.config.js';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
 import { buildOutboundCallOptions, outboundCall } from '@/infrastructure/outbound/index.js';
@@ -12,10 +13,11 @@ const STRIPE_MAX_NETWORK_RETRIES = 2;
 let stripeInstance: Stripe | null = null;
 
 /**
- * Nock 14 intercepts `fetch` (undici) reliably; Stripe's default `NodeHttpClient` +
- * deferred `socket` handling can hang under nock 14 / `@mswjs/interceptors` (see stripe-node#2211,
- * nock#2785). The contract-test harness is the only caller that sets `CONTRACT_TESTS_ENABLED=true`; use
- * the fetch-based client only there so production keeps the Node HTTP stack.
+ * Nock intercepts `fetch` (undici) faithfully. Through Stripe's default `NodeHttpClient`, nock 15
+ * hands an intercepted connection error back raw (`ERR_NOCK_NO_MATCH`) instead of as a
+ * `StripeConnectionError`, and nock 14 could hang it (stripe-node#2211, nock#2785). The contract-test
+ * harness is the only caller that sets `CONTRACT_TESTS_ENABLED=true`; use the fetch-based client only
+ * there so production keeps the Node HTTP stack.
  */
 function shouldUseStripeFetchHttpClientForContractOutboundTests(): boolean {
   return process.env.CONTRACT_TESTS_ENABLED === 'true';
@@ -47,6 +49,9 @@ export function getStripeClient(): Stripe {
     typescript: true,
     maxNetworkRetries: STRIPE_MAX_NETWORK_RETRIES,
     timeout: env.STRIPE_HTTP_TIMEOUT_MS,
+    // The SDK's private agent ignores Node's managed proxy configuration. Reuse the platform
+    // HTTPS agent so NODE_USE_ENV_PROXY also applies to Stripe's production HTTP transport.
+    httpAgent: httpsGlobalAgent,
     ...optionalOutboundHttpClientForContractTests,
   });
 
@@ -108,10 +113,13 @@ export async function createStripeCustomer(options: {
  * `resource_missing` lookups so callers do not need to special-case 404s; other Stripe
  * errors propagate unwrapped.
  */
-export async function getStripeCustomer(
-  customerId: string,
-  requestId?: string,
-): Promise<Stripe.Customer | null> {
+export async function getStripeCustomer({
+  customerId,
+  requestId,
+}: {
+  customerId: string;
+  requestId?: string | undefined;
+}): Promise<Stripe.Customer | null> {
   const stripe = getStripeClient();
   try {
     return await outboundCall(
@@ -142,10 +150,13 @@ export async function getStripeCustomer(
  * Fetches a fully-formed Stripe event by id — used by the webhook reclaim worker to
  * re-process events whose payloads are missing from the local ledger.
  */
-export async function retrieveStripeEvent(
-  stripeEventId: string,
-  requestId?: string,
-): Promise<Stripe.Event> {
+export async function retrieveStripeEvent({
+  stripeEventId,
+  requestId,
+}: {
+  stripeEventId: string;
+  requestId?: string | undefined;
+}): Promise<Stripe.Event> {
   return outboundCall(
     buildOutboundCallOptions({
       name: 'stripe',
@@ -212,6 +223,24 @@ export async function listRecentStripeEvents(options: {
 
 // ── Subscription helpers ──────────────────────────────────────
 
+/** Retrieve current authoritative subscription state when second-resolution events cannot be ordered. */
+export async function retrieveStripeSubscriptionSnapshot(
+  subscriptionId: string,
+): Promise<Stripe.Subscription> {
+  return outboundCall(
+    buildOutboundCallOptions({
+      name: 'stripe',
+      enforceAbortTimeout: true,
+      rethrowIf: (error) => error instanceof Stripe.errors.StripeError,
+      operation: async () =>
+        getStripeClient().subscriptions.retrieve(subscriptionId, undefined, {
+          timeout: env.STRIPE_HTTP_TIMEOUT_MS,
+          maxNetworkRetries: 0,
+        }),
+    }),
+  );
+}
+
 /**
  * Creates a Stripe subscription in `default_incomplete` payment behaviour so the
  * platform can confirm the first PaymentIntent client-side before activation. Passes a
@@ -220,6 +249,8 @@ export async function listRecentStripeEvents(options: {
 export async function createStripeSubscription(options: {
   customerId: string;
   priceId: string;
+  /** Seats billed from the first invoice; Stripe's default (1) when omitted. */
+  quantity?: number;
   trialEnd?: number;
   metadata?: Record<string, string>;
   idempotencyKey?: string;
@@ -236,7 +267,7 @@ export async function createStripeSubscription(options: {
         return stripe.subscriptions.create(
           omitUndefined({
             customer: options.customerId,
-            items: [{ price: options.priceId }],
+            items: [omitUndefined({ price: options.priceId, quantity: options.quantity })],
             trial_end: options.trialEnd,
             metadata: options.metadata,
             payment_behavior: 'default_incomplete' as const,
@@ -253,11 +284,15 @@ export async function createStripeSubscription(options: {
  * current billing period (`cancel_at_period_end: true`); pass `false` to cancel
  * immediately and stop further proration.
  */
-export async function cancelStripeSubscription(
-  subscriptionId: string,
+export async function cancelStripeSubscription({
+  subscriptionId,
   cancelAtPeriodEnd = true,
-  options?: { requestId?: string; idempotencyKey?: string },
-): Promise<Stripe.Subscription> {
+  options,
+}: {
+  subscriptionId: string;
+  cancelAtPeriodEnd?: boolean | undefined;
+  options?: { requestId?: string; idempotencyKey?: string } | undefined;
+}): Promise<Stripe.Subscription> {
   return outboundCall(
     buildOutboundCallOptions({
       name: 'stripe',
@@ -289,10 +324,13 @@ export async function cancelStripeSubscription(
  * Reverses a pending period-end cancellation by clearing `cancel_at_period_end`. No-op
  * on Stripe's side if the subscription was never scheduled to cancel.
  */
-export async function resumeStripeSubscription(
-  subscriptionId: string,
-  options?: { requestId?: string; idempotencyKey?: string },
-): Promise<Stripe.Subscription> {
+export async function resumeStripeSubscription({
+  subscriptionId,
+  options,
+}: {
+  subscriptionId: string;
+  options?: { requestId?: string; idempotencyKey?: string } | undefined;
+}): Promise<Stripe.Subscription> {
   return outboundCall(
     buildOutboundCallOptions({
       name: 'stripe',
@@ -318,15 +356,18 @@ export async function resumeStripeSubscription(
  * current subscription item is retrieved first so the swap targets the existing line
  * item (avoids creating a second item alongside the original).
  */
-export async function updateStripeSubscription(
-  subscriptionId: string,
+export async function updateStripeSubscription({
+  subscriptionId,
+  options,
+}: {
+  subscriptionId: string;
   options: {
     priceId?: string;
     metadata?: Record<string, string>;
     requestId?: string;
     idempotencyKey?: string;
-  },
-): Promise<Stripe.Subscription> {
+  };
+}): Promise<Stripe.Subscription> {
   return outboundCall(
     buildOutboundCallOptions({
       name: 'stripe',
@@ -373,11 +414,15 @@ export async function updateStripeSubscription(
  *   a BullMQ worker — relies on retry/backoff).
  * - **Side effects:** two outbound Stripe API calls (retrieve + update).
  */
-export async function updateStripeSubscriptionQuantity(
-  subscriptionId: string,
-  quantity: number,
-  options?: { requestId?: string; idempotencyKey?: string },
-): Promise<Stripe.Subscription> {
+export async function updateStripeSubscriptionQuantity({
+  subscriptionId,
+  quantity,
+  options,
+}: {
+  subscriptionId: string;
+  quantity: number;
+  options?: { requestId?: string; idempotencyKey?: string } | undefined;
+}): Promise<Stripe.Subscription> {
   return outboundCall(
     buildOutboundCallOptions({
       name: 'stripe',
@@ -416,10 +461,13 @@ export async function updateStripeSubscriptionQuantity(
  * - **Notes:** the caller derives the next cursor from the last row's `id`; Stripe orders newest
  *   first, so paging walks backwards in time.
  */
-export async function listStripeInvoices(
-  customerId: string,
-  options?: { limit?: number; startingAfter?: string; requestId?: string },
-): Promise<{ data: Stripe.Invoice[]; has_more: boolean }> {
+export async function listStripeInvoices({
+  customerId,
+  options,
+}: {
+  customerId: string;
+  options?: { limit?: number; startingAfter?: string; requestId?: string } | undefined;
+}): Promise<{ data: Stripe.Invoice[]; has_more: boolean }> {
   return outboundCall(
     buildOutboundCallOptions({
       name: 'stripe',
@@ -445,10 +493,13 @@ export async function listStripeInvoices(
 /**
  * Lists card payment methods saved on a Stripe customer.
  */
-export async function listStripePaymentMethods(
-  customerId: string,
-  options?: { requestId?: string },
-): Promise<Stripe.PaymentMethod[]> {
+export async function listStripePaymentMethods({
+  customerId,
+  options,
+}: {
+  customerId: string;
+  options?: { requestId?: string } | undefined;
+}): Promise<Stripe.PaymentMethod[]> {
   return outboundCall(
     buildOutboundCallOptions({
       name: 'stripe',
@@ -473,10 +524,13 @@ export async function listStripePaymentMethods(
 /**
  * Retrieves the customer's default payment method id when set on invoice settings.
  */
-export async function retrieveStripeCustomerDefaultPaymentMethodId(
-  customerId: string,
-  requestId?: string,
-): Promise<string | null> {
+export async function retrieveStripeCustomerDefaultPaymentMethodId({
+  customerId,
+  requestId,
+}: {
+  customerId: string;
+  requestId?: string | undefined;
+}): Promise<string | null> {
   return outboundCall(
     buildOutboundCallOptions({
       name: 'stripe',
@@ -498,10 +552,13 @@ export async function retrieveStripeCustomerDefaultPaymentMethodId(
 /**
  * Creates a SetupIntent so the frontend can collect a card and attach it to the customer.
  */
-export async function createStripeSetupIntent(
-  customerId: string,
-  options?: { requestId?: string; idempotencyKey?: string },
-): Promise<string | null> {
+export async function createStripeSetupIntent({
+  customerId,
+  options,
+}: {
+  customerId: string;
+  options?: { requestId?: string; idempotencyKey?: string } | undefined;
+}): Promise<string | null> {
   return outboundCall(
     buildOutboundCallOptions({
       name: 'stripe',
@@ -532,10 +589,13 @@ export async function createStripeSetupIntent(
  * Retrieves the PaymentIntent `client_secret` for an incomplete Stripe subscription so
  * the frontend can confirm the first payment via Stripe.js (`default_incomplete` flow).
  */
-export async function retrieveStripeSubscriptionPaymentClientSecret(
-  subscriptionId: string,
-  requestId?: string,
-): Promise<string | null> {
+export async function retrieveStripeSubscriptionPaymentClientSecret({
+  subscriptionId,
+  requestId,
+}: {
+  subscriptionId: string;
+  requestId?: string | undefined;
+}): Promise<string | null> {
   return outboundCall(
     buildOutboundCallOptions({
       name: 'stripe',
@@ -574,10 +634,13 @@ export async function retrieveStripeSubscriptionPaymentClientSecret(
  * secret matches, the last `StripeSignatureVerificationError` is re-thrown so callers can
  * distinguish "bad signature" from "missing config".
  */
-export function constructStripeWebhookEvent(
-  body: string | Buffer,
-  signature: string,
-): Stripe.Event {
+export function constructStripeWebhookEvent({
+  body,
+  signature,
+}: {
+  body: string | Buffer;
+  signature: string;
+}): Stripe.Event {
   const stripe = getStripeClient();
   const webhookSecret = env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {

@@ -1,5 +1,5 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import type { StockCountsRepository } from './stock-counts.repository.js';
 import { createStockCountsRules } from './stock-counts.rules.js';
@@ -31,7 +31,7 @@ export class StockCountsService extends BaseRecordService<StockCountOutput> {
       parseUpdate: refuseStockCountUpdate,
       parseList: validateListStockCountsQuery,
       serialize: serializeStockCount,
-      references: [{ field: 'author_membership_id', table: memberships, label: 'team member' }],
+      references: [memberReference('author_membership_id')],
       ...createStockCountsRules(repository),
     });
   }

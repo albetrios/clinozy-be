@@ -13,7 +13,11 @@ import {
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import type { OrganizationRepository } from '@/domains/tenancy/sub-domains/organization/organization.repository.js';
 import type { MembershipRepository } from '@/domains/tenancy/sub-domains/membership/membership.repository.js';
+import type { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
+import { MEMBERSHIP_EVENT } from '@/domains/tenancy/sub-domains/membership/events/membership.events.js';
 import type { UserService } from '@/domains/user/user.service.js';
+import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/shared/constants/i18n.constants.js';
 import type {
   MembershipInvitationOrganizationLookupRow,
   MembershipInvitationRepository,
@@ -53,34 +57,44 @@ const MEMBERSHIP_INVITATION_RESOURCE = 'Membership invitation';
 /** An invitation still open — neither revoked nor accepted (resend and decline, expired or not). */
 function assertInvitationOpen(row: MembershipInvitationRow): void {
   if (row.revoked_at) {
-    throw new ValidationError('errors:validation.invitationRevoked', undefined, {}).withReason(
+    throw new ValidationError('errors:validation.invitationRevoked').withReason(
       'invitation_revoked',
     );
   }
   if (row.accepted_at) {
-    throw new ValidationError(
-      'errors:validation.invitationAlreadyAccepted',
-      undefined,
-      {},
-    ).withReason('invitation_already_accepted');
+    throw new ValidationError('errors:validation.invitationAlreadyAccepted').withReason(
+      'invitation_already_accepted',
+    );
   }
 }
 
-function assertInvitationAcceptable(row: MembershipInvitationRow, now: Date): void {
+function assertInvitationAcceptable({
+  row,
+  now,
+}: {
+  row: MembershipInvitationRow;
+  now: Date;
+}): void {
   assertInvitationOpen(row);
   if (now > row.expires_at) {
-    throw new ValidationError('errors:validation.invitationExpired', undefined, {}).withReason(
+    throw new ValidationError('errors:validation.invitationExpired').withReason(
       'invitation_expired',
     );
   }
 }
 
-function throwInvitationAcceptFailure(current: MembershipInvitationRow | null, now: Date): never {
+function throwInvitationAcceptFailure({
+  current,
+  now,
+}: {
+  current: MembershipInvitationRow | null;
+  now: Date;
+}): never {
   if (!current) throw new NotFoundError(MEMBERSHIP_INVITATION_RESOURCE);
-  assertInvitationAcceptable(current, now);
-  throw new ValidationError('errors:validation.invalidToken', undefined, {
-    token: ['Invalid or expired'],
-  });
+  assertInvitationAcceptable({ row: current, now });
+  throw new ValidationError('errors:validation.invalidToken', undefined, undefined, [
+    { field: 'token', messageKey: 'errors:validation.invalidToken' },
+  ]);
 }
 
 /**
@@ -88,10 +102,13 @@ function throwInvitationAcceptFailure(current: MembershipInvitationRow | null, n
  * raw token as `debug_invitation_token` when `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` is on — a
  * flag the env schema refuses outside the `local` and `development` targets.
  */
-function withInvitationTokenEcho(
-  output: MembershipInvitationOutput,
-  token: string,
-): MembershipInvitationOutput {
+function withInvitationTokenEcho({
+  output,
+  token,
+}: {
+  output: MembershipInvitationOutput;
+  token: string;
+}): MembershipInvitationOutput {
   return env.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED
     ? { ...output, debug_invitation_token: token }
     : output;
@@ -129,8 +146,18 @@ export interface CreateInvitationForMembershipParams {
   email: string;
   expires_in_days: number;
   invited_by_user_id: number;
-  inviter_label: string;
+  /** The organization's public id — its default language is the invitation email's. */
+  organization_public_id: string;
   requestId?: string;
+}
+
+/** A member's display name: their full name, else their email. */
+function memberDisplayName(user: {
+  first_name?: string | null;
+  last_name?: string | null;
+  email: string;
+}): string {
+  return [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.email;
 }
 
 /**
@@ -171,7 +198,48 @@ export class MembershipInvitationService {
     private readonly invitationRepository: MembershipInvitationRepository,
     private readonly userService?: UserService,
     private readonly objectStorage?: ObjectStoragePort,
+    private readonly organizationSettingsService?: Pick<
+      OrganizationSettingsService,
+      'resolveDefaultLocaleForOrganization'
+    >,
   ) {}
+
+  /** The organization's default language — what an invitee, who has none yet, is written to in. */
+  private async resolveOrganizationLanguage(
+    organizationPublicId: string,
+  ): Promise<SupportedLanguage> {
+    return (
+      (await this.organizationSettingsService?.resolveDefaultLocaleForOrganization(
+        organizationPublicId,
+      )) ?? DEFAULT_LANGUAGE
+    );
+  }
+
+  /** The name an invitation email shows for a member: the inviter's name, else '' (a team member). */
+  private async resolveInviterName(
+    inviter: { internalId: number } | { publicId: string } | null,
+  ): Promise<string> {
+    if (inviter === null || this.userService === undefined) return '';
+    const user =
+      'internalId' in inviter
+        ? await this.userService.findById(inviter.internalId)
+        : await this.userService.requireUserRecordByPublicId(inviter.publicId);
+    return user ? memberDisplayName(user) : '';
+  }
+
+  /**
+   * Emits the membership event of an accept, late-wired by the tenancy container:
+   * {@link MembershipService} takes this service in its constructor, so the reverse edge cannot be a
+   * constructor parameter. Left `null` in minimal test harnesses, where no event is emitted. (The
+   * other invitation endings — revoke, decline, expiry — end the membership through the membership
+   * service's leave step, which announces them itself.)
+   */
+  private membershipEvents: Pick<MembershipService, 'emitMembershipEvents'> | null = null;
+
+  /** Late-wires the membership event emitter; see {@link membershipEvents}. */
+  wireMembershipEvents(membershipEvents: Pick<MembershipService, 'emitMembershipEvents'>): void {
+    this.membershipEvents = membershipEvents;
+  }
 
   /** The signed-in person's user record. `NotFoundError('User')` when the login is gone. */
   private async requireActingUser(actingUserPublicId: string) {
@@ -211,10 +279,13 @@ export class MembershipInvitationService {
    * - **Failure modes:** those of {@link MembershipInvitationService.requireVerifiedInvitee};
    *   `NotFoundError` when the invitation, its membership or its organization is gone.
    */
-  async resolveInviteeAndOrganization(
-    invitation_public_id: string,
-    actingUserPublicId: string,
-  ): Promise<{
+  async resolveInviteeAndOrganization({
+    invitation_public_id,
+    actingUserPublicId,
+  }: {
+    invitation_public_id: string;
+    actingUserPublicId: string;
+  }): Promise<{
     invitee: { email: string; first_name: string | null; last_name: string | null };
     lookup: MembershipInvitationOrganizationLookupRow;
   }> {
@@ -236,10 +307,13 @@ export class MembershipInvitationService {
    *   read, each clinic logo presigned.
    * - **Failure modes:** `ValidationError` for a bad query; `NotFoundError('User')`.
    */
-  async listMine(
-    query: unknown,
-    actingUserPublicId: string,
-  ): Promise<{
+  async listMine({
+    query,
+    actingUserPublicId,
+  }: {
+    query: unknown;
+    actingUserPublicId: string;
+  }): Promise<{
     items: MyMembershipInvitationOutput[];
     limit: number;
     has_more: boolean;
@@ -250,19 +324,27 @@ export class MembershipInvitationService {
     if (!actingUser.is_email_verified) {
       return { items: [], limit: parsed.limit, has_more: false, next_cursor: null };
     }
-    const page = await this.invitationRepository.listPendingForEmail(
-      actingUser.email.toLowerCase(),
-      omitUndefined({ after: parsed.after, limit: parsed.limit }),
-    );
+    // The SECURITY DEFINER read crosses organizations; it runs in the invitee's own user context.
+    const page = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: actingUserPublicId }),
+      callback: () =>
+        this.invitationRepository.listPendingForEmail(
+          actingUser.email.toLowerCase(),
+          omitUndefined({ after: parsed.after, limit: parsed.limit }),
+        ),
+    });
     const objectStorage = this.objectStorage;
     const items = await Promise.all(
       page.items.map(async (row) =>
-        serializeMyMembershipInvitation(
+        serializeMyMembershipInvitation({
           row,
-          objectStorage
-            ? await resolveStoredMediaReadUrl(objectStorage, row.organization_logo_url)
+          logo_url: objectStorage
+            ? await resolveStoredMediaReadUrl({
+                objectStorage,
+                storedValue: row.organization_logo_url,
+              })
             : null,
-        ),
+        }),
       ),
     );
     return { ...page, items };
@@ -307,29 +389,37 @@ export class MembershipInvitationService {
       expires_at: expiresAt,
       created_by_user_id: params.invited_by_user_id,
     });
-    const output = serializeMembershipInvitation(row, params.membership_public_id);
+    const output = serializeMembershipInvitation({
+      row,
+      membership_public_id: params.membership_public_id,
+    });
     await eventBus.emitStrict(
-      buildDomainEvent(
-        MEMBERSHIP_INVITATION_EVENT.CREATED,
-        {
+      buildDomainEvent({
+        type: MEMBERSHIP_INVITATION_EVENT.CREATED,
+        payload: {
           email: params.email,
           organization_name: params.organization_name,
-          inviter_name: params.inviter_label,
+          inviter_name: await this.resolveInviterName({ internalId: params.invited_by_user_id }),
           token,
           invitation_public_id: output.id,
           expires_in_days: params.expires_in_days,
+          locale: await this.resolveOrganizationLanguage(params.organization_public_id),
         } satisfies MembershipInvitationEmailPayload,
-        params.requestId !== undefined ? { requestId: params.requestId } : undefined,
-      ),
+        options: params.requestId !== undefined ? { requestId: params.requestId } : undefined,
+      }),
     );
-    return withInvitationTokenEcho(output, token);
+    return withInvitationTokenEcho({ output, token });
   }
 
-  async accept(
-    invitation_public_id: string,
-    body: unknown,
-    actingUserPublicId: string,
-  ): Promise<AcceptMembershipInvitationOutput> {
+  async accept({
+    invitation_public_id,
+    body,
+    actingUserPublicId,
+  }: {
+    invitation_public_id: string;
+    body: unknown;
+    actingUserPublicId: string;
+  }): Promise<AcceptMembershipInvitationOutput> {
     const parsed = validateAcceptMembershipInvitation(body);
     // sec-T4: previously accept was unauthenticated, so anyone with the
     // invitation URL could flip the victim's pending membership to ACTIVE.
@@ -342,14 +432,14 @@ export class MembershipInvitationService {
      * SECURITY DEFINER lookup, then wrap the read + UPDATE in
      * `withAppDatabaseContext` so RLS sees the organization GUC.
      */
-    const { invitee: actingUser, lookup } = await this.resolveInviteeAndOrganization(
+    const { invitee: actingUser, lookup } = await this.resolveInviteeAndOrganization({
       invitation_public_id,
       actingUserPublicId,
-    );
+    });
     let acceptedMemberPublicId: string | null = null;
-    const result = await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: lookup.organization_public_id }),
-      async () => {
+    const result = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: lookup.organization_public_id }),
+      callback: async () => {
         const row = await this.invitationRepository.findByPublicId(invitation_public_id);
         if (!row) throw new NotFoundError(MEMBERSHIP_INVITATION_RESOURCE);
         if (row.email.toLowerCase() !== actingUser.email.toLowerCase()) {
@@ -357,7 +447,7 @@ export class MembershipInvitationService {
         }
         const tokenHash = parsed.token === undefined ? null : hashInvitationToken(parsed.token);
         const now = new Date();
-        assertInvitationAcceptable(row, now);
+        assertInvitationAcceptable({ row, now });
         const updated = await this.invitationRepository.accept(
           invitation_public_id,
           tokenHash,
@@ -365,7 +455,7 @@ export class MembershipInvitationService {
         );
         if (!updated) {
           const current = await this.invitationRepository.findByPublicId(invitation_public_id);
-          throwInvitationAcceptFailure(current, now);
+          throwInvitationAcceptFailure({ current, now });
         }
         /**
          * Atomically activate the membership in the same transaction so accepting
@@ -379,6 +469,18 @@ export class MembershipInvitationService {
           lookup.organization_id,
         );
         if (!activatedMembership) throw new NotFoundError('Membership');
+        if (this.membershipEvents) {
+          const organization = await this.organizationRepository.findByPublicId(
+            lookup.organization_public_id,
+          );
+          if (organization) {
+            await this.membershipEvents.emitMembershipEvents({
+              type: MEMBERSHIP_EVENT.UPDATED,
+              memberships: [activatedMembership],
+              organization,
+            });
+          }
+        }
         acceptedMemberPublicId =
           (await this.organizationRepository.resolveUserPublicIdByInternalId(
             activatedMembership.user_id,
@@ -399,16 +501,17 @@ export class MembershipInvitationService {
             const organization = await this.organizationRepository.findByPublicId(
               lookup.organization_public_id,
             );
-            const inviteeName =
-              [actingUser.first_name, actingUser.last_name].filter(Boolean).join(' ').trim() ||
-              actingUser.email;
             await eventBus.emit(
-              buildDomainEvent(MEMBERSHIP_INVITATION_EVENT.ACCEPTED, {
-                recipient_user_ids: recipientUserIds,
-                organization_id: lookup.organization_id,
-                organization_name: organization?.name ?? '',
-                invitee_name: inviteeName,
-              } satisfies MembershipInvitationAcceptedPayload),
+              buildDomainEvent({
+                type: MEMBERSHIP_INVITATION_EVENT.ACCEPTED,
+                payload: {
+                  recipient_user_ids: recipientUserIds,
+                  organization_id: lookup.organization_id,
+                  organization_name: organization?.name ?? '',
+                  invitee_name: memberDisplayName(actingUser),
+                  locale: await this.resolveOrganizationLanguage(lookup.organization_public_id),
+                } satisfies MembershipInvitationAcceptedPayload,
+              }),
             );
           }
         } catch (error) {
@@ -417,14 +520,20 @@ export class MembershipInvitationService {
             'membership_invitation.accept.notify_failed',
           );
         }
-        return serializeMembershipInvitation(updated, lookup.membership_public_id);
+        return serializeMembershipInvitation({
+          row: updated,
+          membership_public_id: lookup.membership_public_id,
+        });
       },
-    );
+    });
     // sec-R11: invalidate AFTER commit so the newly-activated member's permissions are recomputed
     // from the committed ACTIVE membership — a pre-commit invalidation could be re-populated with
     // the stale (pre-acceptance) set by a concurrent recompute, delaying the access grant.
     if (acceptedMemberPublicId) {
-      await invalidatePermissions(acceptedMemberPublicId, lookup.organization_public_id);
+      await invalidatePermissions({
+        userId: acceptedMemberPublicId,
+        organizationId: lookup.organization_public_id,
+      });
     }
     // Return the joined org's public id alongside the invitation so the client can
     // POST /auth/switch-to-organization into it without a separate lookup (gate reduction).
@@ -460,10 +569,13 @@ export class MembershipInvitationService {
    *   `ValidationError` `invitation_revoked` / `invitation_already_accepted`.
    * - **Notes:** MUST run inside the invitation's organization context.
    */
-  async revokeForInvitee(
-    invitation_public_id: string,
-    inviteeEmail: string,
-  ): Promise<MembershipInvitationRow> {
+  async revokeForInvitee({
+    invitation_public_id,
+    inviteeEmail,
+  }: {
+    invitation_public_id: string;
+    inviteeEmail: string;
+  }): Promise<MembershipInvitationRow> {
     const row = await this.invitationRepository.findByPublicId(invitation_public_id);
     if (!row) throw new NotFoundError(MEMBERSHIP_INVITATION_RESOURCE);
     if (row.email.toLowerCase() !== inviteeEmail.toLowerCase()) {
@@ -472,11 +584,9 @@ export class MembershipInvitationService {
     assertInvitationOpen(row);
     const revoked = await this.invitationRepository.revoke(invitation_public_id);
     if (!revoked) {
-      throw new ValidationError(
-        'errors:validation.invitationAlreadyAccepted',
-        undefined,
-        {},
-      ).withReason('invitation_already_accepted');
+      throw new ValidationError('errors:validation.invitationAlreadyAccepted').withReason(
+        'invitation_already_accepted',
+      );
     }
     return revoked;
   }
@@ -492,10 +602,13 @@ export class MembershipInvitationService {
    *   racing the sweep keeps its invitation.
    * - **Notes:** MUST run inside the organization context.
    */
-  async revokeExpiredForMembership(
-    membership_id: number,
-    expiredBefore: Date,
-  ): Promise<MembershipInvitationRow | null> {
+  async revokeExpiredForMembership({
+    membership_id,
+    expiredBefore,
+  }: {
+    membership_id: number;
+    expiredBefore: Date;
+  }): Promise<MembershipInvitationRow | null> {
     const latest = await this.invitationRepository.findLatestByMembershipId(membership_id);
     if (!latest || latest.accepted_at || latest.revoked_at || latest.expires_at >= expiredBefore) {
       return null;
@@ -540,12 +653,16 @@ export class MembershipInvitationService {
         options.organizationPublicId,
       );
       await eventBus.emit(
-        buildDomainEvent(MEMBERSHIP_INVITATION_EVENT.DECLINED, {
-          recipient_user_ids: recipientUserIds,
-          organization_id: options.organizationId,
-          organization_name: organization?.name ?? '',
-          invitee_name: options.inviteeName,
-        } satisfies MembershipInvitationDeclinedPayload),
+        buildDomainEvent({
+          type: MEMBERSHIP_INVITATION_EVENT.DECLINED,
+          payload: {
+            recipient_user_ids: recipientUserIds,
+            organization_id: options.organizationId,
+            organization_name: organization?.name ?? '',
+            invitee_name: options.inviteeName,
+            locale: await this.resolveOrganizationLanguage(options.organizationPublicId),
+          } satisfies MembershipInvitationDeclinedPayload,
+        }),
       );
     } catch (error) {
       logger.error(
@@ -568,57 +685,74 @@ export class MembershipInvitationService {
    *   token only via email, plus the dev-only `debug_invitation_token` echo on the answer when its
    *   flag is on).
    */
-  async resendForMembership(
-    scope: OrganizationPrincipalDatabaseScope,
-    membership_public_id: string,
-    body: unknown,
-    options?: MembershipInvitationCommandOptions,
-  ): Promise<MembershipInvitationOutput> {
+  async resendForMembership({
+    scope,
+    membership_public_id,
+    body,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    membership_public_id: string;
+    body: unknown;
+    options?: MembershipInvitationCommandOptions | undefined;
+  }): Promise<MembershipInvitationOutput> {
     const organization_public_id = scope.organizationPublicId;
     const parsed = validateResendMembershipInvitation(body);
-    return withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationRepository.findByPublicId(organization_public_id);
-      if (!organization) throw new NotFoundError('Organization');
-      const membership = await this.membershipRepository.findByPublicId(
-        membership_public_id,
-        organization.id,
-      );
-      if (!membership) throw new NotFoundError('Membership');
-      const row = await this.invitationRepository.findLatestByMembershipId(membership.id);
-      if (!row) throw new NotFoundError(MEMBERSHIP_INVITATION_RESOURCE);
-      assertInvitationOpen(row);
-      // T11: an expired invite gets a new token and a new expiry like any other.
-      const token = generateInvitationToken();
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + parsed.expires_in_days);
-      const updated = await this.invitationRepository.resend(
-        row.public_id,
-        hashInvitationToken(token),
-        expiresAt,
-      );
-      if (!updated) throw new NotFoundError(MEMBERSHIP_INVITATION_RESOURCE);
-      const output = serializeMembershipInvitation(updated, membership.public_id);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationRepository.findByPublicId(organization_public_id);
+        if (!organization) throw new NotFoundError('Organization');
+        const membership = await this.membershipRepository.findByPublicId(
+          membership_public_id,
+          organization.id,
+        );
+        if (!membership) throw new NotFoundError('Membership');
+        const row = await this.invitationRepository.findLatestByMembershipId(membership.id);
+        if (!row) throw new NotFoundError(MEMBERSHIP_INVITATION_RESOURCE);
+        assertInvitationOpen(row);
+        // T11: an expired invite gets a new token and a new expiry like any other.
+        const token = generateInvitationToken();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + parsed.expires_in_days);
+        const updated = await this.invitationRepository.resend(
+          row.public_id,
+          hashInvitationToken(token),
+          expiresAt,
+        );
+        if (!updated) throw new NotFoundError(MEMBERSHIP_INVITATION_RESOURCE);
+        const output = serializeMembershipInvitation({
+          row: updated,
+          membership_public_id: membership.public_id,
+        });
 
-      // R2: emitStrict so the rotated token_hash (already persisted above in this
-      // same organization transaction) and the new outbox row commit atomically. The old
-      // token was overwritten by `resend`, so a swallowed email failure would
-      // otherwise leave the invitee with no working link and no error surfaced.
-      await eventBus.emitStrict(
-        buildDomainEvent(
-          MEMBERSHIP_INVITATION_EVENT.RESENT,
-          {
-            email: row.email,
-            organization_name: organization.name ?? organization.public_id,
-            inviter_name: 'Team member',
-            token,
-            invitation_public_id: output.id,
-            expires_in_days: parsed.expires_in_days,
-          } satisfies MembershipInvitationEmailPayload,
-          options?.requestId !== undefined ? { requestId: options.requestId } : undefined,
-        ),
-      );
+        // R2: emitStrict so the rotated token_hash (already persisted above in this
+        // same organization transaction) and the new outbox row commit atomically. The old
+        // token was overwritten by `resend`, so a swallowed email failure would
+        // otherwise leave the invitee with no working link and no error surfaced.
+        await eventBus.emitStrict(
+          buildDomainEvent({
+            type: MEMBERSHIP_INVITATION_EVENT.RESENT,
+            payload: {
+              email: row.email,
+              organization_name: organization.name ?? organization.public_id,
+              // The member who resends is the inviter the email names.
+              inviter_name: await this.resolveInviterName(
+                scope.userPublicId !== undefined ? { publicId: scope.userPublicId } : null,
+              ),
+              token,
+              invitation_public_id: output.id,
+              expires_in_days: parsed.expires_in_days,
+              locale: await this.resolveOrganizationLanguage(organization.public_id),
+            } satisfies MembershipInvitationEmailPayload,
+            options:
+              options?.requestId !== undefined ? { requestId: options.requestId } : undefined,
+          }),
+        );
 
-      return withInvitationTokenEcho(output, token);
+        return withInvitationTokenEcho({ output, token });
+      },
     });
   }
 }

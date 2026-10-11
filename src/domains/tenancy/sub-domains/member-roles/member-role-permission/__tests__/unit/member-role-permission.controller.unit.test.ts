@@ -51,10 +51,10 @@ describe('createMemberRolePermissionController', () => {
       mockRequest({ params: { role_id: rolePublicId } }),
       mockReply(),
     );
-    expect(service.list).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      rolePublicId,
-    );
+    expect(service.list).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      role_public_id: rolePublicId,
+    });
     expect(response).toMatchObject({
       data: [{ permission_code: 'tenancy:read' }],
       meta: { pagination: { has_more: false, next: null, estimated_total: 1 } },
@@ -104,12 +104,12 @@ describe('createMemberRolePermissionController', () => {
       }),
       mockReply(),
     );
-    expect(service.put).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      rolePublicId,
+    expect(service.put).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      role_public_id: rolePublicId,
       body,
-      userId,
-    );
+      created_by_user_public_id: userId,
+    });
     expect(response).toMatchObject({
       data: [{ permission_code: 'tenancy:read' }],
     });

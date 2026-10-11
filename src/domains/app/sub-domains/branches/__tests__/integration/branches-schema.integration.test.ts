@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -42,9 +42,12 @@ describe('Integration: app.branches schema', () => {
       email: 'adajan@example.com',
       ...overrides,
     };
-    const [inserted] = await getOperatorSql()<{ id: number }[]>`
-      INSERT INTO app.branches ${getOperatorSql()(row)} RETURNING id
-    `;
+    const columns = Object.keys(row);
+    const [inserted] = await operatorQuery.unsafe<{ id: number }[]>(
+      `INSERT INTO app.branches (${columns.join(', ')})
+       VALUES (${columns.map((_, index) => `$${index + 1}`).join(', ')}) RETURNING id`,
+      Object.values(row),
+    );
     return Number(inserted!.id);
   }
 
@@ -57,7 +60,7 @@ describe('Integration: app.branches schema', () => {
 
   it('gives a new branch the launch defaults', async () => {
     const id = await insertBranch();
-    const [row] = await getOperatorSql()<
+    const [row] = await operatorQuery<
       {
         tone: string;
         state: string;
@@ -124,9 +127,9 @@ describe('Integration: app.branches schema', () => {
     });
     const id = await insertBranch({ default_doctor_membership_id: membership.id });
 
-    await getOperatorSql()`DELETE FROM tenancy.memberships WHERE id = ${membership.id}`;
+    await operatorQuery`DELETE FROM tenancy.memberships WHERE id = ${membership.id}`;
 
-    const [row] = await getOperatorSql()<{ default_doctor_membership_id: number | null }[]>`
+    const [row] = await operatorQuery<{ default_doctor_membership_id: number | null }[]>`
       SELECT default_doctor_membership_id FROM app.branches WHERE id = ${id}
     `;
     expect(row?.default_doctor_membership_id).toBeNull();

@@ -13,9 +13,9 @@ import { DATABASE_ACQUIRE_RETRY_AFTER_SECONDS } from '@/infrastructure/database/
  * The connection-acquire deadline shared by every pooled unit of work (`runPooledUnitOfWork`),
  * driven through the maintenance context, which always counts toward the in-flight gauge.
  *
- * `transaction` stands in for postgres.js: with a cold pool and an unreachable database it never
- * calls back, and when the database returns it calls back late — the two cases the deadline exists
- * for.
+ * `transaction` stands in for the pool: with a cold pool and a database that does not answer it
+ * never calls back, and when the database returns it calls back late — the two cases the deadline
+ * exists for. A checkout that fails outright stands in for a database that refuses the connection.
  */
 const acquireDeadline = vi.hoisted(() => ({ milliseconds: 1_000 }));
 const transactionMock = vi.fn();
@@ -72,10 +72,10 @@ describe('pooled unit of work: connection-acquire deadline', () => {
 
   it('answers 503 with Retry-After when no connection arrives before the deadline', async () => {
     coldPool();
-    const unitOfWork = withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      vi.fn(),
-    );
+    const unitOfWork = withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: vi.fn(),
+    });
     const outcome = expect(unitOfWork).rejects.toMatchObject({
       statusCode: 503,
       retryAfterSeconds: DATABASE_ACQUIRE_RETRY_AFTER_SECONDS,
@@ -89,10 +89,10 @@ describe('pooled unit of work: connection-acquire deadline', () => {
   it('rolls back without running the unit of work when the connection arrives after the deadline', async () => {
     const pool = coldPool();
     const work = vi.fn().mockResolvedValue('written');
-    const unitOfWork = withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      work,
-    );
+    const unitOfWork = withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: work,
+    });
     const outcome = expect(unitOfWork).rejects.toMatchObject({ statusCode: 503 });
     await vi.advanceTimersByTimeAsync(1_000);
     await outcome;
@@ -104,10 +104,10 @@ describe('pooled unit of work: connection-acquire deadline', () => {
 
   it('keeps an abandoned wait in the in-flight gauge until the pool lets it go', async () => {
     const pool = coldPool();
-    const unitOfWork = withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      vi.fn(),
-    );
+    const unitOfWork = withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: vi.fn(),
+    });
     const outcome = expect(unitOfWork).rejects.toMatchObject({ statusCode: 503 });
     expect(getActiveOrganizationRlsCheckoutCount()).toBe(1);
 
@@ -127,7 +127,10 @@ describe('pooled unit of work: connection-acquire deadline', () => {
     });
 
     await expect(
-      withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP, vi.fn()),
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: vi.fn(),
+      }),
     ).rejects.toThrow('pool exploded');
     expect(getActiveOrganizationRlsCheckoutCount()).toBe(0);
   });
@@ -137,10 +140,10 @@ describe('pooled unit of work: connection-acquire deadline', () => {
     const work = vi.fn(
       () => new Promise((resolve) => setTimeout(() => resolve('slow but fine'), 5_000)),
     );
-    const unitOfWork = withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      work,
-    );
+    const unitOfWork = withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: work,
+    });
 
     await vi.advanceTimersByTimeAsync(500);
     void pool.connect();
@@ -152,10 +155,10 @@ describe('pooled unit of work: connection-acquire deadline', () => {
   it('never times out when DATABASE_POOL_ACQUIRE_TIMEOUT_MS is 0', async () => {
     acquireDeadline.milliseconds = 0;
     const pool = coldPool();
-    const unitOfWork = withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      vi.fn().mockResolvedValue('eventually'),
-    );
+    const unitOfWork = withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: vi.fn().mockResolvedValue('eventually'),
+    });
     let settled = false;
     void unitOfWork.finally(() => {
       settled = true;
@@ -166,5 +169,48 @@ describe('pooled unit of work: connection-acquire deadline', () => {
 
     void pool.connect();
     await expect(unitOfWork).resolves.toBe('eventually');
+  });
+
+  it('answers 503 with Retry-After at once when the connection cannot be opened', async () => {
+    transactionMock.mockRejectedValue(
+      Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:5432'), { code: 'ECONNREFUSED' }),
+    );
+    const work = vi.fn();
+
+    await expect(
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: work,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 503,
+      retryAfterSeconds: DATABASE_ACQUIRE_RETRY_AFTER_SECONDS,
+    });
+    expect(work).not.toHaveBeenCalled();
+    expect(getActiveOrganizationRlsCheckoutCount()).toBe(0);
+  });
+
+  it('keeps a refused login and a failure after the connection was claimed as they are', async () => {
+    const wrongPassword = Object.assign(new Error('password authentication failed'), {
+      code: '28P01',
+    });
+    transactionMock.mockRejectedValueOnce(wrongPassword);
+    await expect(
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: vi.fn(),
+      }),
+    ).rejects.toBe(wrongPassword);
+
+    // The unit of work had its connection: a drop now is the work's failure, not unavailability.
+    const dropped = new Error('Connection terminated unexpectedly');
+    const pool = coldPool();
+    const unitOfWork = withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: vi.fn().mockRejectedValue(dropped),
+    });
+    const outcome = expect(unitOfWork).rejects.toBe(dropped);
+    void pool.connect().catch(() => undefined);
+    await outcome;
   });
 });

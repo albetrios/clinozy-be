@@ -1,5 +1,5 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import {
   type OrganizationPrincipalDatabaseScope,
   withAppDatabaseContext,
@@ -71,8 +71,8 @@ export class TasksService extends BaseRecordService<TaskOutput> {
       parseList: validateListTasksQuery,
       serialize: serializeTask,
       references: [
-        { field: 'owner_membership_id', table: memberships, label: 'team member' },
-        { field: 'resolved_by_membership_id', table: memberships, label: 'team member' },
+        memberReference('owner_membership_id'),
+        memberReference('resolved_by_membership_id'),
         { field: 'contact_id', table: contacts, label: 'contact' },
         { field: 'lead_id', table: leads, label: 'lead' },
         { field: 'appointment_id', table: appointments, label: 'appointment' },
@@ -97,22 +97,32 @@ export class TasksService extends BaseRecordService<TaskOutput> {
   }
 
   /** TK3: the Tasks tabs — `scope=mine` (default) adds the caller's tasks and their roles' queues. */
-  override async list(
-    scope: OrganizationPrincipalDatabaseScope,
-    query: unknown,
-    options: TaskListOptions = {},
-  ): Promise<BaseRecordListResult<TaskOutput>> {
+  override async list({
+    scope,
+    query,
+    options = {},
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    query: unknown;
+    options?: TaskListOptions | undefined;
+  }): Promise<BaseRecordListResult<TaskOutput>> {
     // A bad query is refused before the caller's membership is looked up
     validateListTasksQuery(query);
     if ((query as { scope?: string } | null)?.scope === 'everyone') {
-      return super.list(scope, query, options);
+      return super.list({ scope, query, options });
     }
-    const worker = await withAppDatabaseContext(scope, async () =>
-      this.tasksRepository.findWorker({
-        organizationId: await this.organizationId(scope),
-        userId: await this.userId(options.actingUserPublicId),
-      }),
-    );
-    return super.list(scope, query, { ...options, derived: { ...options.derived, mine: worker } });
+    const worker = await withAppDatabaseContext({
+      scope,
+      callback: async () =>
+        this.tasksRepository.findWorker({
+          organizationId: await this.organizationId(scope),
+          userId: await this.userId(options.actingUserPublicId),
+        }),
+    });
+    return super.list({
+      scope,
+      query,
+      options: { ...options, derived: { ...options.derived, mine: worker } },
+    });
   }
 }

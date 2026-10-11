@@ -58,11 +58,11 @@ export function dayCloseAutoCloseDeduplication(organizationPublicId: string): De
  * - **Side effects:** at most one job on the queue per organization at a time.
  */
 export async function enqueueDayCloseAutoClose(organizationPublicId: string): Promise<void> {
-  const jobData = parseBullMQJobData(
-    dayCloseAutoCloseJobDataSchema,
-    { organizationPublicId, ...captureTraceContextForPropagation() },
-    DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME,
-  );
+  const jobData = parseBullMQJobData({
+    schema: dayCloseAutoCloseJobDataSchema,
+    data: { organizationPublicId, ...captureTraceContextForPropagation() },
+    queueName: DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME,
+  });
   await getDayCloseAutoCloseQueue().add('auto-close-past-days', jobData, {
     jobId: `day-close-auto-close-${organizationPublicId}-${randomUUID()}`,
     deduplication: dayCloseAutoCloseDeduplication(organizationPublicId),

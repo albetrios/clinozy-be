@@ -13,6 +13,11 @@ import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { auth_methods } from '@/domains/auth/sub-domains/auth-method/auth-method.schema.js';
 import { verification_tokens } from '@/domains/auth/sub-domains/auth-method/verification-token/verification-token.schema.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import {
+  SESSION_COOKIE_NAME,
+  CSRF_COOKIE_NAME,
+  getSessionCookieOptions,
+} from '@/domains/auth/auth.http.util.js';
 import type { FastifyInstance } from 'fastify';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 
@@ -228,7 +233,20 @@ describe('Auth Domain — Route gates (e2e)', () => {
         url: testApiPath('/auth/logout'),
         token: accessToken,
       });
-      expect([200]).toContain(logoutResponse.statusCode);
+      expect(logoutResponse.statusCode, logoutResponse.body).toBe(200);
+      const clearedCookies = logoutResponse.headers['set-cookie'];
+      const cookieHeaders = Array.isArray(clearedCookies)
+        ? clearedCookies
+        : typeof clearedCookies === 'string'
+          ? [clearedCookies]
+          : [];
+      for (const cookieName of [SESSION_COOKIE_NAME, CSRF_COOKIE_NAME]) {
+        const clearedCookie = cookieHeaders.find((cookie) => cookie.startsWith(`${cookieName}=`));
+        expect(clearedCookie, `${cookieName} must be removed from the browser`).toBeDefined();
+        expect(clearedCookie).toContain(`${cookieName}=;`);
+        expect(clearedCookie).toContain(`Path=${getSessionCookieOptions().path}`);
+        expect(clearedCookie).toMatch(/Expires=Thu, 01 Jan 1970 00:00:00 GMT/i);
+      }
     });
   });
 
@@ -318,7 +336,17 @@ describe('Auth Domain — Route gates (e2e)', () => {
       const response = await injectUnauthenticated(app, {
         url: testApiPath('/auth/oauth/google'),
       });
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode, response.body).toBe(200);
+      const { redirect_url } = (response.json() as { data: { redirect_url: string } }).data;
+      const redirect = new URL(redirect_url);
+      expect(redirect.origin).toBe('https://accounts.google.com');
+      expect(redirect.pathname).toBe('/o/oauth2/v2/auth');
+      expect(redirect.searchParams.get('response_type')).toBe('code');
+      expect(redirect.searchParams.get('state')).toMatch(/^[a-f0-9]{64}$/);
+      expect(redirect.searchParams.get('code_challenge')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(redirect.searchParams.get('code_challenge_method')).toBe('S256');
+      expect(redirect.searchParams.get('redirect_uri')).toBeTruthy();
+      expect(response.cookies.oauth_nonce).toMatch(/^[a-f0-9]{64}$/);
     });
   });
 
@@ -346,15 +374,24 @@ describe('Auth Domain — Route gates (e2e)', () => {
       expect(body.data).toHaveProperty('message');
     });
 
-    it('should return 200 with same message for non-existent email (anti-enumeration)', async () => {
-      const response = await injectUnauthenticated(app, {
+    it('returns the same password-forgot response for existing and non-existent emails (anti-enumeration)', async () => {
+      const { user } = await createTestUserWithPassword();
+      const existing = await injectUnauthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/password/forgot'),
+        payload: { email: user.email },
+      });
+      const missing = await injectUnauthenticated(app, {
         method: 'POST',
         url: testApiPath('/auth/password/forgot'),
         payload: { email: 'nobody@nonexistent.com' },
       });
-      expect(response.statusCode).toBe(200);
-      const body = response.json() as { data: Record<string, unknown> };
-      expect(body.data).toHaveProperty('message');
+      expect(existing.statusCode, existing.body).toBe(200);
+      expect(missing.statusCode, missing.body).toBe(200);
+      const existingData = (existing.json() as { data: Record<string, unknown> }).data;
+      const missingData = (missing.json() as { data: Record<string, unknown> }).data;
+      expect(existingData.message).toBeTypeOf('string');
+      expect(missingData).toEqual(existingData);
     });
 
     it('when BLOCK_DISPOSABLE_EMAIL is off, password forgot accepts disposable email', async () => {
@@ -484,6 +521,17 @@ describe('Auth Domain — Route gates (e2e)', () => {
         },
       });
       expect(loginResponse.statusCode).toBe(200);
+
+      // The replaced password no longer authenticates
+      const oldPasswordLogin = await injectUnauthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/login'),
+        payload: {
+          email: user.email,
+          password,
+        },
+      });
+      expect(oldPasswordLogin.statusCode).toBe(401);
     });
   });
 
@@ -541,7 +589,13 @@ describe('Auth Domain — Route gates (e2e)', () => {
         token,
         payload: { method_type: 'MFA_TOTP' },
       });
-      expect(afterStepUp.statusCode).not.toBe(403);
+      expect(afterStepUp.statusCode, afterStepUp.body).toBe(200);
+      expect(
+        (afterStepUp.json() as { data: { secret: string; provisioning_uri: string } }).data,
+      ).toMatchObject({
+        secret: expect.any(String),
+        provisioning_uri: expect.stringMatching(/^otpauth:\/\/totp\//),
+      });
     });
   });
 

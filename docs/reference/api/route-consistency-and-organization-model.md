@@ -47,7 +47,7 @@ Every serialized organization response — get, list, create, patch — carries 
 | Cancel subscription | `POST /api/v1/billing/subscriptions/{subscription_id}/cancel` | `BILLING` |
 | Resume subscription | `POST /api/v1/billing/subscriptions/{subscription_id}/resume` | `BILLING` |
 
-The single point of enforcement is `assertTeamOrganization(organization, capability)` (capability buckets `MEMBERS | ROLES | MUTATION | BILLING`). On a personal organization it throws `UnprocessableEntityError` → **HTTP 422** `unprocessable_entity`. Clients hide or disable these actions up front from the organization `type` + the caller's permissions, so a well-behaved client never triggers the 422.
+The single point of enforcement is `assertTeamOrganization({ organization, capability })` (capability buckets `MEMBERS | ROLES | MUTATION | BILLING`). On a personal organization it throws `UnprocessableEntityError` → **HTTP 422** `unprocessable_entity`. Clients hide or disable these actions up front from the organization `type` + the caller's permissions, so a well-behaved client never triggers the 422.
 
 ---
 

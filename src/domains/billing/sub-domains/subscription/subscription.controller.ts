@@ -29,14 +29,17 @@ async function recordSubscriptionAuditEvent(options: {
   action: string;
   subscription: { id: string; plan_id: string | null };
 }): Promise<void> {
-  await recordScopedAuditEvent(options.request, {
-    ...buildAuditActorFields(options.auth),
-    action: options.action,
-    resource_type: 'subscription',
-    organizationPublicId: options.organizationPublicId,
-    metadata: {
-      subscription_public_id: options.subscription.id,
-      plan_public_id: options.subscription.plan_id,
+  await recordScopedAuditEvent({
+    request: options.request,
+    input: {
+      ...buildAuditActorFields(options.auth),
+      action: options.action,
+      resource_type: 'subscription',
+      organizationPublicId: options.organizationPublicId,
+      metadata: {
+        subscription_public_id: options.subscription.id,
+        plan_public_id: options.subscription.plan_id,
+      },
     },
   });
 }
@@ -64,25 +67,39 @@ export function createSubscriptionController(service: SubscriptionService) {
     listSubscriptions: async (request: FastifyRequest, _reply: FastifyReply) => {
       requirePrincipal(request);
       const data = await service.list(requireOrganizationScope(request));
-      return successResponse(SubscriptionSerializer.many(data), getRequestIdentifier(request));
+      return successResponse({
+        data: SubscriptionSerializer.many(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
     getSubscription: async (
       request: FastifyRequest<{ Params: { subscription_id: string } }>,
       _reply: FastifyReply,
     ) => {
       requirePrincipal(request);
-      const data = await service.get(
-        requireOrganizationScope(request),
-        validatePublicIdParam(request.params.subscription_id, 'subscription_id'),
-      );
-      return successResponse(SubscriptionSerializer.one(data), getRequestIdentifier(request));
+      const data = await service.get({
+        scope: requireOrganizationScope(request),
+        subscription_public_id: validatePublicIdParam({
+          value: request.params.subscription_id,
+          fieldName: 'subscription_id',
+        }),
+      });
+      return successResponse({
+        data: SubscriptionSerializer.one(data),
+        request_id: getRequestIdentifier(request),
+      });
     },
     createSubscription: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const idempotencyKey = readIdempotencyKey(request);
       const subscription = SubscriptionSerializer.one(
-        await service.create(scope, request.body, getActingUserPublicId(auth), idempotencyKey),
+        await service.create({
+          scope,
+          body: request.body,
+          created_by_user_public_id: getActingUserPublicId(auth),
+          idempotencyKey,
+        }),
       );
       await recordSubscriptionAuditEvent({
         request,
@@ -91,7 +108,7 @@ export function createSubscriptionController(service: SubscriptionService) {
         action: 'billing.subscription.create',
         subscription,
       });
-      return successResponse(subscription, getRequestIdentifier(request));
+      return successResponse({ data: subscription, request_id: getRequestIdentifier(request) });
     },
     changePlan: async (
       request: FastifyRequest<{ Params: { subscription_id: string } }>,
@@ -100,12 +117,15 @@ export function createSubscriptionController(service: SubscriptionService) {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const subscription = SubscriptionSerializer.one(
-        await service.changePlan(
+        await service.changePlan({
           scope,
-          validatePublicIdParam(request.params.subscription_id, 'subscription_id'),
-          request.body,
-          readIdempotencyKey(request),
-        ),
+          subscription_public_id: validatePublicIdParam({
+            value: request.params.subscription_id,
+            fieldName: 'subscription_id',
+          }),
+          body: request.body,
+          idempotencyKey: readIdempotencyKey(request),
+        }),
       );
       await recordSubscriptionAuditEvent({
         request,
@@ -114,7 +134,7 @@ export function createSubscriptionController(service: SubscriptionService) {
         action: 'billing.subscription.change_plan',
         subscription,
       });
-      return successResponse(subscription, getRequestIdentifier(request));
+      return successResponse({ data: subscription, request_id: getRequestIdentifier(request) });
     },
     cancelSubscription: async (
       request: FastifyRequest<{ Params: { subscription_id: string } }>,
@@ -123,11 +143,14 @@ export function createSubscriptionController(service: SubscriptionService) {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const subscription = SubscriptionSerializer.one(
-        await service.cancel(
+        await service.cancel({
           scope,
-          validatePublicIdParam(request.params.subscription_id, 'subscription_id'),
-          readIdempotencyKey(request),
-        ),
+          subscription_public_id: validatePublicIdParam({
+            value: request.params.subscription_id,
+            fieldName: 'subscription_id',
+          }),
+          idempotencyKey: readIdempotencyKey(request),
+        }),
       );
       await recordSubscriptionAuditEvent({
         request,
@@ -136,7 +159,7 @@ export function createSubscriptionController(service: SubscriptionService) {
         action: 'billing.subscription.cancel',
         subscription,
       });
-      return successResponse(subscription, getRequestIdentifier(request));
+      return successResponse({ data: subscription, request_id: getRequestIdentifier(request) });
     },
     resumeSubscription: async (
       request: FastifyRequest<{ Params: { subscription_id: string } }>,
@@ -145,11 +168,14 @@ export function createSubscriptionController(service: SubscriptionService) {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const subscription = SubscriptionSerializer.one(
-        await service.resume(
+        await service.resume({
           scope,
-          validatePublicIdParam(request.params.subscription_id, 'subscription_id'),
-          readIdempotencyKey(request),
-        ),
+          subscription_public_id: validatePublicIdParam({
+            value: request.params.subscription_id,
+            fieldName: 'subscription_id',
+          }),
+          idempotencyKey: readIdempotencyKey(request),
+        }),
       );
       await recordSubscriptionAuditEvent({
         request,
@@ -158,41 +184,51 @@ export function createSubscriptionController(service: SubscriptionService) {
         action: 'billing.subscription.resume',
         subscription,
       });
-      return successResponse(subscription, getRequestIdentifier(request));
+      return successResponse({ data: subscription, request_id: getRequestIdentifier(request) });
     },
     getPaymentSetup: async (
       request: FastifyRequest<{ Params: { subscription_id: string } }>,
       _reply: FastifyReply,
     ) => {
       requirePrincipal(request);
-      const data = await service.getPaymentSetup(
-        requireOrganizationScope(request),
-        validatePublicIdParam(request.params.subscription_id, 'subscription_id'),
-      );
-      return successResponse(data, getRequestIdentifier(request));
+      const data = await service.getPaymentSetup({
+        scope: requireOrganizationScope(request),
+        subscription_public_id: validatePublicIdParam({
+          value: request.params.subscription_id,
+          fieldName: 'subscription_id',
+        }),
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     listInvoices: async (request: FastifyRequest, _reply: FastifyReply) => {
       requirePrincipal(request);
-      const result = await service.listInvoices(requireOrganizationScope(request), request.query);
-      return paginatedResponse(result.items, getRequestIdentifier(request), {
-        per_page: result.limit,
-        next: result.next_cursor,
-        has_more: result.has_more,
-        ...(result.total !== null ? { estimated_total: result.total } : {}),
+      const result = await service.listInvoices({
+        scope: requireOrganizationScope(request),
+        query: request.query,
+      });
+      return paginatedResponse({
+        data: result.items,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: result.limit,
+          next: result.next_cursor,
+          has_more: result.has_more,
+          ...(result.total !== null ? { estimated_total: result.total } : {}),
+        },
       });
     },
     listPaymentMethods: async (request: FastifyRequest, _reply: FastifyReply) => {
       requirePrincipal(request);
       const data = await service.listPaymentMethods(requireOrganizationScope(request));
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     createPaymentMethodSetup: async (request: FastifyRequest, _reply: FastifyReply) => {
       requirePrincipal(request);
-      const data = await service.createPaymentMethodSetup(
-        requireOrganizationScope(request),
-        readIdempotencyKey(request),
-      );
-      return successResponse(data, getRequestIdentifier(request));
+      const data = await service.createPaymentMethodSetup({
+        scope: requireOrganizationScope(request),
+        idempotencyKey: readIdempotencyKey(request),
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

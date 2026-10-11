@@ -28,10 +28,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -49,7 +51,10 @@ describe('authorization.service configuration + function-style export', () => {
   // Runs first, before configureAuthorization: the singleton is null, so the guard must fire.
   it('resolveUserOrganizationPermissions throws ConfigurationError before configuration', async () => {
     await expect(
-      resolveUserOrganizationPermissions('user_public', 'org_public'),
+      resolveUserOrganizationPermissions({
+        userPublicId: 'user_public',
+        organizationPublicId: 'org_public',
+      }),
     ).rejects.toBeInstanceOf(ConfigurationError);
   });
 
@@ -61,7 +66,10 @@ describe('authorization.service configuration + function-style export', () => {
     vi.mocked(redisConnection.get).mockResolvedValue(null);
     vi.mocked(redisConnection.set).mockResolvedValue('OK');
 
-    const codes = await resolveUserOrganizationPermissions('user_public', 'org_public');
+    const codes = await resolveUserOrganizationPermissions({
+      userPublicId: 'user_public',
+      organizationPublicId: 'org_public',
+    });
 
     expect(codes).toEqual(['organization:read']);
     expect(repository.findPermissionCodesForUserInOrganization).toHaveBeenCalledTimes(1);

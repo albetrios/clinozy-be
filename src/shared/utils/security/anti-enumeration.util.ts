@@ -33,10 +33,13 @@ export const ANTI_ENUMERATION_MINIMUM_DURATION_MS = 300;
  *
  * Side effects: introduces up to `minimumMillis` of added latency on the calling path.
  */
-export async function enforceMinimumDuration(
-  startedAtMillis: number,
-  minimumMillis: number = ANTI_ENUMERATION_MINIMUM_DURATION_MS,
-): Promise<void> {
+export async function enforceMinimumDuration({
+  startedAtMillis,
+  minimumMillis = ANTI_ENUMERATION_MINIMUM_DURATION_MS,
+}: {
+  startedAtMillis: number;
+  minimumMillis?: number | undefined;
+}): Promise<void> {
   const remainingMillis = minimumMillis - (Date.now() - startedAtMillis);
   if (remainingMillis > 0) {
     await delay(remainingMillis);

@@ -134,4 +134,4 @@ AS $$
 $$;
 --> statement-breakpoint
 
-GRANT EXECUTE ON FUNCTION tenancy.list_pending_membership_invitations_for_email (TEXT, INTEGER, TIMESTAMPTZ, BIGINT) TO clinozy_be_app;
+GRANT EXECUTE ON FUNCTION tenancy.list_pending_membership_invitations_for_email (TEXT, INTEGER, TIMESTAMPTZ, BIGINT) TO clinozy_be_app, clinozy_be_maintenance;

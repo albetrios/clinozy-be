@@ -5,7 +5,7 @@ import { BRANCH_MEMBERSHIP_IDS_MAX } from '@/domains/app/sub-domains/branches/br
 /** Path params of the branch members routes. */
 export const branchMembersParamsDto = z
   .object({
-    branch_id: trimmedStringMinMax(1, 28),
+    branch_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 
@@ -13,7 +13,7 @@ export const branchMembersParamsDto = z
 export const ReplaceBranchMembersDto = z
   .object({
     membership_ids: z
-      .array(trimmedStringMinMax(1, 28))
+      .array(trimmedStringMinMax({ min: 1, max: 28 }))
       .max(BRANCH_MEMBERSHIP_IDS_MAX)
       .refine((ids) => new Set(ids).size === ids.length, { message: 'Each membership once' }),
   })

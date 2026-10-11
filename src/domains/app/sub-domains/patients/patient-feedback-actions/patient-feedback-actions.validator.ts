@@ -6,5 +6,5 @@ import {
 
 /** Parses a feedback action body; throws `ValidationError` naming each bad field. */
 export function validateLogPatientFeedbackAction(data: unknown): LogPatientFeedbackActionInput {
-  return parseWithSchema(LogPatientFeedbackActionDto, data);
+  return parseWithSchema({ schema: LogPatientFeedbackActionDto, data });
 }

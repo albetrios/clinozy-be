@@ -56,9 +56,10 @@ describe('auth audit trail — security events reach audit.logs', () => {
   });
 
   async function drainAuditOutbox() {
-    return withMaintenanceDatabaseContext(MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN, (databaseHandle) =>
-      runAuditOutboxDrainJob(databaseHandle),
-    );
+    return withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.AUDIT_OUTBOX_DRAIN,
+      callback: (databaseHandle) => runAuditOutboxDrainJob(databaseHandle),
+    });
   }
 
   async function auditLogRows(action: string) {

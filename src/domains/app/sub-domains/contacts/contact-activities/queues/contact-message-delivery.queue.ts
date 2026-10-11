@@ -66,11 +66,11 @@ export function contactMessageDeliveryDeduplication(
  */
 export async function enqueueContactMessageDelivery(organizationPublicId: string): Promise<void> {
   if (!isMessagingDeliveryEnabled()) return;
-  const jobData = parseBullMQJobData(
-    contactMessageDeliveryJobDataSchema,
-    { organizationPublicId, ...captureTraceContextForPropagation() },
-    CONTACT_MESSAGE_DELIVERY_QUEUE_NAME,
-  );
+  const jobData = parseBullMQJobData({
+    schema: contactMessageDeliveryJobDataSchema,
+    data: { organizationPublicId, ...captureTraceContextForPropagation() },
+    queueName: CONTACT_MESSAGE_DELIVERY_QUEUE_NAME,
+  });
   await getDeliveryQueue().add('deliver-contact-messages', jobData, {
     jobId: `contact-message-delivery-${organizationPublicId}-${randomUUID()}`,
     deduplication: contactMessageDeliveryDeduplication(organizationPublicId),

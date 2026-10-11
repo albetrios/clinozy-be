@@ -10,7 +10,11 @@ describe('readinessProbeTimeout', () => {
         /* intentionally hanging */
       });
 
-      const racePromise = readinessProbeTimeout(neverResolvesPromise, 50, 'slow_probe_label');
+      const racePromise = readinessProbeTimeout({
+        incomingPromise: neverResolvesPromise,
+        timeoutMilliseconds: 50,
+        probeLabelForErrors: 'slow_probe_label',
+      });
 
       const rejectionExpectationPromise = expect(racePromise).rejects.toThrow(
         'health_ready_timeout:slow_probe_label',
@@ -28,7 +32,11 @@ describe('readinessProbeTimeout', () => {
     const fastResolvedPromise = Promise.resolve(42);
 
     await expect(
-      readinessProbeTimeout(fastResolvedPromise, 1_000, 'fast_probe_label'),
+      readinessProbeTimeout({
+        incomingPromise: fastResolvedPromise,
+        timeoutMilliseconds: 1_000,
+        probeLabelForErrors: 'fast_probe_label',
+      }),
     ).resolves.toBe(42);
   });
 });

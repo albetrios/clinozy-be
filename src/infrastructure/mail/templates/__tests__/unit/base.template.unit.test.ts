@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll } from 'vitest';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
 import { baseTemplate } from '@/infrastructure/mail/templates/base.template.js';
+
+// Email copy comes from the locale files, as in the API and the worker.
+beforeAll(async () => {
+  await initializeI18nextForBackgroundWork();
+});
 
 describe('baseTemplate HTML escaping', () => {
   it('escapes a script-tag injection in the title', () => {

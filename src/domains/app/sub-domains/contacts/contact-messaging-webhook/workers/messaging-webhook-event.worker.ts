@@ -38,11 +38,11 @@ export function createMessagingWebhookEventWorker(): WorkerHandle {
         job,
         queueName: MESSAGING_WEBHOOK_EVENT_QUEUE_NAME,
       });
-      return runWithPropagatedTraceContext(
-        { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
-        job.name,
-        () => runMessagingWebhookEventJob(jobData.organizationPublicId),
-      );
+      return runWithPropagatedTraceContext({
+        carrier: { traceparent: jobData.traceparent, tracestate: jobData.tracestate },
+        spanName: job.name,
+        callback: () => runMessagingWebhookEventJob(jobData.organizationPublicId),
+      });
     },
     workerOptions: {
       connection: getBullMQConnectionOptions(),
@@ -58,5 +58,5 @@ export function createMessagingWebhookEventWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, MESSAGING_WEBHOOK_EVENT_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: MESSAGING_WEBHOOK_EVENT_QUEUE_NAME });
 }

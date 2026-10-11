@@ -1,5 +1,5 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { DAY_CLOSE_STATUS } from './day-closes.constants.js';
@@ -41,8 +41,8 @@ export class DayClosesService extends BaseRecordService<DayCloseOutput> {
       serialize: serializeDayClose,
       references: [
         { field: 'branch_id', table: branches, label: 'branch' },
-        { field: 'opening_accepted_by_membership_id', table: memberships, label: 'team member' },
-        { field: 'closed_by_membership_id', table: memberships, label: 'team member' },
+        memberReference('opening_accepted_by_membership_id'),
+        memberReference('closed_by_membership_id'),
       ],
       conflicts: {
         idx_day_closes_organization_branch_date: {

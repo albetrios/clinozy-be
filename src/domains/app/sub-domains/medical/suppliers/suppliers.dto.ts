@@ -16,7 +16,7 @@ const distinct = (values: readonly unknown[]) => new Set(values).size === values
 
 /** The fields a create and a change share (routes-final 11.B.8). */
 const supplierFields = {
-  name: trimmedStringMinMax(1, 120),
+  name: trimmedStringMinMax({ min: 1, max: 120 }),
   phone: phoneNumberSchema.nullable(),
   gst_number: gstNumberSchema.nullable(),
   manufacturer_ids: z
@@ -75,8 +75,8 @@ export const PaySupplierDto = z
     branch_id: recordIdSchema,
     splits: invoicePaidNowDto.shape.splits,
     paid_at: instantSchema.optional(),
-    reference: trimmedStringMinMax(1, 60).optional(),
-    note: trimmedStringMinMax(1, 280).optional(),
+    reference: trimmedStringMinMax({ min: 1, max: 60 }).optional(),
+    note: trimmedStringMinMax({ min: 1, max: 280 }).optional(),
   })
   .strict();
 

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { withOperatorTransaction } from '@/tests/helpers/operator-database.js';
 import {
   type AppFixture,
   createAppFixture,
@@ -54,7 +54,7 @@ describe('Performance: the app lists read their indexes backwards', () => {
   it.each(LISTS.map((list) => [list.table, list]))(
     '%s: a backward index scan, no sort',
     async (_table, list) => {
-      const plan = await getOperatorSql().begin(async (transaction) => {
+      const plan = await withOperatorTransaction(async (transaction) => {
         // A fixture's few rows leave the planner on default estimates (the table is not analysed
         // after its truncate), where a sequential or bitmap scan plus a sort can cost the same as
         // the index — the question here is whether the index serves the order backwards.

@@ -89,10 +89,10 @@ describe('createSubscriptionController auth matrix', () => {
       params: { subscription_id: subscriptionPublicId },
     });
     await controller.cancelSubscription(request, buildReply());
-    expect(service.cancel).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId }),
-      subscriptionPublicId,
-      undefined,
-    );
+    expect(service.cancel).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId }),
+      subscription_public_id: subscriptionPublicId,
+      idempotencyKey: undefined,
+    });
   });
 });

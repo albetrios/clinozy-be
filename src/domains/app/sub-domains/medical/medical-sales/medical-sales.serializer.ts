@@ -9,25 +9,28 @@ import type { MedicalSaleOutput } from './medical-sales.types.js';
  * invoice, its lines, team and returns, the status of a live sale and the margin are the rules'
  * `decorate`.
  */
-export function serializeMedicalSale(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): MedicalSaleOutput {
-  const contactId = references.publicIdOf('contact_id', row);
+export function serializeMedicalSale({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): MedicalSaleOutput {
+  const contactId = references.publicIdOf({ field: 'contact_id', row });
   return {
     id: row.public_id,
     sale_number: row.sale_number as number,
     status: row.deleted_at === null ? MEDICAL_SALE_STATUS.UNPAID : MEDICAL_SALE_STATUS.VOIDED,
     contact: contactId === null ? null : { id: contactId, name: '', primary_phone: '' },
     patient_id: null,
-    branch_id: references.publicIdOf('branch_id', row) ?? '',
+    branch_id: references.publicIdOf({ field: 'branch_id', row }) ?? '',
     invoice: null,
     items: [],
     returned_amount: 0,
     margin_amount: 0,
     margin_percent: null,
     member_ids: [],
-    patient_prescription_id: references.publicIdOf('patient_prescription_id', row),
+    patient_prescription_id: references.publicIdOf({ field: 'patient_prescription_id', row }),
     remark: null,
     returns: [],
     sold_at: toInstant(row.sold_at) ?? row.created_at.toISOString(),

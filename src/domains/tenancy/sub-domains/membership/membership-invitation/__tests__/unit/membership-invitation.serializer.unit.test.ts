@@ -10,8 +10,8 @@ describe('membership-invitation serializer', () => {
   it('serializeMembershipInvitation maps invitation row', () => {
     const expiresAt = new Date('2026-02-01T00:00:00.000Z');
     expect(
-      serializeMembershipInvitation(
-        {
+      serializeMembershipInvitation({
+        row: {
           public_id: 'inv-public',
           membership_id: 5,
           email: 'invite@example.com',
@@ -20,8 +20,8 @@ describe('membership-invitation serializer', () => {
           revoked_at: null,
           created_at: createdAt,
         },
-        'mem-public',
-      ),
+        membership_public_id: 'mem-public',
+      }),
     ).toEqual({
       id: 'inv-public',
       membership_id: 'mem-public',
@@ -41,7 +41,7 @@ describe('membership-invitation serializer', () => {
 
     it("puts the issued invitation's debug token on the embedded invitation", () => {
       expect(
-        attachInvitationTokenEcho(membership, { debug_invitation_token: 'raw-token' }),
+        attachInvitationTokenEcho({ membership, issued: { debug_invitation_token: 'raw-token' } }),
       ).toEqual({
         id: 'mem-public',
         invitation: {
@@ -53,14 +53,17 @@ describe('membership-invitation serializer', () => {
     });
 
     it('returns the membership unchanged when the echo is off', () => {
-      expect(attachInvitationTokenEcho(membership, {})).toBe(membership);
+      expect(attachInvitationTokenEcho({ membership, issued: {} })).toBe(membership);
     });
 
     it('returns the membership unchanged when it has no live invitation', () => {
       const active = { id: 'mem-public', invitation: null };
-      expect(attachInvitationTokenEcho(active, { debug_invitation_token: 'raw-token' })).toBe(
-        active,
-      );
+      expect(
+        attachInvitationTokenEcho({
+          membership: active,
+          issued: { debug_invitation_token: 'raw-token' },
+        }),
+      ).toBe(active);
     });
   });
 });

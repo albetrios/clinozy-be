@@ -3,6 +3,7 @@
  * `faker` so output is reproducible for a given `SEED`.
  */
 import type { Faker } from '@faker-js/faker';
+import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/shared/constants/i18n.constants.js';
 
 /** Generated personalization toggles + locale preferences for one `auth.user_settings` row. */
 export interface BulkUserSettingsProfile {
@@ -16,8 +17,6 @@ export interface BulkUserSettingsProfile {
   preferred_locales: string[];
 }
 
-const SUPPORTED_LANGUAGES = ['en', 'es'] as const;
-
 /** Builds one fake user-settings profile from the provided faker instance. */
 export function generateBulkUserSettings(faker: Faker): BulkUserSettingsProfile {
   const language = faker.helpers.arrayElement(SUPPORTED_LANGUAGES);
@@ -25,6 +24,6 @@ export function generateBulkUserSettings(faker: Faker): BulkUserSettingsProfile 
     is_dark_mode_enabled: faker.datatype.boolean(),
     is_notifications_enabled: faker.datatype.boolean({ probability: 0.8 }),
     language,
-    preferred_locales: language === 'en' ? ['en'] : [language, 'en'],
+    preferred_locales: language === DEFAULT_LANGUAGE ? [language] : [language, DEFAULT_LANGUAGE],
   };
 }

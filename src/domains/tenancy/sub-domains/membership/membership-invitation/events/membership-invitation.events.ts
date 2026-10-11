@@ -1,3 +1,5 @@
+import type { SupportedLanguage } from '@/shared/constants/i18n.constants.js';
+
 /**
  * Domain event codes emitted by {@link MembershipInvitationService} when an
  * invitation is created or resent. Consumed by the invitation email handler
@@ -22,10 +24,13 @@ export type MembershipInvitationEventType =
 export interface MembershipInvitationEmailPayload {
   email: string;
   organization_name: string;
+  /** The inviter's name or email; empty when unknown (the email then names "a team member"). */
   inviter_name: string;
   token: string;
   invitation_public_id: string;
   expires_in_days: number;
+  /** The organization's default language — the invitee has no language of their own yet. */
+  locale: SupportedLanguage;
 }
 
 /**
@@ -42,6 +47,8 @@ export interface MembershipInvitationAcceptedPayload {
   organization_name: string;
   /** Display name (or email) of the invitee who accepted, for the notification copy. */
   invitee_name: string;
+  /** The organization's default language, which the notification is written in. */
+  locale: SupportedLanguage;
 }
 
 /**
@@ -59,4 +66,6 @@ export interface MembershipInvitationDeclinedPayload {
   organization_name: string;
   /** Display name (or email) of the invitee who declined, for the notification copy. */
   invitee_name: string;
+  /** The organization's default language, which the notification is written in. */
+  locale: SupportedLanguage;
 }

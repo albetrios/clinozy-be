@@ -67,10 +67,21 @@ describe('WebauthnCredentialRepository.updateCounter — monotonicity (database)
       transports: ['internal'],
     });
 
-    // Passkeys keep counter=0 forever; the 0 -> 0 write must be accepted so the credential is
-    // not locked out of every subsequent login.
+    const previousUse = new Date('2020-01-01T00:00:00.000Z');
+    await database
+      .update(webauthn_credentials)
+      .set({ last_used_at: previousUse })
+      .where(eq(webauthn_credentials.credential_id, 'cred-zero'));
+
+    // Counter stays zero for both an accepted and refused write; last_used_at proves acceptance.
     await repository.updateCounter('cred-zero', 0);
     expect(await readStoredCounter('cred-zero')).toBe(0);
+    const [persisted] = await database
+      .select({ last_used_at: webauthn_credentials.last_used_at })
+      .from(webauthn_credentials)
+      .where(eq(webauthn_credentials.credential_id, 'cred-zero'));
+    expect(persisted?.last_used_at).toBeInstanceOf(Date);
+    expect(persisted!.last_used_at!.getTime()).toBeGreaterThan(previousUse.getTime());
   });
 
   it('does not touch a revoked credential', async () => {

@@ -62,7 +62,7 @@ import { createPendingWebhookDeliveryAttempt } from '@/domains/notify/sub-domain
  *
  * The fix plumbs an optional `eventKey` through the input and, when present,
  * inserts `event_key` and uses `onConflictDoNothing({ target: [webhook_id,
- * event_key] })` so a retry of the same logical event is a no-op against the
+ * event_key], where: partialIndexPredicate })` so a retry of the same logical event is a no-op against the
  * existing PENDING row. Events without a stable upstream id (`eventKey`
  * omitted) always insert a new row.
  */
@@ -96,6 +96,7 @@ describe('createPendingWebhookDeliveryAttempt — event_key dedupe (sec-N2)', ()
       status: 'PENDING',
     });
     expect(onConflictDoNothingMock).toHaveBeenCalledTimes(1);
+    expect(onConflictDoNothingMock.mock.calls[0]?.[0].where).toBeDefined();
   });
 
   it('does NOT use onConflictDoNothing when no eventKey is provided', async () => {

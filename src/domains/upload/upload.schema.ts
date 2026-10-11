@@ -29,9 +29,10 @@ export const uploads = uploadSchema
     {
       id: bigserial('id', { mode: 'number' }).primaryKey(),
       public_id: varchar('public_id', { length: 28 }).notNull(),
-      user_id: bigint('user_id', { mode: 'number' })
-        .notNull()
-        .references(() => users.id),
+      // Nullable: an organization's file outlives its uploader's deleted account (SET NULL).
+      user_id: bigint('user_id', { mode: 'number' }).references(() => users.id, {
+        onDelete: 'set null',
+      }),
       organization_id: bigint('organization_id', { mode: 'number' }).references(
         () => organizations.id,
       ),
@@ -49,9 +50,14 @@ export const uploads = uploadSchema
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
+        { onDelete: 'set null' },
       ),
     },
     (table) => [
+      // Tombstone purge: only the soft-deleted rows, so live writes never maintain it.
+      index('idx_uploads_tombstoned')
+        .on(table.deleted_at)
+        .where(sql`${table.deleted_at} IS NOT NULL`),
       // Attribution FK indexes (partial on IS NOT NULL) from migration 20260623000000 — declared so
       // the schema lists every index the database has (pinned by index-hygiene.integration.test.ts).
       index('idx_uploads_created_by_user_id')

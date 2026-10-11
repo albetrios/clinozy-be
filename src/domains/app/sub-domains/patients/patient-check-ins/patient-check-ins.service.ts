@@ -62,68 +62,84 @@ export class PatientCheckInsService extends BaseRecordService<PatientCheckInOutp
   }
 
   /** Logs a check-in; its `next_offering_ids` become the patient's planned offerings (TR10). */
-  override async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    parentPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    createName?: string,
-  ): Promise<PatientCheckInOutput> {
+  override async create({
+    scope,
+    body,
+    actingUserPublicId,
+    parentPublicId,
+    visibility,
+    createName,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    parentPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    createName?: string | undefined;
+  }): Promise<PatientCheckInOutput> {
     const { next_offering_ids: nextOfferingIds } = validateCreatePatientCheckIn(body);
     const { next_offering_ids: _planned, ...checkIn } = body as Record<string, unknown>;
     if (nextOfferingIds === undefined || nextOfferingIds.length === 0) {
-      return super.create(
+      return super.create({
         scope,
-        checkIn,
+        body: checkIn,
         actingUserPublicId,
         parentPublicId,
         visibility,
         createName,
-      );
+      });
     }
-    return withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const offeringIds = await resolveRecordIds({
-        table: offerings,
-        organizationId,
-        publicIds: nextOfferingIds,
-        equals: { is_active: true },
-      });
-      const inactive = nextOfferingIds.filter((publicId) => !offeringIds.has(publicId));
-      if (inactive.length > 0) {
-        throw new ValidationError(
-          OFFERING_NOT_ACTIVE_KEY,
-          { id: inactive.join(', ') },
-          undefined,
-          inactive.map((id) => ({
-            field: 'next_offering_ids',
-            messageKey: OFFERING_NOT_ACTIVE_KEY,
-            messageParams: { id },
-          })),
-        );
-      }
-      const created = await super.create(
-        scope,
-        checkIn,
-        actingUserPublicId,
-        parentPublicId,
-        visibility,
-        createName,
-      );
-      const row = await this.checkInsRepository.findByPublicId(created.id, organizationId);
-      if (!row) return created;
-      const userId = await this.userId(actingUserPublicId);
-      await this.checkInsRepository.planNextOfferings({
-        organizationId,
-        patientId: row.patient_id as number,
-        checkInId: row.id,
-        appointmentId: (row.appointment_id as number | null) ?? null,
-        offeringIds: nextOfferingIds.map((publicId) => offeringIds.get(publicId)!),
-        suggestedByMembershipId: await findMembershipIdOfUser({ organizationId, userId }),
-        userId,
-      });
-      return this.get(scope, created.id, actingUserPublicId, visibility, parentPublicId);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const offeringIds = await resolveRecordIds({
+          table: offerings,
+          organizationId,
+          publicIds: nextOfferingIds,
+          equals: { is_active: true },
+        });
+        const inactive = nextOfferingIds.filter((publicId) => !offeringIds.has(publicId));
+        if (inactive.length > 0) {
+          throw new ValidationError(
+            OFFERING_NOT_ACTIVE_KEY,
+            { id: inactive.join(', ') },
+            undefined,
+            inactive.map((id) => ({
+              field: 'next_offering_ids',
+              messageKey: OFFERING_NOT_ACTIVE_KEY,
+              messageParams: { id },
+            })),
+          );
+        }
+        const created = await super.create({
+          scope,
+          body: checkIn,
+          actingUserPublicId,
+          parentPublicId,
+          visibility,
+          createName,
+        });
+        const row = await this.checkInsRepository.findByPublicId(created.id, organizationId);
+        if (!row) return created;
+        const userId = await this.userId(actingUserPublicId);
+        await this.checkInsRepository.planNextOfferings({
+          organizationId,
+          patientId: row.patient_id as number,
+          checkInId: row.id,
+          appointmentId: (row.appointment_id as number | null) ?? null,
+          offeringIds: nextOfferingIds.map((publicId) => offeringIds.get(publicId)!),
+          suggestedByMembershipId: await findMembershipIdOfUser({ organizationId, userId }),
+          userId,
+        });
+        return this.get({
+          scope,
+          publicId: created.id,
+          actingUserPublicId,
+          visibility,
+          parentPublicId,
+        });
+      },
     });
   }
 }

@@ -1,9 +1,14 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { SQL, is } from 'drizzle-orm';
+import { SQL, is, sql } from 'drizzle-orm';
 import { type IndexedColumn, PgTable, getTableConfig } from 'drizzle-orm/pg-core';
 import { describe, it, expect } from 'vitest';
-import { sql } from '@/infrastructure/database/connection.js';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Structural index invariants, asserted against the migrated catalog.
@@ -39,15 +44,14 @@ describe('Integration: index hygiene', () => {
   it('backs every foreign key with an index its ON DELETE / ON UPDATE action can use', async () => {
     // A partial index is usable only when the action's `<column> = $1` implies its predicate,
     // which holds for `<column> IS NOT NULL` and nothing else (e.g. not `revoked_at IS NULL`).
-    const foreignKeys = await sql<
-      {
-        table_name: string;
-        columns: string;
-        referenced_table: string;
-        constraint_name: string;
-        usable_index: string | null;
-      }[]
-    >`
+    const foreignKeys = rowsOf<{
+      table_name: string;
+      columns: string;
+      referenced_table: string;
+      constraint_name: string;
+      usable_index: string | null;
+    }>(
+      await database.execute(sql`
       SELECT c.conrelid::regclass::text AS table_name,
              c.confrelid::regclass::text AS referenced_table,
              c.conname AS constraint_name,
@@ -70,8 +74,9 @@ describe('Integration: index hygiene', () => {
                             WHERE a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)))) AS usable_index
         FROM pg_constraint c
         JOIN pg_namespace n ON n.oid = c.connamespace
-       WHERE c.contype = 'f' AND n.nspname = ANY (${APPLICATION_SCHEMAS})
-    `;
+       WHERE c.contype = 'f' AND n.nspname IN ${APPLICATION_SCHEMAS}
+    `),
+    );
     // Guard against a vacuous pass on an unmigrated database.
     expect(foreignKeys.length).toBeGreaterThan(50);
 
@@ -91,18 +96,21 @@ describe('Integration: index hygiene', () => {
     // Redundant = plain (no predicate, no expression, no INCLUDE) and non-unique — a unique index
     // enforces a constraint and is never dropped for coverage. Its covering index must be plain and
     // match it column for column on operator class, sort order and collation.
-    const [countRow] = await sql<{ btree_index_count: number }[]>`
+    const [countRow] = rowsOf<{ btree_index_count: number }>(
+      await database.execute(sql`
       SELECT count(*)::int AS btree_index_count
         FROM pg_index i
         JOIN pg_class index_class ON index_class.oid = i.indexrelid
         JOIN pg_am am ON am.oid = index_class.relam
         JOIN pg_class table_class ON table_class.oid = i.indrelid
         JOIN pg_namespace n ON n.oid = table_class.relnamespace
-       WHERE am.amname = 'btree' AND n.nspname = ANY (${APPLICATION_SCHEMAS})
-    `;
+       WHERE am.amname = 'btree' AND n.nspname IN ${APPLICATION_SCHEMAS}
+    `),
+    );
     expect(countRow?.btree_index_count ?? 0).toBeGreaterThan(100);
 
-    const redundantIndexes = await sql<{ redundant_index: string; covering_index: string }[]>`
+    const redundantIndexes = rowsOf<{ redundant_index: string; covering_index: string }>(
+      await database.execute(sql`
       WITH btree_indexes AS (
         SELECT i.indexrelid, i.indrelid, i.indisunique, i.indnkeyatts, i.indnatts,
                (i.indkey::int2[])[0:i.indnkeyatts - 1] AS key_columns,
@@ -115,7 +123,7 @@ describe('Integration: index hygiene', () => {
           JOIN pg_am am ON am.oid = index_class.relam
           JOIN pg_class table_class ON table_class.oid = i.indrelid
           JOIN pg_namespace n ON n.oid = table_class.relnamespace
-         WHERE am.amname = 'btree' AND i.indisvalid AND n.nspname = ANY (${APPLICATION_SCHEMAS})
+         WHERE am.amname = 'btree' AND i.indisvalid AND n.nspname IN ${APPLICATION_SCHEMAS}
       )
       SELECT redundant.indexrelid::regclass::text AS redundant_index,
              covering.indexrelid::regclass::text AS covering_index
@@ -137,7 +145,8 @@ describe('Integration: index hygiene', () => {
               OR covering.indisunique
               OR covering.indexrelid > redundant.indexrelid)
        ORDER BY 1
-    `;
+    `),
+    );
     expect(
       redundantIndexes.map((pair) => `${pair.redundant_index} ⊂ ${pair.covering_index}`),
       'Indexes the index on the right already serves — drop them with DROP INDEX CONCURRENTLY (model: 20260923130000_drop_redundant_prefix_indexes.sql)',
@@ -148,7 +157,8 @@ describe('Integration: index hygiene', () => {
     // Constraint-backed indexes (primary keys, `.unique()` constraints, exclusion constraints) are
     // declared through the constraint, not as an index, so only standalone indexes are compared. A
     // foreign key's `conindid` names the referenced side's unique index, which stays standalone.
-    const catalogRows = await sql<{ key: string; is_unique: boolean; key_columns: string }[]>`
+    const catalogRows = rowsOf<{ key: string; is_unique: boolean; key_columns: string }>(
+      await database.execute(sql`
       SELECT n.nspname || '.' || t.relname || '.' || i.relname AS key,
              x.indisunique AS is_unique,
              (SELECT string_agg(coalesce(a.attname, '<expression>'), ',' ORDER BY k.position)
@@ -158,12 +168,10 @@ describe('Integration: index hygiene', () => {
         JOIN pg_class i ON i.oid = x.indexrelid
         JOIN pg_class t ON t.oid = x.indrelid
         JOIN pg_namespace n ON n.oid = t.relnamespace
-       WHERE n.nspname = ANY (${APPLICATION_SCHEMAS})
-         AND NOT EXISTS (
-           SELECT 1 FROM pg_constraint c
-            WHERE c.conindid = x.indexrelid AND c.contype IN ('p', 'u', 'x')
-         )
-    `;
+       WHERE n.nspname IN ${APPLICATION_SCHEMAS}
+         AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = x.indexrelid AND c.contype IN ('p', 'u', 'x'))
+    `),
+    );
     const catalog = new Map(catalogRows.map((row) => [row.key, describeIndex(row)]));
     const declared = await declaredDrizzleIndexes();
     // Guard against a vacuous pass: no schema files found, or an unmigrated database.

@@ -79,6 +79,12 @@ from the row; other rows have `invitation: null`. Status values are lowercase (T
   key resolver requires an `active` creator membership).
 - **Invitation tokens are hashed at rest**: same construction as email verification-code /
   verification tokens (`sha256(raw)`).
+- **Role ordering**: a member manager (`membership:update` / `membership:delete`) suspends,
+  reactivates, re-roles or removes only a member whose role's permissions it holds itself
+  (`assertCallerHoldsMemberPermissionCodes` — an API key's scopes stand in for its held set);
+  anyone else is `403 errors:cannotManageMemberWithPermissionsNotHeld`. The owner is never reachable
+  this way (above); assigning a role still needs every permission it grants
+  (`cannotGrantPermissionNotHeld`).
 - **One leave step (launch K4)**: a removal (the manager's reason), revoking the invite
   (`not_needed`), leaving (`left`) and a deleted account (`account_deleted`, every membership of the
   login) all end a membership the same way — the guarded soft delete, the person's API keys revoked,
@@ -111,7 +117,13 @@ stateDiagram-v2
 ## Events
 
 - Emits: `MEMBERSHIP_INVITATION_EVENT.CREATED`, `MEMBERSHIP_INVITATION_EVENT.RESENT` (each handler
-  enqueues mail), `MEMBERSHIP_INVITATION_EVENT.ACCEPTED` (notifies the `membership:create` holders).
+  enqueues mail, written in the organization's language and naming the inviter — `inviter_name`,
+  `locale`), `MEMBERSHIP_INVITATION_EVENT.ACCEPTED` and `.DECLINED` (each notifies the
+  `membership:create` holders).
+- Emits `MEMBERSHIP_EVENT.CREATED` (a member added), `.UPDATED` (status or roles changed, an invite
+  accepted, a member suspended to fit the seat ceiling) and `.DELETED` (the leave step, a revoked
+  invite included) with the membership's public JSON — the notify domain fans each out to the
+  organization's subscribed webhooks.
 
 ## External integrations
 

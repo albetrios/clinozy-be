@@ -7,25 +7,24 @@ const dueRows = vi.hoisted(() => ({
 }));
 const captureExceptionMock = vi.hoisted(() => vi.fn());
 
-// The scan's query builder, answering the rows the test set.
+// The maintenance context runs its callback; the repository's scan answers the rows the test set.
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
-  const chain = {
-    select: () => chain,
-    from: () => chain,
-    innerJoin: () => chain,
-    where: () => chain,
-    orderBy: () => chain,
-    limit: async () => dueRows.value,
-  };
   return {
     ...actual,
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: (databaseHandle: unknown) => Promise<unknown>) =>
-        callback(chain),
+      async ({ callback }: { callback: (databaseHandle: unknown) => Promise<unknown> }) =>
+        callback({}),
     ),
   };
 });
+
+vi.mock(
+  '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.repository.js',
+  () => ({
+    findInvitedMembershipsDueForSeatRelease: vi.fn(async () => dueRows.value),
+  }),
+);
 
 vi.mock('@/infrastructure/observability/sentry/sentry.js', () => ({
   captureException: captureExceptionMock,
@@ -63,7 +62,10 @@ describe('runMembershipInvitationExpiryJob (launch D84 (4))', () => {
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false);
 
-    const result = await runMembershipInvitationExpiryJob({ endExpiredInvitation }, now);
+    const result = await runMembershipInvitationExpiryJob({
+      service: { endExpiredInvitation },
+      now,
+    });
 
     expect(result).toEqual({ scanned: 2, ended: 1, skipped: 1, failed: 0 });
     expect(endExpiredInvitation).toHaveBeenNthCalledWith(1, {
@@ -80,7 +82,10 @@ describe('runMembershipInvitationExpiryJob (launch D84 (4))', () => {
       .mockRejectedValueOnce(new Error('boom'))
       .mockResolvedValueOnce(true);
 
-    const result = await runMembershipInvitationExpiryJob({ endExpiredInvitation }, now);
+    const result = await runMembershipInvitationExpiryJob({
+      service: { endExpiredInvitation },
+      now,
+    });
 
     expect(result).toEqual({ scanned: 2, ended: 1, skipped: 0, failed: 1 });
     expect(captureExceptionMock).toHaveBeenCalledOnce();
@@ -89,7 +94,9 @@ describe('runMembershipInvitationExpiryJob (launch D84 (4))', () => {
   it('does nothing when nothing is due', async () => {
     const endExpiredInvitation = vi.fn();
 
-    expect(await runMembershipInvitationExpiryJob({ endExpiredInvitation }, now)).toEqual({
+    expect(
+      await runMembershipInvitationExpiryJob({ service: { endExpiredInvitation }, now }),
+    ).toEqual({
       scanned: 0,
       ended: 0,
       skipped: 0,

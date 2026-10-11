@@ -16,28 +16,28 @@ describe('TaskRuleSettingsService', () => {
   const service = new TaskRuleSettingsService({} as never, {} as never);
 
   it('refuses a save without its rules (400)', async () => {
-    await expect(service.replaceRules(SCOPE, {}, undefined)).rejects.toBeInstanceOf(
-      ValidationError,
-    );
+    await expect(
+      service.replaceRules({ scope: SCOPE, body: {}, actingUserPublicId: undefined }),
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('refuses a rule that is not one of the 15 (400)', async () => {
     await expect(
-      service.replaceRules(
-        SCOPE,
-        { rules: [{ rule_key: 'not_a_rule', is_on: true, is_automatic: false }] },
-        undefined,
-      ),
+      service.replaceRules({
+        scope: SCOPE,
+        body: { rules: [{ rule_key: 'not_a_rule', is_on: true, is_automatic: false }] },
+        actingUserPublicId: undefined,
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('refuses "Let the app handle" on a rule the app cannot take (400)', async () => {
     await expect(
-      service.replaceRules(
-        SCOPE,
-        { rules: [{ rule_key: 'arrive', is_on: true, is_automatic: true }] },
-        undefined,
-      ),
+      service.replaceRules({
+        scope: SCOPE,
+        body: { rules: [{ rule_key: 'arrive', is_on: true, is_automatic: true }] },
+        actingUserPublicId: undefined,
+      }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 });

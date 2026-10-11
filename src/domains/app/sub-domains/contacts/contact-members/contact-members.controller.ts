@@ -19,30 +19,39 @@ type ContactParams = { Params: { contact_id: string } };
 export function createContactMembersController(service: ContactMembersService) {
   return {
     listContactMembers: async (request: FastifyRequest<ContactParams>, _reply: FastifyReply) => {
-      const data = await service.list(
-        requireOrganizationScope(request),
-        validatePublicIdParam(request.params.contact_id, 'contact_id'),
-      );
-      return successResponse(data, getRequestIdentifier(request));
+      const data = await service.list({
+        scope: requireOrganizationScope(request),
+        contactPublicId: validatePublicIdParam({
+          value: request.params.contact_id,
+          fieldName: 'contact_id',
+        }),
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     replaceContactMembers: async (request: FastifyRequest<ContactParams>, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
-      const contactId = validatePublicIdParam(request.params.contact_id, 'contact_id');
-      const data = await service.replace(
-        scope,
-        contactId,
-        request.body,
-        getActingUserPublicId(auth),
-      );
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'app.contact.members.replace',
-        resource_type: 'contact',
-        organizationPublicId: scope.organizationPublicId,
-        metadata: { contact_public_id: contactId, membership_count: data.length },
+      const contactId = validatePublicIdParam({
+        value: request.params.contact_id,
+        fieldName: 'contact_id',
       });
-      return successResponse(data, getRequestIdentifier(request));
+      const data = await service.replace({
+        scope,
+        contactPublicId: contactId,
+        body: request.body,
+        actingUserPublicId: getActingUserPublicId(auth),
+      });
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'app.contact.members.replace',
+          resource_type: 'contact',
+          organizationPublicId: scope.organizationPublicId,
+          metadata: { contact_public_id: contactId, membership_count: data.length },
+        },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

@@ -90,10 +90,13 @@ export interface ContactLinkedSearch {
  * typed number is the contact's digits (4 or more) and — when it could be one — the record number
  * too; anything else is the contact's text, 3 or more characters (400 `q` otherwise).
  */
-export function readContactLinkedSearch(
-  q: string | undefined,
-  options: { recordPrefix?: string } = {},
-): ContactLinkedSearch | undefined {
+export function readContactLinkedSearch({
+  q,
+  options = {},
+}: {
+  q: string | undefined;
+  options?: { recordPrefix?: string } | undefined;
+}): ContactLinkedSearch | undefined {
   if (q === undefined) return undefined;
   const prefixed =
     options.recordPrefix === undefined
@@ -145,12 +148,12 @@ function readContactSearch(q: string | undefined): ContactSearch {
 
 /** Parses a contact create body; throws `ValidationError` naming each bad field. */
 export function validateCreateContact(data: unknown): CreateContactInput {
-  return parseWithSchema(CreateContactDto, data);
+  return parseWithSchema({ schema: CreateContactDto, data });
 }
 
 /** Parses a contact update body; throws `ValidationError` naming each bad field. */
 export function validateUpdateContact(data: unknown): UpdateContactInput {
-  return parseWithSchema(UpdateContactDto, data);
+  return parseWithSchema({ schema: UpdateContactDto, data });
 }
 
 /**
@@ -161,7 +164,7 @@ export function validateUpdateContact(data: unknown): UpdateContactInput {
  * derived conditions.
  */
 export function validateListContactsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listContactsQueryDto, data);
+  const query = parseWithSchema({ schema: listContactsQueryDto, data });
   const search = readContactSearch(query.q);
   const ids = splitRecordIds(query.ids);
   const ranksMatches =

@@ -12,14 +12,25 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   return {
     ...actual,
     // Dispatch per kind so the per-context spies keep their original assertions.
-    withMaintenanceDatabaseContext: vi.fn((scope: { kind: string }, ...parameters: unknown[]) => {
-      const inner = (scope.kind === 'GLOBAL_ADMIN'
-        ? globalAdminContextMock
-        : systemAuditInsertContextMock) as unknown as (...innerParameters: unknown[]) => unknown;
-      return inner(...parameters);
-    }),
-    withAppDatabaseContext: vi.fn((_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withMaintenanceDatabaseContext: vi.fn(
+      ({
+        scope,
+        callback,
+        options,
+      }: {
+        scope: { kind: string };
+        callback: unknown;
+        options?: unknown;
+      }) => {
+        const inner = (scope.kind === 'GLOBAL_ADMIN'
+          ? globalAdminContextMock
+          : systemAuditInsertContextMock) as unknown as (...innerParameters: unknown[]) => unknown;
+        return inner(callback, options);
+      },
+    ),
+    withAppDatabaseContext: vi.fn(
+      ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -160,10 +171,10 @@ describe('AuditService', () => {
         organization_public_id: 'org_public',
       });
       // Without this context the outbox WITH CHECK rejects the INSERT under clinozy_be_app.
-      expect(vi.mocked(withAppDatabaseContext)).toHaveBeenCalledWith(
-        expect.objectContaining({ organizationPublicId: 'org_public' }),
-        expect.any(Function),
-      );
+      expect(vi.mocked(withAppDatabaseContext)).toHaveBeenCalledWith({
+        scope: expect.objectContaining({ organizationPublicId: 'org_public' }),
+        callback: expect.any(Function),
+      });
       expect(systemAuditInsertContextMock).not.toHaveBeenCalled();
     });
 

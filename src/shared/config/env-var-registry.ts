@@ -1,6 +1,6 @@
 /**
  * Declarative env-var registry DSL. Each variable is declared once as
- * `envVar(<zod field>, { allowed, description })`, pairing its validation (the Zod schema — the
+ * `envVar({ schema: <zod field>, meta: { allowed, description } })`, pairing its validation (the Zod schema — the
  * allowed-values authority) with a human-readable allowed-values summary and a one-line description.
  * The runtime Zod object is DERIVED from the registry via {@link toSchemaShape}, so the manifest is
  * the single source of truth for what a variable accepts, defaults to, and means.
@@ -32,10 +32,13 @@ export interface EnvVarSpec<Schema extends z.ZodType = z.ZodType> {
  * description. The Zod field's precise type is preserved in the returned spec so the derived schema
  * object keeps full inference.
  */
-export function envVar<Schema extends z.ZodType>(
-  schema: Schema,
-  meta: { readonly allowed: string; readonly description: string },
-): EnvVarSpec<Schema> {
+export function envVar<Schema extends z.ZodType>({
+  schema,
+  meta,
+}: {
+  schema: Schema;
+  meta: { readonly allowed: string; readonly description: string };
+}): EnvVarSpec<Schema> {
   return { schema, allowed: meta.allowed, description: meta.description };
 }
 

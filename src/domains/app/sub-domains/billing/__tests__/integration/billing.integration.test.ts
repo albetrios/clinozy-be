@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import {
   runGlobalRetentionWorkerJob,
   runOrganizationScopedWorkerJob,
@@ -904,7 +904,7 @@ describe('Billing — integration (routes-final §8)', () => {
       `/app/invoice-credit-notes?invoice_id=${branchInvoice}`,
     );
     flow.expectValue("the other branch's hidden", '.data | length', 0);
-    const [branchReceipt] = await getOperatorSql()<{ public_id: string }[]>`
+    const [branchReceipt] = await operatorQuery<{ public_id: string }[]>`
       SELECT p.public_id FROM app.payments p JOIN app.invoices i ON i.id = p.invoice_id
       WHERE i.public_id = ${branchInvoice} AND p.kind = 'receipt'
     `;
@@ -1382,9 +1382,11 @@ describe('Billing — integration (routes-final §8)', () => {
       findOrganizationsWithDaysToClose(databaseHandle),
     );
     expect.soft(due, 'the sweep finds the organization').toContain(organizationPublicId);
-    await runOrganizationScopedWorkerJob({ organizationPublicId }, (databaseHandle) =>
-      runDayCloseAutoCloseJob(databaseHandle, organizationPublicId),
-    );
+    await runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: (databaseHandle) =>
+        runDayCloseAutoCloseJob({ databaseHandle, organizationPublicId }),
+    });
     await flow.expect(
       200,
       'the past days after the sweep',

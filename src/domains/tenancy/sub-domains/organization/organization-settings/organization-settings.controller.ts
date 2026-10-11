@@ -1,7 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { successResponse } from '@/shared/utils/http/response.util.js';
 import {
-  getActingUserPublicId,
   getRequestIdentifier,
   requireOrganizationScope,
   requirePrincipal,
@@ -24,23 +23,26 @@ export function createOrganizationSettingsController(service: OrganizationSettin
     getSettings: async (request: FastifyRequest, _reply: FastifyReply) => {
       const scope = requireOrganizationScope(request);
       const data = await service.get(scope);
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     updateSettings: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
-      const data = await service.update(scope, request.body, getActingUserPublicId(auth));
+      const data = await service.update({ scope, body: request.body });
       const changedFields = listBodyFieldNames(request.body);
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.organization_settings.update',
-        resource_type: 'organization_settings',
-        organizationPublicId: scope.organizationPublicId,
-        // The security policy decides who may use the organization (its MFA requirement among others).
-        severity: changedFields.includes('security_policy') ? 'WARNING' : 'INFO',
-        metadata: { changed_fields: changedFields },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.organization_settings.update',
+          resource_type: 'organization_settings',
+          organizationPublicId: scope.organizationPublicId,
+          // The security policy decides who may use the organization (its MFA requirement among others).
+          severity: changedFields.includes('security_policy') ? 'WARNING' : 'INFO',
+          metadata: { changed_fields: changedFields },
+        },
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

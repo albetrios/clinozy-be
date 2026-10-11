@@ -51,5 +51,5 @@ export function createMessagingWebhookEventRetentionWorker(): WorkerHandle {
     );
   });
 
-  return buildWorkerHandle(worker, MESSAGING_WEBHOOK_EVENT_RETENTION_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: MESSAGING_WEBHOOK_EVENT_RETENTION_QUEUE_NAME });
 }

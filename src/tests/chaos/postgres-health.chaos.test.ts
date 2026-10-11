@@ -21,11 +21,11 @@ describe('Chaos resilience: Postgres outage on readiness probing', () => {
 
   afterAll(async () => {
     await resetChaosTestingListeningProxyFailuresGloballyViaToxiproxy();
-    // The test administratively disables the Postgres proxy, which can leave the postgres.js
-    // pool holding a severed connection. Probe once (best-effort) so the pool re-establishes a
-    // live connection now that the proxy is re-enabled, then bound `app.close()` so a stuck
-    // `sql.end()` drain can never hang teardown up to the hook timeout. The forked worker exits
-    // immediately afterward, so the OS reclaims any lingering socket.
+    // The test administratively disables the Postgres proxy, which can leave the pool holding a
+    // severed connection. Probe once (best-effort) so the pool re-establishes a live connection
+    // now that the proxy is re-enabled, then bound `app.close()` so a stuck pool drain can never
+    // hang teardown up to the hook timeout. The forked worker exits immediately afterward, so the
+    // OS reclaims any lingering socket.
     await chaosListeningFastifyApplicationListeningForHealthIsolation
       .inject({ method: 'GET', url: '/readyz' })
       .catch(() => undefined);

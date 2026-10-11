@@ -26,7 +26,7 @@ export const StripeCustomerApiResponseContractSchema = z.object({
   livemode: z.boolean(),
 });
 
-/** Zod contract for Stripe's subscription-item list (we only require at least one item with an id). */
+/** Zod contract for subscription items, including the period timestamps consumed by current Stripe billing. */
 export const StripeSubscriptionItemListContractSchema = z.object({
   object: z.literal('list'),
   data: z
@@ -34,6 +34,10 @@ export const StripeSubscriptionItemListContractSchema = z.object({
       z.object({
         id: z.string(),
         object: z.literal('subscription_item'),
+        current_period_start: z.number().int(),
+        current_period_end: z.number().int(),
+        quantity: z.number().int().nonnegative().optional(),
+        price: z.object({ id: z.string() }).passthrough().optional(),
       }),
     )
     .min(1),
@@ -64,6 +68,7 @@ export const StripeSubscriptionWebhookInnerContractSchema = z
     status: z.string(),
     cancel_at_period_end: z.boolean(),
     canceled_at: z.number().nullable().optional(),
+    items: StripeSubscriptionItemListContractSchema.optional(),
   })
   .passthrough();
 
@@ -82,7 +87,16 @@ export const StripeEventEnvelopeSubscriptionWebhookContractSchema = z
       object: StripeSubscriptionWebhookInnerContractSchema,
     }),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((event, context) => {
+    if (event.type !== 'customer.subscription.deleted' && !event.data.object.items) {
+      context.addIssue({
+        code: 'custom',
+        path: ['data', 'object', 'items'],
+        message: 'Create/update events require subscription item periods',
+      });
+    }
+  });
 
 /**
  * Zod contract for Stripe's `GET /v1/invoices` list page — the fields the billing-account

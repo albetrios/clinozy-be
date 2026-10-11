@@ -17,7 +17,7 @@ import {
 /** A send-message body as entry values: sent, queued for the messaging worker (M8). */
 export function validateSendContactMessage(data: unknown): Record<string, unknown> {
   return {
-    ...parseWithSchema(SendContactMessageDto, data),
+    ...parseWithSchema({ schema: SendContactMessageDto, data }),
     direction: CONTACT_ACTIVITY_DIRECTION.SENT,
     delivery_status: CONTACT_ACTIVITY_DELIVERY_STATUS.QUEUED,
   };
@@ -25,17 +25,23 @@ export function validateSendContactMessage(data: unknown): Record<string, unknow
 
 /** A log-call body as entry values: a `call_log` either way, no delivery status. */
 export function validateLogContactCall(data: unknown): Record<string, unknown> {
-  return { ...parseWithSchema(LogContactCallDto, data), type: CONTACT_ACTIVITY_TYPE.CALL_LOG };
+  return {
+    ...parseWithSchema({ schema: LogContactCallDto, data }),
+    type: CONTACT_ACTIVITY_TYPE.CALL_LOG,
+  };
 }
 
 /** An add-note body as entry values: a `note`, no direction. */
 export function validateAddContactNote(data: unknown): Record<string, unknown> {
-  return { ...parseWithSchema(AddContactNoteDto, data), type: CONTACT_ACTIVITY_TYPE.NOTE };
+  return {
+    ...parseWithSchema({ schema: AddContactNoteDto, data }),
+    type: CONTACT_ACTIVITY_TYPE.NOTE,
+  };
 }
 
 /** Parses a message batch body; throws `ValidationError` naming each bad field. */
 export function validateContactMessageBatch(data: unknown): ContactMessageBatchInput {
-  return parseWithSchema(ContactMessageBatchDto, data);
+  return parseWithSchema({ schema: ContactMessageBatchDto, data });
 }
 
 /** Entries are never created by a generic body (one route per action, M12) — always a 404 route. */
@@ -53,7 +59,7 @@ export function refuseContactActivityUpdate(): Record<string, unknown> {
  * direction, delivery status, task and appointment links, the time range.
  */
 export function validateListContactActivitiesQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listContactActivitiesQueryDto, data);
+  const query = parseWithSchema({ schema: listContactActivitiesQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

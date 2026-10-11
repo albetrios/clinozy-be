@@ -3,8 +3,7 @@ import {
   MAINTENANCE_SCOPE,
   withMaintenanceDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
-import { and, eq, isNotNull, lt } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
+import { and, eq, isNotNull, lt, sql } from 'drizzle-orm';
 import { database } from '@/infrastructure/database/connection.js';
 import type { RequestScopedPostgresDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -19,8 +18,14 @@ import {
   setLocalDatabaseConfig,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
+
 async function hasGlobalRetentionCleanupPolicyOnWebhooks(): Promise<boolean> {
-  const rows = await sql<{ has_policy: boolean }[]>`
+  const rows = rowsOf<{ has_policy: boolean }>(
+    await database.execute(sql`
     SELECT EXISTS (
       SELECT 1
       FROM pg_policies
@@ -29,7 +34,8 @@ async function hasGlobalRetentionCleanupPolicyOnWebhooks(): Promise<boolean> {
         AND policyname = 'webhooks_tenant_isolation'
         AND qual::text LIKE '%global_retention_cleanup%'
     ) AS has_policy
-  `;
+  `),
+  );
   return rows[0]?.has_policy === true;
 }
 
@@ -89,7 +95,11 @@ describe('Security: retention cleanup RLS', () => {
     const applicationRoleWithRetentionGuc = await database.transaction(async (transaction) => {
       const databaseHandle = transaction as unknown as RequestScopedPostgresDatabase;
       await setLocalApplicationRole(databaseHandle);
-      await setLocalDatabaseConfig(databaseHandle, 'app.global_retention_cleanup', 'true');
+      await setLocalDatabaseConfig({
+        databaseHandle,
+        key: 'app.global_retention_cleanup',
+        value: 'true',
+      });
       return deleteInBatchesByCondition({
         databaseHandle,
         table: webhooks,
@@ -102,9 +112,9 @@ describe('Security: retention cleanup RLS', () => {
 
     expect(applicationRoleWithRetentionGuc.deletedCount).toBe(0);
 
-    const withRetentionGuc = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      async (databaseHandle) =>
+    const withRetentionGuc = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: async (databaseHandle) =>
         deleteInBatchesByCondition({
           databaseHandle,
           table: webhooks,
@@ -113,8 +123,8 @@ describe('Security: retention cleanup RLS', () => {
           logContext: 'retention-cleanup-rls-test-with-guc',
           tableLabel: 'notify.webhooks',
         }),
-      { useMaintenanceDatabaseRole: true },
-    );
+      options: { useMaintenanceDatabaseRole: true },
+    });
 
     expect(withRetentionGuc.deletedCount).toBe(1);
 

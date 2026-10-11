@@ -33,7 +33,13 @@ import {
 const PARSE_RATE_FLOOR = 0.9;
 
 /** The case's answer: Claude's, or with `--oracle` its accepted ideas as the JSON asked for. */
-async function answerOf(evalCase: PatientIdeasEvalCase, isOracle: boolean): Promise<string> {
+async function answerOf({
+  evalCase,
+  isOracle,
+}: {
+  evalCase: PatientIdeasEvalCase;
+  isOracle: boolean;
+}): Promise<string> {
   if (isOracle) {
     return JSON.stringify({
       ideas: evalCase.acceptedPublicIds
@@ -50,7 +56,7 @@ async function main(): Promise<void> {
   const isOracle = process.argv.includes('--oracle');
   const results = [];
   for (const evalCase of PATIENT_IDEAS_EVAL_SET) {
-    const answer = await answerOf(evalCase, isOracle);
+    const answer = await answerOf({ evalCase, isOracle });
     results.push(
       scorePatientIdeasAnswer({
         evalCase,

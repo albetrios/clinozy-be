@@ -124,7 +124,13 @@ async function resolveLines(options: {
 }
 
 /** A purchase date is not after the organization's today — else a 400 `purchase_date`. */
-async function assertPurchaseDate(date: unknown, context: BaseRecordWriteContext): Promise<void> {
+async function assertPurchaseDate({
+  date,
+  context,
+}: {
+  date: unknown;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   if (typeof date === 'string' && date > (await organizationToday(context))) {
     throw fieldValidationError({
       field: 'purchase_date',
@@ -155,7 +161,7 @@ async function preparePurchase(options: {
   });
   values.bill_amount ??= lines.reduce((total, line) => total + line.amountPaise, 0) / 100;
   values.purchase_date ??= await organizationToday(context);
-  await assertPurchaseDate(values.purchase_date, context);
+  await assertPurchaseDate({ date: values.purchase_date, context });
   let pendingPayment: PendingPurchase['payment'];
   if (payment) {
     const paid = payment.splits.reduce((total, split) => total + paiseOf(split.amount), 0);
@@ -251,10 +257,13 @@ async function writePurchase(options: {
  * S12: deleting takes back what arrived — a `reverted` movement for each `received` one not
  * reverted yet (409 `not_enough_stock` when some was used since).
  */
-async function revertReceived(
-  existing: BaseRecordRow,
-  context: BaseRecordWriteContext,
-): Promise<void> {
+async function revertReceived({
+  existing,
+  context,
+}: {
+  existing: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
   const received = await movementsRepository.findUnrevertedOfPurchase(existing.id);
   for (const movement of received) {
     await writeStockMovement({
@@ -296,7 +305,7 @@ export function createStockPurchasesRules(repository: StockPurchasesRepository):
       if ('items' in values) {
         throw new ConflictError('errors:stockPurchaseReceived').withReason('purchase_received');
       }
-      await assertPurchaseDate(values.purchase_date, context);
+      await assertPurchaseDate({ date: values.purchase_date, context });
       if (!('bill_amount' in values)) return;
       if (paiseOf(values.bill_amount) < paiseOf(await repository.lockPaidAmount(existing.id))) {
         throw fieldValidationError({
@@ -309,7 +318,7 @@ export function createStockPurchasesRules(repository: StockPurchasesRepository):
       if (paiseOf(await repository.lockPaidAmount(existing.id)) > 0) {
         throw new ConflictError('errors:stockPurchasePaid').withReason('purchase_paid');
       }
-      await revertReceived(existing, context);
+      await revertReceived({ existing, context });
     },
     afterWrite: async (row, change, context) => {
       if (change.kind === 'create') {

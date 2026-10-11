@@ -22,13 +22,13 @@ const checkInFields = {
   feel: z.enum(PATIENT_CHECK_IN_FEEL_VALUES),
   score: z.number().int().min(1).max(10),
   check_in_date: calendarDateSchema,
-  context: trimmedStringMinMax(1, 80),
+  context: trimmedStringMinMax({ min: 1, max: 80 }),
   appointment_id: recordIdSchema.nullable(),
   patient_treatment_id: recordIdSchema.nullable(),
   followed: z.enum(PATIENT_CHECK_IN_FOLLOWED_VALUES).nullable(),
-  followed_note: trimmedStringMinMax(1, 280).nullable(),
-  current_state: trimmedStringMinMax(1, 500).nullable(),
-  next_plan: trimmedStringMinMax(1, 500).nullable(),
+  followed_note: trimmedStringMinMax({ min: 1, max: 280 }).nullable(),
+  current_state: trimmedStringMinMax({ min: 1, max: 500 }).nullable(),
+  next_plan: trimmedStringMinMax({ min: 1, max: 500 }).nullable(),
 };
 
 /** Path params of the by-id `patient-check-ins` routes (nested under the patient). */

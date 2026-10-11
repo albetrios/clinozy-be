@@ -79,12 +79,17 @@ export class BaseRecordService<Output> {
   }
 
   /** The context a write or a rule runs with. */
-  protected writeContext(
-    scope: OrganizationPrincipalDatabaseScope,
-    organizationId: number,
-    userId: number | null,
-    visibility?: BaseRecordVisibility,
-  ): BaseRecordWriteContext {
+  protected writeContext({
+    scope,
+    organizationId,
+    userId,
+    visibility,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    organizationId: number;
+    userId: number | null;
+    visibility?: BaseRecordVisibility | undefined;
+  }): BaseRecordWriteContext {
     return {
       scope,
       organizationId,
@@ -100,10 +105,14 @@ export class BaseRecordService<Output> {
   }
 
   /** One page of the organization's live records (under the parent when nested). */
-  async list(
-    scope: OrganizationPrincipalDatabaseScope,
-    query: unknown,
-    options: {
+  async list({
+    scope,
+    query,
+    options = {},
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    query: unknown;
+    options?: {
       parentPublicId?: string | undefined;
       actingUserPublicId?: string | undefined;
       visibility?: BaseRecordVisibility | undefined;
@@ -113,61 +122,83 @@ export class BaseRecordService<Output> {
       referenceIn?: Readonly<Record<string, readonly string[]>> | undefined;
       /** Derived filters the service adds beside the query's (the caller's queues — a task's `mine`). */
       derived?: Readonly<Record<string, unknown>> | undefined;
-    } = {},
-  ): Promise<BaseRecordListResult<Output>> {
+    };
+  }): Promise<BaseRecordListResult<Output>> {
     const parsed = this.descriptor.parseList(query);
     const input = options.derived
       ? { ...parsed, derived: { ...parsed.derived, ...options.derived } }
       : parsed;
     const parentPublicId = options.parentPublicId;
-    return withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const equals: Record<string, unknown> = { ...(input.equals ?? {}) };
-      if (!(await this.resolveReferenceIn(organizationId, options.referenceIn, equals))) {
-        return emptyPage(input.limit);
-      }
-      if (!(await this.narrowToOwner(organizationId, options.actingUserPublicId, equals))) {
-        return emptyPage(input.limit);
-      }
-      const { parent } = this.descriptor;
-      if (parent && parentPublicId !== undefined) {
-        equals[parent.field] = await this.requireVisibleParentId({
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const equals: Record<string, unknown> = { ...(input.equals ?? {}) };
+        if (
+          !(await this.resolveReferenceIn({
+            organizationId,
+            referenceIn: options.referenceIn,
+            equals,
+          }))
+        ) {
+          return emptyPage(input.limit);
+        }
+        if (
+          !(await this.narrowToOwner({
+            organizationId,
+            actingUserPublicId: options.actingUserPublicId,
+            equals,
+          }))
+        ) {
+          return emptyPage(input.limit);
+        }
+        const { parent } = this.descriptor;
+        if (parent && parentPublicId !== undefined) {
+          equals[parent.field] = await this.requireVisibleParentId({
+            organizationId,
+            parentPublicId,
+            userId: await this.userId(options.actingUserPublicId),
+            visibility: options.visibility,
+          });
+        }
+        // TRC3: the path's parent wins over the same filter in the query
+        const filters =
+          parent && parentPublicId !== undefined
+            ? { ...input, referenceEquals: { ...input.referenceEquals, [parent.field]: undefined } }
+            : input;
+        const linked = await this.resolveReferenceFilters({
           organizationId,
-          parentPublicId,
-          userId: await this.userId(options.actingUserPublicId),
-          visibility: options.visibility,
+          input: filters,
+          equals,
         });
-      }
-      // TRC3: the path's parent wins over the same filter in the query
-      const filters =
-        parent && parentPublicId !== undefined
-          ? { ...input, referenceEquals: { ...input.referenceEquals, [parent.field]: undefined } }
-          : input;
-      const linked = await this.resolveReferenceFilters(organizationId, filters, equals);
-      if (!linked) return emptyPage(input.limit);
-      if (!(await this.narrowToReadScope(options.visibility, equals))) {
-        return emptyPage(input.limit);
-      }
-      const branchScope = await this.branchScope({
-        organizationId,
-        actingUserPublicId: options.actingUserPublicId,
-        visibility: options.visibility,
-        requested: input.branchPublicIds,
-      });
-      const listQuery = { ...input, equals, branchScope, linked, withTotal: options.withTotal };
-      const page: BaseRecordPage = await this.descriptor.repository.list(organizationId, listQuery);
-      const meta = await this.descriptor.listMeta?.({ organizationId, query: listQuery });
-      const items = await this.serializeRows(page.items);
-      await this.decorate(
-        items,
-        this.writeContext(
-          scope,
+        if (!linked) return emptyPage(input.limit);
+        if (!(await this.narrowToReadScope({ visibility: options.visibility, equals }))) {
+          return emptyPage(input.limit);
+        }
+        const branchScope = await this.branchScope({
           organizationId,
-          await this.userId(options.actingUserPublicId),
-          options.visibility,
-        ),
-      );
-      return { ...page, items, ...(meta ? { meta } : {}) };
+          actingUserPublicId: options.actingUserPublicId,
+          visibility: options.visibility,
+          requested: input.branchPublicIds,
+        });
+        const listQuery = { ...input, equals, branchScope, linked, withTotal: options.withTotal };
+        const page: BaseRecordPage = await this.descriptor.repository.list(
+          organizationId,
+          listQuery,
+        );
+        const meta = await this.descriptor.listMeta?.({ organizationId, query: listQuery });
+        const items = await this.serializeRows({ rows: page.items });
+        await this.decorate({
+          outputs: items,
+          context: this.writeContext({
+            scope,
+            organizationId,
+            userId: await this.userId(options.actingUserPublicId),
+            visibility: options.visibility,
+          }),
+        });
+        return { ...page, items, ...(meta ? { meta } : {}) };
+      },
     });
   }
 
@@ -175,11 +206,15 @@ export class BaseRecordService<Output> {
    * Internal reference filters by many public ids, into `equals` (one `IN` per field); false when a
    * field names no record here (the page is empty).
    */
-  private async resolveReferenceIn(
-    organizationId: number,
-    referenceIn: Readonly<Record<string, readonly string[]>> | undefined,
-    equals: Record<string, unknown>,
-  ): Promise<boolean> {
+  private async resolveReferenceIn({
+    organizationId,
+    referenceIn,
+    equals,
+  }: {
+    organizationId: number;
+    referenceIn: Readonly<Record<string, readonly string[]>> | undefined;
+    equals: Record<string, unknown>;
+  }): Promise<boolean> {
     for (const [field, publicIds] of Object.entries(referenceIn ?? {})) {
       const ids = await resolveRecordIds({
         table: this.referenceTable(field),
@@ -196,11 +231,15 @@ export class BaseRecordService<Output> {
    * A list query's reference filters (into `equals`) and link filters (returned) by public id; null
    * when one names no record here (the page is empty).
    */
-  private async resolveReferenceFilters(
-    organizationId: number,
-    input: BaseRecordListInput,
-    equals: Record<string, unknown>,
-  ): Promise<BaseRecordLinkFilter[] | null> {
+  private async resolveReferenceFilters({
+    organizationId,
+    input,
+    equals,
+  }: {
+    organizationId: number;
+    input: BaseRecordListInput;
+    equals: Record<string, unknown>;
+  }): Promise<BaseRecordLinkFilter[] | null> {
     for (const [field, publicId] of Object.entries(input.referenceEquals ?? {})) {
       if (publicId === undefined) continue;
       const table = this.referenceTable(field);
@@ -226,19 +265,31 @@ export class BaseRecordService<Output> {
   }
 
   /** One live record. */
-  async get(
-    scope: OrganizationPrincipalDatabaseScope,
-    publicId: string,
-    actingUserPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    parentPublicId?: string,
-  ): Promise<Output> {
-    return withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const userId = await this.userId(actingUserPublicId);
-      const row = await this.requireRow(organizationId, publicId, userId, visibility);
-      await this.assertUnderParent({ organizationId, row, parentPublicId, userId, visibility });
-      return this.serializeOne(row, this.writeContext(scope, organizationId, userId, visibility));
+  async get({
+    scope,
+    publicId,
+    actingUserPublicId,
+    visibility,
+    parentPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    publicId: string;
+    actingUserPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    parentPublicId?: string | undefined;
+  }): Promise<Output> {
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const userId = await this.userId(actingUserPublicId);
+        const row = await this.requireRow({ organizationId, publicId, userId, visibility });
+        await this.assertUnderParent({ organizationId, row, parentPublicId, userId, visibility });
+        return this.serializeOne({
+          row,
+          context: this.writeContext({ scope, organizationId, userId, visibility }),
+        });
+      },
     });
   }
 
@@ -246,101 +297,121 @@ export class BaseRecordService<Output> {
    * Creates a record (under the parent when nested) — with the table's create body, or with one of
    * its named creates (`createName`, one route per action — `send-message`, `add-note`).
    */
-  async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    parentPublicId?: string,
-    visibility?: BaseRecordVisibility,
-    createName?: string,
-  ): Promise<Output> {
+  async create({
+    scope,
+    body,
+    actingUserPublicId,
+    parentPublicId,
+    visibility,
+    createName,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    parentPublicId?: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    createName?: string | undefined;
+  }): Promise<Output> {
     const parse =
       createName === undefined
         ? this.descriptor.parseCreate
         : this.descriptor.namedCreates?.[createName];
     if (!parse) throw new NotFoundError(this.descriptor.label);
     const parsed = parse(body);
-    return withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const userId = await this.userId(actingUserPublicId);
-      const values: Record<string, unknown> = { ...parsed };
-      const { parent } = this.descriptor;
-      if (parent && parentPublicId !== undefined) {
-        values[parent.field] = await this.requireVisibleParentId({
-          organizationId,
-          parentPublicId,
-          userId,
-          visibility,
-        });
-      }
-      await this.resolveReferences(organizationId, values);
-      await this.assertBranchWritable({ organizationId, userId, visibility, values });
-      const ownerColumn = this.descriptor.ownerMembershipColumn;
-      if (ownerColumn !== undefined) {
-        const membershipId = await findMembershipIdOfUser({ organizationId, userId });
-        if (membershipId === null) {
-          throw new ForbiddenError('errors:forbidden').withReason('not_a_member');
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const userId = await this.userId(actingUserPublicId);
+        const values: Record<string, unknown> = { ...parsed };
+        const { parent } = this.descriptor;
+        if (parent && parentPublicId !== undefined) {
+          values[parent.field] = await this.requireVisibleParentId({
+            organizationId,
+            parentPublicId,
+            userId,
+            visibility,
+          });
         }
-        values[ownerColumn] = membershipId;
-      }
-      const lists = await this.takeReferenceLists(organizationId, values);
-      const context = this.writeContext(scope, organizationId, userId, visibility);
-      await this.descriptor.prepareCreate?.(values, context);
-      this.descriptor.checkValues?.(values);
-      const children = this.takeChildLists(values);
-      const row = await this.mapConflicts(() =>
-        this.descriptor.repository.insert({
-          ...values,
-          organization_id: organizationId,
-          created_by_user_id: userId,
-          updated_by_user_id: userId,
-        }),
-      );
-      await this.writeReferenceLists({ organizationId, ownerId: row.id, lists, userId });
-      await this.writeChildLists(row, children);
-      await this.descriptor.afterWrite?.(row, { kind: 'create' }, context);
-      return this.serializeOne(row, context);
+        await this.resolveReferences({ organizationId, values });
+        await this.assertBranchWritable({ organizationId, userId, visibility, values });
+        const ownerColumn = this.descriptor.ownerMembershipColumn;
+        if (ownerColumn !== undefined) {
+          const membershipId = await findMembershipIdOfUser({ organizationId, userId });
+          if (membershipId === null) {
+            throw new ForbiddenError('errors:forbidden').withReason('not_a_member');
+          }
+          values[ownerColumn] = membershipId;
+        }
+        const lists = await this.takeReferenceLists({ organizationId, values });
+        const context = this.writeContext({ scope, organizationId, userId, visibility });
+        await this.descriptor.prepareCreate?.(values, context);
+        this.descriptor.checkValues?.(values);
+        const children = this.takeChildLists(values);
+        const row = await this.mapConflicts(() =>
+          this.descriptor.repository.insert({
+            ...values,
+            organization_id: organizationId,
+            created_by_user_id: userId,
+            updated_by_user_id: userId,
+          }),
+        );
+        await this.writeReferenceLists({ organizationId, ownerId: row.id, lists, userId });
+        await this.writeChildLists({ owner: row, children });
+        await this.descriptor.afterWrite?.(row, { kind: 'create' }, context);
+        return this.serializeOne({ row, context });
+      },
     });
   }
 
   /** Changes a live record; refuses a stale save (`expected_updated_at`, D43). */
-  async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    publicId: string,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    visibility?: BaseRecordVisibility,
-    parentPublicId?: string,
-  ): Promise<Output> {
+  async update({
+    scope,
+    publicId,
+    body,
+    actingUserPublicId,
+    visibility,
+    parentPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    publicId: string;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    parentPublicId?: string | undefined;
+  }): Promise<Output> {
     const { expected_updated_at: expectedUpdatedAt, ...parsed } = this.descriptor.parseUpdate(body);
-    return withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const userId = await this.userId(actingUserPublicId);
-      const existing = await this.requireRow(organizationId, publicId, userId, visibility);
-      await this.assertUnderParent({
-        organizationId,
-        row: existing,
-        parentPublicId,
-        userId,
-        visibility,
-      });
-      await this.assertNotChangedSince(existing, expectedUpdatedAt);
-      const values: Record<string, unknown> = { ...parsed };
-      await this.resolveReferences(organizationId, values);
-      await this.assertBranchWritable({ organizationId, userId, visibility, values });
-      const lists = await this.takeReferenceLists(organizationId, values);
-      const context = this.writeContext(scope, organizationId, userId, visibility);
-      await this.descriptor.prepareUpdate?.(values, existing, context);
-      this.descriptor.checkValues?.({ ...existing, ...values });
-      const children = this.takeChildLists(values);
-      const updated = await this.mapConflicts(() =>
-        this.descriptor.repository.update(existing.id, values, userId),
-      );
-      if (!updated) throw new NotFoundError(this.descriptor.label);
-      await this.writeReferenceLists({ organizationId, ownerId: updated.id, lists, userId });
-      await this.writeChildLists(updated, children);
-      await this.descriptor.afterWrite?.(updated, { kind: 'update', before: existing }, context);
-      return this.serializeOne(updated, context);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const userId = await this.userId(actingUserPublicId);
+        const existing = await this.requireRow({ organizationId, publicId, userId, visibility });
+        await this.assertUnderParent({
+          organizationId,
+          row: existing,
+          parentPublicId,
+          userId,
+          visibility,
+        });
+        await this.assertNotChangedSince({ row: existing, expected: expectedUpdatedAt });
+        const values: Record<string, unknown> = { ...parsed };
+        await this.resolveReferences({ organizationId, values });
+        await this.assertBranchWritable({ organizationId, userId, visibility, values });
+        const lists = await this.takeReferenceLists({ organizationId, values });
+        const context = this.writeContext({ scope, organizationId, userId, visibility });
+        await this.descriptor.prepareUpdate?.(values, existing, context);
+        this.descriptor.checkValues?.({ ...existing, ...values });
+        const children = this.takeChildLists(values);
+        const updated = await this.mapConflicts(() =>
+          this.descriptor.repository.update(existing.id, values, userId),
+        );
+        if (!updated) throw new NotFoundError(this.descriptor.label);
+        await this.writeReferenceLists({ organizationId, ownerId: updated.id, lists, userId });
+        await this.writeChildLists({ owner: updated, children });
+        await this.descriptor.afterWrite?.(updated, { kind: 'update', before: existing }, context);
+        return this.serializeOne({ row: updated, context });
+      },
     });
   }
 
@@ -348,15 +419,23 @@ export class BaseRecordService<Output> {
    * Runs a lifecycle action (`cancel`, `approve`, …) if the record's status allows it — under the
    * parent when the route is nested (`…/{contact_id}/activities/{contact_activity_id}/resend`).
    */
-  async transition(
-    scope: OrganizationPrincipalDatabaseScope,
-    publicId: string,
-    action: string,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-    visibility?: BaseRecordVisibility,
-    parentPublicId?: string,
-  ): Promise<Output> {
+  async transition({
+    scope,
+    publicId,
+    action,
+    body,
+    actingUserPublicId,
+    visibility,
+    parentPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    publicId: string;
+    action: string;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    parentPublicId?: string | undefined;
+  }): Promise<Output> {
     const custom = this.descriptor.actions?.[action];
     if (custom) {
       return this.runAction({
@@ -373,83 +452,97 @@ export class BaseRecordService<Output> {
     const transition = this.descriptor.transitions?.[action];
     if (!transition) throw new NotFoundError(this.descriptor.label);
     const extra = transition.parse ? transition.parse(body) : {};
-    return withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const userId = await this.userId(actingUserPublicId);
-      const existing = await this.requireRow(organizationId, publicId, userId, visibility);
-      await this.assertUnderParent({
-        organizationId,
-        row: existing,
-        parentPublicId,
-        userId,
-        visibility,
-      });
-      const statusColumn = transition.statusColumn ?? 'status';
-      const currentStatus = existing[statusColumn];
-      const status = typeof currentStatus === 'string' ? currentStatus : '';
-      if (transition.from && !transition.from.includes(status)) {
-        throw new ConflictError('errors:recordTransitionNotAllowed', { action, status }).withReason(
-          'transition_not_allowed',
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const userId = await this.userId(actingUserPublicId);
+        const existing = await this.requireRow({ organizationId, publicId, userId, visibility });
+        await this.assertUnderParent({
+          organizationId,
+          row: existing,
+          parentPublicId,
+          userId,
+          visibility,
+        });
+        const statusColumn = transition.statusColumn ?? 'status';
+        const currentStatus = existing[statusColumn];
+        const status = typeof currentStatus === 'string' ? currentStatus : '';
+        if (transition.from && !transition.from.includes(status)) {
+          throw new ConflictError('errors:recordTransitionNotAllowed', {
+            action,
+            status,
+          }).withReason('transition_not_allowed');
+        }
+        const values: Record<string, unknown> = { ...(transition.set ?? {}), ...extra };
+        for (const column of transition.stamp ?? []) values[column] = new Date();
+        await this.resolveReferences({ organizationId, values });
+        const context = this.writeContext({ scope, organizationId, userId, visibility });
+        await this.descriptor.prepareTransition?.(action, values, existing, context);
+        this.descriptor.checkValues?.({ ...existing, ...values });
+        const updated = await this.mapConflicts(() =>
+          this.descriptor.repository.update(existing.id, values, userId),
         );
-      }
-      const values: Record<string, unknown> = { ...(transition.set ?? {}), ...extra };
-      for (const column of transition.stamp ?? []) values[column] = new Date();
-      await this.resolveReferences(organizationId, values);
-      const context = this.writeContext(scope, organizationId, userId, visibility);
-      await this.descriptor.prepareTransition?.(action, values, existing, context);
-      this.descriptor.checkValues?.({ ...existing, ...values });
-      const updated = await this.mapConflicts(() =>
-        this.descriptor.repository.update(existing.id, values, userId),
-      );
-      if (!updated) throw new NotFoundError(this.descriptor.label);
-      await this.descriptor.afterWrite?.(
-        updated,
-        { kind: 'transition', action, before: existing },
-        context,
-      );
-      return this.serializeOne(updated, context);
+        if (!updated) throw new NotFoundError(this.descriptor.label);
+        await this.descriptor.afterWrite?.(
+          updated,
+          { kind: 'transition', action, before: existing },
+          context,
+        );
+        return this.serializeOne({ row: updated, context });
+      },
     });
   }
 
   /** Soft-deletes a record with why (`?reason=&note=`). */
-  async remove(
-    scope: OrganizationPrincipalDatabaseScope,
-    publicId: string,
-    query: unknown,
-    actingUserPublicId: string | undefined,
-    visibility?: BaseRecordVisibility,
-    parentPublicId?: string,
-  ): Promise<void> {
-    const removal = parseWithSchema<{ reason: string; note?: string | undefined }>(
-      this.descriptor.deleteQuery ?? recordDeleteQuerySchema,
-      query,
-    );
-    await withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const userId = await this.userId(actingUserPublicId);
-      const existing = await this.requireRow(organizationId, publicId, userId, visibility);
-      await this.assertUnderParent({
-        organizationId,
-        row: existing,
-        parentPublicId,
-        userId,
-        visibility,
-      });
-      await this.descriptor.prepareRemove?.(
-        existing,
-        this.writeContext(scope, organizationId, userId, visibility),
-      );
-      const deleted = await this.descriptor.repository.softDelete(
-        existing.id,
-        { delete_reason: removal.reason, delete_note: removal.note ?? null },
-        userId,
-      );
-      if (!deleted) throw new NotFoundError(this.descriptor.label);
-      await this.descriptor.afterWrite?.(
-        deleted,
-        { kind: 'delete', before: existing },
-        this.writeContext(scope, organizationId, userId, visibility),
-      );
+  async remove({
+    scope,
+    publicId,
+    query,
+    actingUserPublicId,
+    visibility,
+    parentPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    publicId: string;
+    query: unknown;
+    actingUserPublicId: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    parentPublicId?: string | undefined;
+  }): Promise<void> {
+    const removal = parseWithSchema<{ reason: string; note?: string | undefined }>({
+      schema: this.descriptor.deleteQuery ?? recordDeleteQuerySchema,
+      data: query,
+    });
+    await withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const userId = await this.userId(actingUserPublicId);
+        const existing = await this.requireRow({ organizationId, publicId, userId, visibility });
+        await this.assertUnderParent({
+          organizationId,
+          row: existing,
+          parentPublicId,
+          userId,
+          visibility,
+        });
+        await this.descriptor.prepareRemove?.(
+          existing,
+          this.writeContext({ scope, organizationId, userId, visibility }),
+        );
+        const deleted = await this.descriptor.repository.softDelete(
+          existing.id,
+          { delete_reason: removal.reason, delete_note: removal.note ?? null },
+          userId,
+        );
+        if (!deleted) throw new NotFoundError(this.descriptor.label);
+        await this.descriptor.afterWrite?.(
+          deleted,
+          { kind: 'delete', before: existing },
+          this.writeContext({ scope, organizationId, userId, visibility }),
+        );
+      },
     });
   }
 
@@ -465,181 +558,268 @@ export class BaseRecordService<Output> {
     run: (input: BaseRecordActionInput) => Promise<BaseRecordRow>;
   }): Promise<Output> {
     const { scope } = options;
-    return withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const userId = await this.userId(options.actingUserPublicId);
-      const existing = await this.requireRow(
-        organizationId,
-        options.publicId,
-        userId,
-        options.visibility,
-      );
-      await this.assertUnderParent({
-        organizationId,
-        row: existing,
-        parentPublicId: options.parentPublicId,
-        userId,
-        visibility: options.visibility,
-      });
-      const context = this.writeContext(scope, organizationId, userId, options.visibility);
-      const row = await options.run({
-        existing,
-        input: (options.body ?? {}) as Record<string, unknown>,
-        context,
-        visibility: options.visibility,
-        repository: this.descriptor.repository,
-        present: (rows) =>
-          this.present(rows, this.writeContext(scope, organizationId, userId, options.visibility)),
-      });
-      await this.descriptor.afterWrite?.(
-        row,
-        { kind: 'transition', action: options.action, before: existing },
-        context,
-      );
-      return this.serializeOne(row, context);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const userId = await this.userId(options.actingUserPublicId);
+        const existing = await this.requireRow({
+          organizationId,
+          publicId: options.publicId,
+          userId,
+          visibility: options.visibility,
+        });
+        await this.assertUnderParent({
+          organizationId,
+          row: existing,
+          parentPublicId: options.parentPublicId,
+          userId,
+          visibility: options.visibility,
+        });
+        const context = this.writeContext({
+          scope,
+          organizationId,
+          userId,
+          visibility: options.visibility,
+        });
+        const row = await options.run({
+          existing,
+          input: (options.body ?? {}) as Record<string, unknown>,
+          context,
+          visibility: options.visibility,
+          repository: this.descriptor.repository,
+          present: (rows) =>
+            this.present({
+              rows,
+              context: this.writeContext({
+                scope,
+                organizationId,
+                userId,
+                visibility: options.visibility,
+              }),
+            }),
+        });
+        await this.descriptor.afterWrite?.(
+          row,
+          { kind: 'transition', action: options.action, before: existing },
+          context,
+        );
+        return this.serializeOne({ row, context });
+      },
     });
   }
 
   /** A read view of one record (`GET …/{id}/<view>`). */
-  async view(
-    scope: OrganizationPrincipalDatabaseScope,
-    publicId: string,
-    name: string,
-    query: unknown,
+  async view({
+    scope,
+    publicId,
+    name,
+    query,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    publicId: string;
+    name: string;
+    query: unknown;
     options: {
       actingUserPublicId?: string | undefined;
       visibility?: BaseRecordVisibility | undefined;
-    },
-  ): Promise<unknown> {
+    };
+  }): Promise<unknown> {
     const run = this.descriptor.views?.[name];
     if (!run) throw new NotFoundError(this.descriptor.label);
-    return withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const userId = await this.userId(options.actingUserPublicId);
-      const existing = await this.requireRow(organizationId, publicId, userId, options.visibility);
-      return run({
-        existing,
-        input: (query ?? {}) as Record<string, unknown>,
-        context: this.writeContext(scope, organizationId, userId, options.visibility),
-        visibility: options.visibility,
-        repository: this.descriptor.repository,
-        present: (rows) =>
-          this.present(rows, this.writeContext(scope, organizationId, userId, options.visibility)),
-      });
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const userId = await this.userId(options.actingUserPublicId);
+        const existing = await this.requireRow({
+          organizationId,
+          publicId,
+          userId,
+          visibility: options.visibility,
+        });
+        return run({
+          existing,
+          input: (query ?? {}) as Record<string, unknown>,
+          context: this.writeContext({
+            scope,
+            organizationId,
+            userId,
+            visibility: options.visibility,
+          }),
+          visibility: options.visibility,
+          repository: this.descriptor.repository,
+          present: (rows) =>
+            this.present({
+              rows,
+              context: this.writeContext({
+                scope,
+                organizationId,
+                userId,
+                visibility: options.visibility,
+              }),
+            }),
+        });
+      },
     });
   }
 
   /** A collection action (`POST /<module>/<name>`) or view (`GET /<module>/<name>`). */
-  async collection(
-    scope: OrganizationPrincipalDatabaseScope,
-    kind: 'action' | 'view',
-    name: string,
-    input: unknown,
+  async collection({
+    scope,
+    kind,
+    name,
+    input,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    kind: 'action' | 'view';
+    name: string;
+    input: unknown;
     options: {
       actingUserPublicId?: string | undefined;
       visibility?: BaseRecordVisibility | undefined;
-    },
-  ): Promise<unknown> {
+    };
+  }): Promise<unknown> {
     const run = (
       kind === 'action' ? this.descriptor.collectionActions : this.descriptor.collectionViews
     )?.[name];
     if (!run) throw new NotFoundError(this.descriptor.label);
-    return withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const userId = await this.userId(options.actingUserPublicId);
-      return run({
-        input: (input ?? {}) as Record<string, unknown>,
-        context: this.writeContext(scope, organizationId, userId, options.visibility),
-        visibility: options.visibility,
-        repository: this.descriptor.repository,
-        present: (rows) =>
-          this.present(rows, this.writeContext(scope, organizationId, userId, options.visibility)),
-        branchScope: (requested) =>
-          this.branchScope({
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const userId = await this.userId(options.actingUserPublicId);
+        return run({
+          input: (input ?? {}) as Record<string, unknown>,
+          context: this.writeContext({
+            scope,
             organizationId,
-            actingUserPublicId: options.actingUserPublicId,
+            userId,
             visibility: options.visibility,
-            requested,
           }),
-        resolveReferences: (values) => this.resolveReferences(organizationId, values),
-      });
+          visibility: options.visibility,
+          repository: this.descriptor.repository,
+          present: (rows) =>
+            this.present({
+              rows,
+              context: this.writeContext({
+                scope,
+                organizationId,
+                userId,
+                visibility: options.visibility,
+              }),
+            }),
+          branchScope: (requested) =>
+            this.branchScope({
+              organizationId,
+              actingUserPublicId: options.actingUserPublicId,
+              visibility: options.visibility,
+              requested,
+            }),
+          resolveReferences: (values) => this.resolveReferences({ organizationId, values }),
+        });
+      },
     });
   }
 
   /** Serializes rows for a rule's answer, with the per-viewer fields (for collection results). */
-  async present(rows: BaseRecordRow[], context: BaseRecordWriteContext): Promise<Output[]> {
-    const outputs = await this.serializeRows(rows);
-    await this.decorate(outputs, context);
+  async present({
+    rows,
+    context,
+  }: {
+    rows: BaseRecordRow[];
+    context: BaseRecordWriteContext;
+  }): Promise<Output[]> {
+    const outputs = await this.serializeRows({ rows });
+    await this.decorate({ outputs, context });
     return outputs;
   }
 
   /** Undoes a soft delete within the restore window. */
-  async restore(
-    scope: OrganizationPrincipalDatabaseScope,
-    publicId: string,
-    actingUserPublicId: string | undefined,
-    visibility?: BaseRecordVisibility,
-    parentPublicId?: string,
-  ): Promise<Output> {
-    return withAppDatabaseContext(scope, async () => {
-      const organizationId = await this.organizationId(scope);
-      const { repository } = this.descriptor;
-      const deleted = await repository.findByPublicId(publicId, organizationId, { deleted: true });
-      if (
-        deleted &&
-        !(await this.isRowVisible({ organizationId, row: deleted, actingUserPublicId, visibility }))
-      ) {
-        throw new NotFoundError(this.descriptor.label);
-      }
-      const live = deleted ? null : await repository.findByPublicId(publicId, organizationId);
-      const found = deleted ?? live;
-      if (found) {
-        await this.assertUnderParent({
-          organizationId,
-          row: found,
-          parentPublicId,
-          userId: await this.userId(actingUserPublicId),
-          visibility,
+  async restore({
+    scope,
+    publicId,
+    actingUserPublicId,
+    visibility,
+    parentPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    publicId: string;
+    actingUserPublicId: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    parentPublicId?: string | undefined;
+  }): Promise<Output> {
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.organizationId(scope);
+        const { repository } = this.descriptor;
+        const deleted = await repository.findByPublicId(publicId, organizationId, {
+          deleted: true,
         });
-      }
-      if (!deleted) {
-        if (live) {
-          throw new ConflictError('errors:recordNotDeleted').withReason('record_not_deleted');
+        if (
+          deleted &&
+          !(await this.isRowVisible({
+            organizationId,
+            row: deleted,
+            actingUserPublicId,
+            visibility,
+          }))
+        ) {
+          throw new NotFoundError(this.descriptor.label);
         }
-        throw new NotFoundError(this.descriptor.label);
-      }
-      const userId = await this.userId(actingUserPublicId);
-      await this.descriptor.prepareRestore?.(
-        deleted,
-        this.writeContext(scope, organizationId, userId, visibility),
-      );
-      let restored: BaseRecordRow | null;
-      try {
-        restored = await repository.restore(deleted.id, userId);
-      } catch (error) {
-        if (isPostgresUniqueViolation(error)) {
-          throw new ConflictError('errors:recordRestoreConflict').withReason(
-            'record_restore_conflict',
-          );
+        const live = deleted ? null : await repository.findByPublicId(publicId, organizationId);
+        const found = deleted ?? live;
+        if (found) {
+          await this.assertUnderParent({
+            organizationId,
+            row: found,
+            parentPublicId,
+            userId: await this.userId(actingUserPublicId),
+            visibility,
+          });
         }
-        // A table's own exclusion conflict (a slot booked meanwhile — `slot_taken`, A3).
-        restored = await this.mapConflicts<BaseRecordRow | null>(async () => {
-          throw error;
+        if (!deleted) {
+          if (live) {
+            throw new ConflictError('errors:recordNotDeleted').withReason('record_not_deleted');
+          }
+          throw new NotFoundError(this.descriptor.label);
+        }
+        const userId = await this.userId(actingUserPublicId);
+        await this.descriptor.prepareRestore?.(
+          deleted,
+          this.writeContext({ scope, organizationId, userId, visibility }),
+        );
+        let restored: BaseRecordRow | null;
+        try {
+          restored = await repository.restore(deleted.id, userId);
+        } catch (error) {
+          if (isPostgresUniqueViolation(error)) {
+            throw new ConflictError('errors:recordRestoreConflict').withReason(
+              'record_restore_conflict',
+            );
+          }
+          // A table's own exclusion conflict (a slot booked meanwhile — `slot_taken`, A3).
+          restored = await this.mapConflicts<BaseRecordRow | null>(async () => {
+            throw error;
+          });
+        }
+        if (!restored) throw new NotFoundError(this.descriptor.label);
+        // A rule's own restore writes (a contact's numbers) may clash too — the table's 409, not a 500.
+        await this.mapConflicts(async () =>
+          this.descriptor.afterWrite?.(
+            restored,
+            { kind: 'restore' },
+            this.writeContext({ scope, organizationId, userId, visibility }),
+          ),
+        );
+        return this.serializeOne({
+          row: restored,
+          context: this.writeContext({ scope, organizationId, userId, visibility }),
         });
-      }
-      if (!restored) throw new NotFoundError(this.descriptor.label);
-      // A rule's own restore writes (a contact's numbers) may clash too — the table's 409, not a 500.
-      await this.mapConflicts(async () =>
-        this.descriptor.afterWrite?.(
-          restored,
-          { kind: 'restore' },
-          this.writeContext(scope, organizationId, userId, visibility),
-        ),
-      );
-      return this.serializeOne(
-        restored,
-        this.writeContext(scope, organizationId, userId, visibility),
-      );
+      },
     });
   }
 
@@ -647,10 +827,13 @@ export class BaseRecordService<Output> {
    * Serializes rows with their references' public ids read in one batch per field — and, for a
    * single-record response (`withChildren`), their child lists.
    */
-  protected async serializeRows(
-    rows: BaseRecordRow[],
-    options: { withChildren?: boolean } = {},
-  ): Promise<Output[]> {
+  protected async serializeRows({
+    rows,
+    options = {},
+  }: {
+    rows: BaseRecordRow[];
+    options?: { withChildren?: boolean } | undefined;
+  }): Promise<Output[]> {
     const references = [
       ...(this.descriptor.references ?? []),
       ...(this.descriptor.parent ? [this.descriptor.parent] : []),
@@ -679,31 +862,40 @@ export class BaseRecordService<Output> {
       }
     }
     const lookup: BaseRecordReferenceLookup = {
-      publicIdOf: (field, row) => {
+      publicIdOf: ({ field, row }) => {
         const value = row[field];
         return typeof value === 'number' ? (publicIds.get(field)?.get(value) ?? null) : null;
       },
-      listOf: (field, row) => lists.get(field)?.get(row.id) ?? [],
-      childrenOf: (field, row) => {
+      listOf: ({ field, row }) => lists.get(field)?.get(row.id) ?? [],
+      childrenOf: ({ field, row }) => {
         const byOwner = children.get(field);
         return byOwner ? (byOwner.get(row.id) ?? []) : undefined;
       },
     };
-    return rows.map((row) => this.descriptor.serialize(row, lookup));
+    return rows.map((row) => this.descriptor.serialize({ row, references: lookup }));
   }
 
   /** Serializes one row, with the per-viewer fields when the caller is known. */
-  protected async serializeOne(
-    row: BaseRecordRow,
-    context?: BaseRecordWriteContext,
-  ): Promise<Output> {
-    const [output] = await this.serializeRows([row], { withChildren: true });
-    if (context) await this.decorate([output!], context);
+  protected async serializeOne({
+    row,
+    context,
+  }: {
+    row: BaseRecordRow;
+    context?: BaseRecordWriteContext | undefined;
+  }): Promise<Output> {
+    const [output] = await this.serializeRows({ rows: [row], options: { withChildren: true } });
+    if (context) await this.decorate({ outputs: [output!], context });
     return output!;
   }
 
   /** Adds the table's per-viewer fields ({@link BaseRecordRules.decorate}). */
-  private async decorate(outputs: Output[], context: BaseRecordWriteContext): Promise<void> {
+  private async decorate({
+    outputs,
+    context,
+  }: {
+    outputs: Output[];
+    context: BaseRecordWriteContext;
+  }): Promise<void> {
     if (!this.descriptor.decorate || outputs.length === 0) return;
     await this.descriptor.decorate(outputs as unknown as Record<string, unknown>[], context);
   }
@@ -712,23 +904,27 @@ export class BaseRecordService<Output> {
    * Every row a list query matches, for a download — up to {@link BASE_RECORD_EXPORT_ROW_LIMIT},
    * paging through the list (its filters, sort, visibility and rules).
    */
-  async exportRows(
-    scope: OrganizationPrincipalDatabaseScope,
-    query: unknown,
+  async exportRows({
+    scope,
+    query,
+    options,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    query: unknown;
     options: {
       actingUserPublicId?: string | undefined;
       visibility?: BaseRecordVisibility | undefined;
-    },
-  ): Promise<{ rows: Output[]; is_truncated: boolean }> {
+    };
+  }): Promise<{ rows: Output[]; is_truncated: boolean }> {
     const { after: _after, limit: _limit, ...filters } = (query ?? {}) as Record<string, unknown>;
     const rows: Output[] = [];
     let after: string | undefined;
     for (;;) {
-      const page = await this.list(
+      const page = await this.list({
         scope,
-        { ...filters, limit: EXPORT_PAGE_SIZE, ...(after === undefined ? {} : { after }) },
-        { ...options, withTotal: false },
-      );
+        query: { ...filters, limit: EXPORT_PAGE_SIZE, ...(after === undefined ? {} : { after }) },
+        options: { ...options, withTotal: false },
+      });
       rows.push(...page.items);
       if (rows.length >= BASE_RECORD_EXPORT_ROW_LIMIT) {
         return {
@@ -757,22 +953,27 @@ export class BaseRecordService<Output> {
   }
 
   /** A live row of the organization by public id (the actor's own, when owned); 404 otherwise. */
-  protected async requireRow(
-    organizationId: number,
-    publicId: string,
-    userId: number | null,
-    visibility?: BaseRecordVisibility,
-  ): Promise<BaseRecordRow> {
+  protected async requireRow({
+    organizationId,
+    publicId,
+    userId,
+    visibility,
+  }: {
+    organizationId: number;
+    publicId: string;
+    userId: number | null;
+    visibility?: BaseRecordVisibility | undefined;
+  }): Promise<BaseRecordRow> {
     const row = await this.descriptor.repository.findByPublicId(publicId, organizationId);
     if (!row) throw new NotFoundError(this.descriptor.label);
     if (!(await this.isOwnersRow({ organizationId, row, userId }))) {
       throw new NotFoundError(this.descriptor.label);
     }
     const visible = await this.visibleBranchIds({ organizationId, userId, visibility });
-    if (!branchAllowed(row[this.descriptor.branchColumn ?? ''], visible)) {
+    if (!branchAllowed({ branchId: row[this.descriptor.branchColumn ?? ''], visible })) {
       throw new NotFoundError(this.descriptor.label);
     }
-    if (!readScopeAllows(row, await this.readScopeOf(visibility))) {
+    if (!readScopeAllows({ row, scope: await this.readScopeOf(visibility) })) {
       throw new NotFoundError(this.descriptor.label);
     }
     return row;
@@ -791,11 +992,15 @@ export class BaseRecordService<Output> {
    * ({@link BaseRecordDescriptor.ownerMembershipColumn}) — false when the caller is no member (an
    * empty page); true, unchanged, on any other table.
    */
-  private async narrowToOwner(
-    organizationId: number,
-    actingUserPublicId: string | undefined,
-    equals: Record<string, unknown>,
-  ): Promise<boolean> {
+  private async narrowToOwner({
+    organizationId,
+    actingUserPublicId,
+    equals,
+  }: {
+    organizationId: number;
+    actingUserPublicId: string | undefined;
+    equals: Record<string, unknown>;
+  }): Promise<boolean> {
     const ownerColumn = this.descriptor.ownerMembershipColumn;
     if (ownerColumn === undefined) return true;
     const membershipId = await findMembershipIdOfUser({
@@ -811,10 +1016,13 @@ export class BaseRecordService<Output> {
    * Narrows a list's equality filters to the caller's read scope ({@link BaseRecordRules.readScope})
    * — false when a requested value is outside it (an empty page).
    */
-  private async narrowToReadScope(
-    visibility: BaseRecordVisibility | undefined,
-    equals: Record<string, unknown>,
-  ): Promise<boolean> {
+  private async narrowToReadScope({
+    visibility,
+    equals,
+  }: {
+    visibility: BaseRecordVisibility | undefined;
+    equals: Record<string, unknown>;
+  }): Promise<boolean> {
     const readScope = await this.readScopeOf(visibility);
     for (const [field, allowed] of Object.entries(readScope ?? {})) {
       const requested = equals[field];
@@ -861,8 +1069,8 @@ export class BaseRecordService<Output> {
       visibility: options.visibility,
     });
     return (
-      branchAllowed(options.row[this.descriptor.branchColumn ?? ''], visible) &&
-      readScopeAllows(options.row, await this.readScopeOf(options.visibility)) &&
+      branchAllowed({ branchId: options.row[this.descriptor.branchColumn ?? ''], visible }) &&
+      readScopeAllows({ row: options.row, scope: await this.readScopeOf(options.visibility) }) &&
       (await this.isOwnersRow({ organizationId: options.organizationId, row: options.row, userId }))
     );
   }
@@ -920,12 +1128,10 @@ export class BaseRecordService<Output> {
     const column = this.descriptor.branchColumn;
     if (!(column && column in options.values)) return;
     const visible = await this.visibleBranchIds(options);
-    if (!branchAllowed(options.values[column], visible)) {
-      throw new ValidationError(
-        'errors:validation.branchNotYours',
-        { field: column },
-        { [column]: ['This is not one of your branches'] },
-      );
+    if (!branchAllowed({ branchId: options.values[column], visible })) {
+      throw new ValidationError('errors:validation.branchNotYours', { field: column }, undefined, [
+        { field: column, messageKey: 'errors:validation.branchNotYours' },
+      ]);
     }
   }
 
@@ -940,10 +1146,13 @@ export class BaseRecordService<Output> {
     visibility: BaseRecordVisibility | undefined;
   }): Promise<number> {
     const parent = this.descriptor.parent!;
-    const parentId = await this.requireParentId(options.organizationId, options.parentPublicId);
+    const parentId = await this.requireParentId({
+      organizationId: options.organizationId,
+      parentPublicId: options.parentPublicId,
+    });
     if (parent.field === this.descriptor.branchColumn) {
       const visible = await this.visibleBranchIds(options);
-      if (!branchAllowed(parentId, visible)) throw new NotFoundError(parent.label);
+      if (!branchAllowed({ branchId: parentId, visible })) throw new NotFoundError(parent.label);
     }
     return parentId;
   }
@@ -971,7 +1180,13 @@ export class BaseRecordService<Output> {
   }
 
   /** The parent record's id; 404 (the parent's name) when it is not here. */
-  private async requireParentId(organizationId: number, parentPublicId: string): Promise<number> {
+  private async requireParentId({
+    organizationId,
+    parentPublicId,
+  }: {
+    organizationId: number;
+    parentPublicId: string;
+  }): Promise<number> {
     const parent = this.descriptor.parent!;
     const ids = await resolveRecordIds({
       table: parent.table,
@@ -998,10 +1213,13 @@ export class BaseRecordService<Output> {
   }
 
   /** Turns referenced public ids in `values` into ids, in place; 400 on an unknown one. */
-  private async resolveReferences(
-    organizationId: number,
-    values: Record<string, unknown>,
-  ): Promise<void> {
+  private async resolveReferences({
+    organizationId,
+    values,
+  }: {
+    organizationId: number;
+    values: Record<string, unknown>;
+  }): Promise<void> {
     for (const reference of this.descriptor.references ?? []) {
       const value = values[reference.field];
       if (typeof value !== 'string') continue;
@@ -1011,16 +1229,19 @@ export class BaseRecordService<Output> {
         publicIds: [value],
       });
       const id = ids.get(value);
-      if (id === undefined) throw referenceNotFound(reference, [value]);
+      if (id === undefined) throw referenceNotFound({ reference, publicIds: [value] });
       values[reference.field] = id;
     }
   }
 
   /** Removes the list fields from `values` and resolves them to ids; 400 on an unknown one. */
-  private async takeReferenceLists(
-    organizationId: number,
-    values: Record<string, unknown>,
-  ): Promise<Map<BaseRecordReferenceList, number[]>> {
+  private async takeReferenceLists({
+    organizationId,
+    values,
+  }: {
+    organizationId: number;
+    values: Record<string, unknown>;
+  }): Promise<Map<BaseRecordReferenceList, number[]>> {
     const lists = new Map<BaseRecordReferenceList, number[]>();
     for (const list of this.descriptor.referenceLists ?? []) {
       const value = values[list.field];
@@ -1034,7 +1255,7 @@ export class BaseRecordService<Output> {
         equals: list.require,
       });
       const unknown = publicIds.filter((publicId) => !ids.has(publicId));
-      if (unknown.length > 0) throw referenceNotFound(list, unknown);
+      if (unknown.length > 0) throw referenceNotFound({ reference: list, publicIds: unknown });
       lists.set(
         list,
         publicIds.map((publicId) => ids.get(publicId)!),
@@ -1057,10 +1278,13 @@ export class BaseRecordService<Output> {
   }
 
   /** Replaces each sent child list's rows; a constraint the table names becomes a 409. */
-  private async writeChildLists(
-    owner: BaseRecordRow,
-    children: Map<BaseRecordChildList, Record<string, unknown>[]>,
-  ): Promise<void> {
+  private async writeChildLists({
+    owner,
+    children,
+  }: {
+    owner: BaseRecordRow;
+    children: Map<BaseRecordChildList, Record<string, unknown>[]>;
+  }): Promise<void> {
     for (const [child, rows] of children) {
       await this.mapConflicts(() => replaceChildRows({ child, owner, rows }));
     }
@@ -1085,7 +1309,13 @@ export class BaseRecordService<Output> {
   }
 
   /** D43: a save based on an older version than the stored one is refused with who and when. */
-  private async assertNotChangedSince(row: BaseRecordRow, expected: unknown): Promise<void> {
+  private async assertNotChangedSince({
+    row,
+    expected,
+  }: {
+    row: BaseRecordRow;
+    expected: unknown;
+  }): Promise<void> {
     await assertRecordNotChangedSince({
       row,
       expected,
@@ -1110,10 +1340,13 @@ export class BaseRecordService<Output> {
 }
 
 /** The 400 for a referenced id that is no live record of the organization. */
-function referenceNotFound(
-  reference: { field: string; label: string; notFoundKey?: string },
-  publicIds: readonly string[],
-): ValidationError {
+function referenceNotFound({
+  reference,
+  publicIds,
+}: {
+  reference: { field: string; label: string; notFoundKey?: string };
+  publicIds: readonly string[];
+}): ValidationError {
   const { notFoundKey } = reference;
   if (notFoundKey) {
     return new ValidationError(
@@ -1130,11 +1363,8 @@ function referenceNotFound(
   return new ValidationError(
     'errors:validation.recordReferenceNotFound',
     { id: publicIds.join(', '), label: reference.label },
-    {
-      [reference.field]: publicIds.map(
-        (publicId) => `${publicId} is not a ${reference.label} of this organization`,
-      ),
-    },
+    undefined,
+    [{ field: reference.field, messageKey: 'errors:validation.recordReferenceNotFound' }],
   );
 }
 
@@ -1190,16 +1420,25 @@ export async function requireConfirmedUploads(options: {
 const EXPORT_PAGE_SIZE = 100;
 
 /** Whether a row's branch (a number, or null for every branch) is among the visible ones. */
-function branchAllowed(branchId: unknown, visible: readonly number[] | null): boolean {
+function branchAllowed({
+  branchId,
+  visible,
+}: {
+  branchId: unknown;
+  visible: readonly number[] | null;
+}): boolean {
   if (visible === null || branchId === null || branchId === undefined) return true;
   return typeof branchId === 'number' && visible.includes(branchId);
 }
 
 /** Whether a row's values fall inside a read scope (none = every row). */
-function readScopeAllows(
-  row: BaseRecordRow,
-  scope: Readonly<Record<string, readonly unknown[]>> | undefined,
-): boolean {
+function readScopeAllows({
+  row,
+  scope,
+}: {
+  row: BaseRecordRow;
+  scope: Readonly<Record<string, readonly unknown[]>> | undefined;
+}): boolean {
   return Object.entries(scope ?? {}).every(([field, allowed]) => allowed.includes(row[field]));
 }
 

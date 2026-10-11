@@ -10,17 +10,17 @@ import {
 
 /** Parses a machine create body; throws `ValidationError` naming each bad field. */
 export function validateCreateBranchMachine(data: unknown): CreateBranchMachineInput {
-  return parseWithSchema(CreateBranchMachineDto, data);
+  return parseWithSchema({ schema: CreateBranchMachineDto, data });
 }
 
 /** Parses a machine update body; throws `ValidationError` naming each bad field. */
 export function validateUpdateBranchMachine(data: unknown): UpdateBranchMachineInput {
-  return parseWithSchema(UpdateBranchMachineDto, data);
+  return parseWithSchema({ schema: UpdateBranchMachineDto, data });
 }
 
 /** Parses the `GET /app/branches/{branch_id}/machines` query into a list input (filters by column). */
 export function validateListBranchMachinesQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listBranchMachinesQueryDto, data);
+  const query = parseWithSchema({ schema: listBranchMachinesQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

@@ -22,7 +22,13 @@ interface OfferStatusInput {
  * off, else scheduled before its start, ended after its end, live in between. Dates are
  * `YYYY-MM-DD`, so they compare as text; an empty start is "from now", an empty end is "no end".
  */
-export function offerStatusOn(offer: OfferStatusInput, today: string): OfferStatus {
+export function offerStatusOn({
+  offer,
+  today,
+}: {
+  offer: OfferStatusInput;
+  today: string;
+}): OfferStatus {
   if (offer.is_active !== true) return OFFER_STATUS.PAUSED;
   if (typeof offer.starts_on === 'string' && today < offer.starts_on) return OFFER_STATUS.SCHEDULED;
   if (typeof offer.ends_on === 'string' && today > offer.ends_on) return OFFER_STATUS.ENDED;
@@ -30,12 +36,18 @@ export function offerStatusOn(offer: OfferStatusInput, today: string): OfferStat
 }
 
 /** The 400 on one field of an offer, with its own message. */
-function offerFieldError(field: 'value' | 'ends_on', messageKey: string): ValidationError {
+function offerFieldError({
+  field,
+  messageKey,
+}: {
+  field: 'value' | 'ends_on';
+  messageKey: string;
+}): ValidationError {
   return fieldValidationError({ field, messageKey });
 }
 
 /** Whether `value` is a whole number from 1 to `max`. */
-function isWholeBetweenOneAnd(value: number, max: number): boolean {
+function isWholeBetweenOneAnd({ value, max }: { value: number; max: number }): boolean {
   return Number.isInteger(value) && value >= 1 && value <= max;
 }
 
@@ -52,24 +64,30 @@ function isWholeBetweenOneAnd(value: number, max: number): boolean {
 export function assertOfferValues(values: Record<string, unknown>): void {
   const kind = (values.kind ?? OFFER_KIND.PERCENT) as OfferKind;
   const value = Number(values.value);
-  if (kind === OFFER_KIND.PERCENT && !isWholeBetweenOneAnd(value, OFFER_PERCENT_MAX)) {
-    throw offerFieldError('value', 'errors:validation.offerPercentValue');
+  if (kind === OFFER_KIND.PERCENT && !isWholeBetweenOneAnd({ value, max: OFFER_PERCENT_MAX })) {
+    throw offerFieldError({ field: 'value', messageKey: 'errors:validation.offerPercentValue' });
   }
   if (
     (kind === OFFER_KIND.AMOUNT || kind === OFFER_KIND.FIXED) &&
     (Number.isNaN(value) || value <= 0)
   ) {
-    throw offerFieldError('value', 'errors:validation.offerAmountValue');
+    throw offerFieldError({ field: 'value', messageKey: 'errors:validation.offerAmountValue' });
   }
-  if (kind === OFFER_KIND.EXTRA && !isWholeBetweenOneAnd(value, OFFER_EXTRA_SESSIONS_MAX)) {
-    throw offerFieldError('value', 'errors:validation.offerExtraValue');
+  if (
+    kind === OFFER_KIND.EXTRA &&
+    !isWholeBetweenOneAnd({ value, max: OFFER_EXTRA_SESSIONS_MAX })
+  ) {
+    throw offerFieldError({ field: 'value', messageKey: 'errors:validation.offerExtraValue' });
   }
   if (
     values.ends_on != null &&
     values.starts_on != null &&
     toText(values.ends_on) < toText(values.starts_on)
   ) {
-    throw offerFieldError('ends_on', 'errors:validation.offerEndsBeforeStarts');
+    throw offerFieldError({
+      field: 'ends_on',
+      messageKey: 'errors:validation.offerEndsBeforeStarts',
+    });
   }
 }
 
@@ -92,9 +110,9 @@ export const offersRules: BaseRecordRules = {
   prepareUpdate: (values) => upperCaseCode(values),
   decorate: async (outputs, context) => {
     const { timezone } = await context.ports.organizationSettings(context.scope);
-    const today = calendarDateInTimeZone(timezone);
+    const today = calendarDateInTimeZone({ timeZone: timezone });
     for (const output of outputs) {
-      output.status = offerStatusOn(output as unknown as OfferStatusInput, today);
+      output.status = offerStatusOn({ offer: output as unknown as OfferStatusInput, today });
     }
   },
 };

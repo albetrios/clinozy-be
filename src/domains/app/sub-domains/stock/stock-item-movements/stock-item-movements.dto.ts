@@ -42,9 +42,9 @@ export const CreateStockItemMovementDto = z
   .object({
     type: z.enum(STOCK_ITEM_MOVEMENT_MANUAL_TYPE_VALUES),
     quantity: stockQuantitySchema,
-    used_for: trimmedStringMinMax(1, STOCK_ITEM_MOVEMENT_USED_FOR_MAX).optional(),
+    used_for: trimmedStringMinMax({ min: 1, max: STOCK_ITEM_MOVEMENT_USED_FOR_MAX }).optional(),
     patient_treatment_id: recordIdSchema.optional(),
-    note: trimmedStringMinMax(1, STOCK_ITEM_MOVEMENT_NOTE_MAX).optional(),
+    note: trimmedStringMinMax({ min: 1, max: STOCK_ITEM_MOVEMENT_NOTE_MAX }).optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -66,7 +66,7 @@ export const CreateStockItemMovementDto = z
 export const RevertStockItemMovementDto = z
   .object({
     reason: z.enum(STOCK_ITEM_MOVEMENT_REVERT_REASON_VALUES),
-    note: trimmedStringMinMax(1, STOCK_ITEM_MOVEMENT_NOTE_MAX).optional(),
+    note: trimmedStringMinMax({ min: 1, max: STOCK_ITEM_MOVEMENT_NOTE_MAX }).optional(),
   })
   .strict()
   .superRefine((value, context) => {

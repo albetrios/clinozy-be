@@ -19,13 +19,13 @@ const distinct = (values: readonly unknown[]) => new Set(values).size === values
 /** The fields a report is written with (7.G.8 #40, #42) — each optional; create and update narrow them. */
 const reportFields = {
   type: z.enum(PATIENT_REPORT_TYPE_VALUES),
-  name: trimmedStringMinMax(1, 120),
+  name: trimmedStringMinMax({ min: 1, max: 120 }),
   report_date: calendarDateSchema,
   file_keys: z
-    .array(trimmedStringMinMax(1, 512))
+    .array(trimmedStringMinMax({ min: 1, max: 512 }))
     .max(PATIENT_REPORT_FILE_KEYS_MAX)
     .refine(distinct, { message: 'Each file once' }),
-  notes: trimmedStringMinMax(1, PATIENT_REPORT_NOTES_MAX).nullable(),
+  notes: trimmedStringMinMax({ min: 1, max: PATIENT_REPORT_NOTES_MAX }).nullable(),
 };
 
 /** Path params of the by-id `patient-reports` routes (nested under the patient). */

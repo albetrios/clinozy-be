@@ -13,12 +13,19 @@ vi.mock('@/infrastructure/payment/stripe.client.js', async (importOriginal) => {
   };
 });
 
-import { sql } from '@/infrastructure/database/connection.js';
 import { processStripeWebhookJob } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook.processor.js';
 import { StripeWebhookService } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook.service.js';
 import type { SubscriptionService } from '@/domains/billing/sub-domains/subscription/subscription.service.js';
 import { StripeWebhookEventRepository } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-event.repository.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
+import { StripeWebhookRetryLaterError } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook.types.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 const PARALLEL_WORKER_COUNT = 10;
 
@@ -28,7 +35,7 @@ describe('Integration: stripe-webhook worker concurrency race', () => {
     retrieveStripeEventMock.mockReset();
   });
 
-  it('processes the same Stripe event id exactly once under parallel workers', async () => {
+  it('records one processed Stripe ledger row; competing executions only defer for its lease', async () => {
     const stripeEventId = `evt_race_${randomUUID()}`;
     const eventPayload = {
       id: stripeEventId,
@@ -43,6 +50,9 @@ describe('Integration: stripe-webhook worker concurrency race', () => {
       {
         syncFromStripeProviderSubscription: vi.fn(),
         markCanceledByStripeProviderSubscriptionId: vi.fn(),
+        emitSubscriptionEvent: vi.fn().mockResolvedValue(undefined),
+        findStripeSubscriptionPublicState: vi.fn().mockResolvedValue(null),
+        enforceFreeSeatCeilingAfterCommitIfEntitlementLost: vi.fn().mockResolvedValue(undefined),
       } as unknown as SubscriptionService,
       new StripeWebhookEventRepository(),
       // sec-B7: race test fires `account.updated` (not subscription.updated)
@@ -50,22 +60,37 @@ describe('Integration: stripe-webhook worker concurrency race', () => {
       { findByStripePriceId: vi.fn() } as never,
     );
 
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       Array.from({ length: PARALLEL_WORKER_COUNT }, (_, index) =>
-        processStripeWebhookJob(
-          { stripeEventId, requestId: `req-race-${String(index)}` },
+        processStripeWebhookJob({
+          jobData: { stripeEventId, requestId: `req-race-${String(index)}` },
           stripeWebhookService,
-          `job-race-${String(index)}`,
-        ),
+          jobId: `job-race-${String(index)}`,
+        }),
       ),
     );
 
-    const processedCountRows = await sql<{ count: string }[]>`
+    expect(results.some((result) => result.status === 'fulfilled')).toBe(true);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        expect(result.reason).toBeInstanceOf(StripeWebhookRetryLaterError);
+      }
+    }
+    // Once the winning execution completes, duplicate executions must finish without error.
+    await processStripeWebhookJob({
+      jobData: { stripeEventId },
+      stripeWebhookService,
+      jobId: 'job-after-race',
+    });
+
+    const processedCountRows = rowsOf<{ count: string }>(
+      await database.execute(sql`
       SELECT COUNT(*)::text AS count
       FROM billing.stripe_webhook_events
       WHERE stripe_event_id = ${stripeEventId}
         AND processing_status = 'processed'
-    `;
+    `),
+    );
 
     expect(Number(processedCountRows[0]?.count ?? 0)).toBe(1);
   });

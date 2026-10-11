@@ -67,7 +67,7 @@ export const CreateMedicalSaleDto = z
       .refine(distinct, { message: 'Each member once' })
       .optional(),
     patient_prescription_id: recordIdSchema.optional(),
-    remark: trimmedStringMinMax(1, INVOICE_REMARK_MAX).optional(),
+    remark: trimmedStringMinMax({ min: 1, max: INVOICE_REMARK_MAX }).optional(),
     payment: invoicePaidNowDto.optional(),
   })
   .strict();
@@ -94,7 +94,7 @@ export const ReturnMedicalSaleDto = z
       }),
     reason: z.enum(MEDICAL_SALE_RETURN_REASON_VALUES),
     refund_mode: z.enum(MEDICAL_SALE_REFUND_MODE_VALUES),
-    note: trimmedStringMinMax(1, 280).optional(),
+    note: trimmedStringMinMax({ min: 1, max: 280 }).optional(),
   })
   .strict();
 

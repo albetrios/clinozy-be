@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { sql } from '@/infrastructure/database/connection.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
@@ -9,6 +8,13 @@ import { createTestOrganization } from '@/tests/factories/organization.factory.j
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestNotification } from '@/tests/factories/notification.factory.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Notify was the last routed read-heavy domain with NO performance coverage, and its
@@ -61,7 +67,7 @@ describe('Performance: notification inbox', () => {
     return { user, token };
   }
 
-  it('GET /notify/notifications does not scale its work with inbox size', async () => {
+  it('GET /notify/notifications returns a 25-row fixture within the local timing budget', async () => {
     const { token } = await createInboxContext();
 
     // Warm the app, connection pool, and JIT before measuring.
@@ -86,7 +92,7 @@ describe('Performance: notification inbox', () => {
     expect(elapsedMs).toBeLessThan(2_000);
   });
 
-  it('GET /notify/notifications/unread-count stays a single bounded count', async () => {
+  it('GET /notify/notifications/unread-count returns the fixture count within the local timing budget', async () => {
     const { token } = await createInboxContext();
 
     await injectAuthenticated(app, {
@@ -109,24 +115,26 @@ describe('Performance: notification inbox', () => {
   });
 
   it.runIf(runExplainTests)(
-    'inbox keyset query uses idx_notifications_user_created_id (no seq scan)',
+    'inbox keyset query can use idx_notifications_user_created_id with sequential scans discouraged',
     async () => {
       const { user } = await createInboxContext();
-      await sql`ANALYZE notify.notifications`;
+      await database.execute(sql`ANALYZE notify.notifications`);
 
-      const planRows = await sql.begin(async (transaction) => {
+      const planRows = await database.transaction(async (transaction) => {
         // The seeded table is tiny, so the planner would happily seq-scan it; disabling
         // seq scans locally asks "COULD the keyset index serve this query?" — which is
         // exactly what regresses when someone reorders the ORDER BY tuple or drops a
         // column from the index.
-        await transaction`SET LOCAL enable_seqscan = off`;
-        return transaction<{ 'QUERY PLAN': string }[]>`
+        await transaction.execute(sql`SET LOCAL enable_seqscan = off`);
+        return rowsOf<{ 'QUERY PLAN': string }>(
+          await transaction.execute(sql`
           EXPLAIN (FORMAT TEXT)
           SELECT id FROM notify.notifications
           WHERE user_id = ${user.id}
           ORDER BY created_at DESC, id DESC
           LIMIT 20
-        `;
+        `),
+        );
       });
 
       const planText = planRows

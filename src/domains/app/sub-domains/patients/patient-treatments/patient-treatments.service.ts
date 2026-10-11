@@ -1,5 +1,5 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
@@ -47,8 +47,8 @@ export class PatientTreatmentsService extends BaseRecordService<PatientTreatment
         { field: 'patient_id', table: patients, label: 'patient' },
         { field: 'appointment_id', table: appointments, label: 'appointment' },
         { field: 'offering_id', table: offerings, label: 'offering' },
-        { field: 'doctor_membership_id', table: memberships, label: 'team member' },
-        { field: 'therapist_membership_id', table: memberships, label: 'team member' },
+        memberReference('doctor_membership_id'),
+        memberReference('therapist_membership_id'),
         { field: 'patient_offering_id', table: patient_offerings, label: 'bought offering' },
       ],
       parent: { field: 'patient_id', table: patients, label: 'Patient' },

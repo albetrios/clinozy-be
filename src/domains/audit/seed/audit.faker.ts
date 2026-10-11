@@ -55,11 +55,15 @@ export interface BulkAuditProfile {
  * `monthStart` is the first instant of the month (UTC) and `nextMonthStart` the first instant
  * of the following month; the timestamp is drawn uniformly in `[monthStart, nextMonthStart)`.
  */
-export function generateBulkAudit(
-  faker: Faker,
-  monthStart: Date,
-  nextMonthStart: Date,
-): BulkAuditProfile {
+export function generateBulkAudit({
+  faker,
+  monthStart,
+  nextMonthStart,
+}: {
+  faker: Faker;
+  monthStart: Date;
+  nextMonthStart: Date;
+}): BulkAuditProfile {
   return {
     action: faker.helpers.arrayElement(ACTIONS),
     resource_type: faker.helpers.arrayElement(RESOURCE_TYPES),

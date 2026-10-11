@@ -16,7 +16,7 @@ export const offeringGroupsIdParamsDto = z
 /** Body of the create route — a new offering group. */
 export const CreateOfferingGroupDto = z
   .object({
-    name: trimmedStringMinMax(1, 60),
+    name: trimmedStringMinMax({ min: 1, max: 60 }),
     sort_order: z.number().int().min(0).max(9999).optional(),
   })
   .strict();
@@ -24,7 +24,7 @@ export const CreateOfferingGroupDto = z
 /** Body of `PATCH /app/offering-groups/{offering_group_id}` — any field (null clears an optional one); `expected_updated_at` refuses a stale save (D43). */
 export const UpdateOfferingGroupDto = z
   .object({
-    name: trimmedStringMinMax(1, 60).optional(),
+    name: trimmedStringMinMax({ min: 1, max: 60 }).optional(),
     sort_order: z.number().int().min(0).max(9999).optional(),
     expected_updated_at: expectedUpdatedAtSchema,
   })

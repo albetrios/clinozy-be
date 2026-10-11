@@ -15,10 +15,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
-    withAppDatabaseContext: vi.fn(async (_scope: unknown, callback: () => Promise<unknown>) =>
-      callback(),
+    withAppDatabaseContext: vi.fn(
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -26,7 +28,9 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
 // audit-#B4: run the create critical section transparently — the lock itself is covered in
 // redis-lock.util.unit.test.ts; here it must not open a real Redis connection.
 vi.mock('@/infrastructure/cache/redis-lock.util.js', () => ({
-  withRedisLock: vi.fn(async (_options: unknown, fn: () => Promise<unknown>) => fn()),
+  withRedisLock: vi.fn(
+    async ({ options: _options, fn }: { options: unknown; fn: () => Promise<unknown> }) => fn(),
+  ),
   RedisLockUnavailableError: class RedisLockUnavailableError extends Error {},
 }));
 
@@ -41,7 +45,7 @@ import type { SubscriptionRepository } from '@/domains/billing/sub-domains/subsc
 import type { PaymentProvider } from '@/domains/billing/sub-domains/subscription/payment-provider.port.js';
 
 // A PERSONAL organization cannot manage billing; the subscription mutations must reject it
-// with 422 via `assertTeamOrganization(organization, 'BILLING')` BEFORE any plan lookup, subscription
+// with 422 via `assertTeamOrganization({ organization, capability: 'BILLING' })` BEFORE any plan lookup, subscription
 // lookup, or Stripe call (defense-in-depth for what the frontend already hides via the organization `type`).
 const personalOrganization = {
   id: 1,
@@ -97,12 +101,12 @@ describe('SubscriptionService — personal-organization billing guard', () => {
   it('create rejects a PERSONAL organization with 422 before any plan lookup or Stripe call', async () => {
     const { service, planService, paymentProvider, repository } = buildService();
     await expect(
-      service.create(
-        personalScope,
-        { plan_id: 'pln_test', billing_cycle: 'monthly' },
-        'creator_public',
-        'idem-personal-billing-key',
-      ),
+      service.create({
+        scope: personalScope,
+        body: { plan_id: 'pln_test', billing_cycle: 'monthly' },
+        created_by_user_public_id: 'creator_public',
+        idempotencyKey: 'idem-personal-billing-key',
+      }),
     ).rejects.toMatchObject(BILLING_REJECTION);
     expect(vi.mocked(repository.findActiveByOrganization)).not.toHaveBeenCalled();
     expect(vi.mocked(planService.requireActivePlanByPublicId)).not.toHaveBeenCalled();
@@ -112,24 +116,37 @@ describe('SubscriptionService — personal-organization billing guard', () => {
   it('changePlan rejects a PERSONAL organization with 422 before the subscription lookup', async () => {
     const { service, repository } = buildService();
     await expect(
-      service.changePlan(personalScope, 'sub_x', { plan_id: 'pln_test' }, 'idem-key'),
+      service.changePlan({
+        scope: personalScope,
+        subscription_public_id: 'sub_x',
+        body: { plan_id: 'pln_test' },
+        idempotencyKey: 'idem-key',
+      }),
     ).rejects.toMatchObject(BILLING_REJECTION);
     expect(vi.mocked(repository.findByPublicId)).not.toHaveBeenCalled();
   });
 
   it('cancel rejects a PERSONAL organization with 422 before the subscription lookup', async () => {
     const { service, repository } = buildService();
-    await expect(service.cancel(personalScope, 'sub_x', 'idem-key')).rejects.toMatchObject(
-      BILLING_REJECTION,
-    );
+    await expect(
+      service.cancel({
+        scope: personalScope,
+        subscription_public_id: 'sub_x',
+        idempotencyKey: 'idem-key',
+      }),
+    ).rejects.toMatchObject(BILLING_REJECTION);
     expect(vi.mocked(repository.findByPublicId)).not.toHaveBeenCalled();
   });
 
   it('resume rejects a PERSONAL organization with 422 before the subscription lookup', async () => {
     const { service, repository } = buildService();
-    await expect(service.resume(personalScope, 'sub_x', 'idem-key')).rejects.toMatchObject(
-      BILLING_REJECTION,
-    );
+    await expect(
+      service.resume({
+        scope: personalScope,
+        subscription_public_id: 'sub_x',
+        idempotencyKey: 'idem-key',
+      }),
+    ).rejects.toMatchObject(BILLING_REJECTION);
     expect(vi.mocked(repository.findByPublicId)).not.toHaveBeenCalled();
   });
 });

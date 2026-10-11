@@ -206,10 +206,10 @@ describe('createMembershipController', () => {
       }),
       mockReply(),
     );
-    expect(service.list).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId }),
-      expect.anything(),
-    );
+    expect(service.list).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId }),
+      query: expect.anything(),
+    });
   });
 
   it('getMembershipPermissions delegates to service with valid params', async () => {
@@ -219,10 +219,10 @@ describe('createMembershipController', () => {
       }),
       mockReply(),
     );
-    expect(service.getPermissions).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId: organizationPublicId }),
-      membershipPublicId,
-    );
+    expect(service.getPermissions).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId: organizationPublicId }),
+      membership_public_id: membershipPublicId,
+    });
   });
 
   it('createMembership returns 200 with valid organization id', async () => {
@@ -360,10 +360,10 @@ describe('createMembershipController', () => {
       mockRequest({ params: { membership_id: membershipPublicId } }),
       reply as unknown as FastifyReply,
     );
-    expect(service.revokeInvitation).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationPublicId }),
-      membershipPublicId,
-    );
+    expect(service.revokeInvitation).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId }),
+      membership_public_id: membershipPublicId,
+    });
     expect(reply.code).toHaveBeenCalledWith(204);
 
     vi.mocked(service.revokeInvitation).mockClear();

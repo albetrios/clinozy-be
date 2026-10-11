@@ -38,12 +38,12 @@ describe('Integration: transactional mail outbox', () => {
       html: '<p>Hello</p>',
     });
 
-    eventBus.onCommit(() => dispatchOutboxEmail(mailOutboxToken));
+    eventBus.onCommit(() => dispatchOutboxEmail({ mailOutboxToken }));
     expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
 
     await eventBus.flushOnCommit();
     expect(dispatchOutboxEmailMock).toHaveBeenCalledOnce();
-    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith(mailOutboxToken);
+    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith({ mailOutboxToken });
 
     const pendingCount = await countPendingMailOutbox();
     expect(pendingCount).toBeGreaterThanOrEqual(1);

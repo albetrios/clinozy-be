@@ -56,6 +56,7 @@ describe('Tenancy Domain — Integration', () => {
     const token = await generateTestToken({
       userId: user.public_id,
       organizationPublicId: organization.public_id,
+      stepUp: true,
     });
     return { user, organization, role, token };
   }
@@ -132,6 +133,7 @@ describe('Tenancy Domain — Integration', () => {
       const ownerOrgToken = await generateTestToken({
         userId: user.public_id,
         organizationPublicId: createdId,
+        stepUp: true,
       });
       const deleteResponse = await injectAuthenticated(app, {
         method: 'DELETE',
@@ -244,6 +246,20 @@ describe('Tenancy Domain — Integration', () => {
   });
 
   describe('DELETE /api/v1/tenancy/organization', () => {
+    it('requires a recent step-up on this session (a stolen access token alone is not enough)', async () => {
+      const { user, organization } = await createAuthorizedUserAndOrganization();
+      const token = await generateTestToken({
+        userId: user.public_id,
+        organizationPublicId: organization.public_id,
+      });
+      const response = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath('/tenancy/organization'),
+        token,
+      });
+      expect(response.statusCode, response.body).toBe(403);
+    });
+
     it('should return 403 without delete permission', async () => {
       const { organization } = await createAuthorizedUserAndOrganization();
       const otherUser = await createTestUser({ email: 'other2@test.com' });
@@ -259,6 +275,7 @@ describe('Tenancy Domain — Integration', () => {
       const otherToken = await generateTestToken({
         userId: otherUser.public_id,
         organizationPublicId: organization.public_id,
+        stepUp: true,
       });
       const response = await injectAuthenticated(app, {
         method: 'DELETE',

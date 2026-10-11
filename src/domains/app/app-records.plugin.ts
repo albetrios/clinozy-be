@@ -29,10 +29,13 @@ import { stockRoutes } from './sub-domains/stock/stock.routes.js';
 import { tasksRoutes } from './sub-domains/tasks/tasks.routes.js';
 
 /** Registers every app record table's routes on the `/api/v1/app` plugin. */
-export async function registerAppRecordRoutes(
-  app: FastifyInstance,
-  services: AppRecordServices,
-): Promise<void> {
+export async function registerAppRecordRoutes({
+  app,
+  services,
+}: {
+  app: FastifyInstance;
+  services: AppRecordServices;
+}): Promise<void> {
   await app.register(offeringGroupsRoutes(services.offeringGroupsService));
   await app.register(branchRoomsRoutes(services.branchRoomsService));
   await app.register(branchMachinesRoutes(services.branchMachinesService));

@@ -65,7 +65,7 @@ describe('removeImageLocation', () => {
     const exif = exifWithGps();
     const image = Buffer.concat([START, segment(0xe1, exif), segment(0xe1, XMP), SCAN]);
 
-    const { body, changed } = removeImageLocation(image, 'image/jpeg');
+    const { body, changed } = removeImageLocation({ image, mimeType: 'image/jpeg' });
 
     expect(changed).toBe(true);
     expect(body.includes(Buffer.from('ns.adobe.com/xap', 'latin1'))).toBe(false);
@@ -82,7 +82,7 @@ describe('removeImageLocation', () => {
   it('JPEG without a location: the same buffer back, unchanged', () => {
     const image = Buffer.concat([START, segment(0xe0, Buffer.from('JFIF\0', 'latin1')), SCAN]);
 
-    const result = removeImageLocation(image, 'image/jpeg');
+    const result = removeImageLocation({ image, mimeType: 'image/jpeg' });
 
     expect(result.changed).toBe(false);
     expect(result.body).toBe(image);
@@ -103,7 +103,7 @@ describe('removeImageLocation', () => {
       end,
     ]);
 
-    const { body, changed } = removeImageLocation(image, 'image/png');
+    const { body, changed } = removeImageLocation({ image, mimeType: 'image/png' });
 
     expect(changed).toBe(true);
     expect(body.equals(Buffer.concat([PNG_SIGNATURE, header, comment, data, end]))).toBe(true);
@@ -111,13 +111,16 @@ describe('removeImageLocation', () => {
 
   it('other types, and files that do not parse, come back as they are', () => {
     const webp = Buffer.from('RIFF....WEBP', 'latin1');
-    expect(removeImageLocation(webp, 'image/webp')).toEqual({ body: webp, changed: false });
+    expect(removeImageLocation({ image: webp, mimeType: 'image/webp' })).toEqual({
+      body: webp,
+      changed: false,
+    });
     const truncated = Buffer.from([0xff, 0xd8, 0xff, 0xe1, 0x40, 0x00]);
-    expect(removeImageLocation(truncated, 'image/jpeg')).toEqual({
+    expect(removeImageLocation({ image: truncated, mimeType: 'image/jpeg' })).toEqual({
       body: truncated,
       changed: false,
     });
     const notPng = Buffer.from('not a png at all', 'latin1');
-    expect(removeImageLocation(notPng, 'image/png').changed).toBe(false);
+    expect(removeImageLocation({ image: notPng, mimeType: 'image/png' }).changed).toBe(false);
   });
 });

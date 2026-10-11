@@ -40,7 +40,8 @@ Runs in **Quality** CI (`pnpm test:contract`). Default `pnpm test` **excludes** 
 - [ ] Stripe uses **fetch HTTP client** under contract-only runs (see contract-tests doc)
 - [ ] nock matchers handle `application/x-www-form-urlencoded` parsed bodies (`helpers/stripe-form.ts`)
 - [ ] Fixtures updated when external API shape changes
-- [ ] No real network in CI — the shared harness module (`src/tests/helpers/harness-provider-env.ts`) refuses non-loopback hosts for every run; only `CONTRACT_RECORD=true` re-enables them
+- [ ] No real network in CI — the shared harness module (`src/tests/helpers/harness-provider-env.ts`) refuses non-loopback hosts for every run; only `pnpm test:contract:live` (`LIVE_PROVIDER_CONTRACTS=true`, the `*.live.contract.test.ts` specs) reaches the providers
+- [ ] A wrapper change that the sandbox can exercise has its live spec updated too, and `pnpm test:contract:live` was run once with the configured keys
 
 ## Related skills
 

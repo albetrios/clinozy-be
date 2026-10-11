@@ -66,11 +66,11 @@ export async function enqueueMessagingWebhookEventProcessing(
   organizationPublicId: string,
 ): Promise<void> {
   if (!isMetaWebhookIngressConfigured()) return;
-  const jobData = parseBullMQJobData(
-    messagingWebhookEventJobDataSchema,
-    { organizationPublicId, ...captureTraceContextForPropagation() },
-    MESSAGING_WEBHOOK_EVENT_QUEUE_NAME,
-  );
+  const jobData = parseBullMQJobData({
+    schema: messagingWebhookEventJobDataSchema,
+    data: { organizationPublicId, ...captureTraceContextForPropagation() },
+    queueName: MESSAGING_WEBHOOK_EVENT_QUEUE_NAME,
+  });
   await getEventQueue().add('apply-messaging-webhook-events', jobData, {
     jobId: `messaging-webhook-event-${organizationPublicId}-${randomUUID()}`,
     deduplication: messagingWebhookEventDeduplication(organizationPublicId),

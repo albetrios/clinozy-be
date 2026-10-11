@@ -65,14 +65,20 @@ function parseArguments(argv: string[]): { observedDirectories: string[]; report
   return { observedDirectories, reportOnly };
 }
 
-function collectObservedFiles(directory: string, collected: string[]): void {
+function collectObservedFiles({
+  directory,
+  collected,
+}: {
+  directory: string;
+  collected: string[];
+}): void {
   if (!existsSync(directory)) {
     return;
   }
   for (const entry of readdirSync(directory)) {
     const fullPath = join(directory, entry);
     if (statSync(fullPath).isDirectory()) {
-      collectObservedFiles(fullPath, collected);
+      collectObservedFiles({ directory: fullPath, collected });
     } else if (entry.endsWith('.txt')) {
       collected.push(fullPath);
     }
@@ -84,7 +90,10 @@ function main(): void {
 
   const observedFiles: string[] = [];
   for (const directory of observedDirectories) {
-    collectObservedFiles(resolve(process.cwd(), directory), observedFiles);
+    collectObservedFiles({
+      directory: resolve(process.cwd(), directory),
+      collected: observedFiles,
+    });
   }
 
   const exitFailure = (): never => {

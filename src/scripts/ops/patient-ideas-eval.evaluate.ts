@@ -96,12 +96,13 @@ export function summarisePatientIdeasEval(
   const acceptedCount = parsed.reduce((total, result) => total + result.acceptedCount, 0);
   const withIdeas = parsed.filter((result) => result.keptPublicIds.length > 0);
   const firstHits = withIdeas.filter((result) => result.isFirstAccepted).length;
-  const ratio = (part: number, whole: number) => (whole === 0 ? 0 : part / whole);
+  const ratio = ({ part, whole }: { part: number; whole: number }) =>
+    whole === 0 ? 0 : part / whole;
   return {
     caseCount: results.length,
-    parseRate: ratio(parsed.length, results.length),
-    relevance: ratio(acceptedCount, keptCount),
-    firstIdeaHitRate: ratio(firstHits, withIdeas.length),
+    parseRate: ratio({ part: parsed.length, whole: results.length }),
+    relevance: ratio({ part: acceptedCount, whole: keptCount }),
+    firstIdeaHitRate: ratio({ part: firstHits, whole: withIdeas.length }),
     violationCount: results.reduce(
       (total, result) =>
         total + result.violations.planned + result.violations.inactive + result.violations.unknown,

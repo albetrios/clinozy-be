@@ -96,10 +96,10 @@ async function seedUploadsForOrganization(options: {
     .from(uploads)
     .where(like(uploads.file_key, organizationMarker));
 
-  const owner = resolveOwner(context, organization);
+  const owner = resolveOwner({ context, organization });
   let insertedForOrg = 0;
   for (let slot = existing.length; slot < uploadsPerOrg; slot += 1) {
-    const profile = generateBulkUpload(context.faker, slot);
+    const profile = generateBulkUpload({ faker: context.faker, slot });
     const ownerSegment = profile.isOrganizationScoped ? organization.public_id : owner.public_id;
     const finalKey = buildBulkObjectKey({
       purpose: profile.purpose,
@@ -135,7 +135,13 @@ async function seedUploadsForOrganization(options: {
  * Resolves the user that owns an organization's bulk uploads, preferring the registry user whose
  * internal id matches the organization owner and falling back to the first registry user.
  */
-function resolveOwner(context: SeedContext, organization: SeededOrg): SeededUser {
+function resolveOwner({
+  context,
+  organization,
+}: {
+  context: SeedContext;
+  organization: SeededOrg;
+}): SeededUser {
   const users = context.registry.users;
   const ownerFromRegistry = users.find((user) => user.id === organization.ownerUserId);
   return ownerFromRegistry ?? (users[0] as SeededUser);

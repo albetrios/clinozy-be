@@ -88,7 +88,9 @@ describe('runTaskRulesJob', () => {
   });
 
   it('wakes, closes and opens per rule, then queues the booking messages and receipts', async () => {
-    expect(await runTaskRulesJob({} as never, ORGANIZATION)).toEqual({
+    expect(
+      await runTaskRulesJob({ databaseHandle: {} as never, organizationPublicId: ORGANIZATION }),
+    ).toEqual({
       wokenCount: 1,
       closedCount: 3,
       openedCount: 6,
@@ -100,7 +102,7 @@ describe('runTaskRulesJob', () => {
   });
 
   it("takes the organization's run lock before anything else (R3)", async () => {
-    await runTaskRulesJob({} as never, ORGANIZATION);
+    await runTaskRulesJob({ databaseHandle: {} as never, organizationPublicId: ORGANIZATION });
 
     expect(repository.lockRun).toHaveBeenCalledWith(7);
     expect(repository.lockRun.mock.invocationCallOrder[0]).toBeLessThan(
@@ -113,7 +115,10 @@ describe('runTaskRulesJob', () => {
       new Map([['feedback', { isOn: false, isAutomatic: false }]]),
     );
 
-    const counts = await runTaskRulesJob({} as never, ORGANIZATION);
+    const counts = await runTaskRulesJob({
+      databaseHandle: {} as never,
+      organizationPublicId: ORGANIZATION,
+    });
 
     expect([counts.closedCount, counts.openedCount]).toEqual([3, 4]);
   });
@@ -130,7 +135,10 @@ describe('runTaskRulesJob', () => {
       step({ taskId: 2, rule: 'gone_quiet', appointmentId: null }),
     ]);
 
-    const counts = await runTaskRulesJob({} as never, ORGANIZATION);
+    const counts = await runTaskRulesJob({
+      databaseHandle: {} as never,
+      organizationPublicId: ORGANIZATION,
+    });
 
     expect(counts.handledCount).toBe(2);
     expect(repository.findDueClinozySteps.mock.calls[0]?.[0].rules).toEqual([
@@ -161,7 +169,10 @@ describe('runTaskRulesJob', () => {
       step({ reminderStatus: 'confirm_requested' }),
     ]);
 
-    expect((await runTaskRulesJob({} as never, ORGANIZATION)).handledCount).toBe(1);
+    expect(
+      (await runTaskRulesJob({ databaseHandle: {} as never, organizationPublicId: ORGANIZATION }))
+        .handledCount,
+    ).toBe(1);
     expect(repository.queueClinozyMessage).not.toHaveBeenCalled();
     expect(repository.closeTaskByClinozy).toHaveBeenCalledWith(1);
   });
@@ -172,7 +183,10 @@ describe('runTaskRulesJob', () => {
     );
     repository.findDueClinozySteps.mockResolvedValue([step({ contactId: null })]);
 
-    expect((await runTaskRulesJob({} as never, ORGANIZATION)).handledCount).toBe(0);
+    expect(
+      (await runTaskRulesJob({ databaseHandle: {} as never, organizationPublicId: ORGANIZATION }))
+        .handledCount,
+    ).toBe(0);
     expect(repository.closeTaskByClinozy).not.toHaveBeenCalled();
   });
 
@@ -183,7 +197,10 @@ describe('runTaskRulesJob', () => {
     ]);
     repository.openRetargetLead.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
 
-    expect((await runTaskRulesJob({} as never, ORGANIZATION)).retargetCount).toBe(1);
+    expect(
+      (await runTaskRulesJob({ databaseHandle: {} as never, organizationPublicId: ORGANIZATION }))
+        .retargetCount,
+    ).toBe(1);
     expect(repository.findLapsedPatients).toHaveBeenCalledWith({
       organizationId: 7,
       timeZone: 'Asia/Kolkata',
@@ -200,7 +217,9 @@ describe('runTaskRulesJob', () => {
   it('an organization that is gone runs nothing', async () => {
     repository.findOrganization.mockResolvedValue(null);
 
-    expect(await runTaskRulesJob({} as never, ORGANIZATION)).toEqual({
+    expect(
+      await runTaskRulesJob({ databaseHandle: {} as never, organizationPublicId: ORGANIZATION }),
+    ).toEqual({
       wokenCount: 0,
       closedCount: 0,
       openedCount: 0,

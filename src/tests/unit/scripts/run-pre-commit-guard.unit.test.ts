@@ -99,8 +99,12 @@ describe('run-pre-commit-guard conditionals', () => {
   });
 
   it('includes optional steps only when package scripts exist', () => {
-    expect(hasPackageScript(baseScripts, 'validate:test-naming')).toBe(true);
-    expect(hasPackageScript(baseScripts, 'tool:project-structure-tree:check')).toBe(false);
+    expect(hasPackageScript({ scripts: baseScripts, scriptName: 'validate:test-naming' })).toBe(
+      true,
+    );
+    expect(
+      hasPackageScript({ scripts: baseScripts, scriptName: 'tool:project-structure-tree:check' }),
+    ).toBe(false);
 
     const stepsWithoutCheck = buildGuardSteps({
       stagedFiles: ['src/domains/auth/auth.routes.ts'],

@@ -14,19 +14,32 @@ import type { MembershipPreferencesService } from './membership-preferences.serv
 export function createMembershipPreferencesController(service: MembershipPreferencesService) {
   return {
     getMine: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const data = await service.getMine(requireOrganizationScope(request), {
-        actingUserPublicId: getActingUserPublicId(requirePrincipal(request)),
-        allBranches: await hasOrganizationPermission(request, APP_PERMISSIONS.BRANCH_READ),
+      const data = await service.getMine({
+        scope: requireOrganizationScope(request),
+        options: {
+          actingUserPublicId: getActingUserPublicId(requirePrincipal(request)),
+          allBranches: await hasOrganizationPermission({
+            request,
+            permissionCode: APP_PERMISSIONS.BRANCH_READ,
+          }),
+        },
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     updateMine: async (request: FastifyRequest, _reply: FastifyReply) => {
-      const data = await service.updateMine(requireOrganizationScope(request), request.body, {
-        actingUserPublicId: getActingUserPublicId(requirePrincipal(request)),
-        // "See every branch" (`branch:read`) lets the filter name any branch; others name their own.
-        allBranches: await hasOrganizationPermission(request, APP_PERMISSIONS.BRANCH_READ),
+      const data = await service.updateMine({
+        scope: requireOrganizationScope(request),
+        body: request.body,
+        options: {
+          actingUserPublicId: getActingUserPublicId(requirePrincipal(request)),
+          // "See every branch" (`branch:read`) lets the filter name any branch; others name their own.
+          allBranches: await hasOrganizationPermission({
+            request,
+            permissionCode: APP_PERMISSIONS.BRANCH_READ,
+          }),
+        },
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

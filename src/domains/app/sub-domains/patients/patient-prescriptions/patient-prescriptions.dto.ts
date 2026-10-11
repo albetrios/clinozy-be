@@ -50,7 +50,7 @@ const doseSchema = z.number().int().min(0).max(2);
  */
 export const PatientPrescriptionLineDto = z
   .object({
-    medicine_name: trimmedStringMinMax(1, 120),
+    medicine_name: trimmedStringMinMax({ min: 1, max: 120 }),
     medicine_id: recordIdSchema.nullable().optional(),
     dose_morning: doseSchema.optional(),
     dose_afternoon: doseSchema.optional(),
@@ -58,11 +58,11 @@ export const PatientPrescriptionLineDto = z
     is_sos: z.boolean().optional(),
     meal: z.enum(['before', 'after']).nullable().optional(),
     timing: z.enum(LINE_TIMING_VALUES).nullable().optional(),
-    timing_text: trimmedStringMinMax(1, 40).nullable().optional(),
+    timing_text: trimmedStringMinMax({ min: 1, max: 40 }).nullable().optional(),
     body_part: z.enum(LINE_BODY_PART_VALUES).nullable().optional(),
-    body_part_text: trimmedStringMinMax(1, 40).nullable().optional(),
+    body_part_text: trimmedStringMinMax({ min: 1, max: 40 }).nullable().optional(),
     quantity: z.number().int().min(1).max(999).optional(),
-    remarks: trimmedStringMinMax(1, 200).nullable().optional(),
+    remarks: trimmedStringMinMax({ min: 1, max: 200 }).nullable().optional(),
   })
   .strict();
 
@@ -72,7 +72,10 @@ export const patientPrescriptionItemsSchema = z
   .max(PATIENT_PRESCRIPTION_ITEMS_MAX);
 
 /** An advice, lab report or procedure text — up to 2000. */
-const prescriptionTextSchema = trimmedStringMinMax(1, PATIENT_PRESCRIPTION_TEXT_MAX).nullable();
+const prescriptionTextSchema = trimmedStringMinMax({
+  min: 1,
+  max: PATIENT_PRESCRIPTION_TEXT_MAX,
+}).nullable();
 
 /** The fields a prescription is written with (7.C.8 #15, #17) — each optional; create and update narrow them. */
 const prescriptionFields = {

@@ -215,9 +215,12 @@ describe('Security: Idempotency', () => {
 
   it('should not persist an idempotency Redis entry when write is unauthenticated', async () => {
     const key = uniqueKey('unauth-idem');
-    const cacheKey = buildIdempotencyCacheKey(key, {
-      userId: 'anonymous',
-      organizationId: 'none',
+    const cacheKey = buildIdempotencyCacheKey({
+      idempotencyKey: key,
+      scope: {
+        userId: 'anonymous',
+        organizationId: 'none',
+      },
     });
     await redisConnection.del(cacheKey);
 
@@ -252,6 +255,7 @@ describe('Security: Idempotency', () => {
     const tokenScopedToOrg = await generateTestToken({
       userId: user.public_id,
       organizationPublicId: organizationId,
+      stepUp: true,
     });
 
     // Regression: attaching an X-Idempotency-Key to a write that returns 204 (empty body)

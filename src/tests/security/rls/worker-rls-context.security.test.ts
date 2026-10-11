@@ -34,13 +34,13 @@ describe('Security: worker RLS database context', () => {
     const owner = await createTestUser();
     const organization = await createTestOrganization({ ownerUserId: owner.id });
 
-    await withAppDatabaseContext(
-      PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
-      async (databaseHandle) => {
+    await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
+      callback: async (databaseHandle) => {
         const repository = createWorkerSubscriptionRepository(databaseHandle);
         const rows = await repository.listByOrganization(organization.id);
         expect(Array.isArray(rows)).toBe(true);
       },
-    );
+    });
   });
 });

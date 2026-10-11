@@ -42,12 +42,12 @@ This domain implements the contracts documented in [src/PATTERNS.md](src/PATTERN
 
 ## Cross-domain flows
 
-The notify domain subscribes to exactly one other domain's event: `MEMBERSHIP_INVITATION_EVENT.ACCEPTED`, registered through `registerNotifyEventHandlers()` (the container path — see [workers-and-events](docs/reference/runtime/workers-and-events.md)). Everything else is driven directly:
+The notify domain subscribes to other domains' events through `registerNotifyEventHandlers()` (the container path — see [workers-and-events](docs/reference/runtime/workers-and-events.md)): `MEMBERSHIP_INVITATION_EVENT.ACCEPTED` and `.DECLINED`, and the eight organization resource events the webhook catalog advertises (`ORGANIZATION_EVENT.*`, `MEMBERSHIP_EVENT.*`, `SUBSCRIPTION_EVENT.*` — `organization-resource-webhook-flow` in [src/FLOWS.md](src/FLOWS.md)). Everything else is driven directly:
 
-- **In-app notifications** — created via `createAndDispatchNotification` (persist the row + enqueue channel dispatch), then delivered asynchronously by the `notification` worker. The invite-accepted handler is the one cross-domain producer: it fans a notification out to the organization's `membership:create` holders and drops each recipient's cached unread count.
-- **Outbound webhook delivery** — a `webhook_delivery_attempts` row (status `PENDING`) is written inside the originating transaction; the internal `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED` listener enqueues the BullMQ delivery job on commit.
+- **In-app notifications** — created via `createAndDispatchNotification` (persist the row + enqueue channel dispatch), then delivered asynchronously by the `notification` worker. The invitation handlers are the cross-domain producers: an accept fans a notification out to the organization's `membership:create` holders, a decline tells the inviter (or, when the inviter has left, those holders); each drops its recipients' cached unread count.
+- **Outbound webhook delivery** — an organization resource event fans out through `WebhookService.dispatchOrganizationWebhooks`: one `webhook_delivery_attempts` row (status `PENDING`, envelope `{ id, type, created_at, data }`) per subscribed enabled webhook, written in one savepoint of the originating transaction — all of an event's attempts or none, and a fan-out failure never rolls back the write; the internal `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED` listener enqueues the BullMQ delivery job once the transaction commits. Subscribing a webhook to `membership.*` or `subscription.*` needs `membership:read` / `subscription:read` (`WEBHOOK_EVENT_READ_PERMISSION`).
 
-For reference, adjacent flows do **not** route through notify today: `signup-flow` / `login-flow` / `organization-invitation-flow` send email **directly via the mail outbox** ([src/infrastructure/mail/](src/infrastructure/mail/)); `subscription-change-flow` / `dunning-flow` persist Stripe state only.
+Notify delivers `organization-resource-webhook-flow`. For reference, adjacent flows do **not** route through notify today: `signup-flow` / `login-flow` / `organization-invitation-flow` send email **directly via the mail outbox** ([src/infrastructure/mail/](src/infrastructure/mail/)); `subscription-change-flow` / `dunning-flow` persist Stripe state, and reach notify only as subscription webhook events.
 
 ## Lifecycle
 

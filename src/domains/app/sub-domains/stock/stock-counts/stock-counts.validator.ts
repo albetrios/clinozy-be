@@ -13,7 +13,7 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a stock check; throws `ValidationError` naming each bad field. */
 export function validateCreateStockCount(data: unknown): CreateStockCountInput {
-  return parseWithSchema(CreateStockCountDto, data);
+  return parseWithSchema({ schema: CreateStockCountDto, data });
 }
 
 /** A stock count is never changed (S9) — there is no change route. */
@@ -23,7 +23,7 @@ export function refuseStockCountUpdate(): Record<string, unknown> {
 
 /** Parses the past stock checks' query into a list input (routes-final 9.C.8 #13). */
 export function validateListStockCountsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listStockCountsQueryDto, data);
+  const query = parseWithSchema({ schema: listStockCountsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

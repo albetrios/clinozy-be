@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { type SQL, sql } from 'drizzle-orm';
 import {
   bigint,
   bigserial,
@@ -11,10 +11,20 @@ import {
   uniqueIndex,
   check,
   pgPolicy,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { maintenanceBypassArm, notifySchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
+
+/** The row belongs to the user named by `app.current_user_public_id` (the owner arms). */
+function notificationOwnerCondition(userIdColumn: AnyPgColumn): SQL {
+  return sql`${userIdColumn} = (
+            SELECT id FROM auth.users
+            WHERE public_id = current_setting('app.current_user_public_id', true)
+              AND deleted_at IS NULL
+          )`;
+}
 
 /**
  * Drizzle table for `notify.notifications` — the per-user in-app inbox. Soft-scoped by RLS to
@@ -49,7 +59,6 @@ export const notifications = notifySchema
       index('idx_notifications_user_read').on(table.user_id, table.is_read, table.created_at),
       index('idx_notifications_user_created_id').on(table.user_id, table.created_at, table.id),
       index('idx_notifications_org').on(table.organization_id, table.created_at),
-      index('idx_notifications_type').on(table.type, table.created_at),
       index('idx_notifications_created').on(table.created_at),
       check('chk_notifications_read', sql`NOT ${table.is_read} OR ${table.read_at} IS NOT NULL`),
       pgPolicy('notifications_tenant_isolation', {
@@ -72,17 +81,28 @@ export const notifications = notifySchema
             )
           )`,
       }),
-      // Owner access so a user can read/manage their own notifications (the service queries by
-      // user_id). Permissive → OR'd with tenant isolation; inert until app.current_user_public_id is set.
-      pgPolicy('notifications_owner_access', {
+      // Owner access: a user reads, marks read and deletes their own notifications (the service
+      // queries by user_id) — never inserts one, which happens in the organization's context or the
+      // worker. Permissive → OR'd with tenant isolation; inert until app.current_user_public_id is
+      // set. The application role may UPDATE only `is_read` / `read_at` (column grant).
+      pgPolicy('notifications_owner_select', {
         as: 'permissive',
-        for: 'all',
+        for: 'select',
         to: 'public',
-        using: sql`${table.user_id} = (
-            SELECT id FROM auth.users
-            WHERE public_id = current_setting('app.current_user_public_id', true)
-              AND deleted_at IS NULL
-          )`,
+        using: notificationOwnerCondition(table.user_id),
+      }),
+      pgPolicy('notifications_owner_update', {
+        as: 'permissive',
+        for: 'update',
+        to: 'public',
+        using: notificationOwnerCondition(table.user_id),
+        withCheck: notificationOwnerCondition(table.user_id),
+      }),
+      pgPolicy('notifications_owner_delete', {
+        as: 'permissive',
+        for: 'delete',
+        to: 'public',
+        using: notificationOwnerCondition(table.user_id),
       }),
     ],
   )

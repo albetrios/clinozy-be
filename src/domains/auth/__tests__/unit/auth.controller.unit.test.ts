@@ -182,9 +182,24 @@ describe('createAuthController', () => {
 
   it('login sets session cookie and returns token', async () => {
     const reply = mockReply();
-    await controller.login(mockRequest({ body: { email: 'a@b.com', password: 'pass' } }), reply);
-    expect(authService.login).toHaveBeenCalled();
-    expect(reply.setCookie).toHaveBeenCalled();
+    const response = await controller.login(
+      mockRequest({ body: { email: 'a@b.com', password: 'pass' } }),
+      reply,
+    );
+    expect(authService.login).toHaveBeenCalledWith({
+      body: { email: 'a@b.com', password: 'pass' },
+      ipAddress: '127.0.0.1',
+      userAgent: 'vitest',
+    });
+    expect(response).toMatchObject({
+      data: { access_token: 'token' },
+      meta: { request_id: 'request-id' },
+    });
+    expect(reply.setCookie).toHaveBeenCalledWith(
+      'session_id',
+      'session.refresh-secret',
+      expect.objectContaining({ httpOnly: true }),
+    );
   });
 
   it('logout requires bearer token and clears cookie', async () => {
@@ -397,15 +412,25 @@ describe('createAuthController', () => {
 
   it('oauthCallback sets session cookie and returns access token payload', async () => {
     const callbackReply = mockReply();
-    await controller.oauthCallback(
+    const response = await controller.oauthCallback(
       mockRequest({
         params: { provider: 'google' },
         query: { code: 'auth-code', state: 'state' },
       }),
       callbackReply,
     );
-    expect(oauthService.handleCallback).toHaveBeenCalled();
-    expect(callbackReply.setCookie).toHaveBeenCalled();
+    expect(oauthService.handleCallback).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'google', code: 'auth-code', state: 'state' }),
+    );
+    expect(response).toMatchObject({
+      data: { access_token: 'token' },
+      meta: { request_id: 'request-id' },
+    });
+    expect(callbackReply.setCookie).toHaveBeenCalledWith(
+      'session_id',
+      'session.refresh-secret',
+      expect.objectContaining({ httpOnly: true }),
+    );
   });
 
   it('oauthRedirect returns 501 when error name is NotImplementedError', async () => {
@@ -599,9 +624,10 @@ describe('createAuthController', () => {
 
     it('composes exactly the union of the factories — no extra and no shadowed handler', () => {
       const composed = createAuthController(container);
-      const union = new Set(handlerFactories.flatMap((factory) => Object.keys(factory(container))));
-      // Equal counts prove no factory was dropped AND that two factories are not fighting over
-      // the same handler name (the later spread would silently win).
+      const contributed = handlerFactories.flatMap((factory) => Object.keys(factory(container)));
+      const union = new Set(contributed);
+      // A Set union alone hides duplicate handler names; check contributions before deduplication.
+      expect(contributed).toHaveLength(union.size);
       expect(Object.keys(composed).sort()).toEqual([...union].sort());
     });
   });

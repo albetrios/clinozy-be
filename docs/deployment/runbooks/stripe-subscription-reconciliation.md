@@ -40,7 +40,7 @@ How **API-initiated** subscription changes relate to **Stripe webhooks** and loc
 
 1. **Webhook lag:** Inspect `billing.stripe_webhook_events` (`processing_status`, `request_id` from correlation id) for stuck `processing` rows.
 2. **Drift:** Compare local subscription `status` / `provider_subscription_id` with Stripe dashboard when users report billing mismatches after changePlan/cancel.
-3. **Duplicate events:** Re-delivered webhooks are idempotent (`tryClaimEvent` + `onConflictDoNothing`).
+3. **Duplicate events:** Re-delivered webhooks are idempotent (`recordAtIngress` at the endpoint, `tryClaimEvent` in the worker, both `onConflictDoNothing`).
 
 ---
 

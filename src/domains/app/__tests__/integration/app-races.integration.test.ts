@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { jsonQuery } from '@/tests/helpers/json-query.helper.js';
 import {
   type AppFixture,
@@ -127,7 +127,7 @@ describe('App races — integration (A3, S5, MD5, TR7, L5)', () => {
 
     expect(statuses(answers)).toEqual([200, 409]);
     expect(answers.find((answer) => answer.status === 409)?.read(REASON)).toBe('slot_taken');
-    const [row] = await getOperatorSql()<{ count: string }[]>`
+    const [row] = await operatorQuery<{ count: string }[]>`
       SELECT count(*)::text AS count FROM app.appointments a
         JOIN tenancy.memberships m ON m.id = a.doctor_membership_id
       WHERE m.public_id = ${doctor} AND a.appointment_date = ${workDay}
@@ -239,7 +239,7 @@ describe('App races — integration (A3, S5, MD5, TR7, L5)', () => {
 
     expect(statuses(answers)).toEqual([200, 409]);
     expect(answers.find((answer) => answer.status === 409)?.read(REASON)).toBe('not_enough_stock');
-    const [row] = await getOperatorSql()<{ quantity: string }[]>`
+    const [row] = await operatorQuery<{ quantity: string }[]>`
       SELECT b.quantity::text AS quantity FROM app.medicine_batches b
         JOIN app.medicines m ON m.id = b.medicine_id
       WHERE m.public_id = ${medicine} AND b.batch_number = 'ONE'
@@ -261,7 +261,7 @@ describe('App races — integration (A3, S5, MD5, TR7, L5)', () => {
       contact_id: asha,
       items: [{ offering_id: flow.last('.data.id'), quantity: 1 }],
     });
-    const [bought] = await getOperatorSql()<{ public_id: string; patient: string }[]>`
+    const [bought] = await operatorQuery<{ public_id: string; patient: string }[]>`
       SELECT o.public_id, p.public_id AS patient FROM app.patient_offerings o
         JOIN app.patients p ON p.id = o.patient_id
         JOIN app.contacts c ON c.id = p.contact_id
@@ -278,7 +278,7 @@ describe('App races — integration (A3, S5, MD5, TR7, L5)', () => {
 
     expect(statuses(answers)).toEqual([200, 409]);
     expect(answers.find((answer) => answer.status === 409)?.read(REASON)).toBe('offering_used_up');
-    const [row] = await getOperatorSql()<{ used: number; total: number }[]>`
+    const [row] = await operatorQuery<{ used: number; total: number }[]>`
       SELECT sessions_used AS used, sessions_total AS total FROM app.patient_offerings
       WHERE public_id = ${bought?.public_id ?? ''}
     `;
@@ -294,7 +294,7 @@ describe('App races — integration (A3, S5, MD5, TR7, L5)', () => {
       source: 'walk_in',
     });
     const lead = flow.last('.data.id');
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.leads SET owner_membership_id = NULL, held_until = NULL WHERE public_id = ${lead}
     `;
     const claim = `/app/leads/${lead}/claim`;

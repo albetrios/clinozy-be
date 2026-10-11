@@ -1,4 +1,30 @@
+import i18next from 'i18next';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/shared/constants/i18n.constants.js';
 import { escapeHtml } from './escape-html.util.js';
+
+/**
+ * One line of email copy from the `mail` namespace, in `locale`.
+ *
+ * @remarks
+ * Values are inserted as given (i18next's own escaping is off): escape every untrusted value with
+ * {@link escapeHtml} first when the line lands in HTML. Plain-text lines (a subject, the title and
+ * preheader the base template escapes itself) take raw values.
+ */
+export function translateMailText({
+  key,
+  locale,
+  values = {},
+}: {
+  key: string;
+  locale: SupportedLanguage;
+  values?: Record<string, string | number> | undefined;
+}): string {
+  return i18next.t(`mail:${key}`, {
+    lng: locale,
+    ...values,
+    interpolation: { escapeValue: false },
+  });
+}
 
 /**
  * Shared HTML email layout wrapper.
@@ -18,18 +44,20 @@ export function baseTemplate(options: {
   preheader?: string;
   body: string;
   footerText?: string;
+  /** The recipient's language: the `lang` attribute and the default footer. */
+  locale?: SupportedLanguage;
 }): string {
   const { title, preheader, body, footerText } = options;
+  const locale = options.locale ?? DEFAULT_LANGUAGE;
 
   const safeTitle = escapeHtml(title);
   const safePreheader = preheader !== undefined ? escapeHtml(preheader) : undefined;
-  const safeFooterText =
-    footerText !== undefined
-      ? escapeHtml(footerText)
-      : 'This is an automated message. Please do not reply.';
+  const safeFooterText = escapeHtml(
+    footerText ?? translateMailText({ key: 'automatedFooter', locale }),
+  );
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${locale}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">

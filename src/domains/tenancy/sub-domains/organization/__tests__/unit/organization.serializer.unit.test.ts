@@ -61,17 +61,20 @@ describe('organization serializers', () => {
 
   it('serializeOrganizationSettings maps settings row', () => {
     expect(
-      serializeOrganizationSettings('org-public', {
-        is_email_notifications_enabled: true,
-        security_policy: { mfa_required: true },
-        default_day_float: '2000.00',
-        lead_hold_days: 3,
-        reminder_hour: 16,
-        retarget_after_days: 90,
-        deleted_record_purge_days: 7,
-        whatsapp_phone_number_id: '109876543210',
-        created_at: createdAt,
-        updated_at: updatedAt,
+      serializeOrganizationSettings({
+        organization_public_id: 'org-public',
+        row: {
+          is_email_notifications_enabled: true,
+          security_policy: { mfa_required: true },
+          default_day_float: '2000.00',
+          lead_hold_days: 3,
+          reminder_hour: 16,
+          retarget_after_days: 90,
+          deleted_record_purge_days: 7,
+          whatsapp_phone_number_id: '109876543210',
+          created_at: createdAt,
+          updated_at: updatedAt,
+        },
       }),
     ).toEqual({
       organization_id: 'org-public',
@@ -94,8 +97,8 @@ describe('organization serializers', () => {
   it('serializeOrganizationApiKey maps key row with organization public id', () => {
     const lastUsedAt = new Date('2026-01-03T00:00:00.000Z');
     expect(
-      serializeOrganizationApiKey(
-        {
+      serializeOrganizationApiKey({
+        row: {
           id: 1,
           public_id: 'key-public',
           organization_id: 10,
@@ -112,8 +115,8 @@ describe('organization serializers', () => {
           created_by_user_id: null,
           updated_by_user_id: null,
         },
-        'org-public',
-      ),
+        organization_public_id: 'org-public',
+      }),
     ).toMatchObject({
       id: 'key-public',
       organization_id: 'org-public',
@@ -128,8 +131,8 @@ describe('organization serializers', () => {
   it('serializeOrganizationNotificationPolicy maps policy row', () => {
     const mutedUntil = new Date('2026-06-01T00:00:00.000Z');
     expect(
-      serializeOrganizationNotificationPolicy(
-        {
+      serializeOrganizationNotificationPolicy({
+        row: {
           id: 1,
           public_id: 'policy-public',
           organization_id: 10,
@@ -141,8 +144,8 @@ describe('organization serializers', () => {
           created_at: createdAt,
           updated_at: updatedAt,
         },
-        'org-public',
-      ),
+        organization_public_id: 'org-public',
+      }),
     ).toMatchObject({
       // sec-T5: serializer now emits the 21-char public id, not the bigserial.
       id: 'policy-public',

@@ -25,8 +25,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/infrastructure/queue/worker-runtime/worker-processor.util.js', () => ({
-  runOrganizationScopedWorkerJob: (_options: unknown, work: (handle: unknown) => unknown) =>
-    work({ kind: 'organization' }),
+  runOrganizationScopedWorkerJob: ({
+    processor,
+  }: {
+    processor: (handle: unknown, job: unknown) => unknown;
+  }) => processor({ kind: 'organization' }, {}),
 }));
 vi.mock('@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js', () => ({
   toProviderOutageError: async () => new Error('provider outage'),

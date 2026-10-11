@@ -40,5 +40,5 @@ export function createMailOutboxSweeperWorker(): WorkerHandle {
     logger.warn({ jobId, queue: MAIL_OUTBOX_SWEEPER_QUEUE_NAME }, 'mail-outbox-sweeper.stalled');
   });
 
-  return buildWorkerHandle(worker, MAIL_OUTBOX_SWEEPER_QUEUE_NAME);
+  return buildWorkerHandle({ worker, queueName: MAIL_OUTBOX_SWEEPER_QUEUE_NAME });
 }

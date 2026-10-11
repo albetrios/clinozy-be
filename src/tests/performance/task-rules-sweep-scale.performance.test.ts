@@ -40,9 +40,10 @@ describe('Performance: the task rules sweep at 500 organizations', () => {
   async function timedRun(): Promise<{ elapsedMs: number; counts: TaskRulesRunCounts }> {
     const organizationPublicId = fixture.organization.publicId;
     const started = performance.now();
-    const counts = await runOrganizationScopedWorkerJob({ organizationPublicId }, (handle) =>
-      runTaskRulesJob(handle, organizationPublicId),
-    );
+    const counts = await runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: (handle) => runTaskRulesJob({ databaseHandle: handle, organizationPublicId }),
+    });
     return { elapsedMs: performance.now() - started, counts };
   }
 

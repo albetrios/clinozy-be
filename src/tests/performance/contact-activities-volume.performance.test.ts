@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery, withOperatorTransaction } from '@/tests/helpers/operator-database.js';
 import {
   type AppFixture,
   createAppFixture,
@@ -53,7 +53,7 @@ describe('Performance: a contact activity stream of 5,000 entries', () => {
       phones: [{ phone: `+919${S.slice(-7)}71`, is_primary: true }],
     });
     contact = flow.last('.data.id');
-    await getOperatorSql()`
+    await operatorQuery`
       INSERT INTO app.contact_activities (public_id, organization_id, contact_id, type, direction, body,
         delivery_status, occurred_at)
       SELECT 'cact_' || substr(md5(${S} || series::text), 1, 21), person.organization_id, person.id,
@@ -65,7 +65,7 @@ describe('Performance: a contact activity stream of 5,000 entries', () => {
       FROM app.contacts person, generate_series(1, ${ENTRY_COUNT}) AS series
       WHERE person.public_id = ${contact}
     `;
-    await getOperatorSql()`ANALYZE app.contact_activities`;
+    await operatorQuery`ANALYZE app.contact_activities`;
     // Warm the app, the pool and the plan cache before measuring.
     await flow.call('GET', `/app/contacts/${contact}/activities?limit=${PAGE_LIMIT}`);
   });
@@ -102,10 +102,10 @@ describe('Performance: a contact activity stream of 5,000 entries', () => {
   });
 
   it("the stream's keyset reads the contact's occurred_at index, backwards", async () => {
-    const [person] = await getOperatorSql()<{ id: string }[]>`
+    const [person] = await operatorQuery<{ id: string }[]>`
       SELECT id::text AS id FROM app.contacts WHERE public_id = ${contact}
     `;
-    const plan = await getOperatorSql().begin(async (transaction) => {
+    const plan = await withOperatorTransaction(async (transaction) => {
       await transaction`SET LOCAL enable_seqscan = off`;
       // The repository resolves the contact first, then reads its stream by its id
       return transaction<{ 'QUERY PLAN': string }[]>`

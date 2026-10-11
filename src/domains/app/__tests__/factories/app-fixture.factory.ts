@@ -10,7 +10,7 @@ import { createTestUser } from '@/tests/factories/user.factory.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 
 /** The people of the app fixture: the owner and one member per clinic preset role (launch D5). */
 export const APP_FIXTURE_ROLES = [
@@ -124,7 +124,7 @@ export async function createAppFixture(app: FastifyInstance): Promise<AppFixture
   }
   const [vesuPublicId, adajanPublicId] = branchPublicIds as [string, string];
 
-  const operatorSql = getOperatorSql();
+  const operatorSql = operatorQuery;
   const branchRows = await operatorSql<{ id: number; public_id: string }[]>`
     SELECT id, public_id FROM app.branches WHERE organization_id = ${organization.id}
   `;

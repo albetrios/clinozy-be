@@ -22,10 +22,13 @@ import type { MembershipInvitationService } from './membership-invitation.servic
  * controller — it ends the invited membership too. Each handler records a scoped audit event — an
  * acceptance in the joined organization's log, since the invitee's token carries no organization yet.
  */
-export function createMembershipInvitationController(
-  service: MembershipInvitationService,
-  membershipService: MembershipService,
-) {
+export function createMembershipInvitationController({
+  service,
+  membershipService,
+}: {
+  service: MembershipInvitationService;
+  membershipService: MembershipService;
+}) {
   return {
     acceptMembershipInvitation: async (request: FastifyRequest, _reply: FastifyReply) => {
       // sec-T4: route is `app.authenticate`-gated; the service binds the invitee email to the acting
@@ -36,19 +39,29 @@ export function createMembershipInvitationController(
       }
       const params = (request.params as { membership_invitation_id?: string }) ?? {};
       // sec-new-T2: reject malformed path params before reaching the service layer.
-      const invitationId = validatePublicIdParam(
-        params.membership_invitation_id ?? '',
-        'membership_invitation_id',
-      );
-      const data = await service.accept(invitationId, request.body, auth.userId);
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'tenancy.membership_invitation.accept',
-        resource_type: 'membership_invitation',
-        organizationPublicId: data.organization_id,
-        metadata: { invitation_public_id: invitationId, membership_public_id: data.membership_id },
+      const invitationId = validatePublicIdParam({
+        value: params.membership_invitation_id ?? '',
+        fieldName: 'membership_invitation_id',
       });
-      return successResponse(data, getRequestIdentifier(request));
+      const data = await service.accept({
+        invitation_public_id: invitationId,
+        body: request.body,
+        actingUserPublicId: auth.userId,
+      });
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'tenancy.membership_invitation.accept',
+          resource_type: 'membership_invitation',
+          organizationPublicId: data.organization_id,
+          metadata: {
+            invitation_public_id: invitationId,
+            membership_public_id: data.membership_id,
+          },
+        },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     declineMembershipInvitation: async (request: FastifyRequest, _reply: FastifyReply) => {
       // Like accept: the service binds the invitation to the acting user's verified email; an API
@@ -58,44 +71,61 @@ export function createMembershipInvitationController(
         throw new ForbiddenError('errors:invitationEmailMismatch');
       }
       const params = (request.params as { membership_invitation_id?: string }) ?? {};
-      const invitationId = validatePublicIdParam(
-        params.membership_invitation_id ?? '',
-        'membership_invitation_id',
-      );
+      const invitationId = validatePublicIdParam({
+        value: params.membership_invitation_id ?? '',
+        fieldName: 'membership_invitation_id',
+      });
       const data = await membershipService.declineInvitation({
         invitationPublicId: invitationId,
         actingUserPublicId: auth.userId,
       });
-      await recordScopedAuditEvent(request, {
-        actorUserPublicId: auth.userId,
-        action: 'tenancy.membership_invitation.decline',
-        resource_type: 'membership_invitation',
-        organizationPublicId: data.organization_id,
-        metadata: { invitation_public_id: invitationId, membership_public_id: data.membership_id },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          actorUserPublicId: auth.userId,
+          action: 'tenancy.membership_invitation.decline',
+          resource_type: 'membership_invitation',
+          organizationPublicId: data.organization_id,
+          metadata: {
+            invitation_public_id: invitationId,
+            membership_public_id: data.membership_id,
+          },
+        },
       });
-      return successResponse(data, getRequestIdentifier(request));
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
     resendInvitation: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const params = (request.params as { membership_id?: string }) ?? {};
       // sec-new-T2: reject malformed path params before reaching the service layer.
-      const membershipId = validatePublicIdParam(params.membership_id ?? '', 'membership_id');
+      const membershipId = validatePublicIdParam({
+        value: params.membership_id ?? '',
+        fieldName: 'membership_id',
+      });
       // R1 / TEN-34: regenerated token is delivered only via email, never returned — except the
       // dev-only `debug_invitation_token` echo (ROUTE #164), which the service adds when its env
       // flag is on (the env schema refuses it outside local/development).
-      const invitation = await service.resendForMembership(scope, membershipId, request.body, {
-        requestId: getRequestIdentifier(request),
+      const invitation = await service.resendForMembership({
+        scope,
+        membership_public_id: membershipId,
+        body: request.body,
+        options: {
+          requestId: getRequestIdentifier(request),
+        },
       });
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.membership_invitation.resend',
-        resource_type: 'membership_invitation',
-        organizationPublicId: scope.organizationPublicId,
-        metadata: { invitation_public_id: invitation.id, membership_public_id: membershipId },
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.membership_invitation.resend',
+          resource_type: 'membership_invitation',
+          organizationPublicId: scope.organizationPublicId,
+          metadata: { invitation_public_id: invitation.id, membership_public_id: membershipId },
+        },
       });
       // T15: the invitation itself, not wrapped.
-      return successResponse(invitation, getRequestIdentifier(request));
+      return successResponse({ data: invitation, request_id: getRequestIdentifier(request) });
     },
   };
 }

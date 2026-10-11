@@ -1,5 +1,5 @@
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
-import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { memberReference } from '@/domains/app/app-member-reference.js';
 import { BaseRecordService } from '@/domains/app/base-record.service.js';
 import { medical_reps } from '@/domains/app/sub-domains/medical/medical-reps/medical-reps.schema.js';
 import type { MedicalRepVisitsRepository } from './medical-rep-visits.repository.js';
@@ -35,7 +35,7 @@ export class MedicalRepVisitsService extends BaseRecordService<MedicalRepVisitOu
       serialize: serializeMedicalRepVisit,
       references: [
         { field: 'medical_rep_id', table: medical_reps, label: 'medical rep' },
-        { field: 'logged_by_membership_id', table: memberships, label: 'team member' },
+        memberReference('logged_by_membership_id'),
       ],
       parent: { field: 'medical_rep_id', table: medical_reps, label: 'Medical rep' },
       ...medicalRepVisitsRules,

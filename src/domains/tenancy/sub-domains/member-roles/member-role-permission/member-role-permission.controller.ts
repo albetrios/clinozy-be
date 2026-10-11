@@ -17,7 +17,7 @@ import { serializeMemberRolePermission } from './member-role-permission.serializ
 /** The `role_id` path param, validated at the boundary like the other role routes (TC14). */
 function readRoleIdParam(request: FastifyRequest): string {
   const params = (request.params as { role_id?: string }) ?? {};
-  return validatePublicIdParam(params.role_id ?? '', 'role_id');
+  return validatePublicIdParam({ value: params.role_id ?? '', fieldName: 'role_id' });
 }
 
 /**
@@ -35,13 +35,17 @@ export function createMemberRolePermissionController(service: MemberRolePermissi
       const _organizationId = scope.organizationPublicId;
       // TC14: the role id format is checked like the other role routes.
       const roleId = readRoleIdParam(request);
-      const rows = await service.list(scope, roleId);
+      const rows = await service.list({ scope, role_public_id: roleId });
       const data = rows.map((row) => serializeMemberRolePermission(row));
-      return paginatedResponse(data, getRequestIdentifier(request), {
-        per_page: data.length,
-        next: null,
-        has_more: false,
-        estimated_total: data.length,
+      return paginatedResponse({
+        data,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: data.length,
+          next: null,
+          has_more: false,
+          estimated_total: data.length,
+        },
       });
     },
     putRolePermissions: async (request: FastifyRequest, _reply: FastifyReply) => {
@@ -49,24 +53,36 @@ export function createMemberRolePermissionController(service: MemberRolePermissi
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
       const roleId = readRoleIdParam(request);
-      const rows = await service.put(scope, roleId, request.body, getActingUserPublicId(auth));
+      const rows = await service.put({
+        scope,
+        role_public_id: roleId,
+        body: request.body,
+        created_by_user_public_id: getActingUserPublicId(auth),
+      });
       const data = rows.map((row) => serializeMemberRolePermission(row));
-      await recordScopedAuditEvent(request, {
-        ...buildAuditActorFields(auth),
-        action: 'tenancy.role_permissions.put',
-        resource_type: 'role',
-        organizationPublicId: scope.organizationPublicId,
-        metadata: {
-          role_public_id: roleId,
-          permission_codes: data.map((permission) => permission.permission_code),
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.role_permissions.put',
+          resource_type: 'role',
+          organizationPublicId: scope.organizationPublicId,
+          metadata: {
+            role_public_id: roleId,
+            permission_codes: data.map((permission) => permission.permission_code),
+          },
         },
       });
       // T15: the same Role permission[] list as the GET.
-      return paginatedResponse(data, getRequestIdentifier(request), {
-        per_page: data.length,
-        next: null,
-        has_more: false,
-        estimated_total: data.length,
+      return paginatedResponse({
+        data,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: data.length,
+          next: null,
+          has_more: false,
+          estimated_total: data.length,
+        },
       });
     },
   };

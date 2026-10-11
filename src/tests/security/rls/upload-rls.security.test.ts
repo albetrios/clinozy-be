@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { sql as drizzleSql, eq } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -12,6 +11,11 @@ import {
   executeAsClinozyBeAppUser,
 } from '@/tests/helpers/rls-matrix.helper.js';
 import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /** Flattens an error and its `.cause` chain to one string so the postgres SQLSTATE is matchable. */
 function flattenErrorChain(error: unknown): string {
@@ -58,7 +62,7 @@ function buildUserUploadValues(userId: number) {
 
 describe('Security: Upload RLS', () => {
   beforeAll(async () => {
-    await sql`GRANT clinozy_be_app TO CURRENT_USER`.catch(() => undefined);
+    await database.execute(drizzleSql`GRANT clinozy_be_app TO CURRENT_USER`).catch(() => undefined);
   });
 
   beforeEach(async () => {
@@ -66,12 +70,14 @@ describe('Security: Upload RLS', () => {
   });
 
   it('should hide other tenants organization-scoped uploads when app.current_organization_public_id is set', async () => {
-    const rlsRows = await sql<{ relrowsecurity: boolean }[]>`
+    const rlsRows = rowsOf<{ relrowsecurity: boolean }>(
+      await database.execute(drizzleSql`
       SELECT c.relrowsecurity
       FROM pg_class c
       INNER JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'upload' AND c.relname = 'uploads'
-    `;
+    `),
+    );
     expect(
       rlsRows[0]?.relrowsecurity,
       'Apply migrations including 20260517000001_upload_rls.sql',
@@ -155,7 +161,7 @@ describe('Security: Upload RLS', () => {
     } catch (error) {
       caught = error;
     }
-    // postgres-js surfaces the RLS WITH CHECK violation as the `.cause` under drizzle's wrapper.
+    // node-postgres surfaces the RLS WITH CHECK violation as the `.cause` under drizzle's wrapper.
     expect(flattenErrorChain(caught)).toMatch(/row-level security/i);
 
     // Nothing was written.

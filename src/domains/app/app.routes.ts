@@ -23,5 +23,5 @@ export const appRoutesPlugin: FastifyPluginAsync = async (app) => {
   await app.register(contactMembersRoutes(appDomain.contactMembersService));
   // Public: the platform Meta app's webhook (signature-checked, no authentication — D77).
   await app.register(contactMessagingWebhookRoutes(appDomain.contactMessagingWebhookService));
-  await registerAppRecordRoutes(app, appDomain);
+  await registerAppRecordRoutes({ app, services: appDomain });
 };

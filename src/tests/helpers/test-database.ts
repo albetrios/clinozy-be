@@ -1,6 +1,6 @@
+import { sql } from 'drizzle-orm';
 import { database } from '@/infrastructure/database/connection.js';
-import { sql } from '@/infrastructure/database/connection.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { assertConnectedToTestDatabase } from '@/tests/helpers/local-test-database.js';
 import { env } from '@/shared/config/env.config.js';
 import { resetPlanCatalogMemoForTests } from '@/domains/billing/sub-domains/plan/plan-catalog-memo.js';
@@ -35,14 +35,14 @@ export async function cleanupDatabase(): Promise<void> {
         'TEST_MODE is refine-forbidden in production, so this can never truncate a deployed database.',
     );
   }
-  wipeTargetCheck ??= assertConnectedToTestDatabase(getOperatorSql());
+  wipeTargetCheck ??= assertConnectedToTestDatabase(getOperatorDatabase());
   await wipeTargetCheck;
 
   for (let attempt = 1; attempt <= MAX_CLEANUP_RETRIES; attempt++) {
     try {
       // Elevated on purpose: TRUNCATE across every table is not something the application
       // role may do, and under `pnpm test:rls-role` the pool under test IS that role.
-      await getOperatorSql()`
+      await getOperatorDatabase().execute(sql`
         DO $$ DECLARE
           tables text;
         BEGIN
@@ -65,7 +65,7 @@ export async function cleanupDatabase(): Promise<void> {
             EXECUTE 'TRUNCATE TABLE ' || tables || ' RESTART IDENTITY CASCADE';
           END IF;
         END $$;
-      `;
+      `);
       await cleanupTestRedis();
       // In-process memos are invisible to a TRUNCATE. A suite that seeds a catalog and asserts on
       // it would otherwise read the previous file's memory.
@@ -73,11 +73,13 @@ export async function cleanupDatabase(): Promise<void> {
       resetPermissionCatalogMemoForTests();
       return;
     } catch (error) {
+      // Drizzle wraps the driver's error: the SQLSTATE is on its `cause`.
+      const databaseError = (error as { cause?: unknown })?.cause ?? error;
       const isDeadlockOrTimeout =
-        error &&
-        typeof error === 'object' &&
-        'code' in error &&
-        ['40P01', '57014'].includes((error as { code: string }).code);
+        databaseError &&
+        typeof databaseError === 'object' &&
+        'code' in databaseError &&
+        ['40P01', '57014'].includes((databaseError as { code: string }).code);
       if (isDeadlockOrTimeout && attempt < MAX_CLEANUP_RETRIES) {
         await new Promise((resolve) => setTimeout(resolve, CLEANUP_RETRY_DELAY_MS * attempt));
         continue;
@@ -87,4 +89,4 @@ export async function cleanupDatabase(): Promise<void> {
   }
 }
 
-export { database, sql };
+export { database };

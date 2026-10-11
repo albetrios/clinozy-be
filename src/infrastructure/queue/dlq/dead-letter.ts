@@ -229,11 +229,15 @@ export function isFinalJobFailure(job: Job | undefined): boolean {
  *   snapshot). The durable Postgres ledger (`audit.dead_letter_jobs`) is independently
  *   unique-keyed and remains the source of truth. Never store secrets here.
  */
-export async function enqueueDeadLetter(
-  sourceQueueName: string,
-  job: Job,
-  error: unknown,
-): Promise<void> {
+export async function enqueueDeadLetter({
+  sourceQueueName,
+  job,
+  error,
+}: {
+  sourceQueueName: string;
+  job: Job;
+  error: unknown;
+}): Promise<void> {
   const deadLetterQueueName = getDeadLetterQueueName(sourceQueueName);
   const queue = getDeadLetterQueueClient(deadLetterQueueName);
   const mirroredCount = await queue.getWaitingCount();
@@ -300,11 +304,15 @@ export async function enqueueDeadLetter(
  * - **Notes:** runs outside any request/worker DB context; identifiers are passed
  *   explicitly (no RLS session reliance).
  */
-async function persistDeadLetterFailureToPostgres(
-  queueName: string,
-  job: Job,
-  error: unknown,
-): Promise<void> {
+async function persistDeadLetterFailureToPostgres({
+  queueName,
+  job,
+  error,
+}: {
+  queueName: string;
+  job: Job;
+  error: unknown;
+}): Promise<void> {
   const errorObject = error instanceof Error ? error : new Error(String(error));
   const maxAttempts = resolveJobMaxAttempts(job);
 
@@ -338,7 +346,7 @@ async function persistDeadLetterFailureToPostgres(
       },
       'queue.dead_letter.persist_failed',
     );
-    captureDeadLetterPersistFailureInSentry(queueName, job, persistError);
+    captureDeadLetterPersistFailureInSentry({ queueName, job, error: persistError });
   }
 }
 
@@ -347,9 +355,17 @@ async function persistDeadLetterFailureToPostgres(
  * Best-effort: any error is logged (`queue.dead_letter.enqueue_failed`) and swallowed —
  * the durable record already lives in Postgres via {@link persistDeadLetterFailureToPostgres}.
  */
-async function mirrorDeadLetterToRedis(queueName: string, job: Job, error: unknown): Promise<void> {
+async function mirrorDeadLetterToRedis({
+  queueName,
+  job,
+  error,
+}: {
+  queueName: string;
+  job: Job;
+  error: unknown;
+}): Promise<void> {
   try {
-    await enqueueDeadLetter(queueName, job, error);
+    await enqueueDeadLetter({ sourceQueueName: queueName, job, error });
   } catch (deadLetterError) {
     logger.error(
       {
@@ -377,16 +393,28 @@ async function mirrorDeadLetterToRedis(queueName: string, job: Job, error: unkno
  *   `<source>-dlq` Redis enqueue; structured logs on both paths.
  * - **Notes:** runs outside any request/worker DB context; identifiers are passed explicitly.
  */
-export async function recordDeadLetterFailure(
-  queueName: string,
-  job: Job,
-  error: unknown,
-): Promise<void> {
-  await persistDeadLetterFailureToPostgres(queueName, job, error);
-  await mirrorDeadLetterToRedis(queueName, job, error);
+export async function recordDeadLetterFailure({
+  queueName,
+  job,
+  error,
+}: {
+  queueName: string;
+  job: Job;
+  error: unknown;
+}): Promise<void> {
+  await persistDeadLetterFailureToPostgres({ queueName, job, error });
+  await mirrorDeadLetterToRedis({ queueName, job, error });
 }
 
-function captureFinalFailureInSentry(queueName: string, job: Job, error: unknown): void {
+function captureFinalFailureInSentry({
+  queueName,
+  job,
+  error,
+}: {
+  queueName: string;
+  job: Job;
+  error: unknown;
+}): void {
   if (!isSentryInitialized()) return;
 
   const errorObject = error instanceof Error ? error : new Error(String(error));
@@ -402,11 +430,15 @@ function captureFinalFailureInSentry(queueName: string, job: Job, error: unknown
   });
 }
 
-function captureDeadLetterPersistFailureInSentry(
-  queueName: string,
-  job: Job,
-  error: unknown,
-): void {
+function captureDeadLetterPersistFailureInSentry({
+  queueName,
+  job,
+  error,
+}: {
+  queueName: string;
+  job: Job;
+  error: unknown;
+}): void {
   if (!isSentryInitialized()) return;
 
   const errorObject = error instanceof Error ? error : new Error(String(error));
@@ -439,7 +471,13 @@ function captureDeadLetterPersistFailureInSentry(
  *   unreadable secret, a corrupt payload. It used to be logged and dropped: no ledger row, no
  *   alert, nothing for an operator to find.
  */
-export function attachDeadLetterAndAlerting(worker: Worker, queueName: string): void {
+export function attachDeadLetterAndAlerting({
+  worker,
+  queueName,
+}: {
+  worker: Worker;
+  queueName: string;
+}): void {
   worker.on('failed', (job, error) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -476,7 +514,7 @@ export function attachDeadLetterAndAlerting(worker: Worker, queueName: string): 
 
     if (isDeadLetterAlreadyRecorded(error)) {
       logger.error(logFields, 'queue.job.final_failure');
-      captureFinalFailureInSentry(queueName, job, error);
+      captureFinalFailureInSentry({ queueName, job, error });
       return;
     }
 
@@ -487,12 +525,12 @@ export function attachDeadLetterAndAlerting(worker: Worker, queueName: string): 
       logger.error(logFields, 'queue.job.final_failure');
     }
 
-    void recordDeadLetterFailure(queueName, job, error).catch((err) => {
+    void recordDeadLetterFailure({ queueName, job, error }).catch((err) => {
       logger.error({ err, queue: queueName, jobId: job?.id }, 'queue.dead_letter.record_failed');
     });
 
     if (!expected) {
-      captureFinalFailureInSentry(queueName, job, error);
+      captureFinalFailureInSentry({ queueName, job, error });
     }
   });
 }

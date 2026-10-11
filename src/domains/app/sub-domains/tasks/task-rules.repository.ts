@@ -248,9 +248,9 @@ export class TaskRulesRepository {
   async openTasks(options: { scope: TaskRuleScope; source: TaskRuleSource }): Promise<number> {
     const { scope, source } = options;
     if (!source.canOpen) return 0;
-    const candidates = (await this.databaseHandle.execute(
-      candidatesQuery(scope, source),
-    )) as unknown as CandidateRow[];
+    const candidates = (
+      await this.databaseHandle.execute<CandidateRow>(candidatesQuery(scope, source))
+    ).rows;
     if (candidates.length === 0) return 0;
     const linkColumn = source.link ?? 'contact_id';
     const rows = await this.databaseHandle
@@ -436,7 +436,11 @@ export class TaskRulesRepository {
     afterDays: number;
   }): Promise<LapsedPatient[]> {
     const { organizationId, timeZone, afterDays } = options;
-    const rows = (await this.databaseHandle.execute(sql`select ${contacts.id} as contact_id,
+    const rows = (
+      await this.databaseHandle.execute<{
+        contact_id: string | number;
+        branch_id: string | number | null;
+      }>(sql`select ${contacts.id} as contact_id,
         last_visit.branch_id as branch_id
       from ${patients}
       join ${contacts} on ${contacts.id} = ${patients.contact_id}
@@ -468,10 +472,8 @@ export class TaskRulesRepository {
           where retargeted.contact_id = ${contacts.id} and retargeted.kind = 'retarget'
             and retargeted.created_at >= last_visit.visited_at)
       order by last_visit.visited_at, ${contacts.id}
-      limit ${TASK_RULES_TASKS_PER_RULE}`)) as unknown as {
-      contact_id: string | number;
-      branch_id: string | number | null;
-    }[];
+      limit ${TASK_RULES_TASKS_PER_RULE}`)
+    ).rows;
     return rows.map((row) => ({
       contactId: Number(row.contact_id),
       branchId: idOrNull(row.branch_id),

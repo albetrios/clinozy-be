@@ -94,7 +94,13 @@ type ParsedHeader = {
   headerErrors: string[];
 };
 
-function offsetToLineNumber(fileContent: string, offset: number): number {
+function offsetToLineNumber({
+  fileContent,
+  offset,
+}: {
+  fileContent: string;
+  offset: number;
+}): number {
   if (offset <= 0) return 1;
   let lineNumber = 1;
   const limit = Math.min(offset, fileContent.length);
@@ -104,13 +110,13 @@ function offsetToLineNumber(fileContent: string, offset: number): number {
   return lineNumber;
 }
 
-function skipLineComment(source: string, startIndex: number): number {
+function skipLineComment({ source, startIndex }: { source: string; startIndex: number }): number {
   let index = startIndex;
   while (index < source.length && source.charCodeAt(index) !== 10) index += 1;
   return index;
 }
 
-function skipBlockComment(source: string, startIndex: number): number {
+function skipBlockComment({ source, startIndex }: { source: string; startIndex: number }): number {
   let index = startIndex + 2;
   while (index < source.length - 1) {
     if (source[index] === '*' && source[index + 1] === '/') return index + 2;
@@ -119,7 +125,13 @@ function skipBlockComment(source: string, startIndex: number): number {
   return source.length;
 }
 
-function skipSingleQuotedString(source: string, startIndex: number): number {
+function skipSingleQuotedString({
+  source,
+  startIndex,
+}: {
+  source: string;
+  startIndex: number;
+}): number {
   let index = startIndex + 1;
   while (index < source.length) {
     const character = source[index];
@@ -136,7 +148,13 @@ function skipSingleQuotedString(source: string, startIndex: number): number {
 }
 
 /** Skip a PostgreSQL dollar-quoted literal starting at the opening `$`. */
-function skipDollarQuotedString(source: string, dollarIndex: number): number {
+function skipDollarQuotedString({
+  source,
+  dollarIndex,
+}: {
+  source: string;
+  dollarIndex: number;
+}): number {
   if (source[dollarIndex] !== '$') return dollarIndex + 1;
   let index = dollarIndex + 1;
   let tag = '';
@@ -165,19 +183,19 @@ export function splitSqlStatements(source: string): { text: string; startOffset:
   while (index < source.length) {
     const character = source[index];
     if (character === '-' && source[index + 1] === '-') {
-      index = skipLineComment(source, index);
+      index = skipLineComment({ source, startIndex: index });
       continue;
     }
     if (character === '/' && source[index + 1] === '*') {
-      index = skipBlockComment(source, index);
+      index = skipBlockComment({ source, startIndex: index });
       continue;
     }
     if (character === "'") {
-      index = skipSingleQuotedString(source, index);
+      index = skipSingleQuotedString({ source, startIndex: index });
       continue;
     }
     if (character === '$') {
-      index = skipDollarQuotedString(source, index);
+      index = skipDollarQuotedString({ source, dollarIndex: index });
       continue;
     }
     if (character === ';') {
@@ -215,7 +233,13 @@ function normalizeSqlWhitespace(text: string): string {
   return text.replace(/\s+/gu, ' ').trim();
 }
 
-function scanAlterActionEnd(source: string, startIndex: number): number {
+function scanAlterActionEnd({
+  source,
+  startIndex,
+}: {
+  source: string;
+  startIndex: number;
+}): number {
   let depthParenthesis = 0;
   let depthSquare = 0;
   let index = startIndex;
@@ -237,11 +261,11 @@ function scanAlterActionEnd(source: string, startIndex: number): number {
     }
 
     if (character === '-' && source[index + 1] === '-') {
-      index = skipLineComment(source, index);
+      index = skipLineComment({ source, startIndex: index });
       continue;
     }
     if (character === '/' && source[index + 1] === '*') {
-      index = skipBlockComment(source, index);
+      index = skipBlockComment({ source, startIndex: index });
       continue;
     }
     if (character === "'") {
@@ -250,7 +274,7 @@ function scanAlterActionEnd(source: string, startIndex: number): number {
       continue;
     }
     if (character === '$') {
-      index = skipDollarQuotedString(source, index);
+      index = skipDollarQuotedString({ source, dollarIndex: index });
       continue;
     }
 
@@ -272,7 +296,10 @@ function violatesAddColumnNotNullWithoutDefault(statement: string): boolean {
   while (true) {
     const keywordIndex = lower.indexOf('add column', from);
     if (keywordIndex === -1) break;
-    const clauseEnd = scanAlterActionEnd(statement, keywordIndex + 'add column'.length);
+    const clauseEnd = scanAlterActionEnd({
+      source: statement,
+      startIndex: keywordIndex + 'add column'.length,
+    });
     const clause = statement.slice(keywordIndex, clauseEnd);
     const clauseLower = clause.toLowerCase();
 
@@ -502,13 +529,19 @@ function parseMigrationHeader(rawFileContent: string): ParsedHeader {
   return { allows, headerErrors };
 }
 
-function emitViolationIfNotAllowed(
-  allows: Map<MigrationSafetyRuleId, string>,
-  usedAllowRules: Set<MigrationSafetyRuleId>,
-  ruleId: MigrationSafetyRuleId,
-  filename: string,
-  lineNumber: number,
-): Violation | null {
+function emitViolationIfNotAllowed({
+  allows,
+  usedAllowRules,
+  ruleId,
+  filename,
+  lineNumber,
+}: {
+  allows: Map<MigrationSafetyRuleId, string>;
+  usedAllowRules: Set<MigrationSafetyRuleId>;
+  ruleId: MigrationSafetyRuleId;
+  filename: string;
+  lineNumber: number;
+}): Violation | null {
   if (allows.has(ruleId)) {
     usedAllowRules.add(ruleId);
     return null;
@@ -541,10 +574,13 @@ const statementBreakpointPattern = /\n--> statement-breakpoint\s*\n?/g;
  * transaction — and `CREATE INDEX CONCURRENTLY` cannot run inside one. Reports
  * each offending segment at the line of its second statement.
  */
-function findNonTransactionalBreakpointViolations(
-  filename: string,
-  fileContent: string,
-): Violation[] {
+function findNonTransactionalBreakpointViolations({
+  filename,
+  fileContent,
+}: {
+  filename: string;
+  fileContent: string;
+}): Violation[] {
   const violations: Violation[] = [];
   let searchOffset = 0;
 
@@ -559,7 +595,7 @@ function findNonTransactionalBreakpointViolations(
     const lineNumber =
       segmentStart === -1 || !secondStatement
         ? 1
-        : offsetToLineNumber(fileContent, segmentStart + secondStatement.startOffset);
+        : offsetToLineNumber({ fileContent, offset: segmentStart + secondStatement.startOffset });
     violations.push({
       filename,
       lineNumber,
@@ -611,7 +647,13 @@ function stripDollarQuotedBodies(sqlText: string): string {
  * - **Notes:** the table list is {@link EXPECTED_FORCE_RLS_TABLES}, the same source the RLS
  *   matrix asserts against, so a newly forced table is covered here without a second list.
  */
-function findForceRlsDataMigrationViolations(filename: string, fileContent: string): Violation[] {
+function findForceRlsDataMigrationViolations({
+  filename,
+  fileContent,
+}: {
+  filename: string;
+  fileContent: string;
+}): Violation[] {
   // A function body (`$$ … $$`) runs when the function is called, not when the file migrates —
   // a trigger that upserts a counter is not a data migration.
   const sqlOnly = stripDollarQuotedBodies(stripSqlLineComments(fileContent));
@@ -641,7 +683,13 @@ function findForceRlsDataMigrationViolations(filename: string, fileContent: stri
   return violations;
 }
 
-function findRowSecurityGucViolations(filename: string, fileContent: string): Violation[] {
+function findRowSecurityGucViolations({
+  filename,
+  fileContent,
+}: {
+  filename: string;
+  fileContent: string;
+}): Violation[] {
   const violations: Violation[] = [];
   const lines = fileContent.split('\n');
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
@@ -665,10 +713,13 @@ function findRowSecurityGucViolations(filename: string, fileContent: string): Vi
  * comments suppress matching rules. Used by `pnpm db:migrate:lint` and unit
  * tests.
  */
-export function lintMigrationFileContent(
-  filename: string,
-  fileContent: string,
-): {
+export function lintMigrationFileContent({
+  filename,
+  fileContent,
+}: {
+  filename: string;
+  fileContent: string;
+}): {
   violations: Violation[];
   headerErrors: string[];
   usedAllowRules: Set<MigrationSafetyRuleId>;
@@ -684,11 +735,11 @@ export function lintMigrationFileContent(
   }
 
   if (!executionMode.transactional) {
-    violations.push(...findNonTransactionalBreakpointViolations(filename, fileContent));
+    violations.push(...findNonTransactionalBreakpointViolations({ filename, fileContent }));
   }
 
-  violations.push(...findRowSecurityGucViolations(filename, fileContent));
-  violations.push(...findForceRlsDataMigrationViolations(filename, fileContent));
+  violations.push(...findRowSecurityGucViolations({ filename, fileContent }));
+  violations.push(...findForceRlsDataMigrationViolations({ filename, fileContent }));
 
   const statements = splitSqlStatements(fileContent);
 
@@ -697,65 +748,65 @@ export function lintMigrationFileContent(
     if (statementWithoutFullLineComments.length === 0) continue;
 
     const keywordRelativeCharacterIndex = characterIndexOfFirstDdlKeyword(statement.text);
-    const lineNumber = offsetToLineNumber(
+    const lineNumber = offsetToLineNumber({
       fileContent,
-      statement.startOffset + keywordRelativeCharacterIndex,
-    );
+      offset: statement.startOffset + keywordRelativeCharacterIndex,
+    });
     const normalized = normalizeSqlWhitespace(statementWithoutFullLineComments);
     if (normalized.length === 0) continue;
 
     if (violatesAddColumnNotNullWithoutDefault(statementWithoutFullLineComments)) {
-      const violation = emitViolationIfNotAllowed(
+      const violation = emitViolationIfNotAllowed({
         allows,
         usedAllowRules,
-        'add_column_not_null_without_default',
+        ruleId: 'add_column_not_null_without_default',
         filename,
         lineNumber,
-      );
+      });
       if (violation) violations.push(violation);
     }
 
     if (/\bALTER\s+TABLE\b.*\bRENAME\b/iu.test(normalized)) {
-      const violation = emitViolationIfNotAllowed(
+      const violation = emitViolationIfNotAllowed({
         allows,
         usedAllowRules,
-        'rename_column_or_table',
+        ruleId: 'rename_column_or_table',
         filename,
         lineNumber,
-      );
+      });
       if (violation) violations.push(violation);
     }
 
     if (/\bDROP\s+COLUMN\b/iu.test(normalized)) {
-      const violation = emitViolationIfNotAllowed(
+      const violation = emitViolationIfNotAllowed({
         allows,
         usedAllowRules,
-        'drop_column',
+        ruleId: 'drop_column',
         filename,
         lineNumber,
-      );
+      });
       if (violation) violations.push(violation);
     }
 
     if (/\bALTER\s+COLUMN\b.*\bTYPE\b/iu.test(normalized)) {
-      const violation = emitViolationIfNotAllowed(
+      const violation = emitViolationIfNotAllowed({
         allows,
         usedAllowRules,
-        'alter_column_type',
+        ruleId: 'alter_column_type',
         filename,
         lineNumber,
-      );
+      });
       if (violation) violations.push(violation);
     }
 
     if (/\bSET\s+NOT\s+NULL\b/iu.test(normalized)) {
-      const violation = emitViolationIfNotAllowed(
+      const violation = emitViolationIfNotAllowed({
         allows,
         usedAllowRules,
-        'set_not_null_on_existing_column',
+        ruleId: 'set_not_null_on_existing_column',
         filename,
         lineNumber,
-      );
+      });
       if (violation) violations.push(violation);
     }
 
@@ -770,23 +821,23 @@ export function lintMigrationFileContent(
         });
       }
       if (!createIndexInfo.hasConcurrently) {
-        const violation = emitViolationIfNotAllowed(
+        const violation = emitViolationIfNotAllowed({
           allows,
           usedAllowRules,
-          'create_index_without_concurrently',
+          ruleId: 'create_index_without_concurrently',
           filename,
           lineNumber,
-        );
+        });
         if (violation) violations.push(violation);
       }
       if (!createIndexInfo.hasIfNotExists) {
-        const violation = emitViolationIfNotAllowed(
+        const violation = emitViolationIfNotAllowed({
           allows,
           usedAllowRules,
-          'missing_if_not_exists_on_create',
+          ruleId: 'missing_if_not_exists_on_create',
           filename,
           lineNumber,
-        );
+        });
         if (violation) violations.push(violation);
       }
     }
@@ -799,35 +850,35 @@ export function lintMigrationFileContent(
       !dropIndexInfo.hasConcurrently &&
       executionMode.transactional
     ) {
-      const violation = emitViolationIfNotAllowed(
+      const violation = emitViolationIfNotAllowed({
         allows,
         usedAllowRules,
-        'drop_index_without_concurrently',
+        ruleId: 'drop_index_without_concurrently',
         filename,
         lineNumber,
-      );
+      });
       if (violation) violations.push(violation);
     }
 
     if (matchesCreateTableWithoutIfNotExists(normalized)) {
-      const violation = emitViolationIfNotAllowed(
+      const violation = emitViolationIfNotAllowed({
         allows,
         usedAllowRules,
-        'missing_if_not_exists_on_create',
+        ruleId: 'missing_if_not_exists_on_create',
         filename,
         lineNumber,
-      );
+      });
       if (violation) violations.push(violation);
     }
 
     if (matchesCreateSchemaWithoutIfNotExists(normalized)) {
-      const violation = emitViolationIfNotAllowed(
+      const violation = emitViolationIfNotAllowed({
         allows,
         usedAllowRules,
-        'missing_if_not_exists_on_create',
+        ruleId: 'missing_if_not_exists_on_create',
         filename,
         lineNumber,
-      );
+      });
       if (violation) violations.push(violation);
     }
 
@@ -842,13 +893,13 @@ export function lintMigrationFileContent(
             'DROP TABLE without IF EXISTS is not allowed. Add IF EXISTS or avoid destructive DDL.',
         });
       } else {
-        const violation = emitViolationIfNotAllowed(
+        const violation = emitViolationIfNotAllowed({
           allows,
           usedAllowRules,
-          'drop_table',
+          ruleId: 'drop_table',
           filename,
           lineNumber,
-        );
+        });
         if (violation) violations.push(violation);
       }
     }
@@ -859,13 +910,13 @@ export function lintMigrationFileContent(
       /\bFOREIGN\s+KEY\b/iu.test(normalized) &&
       !/\bNOT\s+VALID\b/iu.test(normalized)
     ) {
-      const violation = emitViolationIfNotAllowed(
+      const violation = emitViolationIfNotAllowed({
         allows,
         usedAllowRules,
-        'add_foreign_key_without_not_valid',
+        ruleId: 'add_foreign_key_without_not_valid',
         filename,
         lineNumber,
-      );
+      });
       if (violation) violations.push(violation);
     }
 
@@ -878,13 +929,13 @@ export function lintMigrationFileContent(
       !/\bUNIQUE\b/iu.test(normalized) &&
       !/\bNOT\s+VALID\b/iu.test(normalized)
     ) {
-      const violation = emitViolationIfNotAllowed(
+      const violation = emitViolationIfNotAllowed({
         allows,
         usedAllowRules,
-        'add_check_without_not_valid',
+        ruleId: 'add_check_without_not_valid',
         filename,
         lineNumber,
-      );
+      });
       if (violation) violations.push(violation);
     }
 
@@ -895,13 +946,13 @@ export function lintMigrationFileContent(
       !/\bPRIMARY\s+KEY\b/iu.test(normalized) &&
       !/\bFOREIGN\s+KEY\b/iu.test(normalized)
     ) {
-      const violation = emitViolationIfNotAllowed(
+      const violation = emitViolationIfNotAllowed({
         allows,
         usedAllowRules,
-        'add_unique_constraint_inline',
+        ruleId: 'add_unique_constraint_inline',
         filename,
         lineNumber,
-      );
+      });
       if (violation) violations.push(violation);
     }
   }
@@ -1002,10 +1053,13 @@ export function getMaxMigrationPrefix(upMigrationFilenames: string[]): string | 
  *
  * `now` is injectable for deterministic tests.
  */
-export function suggestNextMigrationPrefix(
-  upMigrationFilenames: string[],
-  now: Date = new Date(),
-): {
+export function suggestNextMigrationPrefix({
+  upMigrationFilenames,
+  now = new Date(),
+}: {
+  upMigrationFilenames: string[];
+  now?: Date | undefined;
+}): {
   currentMax: string | null;
   nextPrefix: string;
 } {
@@ -1020,7 +1074,13 @@ function parsePrefixDateUtc(prefix: string): Date {
   return new Date(`${year}-${month}-${day}T00:00:00.000Z`);
 }
 
-function daysBetweenPrefixDates(previousPrefix: string, prefix: string): number {
+function daysBetweenPrefixDates({
+  previousPrefix,
+  prefix,
+}: {
+  previousPrefix: string;
+  prefix: string;
+}): number {
   const previousDate = parsePrefixDateUtc(previousPrefix);
   const currentDate = parsePrefixDateUtc(prefix);
   return Math.abs(currentDate.getTime() - previousDate.getTime()) / (24 * 60 * 60 * 1000);
@@ -1081,7 +1141,7 @@ export function lintMigrationTimestamps(upMigrationFilenames: string[]): Timesta
       });
     }
     if (previousPrefix !== null) {
-      const gapDays = daysBetweenPrefixDates(previousPrefix, prefix);
+      const gapDays = daysBetweenPrefixDates({ previousPrefix, prefix });
       if (gapDays > migrationTimestampGapWarningDays) {
         violations.push({
           filename,
@@ -1103,11 +1163,15 @@ export function lintMigrationTimestamps(upMigrationFilenames: string[]): Timesta
  * `<prefix>_<name>.down.sql` companion, and orphan `.down.sql` files (no
  * matching up) are reported.
  */
-export function lintMigrationRollbackPairing(
-  _migrationsFolder: string,
-  upMigrationFilenames: string[],
-  fileContentsByFilename: Map<string, string>,
-): RollbackViolation[] {
+export function lintMigrationRollbackPairing({
+  _migrationsFolder,
+  upMigrationFilenames,
+  fileContentsByFilename,
+}: {
+  _migrationsFolder: string;
+  upMigrationFilenames: string[];
+  fileContentsByFilename: Map<string, string>;
+}): RollbackViolation[] {
   const violations: RollbackViolation[] = [];
   const allFilenames = [...fileContentsByFilename.keys()];
 
@@ -1177,7 +1241,7 @@ export async function lintMigrationsDirectory(migrationsFolder: string): Promise
       continue;
     }
 
-    const { violations, headerErrors } = lintMigrationFileContent(filename, fileContent);
+    const { violations, headerErrors } = lintMigrationFileContent({ filename, fileContent });
 
     if (headerErrors.length > 0) {
       headerFailureCount += headerErrors.length;
@@ -1204,11 +1268,11 @@ export async function lintMigrationsDirectory(migrationsFolder: string): Promise
   if (headerFailureCount > 0) {
     summaryPieces.push(`${headerFailureCount} header error(s)`);
   }
-  const rollbackViolations = lintMigrationRollbackPairing(
-    migrationsFolder,
+  const rollbackViolations = lintMigrationRollbackPairing({
+    _migrationsFolder: migrationsFolder,
     upMigrationFilenames,
     fileContentsByFilename,
-  );
+  });
 
   for (const violation of rollbackViolations) {
     console.error(chalk.red(`${violation.filename}  [${violation.ruleId}]`));

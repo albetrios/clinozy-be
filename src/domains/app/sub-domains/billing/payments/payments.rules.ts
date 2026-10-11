@@ -74,10 +74,13 @@ function isFixedMoney(row: Readonly<Record<string, unknown>>): boolean {
 }
 
 /** B17: an invoice only on a receipt, and the receipt's contact the invoice's. */
-async function assertInvoiceOfReceipt(
-  kind: string,
-  values: Readonly<Record<string, unknown>>,
-): Promise<void> {
+async function assertInvoiceOfReceipt({
+  kind,
+  values,
+}: {
+  kind: string;
+  values: Readonly<Record<string, unknown>>;
+}): Promise<void> {
   if (typeof values.invoice_id !== 'number') return;
   if (kind !== PAYMENT_KIND.RECEIPT) {
     throw fieldValidationError({
@@ -95,7 +98,13 @@ async function assertInvoiceOfReceipt(
 }
 
 /** A purchase (a medical purchase order or a stock purchase) only on a supplier bill — and one of them. */
-function assertSupplierBillPurchase(kind: string, values: Readonly<Record<string, unknown>>): void {
+function assertSupplierBillPurchase({
+  kind,
+  values,
+}: {
+  kind: string;
+  values: Readonly<Record<string, unknown>>;
+}): void {
   for (const field of SUPPLIER_BILL_PURCHASE_FIELDS) {
     if (typeof values[field] === 'number' && kind !== PAYMENT_KIND.SUPPLIER_BILL) {
       throw fieldValidationError({
@@ -125,8 +134,8 @@ async function assertKindFields(values: Readonly<Record<string, unknown>>): Prom
       messageKey: 'errors:validation.paymentContactRequired',
     });
   }
-  await assertInvoiceOfReceipt(kind, values);
-  assertSupplierBillPurchase(kind, values);
+  await assertInvoiceOfReceipt({ kind, values });
+  assertSupplierBillPurchase({ kind, values });
   if (
     (PAYMENT_PAYEE_KIND_VALUES as readonly string[]).includes(kind) &&
     typeof values.payee_name !== 'string'
@@ -151,7 +160,13 @@ async function assertKindFields(values: Readonly<Record<string, unknown>>): Prom
  * B18 on a change: the splits as columns — `credit` only on a pending credit's payment, and the
  * money of a refund, a reversal or a settlement kept (only its modes may move).
  */
-function applySplits(values: Record<string, unknown>, existing: BaseRecordRow): void {
+function applySplits({
+  values,
+  existing,
+}: {
+  values: Record<string, unknown>;
+  existing: BaseRecordRow;
+}): void {
   if (!('splits' in values)) return;
   const columns = splitsToColumns(values.splits as PaymentSplit[]);
   delete values.splits;
@@ -175,7 +190,13 @@ function applySplits(values: Record<string, unknown>, existing: BaseRecordRow): 
 }
 
 /** A refund's, reversal's or settlement's contact, invoice and purchase stay as their write set them. */
-function assertLinksKept(values: Readonly<Record<string, unknown>>, existing: BaseRecordRow): void {
+function assertLinksKept({
+  values,
+  existing,
+}: {
+  values: Readonly<Record<string, unknown>>;
+  existing: BaseRecordRow;
+}): void {
   if (!isFixedMoney(existing)) return;
   for (const field of ['contact_id', 'invoice_id', ...SUPPLIER_BILL_PURCHASE_FIELDS] as const) {
     if (field in values && values[field] !== existing[field]) {
@@ -188,10 +209,13 @@ function assertLinksKept(values: Readonly<Record<string, unknown>>, existing: Ba
 }
 
 /** The payment a reversal undoes (none for any other payment). */
-async function reversedOf(
-  repository: PaymentsRepository,
-  row: Readonly<Record<string, unknown>>,
-): Promise<BaseRecordRow | undefined> {
+async function reversedOf({
+  repository,
+  row,
+}: {
+  repository: PaymentsRepository;
+  row: Readonly<Record<string, unknown>>;
+}): Promise<BaseRecordRow | undefined> {
   if (typeof row.reverses_payment_id !== 'number') return undefined;
   return (await repository.findById(row.reverses_payment_id)) ?? undefined;
 }
@@ -208,11 +232,15 @@ const RECORDED_REFERENCES = {
 type RecordedReference = keyof typeof RECORDED_REFERENCES;
 
 /** The recorded value of one field — splits as `[{ mode, amount }]`, references as public ids. */
-function recordedValue(
-  row: BaseRecordRow,
-  field: (typeof PAYMENT_EDIT_RECORDED_FIELDS)[number],
-  publicIds: ReadonlyMap<RecordedReference, Map<number, string>>,
-): unknown {
+function recordedValue({
+  row,
+  field,
+  publicIds,
+}: {
+  row: BaseRecordRow;
+  field: (typeof PAYMENT_EDIT_RECORDED_FIELDS)[number];
+  publicIds: ReadonlyMap<RecordedReference, Map<number, string>>;
+}): unknown {
   if (field === 'splits') return columnsToSplits(row);
   if (field === 'paid_at') return toInstant(row.paid_at);
   if (field in RECORDED_REFERENCES) {
@@ -241,8 +269,8 @@ async function recordEdit(options: {
   }
   const changes: Record<string, { from: unknown; to: unknown }> = {};
   for (const field of PAYMENT_EDIT_RECORDED_FIELDS) {
-    const from = recordedValue(before, field, publicIds);
-    const to = recordedValue(after, field, publicIds);
+    const from = recordedValue({ row: before, field, publicIds });
+    const to = recordedValue({ row: after, field, publicIds });
     if (JSON.stringify(from) !== JSON.stringify(to)) changes[field] = { from, to };
   }
   if (Object.keys(changes).length === 0) return;
@@ -277,15 +305,20 @@ async function moveLinkedPaid(options: {
     },
     ...SUPPLIER_BILL_PURCHASE_FIELDS.map((field) => ({
       field,
-      effect: (row: Readonly<Record<string, unknown>>, reversedRow?: BaseRecordRow) =>
-        purchaseEffect(row, field, reversedRow),
+      effect: ({
+        row,
+        reversed: reversedRow,
+      }: {
+        row: Readonly<Record<string, unknown>>;
+        reversed?: BaseRecordRow | undefined;
+      }) => purchaseEffect({ row, field, reversed: reversedRow }),
       apply: (id: unknown, delta: number) =>
         applyPurchasePaid({ context, field, purchaseId: id, delta }),
     })),
   ];
   for (const link of links) {
-    const was = link.effect(before, reversed);
-    const now = link.effect(after, reversed);
+    const was = link.effect({ row: before, reversed });
+    const now = link.effect({ row: after, reversed });
     if (before[link.field] === after[link.field]) {
       await link.apply(after[link.field], now - was);
       continue;
@@ -301,14 +334,14 @@ async function moveLinkedPaid(options: {
  */
 async function reversePayment(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing, context } = input;
-  const body = parseWithSchema(ReversePaymentDto, input.input);
+  const body = parseWithSchema({ schema: ReversePaymentDto, data: input.input });
   const repository = input.repository as PaymentsRepository;
   if (existing.kind === PAYMENT_KIND.REVERSAL || (await repository.hasReversal(existing.id))) {
     throw new ConflictError('errors:paymentAlreadyReversed').withReason('already_reversed');
   }
   const day = await repository.lockDay({
     branchId: existing.branch_id as number,
-    date: await organizationDayOf(context, existing.paid_at as Date),
+    date: await organizationDayOf({ context, at: existing.paid_at as Date }),
   });
   if (day?.status !== DAY_CLOSE_STATUS.CLOSED) {
     throw new ConflictError('errors:paymentDayOpen').withReason('day_open');
@@ -341,12 +374,24 @@ async function reversePayment(input: BaseRecordActionInput): Promise<BaseRecordR
 }
 
 /** The public ids a page's ledger rows name in `field` (none for a row that names none). */
-function linkedPublicIds(outputs: readonly Record<string, unknown>[], field: string): string[] {
+function linkedPublicIds({
+  outputs,
+  field,
+}: {
+  outputs: readonly Record<string, unknown>[];
+  field: string;
+}): string[] {
   return outputs.flatMap((output) => (typeof output[field] === 'string' ? [output[field]] : []));
 }
 
 /** The link's entry for a row's linked public id — null when it names none. */
-function linkOf<Link>(map: ReadonlyMap<string, Link>, publicId: unknown): Link | null {
+function linkOf<Link>({
+  map,
+  publicId,
+}: {
+  map: ReadonlyMap<string, Link>;
+  publicId: unknown;
+}): Link | null {
   return typeof publicId === 'string' ? (map.get(publicId) ?? null) : null;
 }
 
@@ -355,26 +400,38 @@ function linkOf<Link>(map: ReadonlyMap<string, Link>, publicId: unknown): Link |
  * number, type and due), the credit note (`CN-3`), the pending credit (`CR-2`), the stock purchase
  * and the medical order (their numbers and bill numbers) — one read per kind for the page.
  */
-async function attachLinkNumbers(
-  repository: PaymentsRepository,
-  outputs: Record<string, unknown>[],
-): Promise<void> {
+async function attachLinkNumbers({
+  repository,
+  outputs,
+}: {
+  repository: PaymentsRepository;
+  outputs: Record<string, unknown>[];
+}): Promise<void> {
   const numbers = await repository.findLinkNumbers({
-    invoiceIds: linkedPublicIds(outputs, 'invoice_id'),
-    creditNoteIds: linkedPublicIds(outputs, 'invoice_credit_note_id'),
-    pendingCreditIds: linkedPublicIds(outputs, 'pending_credit_id'),
-    stockPurchaseIds: linkedPublicIds(outputs, 'stock_purchase_id'),
-    medicalPurchaseOrderIds: linkedPublicIds(outputs, 'medical_purchase_order_id'),
+    invoiceIds: linkedPublicIds({ outputs, field: 'invoice_id' }),
+    creditNoteIds: linkedPublicIds({ outputs, field: 'invoice_credit_note_id' }),
+    pendingCreditIds: linkedPublicIds({ outputs, field: 'pending_credit_id' }),
+    stockPurchaseIds: linkedPublicIds({ outputs, field: 'stock_purchase_id' }),
+    medicalPurchaseOrderIds: linkedPublicIds({ outputs, field: 'medical_purchase_order_id' }),
   });
   for (const output of outputs) {
-    output.invoice = linkOf(numbers.invoices, output.invoice_id);
-    output.invoice_credit_note_number = linkOf(numbers.creditNotes, output.invoice_credit_note_id);
-    output.pending_credit_number = linkOf(numbers.pendingCredits, output.pending_credit_id);
-    output.stock_purchase = linkOf(numbers.stockPurchases, output.stock_purchase_id);
-    output.medical_purchase_order = linkOf(
-      numbers.medicalPurchaseOrders,
-      output.medical_purchase_order_id,
-    );
+    output.invoice = linkOf({ map: numbers.invoices, publicId: output.invoice_id });
+    output.invoice_credit_note_number = linkOf({
+      map: numbers.creditNotes,
+      publicId: output.invoice_credit_note_id,
+    });
+    output.pending_credit_number = linkOf({
+      map: numbers.pendingCredits,
+      publicId: output.pending_credit_id,
+    });
+    output.stock_purchase = linkOf({
+      map: numbers.stockPurchases,
+      publicId: output.stock_purchase_id,
+    });
+    output.medical_purchase_order = linkOf({
+      map: numbers.medicalPurchaseOrders,
+      publicId: output.medical_purchase_order_id,
+    });
   }
 }
 
@@ -431,8 +488,8 @@ export function createPaymentsRules(repository: PaymentsRepository): BaseRecordR
           paidAt: values.paid_at,
         });
       }
-      applySplits(values, existing);
-      assertLinksKept(values, existing);
+      applySplits({ values, existing });
+      assertLinksKept({ values, existing });
       await assertKindFields({ ...existing, ...values });
       if ('attachment_keys' in values) {
         await requireConfirmedUploads({
@@ -458,7 +515,7 @@ export function createPaymentsRules(repository: PaymentsRepository): BaseRecordR
     },
     afterWrite: async (row, change, context) => {
       if (change.kind === 'transition') return;
-      const reversed = await reversedOf(repository, row);
+      const reversed = await reversedOf({ repository, row });
       if (change.kind === 'create') {
         await applyPaymentEffects({ context, row, reversed, sign: 1 });
         await writePaymentActivity({ context, row });
@@ -511,7 +568,7 @@ export function createPaymentsRules(repository: PaymentsRepository): BaseRecordR
         output.last_edit = summary ? serializePaymentEdit(summary.last) : null;
         output.created_by_membership_id = recordedBy.get(id) ?? null;
       }
-      await attachLinkNumbers(repository, outputs);
+      await attachLinkNumbers({ repository, outputs });
       await attachBilledContacts(outputs);
     },
   };

@@ -32,9 +32,12 @@ export const roleIdParamsDto = z
  */
 export const createMemberRoleDto = z
   .object({
-    name: trimmedStringMinMax(1, 100),
+    name: trimmedStringMinMax({ min: 1, max: 100 }),
     description: trimmedString().max(500).nullable().optional(),
-    permission_codes: z.array(trimmedStringMinMax(1, 100)).max(200).optional(),
+    permission_codes: z
+      .array(trimmedStringMinMax({ min: 1, max: 100 }))
+      .max(200)
+      .optional(),
     tone: chipToneSchema.optional(),
     // Launch RC-142: start from another role's access ("copy access from").
     copy_from_role_id: recordIdSchema.optional(),
@@ -48,7 +51,7 @@ export const createMemberRoleDto = z
  */
 export const updateMemberRoleDto = z
   .object({
-    name: trimmedStringMinMax(1, 100).optional(),
+    name: trimmedStringMinMax({ min: 1, max: 100 }).optional(),
     description: trimmedString().max(500).nullable().optional(),
     tone: chipToneSchema.optional(),
     expected_updated_at: expectedUpdatedAtSchema,

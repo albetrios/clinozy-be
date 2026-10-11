@@ -11,7 +11,8 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
   return {
     ...actual,
     withMaintenanceDatabaseContext: vi.fn(
-      async (_scope: unknown, callback: () => Promise<unknown>) => callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
+        callback(),
     ),
   };
 });
@@ -62,14 +63,14 @@ describe('runStripeWebhookEventCatchupJob', () => {
 
     expect(result).toEqual({ scannedCount: 3, missingCount: 2, enqueuedCount: 2 });
     expect(enqueueStripeWebhookByEventIdForReclaimMock).toHaveBeenCalledTimes(2);
-    expect(enqueueStripeWebhookByEventIdForReclaimMock).toHaveBeenCalledWith(
-      'evt_missing_1',
-      'stripe-webhook-event-catchup',
-    );
-    expect(enqueueStripeWebhookByEventIdForReclaimMock).not.toHaveBeenCalledWith(
-      'evt_present',
-      expect.anything(),
-    );
+    expect(enqueueStripeWebhookByEventIdForReclaimMock).toHaveBeenCalledWith({
+      stripeEventId: 'evt_missing_1',
+      requestId: 'stripe-webhook-event-catchup',
+    });
+    expect(enqueueStripeWebhookByEventIdForReclaimMock).not.toHaveBeenCalledWith({
+      stripeEventId: 'evt_present',
+      requestId: expect.anything(),
+    });
   });
 
   it('no-ops without a Stripe call when Stripe is not configured', async () => {

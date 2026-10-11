@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { runOrganizationScopedWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import {
   calendarDateInTimeZone,
@@ -85,7 +85,7 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
 
   /** Moves the organization into `zone` (the rules read it on every run). */
   async function setZone(zone: string): Promise<void> {
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE tenancy.organizations SET timezone = ${zone}
       WHERE public_id = ${fixture.organization.publicId}
     `;
@@ -94,9 +94,10 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
   /** One run of the task rules for the fixture organization, now. */
   async function runTaskRules(): Promise<TaskRulesRunCounts> {
     const organizationPublicId = fixture.organization.publicId;
-    return runOrganizationScopedWorkerJob({ organizationPublicId }, (databaseHandle) =>
-      runTaskRulesJob(databaseHandle, organizationPublicId),
-    );
+    return runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: (databaseHandle) => runTaskRulesJob({ databaseHandle, organizationPublicId }),
+    });
   }
 
   /** Every rule on; `automatic` ones set to "Let the app handle". */
@@ -187,8 +188,11 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
       await clearOfTheHour();
       const zone = zoneOfOffset(offsetAtLocalHour(hour));
       await setZone(zone);
-      const today = calendarDateInTimeZone(zone, new Date());
-      await unpaidBill(contact, calendarDateInTimeZone(zone, new Date(Date.now() - 24 * HOUR)));
+      const today = calendarDateInTimeZone({ timeZone: zone, at: new Date() });
+      await unpaidBill(
+        contact,
+        calendarDateInTimeZone({ timeZone: zone, at: new Date(Date.now() - 24 * HOUR) }),
+      );
 
       await runTaskRules();
       await ruleTasks('payment_due', `contact_id=${contact}`, tab);
@@ -225,7 +229,7 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
     await setZone(zone);
     /** Moves the visit to start `minutesAgo` minutes ago (to the minute), on today's local date. */
     const startAgo = async (minutesAgo: number) => {
-      await getOperatorSql()`
+      await operatorQuery`
         UPDATE app.appointments
         SET appointment_date = ((now() - make_interval(mins => ${minutesAgo})) at time zone ${zone})::date,
             start_time = date_trunc('minute', (now() - make_interval(mins => ${minutesAgo})) at time zone ${zone})::time
@@ -244,7 +248,7 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
     flow.expectValue('18 minutes in — the arrive task', '.data | length', 1);
     const arriveTask = flow.last('.data[0].id');
 
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.appointments SET appointment_date = appointment_date + 1 WHERE public_id = ${visit}
     `;
     await runTaskRules();
@@ -285,7 +289,10 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
     const followUp = flow.last('.data[0].id');
     expect(new Date(flow.last('.data[0].due_at')).toISOString(), 'due 11:00 that day').toBe(
       instantInTimeZone({
-        date: calendarDateInTimeZone(midnightZone, new Date(nextHour + 5 * 60_000)),
+        date: calendarDateInTimeZone({
+          timeZone: midnightZone,
+          at: new Date(nextHour + 5 * 60_000),
+        }),
         time: '11:00',
         timeZone: midnightZone,
       }).toISOString(),
@@ -293,7 +300,10 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
 
     // Snoozed to the next midnight: a run before it keeps it snoozed; once it has passed, it wakes.
     const nextMidnight = instantInTimeZone({
-      date: calendarDateInTimeZone(midnightZone, new Date(Date.now() + 24 * HOUR)),
+      date: calendarDateInTimeZone({
+        timeZone: midnightZone,
+        at: new Date(Date.now() + 24 * HOUR),
+      }),
       time: '00:00',
       timeZone: midnightZone,
     });
@@ -305,7 +315,7 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
     await runTaskRules();
     await flow.expect(200, 'the follow-up', 'GET', `/app/tasks/${followUp}`);
     flow.expectValue('before midnight — snoozed', '.data.status', 'snoozed');
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.tasks SET snoozed_until = date_trunc('hour', now()) WHERE public_id = ${followUp}
     `;
     await runTaskRules();

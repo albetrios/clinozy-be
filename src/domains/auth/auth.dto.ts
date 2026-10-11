@@ -6,7 +6,7 @@ import { AUTH_METHOD_TYPE } from '@/domains/auth/sub-domains/auth-method/auth-me
 export const LoginDto = z
   .object({
     email: trimmedEmail(),
-    password: trimmedStringMinMax(1, 128),
+    password: trimmedStringMinMax({ min: 1, max: 128 }),
   })
   .strict();
 /** Inferred input type of {@link LoginDto}. */
@@ -94,14 +94,14 @@ function countPasswordCharacterClasses(value: string): number {
  *
  * @remarks
  * Login / step-up / `current_password` verify an EXISTING credential and intentionally keep
- * `trimmedStringMinMax(1, 128)` — applying a strength policy there would lock out users whose
+ * `trimmedStringMinMax({ min: 1, max: 128 })` — applying a strength policy there would lock out users whose
  * password predates the policy. Breach (HIBP k-anonymity) and strength-score (zxcvbn) checks are
  * deliberately left as optional future additions; this policy is the dependency-free baseline.
  */
 export function passwordPolicy(): z.ZodType<string> {
-  return trimmedStringMinMax(PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH).refine(
+  return trimmedStringMinMax({ min: PASSWORD_MIN_LENGTH, max: PASSWORD_MAX_LENGTH }).refine(
     (value) => countPasswordCharacterClasses(value) >= PASSWORD_MIN_CHARACTER_CLASSES,
-    { message: 'Password must include at least 3 of: lowercase, uppercase, number, symbol' },
+    { message: 'errors:validation.passwordComplexity' },
   );
 }
 
@@ -117,7 +117,7 @@ export type ForgotPasswordInput = z.infer<typeof ForgotPasswordDto>;
 /** Zod schema for the `POST /api/v1/auth/password/reset` request body (reset token + a policy-compliant new password). */
 export const ResetPasswordDto = z
   .object({
-    token: trimmedStringMinMax(1, 512),
+    token: trimmedStringMinMax({ min: 1, max: 512 }),
     password: passwordPolicy(),
   })
   .strict();
@@ -127,7 +127,7 @@ export type ResetPasswordInput = z.infer<typeof ResetPasswordDto>;
 /** Zod schema for the authenticated `POST /api/v1/auth/password/change` request body. */
 export const ChangePasswordDto = z
   .object({
-    current_password: trimmedStringMinMax(1, 128),
+    current_password: trimmedStringMinMax({ min: 1, max: 128 }),
     new_password: passwordPolicy(),
   })
   .strict();
@@ -142,7 +142,7 @@ export type ChangePasswordInput = z.infer<typeof ChangePasswordDto>;
  * member rejects a body carrying both factors or unknown keys.
  */
 export const StepUpVerifyDto = z.union([
-  z.object({ password: trimmedStringMinMax(1, 128) }).strict(),
+  z.object({ password: trimmedStringMinMax({ min: 1, max: 128 }) }).strict(),
   z
     .object({
       code: z
@@ -190,13 +190,13 @@ export type MfaEnrollConfirmInput = z.infer<typeof MfaEnrollConfirmDto>;
 /** Public login MFA step after password verification (no JWT yet). */
 export const MfaLoginVerifyDto = z
   .object({
-    mfa_session_token: trimmedStringMinMax(1, 128),
+    mfa_session_token: trimmedStringMinMax({ min: 1, max: 128 }),
     totp_code: z.string().trim().length(6).regex(/^\d+$/).optional(),
-    recovery_code: trimmedStringMinMax(8, 64).optional(),
+    recovery_code: trimmedStringMinMax({ min: 8, max: 64 }).optional(),
   })
   .strict()
   .refine((value) => value.totp_code !== undefined || value.recovery_code !== undefined, {
-    message: 'Either totp_code or recovery_code is required',
+    message: 'errors:validation.totpOrRecoveryCodeRequired',
     path: ['totp_code'],
   });
 /** Inferred input type of {@link MfaLoginVerifyDto}; exactly one of `totp_code` or `recovery_code` is required. */
@@ -219,8 +219,8 @@ export type MfaLoginVerifyInput = z.infer<typeof MfaLoginVerifyDto>;
  * `code` and `state` are ever read — `state` is the CSRF-bearing value and is verified downstream.
  */
 export const OauthCallbackQueryDto = z.looseObject({
-  code: trimmedStringMinMax(1, 2048),
-  state: trimmedStringMinMax(1, 512),
+  code: trimmedStringMinMax({ min: 1, max: 2048 }),
+  state: trimmedStringMinMax({ min: 1, max: 512 }),
   /** Google: issuer identifier (`https://accounts.google.com`). */
   iss: z.string().optional(),
   /** Google/GitHub: space-delimited scopes actually granted. */
@@ -240,7 +240,7 @@ export type OauthCallbackQueryInput = z.infer<typeof OauthCallbackQueryDto>;
 /** Zod schema for the `:provider` path parameter on OAuth routes (`/api/v1/auth/oauth/:provider`). */
 export const oauthProviderParamsDto = z
   .object({
-    provider: trimmedStringMinMax(1, 50),
+    provider: trimmedStringMinMax({ min: 1, max: 50 }),
   })
   .strict();
 /** Inferred input type of {@link oauthProviderParamsDto}. */
@@ -279,7 +279,7 @@ export type AuthMethodPublicIdParamsInput = z.infer<typeof authMethodPublicIdPar
 /** Zod schema for the `:session_id` (session public id) path parameter on `/api/v1/auth/me/sessions/:session_id`. */
 export const sessionIdParamsDto = z
   .object({
-    session_id: trimmedStringMinMax(1, 28),
+    session_id: trimmedStringMinMax({ min: 1, max: 28 }),
   })
   .strict();
 /** Inferred input type of {@link sessionIdParamsDto}. */

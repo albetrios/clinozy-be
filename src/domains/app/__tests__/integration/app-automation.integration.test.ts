@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { env } from '@/shared/config/env.config.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runOrganizationScopedWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
@@ -80,9 +80,10 @@ describe('App automation — integration (launch D79, ROUTE #143–#147)', () =>
 
   /** The organization's rules run (TK4), as the worker runs it. */
   function runRules() {
-    return runOrganizationScopedWorkerJob({ organizationPublicId }, (handle) =>
-      runTaskRulesJob(handle, organizationPublicId),
-    );
+    return runOrganizationScopedWorkerJob({
+      job: { organizationPublicId },
+      processor: (handle) => runTaskRulesJob({ databaseHandle: handle, organizationPublicId }),
+    });
   }
 
   /** A patient file for the contact; answers its id. */
@@ -98,7 +99,7 @@ describe('App automation — integration (launch D79, ROUTE #143–#147)', () =>
   /** A completed visit `daysAgo` days back at `start` (written directly — the rules never book the past). */
   async function visitDaysAgo(contact: string, daysAgo: number, start: string): Promise<void> {
     const date = calendarDay(fixture, -daysAgo);
-    await getOperatorSql()`
+    await operatorQuery`
       INSERT INTO app.appointments (public_id, organization_id, contact_id, branch_id,
         doctor_membership_id, appointment_date, start_time, duration_minutes, service_label, status,
         checked_in_at, completed_at)
@@ -111,7 +112,7 @@ describe('App automation — integration (launch D79, ROUTE #143–#147)', () =>
 
   /** The contact's re-target leads. */
   async function retargetLeads(contact: string) {
-    return getOperatorSql()<{ retarget_reason: string; owner_membership_id: number | null }[]>`
+    return operatorQuery<{ retarget_reason: string; owner_membership_id: number | null }[]>`
       SELECT lead.retarget_reason, lead.owner_membership_id FROM app.leads lead
       JOIN app.contacts contact ON contact.id = lead.contact_id
       WHERE contact.public_id = ${contact} AND lead.kind = 'retarget'
@@ -121,7 +122,7 @@ describe('App automation — integration (launch D79, ROUTE #143–#147)', () =>
   /** A confirmed upload of the fixture organization; answers its key. */
   async function confirmedUpload(name: string, mimeType: string): Promise<string> {
     const key = `organizations/${organizationPublicId}/uploads/${lastName}-${name}`;
-    await getOperatorSql()`
+    await operatorQuery`
       INSERT INTO upload.uploads (public_id, user_id, organization_id, file_name, file_key, mime_type,
         file_size, bucket, status, uploaded_at)
       VALUES (${generatePublicId('upload')}, ${fixture.members.owner.userId}, ${fixture.organization.id},
@@ -262,7 +263,7 @@ describe('App automation — integration (launch D79, ROUTE #143–#147)', () =>
       file_key: second,
     });
     expect(response.status).toBeGreaterThanOrEqual(500);
-    const filed = await getOperatorSql()<{ count: number }[]>`
+    const filed = await operatorQuery<{ count: number }[]>`
       SELECT count(*)::int AS count FROM app.patient_images WHERE file_key = ${second}
     `;
     expect(filed[0]?.count).toBe(0);

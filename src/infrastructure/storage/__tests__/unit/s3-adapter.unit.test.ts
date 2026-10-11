@@ -214,13 +214,15 @@ describe('S3ObjectStorageAdapter', () => {
   it('UPLOAD-03: getObjectFirstBytes rethrows a transient failure instead of returning null', async () => {
     sendMock.mockRejectedValueOnce(new Error('ETIMEDOUT'));
 
-    await expect(adapter.getObjectFirstBytes('uploads/file.png', 16)).rejects.toBeTruthy();
+    await expect(
+      adapter.getObjectFirstBytes({ key: 'uploads/file.png', byteCount: 16 }),
+    ).rejects.toBeTruthy();
   });
 
   it('UPLOAD-03: getObjectFirstBytes returns null for a genuine NoSuchKey (404)', async () => {
     sendMock.mockRejectedValueOnce(notFound('NoSuchKey'));
 
-    const result = await adapter.getObjectFirstBytes('uploads/missing.png', 16);
+    const result = await adapter.getObjectFirstBytes({ key: 'uploads/missing.png', byteCount: 16 });
 
     expect(result).toBeNull();
   });
@@ -256,7 +258,7 @@ describe('S3ObjectStorageAdapter', () => {
       ETag: '"etag-1"',
     });
 
-    const result = await adapter.getObjectFirstBytes('pending/file.png', 32);
+    const result = await adapter.getObjectFirstBytes({ key: 'pending/file.png', byteCount: 32 });
 
     expect(result).toEqual({
       body: Buffer.from([0x89, 0x50]),
@@ -271,7 +273,9 @@ describe('S3ObjectStorageAdapter', () => {
       ContentType: 'image/png',
     });
 
-    await expect(adapter.getObjectFirstBytes('pending/file.png', 32)).rejects.toBeTruthy();
+    await expect(
+      adapter.getObjectFirstBytes({ key: 'pending/file.png', byteCount: 32 }),
+    ).rejects.toBeTruthy();
   });
 
   describe('verifyUploadedObject', () => {
@@ -280,7 +284,7 @@ describe('S3ObjectStorageAdapter', () => {
     it('verifies an object matching the declared length and type', async () => {
       sendMock.mockResolvedValueOnce({ ContentType: 'image/png', ContentLength: 2048 });
 
-      expect(await adapter.verifyUploadedObject('pending/file.png', expected)).toEqual({
+      expect(await adapter.verifyUploadedObject({ key: 'pending/file.png', expected })).toEqual({
         kind: 'verified',
         metadata: { contentType: 'image/png', contentLength: 2048 },
       });
@@ -289,7 +293,9 @@ describe('S3ObjectStorageAdapter', () => {
     it('verifies when S3 echoes no content type', async () => {
       sendMock.mockResolvedValueOnce({ ContentLength: 2048 });
 
-      expect(await adapter.verifyUploadedObject('pending/file.png', expected)).toMatchObject({
+      expect(
+        await adapter.verifyUploadedObject({ key: 'pending/file.png', expected }),
+      ).toMatchObject({
         kind: 'verified',
       });
     });
@@ -308,7 +314,7 @@ describe('S3ObjectStorageAdapter', () => {
     ])('rejects with reason %s', async (reason, response) => {
       sendMock.mockImplementationOnce(response);
 
-      expect(await adapter.verifyUploadedObject('pending/file.png', expected)).toEqual({
+      expect(await adapter.verifyUploadedObject({ key: 'pending/file.png', expected })).toEqual({
         kind: 'rejected',
         reason,
       });
@@ -317,7 +323,9 @@ describe('S3ObjectStorageAdapter', () => {
     it('throws on a storage failure — never a verdict on the object', async () => {
       sendMock.mockRejectedValueOnce(new Error('connection reset by peer'));
 
-      await expect(adapter.verifyUploadedObject('pending/file.png', expected)).rejects.toBeTruthy();
+      await expect(
+        adapter.verifyUploadedObject({ key: 'pending/file.png', expected }),
+      ).rejects.toBeTruthy();
     });
   });
 

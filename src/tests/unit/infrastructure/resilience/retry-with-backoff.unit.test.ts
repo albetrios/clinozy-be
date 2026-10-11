@@ -11,9 +11,12 @@ describe('retryWithBackoff', () => {
       .mockRejectedValueOnce(new Error('fetch failed'))
       .mockResolvedValueOnce('ok');
 
-    const result = await retryWithBackoff(operation, {
-      maxAttempts: 3,
-      baseDelayMs: 1,
+    const result = await retryWithBackoff({
+      operation,
+      options: {
+        maxAttempts: 3,
+        baseDelayMs: 1,
+      },
     });
 
     expect(result).toBe('ok');
@@ -24,10 +27,13 @@ describe('retryWithBackoff', () => {
     const operation = vi.fn().mockRejectedValue(new Error('validation'));
 
     await expect(
-      retryWithBackoff(operation, {
-        maxAttempts: 3,
-        baseDelayMs: 1,
-        shouldRetry: () => false,
+      retryWithBackoff({
+        operation,
+        options: {
+          maxAttempts: 3,
+          baseDelayMs: 1,
+          shouldRetry: () => false,
+        },
       }),
     ).rejects.toThrow('validation');
     expect(operation).toHaveBeenCalledTimes(1);

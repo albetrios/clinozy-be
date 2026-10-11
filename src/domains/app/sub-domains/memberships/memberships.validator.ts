@@ -8,10 +8,10 @@ import {
 
 /** Parses the `GET /app/memberships` query (400 on a bad one). */
 export function validateListAppMembershipsQuery(query: unknown): ListAppMembershipsQueryInput {
-  return parseWithSchema(listAppMembershipsQueryDto, query);
+  return parseWithSchema({ schema: listAppMembershipsQueryDto, data: query });
 }
 
 /** Parses the `GET /app/roles` query (400 on a bad one). */
 export function validateListAppRolesQuery(query: unknown): ListAppRolesQueryInput {
-  return parseWithSchema(listAppRolesQueryDto, query);
+  return parseWithSchema({ schema: listAppRolesQueryDto, data: query });
 }

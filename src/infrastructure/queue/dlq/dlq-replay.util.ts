@@ -186,15 +186,15 @@ export async function recordDlqReplayAuditEntry(input: {
   // users_self_or_admin_access evaluate false under the RLS-subject application role
   // and the lookup returned zero rows — every manual DLQ replay failed at this
   // pre-condition. global_admin is the cross-user read arm the users policy grants.
-  const [actorRow] = await withMaintenanceDatabaseContext(
-    MAINTENANCE_SCOPE.GLOBAL_ADMIN,
-    (databaseHandle) =>
+  const [actorRow] = await withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.GLOBAL_ADMIN,
+    callback: (databaseHandle) =>
       databaseHandle
         .select({ id: users.id })
         .from(users)
         .where(eq(users.public_id, input.actorUserPublicId))
         .limit(1),
-  );
+  });
 
   if (!actorRow) {
     throw new Error(`Unknown actor user public id: ${input.actorUserPublicId}`);
@@ -205,9 +205,9 @@ export async function recordDlqReplayAuditEntry(input: {
   // here is rejected by RLS. Use the system-audit-insert context (gated on
   // `organization_id IS NULL`, so it cannot impersonate a tenant) to write
   // the row.
-  await withMaintenanceDatabaseContext(
-    MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
-    async (databaseHandle) => {
+  await withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
+    callback: async (databaseHandle) => {
       await databaseHandle.insert(logs).values({
         public_id: generatePublicId('auditLog'),
         actor_user_id: actorRow.id,
@@ -223,7 +223,7 @@ export async function recordDlqReplayAuditEntry(input: {
         },
       });
     },
-  );
+  });
 }
 
 /**
@@ -265,9 +265,9 @@ export async function recordDlqAutoRetryAuditEntry(input: {
   // sec-r5-async-queue-1: tenantless system event — see the matching comment
   // in `recordDlqReplayAuditEntry` above. The system-audit-insert context fires
   // the policy arm gated on `organization_id IS NULL`.
-  await withMaintenanceDatabaseContext(
-    MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
-    async (databaseHandle) => {
+  await withMaintenanceDatabaseContext({
+    scope: MAINTENANCE_SCOPE.SYSTEM_AUDIT_INSERT,
+    callback: async (databaseHandle) => {
       await databaseHandle.insert(logs).values({
         public_id: generatePublicId('auditLog'),
         actor_user_id: null,
@@ -284,7 +284,7 @@ export async function recordDlqAutoRetryAuditEntry(input: {
         },
       });
     },
-  );
+  });
 }
 
 /**

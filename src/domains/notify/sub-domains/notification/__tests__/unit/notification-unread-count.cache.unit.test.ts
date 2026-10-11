@@ -37,7 +37,7 @@ describe('unread-count cache — key and TTLs', () => {
     // ioredis prepends the configured prefix itself. A key that includes it here is written
     // double-prefixed: it never hits, and the test-teardown SCAN never clears it either.
     const { setCachedUnreadNotificationCount } = await importCache();
-    await setCachedUnreadNotificationCount(USER, 3);
+    await setCachedUnreadNotificationCount({ userPublicId: USER, count: 3 });
     expect(redisSet).toHaveBeenCalledWith(KEY, '3', 'EX', expect.any(Number), 'NX');
   });
 
@@ -50,7 +50,7 @@ describe('unread-count cache — key and TTLs', () => {
     const { setCachedUnreadNotificationCount, invalidateCachedUnreadNotificationCount } =
       await importCache();
 
-    await setCachedUnreadNotificationCount(USER, 3);
+    await setCachedUnreadNotificationCount({ userPublicId: USER, count: 3 });
     expect(redisSet).toHaveBeenCalledWith(
       KEY,
       '3',
@@ -77,11 +77,17 @@ describe('unread-count cache — key and TTLs', () => {
 
     redisGet.mockResolvedValueOnce('7');
     await expect(getCachedUnreadNotificationCount(USER)).resolves.toBe(7);
-    expect(recordReadCacheRequest).toHaveBeenLastCalledWith('notify_unread_count', 'hit');
+    expect(recordReadCacheRequest).toHaveBeenLastCalledWith({
+      cache: 'notify_unread_count',
+      result: 'hit',
+    });
 
     redisGet.mockResolvedValueOnce(null);
     await expect(getCachedUnreadNotificationCount(USER)).resolves.toBeNull();
-    expect(recordReadCacheRequest).toHaveBeenLastCalledWith('notify_unread_count', 'miss');
+    expect(recordReadCacheRequest).toHaveBeenLastCalledWith({
+      cache: 'notify_unread_count',
+      result: 'miss',
+    });
   });
 
   it('treats a non-integer payload as a miss rather than trusting it', async () => {

@@ -95,10 +95,10 @@ describe('audit-retention.worker — purge', () => {
     await queue!.add('cleanup-old-logs', {}, { jobId, attempts: 1 });
     await completion;
 
-    const remaining = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      async (databaseHandle) => databaseHandle.select().from(logs),
-    );
+    const remaining = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: async (databaseHandle) => databaseHandle.select().from(logs),
+    });
     expect(remaining).toHaveLength(1);
     expect(remaining[0]?.action).toBe('user.login.recent');
   });
@@ -146,10 +146,10 @@ describe('audit-retention.worker — purge', () => {
     await queue!.add('cleanup-old-logs', {}, { jobId, attempts: 1 });
     await completion;
 
-    const remaining = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      async (databaseHandle) => databaseHandle.select().from(logs),
-    );
+    const remaining = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: async (databaseHandle) => databaseHandle.select().from(logs),
+    });
     expect(remaining).toHaveLength(1);
     expect(remaining[0]?.action).toBe('user.login.just_inside_retention');
   });
@@ -160,9 +160,9 @@ describe('audit-retention.worker — purge', () => {
     staleFailedAt.setDate(staleFailedAt.getDate() - retentionDays - 1);
     const recentFailedAt = new Date();
 
-    await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      async (databaseHandle) => {
+    await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: async (databaseHandle) => {
         await databaseHandle.insert(dead_letter_jobs).values([
           {
             source_queue: 'mail',
@@ -186,17 +186,17 @@ describe('audit-retention.worker — purge', () => {
           },
         ]);
       },
-    );
+    });
 
     const jobId = `audit-retention-${randomUUID()}`;
     const completion = waitForJobCompletion(queueEvents!, jobId);
     await queue!.add('cleanup-old-logs', {}, { jobId, attempts: 1 });
     await completion;
 
-    const remaining = await withMaintenanceDatabaseContext(
-      MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
-      async (databaseHandle) => databaseHandle.select().from(dead_letter_jobs),
-    );
+    const remaining = await withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: async (databaseHandle) => databaseHandle.select().from(dead_letter_jobs),
+    });
     expect(remaining).toHaveLength(1);
     expect(remaining[0]?.failed_reason).toBe('recent-failure');
   });

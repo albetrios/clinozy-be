@@ -22,32 +22,41 @@ import {
  * (a unit test's fake request) is handled by {@link recordScopedAuditEvent},
  * which logs and returns, so the deny path is the same either way.
  */
-async function emitPermissionDenyAudit(
-  request: FastifyRequest,
-  metadata: Record<string, unknown>,
-): Promise<void> {
+async function emitPermissionDenyAudit({
+  request,
+  metadata,
+}: {
+  request: FastifyRequest;
+  metadata: Record<string, unknown>;
+}): Promise<void> {
   const auth = request.auth;
   // Every caller answers an unauthenticated request with 401 first, so `auth` is always set here.
   if (!auth) return;
   try {
-    await recordScopedAuditEvent(request, {
-      // A user is recorded as the user, an API key denied a scope as the key. Key denials used to
-      // carry no actor, and the audit service dropped every one of those rows.
-      ...buildAuditActorFields(auth),
-      action: 'auth.permission.denied',
-      resource_type: 'route',
-      severity: 'WARNING',
-      metadata,
+    await recordScopedAuditEvent({
+      request,
+      input: {
+        // A user is recorded as the user, an API key denied a scope as the key. Key denials used to
+        // carry no actor, and the audit service dropped every one of those rows.
+        ...buildAuditActorFields(auth),
+        action: 'auth.permission.denied',
+        resource_type: 'route',
+        severity: 'WARNING',
+        metadata,
+      },
     });
   } catch {
     // best-effort: a failure to record must not affect the 403 response.
   }
 }
 
-function buildDenyMetadata(
-  request: FastifyRequest,
-  extra: Record<string, unknown>,
-): Record<string, unknown> {
+function buildDenyMetadata({
+  request,
+  extra,
+}: {
+  request: FastifyRequest;
+  extra: Record<string, unknown>;
+}): Record<string, unknown> {
   return {
     route: request.routeOptions?.url ?? request.url,
     method: request.method,
@@ -61,19 +70,26 @@ const organizationPermissionResolveMemo = new WeakMap<
   Map<string, Promise<string[]>>
 >();
 
-function buildOrganizationPermissionMemoKey(
-  userPublicId: string,
-  organizationPublicId: string,
-): string {
+function buildOrganizationPermissionMemoKey({
+  userPublicId,
+  organizationPublicId,
+}: {
+  userPublicId: string;
+  organizationPublicId: string;
+}): string {
   return `${userPublicId}:${organizationPublicId}`;
 }
 
-function resolveOrganizationPermissionsForRequest(
-  request: FastifyRequest,
-  userPublicId: string,
-  organizationPublicId: string,
-): Promise<string[]> {
-  const memoKey = buildOrganizationPermissionMemoKey(userPublicId, organizationPublicId);
+function resolveOrganizationPermissionsForRequest({
+  request,
+  userPublicId,
+  organizationPublicId,
+}: {
+  request: FastifyRequest;
+  userPublicId: string;
+  organizationPublicId: string;
+}): Promise<string[]> {
+  const memoKey = buildOrganizationPermissionMemoKey({ userPublicId, organizationPublicId });
   let requestMemo = organizationPermissionResolveMemo.get(request);
   if (!requestMemo) {
     requestMemo = new Map();
@@ -83,7 +99,7 @@ function resolveOrganizationPermissionsForRequest(
   if (existing) {
     return existing;
   }
-  const resolved = resolveUserOrganizationPermissions(userPublicId, organizationPublicId);
+  const resolved = resolveUserOrganizationPermissions({ userPublicId, organizationPublicId });
   requestMemo.set(memoKey, resolved);
   return resolved;
 }
@@ -100,19 +116,22 @@ function resolveOrganizationPermissionsForRequest(
  * - **Notes:** never use it to gate a write — a gate must throw (and audit the deny) through
  *   {@link requireOrganizationPermission}.
  */
-export async function hasOrganizationPermission(
-  request: FastifyRequest,
-  permissionCode: string,
-): Promise<boolean> {
+export async function hasOrganizationPermission({
+  request,
+  permissionCode,
+}: {
+  request: FastifyRequest;
+  permissionCode: string;
+}): Promise<boolean> {
   const auth = request.auth;
   const organizationPublicId = auth?.organizationPublicId;
   if (!(auth && organizationPublicId)) return false;
   if (auth.kind === 'apiKey') return auth.apiKeyScopes.includes(permissionCode);
-  const permissionCodes = await resolveOrganizationPermissionsForRequest(
+  const permissionCodes = await resolveOrganizationPermissionsForRequest({
     request,
-    auth.userId,
+    userPublicId: auth.userId,
     organizationPublicId,
-  );
+  });
   return permissionCodes.includes(permissionCode);
 }
 
@@ -130,14 +149,17 @@ export function requireRole(
     const auth = request.auth;
     if (auth?.kind !== 'user') throw new UnauthorizedError();
     if (!(auth.role && allowedRoles.includes(auth.role))) {
-      await emitPermissionDenyAudit(
+      await emitPermissionDenyAudit({
         request,
-        buildDenyMetadata(request, {
-          deny_reason: 'insufficient_role',
-          required_roles: allowedRoles,
-          actor_role: auth.role,
+        metadata: buildDenyMetadata({
+          request,
+          extra: {
+            deny_reason: 'insufficient_role',
+            required_roles: allowedRoles,
+            actor_role: auth.role,
+          },
         }),
-      );
+      });
       throw new ForbiddenError('errors:insufficientRolePrivileges');
     }
   };
@@ -163,69 +185,101 @@ export function requireOrganizationPermission(
   permissionCode: string,
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
   return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-    const auth = request.auth;
-    if (!auth) throw new UnauthorizedError();
+    await assertOrganizationPermission({ request, permissionCode });
+  };
+}
 
-    // The organization is the signed `org` token claim — the same source `requireOrganizationScope`
-    // hands the controller, so authz and the data/RLS scope cannot diverge. The claim is scope, not
-    // authority: membership is verified below (and RLS re-checked per request).
-    const organizationId = auth.organizationPublicId;
-    if (!organizationId) {
-      throw new ForbiddenError('errors:organizationContextRequired');
-    }
+/**
+ * Throws unless the request's principal holds `permissionCode` in the active organization — the
+ * check behind {@link requireOrganizationPermission}, for a permission known only from the request
+ * (e.g. the read permission each subscribed webhook event needs).
+ *
+ * @remarks
+ * - **Algorithm:** an API key must carry the code in its scopes; a user must hold it through the
+ *   organization role, and in an MFA-required organization the session must have proved a second
+ *   factor.
+ * - **Failure modes:** `UnauthorizedError` without a principal; `ForbiddenError` without an
+ *   organization claim, without the permission, or without the required MFA.
+ * - **Side effects:** a deny audit row on every refusal.
+ */
+export async function assertOrganizationPermission({
+  request,
+  permissionCode,
+}: {
+  request: FastifyRequest;
+  permissionCode: string;
+}): Promise<void> {
+  const auth = request.auth;
+  if (!auth) throw new UnauthorizedError();
 
-    if (auth.kind === 'apiKey') {
-      // An API key is pinned to the one organization it was minted in (its claim above); fail
-      // closed when its scopes lack the permission.
-      if (!auth.apiKeyScopes.includes(permissionCode)) {
-        await emitPermissionDenyAudit(
+  // The organization is the signed `org` token claim — the same source `requireOrganizationScope`
+  // hands the controller, so authz and the data/RLS scope cannot diverge. The claim is scope, not
+  // authority: membership is verified below (and RLS re-checked per request).
+  const organizationId = auth.organizationPublicId;
+  if (!organizationId) {
+    throw new ForbiddenError('errors:organizationContextRequired');
+  }
+
+  if (auth.kind === 'apiKey') {
+    // An API key is pinned to the one organization it was minted in (its claim above); fail
+    // closed when its scopes lack the permission.
+    if (!auth.apiKeyScopes.includes(permissionCode)) {
+      await emitPermissionDenyAudit({
+        request,
+        metadata: buildDenyMetadata({
           request,
-          buildDenyMetadata(request, {
+          extra: {
             deny_reason: 'api_key_scope_missing',
             permission_code: permissionCode,
             organization_id: organizationId,
-          }),
-        );
-        throw new ForbiddenError('errors:insufficientOrganizationPermissions').withReason(
-          MISSING_PERMISSION_REASON,
-        );
-      }
-      return;
-    }
-
-    const permissionCodes = await resolveOrganizationPermissionsForRequest(
-      request,
-      auth.userId,
-      organizationId,
-    );
-    if (!permissionCodes.includes(permissionCode)) {
-      await emitPermissionDenyAudit(
-        request,
-        buildDenyMetadata(request, {
-          deny_reason: 'organization_permission_missing',
-          permission_code: permissionCode,
-          organization_id: organizationId,
+          },
         }),
-      );
+      });
       throw new ForbiddenError('errors:insufficientOrganizationPermissions').withReason(
         MISSING_PERMISSION_REASON,
       );
     }
-    // An organization whose security policy requires MFA admits only a session that proved a
-    // second factor (the token's `amr`). Checked per request — not only at login — so a session
-    // that joined later (invitation accepted after a first-factor login) or predates the policy
-    // cannot use the organization's authority. Runs after the permission check so a non-member
-    // learns nothing about the policy; an MFA-verified principal skips the lookup entirely.
-    if (auth.mfaVerified !== true && (await organizationRequiresMfa(organizationId))) {
-      await emitPermissionDenyAudit(
+    return;
+  }
+
+  const permissionCodes = await resolveOrganizationPermissionsForRequest({
+    request,
+    userPublicId: auth.userId,
+    organizationPublicId: organizationId,
+  });
+  if (!permissionCodes.includes(permissionCode)) {
+    await emitPermissionDenyAudit({
+      request,
+      metadata: buildDenyMetadata({
         request,
-        buildDenyMetadata(request, {
+        extra: {
+          deny_reason: 'organization_permission_missing',
+          permission_code: permissionCode,
+          organization_id: organizationId,
+        },
+      }),
+    });
+    throw new ForbiddenError('errors:insufficientOrganizationPermissions').withReason(
+      MISSING_PERMISSION_REASON,
+    );
+  }
+  // An organization whose security policy requires MFA admits only a session that proved a
+  // second factor (the token's `amr`). Checked per request — not only at login — so a session
+  // that joined later (invitation accepted after a first-factor login) or predates the policy
+  // cannot use the organization's authority. Runs after the permission check so a non-member
+  // learns nothing about the policy; an MFA-verified principal skips the lookup entirely.
+  if (auth.mfaVerified !== true && (await organizationRequiresMfa(organizationId))) {
+    await emitPermissionDenyAudit({
+      request,
+      metadata: buildDenyMetadata({
+        request,
+        extra: {
           deny_reason: 'organization_mfa_required',
           permission_code: permissionCode,
           organization_id: organizationId,
-        }),
-      );
-      throw new ForbiddenError('errors:organizationRequiresMfa').withReason('mfa_required');
-    }
-  };
+        },
+      }),
+    });
+    throw new ForbiddenError('errors:organizationRequiresMfa').withReason('mfa_required');
+  }
 }

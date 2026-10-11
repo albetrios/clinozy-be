@@ -49,156 +49,191 @@ describe('resolveTracesSampleRate (head / tracesSampler)', () => {
   });
 
   it('does not sample health-check transactions', () => {
-    expect(resolveTracesSampleRate({ name: 'GET /livez' }, BASELINE, SLOW_MS)).toBe(0);
-    expect(resolveTracesSampleRate({ name: 'GET /readyz' }, BASELINE, SLOW_MS)).toBe(0);
+    expect(
+      resolveTracesSampleRate({
+        samplingContext: { name: 'GET /livez' },
+        defaultTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
+    ).toBe(0);
+    expect(
+      resolveTracesSampleRate({
+        samplingContext: { name: 'GET /readyz' },
+        defaultTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
+    ).toBe(0);
   });
 
   it('returns baseline rate for ordinary successful requests', () => {
     expect(
-      resolveTracesSampleRate(
-        {
+      resolveTracesSampleRate({
+        samplingContext: {
           name: 'GET /api/v1/tenancy/organizations',
           attributes: { 'http.response.status_code': 200 },
         },
-        BASELINE,
-        SLOW_MS,
-      ),
+        defaultTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe(BASELINE);
   });
 
   it('uses inheritOrSampleWith when provided', () => {
     const inheritOrSampleWith = (fallbackRate: number) => fallbackRate * 2;
     expect(
-      resolveTracesSampleRate(
-        { name: 'GET /api/v1/user/me', inheritOrSampleWith },
-        BASELINE,
-        SLOW_MS,
-      ),
+      resolveTracesSampleRate({
+        samplingContext: { name: 'GET /api/v1/user/me', inheritOrSampleWith },
+        defaultTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe(BASELINE * 2);
   });
 
   it('always samples 5xx responses at 100%', () => {
     expect(
-      resolveTracesSampleRate(
-        { name: 'POST /api/v1/auth/login', attributes: { 'http.response.status_code': 503 } },
-        BASELINE,
-        SLOW_MS,
-      ),
+      resolveTracesSampleRate({
+        samplingContext: {
+          name: 'POST /api/v1/auth/login',
+          attributes: { 'http.response.status_code': 503 },
+        },
+        defaultTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe(1.0);
   });
 
   it('always samples 4xx responses at 100% when status is available at head', () => {
     expect(
-      resolveTracesSampleRate(
-        { name: 'GET /api/v1/user/me', attributes: { 'http.response.status_code': 404 } },
-        BASELINE,
-        SLOW_MS,
-      ),
+      resolveTracesSampleRate({
+        samplingContext: {
+          name: 'GET /api/v1/user/me',
+          attributes: { 'http.response.status_code': 404 },
+        },
+        defaultTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe(1.0);
   });
 
   it('always samples transactions with error in the name at 100%', () => {
-    expect(resolveTracesSampleRate({ name: 'GET /error' }, BASELINE, SLOW_MS)).toBe(1.0);
+    expect(
+      resolveTracesSampleRate({
+        samplingContext: { name: 'GET /error' },
+        defaultTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
+    ).toBe(1.0);
   });
 
   it('always samples billing API routes at 100%', () => {
     expect(
-      resolveTracesSampleRate(
-        { name: 'GET /api/v1/billing/plans', attributes: { 'http.response.status_code': 200 } },
-        BASELINE,
-        SLOW_MS,
-      ),
+      resolveTracesSampleRate({
+        samplingContext: {
+          name: 'GET /api/v1/billing/plans',
+          attributes: { 'http.response.status_code': 200 },
+        },
+        defaultTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe(1.0);
   });
 
   it('always samples Stripe webhook route at 100%', () => {
     expect(
-      resolveTracesSampleRate(
-        {
+      resolveTracesSampleRate({
+        samplingContext: {
           name: 'POST /api/v1/billing/webhook',
           attributes: { 'http.response.status_code': 200 },
         },
-        BASELINE,
-        SLOW_MS,
-      ),
+        defaultTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe(1.0);
   });
 
   it('always samples slow requests at 100% when duration is available at head', () => {
     expect(
-      resolveTracesSampleRate(
-        {
+      resolveTracesSampleRate({
+        samplingContext: {
           name: 'GET /api/v1/user/me',
           attributes: { 'http.server.request.duration_ms': SLOW_MS },
         },
-        BASELINE,
-        SLOW_MS,
-      ),
+        defaultTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe(1.0);
   });
 });
 
 describe('resolveTailTransactionDecision (tail / beforeSendTransaction)', () => {
   it('drops health-check transactions', () => {
-    expect(resolveTailTransactionDecision({ transaction: 'GET /livez' }, BASELINE, SLOW_MS)).toBe(
-      'drop',
-    );
-    expect(resolveTailTransactionDecision({ transaction: 'GET /readyz' }, BASELINE, SLOW_MS)).toBe(
-      'drop',
-    );
+    expect(
+      resolveTailTransactionDecision({
+        input: { transaction: 'GET /livez' },
+        baselineTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
+    ).toBe('drop');
+    expect(
+      resolveTailTransactionDecision({
+        input: { transaction: 'GET /readyz' },
+        baselineTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
+    ).toBe('drop');
   });
 
   it('always keeps 5xx transactions at 100%', () => {
     expect(
-      resolveTailTransactionDecision(
-        {
+      resolveTailTransactionDecision({
+        input: {
           transaction: 'POST /api/v1/auth/login',
           tags: { 'http.response.status_code': 503 },
           start_timestamp: 1,
           timestamp: 2,
         },
-        BASELINE,
-        SLOW_MS,
-      ),
+        baselineTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe('keep');
   });
 
   it('always keeps 4xx transactions at 100%', () => {
     expect(
-      resolveTailTransactionDecision(
-        {
+      resolveTailTransactionDecision({
+        input: {
           transaction: 'GET /api/v1/user/me',
           tags: { 'http.status_code': 404 },
           start_timestamp: 1,
           timestamp: 1.1,
         },
-        BASELINE,
-        SLOW_MS,
-      ),
+        baselineTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe('keep');
   });
 
   it('always keeps slow transactions at 100%', () => {
     expect(
-      resolveTailTransactionDecision(
-        {
+      resolveTailTransactionDecision({
+        input: {
           transaction: 'GET /api/v1/user/me',
           start_timestamp: 0,
           timestamp: SLOW_MS / 1000,
         },
-        BASELINE,
-        SLOW_MS,
-      ),
+        baselineTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe('keep');
   });
 
   it('always keeps billing and webhook routes at 100%', () => {
     expect(
-      resolveTailTransactionDecision(
-        { transaction: 'GET /api/v1/billing/plans', start_timestamp: 0, timestamp: 0.1 },
-        BASELINE,
-        SLOW_MS,
-      ),
+      resolveTailTransactionDecision({
+        input: { transaction: 'GET /api/v1/billing/plans', start_timestamp: 0, timestamp: 0.1 },
+        baselineTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe('keep');
   });
 
@@ -214,11 +249,11 @@ describe('resolveTailTransactionDecision (tail / beforeSendTransaction)', () => 
     let dropEventId: string | undefined;
     for (let index = 0; index < 500; index += 1) {
       const eventId = `tail-sample-probe-${index}`;
-      const decision = resolveTailTransactionDecision(
-        omitUndefined({ ...fastSuccessfulRequest, event_id: eventId }),
-        BASELINE,
-        SLOW_MS,
-      );
+      const decision = resolveTailTransactionDecision({
+        input: omitUndefined({ ...fastSuccessfulRequest, event_id: eventId }),
+        baselineTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      });
       if (decision === 'keep' && keepEventId === undefined) {
         keepEventId = eventId;
       }
@@ -233,18 +268,18 @@ describe('resolveTailTransactionDecision (tail / beforeSendTransaction)', () => 
     expect(keepEventId).toBeDefined();
     expect(dropEventId).toBeDefined();
     expect(
-      resolveTailTransactionDecision(
-        omitUndefined({ ...fastSuccessfulRequest, event_id: keepEventId }),
-        BASELINE,
-        SLOW_MS,
-      ),
+      resolveTailTransactionDecision({
+        input: omitUndefined({ ...fastSuccessfulRequest, event_id: keepEventId }),
+        baselineTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe('keep');
     expect(
-      resolveTailTransactionDecision(
-        omitUndefined({ ...fastSuccessfulRequest, event_id: dropEventId }),
-        BASELINE,
-        SLOW_MS,
-      ),
+      resolveTailTransactionDecision({
+        input: omitUndefined({ ...fastSuccessfulRequest, event_id: dropEventId }),
+        baselineTracesSampleRate: BASELINE,
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe('drop');
   });
 });
@@ -269,30 +304,30 @@ describe('transaction tail helpers', () => {
 
   it('annotates slow transactions', () => {
     expect(
-      annotateSlowTransactionIfNeeded(
-        { start_timestamp: 0, timestamp: SLOW_MS / 1000, tags: { region: 'us' } },
-        SLOW_MS,
-      ),
+      annotateSlowTransactionIfNeeded({
+        input: { start_timestamp: 0, timestamp: SLOW_MS / 1000, tags: { region: 'us' } },
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toEqual({ region: 'us', slow_transaction: 'true' });
   });
 
   it('shouldAlwaysKeepTransactionAtTail mirrors keep rules', () => {
     expect(
-      shouldAlwaysKeepTransactionAtTail(
-        { transaction: 'GET /api/v1/billing/plans', start_timestamp: 0, timestamp: 0.1 },
-        SLOW_MS,
-      ),
+      shouldAlwaysKeepTransactionAtTail({
+        input: { transaction: 'GET /api/v1/billing/plans', start_timestamp: 0, timestamp: 0.1 },
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe(true);
     expect(
-      shouldAlwaysKeepTransactionAtTail(
-        {
+      shouldAlwaysKeepTransactionAtTail({
+        input: {
           transaction: 'GET /api/v1/user/me',
           tags: { status_code: 422 },
           start_timestamp: 0,
           timestamp: 0.1,
         },
-        SLOW_MS,
-      ),
+        slowTransactionThresholdMs: SLOW_MS,
+      }),
     ).toBe(true);
   });
 });

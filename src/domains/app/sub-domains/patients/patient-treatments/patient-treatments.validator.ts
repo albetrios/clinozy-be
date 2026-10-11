@@ -17,22 +17,28 @@ function readInstant(value: string | undefined): Date | undefined {
 
 /** Parses a session create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePatientTreatment(data: unknown): CreatePatientTreatmentInput {
-  return withInstants(parseWithSchema(CreatePatientTreatmentDto, data), ['performed_at']);
+  return withInstants({
+    values: parseWithSchema({ schema: CreatePatientTreatmentDto, data }),
+    fields: ['performed_at'],
+  });
 }
 
 /** Parses a session update body; throws `ValidationError` naming each bad field. */
 export function validateUpdatePatientTreatment(data: unknown): UpdatePatientTreatmentInput {
-  return withInstants(parseWithSchema(UpdatePatientTreatmentDto, data), ['performed_at']);
+  return withInstants({
+    values: parseWithSchema({ schema: UpdatePatientTreatmentDto, data }),
+    fields: ['performed_at'],
+  });
 }
 
 /** Parses a reverse body into the values it writes (TR6). */
 export function validateReversePatientTreatment(data: unknown): Record<string, unknown> {
-  return { reversed_reason: parseWithSchema(ReversePatientTreatmentDto, data).reason };
+  return { reversed_reason: parseWithSchema({ schema: ReversePatientTreatmentDto, data }).reason };
 }
 
 /** Parses a treatment list query into a list input (routes-final 7.H.8 #45, #46). */
 export function validateListPatientTreatmentsQuery(data: unknown): BaseRecordListInput {
-  const query = parseWithSchema(listPatientTreatmentsQueryDto, data);
+  const query = parseWithSchema({ schema: listPatientTreatmentsQueryDto, data });
   return {
     after: query.after,
     limit: query.limit,

@@ -7,15 +7,18 @@ import type { PatientCheckInOutput } from './patient-check-ins.types.js';
  * plan, the actions and `needs_action` are the rules' `decorate` (one read each per page) — empty
  * here.
  */
-export function serializePatientCheckIn(
-  row: BaseRecordRow,
-  references: BaseRecordReferenceLookup,
-): PatientCheckInOutput {
+export function serializePatientCheckIn({
+  row,
+  references,
+}: {
+  row: BaseRecordRow;
+  references: BaseRecordReferenceLookup;
+}): PatientCheckInOutput {
   return {
     id: row.public_id,
-    patient_id: references.publicIdOf('patient_id', row) ?? '',
-    appointment_id: references.publicIdOf('appointment_id', row),
-    patient_treatment_id: references.publicIdOf('patient_treatment_id', row),
+    patient_id: references.publicIdOf({ field: 'patient_id', row }) ?? '',
+    appointment_id: references.publicIdOf({ field: 'appointment_id', row }),
+    patient_treatment_id: references.publicIdOf({ field: 'patient_treatment_id', row }),
     context: row.context as string,
     feel: row.feel as string,
     score: row.score as number,

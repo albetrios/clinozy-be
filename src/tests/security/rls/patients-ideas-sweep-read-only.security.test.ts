@@ -26,7 +26,11 @@ async function probe(options: { role: RoleSwitch; statement: SQL }): Promise<num
     .transaction(async (transaction) => {
       const databaseHandle = transaction as unknown as RequestScopedPostgresDatabase;
       await options.role(databaseHandle);
-      await setLocalDatabaseConfig(databaseHandle, 'app.global_retention_cleanup', 'true');
+      await setLocalDatabaseConfig({
+        databaseHandle,
+        key: 'app.global_retention_cleanup',
+        value: 'true',
+      });
       const result = await databaseHandle.execute(options.statement);
       const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
       count = rows.length;

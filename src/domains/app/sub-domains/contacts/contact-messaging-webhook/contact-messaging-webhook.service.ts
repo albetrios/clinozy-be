@@ -113,10 +113,10 @@ export class ContactMessagingWebhookService {
         );
         continue;
       }
-      storedCount += await withAppDatabaseContext(
-        PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId }),
-        () => this.repository.insertUpdates({ organizationPublicId, updates }),
-      );
+      storedCount += await withAppDatabaseContext({
+        scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId }),
+        callback: () => this.repository.insertUpdates({ organizationPublicId, updates }),
+      });
       await requestMessagingWebhookEventProcessing(organizationPublicId);
     }
     return { stored_count: storedCount };

@@ -1,5 +1,5 @@
 /**
- * Billing plan seed — default plans (Free, Starter, Pro).
+ * Billing plan seed — the product catalog (Free, Starter, Growth, Pro).
  * Domain-owned; used by scripts/seed orchestration.
  */
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
@@ -7,9 +7,10 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { plans } from '@/domains/billing/sub-domains/plan/plan.schema.js';
 
 /**
- * Free / Starter / Pro baseline used by `pnpm db:seed`. REQ-4: each tier now carries a seat
- * allowance (`included_seats`) and a `features` capability map — Free is small, Pro is larger.
- * Free has 1 seat (solo), Starter 5, Pro 25.
+ * The product plan catalog `pnpm db:seed` installs — the same four tiers, prices and seats the
+ * Stripe sandbox catalog and the k6 billing journeys use. REQ-4: each tier carries a seat
+ * allowance (`included_seats`) and a `features` capability map. Free has 1 seat (solo) and no
+ * annual price (`price_yearly` 0); Starter 5, Growth 15, Pro 25.
  */
 export const DEFAULT_PLANS = [
   {
@@ -21,9 +22,16 @@ export const DEFAULT_PLANS = [
   },
   {
     name: 'Starter',
-    price_monthly: '29.00',
-    price_yearly: '290.00',
+    price_monthly: '10.00',
+    price_yearly: '100.00',
     included_seats: 5,
+    features: { priority_support: false, audit_log: true, sso: false },
+  },
+  {
+    name: 'Growth',
+    price_monthly: '30.00',
+    price_yearly: '300.00',
+    included_seats: 15,
     features: { priority_support: false, audit_log: true, sso: false },
   },
   {

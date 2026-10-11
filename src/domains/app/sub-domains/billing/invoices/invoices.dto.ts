@@ -38,7 +38,7 @@ const invoiceItemFields = {
     .array(recordIdSchema)
     .max(INVOICE_ITEM_QUANTITY_MAX)
     .refine(distinct, { message: 'Each treatment once' }),
-  batch_number: trimmedStringMinMax(1, 20).nullable(),
+  batch_number: trimmedStringMinMax({ min: 1, max: 20 }).nullable(),
 };
 
 /** A new line: exactly one of the offering and the medicine. */
@@ -97,7 +97,7 @@ export const invoicePaidNowDto = z
         message: 'Each mode once',
       }),
     paid_at: instantSchema.optional(),
-    reference: trimmedStringMinMax(1, 60).nullable().optional(),
+    reference: trimmedStringMinMax({ min: 1, max: 60 }).nullable().optional(),
   })
   .strict();
 
@@ -110,7 +110,7 @@ const invoiceFields = {
     .max(INVOICE_MEMBERS_MAX)
     .refine(distinct, { message: 'Each member once' }),
   overall_discount: moneySchema,
-  remark: trimmedStringMinMax(1, INVOICE_REMARK_MAX).nullable(),
+  remark: trimmedStringMinMax({ min: 1, max: INVOICE_REMARK_MAX }).nullable(),
   patient_prescription_id: recordIdSchema.nullable(),
 };
 

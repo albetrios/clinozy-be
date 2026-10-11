@@ -1,4 +1,5 @@
 import type { FastifyRequest } from 'fastify';
+import { getUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import type { AuditActor, AuditLogRecordFields } from '@/domains/audit/audit.types.js';
 import type { AuthContext } from '@/shared/types/index.js';
 import { isApiKeyPrincipal } from '@/shared/utils/http/request.util.js';
@@ -23,8 +24,7 @@ export function getAuditRequestNetworkContext(request: FastifyRequest): {
 } {
   return {
     ip_address: request.ip ?? null,
-    user_agent:
-      typeof request.headers['user-agent'] === 'string' ? request.headers['user-agent'] : null,
+    user_agent: getUserAgent(request),
   };
 }
 
@@ -57,10 +57,13 @@ type ScopedAuditInput = AuditActor &
  * request, a boot that never registered it) the row is lost with an `audit.record.unavailable`
  * error log, and the request still succeeds.
  */
-export async function recordScopedAuditEvent(
-  request: FastifyRequest,
-  input: ScopedAuditInput,
-): Promise<void> {
+export async function recordScopedAuditEvent({
+  request,
+  input,
+}: {
+  request: FastifyRequest;
+  input: ScopedAuditInput;
+}): Promise<void> {
   const auditService = request.server?.auditDomain?.auditService;
   if (!auditService) {
     request.log?.error({ action: input.action }, 'audit.record.unavailable');
@@ -68,9 +71,9 @@ export async function recordScopedAuditEvent(
   }
   const network = getAuditRequestNetworkContext(request);
   const { organizationPublicId, ...rest } = input;
-  await recordAuditEvent(
+  await recordAuditEvent({
     auditService,
-    { ...rest, ...network, organization_public_id: organizationPublicId ?? null },
-    request.log,
-  );
+    input: { ...rest, ...network, organization_public_id: organizationPublicId ?? null },
+    log: request.log,
+  });
 }

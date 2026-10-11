@@ -25,12 +25,12 @@ describe('reserveIdeasCall', () => {
   });
 
   it('keys the budget by organization and UTC day', () => {
-    expect(ideasCallBudgetKey('org_x', new Date('2026-10-09T23:59:59Z'))).toBe(
-      'patient-ideas:calls:org_x:2026-10-09',
-    );
-    expect(ideasCallBudgetKey('org_x', new Date('2026-10-10T00:00:00Z'))).toBe(
-      'patient-ideas:calls:org_x:2026-10-10',
-    );
+    expect(
+      ideasCallBudgetKey({ organizationPublicId: 'org_x', now: new Date('2026-10-09T23:59:59Z') }),
+    ).toBe('patient-ideas:calls:org_x:2026-10-09');
+    expect(
+      ideasCallBudgetKey({ organizationPublicId: 'org_x', now: new Date('2026-10-10T00:00:00Z') }),
+    ).toBe('patient-ideas:calls:org_x:2026-10-10');
   });
 
   it('takes a call while the day has budget, with the limit and a two-day expiry', async () => {

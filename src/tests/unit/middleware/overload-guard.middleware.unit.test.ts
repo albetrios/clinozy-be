@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  beginConnectionWait,
   incrementOrganizationRlsCheckoutCount,
   resetOrganizationRlsCheckoutCountForTests,
 } from '@/infrastructure/database/pool/organization-rls-checkout-counter.js';
@@ -8,7 +9,11 @@ import errorHandlerMiddleware from '@/shared/middlewares/core/error-handler.midd
 import overloadGuardMiddleware, {
   shouldShedRequest,
 } from '@/shared/middlewares/core/overload-guard.middleware.js';
-import { resetSharedEventLoopHistogram } from '@/shared/utils/infrastructure/event-loop-monitor.js';
+import {
+  getSharedEventLoopHistogram,
+  resetSharedEventLoopHistogram,
+} from '@/shared/utils/infrastructure/event-loop-monitor.js';
+import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 vi.mock('@/infrastructure/observability/sentry/sentry.js', () => ({
   captureException: vi.fn(),
@@ -28,6 +33,7 @@ vi.mock('@/shared/config/env.config.js', async (importOriginal) => {
       DATABASE_POOL_MAX: 20,
       OVERLOAD_DB_POOL_SHED_RATIO: 0.9,
       OVERLOAD_MAX_EVENT_LOOP_DELAY_MS: 250,
+      OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS: 2_000,
     },
   };
 });
@@ -52,6 +58,8 @@ const baseShedOptions = {
   thresholdMs: 250,
   activeDbCheckouts: 0,
   dbCheckoutShedThreshold: 18, // ceil(20 * 0.9)
+  oldestConnectionWaitMs: 0,
+  connectionWaitShedMs: 2_000,
 };
 
 describe('overload-guard.middleware', () => {
@@ -86,6 +94,31 @@ describe('overload-guard.middleware', () => {
       expect(
         shouldShedRequest({ ...baseShedOptions, recentEventLoopDelayMs: 5, activeDbCheckouts: 20 }),
       ).toBe(true);
+    });
+
+    it('sheds when the oldest connection waiter has waited the threshold (slow database)', () => {
+      // A short queue that does not drain: the count stays far below the ratio threshold.
+      expect(
+        shouldShedRequest({
+          ...baseShedOptions,
+          activeDbCheckouts: 3,
+          oldestConnectionWaitMs: 1_999,
+        }),
+      ).toBe(false);
+      expect(
+        shouldShedRequest({
+          ...baseShedOptions,
+          activeDbCheckouts: 3,
+          oldestConnectionWaitMs: 2_000,
+        }),
+      ).toBe(true);
+      expect(
+        shouldShedRequest({
+          ...baseShedOptions,
+          oldestConnectionWaitMs: 9_000,
+          connectionWaitShedMs: 0,
+        }),
+      ).toBe(false);
     });
 
     it('does not shed when checkouts are below the pool shed threshold', () => {
@@ -129,12 +162,79 @@ describe('overload-guard.middleware', () => {
       await app.register(overloadGuardMiddleware);
       app.get('/x', async () => ({ ok: true }));
       try {
+        const warning = vi.spyOn(logger, 'warn');
         const response = await app.inject({ method: 'GET', url: '/x' });
         expect(response.statusCode).toBe(503);
         expect(response.headers['retry-after']).toBe('1');
+        expect(response.json().error.reason).toBeUndefined();
+        expect(warning).toHaveBeenCalledWith(
+          expect.objectContaining({ reason: 'database_pool_overload' }),
+          'request.service_unavailable',
+        );
       } finally {
+        vi.restoreAllMocks();
         resetOrganizationRlsCheckoutCountForTests();
         await app.close();
+      }
+    });
+
+    it('sheds with 503 once a unit of work has waited too long for a connection', async () => {
+      resetOrganizationRlsCheckoutCountForTests();
+      const now = vi.spyOn(performance, 'now').mockReturnValue(10_000);
+      beginConnectionWait();
+      now.mockReturnValue(12_500);
+      const app = Fastify();
+      app.decorateRequest(
+        't',
+        ((key: string) => key) as unknown as NonNullable<Parameters<typeof app.decorateRequest>[1]>,
+      );
+      await app.register(errorHandlerMiddleware);
+      await app.register(overloadGuardMiddleware);
+      app.get('/x', async () => ({ ok: true }));
+      try {
+        const warning = vi.spyOn(logger, 'warn');
+        const response = await app.inject({ method: 'GET', url: '/x' });
+        expect(response.statusCode).toBe(503);
+        expect(response.headers['retry-after']).toBe('1');
+        expect(warning).toHaveBeenCalledWith(
+          expect.objectContaining({ reason: 'database_pool_wait_overload' }),
+          'request.service_unavailable',
+        );
+      } finally {
+        vi.restoreAllMocks();
+        resetOrganizationRlsCheckoutCountForTests();
+        await app.close();
+      }
+    });
+
+    it('logs event-loop overload without exposing the internal reason to clients', async () => {
+      resetOrganizationRlsCheckoutCountForTests();
+      resetSharedEventLoopHistogram();
+      const app = Fastify();
+      app.decorateRequest(
+        't',
+        ((key: string) => key) as unknown as NonNullable<Parameters<typeof app.decorateRequest>[1]>,
+      );
+      await app.register(errorHandlerMiddleware);
+      await app.register(overloadGuardMiddleware);
+      app.get('/x', async () => ({ ok: true }));
+      await app.ready();
+      vi.spyOn(getSharedEventLoopHistogram(), 'percentile').mockReturnValue(300_000_000);
+      const warning = vi.spyOn(logger, 'warn');
+      try {
+        await new Promise((resolve) => setTimeout(resolve, SAMPLE_INTERVAL_MS + 50));
+        const response = await app.inject({ method: 'GET', url: '/x' });
+        expect(response.statusCode).toBe(503);
+        expect(response.headers['retry-after']).toBe('1');
+        expect(response.json().error.reason).toBeUndefined();
+        expect(warning).toHaveBeenCalledWith(
+          expect.objectContaining({ reason: 'event_loop_overload' }),
+          'request.service_unavailable',
+        );
+      } finally {
+        vi.restoreAllMocks();
+        await app.close();
+        resetSharedEventLoopHistogram();
       }
     });
 

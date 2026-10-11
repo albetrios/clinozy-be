@@ -49,14 +49,14 @@ export const CreateDayCloseDto = z
 export const CloseDayCloseDto = z
   .object({
     counted_cash: moneySchema,
-    difference_reason: trimmedStringMinMax(1, 280).optional(),
+    difference_reason: trimmedStringMinMax({ min: 1, max: 280 }).optional(),
   })
   .strict();
 
 /** Body of `POST /app/day-closes/{day_close_id}/reopen` (8.E.8 #32): why. */
 export const ReopenDayCloseDto = z
   .object({
-    reason: trimmedStringMinMax(1, 280),
+    reason: trimmedStringMinMax({ min: 1, max: 280 }),
   })
   .strict();
 

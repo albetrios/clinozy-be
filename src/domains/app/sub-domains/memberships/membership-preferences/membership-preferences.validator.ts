@@ -9,7 +9,7 @@ import {
 export function validateUpdateMembershipPreferences(
   data: unknown,
 ): UpdateMembershipPreferencesInput {
-  return parseWithSchema(updateMembershipPreferencesDto, data);
+  return parseWithSchema({ schema: updateMembershipPreferencesDto, data });
 }
 
 /**

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { runGlobalRetentionWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import {
   type AppFixture,
@@ -36,7 +36,7 @@ describe('App record purge — integration (WC-46, D38)', () => {
   /** Deletes a group through the API, then dates the deletion `daysAgo` days back. */
   async function deletedDaysAgo(id: string, daysAgo: number): Promise<void> {
     await flow.expect(204, `delete ${id}`, 'DELETE', `/app/offering-groups/${id}?reason=mistake`);
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.offering_groups SET deleted_at = now() - make_interval(days => ${daysAgo})
       WHERE public_id = ${id}
     `;
@@ -44,7 +44,7 @@ describe('App record purge — integration (WC-46, D38)', () => {
 
   /** The clinic's restore window, in days. */
   async function purgeAfter(days: number): Promise<void> {
-    await getOperatorSql()`
+    await operatorQuery`
       INSERT INTO tenancy.organization_settings (organization_id, deleted_record_purge_days)
       VALUES (${fixture.organization.id}, ${days})
       ON CONFLICT (organization_id) DO UPDATE SET deleted_record_purge_days = EXCLUDED.deleted_record_purge_days
@@ -53,7 +53,7 @@ describe('App record purge — integration (WC-46, D38)', () => {
 
   /** Which of the groups are still stored (deleted or not). */
   async function stored(ids: readonly string[]): Promise<string[]> {
-    const rows = await getOperatorSql()<{ public_id: string }[]>`
+    const rows = await operatorQuery<{ public_id: string }[]>`
       SELECT public_id FROM app.offering_groups WHERE public_id = ANY(${ids as string[]})
     `;
     return rows.map((row) => row.public_id).sort();
@@ -135,7 +135,7 @@ describe('App record purge — integration (WC-46, D38)', () => {
     for (const id of [billed, unused]) {
       await flow.expect(204, `delete ${id}`, 'DELETE', `/app/offerings/${id}?reason=not_needed`);
     }
-    await getOperatorSql()`
+    await operatorQuery`
       UPDATE app.offerings SET deleted_at = now() - interval '8 days'
       WHERE public_id IN (${billed}, ${unused})
     `;
@@ -145,7 +145,7 @@ describe('App record purge — integration (WC-46, D38)', () => {
       run.blockedCount,
       'the billed offering is skipped, not a failed job',
     ).toBeGreaterThanOrEqual(1);
-    const left = await getOperatorSql()<{ public_id: string }[]>`
+    const left = await operatorQuery<{ public_id: string }[]>`
       SELECT public_id FROM app.offerings WHERE public_id IN (${billed}, ${unused})
     `;
     expect(

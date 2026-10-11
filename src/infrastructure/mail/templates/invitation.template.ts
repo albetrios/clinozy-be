@@ -1,12 +1,14 @@
-import { baseTemplate } from './base.template.js';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/shared/constants/i18n.constants.js';
+import { baseTemplate, translateMailText } from './base.template.js';
 import { escapeHtml } from './escape-html.util.js';
 
-/** Template variables for {@link invitationTemplate} — inviter, target organization, accept URL, and TTL. */
+/** Template variables for {@link invitationTemplate} — inviter, target organization, accept URL, TTL and the recipient's language. */
 export interface InvitationTemplateData {
   inviterName: string;
   organizationName: string;
   acceptUrl: string;
   expiresInDays: number;
+  locale?: SupportedLanguage;
 }
 
 /**
@@ -22,22 +24,37 @@ export interface InvitationTemplateData {
  * URL-construction code ever changes.
  */
 export function invitationTemplate(data: InvitationTemplateData): string {
+  const locale = data.locale ?? DEFAULT_LANGUAGE;
   const inviterName = escapeHtml(data.inviterName);
   const organizationName = escapeHtml(data.organizationName);
   const acceptUrl = escapeHtml(data.acceptUrl);
 
   return baseTemplate({
-    title: `You're invited to join ${data.organizationName}`,
-    preheader: `${data.inviterName} invited you to join ${data.organizationName}.`,
+    locale,
+    title: translateMailText({
+      key: 'invitationTitle',
+      locale,
+      values: {
+        organizationName: data.organizationName,
+      },
+    }),
+    preheader: translateMailText({
+      key: 'invitationPreheader',
+      locale,
+      values: {
+        inviterName: data.inviterName,
+        organizationName: data.organizationName,
+      },
+    }),
     body: `
-      <h1>You've been invited</h1>
-      <p><strong>${inviterName}</strong> has invited you to join <strong>${organizationName}</strong>.</p>
-      <p>Click the button below to accept the invitation. This link expires in ${data.expiresInDays} days.</p>
+      <h1>${translateMailText({ key: 'invitationHeading', locale })}</h1>
+      <p>${translateMailText({ key: 'invitationBody', locale, values: { inviterName, organizationName } })}</p>
+      <p>${translateMailText({ key: 'invitationExpiry', locale, values: { expiresInDays: data.expiresInDays } })}</p>
       <p style="text-align: center; margin: 32px 0;">
-        <a href="${acceptUrl}" class="button">Accept Invitation</a>
+        <a href="${acceptUrl}" class="button">${translateMailText({ key: 'invitationAccept', locale })}</a>
       </p>
-      <p style="font-size: 13px; color: #6b7280;">If you weren't expecting this invitation, you can safely ignore this email.</p>
-      <p style="font-size: 13px; color: #6b7280;">Or copy and paste this URL into your browser:</p>
+      <p style="font-size: 13px; color: #6b7280;">${translateMailText({ key: 'invitationIgnore', locale })}</p>
+      <p style="font-size: 13px; color: #6b7280;">${translateMailText({ key: 'copyUrlPrompt', locale })}</p>
       <p style="font-size: 12px; color: #9ca3af; word-break: break-all;">${acceptUrl}</p>
     `,
   });

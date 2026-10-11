@@ -8,7 +8,10 @@ import type { MemberRoleOutput } from './member-role.types.js';
  * resolves it from a membership aggregate), mirroring how
  * {@link serializeMemberRolePermission} takes the role public id positionally.
  */
-export function serializeMemberRole(
+export function serializeMemberRole({
+  row,
+  member_count,
+}: {
   row: {
     public_id: string;
     name: string;
@@ -18,9 +21,9 @@ export function serializeMemberRole(
     is_locked: boolean;
     created_at: Date;
     updated_at: Date;
-  },
-  member_count: number,
-): MemberRoleOutput {
+  };
+  member_count: number;
+}): MemberRoleOutput {
   return {
     id: row.public_id,
     name: row.name,

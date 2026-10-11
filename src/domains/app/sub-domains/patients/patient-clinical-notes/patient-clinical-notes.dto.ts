@@ -35,7 +35,7 @@ export const patientClinicalNotesParentParamsDto = z
 export const CreatePatientClinicalNoteDto = z
   .object({
     kind: z.enum(PATIENT_CLINICAL_NOTE_KIND_VALUES),
-    text: trimmedStringMinMax(1, PATIENT_CLINICAL_NOTE_TEXT_MAX),
+    text: trimmedStringMinMax({ min: 1, max: PATIENT_CLINICAL_NOTE_TEXT_MAX }),
     appointment_id: recordIdSchema.nullable().optional(),
     patient_diagnosis_id: recordIdSchema.nullable().optional(),
   })

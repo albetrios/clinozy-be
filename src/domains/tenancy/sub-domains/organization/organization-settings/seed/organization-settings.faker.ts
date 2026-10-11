@@ -3,6 +3,7 @@
  * seeded `faker` so output is reproducible for a given `SEED`.
  */
 import type { Faker } from '@faker-js/faker';
+import { SUPPORTED_LANGUAGES } from '@/shared/constants/i18n.constants.js';
 
 /** Generated content for one `tenancy.organization_settings` row. */
 export interface BulkOrganizationSettingsProfile {
@@ -14,13 +15,11 @@ export interface BulkOrganizationSettingsProfile {
   security_policy: Record<string, unknown>;
 }
 
-const LOCALES = ['en', 'es'] as const;
-
 /** Builds one fake organization-settings profile from the provided faker instance. */
 export function generateBulkOrganizationSettings(faker: Faker): BulkOrganizationSettingsProfile {
   return {
     is_email_notifications_enabled: faker.datatype.boolean({ probability: 0.9 }),
-    default_locale: faker.helpers.arrayElement(LOCALES),
+    default_locale: faker.helpers.arrayElement(SUPPORTED_LANGUAGES),
     security_policy: { mfa_required: faker.datatype.boolean({ probability: 0.3 }) },
   };
 }

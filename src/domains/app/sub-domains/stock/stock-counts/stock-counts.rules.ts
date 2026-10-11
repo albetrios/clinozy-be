@@ -27,7 +27,13 @@ interface PendingCountLine {
 const pendingLines = new WeakMap<BaseRecordWriteContext, PendingCountLine[]>();
 
 /** A 400 on `lines` with its message. */
-function linesError(messageKey: string, messageParams: Record<string, string | number> = {}) {
+function linesError({
+  messageKey,
+  messageParams = {},
+}: {
+  messageKey: string;
+  messageParams?: Record<string, string | number> | undefined;
+}) {
   return fieldValidationError({ field: 'lines', messageKey, messageParams });
 }
 
@@ -35,10 +41,13 @@ function linesError(messageKey: string, messageParams: Record<string, string | n
  * S9: the counted lines with the system quantities — the items live here, their balances taken
  * `FOR UPDATE` (so nothing moves them before the count's movements); at least one differs.
  */
-async function prepareLines(
-  lines: CreateStockCountInput['lines'],
-  context: BaseRecordWriteContext,
-): Promise<PendingCountLine[]> {
+async function prepareLines({
+  lines,
+  context,
+}: {
+  lines: CreateStockCountInput['lines'];
+  context: BaseRecordWriteContext;
+}): Promise<PendingCountLine[]> {
   const ids = await resolveRecordIds({
     table: stock_items,
     organizationId: context.organizationId,
@@ -46,7 +55,10 @@ async function prepareLines(
   });
   const unknown = lines.find((line) => !ids.has(line.stock_item_id));
   if (unknown) {
-    throw linesError('errors:validation.stockCountUnknownItem', { id: unknown.stock_item_id });
+    throw linesError({
+      messageKey: 'errors:validation.stockCountUnknownItem',
+      messageParams: { id: unknown.stock_item_id },
+    });
   }
   const balances = await itemsRepository.findQuantities([...ids.values()]);
   const pending = lines.map((line) => {
@@ -58,7 +70,7 @@ async function prepareLines(
     };
   });
   if (pending.every((line) => line.systemMilli === line.countedMilli)) {
-    throw linesError('errors:validation.stockCountNothingDiffers');
+    throw linesError({ messageKey: 'errors:validation.stockCountNothingDiffers' });
   }
   return pending;
 }
@@ -80,7 +92,7 @@ export function createStockCountsRules(repository: StockCountsRepository): BaseR
     prepareCreate: async (values, context) => {
       const lines = values.lines as CreateStockCountInput['lines'];
       delete values.lines;
-      pendingLines.set(context, await prepareLines(lines, context));
+      pendingLines.set(context, await prepareLines({ lines, context }));
       values.author_membership_id = await findMembershipIdOfUser({
         organizationId: context.organizationId,
         userId: context.userId,

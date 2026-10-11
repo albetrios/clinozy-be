@@ -24,8 +24,18 @@ runs:
     - name: Stop API server
       if: always()
       run: |
+        stop_api_process_tree() {
+          local process_id="$1"
+          local child_id
+          while read -r child_id; do
+            if [ -n "$child_id" ]; then
+              stop_api_process_tree "$child_id"
+            fi
+          done < <(pgrep -P "$process_id" || true)
+          kill "$process_id" 2>/dev/null || true
+        }
         if [ -f server.pid ]; then
-          kill "$(cat server.pid)" 2>/dev/null || true
+          stop_api_process_tree "$(cat server.pid)"
           rm -f server.pid
         fi
       shell: bash

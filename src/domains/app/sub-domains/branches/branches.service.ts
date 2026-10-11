@@ -68,150 +68,195 @@ export class BranchesService {
     userPublicId: string | undefined;
     canReadAllBranches: boolean;
   }) {
-    return withAppDatabaseContext(options.scope, async () => {
-      const organization = await this.organizationService.requireOrganizationByPublicId(
-        options.scope.organizationPublicId,
-      );
-      if (options.canReadAllBranches) {
-        return BranchesSerializer.summaries(
-          await this.branchesRepository.listActiveSummaries(organization.id),
+    return withAppDatabaseContext({
+      scope: options.scope,
+      callback: async () => {
+        const organization = await this.organizationService.requireOrganizationByPublicId(
+          options.scope.organizationPublicId,
         );
-      }
-      const userId = await this.organizationService.resolveUserInternalIdByPublicId(
-        options.userPublicId,
-      );
-      if (userId === null || userId === undefined) return [];
-      return BranchesSerializer.summaries(
-        await this.branchesRepository.listActiveSummariesForUser(organization.id, userId),
-      );
+        if (options.canReadAllBranches) {
+          return BranchesSerializer.summaries(
+            await this.branchesRepository.listActiveSummaries(organization.id),
+          );
+        }
+        const userId = await this.organizationService.resolveUserInternalIdByPublicId(
+          options.userPublicId,
+        );
+        if (userId === null || userId === undefined) return [];
+        return BranchesSerializer.summaries(
+          await this.branchesRepository.listActiveSummariesForUser(organization.id, userId),
+        );
+      },
     });
   }
 
   async list(options: { scope: OrganizationPrincipalDatabaseScope; includeInactive: boolean }) {
-    return withAppDatabaseContext(options.scope, async () => {
-      const organization = await this.organizationService.requireOrganizationByPublicId(
-        options.scope.organizationPublicId,
-      );
-      return BranchesSerializer.many(
-        await this.branchesRepository.listByOrganization(organization.id, {
-          include_inactive: options.includeInactive,
-        }),
-      );
-    });
-  }
-
-  async get(scope: OrganizationPrincipalDatabaseScope, branchPublicId: string) {
-    return withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationService.requireOrganizationByPublicId(
-        scope.organizationPublicId,
-      );
-      const branch = await this.branchesRepository.findByPublicId(branchPublicId, organization.id);
-      if (!branch) throw new NotFoundError('Branch');
-      return BranchesSerializer.one(branch);
-    });
-  }
-
-  async create(
-    scope: OrganizationPrincipalDatabaseScope,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-  ) {
-    const parsed = validateCreateBranch(body);
-    return withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationService.requireOrganizationByPublicId(
-        scope.organizationPublicId,
-      );
-      const userId =
-        (await this.organizationService.resolveUserInternalIdByPublicId(actingUserPublicId)) ??
-        undefined;
-      const defaultStaff = await this.resolveDefaultStaff(organization.id, parsed);
-      const { membership_ids: membershipPublicIds, ...fields } = parsed;
-      const memberIds =
-        membershipPublicIds === undefined
-          ? undefined
-          : await this.resolveMemberIds(organization.id, membershipPublicIds);
-      const created = await this.mapConflicts(parsed.name, () =>
-        this.branchesRepository.create(
-          omitUndefined({
-            ...withoutDefaultStaff(fields),
-            organization_id: organization.id,
-            created_by_user_id: userId,
+    return withAppDatabaseContext({
+      scope: options.scope,
+      callback: async () => {
+        const organization = await this.organizationService.requireOrganizationByPublicId(
+          options.scope.organizationPublicId,
+        );
+        return BranchesSerializer.many(
+          await this.branchesRepository.listByOrganization(organization.id, {
+            include_inactive: options.includeInactive,
           }),
-        ),
-      );
-      // D13: who works there from day one — the list given, else the creator.
-      if (memberIds !== undefined) {
-        await this.branchMembersRepository.replaceForBranch({
-          branch_id: created.id,
-          organization_id: organization.id,
-          membership_ids: [...memberIds],
-          created_by_user_id: userId,
-        });
-      } else if (userId !== undefined) {
-        await this.branchMembersRepository.grantToUser({
-          branch_id: created.id,
-          organization_id: organization.id,
-          user_id: userId,
-          created_by_user_id: userId,
-        });
-      }
-      // D10: the default staff are among the branch's members (checked against the rows just
-      // written, so it holds whichever way the list was given).
-      await this.assertDefaultStaffAreMembers(created.id, defaultStaff);
-      if (Object.keys(defaultStaff).length > 0) {
-        await this.branchesRepository.update(created.id, defaultStaff, userId);
-      }
-      const branch = await this.branchesRepository.findByPublicId(
-        created.public_id,
-        organization.id,
-      );
-      return BranchesSerializer.one(branch!);
+        );
+      },
     });
   }
 
-  async update(
-    scope: OrganizationPrincipalDatabaseScope,
-    branchPublicId: string,
-    body: unknown,
-    actingUserPublicId: string | undefined,
-  ) {
+  async get({
+    scope,
+    branchPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    branchPublicId: string;
+  }) {
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization = await this.organizationService.requireOrganizationByPublicId(
+          scope.organizationPublicId,
+        );
+        const branch = await this.branchesRepository.findByPublicId(
+          branchPublicId,
+          organization.id,
+        );
+        if (!branch) throw new NotFoundError('Branch');
+        return BranchesSerializer.one(branch);
+      },
+    });
+  }
+
+  async create({
+    scope,
+    body,
+    actingUserPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+  }) {
+    const parsed = validateCreateBranch(body);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization = await this.organizationService.requireOrganizationByPublicId(
+          scope.organizationPublicId,
+        );
+        const userId =
+          (await this.organizationService.resolveUserInternalIdByPublicId(actingUserPublicId)) ??
+          undefined;
+        const defaultStaff = await this.resolveDefaultStaff({
+          organizationId: organization.id,
+          input: parsed,
+        });
+        const { membership_ids: membershipPublicIds, ...fields } = parsed;
+        const memberIds =
+          membershipPublicIds === undefined
+            ? undefined
+            : await this.resolveMemberIds({ organizationId: organization.id, membershipPublicIds });
+        const created = await this.mapConflicts({
+          name: parsed.name,
+          write: () =>
+            this.branchesRepository.create(
+              omitUndefined({
+                ...withoutDefaultStaff(fields),
+                organization_id: organization.id,
+                created_by_user_id: userId,
+              }),
+            ),
+        });
+        // D13: who works there from day one — the list given, else the creator.
+        if (memberIds !== undefined) {
+          await this.branchMembersRepository.replaceForBranch({
+            branch_id: created.id,
+            organization_id: organization.id,
+            membership_ids: [...memberIds],
+            created_by_user_id: userId,
+          });
+        } else if (userId !== undefined) {
+          await this.branchMembersRepository.grantToUser({
+            branch_id: created.id,
+            organization_id: organization.id,
+            user_id: userId,
+            created_by_user_id: userId,
+          });
+        }
+        // D10: the default staff are among the branch's members (checked against the rows just
+        // written, so it holds whichever way the list was given).
+        await this.assertDefaultStaffAreMembers({ branchId: created.id, defaultStaff });
+        if (Object.keys(defaultStaff).length > 0) {
+          await this.branchesRepository.update(created.id, defaultStaff, userId);
+        }
+        const branch = await this.branchesRepository.findByPublicId(
+          created.public_id,
+          organization.id,
+        );
+        return BranchesSerializer.one(branch!);
+      },
+    });
+  }
+
+  async update({
+    scope,
+    branchPublicId,
+    body,
+    actingUserPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    branchPublicId: string;
+    body: unknown;
+    actingUserPublicId: string | undefined;
+  }) {
     const parsed = validateUpdateBranch(body);
-    return withAppDatabaseContext(scope, async () => {
-      const organization = await this.organizationService.requireOrganizationByPublicId(
-        scope.organizationPublicId,
-      );
-      const existing = await this.branchesRepository.findByPublicId(
-        branchPublicId,
-        organization.id,
-      );
-      if (!existing) throw new NotFoundError('Branch');
-      // C12 / D43: a save based on an older version is refused with who and when.
-      await assertRecordNotChangedSince({
-        row: existing,
-        expected: parsed.expected_updated_at,
-        resolveUserPublicId: (userInternalId) =>
-          this.organizationService.resolveUserPublicIdByInternalId(userInternalId),
-      });
-      assertClosesAfterOpens({
-        opens_at: parsed.opens_at ?? existing.opens_at.slice(0, 5),
-        closes_at: parsed.closes_at ?? existing.closes_at.slice(0, 5),
-      });
-      const userId =
-        (await this.organizationService.resolveUserInternalIdByPublicId(actingUserPublicId)) ??
-        undefined;
-      const defaultStaff = await this.resolveDefaultStaff(organization.id, parsed);
-      await this.assertDefaultStaffAreMembers(existing.id, defaultStaff);
-      const { expected_updated_at: _expectedUpdatedAt, ...fields } = parsed;
-      const changes: BranchUpdateData = omitUndefined({
-        ...withoutDefaultStaff(fields),
-        ...defaultStaff,
-      });
-      const updated = await this.mapConflicts(parsed.name ?? existing.name, () =>
-        this.branchesRepository.update(existing.id, changes, userId),
-      );
-      if (!updated) throw new NotFoundError('Branch');
-      const branch = await this.branchesRepository.findByPublicId(branchPublicId, organization.id);
-      return BranchesSerializer.one(branch!);
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization = await this.organizationService.requireOrganizationByPublicId(
+          scope.organizationPublicId,
+        );
+        const existing = await this.branchesRepository.findByPublicId(
+          branchPublicId,
+          organization.id,
+        );
+        if (!existing) throw new NotFoundError('Branch');
+        // C12 / D43: a save based on an older version is refused with who and when.
+        await assertRecordNotChangedSince({
+          row: existing,
+          expected: parsed.expected_updated_at,
+          resolveUserPublicId: (userInternalId) =>
+            this.organizationService.resolveUserPublicIdByInternalId(userInternalId),
+        });
+        assertClosesAfterOpens({
+          opens_at: parsed.opens_at ?? existing.opens_at.slice(0, 5),
+          closes_at: parsed.closes_at ?? existing.closes_at.slice(0, 5),
+        });
+        const userId =
+          (await this.organizationService.resolveUserInternalIdByPublicId(actingUserPublicId)) ??
+          undefined;
+        const defaultStaff = await this.resolveDefaultStaff({
+          organizationId: organization.id,
+          input: parsed,
+        });
+        await this.assertDefaultStaffAreMembers({ branchId: existing.id, defaultStaff });
+        const { expected_updated_at: _expectedUpdatedAt, ...fields } = parsed;
+        const changes: BranchUpdateData = omitUndefined({
+          ...withoutDefaultStaff(fields),
+          ...defaultStaff,
+        });
+        const updated = await this.mapConflicts({
+          name: parsed.name ?? existing.name,
+          write: () => this.branchesRepository.update(existing.id, changes, userId),
+        });
+        if (!updated) throw new NotFoundError('Branch');
+        const branch = await this.branchesRepository.findByPublicId(
+          branchPublicId,
+          organization.id,
+        );
+        return BranchesSerializer.one(branch!);
+      },
     });
   }
 
@@ -219,10 +264,13 @@ export class BranchesService {
    * Turns the default-staff `mem_` ids in a body into membership ids; `null` clears a field and an
    * absent field stays absent. An id that is no live member of this organization is a 400.
    */
-  private async resolveDefaultStaff(
-    organizationId: number,
-    input: Partial<Record<DefaultStaffField, string | null | undefined>>,
-  ): Promise<Partial<Record<DefaultStaffField, number | null>>> {
+  private async resolveDefaultStaff({
+    organizationId,
+    input,
+  }: {
+    organizationId: number;
+    input: Partial<Record<DefaultStaffField, string | null | undefined>>;
+  }): Promise<Partial<Record<DefaultStaffField, number | null>>> {
     const requested = DEFAULT_STAFF_FIELDS.flatMap((field) => {
       const value = input[field];
       return typeof value === 'string' ? [{ field, publicId: value }] : [];
@@ -246,10 +294,13 @@ export class BranchesService {
   }
 
   /** `membership_ids` → live membership ids of this organization; an unknown one is a 400. */
-  private async resolveMemberIds(
-    organizationId: number,
-    membershipPublicIds: readonly string[],
-  ): Promise<Set<number>> {
+  private async resolveMemberIds({
+    organizationId,
+    membershipPublicIds,
+  }: {
+    organizationId: number;
+    membershipPublicIds: readonly string[];
+  }): Promise<Set<number>> {
     const resolved = await resolveMembershipIds({
       membershipService: this.membershipService,
       organizationId,
@@ -259,10 +310,13 @@ export class BranchesService {
   }
 
   /** D10: every default-staff member named is one of the branch's live members, else a 400. */
-  private async assertDefaultStaffAreMembers(
-    branchId: number,
-    defaultStaff: Partial<Record<DefaultStaffField, number | null>>,
-  ): Promise<void> {
+  private async assertDefaultStaffAreMembers({
+    branchId,
+    defaultStaff,
+  }: {
+    branchId: number;
+    defaultStaff: Partial<Record<DefaultStaffField, number | null>>;
+  }): Promise<void> {
     const named = DEFAULT_STAFF_FIELDS.filter((field) => typeof defaultStaff[field] === 'number');
     if (named.length === 0) return;
     const members = await this.branchMembersRepository.listLiveMembershipIds(branchId);
@@ -282,7 +336,13 @@ export class BranchesService {
   }
 
   /** Runs a write; a taken name or a second main branch becomes a 409. */
-  private async mapConflicts<T>(name: string, write: () => Promise<T>): Promise<T> {
+  private async mapConflicts<T>({
+    name,
+    write,
+  }: {
+    name: string;
+    write: () => Promise<T>;
+  }): Promise<T> {
     try {
       return await write();
     } catch (error) {
@@ -312,8 +372,8 @@ function withoutDefaultStaff<T extends CreateBranchInput | UpdateBranchInput>(
 /** A merged update (body over the stored row) must still close after it opens. */
 function assertClosesAfterOpens(hours: { opens_at: string; closes_at: string }): void {
   if (hours.closes_at <= hours.opens_at) {
-    throw new ValidationError('errors:validation.branchClosesBeforeOpens', undefined, {
-      closes_at: ['Closing time must be after opening time'],
-    });
+    throw new ValidationError('errors:validation.branchClosesBeforeOpens', undefined, undefined, [
+      { field: 'closes_at', messageKey: 'errors:validation.branchClosesBeforeOpens' },
+    ]);
   }
 }

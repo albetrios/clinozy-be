@@ -15,7 +15,7 @@ const distinct = (values: readonly unknown[]) => new Set(values).size === values
 
 /** The fields a create and a change share (routes-final 11.F.8). */
 const medicalRepFields = {
-  name: trimmedStringMinMax(1, 120),
+  name: trimmedStringMinMax({ min: 1, max: 120 }),
   phone: phoneNumberSchema.nullable(),
   next_visit_on: calendarDateSchema.nullable(),
   manufacturer_ids: z

@@ -100,14 +100,14 @@ describe("revocation tombstone (route-audit session-#1: revoke can't be repopula
     vi.clearAllMocks();
   });
 
-  it("invalidate writes a short-lived REVOKED tombstone (not a DEL) so a racing populate can't un-revoke", async () => {
+  it("invalidate writes a revocation tombstone for the full cache TTL (not a DEL) so a racing populate can't un-revoke", async () => {
     const { invalidateCachedSessionToken } = await import(
       '@/domains/auth/sub-domains/auth-session/session-token-cache.service.js'
     );
     await invalidateCachedSessionToken('hash-revoked');
     expect(redisSet).toHaveBeenCalledWith(
       'session:tok:hash-revoked',
-      '__revoked__',
+      '__invalidated__',
       'EX',
       SESSION_TOKEN_CACHE_TTL_SECONDS,
     );
@@ -115,7 +115,7 @@ describe("revocation tombstone (route-audit session-#1: revoke can't be repopula
   });
 
   it('reads a tombstoned hash as a cache MISS so the caller re-checks Postgres (which denies it)', async () => {
-    redisGet.mockResolvedValueOnce('__revoked__');
+    redisGet.mockResolvedValueOnce('__invalidated__');
     const { getCachedSessionTokenValid } = await import(
       '@/domains/auth/sub-domains/auth-session/session-token-cache.service.js'
     );
