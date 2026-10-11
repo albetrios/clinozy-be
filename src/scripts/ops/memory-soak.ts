@@ -8,6 +8,7 @@
 import '@/shared/config/load-env-files.js';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
+import { listProcessTree, signalProcesses } from './process-tree.util.js';
 
 const SOAK_MINUTES = Number(process.env.MEMORY_SOAK_MINUTES ?? 30);
 const SAMPLE_INTERVAL_MS = Number(process.env.MEMORY_SOAK_SAMPLE_MS ?? 60_000);
@@ -49,8 +50,11 @@ async function main(): Promise<void> {
       ),
     );
   } finally {
-    apiProcess.kill('SIGTERM');
-    workerProcess.kill('SIGTERM');
+    // pnpm runs the script in a process group of its own: stop the trees, not just pnpm.
+    const processIds = [apiProcess, workerProcess].flatMap((child) =>
+      child.pid === undefined ? [] : listProcessTree(child.pid),
+    );
+    signalProcesses({ processIds, signal: 'SIGTERM' });
   }
 }
 

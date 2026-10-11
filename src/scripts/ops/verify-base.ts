@@ -18,6 +18,7 @@ import { resolve } from 'node:path';
 import dotenv from 'dotenv';
 import { DATABASE_URL_KEYS } from '@/infrastructure/database/utils/connection-url.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { listProcessTree, signalProcesses } from './process-tree.util.js';
 
 const BASE_URL_FOR_HEALTH = (process.env.BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const HEALTH_URL = `${BASE_URL_FOR_HEALTH}/readyz`;
@@ -61,21 +62,20 @@ async function sleep(milliseconds: number): Promise<void> {
   });
 }
 
+/** Every process under the spawned dev server and worker, roots included. */
+function spawnedProcessTrees(): number[] {
+  return spawnedChildProcesses.flatMap((child) =>
+    child.pid === undefined ? [] : listProcessTree(child.pid),
+  );
+}
+
 function registerSignalHandlersForTeardown(): void {
   if (didRegisterSignalHandlers) {
     return;
   }
   didRegisterSignalHandlers = true;
   const teardownSynchronously = (): void => {
-    for (const child of spawnedChildProcesses) {
-      if (!child.killed && child.pid !== undefined) {
-        try {
-          child.kill('SIGTERM');
-        } catch {
-          /* ignore */
-        }
-      }
-    }
+    signalProcesses({ processIds: spawnedProcessTrees(), signal: 'SIGTERM' });
   };
   process.on('SIGINT', () => {
     teardownSynchronously();
@@ -154,17 +154,12 @@ async function teardownSpawnedProcesses(): Promise<void> {
     return;
   }
   logger.info('verify.base: stopping spawned dev processes');
-  for (const child of spawnedChildProcesses) {
-    if (!child.killed && child.pid !== undefined) {
-      child.kill('SIGTERM');
-    }
-  }
+  // The whole trees, snapshotted before the first signal: pnpm runs the script in a process group
+  // of its own, so signalling pnpm alone left the API listening on its port.
+  const processIds = spawnedProcessTrees();
+  signalProcesses({ processIds, signal: 'SIGTERM' });
   await sleep(TEARDOWN_GRACE_MILLISECONDS);
-  for (const child of spawnedChildProcesses) {
-    if (!child.killed && child.pid !== undefined) {
-      child.kill('SIGKILL');
-    }
-  }
+  signalProcesses({ processIds, signal: 'SIGKILL' });
   spawnedChildProcesses.length = 0;
 }
 
