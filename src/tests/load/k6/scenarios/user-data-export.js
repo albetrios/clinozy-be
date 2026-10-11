@@ -18,11 +18,20 @@ export const options = {
 
 /**
  * A user may have one export in flight, so requesting one per iteration measured nothing but the
- * 409 that rule answers (99% "failures"). Request it once, then load the read a client polls.
+ * 409 that rule answers (99% "failures"). Step up, request it once, then load the read a client
+ * polls.
  */
 export function setup() {
   const token = __ENV.TEST_TOKEN;
   if (!token) return { dataExportId: null };
+  // The export carries every piece of personal data, so it needs a recent step-up on this session:
+  // re-authenticate as the demo user (TEST_TOKEN's) first, as the client does.
+  const stepUp = http.post(
+    `${API_PREFIX}/auth/step-up`,
+    JSON.stringify({ password: __ENV.DEMO_PASSWORD || 'DemoPassword123!' }),
+    { ...authHeaders(token), tags: { name: 'user-data-export-step-up' } },
+  );
+  if (stepUp.status !== 200) return { dataExportId: null };
   const response = http.post(`${API_PREFIX}/users/me/data-export`, JSON.stringify({}), {
     ...authHeaders(token),
     tags: { name: 'user-data-export-request' },
