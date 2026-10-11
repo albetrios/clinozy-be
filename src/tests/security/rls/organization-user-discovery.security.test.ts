@@ -12,6 +12,7 @@ import {
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
 import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
@@ -193,64 +194,78 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
     expect(rows[0]?.membership_public_id).toBe(membership.public_id);
   });
 
-  it('list_pending_membership_invitations_for_email returns active invitations across organizations', async () => {
-    const ownerA = await createTestUser();
-    const ownerB = await createTestUser();
-    const organizationA = await createTestOrganization({ ownerUserId: ownerA.id });
-    const organizationB = await createTestOrganization({ ownerUserId: ownerB.id });
-    const roleA = await createRoleWithPermissions({
-      organizationId: organizationA.id,
-      permissionCodes: [],
-    });
-    const roleB = await createRoleWithPermissions({
-      organizationId: organizationB.id,
-      permissionCodes: [],
-    });
-    const membershipA = await createMembership({
-      userId: ownerA.id,
-      organizationId: organizationA.id,
-      roleId: roleA.id,
-    });
-    const membershipB = await createMembership({
-      userId: ownerB.id,
-      organizationId: organizationB.id,
-      roleId: roleB.id,
-    });
+  it('list_pending_membership_invitations_for_email returns each invited membership’s latest live invitation across organizations', async () => {
+    const owners = await Promise.all([createTestUser(), createTestUser(), createTestUser()]);
+    const invitee = await createTestUser();
+    const invitedIn = await Promise.all(
+      owners.map(async (owner) => {
+        const organization = await createTestOrganization({ ownerUserId: owner.id });
+        const role = await createRoleWithPermissions({
+          organizationId: organization.id,
+          permissionCodes: [],
+        });
+        // An invitation's membership waits as `invited` until it is answered (launch D84).
+        const membership = await createMembership({
+          userId: invitee.id,
+          organizationId: organization.id,
+          roleId: role.id,
+          status: MEMBERSHIP_STATUS.INVITED,
+        });
+        return { owner, organization, membership };
+      }),
+    );
+    const [inA, inB, inC] = invitedIn as [
+      (typeof invitedIn)[number],
+      (typeof invitedIn)[number],
+      (typeof invitedIn)[number],
+    ];
     const invitationEmail = `invitee-${Math.random().toString(36).slice(2, 8)}@example.com`;
+    const hour = 60 * 60 * 1000;
+    const invitation = (options: {
+      membershipId: number;
+      invitedBy: number;
+      token: string;
+      createdAt?: Date;
+      expiresAt?: Date;
+    }) => ({
+      public_id: `inv_${Math.random().toString(36).slice(2, 12)}`,
+      membership_id: options.membershipId,
+      email: invitationEmail,
+      token_hash: options.token,
+      invited_by_user_id: options.invitedBy,
+      ...(options.createdAt ? { created_at: options.createdAt } : {}),
+      expires_at: options.expiresAt ?? new Date(Date.now() + 7 * 24 * hour),
+    });
+    const latestInA = invitation({
+      membershipId: inA.membership.id,
+      invitedBy: inA.owner.id,
+      token: 'hash-a-latest',
+    });
 
     await database.insert(membership_invitations).values([
-      {
-        public_id: `inv_${Math.random().toString(36).slice(2, 12)}`,
-        membership_id: membershipA.id,
-        email: invitationEmail,
-        token_hash: 'hash-a',
-        invited_by_user_id: ownerA.id,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-      {
-        public_id: `inv_${Math.random().toString(36).slice(2, 12)}`,
-        membership_id: membershipB.id,
-        email: invitationEmail,
-        token_hash: 'hash-b',
-        invited_by_user_id: ownerB.id,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-      {
-        public_id: `inv_${Math.random().toString(36).slice(2, 12)}`,
-        membership_id: membershipA.id,
-        email: invitationEmail,
-        token_hash: 'hash-expired',
-        invited_by_user_id: ownerA.id,
-        /**
-         * Expired invitation must be filtered out by
-         * `list_pending_membership_invitations_for_email`. `created_at` is
-         * pinned earlier than `expires_at` so the `chk_membership_invitations_expires`
-         * check constraint (`expires_at > created_at`) still holds while
-         * the row remains past its `expires_at`.
-         */
-        created_at: new Date(Date.now() - 48 * 60 * 60 * 1000),
-        expires_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
-      },
+      // Sent again: only the latest invitation of a membership counts.
+      invitation({
+        membershipId: inA.membership.id,
+        invitedBy: inA.owner.id,
+        token: 'hash-a-earlier',
+        createdAt: new Date(Date.now() - hour),
+      }),
+      latestInA,
+      invitation({ membershipId: inB.membership.id, invitedBy: inB.owner.id, token: 'hash-b' }),
+      /**
+       * Expired invitation must be filtered out by
+       * `list_pending_membership_invitations_for_email`. `created_at` is
+       * pinned earlier than `expires_at` so the `chk_membership_invitations_expires`
+       * check constraint (`expires_at > created_at`) still holds while
+       * the row remains past its `expires_at`.
+       */
+      invitation({
+        membershipId: inC.membership.id,
+        invitedBy: inC.owner.id,
+        token: 'hash-expired',
+        createdAt: new Date(Date.now() - 48 * hour),
+        expiresAt: new Date(Date.now() - 24 * hour),
+      }),
     ]);
 
     const rows = await sql<
@@ -264,7 +279,12 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
     `;
     expect(rows).toHaveLength(2);
     const organizationIds = new Set(rows.map((row) => row.organization_public_id));
-    expect(organizationIds.has(organizationA.public_id)).toBe(true);
-    expect(organizationIds.has(organizationB.public_id)).toBe(true);
+    expect(organizationIds.has(inA.organization.public_id)).toBe(true);
+    expect(organizationIds.has(inB.organization.public_id)).toBe(true);
+    expect(organizationIds.has(inC.organization.public_id)).toBe(false);
+    expect(
+      rows.find((row) => row.organization_public_id === inA.organization.public_id)
+        ?.invitation_public_id,
+    ).toBe(latestInA.public_id);
   });
 });
