@@ -472,6 +472,7 @@ const FUNCTIONS: Record<string, (input: JsonValue, args: Node[]) => JsonValue[]>
     asString(input, 'contains').includes(asString(single(args[0]!, input), 'contains')),
   ],
   test: (input, args) => [
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — test helper: the pattern comes from a test assertion, never from a request
     new RegExp(asString(single(args[0]!, input), 'test')).test(asString(input, 'test')),
   ],
   rtrimstr: (input, args) => {

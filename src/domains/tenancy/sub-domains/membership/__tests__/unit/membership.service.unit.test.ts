@@ -480,6 +480,7 @@ describe('MembershipService', () => {
       undefined,
       userService,
       membershipInvitationService,
+      membershipAdditionalRolesRepository,
     );
     seatEnforcedService.wireSeatEnforcement({
       reserveSeatCeilingForMemberAdd,
@@ -739,6 +740,13 @@ describe('MembershipService', () => {
       membershipRepository,
       authorizationService,
       permissionRepository,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      userService,
+      membershipInvitationService,
+      membershipAdditionalRolesRepository,
     );
 
     const transferred = await transferService.transferOwnership({

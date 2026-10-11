@@ -83,6 +83,7 @@ describe('MetaGraphApiError (launch D77)', () => {
 
 describe('the messaging webhook checks (launch D77)', () => {
   const body = Buffer.from('{"object":"whatsapp_business_account","entry":[]}');
+  // nosemgrep: javascript.lang.security.audit.hardcoded-hmac-key.hardcoded-hmac-key — test fixture: a fake secret that signs a test body
   const signature = `sha256=${createHmac('sha256', 'test-meta-app-secret').update(body).digest('hex')}`;
 
   it("accepts Meta's signature of the raw body, in any hex case", () => {

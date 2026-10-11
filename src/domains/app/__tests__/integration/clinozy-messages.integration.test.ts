@@ -174,6 +174,7 @@ describe("The app's messages — integration (launch D78, ROUTE #140–#142)", (
       payload: raw,
       headers: {
         'content-type': 'application/json',
+        // nosemgrep: javascript.lang.security.audit.hardcoded-hmac-key.hardcoded-hmac-key — test fixture: signs with the harness's fake Meta app secret
         'x-hub-signature-256': `sha256=${createHmac('sha256', META_APP_SECRET).update(raw).digest('hex')}`,
       },
     });

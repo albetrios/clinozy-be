@@ -172,6 +172,7 @@ export function recordIdListSchemaOf(maximum: number): z.ZodString {
   return z
     .string()
     .regex(
+      // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — built once per call site from a code constant (the id cap), never from input; linear pattern
       new RegExp(`^[a-z0-9_]{1,28}(,[a-z0-9_]{1,28}){0,${maximum - 1}}$`),
       `Up to ${maximum} ids, comma-separated`,
     )
@@ -199,16 +200,19 @@ export const recordIdListSchema = recordIdListSchemaOf(20);
 export function valueListSchema(values: readonly string[]): z.ZodType<string> {
   const body = values.join('|');
   const quotedValues = values.map((value) => `\`${value}\``).join(', ');
-  return z
-    .string()
-    .regex(new RegExp(`^(${body})(,(${body}))*$`), `Comma-separated: ${values.join(', ')}`)
-    .refine((value) => new Set(value.split(',')).size === value.split(',').length, {
-      message: 'Each value once',
-    })
-    .meta({
-      description: `Several, comma-separated, each once: ${quotedValues}.`,
-      example: values.slice(0, 2).join(','),
-    });
+  return (
+    z
+      .string()
+      // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — built once per call site from a code enum (the allowed values), never from input; linear pattern
+      .regex(new RegExp(`^(${body})(,(${body}))*$`), `Comma-separated: ${values.join(', ')}`)
+      .refine((value) => new Set(value.split(',')).size === value.split(',').length, {
+        message: 'Each value once',
+      })
+      .meta({
+        description: `Several, comma-separated, each once: ${quotedValues}.`,
+        example: values.slice(0, 2).join(','),
+      })
+  );
 }
 
 /** The ids of a {@link recordIdListSchema} value (none when absent). */

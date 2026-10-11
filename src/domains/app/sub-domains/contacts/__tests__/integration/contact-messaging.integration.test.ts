@@ -101,6 +101,7 @@ describe('Messaging — integration (launch D77, ROUTE #139)', () => {
     const raw = JSON.stringify(body);
     const signature =
       options.signature ??
+      // nosemgrep: javascript.lang.security.audit.hardcoded-hmac-key.hardcoded-hmac-key — test fixture: signs with the harness's fake Meta app secret
       `sha256=${createHmac('sha256', META_APP_SECRET).update(raw).digest('hex')}`;
     return app.inject({
       method: 'POST',

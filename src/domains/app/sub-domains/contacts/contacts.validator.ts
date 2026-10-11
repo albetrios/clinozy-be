@@ -19,13 +19,18 @@ const CONTACT_NUMBER_QUERY = /^c-?\s*0*(\d{1,9})$/i;
 /** A whole record number: `#2371` (a patient's, a lead's, an appointment's). */
 const RECORD_NUMBER_QUERY = /^#\s*0*(\d{1,9})$/;
 
-/** A whole number shown with its display `prefix`: `PT-0412`, `pt 412`. */
-function prefixedNumberQuery(prefix: string): RegExp {
-  return new RegExp(`^${prefix}-?\\s*0*(\\d{1,9})$`, 'i');
-}
+/** What follows a number's display prefix: `-0412`, ` 412`. */
+const PREFIXED_NUMBER_DIGITS = /^-?\s*0*(\d{1,9})$/;
 
-/** A whole patient number: `PT-0412` (SHELL-M1, D81). */
-const PATIENT_NUMBER_QUERY = prefixedNumberQuery(PATIENT_NUMBER_PREFIX);
+/**
+ * The digits of a whole number shown with its display `prefix` — `PT-0412`, `pt 412` (SHELL-M1,
+ * D81) — or undefined. The prefix is compared as text, never built into a pattern.
+ */
+function prefixedNumberDigits(options: { query: string; prefix: string }): string | undefined {
+  const { query, prefix } = options;
+  if (query.slice(0, prefix.length).toLowerCase() !== prefix.toLowerCase()) return undefined;
+  return PREFIXED_NUMBER_DIGITS.exec(query.slice(prefix.length))?.[1];
+}
 /** A typed number: digits with the separators people type (`+91 98765-43210`). */
 const PHONE_QUERY = /^[\d\s+().-]+$/;
 /** The fewest letters a name search takes — the trigram index needs three (CT9). */
@@ -101,7 +106,7 @@ export function readContactLinkedSearch({
   const prefixed =
     options.recordPrefix === undefined
       ? undefined
-      : prefixedNumberQuery(options.recordPrefix).exec(q)?.[1];
+      : prefixedNumberDigits({ query: q, prefix: options.recordPrefix });
   const recordNumber = prefixed ?? RECORD_NUMBER_QUERY.exec(q)?.[1];
   if (recordNumber !== undefined) return { recordNumber: Number(recordNumber) };
   const contactNumber = CONTACT_NUMBER_QUERY.exec(q)?.[1];
@@ -134,7 +139,7 @@ function readContactSearch(q: string | undefined): ContactSearch {
   const recordNumber = RECORD_NUMBER_QUERY.exec(q)?.[1];
   if (recordNumber !== undefined)
     return { kind: 'record_number', recordNumber: Number(recordNumber) };
-  const patientNumber = PATIENT_NUMBER_QUERY.exec(q)?.[1];
+  const patientNumber = prefixedNumberDigits({ query: q, prefix: PATIENT_NUMBER_PREFIX });
   if (patientNumber !== undefined)
     return { kind: 'patient_number', patientNumber: Number(patientNumber) };
   const digits = phoneQueryDigits(q);

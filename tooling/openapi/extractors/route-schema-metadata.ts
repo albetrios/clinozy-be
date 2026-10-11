@@ -88,6 +88,7 @@ function findStringConstant(options: {
   name: string;
   sourceText: string;
 }): { quote: string; body: string } | undefined {
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — build-time tooling: the name is an identifier read from our own source
   const constant = new RegExp(
     `\\bconst\\s+${options.name}\\s*(?::[^=]+)?=\\s*(['"\`])((?:\\\\[\\s\\S]|(?!\\1)[^\\\\])*)\\1`,
   ).exec(options.sourceText);
@@ -97,6 +98,7 @@ function findStringConstant(options: {
 
 /** The source of the `@/…` module a name is imported from (undefined when it is not, or unreadable). */
 function importedModuleSource(options: { name: string; sourceText: string }): string | undefined {
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — build-time tooling: the name is an identifier read from our own source
   const importMatch = new RegExp(
     `import\\s*\\{[^}]*\\b${options.name}\\b[^}]*\\}\\s*from\\s*'@/([^']+)\\.js'`,
   ).exec(options.sourceText);
