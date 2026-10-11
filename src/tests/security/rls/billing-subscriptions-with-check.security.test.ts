@@ -4,7 +4,6 @@ import {
   withMaintenanceDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
 import { sql as drizzleSql } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import {
   grantClinozyBeAppRoleForTests,
@@ -13,6 +12,12 @@ import {
   tableKey,
   type RlsTenantFixture,
 } from '@/tests/helpers/rls-matrix.helper.js';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * audit #41: the `subscriptions_tenant_isolation` policy now declares an explicit
@@ -30,9 +35,11 @@ import {
  *      tightened.
  */
 async function resolveOrganizationInternalId(organizationPublicId: string): Promise<number> {
-  const rows = await sql<{ id: number }[]>`
+  const rows = rowsOf<{ id: number }>(
+    await database.execute(drizzleSql`
     SELECT id FROM tenancy.organizations WHERE public_id = ${organizationPublicId}
-  `;
+  `),
+  );
   return Number(rows[0]!.id);
 }
 

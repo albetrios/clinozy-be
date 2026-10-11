@@ -167,7 +167,7 @@ export async function runFullSeed(): Promise<void> {
 /**
  * Auto-run only when executed directly (`tsx src/scripts/seed/full.ts`), never on import — so a
  * test can import {@link runFullSeed} without triggering a seed or tearing down the shared pool.
- * `closeDatabase` always runs (success or failure) so the postgres.js pool drains before exit;
+ * `closeDatabase` always runs (success or failure) so the database pool drains before exit;
  * without it a thrown error would `process.exit(1)` and leave aborted connections behind in Postgres.
  */
 if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {

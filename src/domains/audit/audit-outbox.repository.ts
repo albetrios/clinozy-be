@@ -72,7 +72,7 @@ export async function insertAuditOutboxRow(input: AuditOutboxInsertInput): Promi
     severity: input.severity ?? 'INFO',
     metadata: input.metadata ?? {},
   });
-  const affectedRows = (result as unknown as { count?: number }).count ?? 0;
+  const affectedRows = result.rowCount ?? 0;
   if (affectedRows !== 1) {
     throw new Error('audit.outbox INSERT staged no row');
   }

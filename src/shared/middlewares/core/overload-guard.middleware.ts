@@ -92,8 +92,7 @@ function resolveShedReason(options: Parameters<typeof shouldShedRequest>[0]) {
  *   structured error-handler log;
  *   the 5xx response does not expose it. The event-loop signal alone is blind to pool
  *   exhaustion: a request awaiting a pooled connection leaves the loop *idle*, so without the pool
- *   condition requests would queue behind postgres.js (which has no acquire timeout of its own)
- *   until `DATABASE_POOL_ACQUIRE_TIMEOUT_MS`. The pool ratio (`env.OVERLOAD_DB_POOL_SHED_RATIO`,
+ *   condition requests would queue for a pooled connection until `DATABASE_POOL_ACQUIRE_TIMEOUT_MS`. The pool ratio (`env.OVERLOAD_DB_POOL_SHED_RATIO`,
  *   `0` disables) is decoupled from the alerter's `DATABASE_POOL_ACTIVE_CRITICAL_RATIO` so shedding
  *   tunes independently.
  * - **Failure modes:** none surfaced to healthy traffic — at sane thresholds the guard is dormant

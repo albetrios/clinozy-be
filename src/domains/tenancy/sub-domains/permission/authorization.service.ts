@@ -2,7 +2,7 @@ import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { ConfigurationError } from '@/shared/errors/index.js';
 import {
   getCachedPermissions,
@@ -71,7 +71,7 @@ async function resolvePermissionsFromDatabase({
       repository.findPermissionCodesForUserInOrganization(
         userPublicId,
         organizationPublicId,
-        databaseHandle as PostgresJsDatabase,
+        databaseHandle as NodePgDatabase,
       ),
   });
 }

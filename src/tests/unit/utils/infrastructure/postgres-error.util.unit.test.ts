@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  isDatabaseUnavailableError,
   isPostgresForeignKeyViolation,
   isPostgresUniqueViolation,
   isTransientConnectionError,
@@ -26,7 +27,7 @@ describe('postgres-error.util', () => {
   it('retries only a public_id unique violation, then succeeds', async () => {
     const insert = vi
       .fn()
-      .mockRejectedValueOnce({ code: '23505', constraint_name: 'idx_users_public_id' })
+      .mockRejectedValueOnce({ code: '23505', constraint: 'idx_users_public_id' })
       .mockResolvedValueOnce('ok');
 
     const result = await runInsertWithPublicIdentifierRetry({ insert, maxAttempts: 3 });
@@ -38,7 +39,7 @@ describe('postgres-error.util', () => {
     const insert = vi
       .fn()
       .mockRejectedValueOnce({
-        cause: { code: '23505', constraint_name: 'idx_organizations_public_id' },
+        cause: { code: '23505', constraint: 'idx_organizations_public_id' },
       })
       .mockResolvedValueOnce('ok');
 
@@ -50,7 +51,7 @@ describe('postgres-error.util', () => {
   it('does NOT retry a non-public_id unique violation (e.g. slug) — rethrows immediately', async () => {
     // A slug collision cannot be resolved by regenerating a public_id; retrying it
     // would run on the already-aborted transaction (25P02). It must rethrow at once.
-    const slugViolation = { code: '23505', constraint_name: 'idx_organizations_slug' };
+    const slugViolation = { code: '23505', constraint: 'idx_organizations_slug' };
     const insert = vi.fn().mockRejectedValue(slugViolation);
 
     await expect(runInsertWithPublicIdentifierRetry({ insert, maxAttempts: 5 })).rejects.toBe(
@@ -74,7 +75,19 @@ describe('postgres-error.util', () => {
       expect(isTransientConnectionError({ code: '08006' })).toBe(true); // connection_failure
       expect(isTransientConnectionError({ code: '57P01' })).toBe(true); // admin_shutdown
       expect(isTransientConnectionError({ cause: { code: 'ECONNRESET' } })).toBe(true);
-      expect(isTransientConnectionError({ cause: { code: 'CONNECTION_ENDED' } })).toBe(true);
+    });
+
+    it("detects node-postgres's code-less connection drops, top-level and wrapped", () => {
+      expect(isTransientConnectionError(new Error('Connection terminated unexpectedly'))).toBe(
+        true,
+      );
+      expect(
+        isTransientConnectionError({
+          cause: new Error('Client has encountered a connection error and is not queryable'),
+        }),
+      ).toBe(true);
+      // A different message is not a connection drop.
+      expect(isTransientConnectionError(new Error('Connection terminated'))).toBe(false);
     });
 
     it('returns false for query-logic errors (never retry a doomed query) and non-objects', () => {
@@ -82,6 +95,37 @@ describe('postgres-error.util', () => {
       expect(isTransientConnectionError({ code: '42601' })).toBe(false); // syntax_error
       expect(isTransientConnectionError(null)).toBe(false);
       expect(isTransientConnectionError(new Error('plain'))).toBe(false);
+    });
+  });
+
+  describe('isDatabaseUnavailableError', () => {
+    it('detects a database that cannot be reached, is full or is starting, wrapped or not', () => {
+      expect(isDatabaseUnavailableError({ code: 'ECONNREFUSED' })).toBe(true);
+      expect(isDatabaseUnavailableError({ cause: { code: 'ENOTFOUND' } })).toBe(true);
+      expect(isDatabaseUnavailableError({ code: '53300' })).toBe(true); // too_many_connections
+      expect(isDatabaseUnavailableError({ code: '57P03' })).toBe(true); // cannot_connect_now
+    });
+
+    it("detects node-postgres's connect and checkout timeouts, and a dropped connection", () => {
+      expect(isDatabaseUnavailableError(new Error('timeout exceeded when trying to connect'))).toBe(
+        true,
+      );
+      expect(
+        isDatabaseUnavailableError({
+          cause: new Error('Connection terminated due to connection timeout'),
+        }),
+      ).toBe(true);
+      expect(isDatabaseUnavailableError(new Error('Connection terminated unexpectedly'))).toBe(
+        true,
+      );
+    });
+
+    it('leaves a misconfigured login and query errors alone (they stay a 500)', () => {
+      expect(isDatabaseUnavailableError({ code: '28P01' })).toBe(false); // invalid_password
+      expect(isDatabaseUnavailableError({ code: '3D000' })).toBe(false); // invalid_catalog_name
+      expect(isDatabaseUnavailableError({ code: '23505' })).toBe(false);
+      expect(isDatabaseUnavailableError(new Error('plain'))).toBe(false);
+      expect(isDatabaseUnavailableError(undefined)).toBe(false);
     });
   });
 

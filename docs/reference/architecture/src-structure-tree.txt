@@ -2198,6 +2198,7 @@ src/
     │   │   │   └── redis-tombstone-cache.util.unit.test.ts
     │   │   ├── database/
     │   │   │   ├── acquire-deadline.unit.test.ts
+    │   │   │   ├── assert-transaction-not-failed.unit.test.ts
     │   │   │   ├── batch-delete.util.db.unit.test.ts
     │   │   │   ├── batch-delete.util.unit.test.ts
     │   │   │   ├── capped-count.util.db.unit.test.ts
@@ -2283,6 +2284,7 @@ src/
     │   ├── observability/
     │   │   ├── business-metrics.unit.test.ts
     │   │   ├── db-pool-alert.service.unit.test.ts
+    │   │   ├── db-pool-metrics.unit.test.ts
     │   │   ├── db-rls-checkout-metrics.unit.test.ts
     │   │   ├── dlq-depth.service.unit.test.ts
     │   │   ├── event-loop-metrics.unit.test.ts

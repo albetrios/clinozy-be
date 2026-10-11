@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it, type MockInstance, vi } from 'vitest';
 
 import { type Job, Queue, QueueEvents, type Worker } from 'bullmq';
 import { eq } from 'drizzle-orm';
-import { env } from '@/shared/config/env.config.js';
+import { isDatabaseUnavailableError } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { webhook_delivery_attempts } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 
@@ -129,7 +129,6 @@ describe('Chaos resilience: BullMQ webhook delivery survives transient Postgres 
         },
       );
 
-    const outageStartedAt = performance.now();
     await setChaosTestingListeningProxyEnabledAdministrativeSwitch(
       CHAOS_POSTGRES_PROXY_NAME,
       false,
@@ -184,17 +183,12 @@ describe('Chaos resilience: BullMQ webhook delivery survives transient Postgres 
       const failedAttempt = await firstFailure;
       expect(failedAttempt.attemptsMade).toBeGreaterThanOrEqual(1);
       const failureCode = postgresConnectionFailureCode(failedAttempt.error);
-      if (failureCode === 'SERVICE_UNAVAILABLE') {
-        // The bounded database acquisition wait deliberately hides the socket error.
-        expect(env.DATABASE_POOL_ACQUIRE_TIMEOUT_MS).toBeGreaterThan(0);
-        expect(performance.now() - outageStartedAt).toBeGreaterThanOrEqual(
-          env.DATABASE_POOL_ACQUIRE_TIMEOUT_MS,
-        );
-      } else {
-        expect(failureCode).toMatch(
-          /^(ECONNREFUSED|ECONNRESET|CONNECTION_CLOSED|CONNECTION_ENDED|CONNECT_TIMEOUT|ETIMEDOUT)$/,
-        );
-      }
+      // A connection that could not be opened or claimed answers 503 (the socket error is logged);
+      // one that dropped under the job fails with node-postgres's own error.
+      expect(
+        failureCode === 'SERVICE_UNAVAILABLE' || isDatabaseUnavailableError(failedAttempt.error),
+        `${failureCode ?? 'no code'}: ${failedAttempt.error.message}`,
+      ).toBe(true);
       const receiverCallsBeforeRecovery =
         outboundWebhookFetchSpyAwaitingObservation.mock.calls.filter(
           ([input]) =>

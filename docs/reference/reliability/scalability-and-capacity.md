@@ -97,19 +97,13 @@ in the oversubscribed cluster it fired ~4,900 times. See
 
 ## Statement planning on direct database connections
 
-The version-pinned Drizzle postgres.js driver patch in `pnpm-workspace.yaml`
-enables statement preparation on its `unsafe()` execution paths. Without the
-patch, those calls explicitly disable preparation, so repeated parameterized
-reads are parsed and planned again even when the connection pool permits reuse.
-The patch covers both ESM and CommonJS driver builds and uses bound parameters;
-it does not cache query results or remove authorization or RLS checks.
-
-postgres.js also checks the pool's `prepare` option, so the existing
-`prepare: false` setting for detected transaction-pooler connections still wins.
-Do not force PostgreSQL's `plan_cache_mode` globally: parameter-sensitive queries
-may need custom plans. The regression suite verifies plan reuse, changing
-transaction-local organization settings and the disabled-preparation path.
-Remove the patch when the upstream driver provides the same behavior.
+Drizzle's node-postgres session sends every statement unnamed: Postgres parses and plans it on each
+execution and keeps nothing prepared between checkouts, so a transaction-mode pooler (Neon's
+`-pooler` host) can serve the pool unchanged.
+[`prepared-statements.integration.test.ts`](../../../src/tests/integration/database/prepared-statements.integration.test.ts)
+checks that no prepared statement is left behind and that every statement in a transaction reads its
+own transaction-local organization setting. Do not force PostgreSQL's `plan_cache_mode` globally:
+parameter-sensitive queries may need custom plans.
 
 ## Concurrency correctness under stress
 

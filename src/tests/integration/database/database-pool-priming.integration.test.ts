@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { primeDatabasePool, sql } from '@/infrastructure/database/connection.js';
+import { primeDatabasePool } from '@/infrastructure/database/connection.js';
 import { env } from '@/shared/config/env.config.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * `server.ts` primes the pool before `listen`, so a fresh process's first burst does not open its
@@ -15,22 +22,27 @@ const runAsApplicationBehaviour = !process.env.TEST_DATABASE_ROLE;
 describe.runIf(runAsApplicationBehaviour)('primeDatabasePool', () => {
   it('opens every pool connection before the first burst', async () => {
     await primeDatabasePool();
-    const [primed] = await sql<{ primed_at: string }[]>`
+    const [primed] = rowsOf<{ primed_at: string }>(
+      await database.execute(sql`
       SELECT clock_timestamp()::text AS primed_at
-    `;
+    `),
+    );
     if (!primed) throw new Error('clock_timestamp() returned no row');
 
     const burst = await Promise.all(
-      Array.from(
-        { length: env.DATABASE_POOL_MAX },
-        () => sql<{ pid: number; opened_before_priming_returned: boolean }[]>`
+      Array.from({ length: env.DATABASE_POOL_MAX }, () =>
+        database
+          .execute(sql`
           SELECT
             pg_backend_pid() AS pid,
             backend_start <= ${primed.primed_at}::timestamptz AS opened_before_priming_returned,
             pg_sleep(0.05)
           FROM pg_stat_activity
           WHERE pid = pg_backend_pid()
-        `,
+        `)
+          .then((result) =>
+            rowsOf<{ pid: number; opened_before_priming_returned: boolean }>(result),
+          ),
       ),
     );
 

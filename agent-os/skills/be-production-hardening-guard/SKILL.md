@@ -31,7 +31,8 @@ Enforce production-readiness checks across the codebase. Verifies security heade
 
 ### Database
 
-- [ ] Connection pool configured (max, idle_timeout, connect_timeout, max_lifetime)
+- [ ] Connection pool configured (max, idle timeout, connect timeout, max lifetime) and created through `createDatabasePool()` — its `error` listeners keep a dropped connection from becoming an uncaught exception
+- [ ] A connection that cannot be had answers 503 + `Retry-After` (`runPooledUnitOfWork`), and a transaction with a failed statement never commits (`assertTransactionNotFailed`)
 - [ ] `DEPLOYMENT_TOTAL_REPLICA_COUNT` set in production; `assertPostgresConnectionBudget()` passes at startup
 - [ ] SSL enabled in production (`rejectUnauthorized: true`)
 - [ ] Transaction timeout via `withTransaction()` (default 10s)

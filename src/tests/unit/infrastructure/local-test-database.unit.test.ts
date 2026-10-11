@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type postgres from 'postgres';
 import {
   assertConnectedToTestDatabase,
   buildMigrationChildEnvironment,
@@ -19,10 +18,13 @@ const MANAGED_KEYS = [
   'CI',
 ] as const;
 
-/** A postgres.js tagged-template stand-in answering `current_database()` with `databaseName`. */
+/** A Drizzle `execute` stand-in answering `current_database()` with `databaseName`. */
 function fakeQuery(databaseName: string) {
-  const query = vi.fn(async () => [{ name: databaseName }]);
-  return { query, sql: query as unknown as ReturnType<typeof postgres> };
+  const query = vi.fn(async () => ({ rows: [{ name: databaseName }] }));
+  return {
+    query,
+    sql: { execute: query } as unknown as Parameters<typeof assertConnectedToTestDatabase>[0],
+  };
 }
 
 describe('local test database harness', () => {

@@ -1,5 +1,5 @@
 /**
- * Postgres / driver error helpers (postgres.js uses standard `code` for SQLSTATE).
+ * Postgres / driver error helpers (node-postgres's `DatabaseError` carries the SQLSTATE as `code`).
  */
 import { DEFAULT_TRANSIENT_RETRY_ATTEMPTS } from '@/shared/constants/limits.constants.js';
 
@@ -26,16 +26,46 @@ const TRANSIENT_CONNECTION_ERROR_CODES = new Set<string>([
   'ECONNRESET',
   'EPIPE',
   'ETIMEDOUT',
-  'CONNECTION_ENDED', // postgres.js: connection ended before the query completed
-  'CONNECTION_DESTROYED',
-  'CONNECTION_CLOSED',
+]);
+
+/**
+ * node-postgres reports a connection that dropped under a query without a `code`: the query in
+ * flight fails with the first message, and a later query on the same broken client with the second.
+ */
+const TRANSIENT_CONNECTION_ERROR_MESSAGES = new Set<string>([
+  'Connection terminated unexpectedly',
+  'Client has encountered a connection error and is not queryable',
 ]);
 
 const TRANSIENT_RETRY_BASE_DELAY_MS = 25;
 
 /**
+ * What a new connection fails with while the database cannot take one: Node.js socket codes for a
+ * host that cannot be reached, and the SQLSTATEs a server answers with while it is full or starting.
+ */
+const DATABASE_UNAVAILABLE_ERROR_CODES = new Set<string>([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  '53300', // too_many_connections
+  '57P03', // cannot_connect_now
+]);
+
+/**
+ * node-postgres's code-less errors for a connection it could not open, or a pooled one that did not
+ * free up, within `connectionTimeoutMillis`.
+ */
+const DATABASE_UNAVAILABLE_ERROR_MESSAGES = new Set<string>([
+  'timeout exceeded when trying to connect',
+  'Connection terminated due to connection timeout',
+  'timeout expired',
+]);
+
+/**
  * Returns true when `error` — or any error in its `cause` chain — carries the
- * given SQLSTATE `code`. Drizzle wraps the driver's `PostgresError` (which holds
+ * given SQLSTATE `code`. Drizzle wraps the driver's `DatabaseError` (which holds
  * the SQLSTATE) in `error.cause`, so a top-level-only check misses the code and
  * a concurrent unique-violation loser would surface as a 500 instead of a 409.
  */
@@ -82,7 +112,7 @@ export function getPostgresConstraintName(error: unknown): string | undefined {
   let current: unknown = error;
   for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
     if (typeof current !== 'object' || current === null) return undefined;
-    const name = (current as { constraint_name?: unknown }).constraint_name;
+    const name = (current as { constraint?: unknown }).constraint;
     if (typeof name === 'string') return name;
     current = (current as { cause?: unknown }).cause;
   }
@@ -95,7 +125,8 @@ export function getPostgresConstraintName(error: unknown): string | undefined {
  *
  * @remarks
  * - **Algorithm:** walks the `cause` chain (Drizzle wraps the driver error) checking each link's
- *   `code` against {@link TRANSIENT_CONNECTION_ERROR_CODES}.
+ *   `code` against {@link TRANSIENT_CONNECTION_ERROR_CODES} and its `message` against
+ *   {@link TRANSIENT_CONNECTION_ERROR_MESSAGES} (node-postgres's code-less connection drops).
  * - **Notes:** intentionally narrow — only errors that a retry on a fresh connection could plausibly
  *   resolve. Constraint/syntax/permission errors return false so callers never retry a doomed query.
  */
@@ -103,8 +134,38 @@ export function isTransientConnectionError(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
     if (typeof current !== 'object' || current === null) return false;
-    const code = (current as { code?: unknown }).code;
+    const { code, message } = current as { code?: unknown; message?: unknown };
     if (typeof code === 'string' && TRANSIENT_CONNECTION_ERROR_CODES.has(code)) return true;
+    if (typeof message === 'string' && TRANSIENT_CONNECTION_ERROR_MESSAGES.has(message))
+      return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/**
+ * Returns true when `error` — or any error in its `cause` chain — says the database could not give
+ * a connection at all: unreachable, refusing, full, starting up, or not answering in time — or a
+ * connection that dropped ({@link isTransientConnectionError}).
+ *
+ * @remarks
+ * - **Why:** node-postgres fails a checkout at once when the connection cannot be opened, and after
+ *   `connectionTimeoutMillis` when nothing frees up. Those failures mean the database is
+ *   unavailable, not that the request was wrong: the unit of work answers 503 with `Retry-After`,
+ *   as the acquire deadline does, instead of a 500.
+ * - **Notes:** a login refused for a reason that will not go away by itself (a wrong password,
+ *   SQLSTATE 28P01; a missing database, 3D000) is not here — it is a misconfiguration and stays a 500.
+ */
+export function isDatabaseUnavailableError(error: unknown): boolean {
+  if (isTransientConnectionError(error)) return true;
+  let current: unknown = error;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    if (typeof current !== 'object' || current === null) return false;
+    const { code, message } = current as { code?: unknown; message?: unknown };
+    if (typeof code === 'string' && DATABASE_UNAVAILABLE_ERROR_CODES.has(code)) return true;
+    if (typeof message === 'string' && DATABASE_UNAVAILABLE_ERROR_MESSAGES.has(message)) {
+      return true;
+    }
     current = (current as { cause?: unknown }).cause;
   }
   return false;
@@ -116,7 +177,7 @@ export function isTransientConnectionError(error: unknown): boolean {
  *
  * @remarks
  * - **Algorithm:** up to `maxAttempts` calls; between attempts waits a short linear backoff
- *   (`TRANSIENT_RETRY_BASE_DELAY_MS * attempt`) to let postgres.js acquire a fresh connection.
+ *   (`TRANSIENT_RETRY_BASE_DELAY_MS * attempt`) to let the pool open a fresh connection.
  * - **Failure modes:** a non-transient error (or the final attempt) rethrows unchanged.
  * - **Side effects:** none beyond re-invoking `read`. **Caller contract:** `read` MUST be a read with
  *   no side effects and MUST NOT run inside an open transaction — a mid-transaction connection drop

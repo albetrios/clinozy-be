@@ -25,8 +25,8 @@
  */
 import '@/shared/config/load-env-files.js';
 import { parseArgs } from 'node:util';
-import { eq, isNotNull } from 'drizzle-orm';
-import { database, sql, closeDatabase } from '@/infrastructure/database/connection.js';
+import { eq, isNotNull, sql as drizzleSql } from 'drizzle-orm';
+import { database, closeDatabase } from '@/infrastructure/database/connection.js';
 import { mfa_methods } from '@/domains/auth/sub-domains/auth-mfa/auth-mfa-method.schema.js';
 import { webhooks } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import { getEnv } from '@/shared/config/env.config.js';
@@ -79,7 +79,7 @@ async function main(): Promise<void> {
   const options = parseOptions();
   const currentPrefix = currentVersionPrefix();
 
-  await sql`select 1`;
+  await database.execute(drizzleSql`select 1`);
 
   let mfaUpdated = 0;
   let webhookUpdated = 0;

@@ -3,7 +3,8 @@ import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { usesSeparateBullMqRedisEndpoint } from '@/infrastructure/cache/redis-url.parse.util.js';
 import { env } from '@/shared/config/env.config.js';
 import { resolveBullMqRedisUrl } from '@/infrastructure/cache/redis-url.util.js';
-import { sql } from '@/infrastructure/database/connection.js';
+import { sql as drizzleSql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
 import { pingBullMQ } from '@/infrastructure/queue/health.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
@@ -109,7 +110,7 @@ export async function runDependencyReadinessProbes(): Promise<ReadinessProbeSumm
     runReadinessProbe({
       readinessComponentName: 'database',
       probe: async () => {
-        await sql`select 1`;
+        await database.execute(drizzleSql`select 1`);
       },
     }),
     runReadinessProbe({

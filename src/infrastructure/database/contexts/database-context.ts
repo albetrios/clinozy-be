@@ -38,6 +38,7 @@ function resolveMaintenancePool(): typeof database {
 }
 import {
   applyWorkerStatementTimeout,
+  assertTransactionNotFailed,
   getOrganizationRequestDatabaseSession,
   isWorkerRuntime,
   runWithPinnedDatabaseHandle,
@@ -67,6 +68,7 @@ import {
 import { getEnv } from '@/shared/config/env.config.js';
 import { ConfigurationError, ServiceUnavailableError } from '@/shared/errors/index.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { isDatabaseUnavailableError } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { trace } from '@opentelemetry/api';
 
 declare const PRINCIPAL_SCOPE_BRAND: unique symbol;
@@ -271,14 +273,16 @@ async function runWithLayeredUserIdentity<T>(options: {
  * overload guard reads, the hold-time sample, and a deadline on getting the connection.
  *
  * @remarks
- * postgres.js has no acquire timeout. With no connection open, a query waits while the pool keeps
- * reconnecting for as long as the database stays unreachable — `connect_timeout` bounds each attempt,
- * not the wait — so a unit of work could outlive the HTTP request that started it and commit after
- * the client had been told the request failed. `openTransaction` calls `claimConnection` first thing
- * inside the transaction. When `DATABASE_POOL_ACQUIRE_TIMEOUT_MS` passes before it does, the unit of
- * work is abandoned: the caller gets a 503 with `Retry-After`, and a connection that arrives later
- * throws out of `claimConnection`, so the transaction rolls back before running anything. Once the
- * transaction has started, the deadline no longer applies; `statement_timeout` bounds the work. The
+ * node-postgres fails a checkout at once when the database refuses the connection, and after
+ * `connectionTimeoutMillis` when it does not answer or no pooled connection frees up. A unit of work
+ * that fails that way before its transaction started ({@link isDatabaseUnavailableError}) answers
+ * 503 with `Retry-After`: the database is unavailable, the request is not wrong. `openTransaction`
+ * calls `claimConnection` first thing inside the transaction. When `DATABASE_POOL_ACQUIRE_TIMEOUT_MS`
+ * passes before it does, the unit of work is abandoned with the same 503, and a connection that
+ * arrives later throws out of `claimConnection`, so the transaction rolls back before running
+ * anything — a unit of work never outlives the request that started it and commits after the client
+ * was told it failed. Once the transaction has started, neither applies; `statement_timeout` bounds
+ * the work. The
  * gauge and the hold sample follow the transaction itself, so an abandoned waiter keeps counting as
  * in flight — and the overload guard keeps shedding — until the pool lets it go. Every pooled unit
  * counts, user-only and `withTransaction` ones included: an uncounted unit holds a connection the
@@ -304,7 +308,13 @@ export async function runPooledUnitOfWork<T>(options: {
   // Called from an async function, a synchronous throw from openTransaction becomes a rejection,
   // so the gauge below is still released, as the per-site try/finally did.
   // The unit's after-commit tasks survive only if it commits (see runInCommitUnit).
-  const transaction = runInCommitUnit(() => options.openTransaction(claimConnection));
+  const transaction = runInCommitUnit(() => options.openTransaction(claimConnection)).catch(
+    (error: unknown) => {
+      if (started || !isDatabaseUnavailableError(error)) throw error;
+      logger.warn({ path: options.path, error }, 'database.acquire_failed');
+      throw new ServiceUnavailableError().withRetryAfter(DATABASE_ACQUIRE_RETRY_AFTER_SECONDS);
+    },
+  );
   const unitOfWork = transaction.finally(() => {
     endConnectionWait(waitToken);
     decrementOrganizationRlsCheckoutCount();
@@ -444,13 +454,15 @@ async function runPrincipalTransaction<T>(options: {
       callback(brandWorkerContextDatabaseHandle(databaseHandle)),
     );
   try {
-    return await (organizationPublicId !== undefined
+    const result = await (organizationPublicId !== undefined
       ? runWithPinnedOrganizationDatabaseSession({
           organizationPublicId,
           databaseHandle,
           callback: runCallback,
         })
       : runWithPinnedDatabaseHandle({ databaseHandle, callback: runCallback }));
+    await assertTransactionNotFailed(databaseHandle);
+    return result;
   } finally {
     originalIdentity.identityChanged = true;
   }
@@ -568,10 +580,12 @@ async function runSessionDatabaseContext<T>({
         claimConnection();
         const databaseHandle = transaction as unknown as RequestScopedPostgresDatabase;
         await setLocalDatabaseConfig({ databaseHandle, key: armed.guc, value: armed.value });
-        return runWithPinnedDatabaseHandle({
+        const result = await runWithPinnedDatabaseHandle({
           databaseHandle,
           callback: () => callback(brandWorkerContextDatabaseHandle(databaseHandle)),
         });
+        await assertTransactionNotFailed(databaseHandle);
+        return result;
       }),
   });
 }
@@ -918,8 +932,10 @@ async function runMaintenanceTransaction<T>(options: {
   if (definition.guc !== null) {
     await setLocalDatabaseConfig({ databaseHandle, key: definition.guc, value: 'true' });
   }
-  return runWithPinnedDatabaseHandle({
+  const result = await runWithPinnedDatabaseHandle({
     databaseHandle,
     callback: () => callback(brandWorkerContextDatabaseHandle(databaseHandle)),
   });
+  await assertTransactionNotFailed(databaseHandle);
+  return result;
 }

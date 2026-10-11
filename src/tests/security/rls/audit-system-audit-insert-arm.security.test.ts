@@ -4,13 +4,18 @@ import {
   withMaintenanceDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
 import { sql as drizzleSql } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants.js';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Regression for sec-r5-async-queue-1.
@@ -34,13 +39,15 @@ import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants
  * harness's Compose superuser bypass does not silently mask RLS regressions.
  */
 async function isSystemAuditInsertArmApplied(): Promise<boolean> {
-  const rows = await sql<{ with_check: string | null }[]>`
+  const rows = rowsOf<{ with_check: string | null }>(
+    await database.execute(drizzleSql`
     SELECT with_check FROM pg_policies
     WHERE schemaname = 'audit'
       AND tablename = 'logs'
       AND policyname = 'audit_logs_tenant_isolation_insert'
       AND cmd = 'INSERT'
-  `;
+  `),
+  );
   const withCheck = rows[0]?.with_check ?? '';
   return withCheck.includes('system_audit_insert');
 }
@@ -84,9 +91,11 @@ describe('Security: audit.logs INSERT system-audit arm (sec-r5-async-queue-1)', 
       'tenantless INSERT under withMaintenanceDatabaseContext must succeed',
     ).toBeUndefined();
 
-    const inserted = await sql<{ count: string }[]>`
+    const inserted = rowsOf<{ count: string }>(
+      await database.execute(drizzleSql`
       SELECT COUNT(*)::text AS count FROM audit.logs WHERE action = 'test.r5.system_audit'
-    `;
+    `),
+    );
     expect(inserted[0]?.count).toBe('1');
   });
 
@@ -130,12 +139,14 @@ describe('Security: audit.logs INSERT system-audit arm (sec-r5-async-queue-1)', 
     // replay code hit. Without the GUC, RLS rejects the bare INSERT.
     let caught: unknown;
     try {
-      await sql.begin(async (transaction) => {
-        await transaction`SET LOCAL ROLE ${transaction(DATABASE_APP_ROLE)}`;
-        await transaction`
+      await database.transaction(async (transaction) => {
+        await transaction.execute(
+          drizzleSql`SET LOCAL ROLE ${drizzleSql.identifier(DATABASE_APP_ROLE)}`,
+        );
+        await transaction.execute(drizzleSql`
           INSERT INTO audit.logs (public_id, organization_id, actor_user_id, action, resource_type, metadata, severity)
           VALUES (${generatePublicId('auditLog')}, NULL, NULL, 'test.r5.bare', 'test', '{}'::jsonb, 'INFO')
-        `;
+        `);
       });
     } catch (error) {
       caught = error;

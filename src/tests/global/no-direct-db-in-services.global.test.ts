@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
  * Walks every `.ts` file under `src/domains/**` that is NOT a repository,
  * NOT a schema, NOT a test, NOT a seed. Fails if any such file imports one
  * of the DB-query primitives — the `database` connection singleton, the
- * raw postgres-js `sql` template, or `getRequestDatabase`. Context wrappers
+ * raw node-postgres `pool`, or `getRequestDatabase`. Context wrappers
  * (`withAppDatabaseContext`, `withMaintenanceDatabaseContext`,
  * `withTransaction`, etc.) and DB-handle TYPES are allowed because they
  * model service-layer orchestration; the SQL queries they wrap still go
@@ -29,9 +29,9 @@ describe('Global: no direct DB-query primitives outside repositories (sec-r5-arc
         /import\s*\{[^}]*\bdatabase\b[^}]*\}\s*from\s+['"]@\/infrastructure\/database\/connection\.js['"]/g,
     },
     {
-      name: 'raw `sql` tagged-template from connection.js',
+      name: 'raw node-postgres `pool` from connection.js',
       pattern:
-        /import\s*\{[^}]*\bsql\b[^}]*\}\s*from\s+['"]@\/infrastructure\/database\/connection\.js['"]/g,
+        /import\s*\{[^}]*\bpool\b[^}]*\}\s*from\s+['"]@\/infrastructure\/database\/connection\.js['"]/g,
     },
     {
       name: 'getRequestDatabase() from request-database.context.js',
@@ -85,7 +85,7 @@ describe('Global: no direct DB-query primitives outside repositories (sec-r5-arc
   }
 
   it('recognizes ordinary and multiline runtime connection imports while allowing type-only imports', () => {
-    for (const primitive of ['database', 'sql']) {
+    for (const primitive of ['database', 'pool']) {
       const scanner = FORBIDDEN_IMPORT_PATTERNS.find(({ name }) =>
         name.includes(`\`${primitive}\``),
       )?.pattern;
@@ -109,7 +109,7 @@ describe('Global: no direct DB-query primitives outside repositories (sec-r5-arc
     }
   });
 
-  it('forbids `database` / `sql` / `getRequestDatabase` outside repositories', async () => {
+  it('forbids `database` / `pool` / `getRequestDatabase` outside repositories', async () => {
     const repositoryRoot = process.cwd();
     const domainsRoot = join(repositoryRoot, 'src', 'domains');
     const violations: string[] = [];

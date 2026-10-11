@@ -183,7 +183,7 @@ describe('Integration: audit transactional outbox drain', () => {
 
     // 23514 = check_violation, raised by Postgres itself — not by application code.
     expect(failure).toMatchObject({
-      cause: { code: '23514', constraint_name: 'chk_audit_outbox_actor_present' },
+      cause: { code: '23514', constraint: 'chk_audit_outbox_actor_present' },
     });
     expect(await pendingOutboxCount()).toBe(0);
   });
@@ -245,13 +245,11 @@ describe('Integration: audit transactional outbox drain', () => {
   });
 
   it('sec-r7/M2: a nested-transaction savepoint isolates a failed audit.logs insert from the batch', async () => {
-    // Drives the EXACT mechanism `drainOutboxRow` now uses against the real postgres-js / drizzle
+    // Drives the EXACT mechanism `drainOutboxRow` now uses against the real node-postgres / drizzle
     // drain transaction: the per-row INSERT runs in a NESTED transaction (a SAVEPOINT). A genuinely
     // failing insert (invalid severity violates chk_audit_severity) rolls the nested transaction
     // back and re-throws; the OUTER batch transaction must stay usable so a subsequent VALID insert
-    // still commits. This proves the failed row does NOT wedge the batch on the real driver — raw
-    // `SAVEPOINT` via execute() does not survive postgres-js's transaction-error state, so the
-    // nested transaction is the supported mechanism.
+    // still commits. This proves the failed row does NOT wedge the batch on the real driver.
     await getOperatorDatabase().insert(users).values({
       public_id: ACTOR_PUBLIC_ID,
       email: 'audit-drain-savepoint@example.com',

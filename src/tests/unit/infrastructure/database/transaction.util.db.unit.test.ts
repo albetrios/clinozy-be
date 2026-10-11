@@ -58,10 +58,12 @@ describe('withTransaction', () => {
     let timeoutSetting: string | null = null;
     await withTransaction({
       callback: async (transaction) => {
-        const result = await (transaction as typeof database).execute(
+        const result = await (transaction as typeof database).execute<{ timeout: string }>(
           sql`SELECT current_setting('statement_timeout', true) AS timeout`,
         );
-        const rows = result as unknown as { timeout: string }[];
+        const rows = Array.isArray(result)
+          ? (result as { timeout: string }[])
+          : ((result as { rows?: { timeout: string }[] }).rows ?? []);
         timeoutSetting = rows[0]?.timeout ?? null;
       },
       options: { timeoutMs: 5_000 },

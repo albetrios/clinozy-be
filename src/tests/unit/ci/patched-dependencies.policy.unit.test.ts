@@ -7,12 +7,9 @@ import { describe, expect, it } from 'vitest';
  * their fixes — so a dependency bump, a re-cut patch or a dropped entry cannot quietly bring a
  * fixed defect back.
  *
- * Two of them guard production and the test harness:
- * - `postgres@3.4.9`: a connection lost under an open transaction crashed the API/worker process
- *   (porsager/postgres#1208) or let the transaction's later statements commit on a reconnected
- *   session (porsager/postgres#1248). Behaviour: `transaction-connection-loss.integration.test.ts`.
- * - `@mswjs/interceptors@0.44.0` (nock 15): loopback sockets must reach Node.js as-is, and a client
- *   that waits for "connect" must not get it twice. Behaviour: `harness-network-isolation.unit.test.ts`.
+ * The one that guards the test harness: `@mswjs/interceptors@0.44.0` (nock 15) — loopback sockets
+ * must reach Node.js as-is, or a refused Postgres or Redis connection is reported as established.
+ * Behaviour: `harness-network-isolation.unit.test.ts`.
  *
  * This suite needs no database, so it runs in the fast lane on every pre-commit, pre-push and PR.
  */
@@ -63,9 +60,9 @@ function installedFile(directory: string, relativePath: string): string {
 }
 
 describe('patched dependencies', () => {
-  it('finds the patch entries, the postgres.js and interceptors ones included', () => {
+  it('finds the patch entries, the interceptors one included', () => {
     const names = patchedDependencies.map((entry) => entry.name);
-    expect(names).toEqual(expect.arrayContaining(['postgres', '@mswjs/interceptors']));
+    expect(names).toEqual(expect.arrayContaining(['@mswjs/interceptors']));
   });
 
   it.each(patchedDependencies)(
@@ -87,22 +84,7 @@ describe('patched dependencies', () => {
     },
   );
 
-  it('postgres.js: every build settles a write on a closed socket and refuses statements of a lost transaction', () => {
-    const directory = installedPackageDirectory('postgres') as string;
-    for (const build of ['src', 'cjs/src', 'cf/src']) {
-      expect(
-        installedFile(directory, `${build}/connection.js`),
-        `${build}/connection.js`,
-      ).toContain("error(Errors.connection('CONNECTION_CLOSED', options, socket))");
-      const index = installedFile(directory, `${build}/index.js`);
-      expect(index, `${build}/index.js records the close`).toContain('closedError = error');
-      expect(index, `${build}/index.js refuses later statements`).toContain(
-        'return q.reject(closedError)',
-      );
-    }
-  });
-
-  it('@mswjs/interceptors: loopback sockets bypass interception and "connect" is not emitted twice', () => {
+  it('@mswjs/interceptors: loopback sockets bypass interception', () => {
     const directory = installedPackageDirectory('@mswjs/interceptors') as string;
     const netBuild = readdirSync(join(directory, 'lib/node')).find((file) =>
       /^net-.*\.js$/.test(file),
@@ -110,14 +92,21 @@ describe('patched dependencies', () => {
     expect(netBuild, 'the socket interceptor build').toBeDefined();
     const source = installedFile(directory, `lib/node/${netBuild}`);
     expect(source).toContain('if (isLocalConnection(transportConnectionOptions))');
-    expect(source).toContain('if (!this.#connectEmulated) this.socket.emit("connect");');
   });
 
-  it('a PR that changes a patch or its registration runs the full test matrix', () => {
-    const prCi = readFileSync(join(ROOT, '.github/workflows/pr-ci.yml'), 'utf8');
-    const sourceFilter = prCi.split(/^\s+src-code:\s*$/m)[1]?.split(/^\s+\w[\w-]*:\s*$/m)[0] ?? '';
-    for (const path of ["'pnpm-workspace.yaml'", "'patches/**'", "'pnpm-lock.yaml'"]) {
-      expect(sourceFilter, `src-code filter lists ${path}`).toContain(path);
-    }
-  });
+  it.each(['pr-ci.yml', 'post-merge-ci.yml'])(
+    '%s: a change to a patch or its registration runs the full test matrix and the image build',
+    (workflow) => {
+      const source = readFileSync(join(ROOT, '.github/workflows', workflow), 'utf8');
+      for (const filter of ['src-code', 'docker']) {
+        const paths =
+          source
+            .split(new RegExp(`^\\s+${filter}:\\s*$`, 'm'))[1]
+            ?.split(/^\s+\w[\w-]*:\s*$/m)[0] ?? '';
+        for (const path of ["'pnpm-workspace.yaml'", "'patches/**'", "'pnpm-lock.yaml'"]) {
+          expect(paths, `${filter} filter lists ${path}`).toContain(path);
+        }
+      }
+    },
+  );
 });

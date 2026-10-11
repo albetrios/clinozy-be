@@ -124,7 +124,11 @@ describe('Cursor pagination — integration', () => {
           ? sql`SELECT public_id FROM tenancy.memberships WHERE organization_id=${organization.id} ORDER BY created_at ASC, id ASC`
           : sql`SELECT public_id FROM tenancy.memberships WHERE organization_id=${organization.id} ORDER BY created_at DESC, id DESC`,
       );
-      const expectedIds = [...expectedRows].map((row) => row.public_id);
+      const expectedIds = (
+        Array.isArray(expectedRows)
+          ? (expectedRows as { public_id: string }[])
+          : ((expectedRows as { rows?: { public_id: string }[] }).rows ?? [])
+      ).map((row) => row.public_id);
       const token = await generateTestToken({
         userId: owner.public_id,
         organizationPublicId: organization.public_id,

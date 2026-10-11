@@ -36,8 +36,8 @@ import {
 import type { Organization } from './organization.types.js';
 
 /**
- * Normalizes a `db.execute()` result into rows across drivers (postgres-js returns an array,
- * node-postgres a `{ rows }` envelope) for the SECURITY DEFINER `auth.*` resolvers.
+ * Normalizes a `db.execute()` result into rows (node-postgres returns a `{ rows }` envelope; a bare
+ * array is accepted too) for the SECURITY DEFINER `auth.*` resolvers.
  */
 function extractResolverRows<T>(result: unknown): T[] {
   return (Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? [])) as T[];

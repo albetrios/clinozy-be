@@ -322,7 +322,7 @@ describe('SubscriptionService', () => {
     vi.mocked(repository.create).mockRejectedValueOnce(
       Object.assign(new Error('duplicate key value violates unique constraint'), {
         code: '23505',
-        constraint_name: 'idx_subscriptions_provider_subscription_id_unique',
+        constraint: 'idx_subscriptions_provider_subscription_id_unique',
       }),
     );
     const findByProviderSubscriptionId = vi.fn().mockResolvedValue(subscriptionRow);

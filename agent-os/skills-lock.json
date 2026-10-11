@@ -29,7 +29,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-chaos-test-maintainer/SKILL.md",
-      "computedHash": "ec11626990d59f2919ae0b7e9702e18907eb08f4a51976fa727bd9c9e943019e"
+      "computedHash": "05b3746077cc58d1ef92f9112542c2fa57ce4a60dc9dc5f6e79971038d20fe29"
     },
     "be-ci-investigation": {
       "source": "local",
@@ -173,7 +173,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-production-hardening-guard/SKILL.md",
-      "computedHash": "3f81cdf214e32c9ac8eb4d13a596d80bd1a2acbf1ff71f1cd78c6cb728129549"
+      "computedHash": "e7b9334e6176950000e44550302828065aec6b26420bb1fb0b3820192b4e3e15"
     },
     "be-read-cache-guard": {
       "source": "local",
@@ -263,7 +263,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-workers-events/SKILL.md",
-      "computedHash": "7c20be703fa0b154cf68bb656c91c9583aaed79267a9805e756f96d3a24b47c9"
+      "computedHash": "b45a58bb26e1d12a03f89ded221ee84d4fe2d0b77ee2218daad8172f7535e539"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",

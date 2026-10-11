@@ -196,7 +196,7 @@ export function workerDatabaseContextForUser(userPublicId: string): WorkerDataba
 }
 
 /**
- * Drizzle handle pinned to a single postgres.js checkout for the lifetime of a
+ * Drizzle handle pinned to a single pooled connection for the lifetime of a
  * unit of work (an HTTP service transaction or a worker-scoped context) — alias of
  * {@link PostgresDatabaseHandle} carried through ALS by the helpers in this file.
  */
@@ -205,7 +205,7 @@ export type RequestScopedPostgresDatabase = PostgresDatabaseHandle;
 /**
  * Organization-scoped Fastify HTTP requests run inside a single Drizzle
  * transaction with `SET LOCAL app.current_organization_public_id` so every query shares one
- * checkout from the postgres.js pool and RLS policies see a stable GUC.
+ * checkout from the pool and RLS policies see a stable GUC.
  *
  * Workers must use context wrappers that pin ALS via `runWithPinnedOrganizationDatabaseSession`
  * and pass the explicit `databaseHandle` into processors/repositories — never rely on the
@@ -323,6 +323,49 @@ export function runWithPinnedDatabaseHandle<T>({
     },
     callback,
   );
+}
+
+/** The parts of the node-postgres client behind a Drizzle transaction that {@link assertTransactionNotFailed} reads. */
+interface TransactionClientStatus {
+  readyForQuery?: boolean;
+  getTransactionStatus?: () => string | null;
+  query?: (text: string) => Promise<unknown>;
+}
+
+/**
+ * Throws when a statement of the transaction behind `databaseHandle` failed, so the transaction
+ * never reaches COMMIT.
+ *
+ * @remarks
+ * - **Why:** one failed statement aborts a transaction (25P02), and Postgres answers COMMIT of an
+ *   aborted transaction by rolling back without an error. A unit of work whose callback caught a
+ *   failed statement would report success with none of its writes kept. Thrown before COMMIT, the
+ *   transaction rolls back and the caller sees the failure; a statement that may fail without
+ *   failing the work belongs in `withSavepoint`.
+ * - **Algorithm:** node-postgres keeps the transaction status the server reports with every
+ *   ReadyForQuery; `E` is a failed transaction. It rejects a failed statement on the error message,
+ *   which can arrive before that ReadyForQuery: while the client is not ready yet, one `SELECT 1`
+ *   (queued behind it) settles the status — the rare case; otherwise there is no round trip.
+ * - **Failure modes:** throws `database.transaction.failed_statement_caught`. A connection that has
+ *   dropped is left to COMMIT, which rejects.
+ * - **Notes:** call it at the end of every callback that opened the transaction, never inside a
+ *   savepoint (RELEASE of a failed savepoint already rejects).
+ */
+export async function assertTransactionNotFailed(databaseHandle: unknown): Promise<void> {
+  const client = (databaseHandle as { session?: { client?: TransactionClientStatus } } | undefined)
+    ?.session?.client;
+  if (client?.getTransactionStatus === undefined) return;
+  if (client.readyForQuery === false && client.query !== undefined) {
+    // safe-catch: the statement only waits for the status; a failed transaction rejects it (25P02).
+    await client.query('SELECT 1').catch(() => undefined);
+  }
+  if (client.getTransactionStatus() === 'E') {
+    throw new Error(
+      'database.transaction.failed_statement_caught: a statement in this transaction failed and ' +
+        'its error was caught, so the transaction was rolled back. Run a statement that may fail ' +
+        'without failing the work in withSavepoint.',
+    );
+  }
 }
 
 /**

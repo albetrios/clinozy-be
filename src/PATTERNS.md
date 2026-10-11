@@ -182,7 +182,9 @@ These four properties hold today and are what keep lock contention from becoming
 
 **Three timeouts, three different failures, no substitutes** (all connection parameters, see [database.overview.md](src/infrastructure/database/database.overview.md)): `statement_timeout` bounds a running query, `idle_in_transaction_session_timeout` bounds an open-and-idle transaction, `lock_timeout` bounds a statement **blocked behind someone else's lock**. A lock waiter is neither running nor idle, so only `lock_timeout` bounds it — while it holds its pooled checkout for the entire wait.
 
-**Getting the connection is bounded separately** (`DATABASE_POOL_ACQUIRE_TIMEOUT_MS`): postgres.js has no acquire timeout, so a unit of work waiting on a cold pool during an outage would otherwise commit after its request had already failed. Every pooled unit of work runs through `runPooledUnitOfWork`, which answers `503` + `Retry-After` at the deadline and rolls a late connection's transaction back unrun (see [database.overview.md](src/infrastructure/database/database.overview.md)).
+**Getting the connection is bounded separately** (`DATABASE_POOL_ACQUIRE_TIMEOUT_MS`): a unit of work waiting on a cold pool during an outage would otherwise commit after its request had already failed. Every pooled unit of work runs through `runPooledUnitOfWork`, which answers `503` + `Retry-After` when the connection cannot be opened or has not arrived by the deadline, and rolls a late connection's transaction back unrun (see [database.overview.md](src/infrastructure/database/database.overview.md)).
+
+**A failed statement fails the whole transaction**: Postgres answers `COMMIT` of an aborted transaction by rolling back without an error, so every transaction the contexts and `withTransaction` open refuses to commit after a statement in it failed — even one the callback caught. A best-effort write runs in `withSavepoint`.
 
 ### How to apply
 

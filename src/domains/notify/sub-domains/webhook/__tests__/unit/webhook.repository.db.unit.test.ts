@@ -366,7 +366,10 @@ describe('WebhookRepository (database)', () => {
       10,
     );
     expect(subscribers.map((hook) => hook.public_id)).toEqual(
-      [...expected].map((row) => row.public_id),
+      (Array.isArray(expected)
+        ? (expected as { public_id: string }[])
+        : ((expected as { rows?: { public_id: string }[] }).rows ?? [])
+      ).map((row) => row.public_id),
     );
     expect(new Set(subscribers.map((hook) => hook.public_id)).size).toBe(6);
   });

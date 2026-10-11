@@ -45,7 +45,7 @@ export function decrementOrganizationRlsCheckoutCount(): void {
 
 /**
  * Current count of in-flight organization-scoped RLS transaction checkouts —
- * read by the DB-pool exhaustion alerter to detect saturation before postgres.js
+ * read by the DB-pool exhaustion alerter to detect saturation before the pool
  * starts queuing, and exported as the `database_rls_active_checkouts` gauge.
  */
 export function getActiveOrganizationRlsCheckoutCount(): number {

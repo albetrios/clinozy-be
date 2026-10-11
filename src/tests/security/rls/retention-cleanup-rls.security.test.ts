@@ -3,8 +3,7 @@ import {
   MAINTENANCE_SCOPE,
   withMaintenanceDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
-import { and, eq, isNotNull, lt } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
+import { and, eq, isNotNull, lt, sql } from 'drizzle-orm';
 import { database } from '@/infrastructure/database/connection.js';
 import type { RequestScopedPostgresDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -19,8 +18,14 @@ import {
   setLocalDatabaseConfig,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
+
 async function hasGlobalRetentionCleanupPolicyOnWebhooks(): Promise<boolean> {
-  const rows = await sql<{ has_policy: boolean }[]>`
+  const rows = rowsOf<{ has_policy: boolean }>(
+    await database.execute(sql`
     SELECT EXISTS (
       SELECT 1
       FROM pg_policies
@@ -29,7 +34,8 @@ async function hasGlobalRetentionCleanupPolicyOnWebhooks(): Promise<boolean> {
         AND policyname = 'webhooks_tenant_isolation'
         AND qual::text LIKE '%global_retention_cleanup%'
     ) AS has_policy
-  `;
+  `),
+  );
   return rows[0]?.has_policy === true;
 }
 

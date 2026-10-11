@@ -13,9 +13,9 @@ import { DATABASE_ACQUIRE_RETRY_AFTER_SECONDS } from '@/infrastructure/database/
  * The connection-acquire deadline shared by every pooled unit of work (`runPooledUnitOfWork`),
  * driven through the maintenance context, which always counts toward the in-flight gauge.
  *
- * `transaction` stands in for postgres.js: with a cold pool and an unreachable database it never
- * calls back, and when the database returns it calls back late — the two cases the deadline exists
- * for.
+ * `transaction` stands in for the pool: with a cold pool and a database that does not answer it
+ * never calls back, and when the database returns it calls back late — the two cases the deadline
+ * exists for. A checkout that fails outright stands in for a database that refuses the connection.
  */
 const acquireDeadline = vi.hoisted(() => ({ milliseconds: 1_000 }));
 const transactionMock = vi.fn();
@@ -169,5 +169,48 @@ describe('pooled unit of work: connection-acquire deadline', () => {
 
     void pool.connect();
     await expect(unitOfWork).resolves.toBe('eventually');
+  });
+
+  it('answers 503 with Retry-After at once when the connection cannot be opened', async () => {
+    transactionMock.mockRejectedValue(
+      Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:5432'), { code: 'ECONNREFUSED' }),
+    );
+    const work = vi.fn();
+
+    await expect(
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: work,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 503,
+      retryAfterSeconds: DATABASE_ACQUIRE_RETRY_AFTER_SECONDS,
+    });
+    expect(work).not.toHaveBeenCalled();
+    expect(getActiveOrganizationRlsCheckoutCount()).toBe(0);
+  });
+
+  it('keeps a refused login and a failure after the connection was claimed as they are', async () => {
+    const wrongPassword = Object.assign(new Error('password authentication failed'), {
+      code: '28P01',
+    });
+    transactionMock.mockRejectedValueOnce(wrongPassword);
+    await expect(
+      withMaintenanceDatabaseContext({
+        scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+        callback: vi.fn(),
+      }),
+    ).rejects.toBe(wrongPassword);
+
+    // The unit of work had its connection: a drop now is the work's failure, not unavailability.
+    const dropped = new Error('Connection terminated unexpectedly');
+    const pool = coldPool();
+    const unitOfWork = withMaintenanceDatabaseContext({
+      scope: MAINTENANCE_SCOPE.GLOBAL_RETENTION_CLEANUP,
+      callback: vi.fn().mockRejectedValue(dropped),
+    });
+    const outcome = expect(unitOfWork).rejects.toBe(dropped);
+    void pool.connect().catch(() => undefined);
+    await outcome;
   });
 });

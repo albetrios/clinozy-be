@@ -41,7 +41,7 @@ async function onMemberInvitationAcceptedEvent(event: DomainEvent): Promise<void
   for (const recipientUserId of payload.recipient_user_ids) {
     try {
       // A savepoint per recipient: inside the accept's transaction a failed INSERT would otherwise
-      // abort it, and postgres.js would fail the accept at COMMIT even though this catch ran.
+      // abort it, and the unit of work would refuse to commit the accept even though this catch ran.
       await withSavepoint(() =>
         createAndDispatchNotification({
           input: {

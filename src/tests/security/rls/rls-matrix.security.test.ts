@@ -31,7 +31,7 @@ import {
   seedPermissions,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { PermissionRepository } from '@/domains/tenancy/sub-domains/permission/permission.repository.js';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 function countFromExecuteResult(result: unknown): number {
@@ -178,7 +178,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
 
         await executeAsClinozyBeAppTenant(fixture.organizationAPublicId, async (transaction) => {
           const qualified = `"${schemaName}"."${tableName}"`;
-          const result = await transaction.execute(
+          const result = await transaction.execute<{ count: number }>(
             drizzleSql.raw(
               `SELECT count(*)::int AS count FROM ${qualified} WHERE id = ${rowIds.organizationB}`,
             ),
@@ -276,7 +276,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
         await executeAsClinozyBeAppUser(fixture.userAPublicId, async (transaction) => {
           const qualified = `"${schemaName}"."${tableName}"`;
           const idColumn = tableName === 'user_settings' ? 'user_id' : 'id';
-          const result = await transaction.execute(
+          const result = await transaction.execute<{ count: number }>(
             drizzleSql.raw(
               `SELECT count(*)::int AS count FROM ${qualified} WHERE ${idColumn} = ${rowIds.userB}`,
             ),
@@ -311,7 +311,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
         tableKey({ schemaName: 'auth', tableName: 'auth_methods' }),
       )!;
       await executeAsClinozyBeAppUser(fixture.userAPublicId, async (transaction) => {
-        const result = await transaction.execute(
+        const result = await transaction.execute<{ count: number }>(
           drizzleSql.raw(
             `SELECT count(*)::int AS count FROM auth.auth_methods WHERE id = ${rowIds.userB}`,
           ),
@@ -403,7 +403,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
         repository.findPermissionCodesForUserInOrganization(
           member.public_id,
           organization.public_id,
-          transaction as unknown as PostgresJsDatabase,
+          transaction as unknown as NodePgDatabase,
         ),
       );
 
@@ -435,7 +435,7 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
         repository.findPermissionCodesForUserInOrganization(
           member.public_id,
           organization.public_id,
-          transaction as unknown as PostgresJsDatabase,
+          transaction as unknown as NodePgDatabase,
         ),
       );
 

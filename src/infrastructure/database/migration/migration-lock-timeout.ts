@@ -28,9 +28,9 @@ export function isMigrationLockTimeoutError(error: unknown): boolean {
   );
 }
 
-/** The one method shared by a postgres.js transaction and the pinned migration session. */
+/** The one method the migration runner's session (a node-postgres client) needs here. */
 interface MigrationSettingExecutor {
-  unsafe: (query: string) => PromiseLike<unknown>;
+  query: (text: string) => PromiseLike<unknown>;
 }
 
 /**
@@ -55,12 +55,12 @@ export async function applyMigrationTimeouts(options: {
   const lockTimeoutMs = options.lockTimeoutMs ?? MIGRATION_LOCK_TIMEOUT_MS;
   if (options.scope === 'transaction') {
     const statementTimeoutMs = options.statementTimeoutMs ?? MIGRATION_STATEMENT_TIMEOUT_MS;
-    await options.executor.unsafe(`SET LOCAL lock_timeout = '${lockTimeoutMs}ms'`);
-    await options.executor.unsafe(`SET LOCAL statement_timeout = '${statementTimeoutMs}ms'`);
+    await options.executor.query(`SET LOCAL lock_timeout = '${lockTimeoutMs}ms'`);
+    await options.executor.query(`SET LOCAL statement_timeout = '${statementTimeoutMs}ms'`);
     return;
   }
-  await options.executor.unsafe(`SET lock_timeout = '${lockTimeoutMs}ms'`);
-  await options.executor.unsafe('SET statement_timeout = 0');
+  await options.executor.query(`SET lock_timeout = '${lockTimeoutMs}ms'`);
+  await options.executor.query('SET statement_timeout = 0');
 }
 
 /**

@@ -1,4 +1,5 @@
-import { sql } from '@/infrastructure/database/connection.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
 
 function formatAuditLogPartitionName(timestamp: Date): string {
   const year = timestamp.getUTCFullYear();
@@ -20,12 +21,15 @@ function formatAuditLogPartitionRange(timestamp: Date): { rangeFrom: string; ran
  * tests run against both migration-only and partitioned dev databases.
  */
 export async function ensureAuditLogPartitionForTimestamp(timestamp: Date): Promise<void> {
-  const kindRows = await sql<{ relkind: string }[]>`
+  const result = await database.execute<{ relkind: string }>(sql`
     SELECT c.relkind
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'audit' AND c.relname = 'logs'
-  `;
+  `);
+  const kindRows = Array.isArray(result)
+    ? (result as { relkind: string }[])
+    : ((result as { rows?: { relkind: string }[] }).rows ?? []);
   if (kindRows[0]?.relkind !== 'p') {
     return;
   }
@@ -33,11 +37,13 @@ export async function ensureAuditLogPartitionForTimestamp(timestamp: Date): Prom
   const partitionName = formatAuditLogPartitionName(timestamp);
   const { rangeFrom, rangeTo } = formatAuditLogPartitionRange(timestamp);
 
-  await sql.unsafe(`
+  await database.execute(
+    sql.raw(`
     CREATE TABLE IF NOT EXISTS audit.${partitionName}
     PARTITION OF audit.logs
     FOR VALUES FROM ('${rangeFrom}') TO ('${rangeTo}')
-  `);
+  `),
+  );
 }
 
 /** Ensures one partition per distinct UTC month covered by the given timestamps. */

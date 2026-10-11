@@ -33,9 +33,8 @@ import {
 type UserRow = typeof users.$inferSelect;
 
 /**
- * Normalises a raw SECURITY DEFINER resolver row (postgres.js returns the `bigint` `id` column as a
- * string) into the typed {@link UserRow} the application consumes. All other columns already arrive
- * as the correct JavaScript types (timestamptz → Date, int4 → number, bool → boolean).
+ * Normalises a raw SECURITY DEFINER resolver row (node-postgres returns the `bigint` `id` column as
+ * a string) into the typed {@link UserRow} the application consumes.
  */
 function mapResolverRowToUserRow(row: Record<string, unknown>): UserRow {
   return { ...(row as UserRow), id: Number((row as { id: unknown }).id) };

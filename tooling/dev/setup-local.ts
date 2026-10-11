@@ -61,7 +61,7 @@ import {
 import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
 import { listProcessTree, signalProcesses } from '@/scripts/ops/process-tree.util.js';
 import dotenv from 'dotenv';
-import postgres from 'postgres';
+import pg from 'pg';
 import {
   resolveDerivedNames,
   resolveSqlIdentifierStem,
@@ -673,16 +673,20 @@ async function provisionLocalDatabaseLogins(
     return;
   }
   const logins = LOCAL_DATABASE_LOGINS;
-  const superuser = postgres(LOCAL_DATABASE_URL, {
-    max: 1,
-    connect_timeout: 5,
-    onnotice: () => {},
+  const superuser = new pg.Client({
+    connectionString: LOCAL_DATABASE_URL,
+    connectionTimeoutMillis: 5_000,
   });
+  // A dropped connection fails the query in flight; without a listener it would also be uncaught.
+  superuser.on('error', () => undefined);
   try {
     let existingRoles: string[];
     try {
-      const rows = await superuser<{ rolname: string }[]>`
-        select rolname from pg_roles where rolname in ${superuser(logins.map((login) => login.role))}`;
+      await superuser.connect();
+      const { rows } = await superuser.query<{ rolname: string }>(
+        'select rolname from pg_roles where rolname = any($1::text[])',
+        [logins.map((login) => login.role)],
+      );
       existingRoles = rows.map((row) => row.rolname);
     } catch {
       reportStep(
@@ -721,18 +725,25 @@ async function provisionLocalDatabaseLogins(
       );
       return;
     }
-    for (const login of planned) await superuser.unsafe(alterRoleStatement(login));
+    for (const login of planned) await superuser.query(alterRoleStatement(login));
     writeFileSync(
       ENV_LOCAL_PATH,
       applyLocalDatabaseLogins({ envLocal, superuserUrl: LOCAL_DATABASE_URL, planned }),
     );
     for (const login of planned) {
-      const connection = postgres(login.url, { max: 1, connect_timeout: 5, onnotice: () => {} });
+      const connection = new pg.Client({
+        connectionString: login.url,
+        connectionTimeoutMillis: 5_000,
+      });
+      connection.on('error', () => undefined);
       try {
-        const [row] = await connection<{ current_user: string }[]>`select current_user`;
+        await connection.connect();
+        const {
+          rows: [row],
+        } = await connection.query<{ current_user: string }>('select current_user');
         if (row?.current_user !== login.role) throw new Error(`connected as ${row?.current_user}`);
       } finally {
-        await connection.end({ timeout: 2 });
+        await connection.end().catch(() => undefined);
       }
     }
     reportStep(
@@ -759,7 +770,7 @@ async function provisionLocalDatabaseLogins(
       error instanceof Error ? error.message : String(error),
     );
   } finally {
-    await superuser.end({ timeout: 2 });
+    await superuser.end().catch(() => undefined);
   }
 }
 

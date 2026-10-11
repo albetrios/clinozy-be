@@ -2,7 +2,7 @@
  * Parses the optional `-- migration-transaction: none reason="..."` header that
  * opts a migration file out of the default single-transaction execution lane.
  *
- * The migration runner wraps each file in `sql.begin(...)` by default, which is
+ * The migration runner wraps each file in one transaction by default, which is
  * the safe choice for DML and most DDL (atomic apply, automatic rollback on a
  * mid-file error). A small class of statements — most importantly
  * `CREATE INDEX CONCURRENTLY` — *cannot* run inside a transaction. Marking a

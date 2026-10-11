@@ -1,6 +1,12 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { sql } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Every per-organization cap in this codebase is enforced the same way: take the advisory
@@ -22,16 +28,20 @@ const CONCURRENT_ATTEMPTS = 60;
 
 async function seedOrganization(): Promise<number> {
   const seedEmail = 'quota-race@example.test';
-  const [user] = await sql<{ id: number }[]>`
+  const [user] = rowsOf<{ id: number }>(
+    await database.execute(sql`
     INSERT INTO auth.users (public_id, email, email_hash, is_email_verified)
     VALUES ('usr_quotaraceseeduser001', ${seedEmail}, md5(${seedEmail}), true)
     RETURNING id
-  `;
-  const [organization] = await sql<{ id: number }[]>`
+  `),
+  );
+  const [organization] = rowsOf<{ id: number }>(
+    await database.execute(sql`
     INSERT INTO tenancy.organizations (public_id, name, slug, owner_user_id, type)
     VALUES ('org_quotaraceseedorg00001', 'Quota Race', 'quota-race', ${user!.id}, 'TEAM')
     RETURNING id
-  `;
+  `),
+  );
   return Number(organization!.id);
 }
 
@@ -44,17 +54,21 @@ async function attemptCappedInsert(
   attempt: number,
   options: { readonly withQuotaLock: boolean } = { withQuotaLock: true },
 ): Promise<boolean> {
-  return sql.begin(async (transaction) => {
+  return database.transaction(async (transaction) => {
     if (options.withQuotaLock) {
       // ASCII `APIK` — the same namespace `organization-api-key.repository.ts` uses.
-      await transaction`SELECT pg_advisory_xact_lock(${0x41_50_49_4b}, ${organizationId})`;
+      await transaction.execute(
+        sql`SELECT pg_advisory_xact_lock(${0x41_50_49_4b}, ${organizationId})`,
+      );
     }
-    const [row] = await transaction<{ count: number }[]>`
+    const [row] = rowsOf<{ count: number }>(
+      await transaction.execute(sql`
       SELECT count(*)::int AS count FROM tenancy.api_keys
       WHERE organization_id = ${organizationId} AND deleted_at IS NULL
-    `;
+    `),
+    );
     if (Number(row!.count) >= API_KEY_CAP) return false;
-    await transaction`
+    await transaction.execute(sql`
       INSERT INTO tenancy.api_keys
         (public_id, organization_id, name, key_hash, key_prefix, scopes, created_by_user_id)
       VALUES (
@@ -63,7 +77,7 @@ async function attemptCappedInsert(
         '[]'::jsonb,
         (SELECT owner_user_id FROM tenancy.organizations WHERE id = ${organizationId})
       )
-    `;
+    `);
     return true;
   });
 }
@@ -84,10 +98,12 @@ describe('Security: per-organization resource caps under concurrency', () => {
     );
 
     const inserted = outcomes.filter(Boolean).length;
-    const [stored] = await sql<{ count: number }[]>`
+    const [stored] = rowsOf<{ count: number }>(
+      await database.execute(sql`
       SELECT count(*)::int AS count FROM tenancy.api_keys
       WHERE organization_id = ${organizationId} AND deleted_at IS NULL
-    `;
+    `),
+    );
 
     // Overshoot here is the interesting failure: it would mean the advisory lock is not
     // serializing count-then-insert, and every cap built on this primitive — API keys, seats,
@@ -103,12 +119,14 @@ describe('Security: per-organization resource caps under concurrency', () => {
     // shape FAILS without the lock; otherwise it would pass on a codebase with no locking at
     // all and quietly certify nothing. Postgres's default READ COMMITTED lets every one of
     // these transactions read the same pre-insert count, so each concludes it is under the cap.
-    const [freshOrganizationId] = await sql<{ id: number }[]>`
+    const [freshOrganizationId] = rowsOf<{ id: number }>(
+      await database.execute(sql`
       INSERT INTO tenancy.organizations (public_id, name, slug, owner_user_id, type)
       VALUES ('org_quotaraceunlocked001', 'Unlocked', 'quota-race-unlocked',
               (SELECT owner_user_id FROM tenancy.organizations WHERE id = ${organizationId}), 'TEAM')
       RETURNING id
-    `;
+    `),
+    );
 
     await Promise.all(
       Array.from({ length: CONCURRENT_ATTEMPTS }, (_, attempt) =>
@@ -118,10 +136,12 @@ describe('Security: per-organization resource caps under concurrency', () => {
       ),
     );
 
-    const [stored] = await sql<{ count: number }[]>`
+    const [stored] = rowsOf<{ count: number }>(
+      await database.execute(sql`
       SELECT count(*)::int AS count FROM tenancy.api_keys
       WHERE organization_id = ${Number(freshOrganizationId!.id)} AND deleted_at IS NULL
-    `;
+    `),
+    );
     expect(Number(stored!.count)).toBeGreaterThan(API_KEY_CAP);
   });
 
@@ -135,10 +155,12 @@ describe('Security: per-organization resource caps under concurrency', () => {
     // Already at the cap, so every attempt must be refused — no gap opens up because the
     // first wave's transactions have committed and released their locks.
     expect(outcomes.some(Boolean)).toBe(false);
-    const [stored] = await sql<{ count: number }[]>`
+    const [stored] = rowsOf<{ count: number }>(
+      await database.execute(sql`
       SELECT count(*)::int AS count FROM tenancy.api_keys
       WHERE organization_id = ${organizationId} AND deleted_at IS NULL
-    `;
+    `),
+    );
     expect(Number(stored!.count)).toBe(API_KEY_CAP);
   });
 });

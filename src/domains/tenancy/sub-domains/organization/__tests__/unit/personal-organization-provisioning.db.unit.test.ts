@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
-import { sql } from '@/infrastructure/database/connection.js';
 import { seedAllPermissions } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { env } from '@/shared/config/env.config.js';
 import { provisionPersonalOrganization } from '@/domains/tenancy/sub-domains/organization/organization-provisioning.js';
@@ -12,6 +11,8 @@ import {
   ensurePersonalOrganization,
   ensurePersonalOrganizationPublicId,
 } from '@/domains/tenancy/sub-domains/organization/resolve-active-organization.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
 
 describe('personal organization provisioning (database)', () => {
   beforeEach(async () => {
@@ -205,8 +206,8 @@ describe('personal organization provisioning (database)', () => {
 
     beforeEach(async () => {
       // Force the CI condition: empty the reference catalog that cleanupDatabase exempts.
-      await sql`DELETE FROM tenancy.role_permissions`;
-      await sql`DELETE FROM tenancy.permissions`;
+      await database.execute(sql`DELETE FROM tenancy.role_permissions`);
+      await database.execute(sql`DELETE FROM tenancy.permissions`);
     });
 
     afterEach(async () => {

@@ -7,8 +7,9 @@ import {
   createRoleWithPermissions,
   seedPermissions,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
-import { sql } from '@/infrastructure/database/connection.js';
 import { PermissionRepository } from '@/domains/tenancy/sub-domains/permission/permission.repository.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
 
 describe('PermissionRepository cross-organization isolation (database)', () => {
   const repository = new PermissionRepository();
@@ -56,11 +57,11 @@ describe('PermissionRepository cross-organization isolation (database)', () => {
     );
     expect(beforeDelete.sort()).toEqual(['organization:manage', 'organization:read']);
 
-    await sql`
+    await database.execute(sql`
       UPDATE tenancy.memberships
       SET deleted_at = now(), updated_at = now()
       WHERE id = ${membership.id}
-    `;
+    `);
 
     const afterDelete = await repository.findPermissionCodesForUserInOrganization(
       member.public_id,
@@ -79,18 +80,18 @@ describe('PermissionRepository cross-organization isolation (database)', () => {
       permissionCodes: ['organization:read'],
     });
 
-    await sql`
+    await database.execute(sql`
       INSERT INTO tenancy.memberships
         (public_id, user_id, organization_id, role_id, status, created_at, updated_at)
       VALUES
         (${'mem_invited_test_id'}, ${invited.id}, ${organization.id}, ${role.id}, 'INVITED', now(), now())
-    `;
-    await sql`
+    `);
+    await database.execute(sql`
       INSERT INTO tenancy.memberships
         (public_id, user_id, organization_id, role_id, status, joined_at, created_at, updated_at)
       VALUES
         (${'mem_suspended_t_id'}, ${suspended.id}, ${organization.id}, ${role.id}, 'SUSPENDED', now(), now(), now())
-    `;
+    `);
 
     const invitedCodes = await repository.findPermissionCodesForUserInOrganization(
       invited.public_id,
@@ -162,9 +163,9 @@ describe('PermissionRepository cross-organization isolation (database)', () => {
       status: 'ACTIVE',
     });
 
-    await sql`
+    await database.execute(sql`
       UPDATE tenancy.organizations SET deleted_at = now(), updated_at = now() WHERE id = ${organization.id}
-    `;
+    `);
 
     const codes = await repository.findPermissionCodesForUserInOrganization(
       member.public_id,
@@ -188,9 +189,9 @@ describe('PermissionRepository cross-organization isolation (database)', () => {
       status: 'ACTIVE',
     });
 
-    await sql`
+    await database.execute(sql`
       UPDATE auth.users SET deleted_at = now(), updated_at = now() WHERE id = ${member.id}
-    `;
+    `);
 
     const codes = await repository.findPermissionCodesForUserInOrganization(
       member.public_id,
@@ -214,9 +215,9 @@ describe('PermissionRepository cross-organization isolation (database)', () => {
       status: 'ACTIVE',
     });
 
-    await sql`
+    await database.execute(sql`
       UPDATE tenancy.roles SET deleted_at = now(), updated_at = now() WHERE id = ${role.id}
-    `;
+    `);
 
     const codes = await repository.findPermissionCodesForUserInOrganization(
       member.public_id,

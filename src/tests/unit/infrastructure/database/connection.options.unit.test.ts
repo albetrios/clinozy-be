@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildPostgresOptions,
   closeDatabase,
-  isNeonPoolerConnection,
-  sql,
+  pool,
   primeDatabasePool,
+  readDatabasePoolStatistics,
 } from '@/infrastructure/database/connection.js';
 import {
   getShutdownTimeoutMs,
@@ -16,46 +16,27 @@ import { env } from '@/shared/config/env.config.js';
 describe('postgres connection options', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
-  });
-
-  describe('isNeonPoolerConnection', () => {
-    it('detects Neon pooler hostnames', () => {
-      expect(
-        isNeonPoolerConnection(
-          'postgresql://user:pass@ep-cool-name-pooler.us-east-2.aws.neon.tech/neondb',
-        ),
-      ).toBe(true);
-    });
-
-    it('detects pgbouncer query parameter', () => {
-      expect(
-        isNeonPoolerConnection('postgresql://user:pass@localhost:5432/app?pgbouncer=true'),
-      ).toBe(true);
-    });
-
-    it('returns false for direct non-pooler URLs', () => {
-      expect(isNeonPoolerConnection('postgresql://user:pass@localhost:5432/app')).toBe(false);
-    });
+    vi.useRealTimers();
   });
 
   describe('buildPostgresOptions', () => {
-    it('disables prepared statements for pooler URLs (Neon transaction pooling)', () => {
+    it('decides TLS from the URL and keeps the TLS parameters out of the connection string', () => {
+      // node-postgres reads URL parameters over `ssl`; a `sslmode=require` left in the URL would
+      // turn into certificate verification and break Railway's self-signed proxy.
       const options = buildPostgresOptions(
-        'postgresql://user:pass@ep-example-pooler.aws.neon.tech/neondb?sslmode=require',
+        'postgresql://user:pass@db.example.test:5432/clinozy?sslmode=require',
       );
-      expect(options.prepare).toBe(false);
+      expect(options.connectionString).toBe('postgresql://user:pass@db.example.test:5432/clinozy');
+      // Encrypted, certificate not verified — what `sslmode=require` means.
+      expect(options.ssl).toBeTypeOf('object');
+      expect((options.ssl as { rejectUnauthorized: boolean }).rejectUnauthorized).toBe(false);
     });
 
-    it('does not set prepare for direct database URLs', () => {
+    it('sets the three per-connection timeouts as startup parameters', () => {
       const options = buildPostgresOptions('postgresql://user:pass@localhost:5432/clinozy');
-      expect(options).not.toHaveProperty('prepare');
-    });
-
-    it('applies prepare:false to any pooler hostname with pgbouncer enabled', () => {
-      const options = buildPostgresOptions(
-        'postgresql://user:pass@reporting-pooler.aws.neon.tech/neondb?pgbouncer=true',
-      );
-      expect(options.prepare).toBe(false);
+      expect(options.statement_timeout).toBeGreaterThan(0);
+      expect(options.idle_in_transaction_session_timeout).toBeGreaterThan(0);
+      expect(options.lock_timeout).toBe(env.DATABASE_LOCK_TIMEOUT_MS);
     });
 
     it('resolves the pool max from DATABASE_POOL_MAX (defaults to 30 in the env schema)', () => {
@@ -66,32 +47,68 @@ describe('postgres connection options', () => {
   });
 
   describe('closeDatabase (EX-32)', () => {
-    it('drains using the shared shutdown timeout so it can never exceed the watchdog budget', async () => {
-      // EX-32: closeDatabase must use the shutdown budget the watchdog is derived from — in SECONDS,
-      // the unit postgres.js `end` takes. The milliseconds passed before were a 15 000-second wait.
-      const endSpy = vi.spyOn(sql, 'end').mockResolvedValue(undefined);
+    it('ends the pool and returns once it has drained', async () => {
+      const endSpy = vi.spyOn(pool, 'end').mockResolvedValue(undefined);
       try {
         await closeDatabase();
-        expect(endSpy).toHaveBeenCalledWith({ timeout: Math.ceil(getShutdownTimeoutMs() / 1_000) });
+        expect(endSpy).toHaveBeenCalledTimes(1);
       } finally {
         endSpy.mockRestore();
       }
     });
 
-    it('drains for what is left of the shared budget once shutdown has begun', async () => {
-      const endSpy = vi.spyOn(sql, 'end').mockResolvedValue(undefined);
-      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    it('gives up on a pool that never drains once what is left of the shared budget has passed', async () => {
+      // EX-32: pool.end() has no timeout of its own. The drain must end inside the watchdog
+      // budget however long the shutdown steps before it took.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      // A drain that never finishes (pool.end() is overloaded; the spy types the callback form).
+      const endSpy = vi
+        .spyOn(pool, 'end')
+        .mockImplementation((() => new Promise<void>(() => undefined)) as never);
       try {
         startShutdownBudget();
-        // The steps before (worker close, queue drains) took 11 of the 15 seconds.
-        now.mockReturnValue(1_000_000 + getShutdownTimeoutMs() - 4_000);
-        await closeDatabase();
-        expect(endSpy).toHaveBeenCalledWith({ timeout: 4 });
+        // The steps before (worker close, queue drains) took all but 4 of the seconds.
+        vi.setSystemTime(Date.now() + getShutdownTimeoutMs() - 4_000);
+        let drained = false;
+        const closing = closeDatabase().then(() => {
+          drained = true;
+        });
+        await vi.advanceTimersByTimeAsync(3_999);
+        expect(drained).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await closing;
+        expect(drained).toBe(true);
       } finally {
         resetShutdownBudgetForTests();
-        now.mockRestore();
         endSpy.mockRestore();
       }
+    });
+  });
+
+  describe('readDatabasePoolStatistics', () => {
+    it("reads the primary pool's live counts from node-postgres, in use = open − idle", () => {
+      const counts = vi.spyOn(pool, 'totalCount', 'get').mockReturnValue(7);
+      const idle = vi.spyOn(pool, 'idleCount', 'get').mockReturnValue(2);
+      const waiting = vi.spyOn(pool, 'waitingCount', 'get').mockReturnValue(3);
+      try {
+        expect(readDatabasePoolStatistics()).toContainEqual({
+          pool: 'primary',
+          maxConnections: env.DATABASE_POOL_MAX,
+          inUse: 5,
+          idle: 2,
+          waiting: 3,
+        });
+      } finally {
+        counts.mockRestore();
+        idle.mockRestore();
+        waiting.mockRestore();
+      }
+    });
+
+    it('leaves out the maintenance pool until something opens it', () => {
+      expect(readDatabasePoolStatistics().map((statistics) => statistics.pool)).toEqual([
+        'primary',
+      ]);
     });
   });
 

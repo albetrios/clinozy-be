@@ -50,7 +50,7 @@ jobs:
               - 'migrations/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
-              # Dependency patches (postgres.js, the nock interceptors) change runtime behaviour.
+              # Dependency overrides and patches change what installs and how it behaves.
               - 'pnpm-workspace.yaml'
               - 'patches/**'
               - 'vitest.config.ts'

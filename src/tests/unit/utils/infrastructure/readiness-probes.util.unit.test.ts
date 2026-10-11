@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const sqlMock = vi.fn().mockResolvedValue([{ '?column?': 1 }]);
+const executeMock = vi.fn().mockResolvedValue([{ '?column?': 1 }]);
 const redisPingMock = vi.fn().mockResolvedValue('PONG');
 const bullmqPingMock = vi.fn().mockResolvedValue('PONG');
 const pingBullMqMock = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@/infrastructure/database/connection.js', () => ({
-  sql: (...args: unknown[]) => sqlMock(...args),
+  database: { execute: (...args: unknown[]) => executeMock(...args) },
 }));
 
 vi.mock('@/infrastructure/cache/redis.client.js', () => ({
@@ -42,7 +42,7 @@ import {
 describe('readiness-probes.util caching', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    sqlMock.mockResolvedValue([{ '?column?': 1 }]);
+    executeMock.mockResolvedValue([{ '?column?': 1 }]);
     redisPingMock.mockResolvedValue('PONG');
     pingBullMqMock.mockResolvedValue(undefined);
     resetReadinessProbeCacheForTests();
@@ -65,7 +65,7 @@ describe('readiness-probes.util caching', () => {
     await getCachedDependencyReadinessProbes();
 
     // Second call within the short TTL must reuse the memoised summary.
-    expect(sqlMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
     expect(pingBullMqMock).toHaveBeenCalledTimes(1);
   });
 
@@ -76,7 +76,7 @@ describe('readiness-probes.util caching', () => {
     ]);
 
     expect(first).toBe(second);
-    expect(sqlMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
   });
 
   it('re-probes after the cache is reset', async () => {
@@ -88,12 +88,12 @@ describe('readiness-probes.util caching', () => {
     resetReadinessProbeCacheForTests();
     const recovered = await getCachedDependencyReadinessProbes();
     expect(recovered.status).toBe('ok');
-    expect(sqlMock).toHaveBeenCalledTimes(2);
+    expect(executeMock).toHaveBeenCalledTimes(2);
   });
 
   it('runDependencyReadinessProbes stays uncached for the worker readiness signal', async () => {
     await runDependencyReadinessProbes();
     await runDependencyReadinessProbes();
-    expect(sqlMock).toHaveBeenCalledTimes(2);
+    expect(executeMock).toHaveBeenCalledTimes(2);
   });
 });

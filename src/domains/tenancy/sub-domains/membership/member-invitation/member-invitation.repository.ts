@@ -161,10 +161,13 @@ export class MemberInvitationRepository {
   async lookupOrganizationByInvitationPublicId(
     invitation_public_id: string,
   ): Promise<MemberInvitationOrganizationLookupRow | null> {
-    const rows =
+    const result =
       await getContextFreeDatabase().execute<MemberInvitationOrganizationLookupDatabaseRow>(
         sql`SELECT organization_public_id, organization_id, membership_public_id, membership_id FROM tenancy.resolve_member_invitation_lookup_by_public_id(${invitation_public_id})`,
       );
+    const rows = (
+      Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? [])
+    ) as MemberInvitationOrganizationLookupDatabaseRow[];
     const row = rows[0];
     if (!row) return null;
     return {

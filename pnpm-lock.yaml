@@ -174,10 +174,8 @@ overrides:
   '@esbuild-kit/core-utils>esbuild': ^0.25.12
 
 patchedDependencies:
-  '@mswjs/interceptors@0.44.0': 5e404cfd9982a844224be9b8706bdf1ca66a32bd921b4908a7a3eef845a209e4
+  '@mswjs/interceptors@0.44.0': c84c76cdaf0f5c98fd0cc014b2aa39bf6ab7ff94b236b5491d1601706de4a691
   '@stryker-mutator/vitest-runner@10.0.0': 2635868beea712de5d4bbcc561738d55c888a27c2cd24b06de9b6c1bf1309485
-  drizzle-orm@0.45.4: bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176
-  postgres@3.4.9: 14769a44cc22f230e714969054721f27a7c8772f229f70efae75611b25ec8823
 
 importers:
 
@@ -194,10 +192,10 @@ importers:
         version: 3.1148.0
       '@bull-board/api':
         specifier: ^9.10.4
-        version: 9.10.4(@bull-board/ui@9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2))(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2)
+        version: 9.10.4(@bull-board/ui@9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2))(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2)
       '@bull-board/fastify':
         specifier: ^9.10.4
-        version: 9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2)
+        version: 9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2)
       '@fastify/compress':
         specifier: ^9.2.1
         version: 9.2.1
@@ -236,7 +234,7 @@ importers:
         version: 0.45.1
       bullmq:
         specifier: ^6.3.12
-        version: 6.3.12(ioredis@6.0.0(supports-color@8.1.1))
+        version: 6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1)
       disposable-email-domains-js:
         specifier: ^1.26.0
         version: 1.26.0
@@ -245,7 +243,7 @@ importers:
         version: 18.0.7
       drizzle-orm:
         specifier: 0.45.4
-        version: 0.45.4(patch_hash=bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176)(@opentelemetry/api@1.9.1)(postgres@3.4.9(patch_hash=14769a44cc22f230e714969054721f27a7c8772f229f70efae75611b25ec8823))
+        version: 0.45.4(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.1)
       fastify:
         specifier: ^5.12.5
         version: 5.12.5
@@ -282,12 +280,12 @@ importers:
       otplib:
         specifier: ^13.5.0
         version: 13.5.0
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
       pino:
         specifier: ^10.4.0
         version: 10.4.0
-      postgres:
-        specifier: 3.4.9
-        version: 3.4.9(patch_hash=14769a44cc22f230e714969054721f27a7c8772f229f70efae75611b25ec8823)
       posthog-node:
         specifier: ^5.55.1
         version: 5.55.1(rxjs@7.8.2)
@@ -340,6 +338,9 @@ importers:
       '@types/opossum':
         specifier: ^8.1.9
         version: 8.1.9
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       '@vitest/coverage-v8':
         specifier: ^5.0.3
         version: 5.0.3(vitest@5.0.3)
@@ -2592,6 +2593,9 @@ packages:
 
   '@types/opossum@8.1.9':
     resolution: {integrity: sha512-Jm/tYxuJFefiwRYs+/EOsUP3ktk0c8siMgAHPLnA4PXF4wKghzcjqf88dY+Xii5jId5Txw4JV0FMKTpjbd7KJA==}
+
+  '@types/pg@8.23.1':
+    resolution: {integrity: sha512-fKVHpikPdg4GKks3JuLEhvwSyvwzF23hnabPy6DD8ljVbC7+6J5dQzdv4arV6jqq57djnMgs1HKBxX4P8aBI3A==}
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
@@ -4998,6 +5002,40 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
+  pg-cloudflare@1.4.1:
+    resolution: {integrity: sha512-6PQbsFWZcp9EmJEwy5cGQ2La+AMWpP46lgbb8X+U/XsHIUweYDNCpeuKck5RxL2MdVFi7krbbEi5nX4Zh7JhrQ==}
+
+  pg-connection-string@2.14.1:
+    resolution: {integrity: sha512-qR3kGNPBLpCNtz0evbKA0Y/MRFXwSSdT+pTJvYp/bXTcReZbvX1kzF0IyTc1QnxqF7AZbOeBhNL8R5mYQZV/MA==}
+
+  pg-int8@1.0.1:
+    resolution: {integrity: sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==}
+    engines: {node: '>=4.0.0'}
+
+  pg-pool@3.14.0:
+    resolution: {integrity: sha512-gKtPkFdQPU3DksooVLi9LsjZxrsBUZIpa+7aVx+LV5pNh0KzP4Zleud2po+ConrxbuXGBJ6Hfer6hdgpIBpBaw==}
+    peerDependencies:
+      pg: '>=8.0'
+
+  pg-protocol@1.16.1:
+    resolution: {integrity: sha512-p9VOFMiHB/ZbJATetbg+99PxssTVSQRnyuPSQ67mN1+1KBOjZaZ83ZQzltnxPhJwSsC3nwVjJ10DVJlerbFzLg==}
+
+  pg-types@2.2.0:
+    resolution: {integrity: sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==}
+    engines: {node: '>=4'}
+
+  pg@8.23.1:
+    resolution: {integrity: sha512-aL96AHANtWjPLDOLqnhx+ngp9+UK7ETEU8VJrDCGvsSSi/mGLcWYsS6Herg7lmaBJe4uwrfqsa7gTEFaSizDoQ==}
+    engines: {node: '>= 16.0.0'}
+    peerDependencies:
+      pg-native: '>=3.0.1'
+    peerDependenciesMeta:
+      pg-native:
+        optional: true
+
+  pgpass@1.0.5:
+    resolution: {integrity: sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==}
+
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
@@ -5046,9 +5084,21 @@ packages:
     resolution: {integrity: sha512-49cGhUbXj8Qenv0iTMxA1cFBzxXoctpC9Ujd77t1WcbJIr6nF/eI7g/8MgxrYldFRuAXvja7xQRwavoW7kgrxQ==}
     engines: {node: ^10 || ^12 || >=14}
 
-  postgres@3.4.9:
-    resolution: {integrity: sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw==}
-    engines: {node: '>=12'}
+  postgres-array@2.0.0:
+    resolution: {integrity: sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==}
+    engines: {node: '>=4'}
+
+  postgres-bytea@1.0.1:
+    resolution: {integrity: sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ==}
+    engines: {node: '>=0.10.0'}
+
+  postgres-date@1.0.7:
+    resolution: {integrity: sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q==}
+    engines: {node: '>=0.10.0'}
+
+  postgres-interval@1.2.0:
+    resolution: {integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==}
+    engines: {node: '>=0.10.0'}
 
   posthog-node@5.55.1:
     resolution: {integrity: sha512-YLnILmFn1zxGYBuCaBldqMjTq9OZBNNbHIr2F0am3iLfU+6ZTvuRmUbTmys//+LnCA6DfZNGgqTb4goFa93u+Q==}
@@ -6042,6 +6092,10 @@ packages:
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
 
+  xtend@4.0.2:
+    resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
+    engines: {node: '>=0.4'}
+
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
     engines: {node: '>=10'}
@@ -6618,20 +6672,20 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@bull-board/api@9.10.4(@bull-board/ui@9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2))(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2)':
+  '@bull-board/api@9.10.4(@bull-board/ui@9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2))(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2)':
     dependencies:
-      '@bull-board/ui': 9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2)
+      '@bull-board/ui': 9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2)
       redis-info: 3.1.0
       valibot: 1.5.0(typescript@7.0.2)
     optionalDependencies:
-      bullmq: 6.3.12(ioredis@6.0.0(supports-color@8.1.1))
+      bullmq: 6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1)
     transitivePeerDependencies:
       - typescript
 
-  '@bull-board/fastify@9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2)':
+  '@bull-board/fastify@9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2)':
     dependencies:
-      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2))(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2)
-      '@bull-board/ui': 9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2)
+      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2))(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2)
+      '@bull-board/ui': 9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2)
       '@fastify/static': 10.1.6
       '@fastify/view': 12.0.0
       ejs: 6.0.1
@@ -6640,9 +6694,9 @@ snapshots:
       - bullmq
       - typescript
 
-  '@bull-board/ui@9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2)':
+  '@bull-board/ui@9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2)':
     dependencies:
-      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2))(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)))(typescript@7.0.2)
+      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2))(bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1))(typescript@7.0.2)
     transitivePeerDependencies:
       - bull
       - bullmq
@@ -7314,7 +7368,7 @@ snapshots:
   '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.4':
     optional: true
 
-  '@mswjs/interceptors@0.44.0(patch_hash=5e404cfd9982a844224be9b8706bdf1ca66a32bd921b4908a7a3eef845a209e4)(supports-color@8.1.1)':
+  '@mswjs/interceptors@0.44.0(patch_hash=c84c76cdaf0f5c98fd0cc014b2aa39bf6ab7ff94b236b5491d1601706de4a691)(supports-color@8.1.1)':
     dependencies:
       '@open-draft/until': 3.0.1
       '@types/debug': 4.1.13
@@ -8527,6 +8581,12 @@ snapshots:
     dependencies:
       '@types/node': 25.9.8
 
+  '@types/pg@8.23.1':
+    dependencies:
+      '@types/node': 24.19.2
+      pg-protocol: 1.16.1
+      pg-types: 2.2.0
+
   '@types/trusted-types@2.0.7':
     optional: true
 
@@ -8889,7 +8949,7 @@ snapshots:
 
   builtins@1.0.3: {}
 
-  bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1)):
+  bullmq@6.3.12(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1):
     dependencies:
       cron-parser: 5.10.1
       msgpackr: 2.1.0
@@ -8898,6 +8958,7 @@ snapshots:
       tslib: 2.8.1
     optionalDependencies:
       ioredis: 6.0.0(supports-color@8.1.1)
+      pg: 8.23.1
 
   bytes@3.1.2:
     optional: true
@@ -9209,10 +9270,11 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.15
 
-  drizzle-orm@0.45.4(patch_hash=bbef75421cd47ea46bf7a405dd4b8de4e33a50a7a78c343e7302529299f0b176)(@opentelemetry/api@1.9.1)(postgres@3.4.9(patch_hash=14769a44cc22f230e714969054721f27a7c8772f229f70efae75611b25ec8823)):
+  drizzle-orm@0.45.4(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.1):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      postgres: 3.4.9(patch_hash=14769a44cc22f230e714969054721f27a7c8772f229f70efae75611b25ec8823)
+      '@types/pg': 8.23.1
+      pg: 8.23.1
 
   dunder-proto@1.0.1:
     dependencies:
@@ -11032,7 +11094,7 @@ snapshots:
 
   nock@15.0.1(supports-color@8.1.1):
     dependencies:
-      '@mswjs/interceptors': 0.44.0(patch_hash=5e404cfd9982a844224be9b8706bdf1ca66a32bd921b4908a7a3eef845a209e4)(supports-color@8.1.1)
+      '@mswjs/interceptors': 0.44.0(patch_hash=c84c76cdaf0f5c98fd0cc014b2aa39bf6ab7ff94b236b5491d1601706de4a691)(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -11333,6 +11395,41 @@ snapshots:
 
   pathe@2.0.3: {}
 
+  pg-cloudflare@1.4.1:
+    optional: true
+
+  pg-connection-string@2.14.1: {}
+
+  pg-int8@1.0.1: {}
+
+  pg-pool@3.14.0(pg@8.23.1):
+    dependencies:
+      pg: 8.23.1
+
+  pg-protocol@1.16.1: {}
+
+  pg-types@2.2.0:
+    dependencies:
+      pg-int8: 1.0.1
+      postgres-array: 2.0.0
+      postgres-bytea: 1.0.1
+      postgres-date: 1.0.7
+      postgres-interval: 1.2.0
+
+  pg@8.23.1:
+    dependencies:
+      pg-connection-string: 2.14.1
+      pg-pool: 3.14.0(pg@8.23.1)
+      pg-protocol: 1.16.1
+      pg-types: 2.2.0
+      pgpass: 1.0.5
+    optionalDependencies:
+      pg-cloudflare: 1.4.1
+
+  pgpass@1.0.5:
+    dependencies:
+      split2: 4.2.0
+
   picocolors@1.1.1: {}
 
   picomatch@2.3.2: {}
@@ -11394,7 +11491,15 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.2
 
-  postgres@3.4.9(patch_hash=14769a44cc22f230e714969054721f27a7c8772f229f70efae75611b25ec8823): {}
+  postgres-array@2.0.0: {}
+
+  postgres-bytea@1.0.1: {}
+
+  postgres-date@1.0.7: {}
+
+  postgres-interval@1.2.0:
+    dependencies:
+      xtend: 4.0.2
 
   posthog-node@5.55.1(rxjs@7.8.2):
     dependencies:
@@ -12504,6 +12609,8 @@ snapshots:
   xml-name-validator@5.0.0: {}
 
   xmlchars@2.2.0: {}
+
+  xtend@4.0.2: {}
 
   y18n@5.0.8: {}
 

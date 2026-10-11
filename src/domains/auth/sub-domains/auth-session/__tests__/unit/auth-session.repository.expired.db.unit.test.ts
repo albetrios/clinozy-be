@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { sql } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { AuthSessionRepository } from '@/domains/auth/sub-domains/auth-session/auth-session.repository.js';
+import { sql } from 'drizzle-orm';
+import { database } from '@/infrastructure/database/connection.js';
 
 describe('AuthSessionRepository — expiry, revocation, and idempotency', () => {
   const repository = new AuthSessionRepository();
@@ -18,7 +19,7 @@ describe('AuthSessionRepository — expiry, revocation, and idempotency', () => 
     // requires expires_at > created_at, both can be in the past.
     const pastCreated = new Date(Date.now() - 7_200_000).toISOString();
     const pastExpires = new Date(Date.now() - 3_600_000).toISOString();
-    await sql`
+    await database.execute(sql`
       INSERT INTO auth.sessions
         (public_id, user_id, token_hash, ip_address, user_agent, expires_at, created_at, last_active_at)
       VALUES (
@@ -31,7 +32,7 @@ describe('AuthSessionRepository — expiry, revocation, and idempotency', () => 
         ${pastCreated}::timestamptz,
         ${pastCreated}::timestamptz
       )
-    `;
+    `);
 
     const result = await repository.findActiveByTokenHash('expired-hash');
     expect(result).toBeNull();

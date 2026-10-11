@@ -24,7 +24,7 @@ import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 const ACTOR_PUBLIC_ID = 'usr_auditoutboxrepo000001';
 
 /**
- * `claimPendingBatch` is a raw `execute()` — postgres-js returns it unmapped, so the `bigserial`
+ * `claimPendingBatch` is a raw `execute()` — node-postgres returns it unmapped, so the `bigserial`
  * `id` and `smallint` `attempt_count` arrive as STRINGS even though `AuditOutboxRow` types them
  * as `number`. Harmless in production (every consumer feeds them straight back into `eq()` /
  * `inArray()`, which bind them as SQL literals either way), but it means an `=== number`

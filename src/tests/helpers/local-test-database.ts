@@ -1,4 +1,6 @@
-import postgres from 'postgres';
+import pg from 'pg';
+import { sql } from 'drizzle-orm';
+import type { PostgresDatabaseHandle } from '@/infrastructure/database/utils/database-handle.types.js';
 import {
   DATABASE_URL_KEYS,
   isLocalDatabaseUrl,
@@ -102,10 +104,15 @@ export function pointHarnessAtLocalTestDatabase(): void {
  * - **Side effects:** one read-only query.
  */
 export async function assertConnectedToTestDatabase(
-  query: ReturnType<typeof postgres>,
+  databaseHandle: Pick<PostgresDatabaseHandle, 'execute'>,
 ): Promise<void> {
   if (isHarnessOnProvidedDatabase()) return;
-  const [row] = await query<{ name: string }[]>`SELECT current_database() AS name`;
+  const result = await databaseHandle.execute<{ name: string }>(
+    sql`SELECT current_database() AS name`,
+  );
+  const [row] = Array.isArray(result)
+    ? (result as { name: string }[])
+    : ((result as { rows?: { name: string }[] }).rows ?? []);
   if (row?.name !== LOCAL_TEST_DATABASE_NAME) {
     throw new Error(
       `Refusing to wipe database "${String(row?.name)}": on a developer machine test cleanup only ` +
@@ -134,17 +141,20 @@ export async function ensureLocalTestDatabaseExists(): Promise<void> {
 
   const serverUrl = new URL(migrationUrl);
   serverUrl.pathname = '/postgres';
-  const sql = postgres(serverUrl.toString(), { max: 1, onnotice: () => {} });
+  const client = new pg.Client({ connectionString: serverUrl.toString() });
+  client.on('error', () => undefined);
   try {
-    const existing =
-      await sql`SELECT 1 FROM pg_database WHERE datname = ${LOCAL_TEST_DATABASE_NAME}`;
-    if (existing.length === 0) {
-      await sql`CREATE DATABASE ${sql(LOCAL_TEST_DATABASE_NAME)}`;
+    await client.connect();
+    const existing = await client.query('SELECT 1 FROM pg_database WHERE datname = $1', [
+      LOCAL_TEST_DATABASE_NAME,
+    ]);
+    if (existing.rowCount === 0) {
+      await client.query(`CREATE DATABASE ${client.escapeIdentifier(LOCAL_TEST_DATABASE_NAME)}`);
     }
   } catch (error) {
     if ((error as { code?: string }).code !== '42P04') throw error;
   } finally {
-    await sql.end({ timeout: 5 });
+    await client.end().catch(() => undefined);
   }
 }
 

@@ -788,7 +788,7 @@ const envSchemaBase = z.object({
    */
   WORKER_QUEUE_FAMILIES: z.string().min(1).default('all'),
   /**
-   * Postgres pool size per Node process (postgres-js `max`). Not the cluster-wide total. Default 30.
+   * Postgres pool size per Node process (node-postgres `max`). Not the cluster-wide total. Default 30.
    *
    * Each HTTP request runs in its own RLS transaction holding one pooled connection for its
    * duration, so the pool size is the per-process in-flight DB concurrency ceiling. The default
@@ -816,11 +816,14 @@ const envSchemaBase = z.object({
   DEPLOYMENT_API_REPLICA_COUNT: z.coerce.number().int().min(1).optional(),
   /** Worker service replica count for the Postgres connection budget. */
   DEPLOYMENT_WORKER_REPLICA_COUNT: z.coerce.number().int().min(1).optional(),
-  /** postgres-js `idle_timeout` (seconds). */
+  /** How long an idle pooled connection stays open (seconds; node-postgres `idleTimeoutMillis`). */
   DATABASE_POOL_IDLE_TIMEOUT_SECONDS: z.coerce.number().int().min(1).optional(),
-  /** postgres-js `connect_timeout` (seconds). */
+  /**
+   * How long opening a connection, or waiting for a free pooled one, may take (seconds;
+   * node-postgres `connectionTimeoutMillis`). Either failure answers 503 with `Retry-After`.
+   */
   DATABASE_POOL_CONNECT_TIMEOUT_SECONDS: z.coerce.number().int().min(1).optional(),
-  /** postgres-js `max_lifetime` (seconds). */
+  /** How long a pooled connection lives before it is replaced (seconds; node-postgres `maxLifetimeSeconds`). */
   DATABASE_POOL_MAX_LIFETIME_SECONDS: z.coerce.number().int().min(60).optional(),
   /** Per-connection statement_timeout (ms). Caps runaway queries; 0 disables. Default: 30000. */
   DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).optional(),

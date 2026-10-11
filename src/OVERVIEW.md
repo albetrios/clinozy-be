@@ -125,7 +125,7 @@ Deliberate business, UX, and security trade-offs encoded as constants. Full rati
 - **Runtime**: Node.js ≥ 24 (single-process API + single-process worker)
 - **HTTP**: [Fastify 5](https://fastify.dev) with `fastify-type-provider-zod`, `@fastify/helmet`, `@fastify/cors`, `@fastify/cookie`, `@fastify/rate-limit`, `@fastify/compress`
 - **Validation**: [Zod 4](https://zod.dev) (HTTP DTOs + route schemas)
-- **ORM**: [Drizzle 0.45](https://orm.drizzle.team) over the [`postgres` 3.x](https://github.com/porsager/postgres) driver (Postgres 17, RLS-enforced)
+- **ORM**: [Drizzle 0.45](https://orm.drizzle.team) over the [node-postgres (`pg`) 8.x](https://node-postgres.com) driver (Postgres 17, RLS-enforced)
 - **Cache + queue**: [ioredis 6](https://github.com/redis/ioredis) + [BullMQ 6](https://docs.bullmq.io)
 - **Auth**: [jose 6](https://github.com/panva/jose) (RS256 JWT), [argon2id](https://github.com/ranisalt/node-argon2), [otplib](https://github.com/yeojz/otplib) (TOTP), [@simplewebauthn/server](https://simplewebauthn.dev) (WebAuthn)
 - **Payments**: [Stripe 23](https://stripe.com)

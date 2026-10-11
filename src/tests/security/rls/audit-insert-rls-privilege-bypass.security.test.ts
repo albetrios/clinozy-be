@@ -4,7 +4,6 @@ import {
   withMaintenanceDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
 import { sql as drizzleSql } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
 import { database } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -16,6 +15,11 @@ import {
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
 
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
+
 /**
  * Checks whether the sec-r4-D1 migration has been applied by verifying the
  * INSERT policy no longer contains the global_admin escape hatch in its
@@ -24,14 +28,16 @@ import { setLocalApplicationRole } from '@/infrastructure/database/contexts/data
 async function isPrivilegeBypassMigrationApplied(): Promise<boolean> {
   // INSERT policies only carry a WITH CHECK predicate — `qual` (the USING
   // predicate column) is NULL for INSERT-only policies. Query with_check.
-  const rows = await sql<{ with_check: string | null }[]>`
+  const rows = rowsOf<{ with_check: string | null }>(
+    await database.execute(drizzleSql`
     SELECT with_check
     FROM pg_policies
     WHERE schemaname = 'audit'
       AND tablename = 'logs'
       AND policyname = 'audit_logs_tenant_isolation_insert'
       AND cmd = 'INSERT'
-  `;
+  `),
+  );
   const withCheck = rows[0]?.with_check;
   if (!withCheck) return false;
   // After the fix the WITH CHECK must NOT mention global_admin or global_retention_cleanup.

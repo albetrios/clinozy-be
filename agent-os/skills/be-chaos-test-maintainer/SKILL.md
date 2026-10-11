@@ -56,7 +56,7 @@ Most chaos "failures" on a fresh machine are environment, not code. Check these 
 - **Idempotency replay tests must resend the *same* body.** The middleware fingerprint is method+route+**body**;
   a different payload under the same `X-Idempotency-Key` is a correct **422** (`idempotency_key_reuse`), not a replay.
 - **Teardown that disables a proxy must bound `app.close()`.** Administratively disabling the Postgres proxy can
-  leave a severed `postgres.js` connection that `sql.end()` cannot drain, hanging `afterAll` to its timeout.
+  leave a severed pooled connection that the pool's `end()` cannot drain, hanging `afterAll` to its timeout.
   Re-enable the proxy, probe once, then `Promise.race` the close against a short cap (see `postgres-health.chaos.test.ts`).
 
 ## Adding a scenario

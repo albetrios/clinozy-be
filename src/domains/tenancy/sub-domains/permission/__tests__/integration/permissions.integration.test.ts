@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { getOperatorSql } from '@/tests/helpers/operator-database.js';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
@@ -20,6 +20,7 @@ import {
 import { resolveUserOrganizationPermissions } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import type { FastifyInstance } from 'fastify';
+import { sql } from 'drizzle-orm';
 
 const ALL_PERMISSION_CODES = Object.values(TENANCY_PERMISSIONS) as string[];
 
@@ -219,7 +220,9 @@ describe('Permission System Validation', () => {
         organizationId: organization.public_id,
       }),
     ).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
-    await getOperatorSql()`DELETE FROM tenancy.role_permissions WHERE role_id = ${limitedRole.id}`;
+    await getOperatorDatabase().execute(
+      sql`DELETE FROM tenancy.role_permissions WHERE role_id = ${limitedRole.id}`,
+    );
     expect(
       await getCachedPermissions({
         userId: user.public_id,
@@ -376,7 +379,9 @@ describe('Permission System Validation', () => {
       }),
     ).toEqual([TENANCY_PERMISSIONS.ORGANIZATION_READ]);
 
-    await getOperatorSql()`DELETE FROM tenancy.role_permissions WHERE role_id = ${role.id}`;
+    await getOperatorDatabase().execute(
+      sql`DELETE FROM tenancy.role_permissions WHERE role_id = ${role.id}`,
+    );
     expect(
       await getCachedPermissions({
         userId: owner.public_id,

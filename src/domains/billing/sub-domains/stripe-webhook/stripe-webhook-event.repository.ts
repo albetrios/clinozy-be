@@ -558,10 +558,9 @@ export class StripeWebhookEventRepository {
     provider_subscription_id: string,
     deleted_event_created_at: Date,
   ): Promise<void> {
-    // The raw `sql` template binds parameters straight through postgres.js, which
-    // rejects a JS `Date` instance (`TypeError: ... Received an instance of Date`).
-    // The Drizzle `.values()` path still gets the `Date` (the date-mode timestamptz
-    // column maps it); only the GREATEST() template needs a serialized ISO string.
+    // The raw `sql` template binds parameters as they are, without the column's date
+    // mapping, so the GREATEST() template gets an unambiguous UTC ISO string. The Drizzle
+    // `.values()` path still gets the `Date` (the date-mode timestamptz column maps it).
     const deleted_at_iso = deleted_event_created_at.toISOString();
     await stripeSubscriptionTombstoneDatabase()
       .insert(stripe_subscription_tombstones)

@@ -2,6 +2,7 @@ import { sql as drizzleSql } from 'drizzle-orm';
 import { runInCommitUnit } from '@/core/events/on-commit-scope.js';
 import { database } from '@/infrastructure/database/connection.js';
 import {
+  assertTransactionNotFailed,
   getOrganizationRequestDatabaseSession,
   runWithPinnedDatabaseHandle,
   type RequestScopedPostgresDatabase,
@@ -47,7 +48,9 @@ export async function withTransaction<T>({
             drizzleSql`SET LOCAL statement_timeout = ${drizzleSql.raw(String(timeoutMs))}`,
           );
 
-          return callback(transaction);
+          const result = await callback(transaction);
+          await assertTransactionNotFailed(transaction);
+          return result;
         },
         {
           isolationLevel,
@@ -61,15 +64,14 @@ export async function withTransaction<T>({
  * failure inside it cannot fail the work around it.
  *
  * @remarks
- * - **Algorithm:** Drizzle's nested `transaction()` on the pinned handle issues `SAVEPOINT`, and
- *   postgres.js gives the savepoint its own error scope; the savepoint's handle is pinned so every
- *   repository call in `callback` runs inside it. Success releases the savepoint, a throw rolls back
- *   to it and rejects. After-commit tasks registered inside follow the same outcome
- *   ({@link runInCommitUnit}).
+ * - **Algorithm:** Drizzle's nested `transaction()` on the pinned handle issues `SAVEPOINT`, which
+ *   gives the callback its own error scope; the savepoint's handle is pinned so every repository call
+ *   in `callback` runs inside it. Success releases the savepoint, a throw rolls back to it and
+ *   rejects. After-commit tasks registered inside follow the same outcome ({@link runInCommitUnit}).
  * - **Why:** inside a transaction one failed statement aborts the whole transaction (25P02), and
- *   postgres.js rethrows a failed query at COMMIT even when the caller caught it — so a best-effort
- *   side write (webhook delivery attempts, a notification, a lost-race insert) must run here or it
- *   fails the write that triggered it.
+ *   the unit of work refuses to commit a failed transaction even when the caller caught the error
+ *   ({@link assertTransactionNotFailed}) — so a best-effort side write (webhook delivery attempts, a
+ *   notification, a lost-race insert) must run here or it fails the write that triggered it.
  * - **Failure modes:** rejects with `callback`'s error, the surrounding transaction still usable;
  *   throws when no transaction is pinned (there is nothing to save-point).
  * - **Side effects:** two extra round trips (`SAVEPOINT` / `RELEASE`).

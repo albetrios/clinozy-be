@@ -16,12 +16,20 @@ function extractErrorCode(error: unknown): string | undefined {
   return withCode.cause ? extractErrorCode(withCode.cause) : undefined;
 }
 
+/** node-postgres reports a connect timeout as a code-less `Error('timeout expired')`. */
+function isConnectTimeout(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const withMessage = error as { message?: unknown; cause?: unknown };
+  if (withMessage.message === 'timeout expired') return true;
+  return withMessage.cause ? isConnectTimeout(withMessage.cause) : false;
+}
+
 /**
  * Returns an actionable hint for a known connection failure code, or `null` when the failure is not a
  * recognized connection/auth problem (so the caller only surfaces a hint when it genuinely helps).
  */
 export function describeMigrationConnectionError(error: unknown): string | null {
-  switch (extractErrorCode(error)) {
+  switch (extractErrorCode(error) ?? (isConnectTimeout(error) ? 'ETIMEDOUT' : undefined)) {
     case '28P01':
       return 'password authentication failed (28P01): the password in DATABASE_MIGRATION_URL is wrong. Check for a leftover placeholder (e.g. <new-password>), use the freshly-rotated password, and URL-encode special characters (@ : / ? # % → %40 %3A %2F %3F %23 %25).';
     case '28000':
@@ -32,7 +40,6 @@ export function describeMigrationConnectionError(error: unknown): string | null 
     case 'ENOTFOUND':
     case 'EAI_AGAIN':
     case 'ETIMEDOUT':
-    case 'CONNECT_TIMEOUT':
       return 'cannot reach the database host: verify DATABASE_MIGRATION_URL points at a DIRECT (non-pooler), publicly reachable endpoint — not a *.railway.internal host and not IP-restricted against the runner.';
     default:
       return null;

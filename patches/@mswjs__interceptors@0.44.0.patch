@@ -19,21 +19,7 @@ index d76d926d3b08fb26377469b9a289a59ee8008748..27669622305b2f54e92c1ac26e9e30c7
  const logger$1 = createLogger("socket");
  function toServerSocket(socket) {
  	/**
-@@ -707,7 +717,12 @@ var TcpSocketController = class extends SocketController {
- 		* connecting (the info of connecting sockets is never cached).
- 		*/
- 		this.socket.remoteAddress;
--		this.socket.emit("connect");
-+		/**
-+		* @note A client that waited for "connect" before writing (e.g. a
-+		* SQL handshake) already received an emulated one. Emitting it again
-+		* re-runs its persistent "connect" listeners, which resend the startup.
-+		*/
-+		if (!this.#connectEmulated) this.socket.emit("connect");
- 		this.socket.emit("ready");
- 	};
- 	#onRealSocketConnectionAttemptFailed = (address, port, family, error) => {
-@@ -1317,6 +1332,16 @@ var SocketInterceptor = class extends Interceptor {
+@@ -1317,6 +1327,16 @@ var SocketInterceptor = class extends Interceptor {
  					*/
  					const connectArgs = Array.isArray(args[0]) ? args[0] : args;
  					const [transportConnectionOptions, connectionCallback] = normalizeNetConnectArgs(connectArgs);

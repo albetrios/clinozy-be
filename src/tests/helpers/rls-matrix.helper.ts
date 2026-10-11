@@ -1,6 +1,5 @@
 import { sql as drizzleSql } from 'drizzle-orm';
 import { withMaintenanceDatabaseContext } from '@/infrastructure/database/contexts/database-context.js';
-import { sql } from '@/infrastructure/database/connection.js';
 import { database } from '@/infrastructure/database/connection.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { createTestOrganization } from '@/tests/factories/organization.factory.js';
@@ -94,7 +93,7 @@ export const RLS_MATRIX_SKIP_CRUD_TABLES = new Set([
 ]);
 
 export async function grantClinozyBeAppRoleForTests(): Promise<void> {
-  await sql`GRANT clinozy_be_app TO CURRENT_USER`.catch(() => undefined);
+  await database.execute(drizzleSql`GRANT clinozy_be_app TO CURRENT_USER`).catch(() => undefined);
 }
 
 /**
@@ -110,7 +109,7 @@ export async function grantClinozyBeAppRoleForTests(): Promise<void> {
  *   represents the policy; including them would surface every child as `extra` drift.
  */
 export async function listForceRlsTablesFromDatabase(): Promise<ForceRlsTableRef[]> {
-  const rows = await sql<{ schema_name: string; table_name: string }[]>`
+  const result = await database.execute<{ schema_name: string; table_name: string }>(drizzleSql`
     SELECT n.nspname AS schema_name, c.relname AS table_name
     FROM pg_class c
     INNER JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -119,17 +118,23 @@ export async function listForceRlsTablesFromDatabase(): Promise<ForceRlsTableRef
       AND c.relforcerowsecurity = true
       AND n.nspname NOT IN ('pg_catalog', 'information_schema')
     ORDER BY n.nspname, c.relname
-  `;
+  `);
+  const rows = Array.isArray(result)
+    ? (result as { schema_name: string; table_name: string }[])
+    : ((result as { rows?: { schema_name: string; table_name: string }[] }).rows ?? []);
   return rows.map((row) => ({ schemaName: row.schema_name, tableName: row.table_name }));
 }
 
 export async function isForceRlsEnabled(schemaName: string, tableName: string): Promise<boolean> {
-  const rows = await sql<{ relforcerowsecurity: boolean }[]>`
+  const result = await database.execute<{ relforcerowsecurity: boolean }>(drizzleSql`
     SELECT c.relforcerowsecurity
     FROM pg_class c
     INNER JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = ${schemaName} AND c.relname = ${tableName}
-  `;
+  `);
+  const rows = Array.isArray(result)
+    ? (result as { relforcerowsecurity: boolean }[])
+    : ((result as { rows?: { relforcerowsecurity: boolean }[] }).rows ?? []);
   return rows[0]?.relforcerowsecurity === true;
 }
 
@@ -153,7 +158,7 @@ async function queryCountInTransaction(
   tableName: string,
 ): Promise<number> {
   const qualified = `"${schemaName}"."${tableName}"`;
-  const result = await transaction.execute(
+  const result = await transaction.execute<{ count: number }>(
     drizzleSql.raw(`SELECT count(*)::int AS count FROM ${qualified}`),
   );
   const rows = Array.isArray(result)
@@ -249,7 +254,6 @@ export async function updateRowAsTenant(
         `UPDATE ${qualified} SET "${column}" = "${column}" WHERE id = ${rowId} RETURNING id`,
       ),
     );
-    // Drizzle postgres-js execute returns row arrays, not a node-postgres rowCount.
     // RETURNING makes an accidental cross-tenant mutation directly observable.
     const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
     return rows.length;
@@ -267,7 +271,6 @@ export async function deleteRowAsTenant(
     const result = await transaction.execute(
       drizzleSql.raw(`DELETE FROM ${qualified} WHERE id = ${rowId} RETURNING id`),
     );
-    // Drizzle postgres-js execute returns row arrays, not a node-postgres rowCount.
     // RETURNING makes an accidental cross-tenant mutation directly observable.
     const rows = Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? []);
     return rows.length;

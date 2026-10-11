@@ -88,7 +88,7 @@ async function createApp(): Promise<FastifyInstance> {
     throw error;
   });
   app.get('/lock-timeout', async () => {
-    // Shape a postgres.js PostgresError: SQLSTATE lives on `code`, and drizzle wraps the driver
+    // Shape a node-postgres DatabaseError: SQLSTATE lives on `code`, and drizzle wraps the driver
     // error in `cause`, which is where the handler's detection has to look.
     const driverError = Object.assign(new Error('canceling statement due to lock timeout'), {
       code: '55P03',

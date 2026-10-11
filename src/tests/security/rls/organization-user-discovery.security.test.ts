@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { sql as drizzleSql, and, eq, isNull } from 'drizzle-orm';
-import { sql } from '@/infrastructure/database/connection.js';
 import { database } from '@/infrastructure/database/connection.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
@@ -17,6 +16,11 @@ import { createTestNotification } from '@/tests/factories/notification.factory.j
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { grantClinozyBeAppRoleForTests } from '@/tests/helpers/rls-matrix.helper.js';
 import { setLocalApplicationRole } from '@/infrastructure/database/contexts/database-context-runtime.js';
+
+/** Rows of a `database.execute()` result. */
+function rowsOf<T>(result: unknown): T[] {
+  return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+}
 
 /**
  * Validates the user-discovery RLS policies and SECURITY DEFINER lookups that
@@ -180,17 +184,17 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
       expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
 
-    const rows = await sql<
-      Array<{
-        organization_public_id: string;
-        organization_id: string | number;
-        membership_public_id: string;
-        membership_id: string | number;
-      }>
-    >`
+    const rows = rowsOf<{
+      organization_public_id: string;
+      organization_id: string | number;
+      membership_public_id: string;
+      membership_id: string | number;
+    }>(
+      await database.execute(drizzleSql`
       SELECT organization_public_id, organization_id, membership_public_id, membership_id
       FROM tenancy.resolve_member_invitation_lookup_by_public_id(${invitationPublicId})
-    `;
+    `),
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0]?.organization_public_id).toBe(organization.public_id);
     expect(rows[0]?.membership_public_id).toBe(membership.public_id);
@@ -256,15 +260,15 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
       },
     ]);
 
-    const rows = await sql<
-      Array<{
-        invitation_public_id: string;
-        organization_public_id: string;
-      }>
-    >`
+    const rows = rowsOf<{
+      invitation_public_id: string;
+      organization_public_id: string;
+    }>(
+      await database.execute(drizzleSql`
       SELECT invitation_public_id, organization_public_id
       FROM tenancy.list_pending_member_invitations_for_email(${invitationEmail}, 100)
-    `;
+    `),
+    );
     expect(rows).toHaveLength(2);
     const organizationIds = new Set(rows.map((row) => row.organization_public_id));
     expect(organizationIds.has(organizationA.public_id)).toBe(true);

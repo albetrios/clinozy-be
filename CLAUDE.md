@@ -183,7 +183,7 @@ See **`docs/reference/architecture/domains-and-public-api-design.md`** for route
 ```text
 src/infrastructure/
   database/
-    connection.ts             # Exports: database, sql, closeDatabase
+    connection.ts             # Exports: database, pool (node-postgres), closeDatabase
     transaction.ts            # withTransaction() helper
     resource-quota-lock.util.ts # Advisory-lock guard for resource caps (per-scope count+insert serialization)
     pg-schemas.ts             # Shared pgSchema definitions (auth, tenancy, billing, notify, audit, upload)

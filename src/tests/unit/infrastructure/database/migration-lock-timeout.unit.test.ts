@@ -15,7 +15,7 @@ describe('migration lock and statement timeouts', () => {
   it('bounds both waits inside a transactional file, with SET LOCAL', async () => {
     const executed: string[] = [];
     await applyMigrationTimeouts({
-      executor: { unsafe: async (query: string) => executed.push(query) },
+      executor: { query: async (query: string) => executed.push(query) },
       scope: 'transaction',
     });
     expect(executed).toEqual([
@@ -27,7 +27,7 @@ describe('migration lock and statement timeouts', () => {
   it('bounds the lock wait but lifts the statement cap for the non-transactional lane', async () => {
     const executed: string[] = [];
     await applyMigrationTimeouts({
-      executor: { unsafe: async (query: string) => executed.push(query) },
+      executor: { query: async (query: string) => executed.push(query) },
       scope: 'session',
     });
     expect(executed).toEqual([

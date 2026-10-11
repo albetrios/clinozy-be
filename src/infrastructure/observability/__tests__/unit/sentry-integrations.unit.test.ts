@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 /**
- * Database spans come from the integration for the driver this service uses — postgres.js. The
- * `pg` integration (`postgresIntegration`) was wired before and instrumented nothing, so no trace
- * ever showed a query.
+ * Database spans come from the integration for the driver this service uses — node-postgres (`pg`),
+ * so `postgresIntegration`. An integration for another driver instruments nothing, and no trace
+ * shows a query.
  */
 const sentryMocks = vi.hoisted(() => ({
   init: vi.fn(),
@@ -37,14 +37,15 @@ vi.mock('@/shared/config/env.config.js', async (importOriginal) => {
 });
 
 describe('initSentry integrations', () => {
-  it('instruments postgres.js — the driver in use — when tracing is on', async () => {
+  it('instruments node-postgres — the driver in use — when tracing is on', async () => {
     const { initSentry } = await import('@/infrastructure/observability/sentry/sentry.js');
 
     initSentry();
 
-    expect(sentryMocks.postgresJsIntegration).toHaveBeenCalledOnce();
-    expect(sentryMocks.postgresIntegration).not.toHaveBeenCalled();
+    expect(sentryMocks.postgresIntegration).toHaveBeenCalledOnce();
+    expect(sentryMocks.postgresJsIntegration).not.toHaveBeenCalled();
     const [options] = sentryMocks.init.mock.calls[0] as [{ integrations: Array<{ name: string }> }];
-    expect(options.integrations.map((integration) => integration.name)).toContain('PostgresJs');
+    expect(options.integrations.map((integration) => integration.name)).toContain('Postgres');
+    expect(options.integrations.map((integration) => integration.name)).not.toContain('PostgresJs');
   });
 });

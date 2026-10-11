@@ -213,8 +213,8 @@ async function drainOutboxRow(options: {
     // leaving the poison row at the head of `claimPendingBatch` (ORDER BY created_at ASC) forever,
     // never reaching the attempt cap. drizzle rolls the nested transaction back to its savepoint
     // and re-throws, leaving the OUTER batch transaction valid so the failure is recorded and the
-    // row's retries stay bounded. (Raw `SAVEPOINT` via execute() does NOT integrate with the
-    // postgres-js transaction-error state, so the nested transaction is the supported mechanism.)
+    // row's retries stay bounded. (Drizzle's nested transaction is the supported mechanism: it
+    // names, releases and rolls back its own savepoint.)
     await databaseHandle.transaction(async (savepoint) => {
       const savepointHandle = savepoint as unknown as RequestScopedPostgresDatabase;
       // Set BOTH GUCs on every row, never just the one this row needs.
