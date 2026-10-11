@@ -55,7 +55,7 @@ export function getActiveOrganizationRlsCheckoutCount(): number {
 /**
  * Registers the sink that receives every {@link OrganizationRlsCheckoutHoldSample}. The metrics
  * stack registers a sink that observes the `database_rls_checkout_hold_seconds` histogram; pass
- * `null` to detach. Kept dependency-free here so the hot DB-checkout paths never import prom-client.
+ * `null` to detach. Kept dependency-free here so the hot DB-checkout paths never import the metrics client.
  */
 export function registerOrganizationRlsCheckoutHoldObserver(
   observer: OrganizationRlsCheckoutHoldObserver | null,

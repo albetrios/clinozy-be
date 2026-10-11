@@ -1,4 +1,4 @@
-import { Counter, Gauge, Histogram, type Registry } from 'prom-client';
+import { Counter, Gauge, Histogram, type Registry } from '@prometheus-io/client';
 import type { OrganizationRlsCheckoutPath } from '@/infrastructure/database/pool/organization-rls-checkout-counter.js';
 import {
   getMetricsRegistry,
@@ -422,7 +422,7 @@ export function setOrganizationRlsActiveCheckouts(count: number): void {
  * Observes one completed RLS checkout hold on the `database_rls_checkout_hold_seconds` histogram,
  * labelled by `path` (`scoped_context` | `session_context` | `maintenance_context`). Wired via
  * `registerOrganizationRlsCheckoutHoldObserver` so the hot database-checkout paths stay free of a
- * prom-client import. No-op when metrics are disabled.
+ * `@prometheus-io/client` import. No-op when metrics are disabled.
  */
 export function recordOrganizationRlsCheckoutHold(options: {
   path: OrganizationRlsCheckoutPath;

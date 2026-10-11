@@ -22,7 +22,7 @@ What is **in place today** for production signals, and what is **deferred**. For
 
 ## Prometheus (opt-in)
 
-Code is in place (`prom-client`). `METRICS_ENABLED` defaults to **`true`** in every runtime (set `METRICS_ENABLED=false` to disable). Configure a scraper (Grafana Alloy, Prometheus, etc.) and set `METRICS_SCRAPE_TOKEN` (min 32 chars). No in-repo Grafana/Prometheus server.
+Code is in place (`@prometheus-io/client`, the Prometheus project's Node client, formerly `prom-client`). `METRICS_ENABLED` defaults to **`true`** in every runtime (set `METRICS_ENABLED=false` to disable). Configure a scraper (Grafana Alloy, Prometheus, etc.) and set `METRICS_SCRAPE_TOKEN` (min 32 chars). No in-repo Grafana/Prometheus server.
 
 ### Enable
 

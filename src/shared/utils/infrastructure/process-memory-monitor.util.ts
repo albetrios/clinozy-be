@@ -16,7 +16,7 @@ export type MonitoredProcessLabel = 'api' | 'worker';
  *   the threshold. Idempotent — a second call while a monitor is already running is a no-op.
  * - **Failure modes:** none — sampling cannot throw and nothing is awaited.
  * - **Side effects:** registers one interval timer (unref'd, so it never keeps the event loop alive);
- *   exact RSS/heap series are also exported to Prometheus via prom-client default metrics
+ *   exact RSS/heap series are also exported to Prometheus via `@prometheus-io/client` default metrics
  *   (`process_resident_memory_bytes`, `nodejs_heap_size_used_bytes`) — this adds the alert signal on top.
  */
 export function startProcessMemoryMonitoring(options: {

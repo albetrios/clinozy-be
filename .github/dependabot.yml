@@ -34,7 +34,16 @@ updates:
     labels:
       - 'dependencies'
     ignore:
+      # Types follow the runtime: @types/node takes a new major together with NODE_VERSION
+      # (Dockerfile, Dockerfile.worker, .nvmrc, engines) — types for a newer Node describe APIs
+      # the deployed runtime does not have.
       - dependency-name: '@types/node'
+        update-types:
+          - 'version-update:semver-major'
+      # nock 15 (2026-10) breaks every database-bound test: with net connect allowed for loopback,
+      # its pass-through socket corrupts the Postgres handshake ("expected SASL response, got message
+      # type 0", 08P01). Stay on 14 until a 15.x passes `pnpm ci:local`, then drop this entry.
+      - dependency-name: 'nock'
         update-types:
           - 'version-update:semver-major'
     groups:
