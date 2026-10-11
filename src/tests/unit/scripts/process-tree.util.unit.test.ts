@@ -35,10 +35,16 @@ async function startParentWithDetachedChild(): Promise<{ parent: ChildProcess; c
        console.log(child.pid);
        setInterval(() => {}, 1000);`,
     ],
-    { stdio: ['ignore', 'pipe', 'ignore'] },
+    // Only PATH: the runner's NODE_OPTIONS preloads write to stdout ahead of the pid.
+    { stdio: ['ignore', 'pipe', 'ignore'], env: { PATH: process.env.PATH ?? '' } },
   );
   const childId = await new Promise<number>((resolve) => {
-    parent.stdout?.once('data', (chunk: Buffer) => resolve(Number(chunk.toString().trim())));
+    let output = '';
+    parent.stdout?.on('data', (chunk: Buffer) => {
+      output += chunk.toString();
+      const pidLine = /^(\d+)$/m.exec(output);
+      if (pidLine) resolve(Number(pidLine[1]));
+    });
   });
   return { parent, childId };
 }
