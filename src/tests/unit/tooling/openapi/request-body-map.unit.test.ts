@@ -9,7 +9,6 @@ import { routeSchemaMap } from '@tooling/openapi/schema-map.js';
 const BODY_MAP_EXEMPT: Readonly<Record<string, string>> = {
   'POST /api/v1/auth/switch-to-organization': 'an inline z.object in auth.routes.ts',
   'POST /api/v1/auth/me/webauthn/register/options': 'an empty strict object — no fields',
-  'POST /api/v1/app/messaging-webhook': "Meta's own payload, verified by X-Hub-Signature-256 (D77)",
 };
 
 /**

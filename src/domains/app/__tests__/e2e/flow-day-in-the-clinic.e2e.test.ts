@@ -1,32 +1,24 @@
-import nock from 'nock';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { operatorQuery } from '@/tests/helpers/operator-database.js';
-import { env } from '@/shared/config/env.config.js';
-import { metaCircuit } from '@/infrastructure/resilience/circuit-breaker.js';
 import {
   type AppFixture,
   createAppFixture,
 } from '@/domains/app/__tests__/factories/app-fixture.factory.js';
 import { AppFlow } from '@/domains/app/__tests__/factories/app-flow.factory.js';
-import { runContactMessageDeliveryJob } from '@/domains/app/sub-domains/contacts/contact-activities/workers/contact-message-delivery.processor.js';
-
-const GRAPH = 'https://graph.facebook.com';
 
 /**
  * A day in the clinic across two branches (task F2, docs/reviews/launch-confidence-plan-2026-10-09.md;
- * routes-final 6, 8.A–8.E, WC-10): each branch opens its day — Vesu recounts its float, Adajan
+ * routes-final 6, 8.A–8.E): each branch opens its day — Vesu recounts its float, Adajan
  * carries none — walk-ins are seen and billed, paid in cash, UPI and card; each branch closes on its
- * own count (Vesu matches, Adajan is short and says why); the closed day refuses a late receipt;
- * and each close's summary reaches the admins on WhatsApp, once.
+ * own count (Vesu matches, Adajan is short and says why); and the closed day refuses a late
+ * receipt.
  */
 describe('Flow — a day in the clinic, two branches', () => {
   const S = String(Date.now());
   const T = `d${S}`;
   const digits = `2${S.slice(-7)}`;
-  const OWNER_PHONE = `+91${digits}90`;
 
   let app: FastifyInstance;
   let fixture: AppFixture;
@@ -35,7 +27,6 @@ describe('Flow — a day in the clinic, two branches', () => {
   let adajan = '';
   let consult = '';
   let peel = '';
-  let deliveryWasEnabled = false;
   const days: Record<string, string> = {};
 
   /** A walk-in at the branch, seen and completed, billed for `offering` and paid by `mode`. */
@@ -86,14 +77,6 @@ describe('Flow — a day in the clinic, two branches', () => {
     flow = new AppFlow(app, fixture).as('owner');
     vesu = fixture.branches.vesu;
     adajan = fixture.branches.adajan;
-    deliveryWasEnabled = env.MESSAGING_DELIVERY_ENABLED;
-    env.MESSAGING_DELIVERY_ENABLED = true;
-    await flow.expect(200, 'connect WhatsApp', 'PATCH', '/tenancy/organization/settings', {
-      whatsapp_phone_number_id: `13${S.slice(-10)}`,
-    });
-    await operatorQuery`
-      UPDATE tenancy.memberships SET phone = ${OWNER_PHONE} WHERE id = ${fixture.members.owner.membershipId}
-    `;
     await flow.expect(200, 'a consultation', 'POST', '/app/offerings', {
       name: `Consult ${T}`,
       category: 'consultation',
@@ -108,9 +91,6 @@ describe('Flow — a day in the clinic, two branches', () => {
   });
 
   afterAll(async () => {
-    env.MESSAGING_DELIVERY_ENABLED = deliveryWasEnabled;
-    nock.cleanAll();
-    await metaCircuit.reset();
     await app.close();
   });
 
@@ -210,7 +190,7 @@ describe('Flow — a day in the clinic, two branches', () => {
     flow.expectValue('closed', '.data.status', 'closed');
   });
 
-  it('4. the closed day refuses a late receipt; the summaries reach the admins once', async () => {
+  it('4. the closed day refuses a late receipt', async () => {
     flow.as('owner');
     await flow.expect(200, 'a late patient', 'POST', '/app/contacts', {
       first_name: 'Tia',
@@ -225,25 +205,5 @@ describe('Flow — a day in the clinic, two branches', () => {
       splits: [{ mode: 'cash', amount: 100 }],
     });
     flow.expectValue('the day is closed', '.error.reason', 'day_closed');
-
-    const sent: string[] = [];
-    nock(GRAPH)
-      .persist()
-      .post(/\/messages$/, (body: { to?: string; text?: { body?: string } }) => {
-        if (body.to === OWNER_PHONE.slice(1)) sent.push(String(body.text?.body));
-        return true;
-      })
-      .reply(200, () => ({ messages: [{ id: `wamid.day.${sent.length}.${S}` }] }));
-    const counts = await runContactMessageDeliveryJob(fixture.organization.publicId);
-    expect(counts.summaryCount, 'one summary per closed branch').toBe(2);
-    expect(sent, 'each a summary of its day').toHaveLength(2);
-    for (const text of sent) expect(text.split('\n')[0]).toMatch(/^Day closed · .+ · \d/);
-    expect(
-      sent.find((text) => text.includes('short')),
-      "Adajan's shows the shortfall",
-    ).toContain('₹50.00 short');
-    expect((await runContactMessageDeliveryJob(fixture.organization.publicId)).summaryCount).toBe(
-      0,
-    );
   });
 });

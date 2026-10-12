@@ -28,11 +28,6 @@ import { MEMBERSHIP_INVITATION_EXPIRY_QUEUE_NAME } from '@/domains/tenancy/sub-d
 import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
 import { DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close.constants.js';
 import { TASK_RULES_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/workers/task-rules.constants.js';
-import { PATIENT_IDEAS_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/patients/patient-ideas/workers/patient-ideas.constants.js';
-import {
-  CONTACT_MESSAGING_SWEEP_QUEUE_NAME,
-  MESSAGING_WEBHOOK_EVENT_RETENTION_QUEUE_NAME,
-} from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/workers/contact-messaging-webhook.constants.js';
 import { MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.constants.js';
 import { ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/organization-api-key/workers/organization-api-key-tombstone-retention.constants.js';
 import { UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/upload/workers/upload-tombstone-retention.constants.js';
@@ -106,12 +101,6 @@ const DEFAULT_APP_RECORD_PURGE_CRON = '56 5 * * *';
 const DEFAULT_DAY_CLOSE_AUTO_CLOSE_SWEEP_CRON = '7 * * * *';
 /** Every five minutes: rule tasks open and close, snoozed tasks wake, the app takes its steps (TK4). */
 const DEFAULT_TASK_RULES_SWEEP_CRON = '*/5 * * * *';
-/** Every five minutes, off the task rules' minute: patients' AI ideas due a refresh (WC-47, D80). */
-const DEFAULT_PATIENT_IDEAS_SWEEP_CRON = '2-59/5 * * * *';
-/** Launch D77: every minute — a lost enqueue of a message or a callback waits at most a minute. */
-const DEFAULT_CONTACT_MESSAGING_SWEEP_CRON = '* * * * *';
-/** Launch D77: the stored callbacks' daily purge (30 days), off the hour. */
-const DEFAULT_MESSAGING_WEBHOOK_EVENT_RETENTION_CRON = '23 3 * * *';
 const DEFAULT_MEMBER_ROLE_TOMBSTONE_RETENTION_CRON = '51 5 * * *';
 const DEFAULT_ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_CRON = '52 5 * * *';
 const DEFAULT_USER_TOMBSTONE_RETENTION_CRON = '53 5 * * *';
@@ -348,8 +337,7 @@ function getRecoverySweepScheduledJobs(timezone: string | undefined): ScheduledJ
 }
 
 /**
- * The app's cross-tenant sweeps: the day auto-close (WC-39), the task rules (TK4), and the
- * messaging sweep and callback purge (D77).
+ * The app's cross-tenant sweeps: the day auto-close (WC-39) and the task rules (TK4).
  */
 function getAppSweepScheduledJobs(timezone: string | undefined): ScheduledJob[] {
   return [
@@ -369,33 +357,6 @@ function getAppSweepScheduledJobs(timezone: string | undefined): ScheduledJob[] 
         schedulerId: 'task-rules-sweep',
         jobName: 'find-organizations-for-task-rules',
         cronPattern: DEFAULT_TASK_RULES_SWEEP_CRON,
-      },
-    }),
-    withSchedulerTimezone({
-      timezone,
-      job: {
-        queueName: PATIENT_IDEAS_SWEEP_QUEUE_NAME,
-        schedulerId: 'patient-ideas-sweep',
-        jobName: 'find-organizations-with-stale-ideas',
-        cronPattern: DEFAULT_PATIENT_IDEAS_SWEEP_CRON,
-      },
-    }),
-    withSchedulerTimezone({
-      timezone,
-      job: {
-        queueName: CONTACT_MESSAGING_SWEEP_QUEUE_NAME,
-        schedulerId: 'contact-messaging-sweep',
-        jobName: 'find-organizations-with-unsent-messages',
-        cronPattern: DEFAULT_CONTACT_MESSAGING_SWEEP_CRON,
-      },
-    }),
-    withSchedulerTimezone({
-      timezone,
-      job: {
-        queueName: MESSAGING_WEBHOOK_EVENT_RETENTION_QUEUE_NAME,
-        schedulerId: 'daily-messaging-webhook-event-retention',
-        jobName: 'purge-old-messaging-webhook-events',
-        cronPattern: DEFAULT_MESSAGING_WEBHOOK_EVENT_RETENTION_CRON,
       },
     }),
   ];

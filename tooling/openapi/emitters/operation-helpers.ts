@@ -40,7 +40,7 @@ export function getRequestBodySchema(
  * These carry no `app.authenticate` onRequest hook (route-catalog access `PUBLIC`): the public auth
  * forms (login/email-login/oauth/webauthn-authenticate/password/mfa-login; refresh is NOT here —
  * it authenticates via the session cookie and advertises `sessionCookie`) and
- * the signed webhooks (Stripe's `Stripe-Signature`, Meta's `X-Hub-Signature-256` — not a JWT). The `Health` and
+ * the Stripe-signed webhooks (verified via `Stripe-Signature`, not a JWT). The `Health` and
  * `Plan` tags are excluded separately above. Keyed by `"<METHOD> <openapi-path>"`. Kept in
  * sync with `docs/routes.txt` PUBLIC routes by `mcp-openapi`/route-security guard tests.
  */
@@ -59,9 +59,6 @@ const PUBLIC_ROUTE_KEYS = new Set<string>([
   'GET /api/v1/auth/oauth/{provider}/callback',
   'GET /api/v1/auth/oauth/providers',
   'POST /api/v1/billing/webhook',
-  // The platform Meta app's webhook (launch D77): Meta's verify token / `X-Hub-Signature-256`.
-  'GET /api/v1/app/messaging-webhook',
-  'POST /api/v1/app/messaging-webhook',
 ]);
 
 export function getRouteSecurity(tags: string[], routeKey: string): object[] | undefined {

@@ -409,14 +409,10 @@ CREATE TABLE "tenancy"."organization_settings" (
 	"reminder_hour" smallint DEFAULT 16 NOT NULL,
 	"retarget_after_days" integer DEFAULT 90 NOT NULL,
 	"deleted_record_purge_days" integer DEFAULT 7 NOT NULL,
-	"whatsapp_phone_number_id" varchar(32),
-	"instagram_account_id" varchar(32),
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
 	"updated_by_user_id" bigint,
-	CONSTRAINT "chk_organization_settings_whatsapp_phone_number_id" CHECK ("tenancy"."organization_settings"."whatsapp_phone_number_id" ~ '^[0-9]{5,32}$'),
-	CONSTRAINT "chk_organization_settings_instagram_account_id" CHECK ("tenancy"."organization_settings"."instagram_account_id" ~ '^[0-9]{5,32}$'),
 	CONSTRAINT "chk_org_settings_updated" CHECK ("tenancy"."organization_settings"."updated_at" >= "tenancy"."organization_settings"."created_at"),
 	CONSTRAINT "chk_organization_settings_default_locale" CHECK ("tenancy"."organization_settings"."default_locale" IN ('en', 'es')),
 	CONSTRAINT "chk_organization_settings_default_day_float" CHECK ("tenancy"."organization_settings"."default_day_float" >= 0),
@@ -427,9 +423,6 @@ CREATE TABLE "tenancy"."organization_settings" (
 );
 --> statement-breakpoint
 ALTER TABLE "tenancy"."organization_settings" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
--- One organization per messaging account on the platform Meta app (launch D77).
-CREATE UNIQUE INDEX "idx_organization_settings_whatsapp_phone_number_id" ON "tenancy"."organization_settings" USING btree ("whatsapp_phone_number_id") WHERE "tenancy"."organization_settings"."whatsapp_phone_number_id" IS NOT NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX "idx_organization_settings_instagram_account_id" ON "tenancy"."organization_settings" USING btree ("instagram_account_id") WHERE "tenancy"."organization_settings"."instagram_account_id" IS NOT NULL;--> statement-breakpoint
 CREATE TABLE "tenancy"."organizations" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"public_id" varchar(28) NOT NULL,
@@ -855,30 +848,6 @@ AS $$
   FROM billing.subscriptions AS s
   INNER JOIN tenancy.organizations AS o ON o.id = s.organization_id
   WHERE s.provider_subscription_id = provider_subscription_id_param
-  LIMIT 1;
-$$;
---> statement-breakpoint
--- The organization a messaging callback belongs to (launch D77): the clinic whose settings hold the
--- WhatsApp phone-number id or Instagram account id the callback names. SECURITY DEFINER — the
--- webhook runs before any organization is known, and organization_settings is FORCE RLS.
-CREATE OR REPLACE FUNCTION tenancy.resolve_organization_public_id_for_messaging_account (
-  channel_param TEXT,
-  account_id_param TEXT
-) RETURNS TEXT
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = tenancy, public
-AS $$
-  SELECT organization_row.public_id
-  FROM tenancy.organization_settings AS settings_row
-  INNER JOIN tenancy.organizations AS organization_row
-    ON organization_row.id = settings_row.organization_id
-  WHERE organization_row.deleted_at IS NULL
-    AND (
-      (channel_param = 'whatsapp' AND settings_row.whatsapp_phone_number_id = account_id_param)
-      OR (channel_param = 'instagram' AND settings_row.instagram_account_id = account_id_param)
-    )
   LIMIT 1;
 $$;
 --> statement-breakpoint
@@ -1510,7 +1479,6 @@ CREATE TABLE IF NOT EXISTS "app"."contacts" (
 	"default_channel" varchar(9) DEFAULT 'whatsapp' NOT NULL,
 	"preference_tags" text[] DEFAULT '{}' NOT NULL,
 	"has_marketing_consent" boolean DEFAULT false NOT NULL,
-	"notices_stopped_at" timestamp with time zone,
 	"referral_source" varchar(9),
 	"referred_by_contact_id" bigint,
 	"referred_by_name" varchar(120),
@@ -1696,7 +1664,6 @@ CREATE TABLE IF NOT EXISTS "app"."patients" (
 	"has_photo_consent" boolean DEFAULT false NOT NULL,
 	"allergies" text[] DEFAULT '{}' NOT NULL,
 	"contraindications" text[] DEFAULT '{}' NOT NULL,
-	"ideas_stale_since" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
@@ -2262,7 +2229,6 @@ CREATE TABLE IF NOT EXISTS "app"."day_closes" (
 	"close_kind" varchar(6),
 	"closed_at" timestamp with time zone,
 	"closed_by_membership_id" bigint,
-	"summary_sent_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by_user_id" bigint,
@@ -2274,7 +2240,6 @@ CREATE TABLE IF NOT EXISTS "app"."day_closes" (
 	CONSTRAINT "chk_day_closes_close_kind" CHECK ("app"."day_closes"."close_kind" IN ('manual', 'auto')),
 	CONSTRAINT "chk_day_closes_closed" CHECK (("app"."day_closes"."status" = 'closed') = ("app"."day_closes"."closed_at" IS NOT NULL AND "app"."day_closes"."expected_cash" IS NOT NULL AND "app"."day_closes"."counted_cash" IS NOT NULL AND "app"."day_closes"."close_kind" IS NOT NULL)),
 	CONSTRAINT "chk_day_closes_difference_reason" CHECK ("app"."day_closes"."counted_cash" IS NULL OR "app"."day_closes"."counted_cash" = "app"."day_closes"."expected_cash" OR "app"."day_closes"."difference_reason" IS NOT NULL),
-	CONSTRAINT "chk_day_closes_summary_sent" CHECK ("app"."day_closes"."summary_sent_at" IS NULL OR "app"."day_closes"."status" = 'closed'),
 	CONSTRAINT "chk_day_closes_updated" CHECK ("app"."day_closes"."updated_at" >= "app"."day_closes"."created_at")
 );--> statement-breakpoint
 ALTER TABLE "app"."day_closes" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -3119,12 +3084,8 @@ CREATE TABLE IF NOT EXISTS "app"."contact_activities" (
 	"attachment_keys" text[] DEFAULT '{}' NOT NULL,
 	"reply_to_contact_activity_id" bigint,
 	"delivery_status" varchar(9),
-	"provider_message_id" varchar(128),
 	"failure_reason" varchar(280),
-	"delivery_claimed_at" timestamp with time zone,
-	"provider_sender_id" varchar(64),
 	"automation_kind" varchar(16),
-	"template_parameters" text[] DEFAULT '{}' NOT NULL,
 	"occurred_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"delivered_at" timestamp with time zone,
 	"read_at" timestamp with time zone,
@@ -3157,10 +3118,7 @@ CREATE TABLE IF NOT EXISTS "app"."contact_activities" (
 	CONSTRAINT "chk_contact_activities_failure_when_failed" CHECK ("app"."contact_activities"."delivery_status" IS DISTINCT FROM 'failed' OR "app"."contact_activities"."failure_reason" IS NOT NULL),
 	CONSTRAINT "chk_contact_activities_author" CHECK ("app"."contact_activities"."author_membership_id" IS NULL OR ("app"."contact_activities"."type" <> 'system' AND "app"."contact_activities"."direction" IS DISTINCT FROM 'received')),
 	CONSTRAINT "chk_contact_activities_one_link" CHECK (num_nonnulls("app"."contact_activities"."appointment_id", "app"."contact_activities"."invoice_id", "app"."contact_activities"."payment_id", "app"."contact_activities"."patient_prescription_id", "app"."contact_activities"."patient_offering_id", "app"."contact_activities"."patient_review_id", "app"."contact_activities"."patient_check_in_id", "app"."contact_activities"."task_id", "app"."contact_activities"."patient_treatment_id", "app"."contact_activities"."patient_clinical_note_id", "app"."contact_activities"."patient_image_id", "app"."contact_activities"."patient_report_id") <= 1),
-	CONSTRAINT "chk_contact_activities_delivery_claim" CHECK ("app"."contact_activities"."delivery_claimed_at" IS NULL OR "app"."contact_activities"."delivery_status" = 'queued'),
-	CONSTRAINT "chk_contact_activities_provider_sender" CHECK ("app"."contact_activities"."provider_sender_id" IS NULL OR "app"."contact_activities"."direction" = 'received'),
 	CONSTRAINT "chk_contact_activities_automation_kind" CHECK ("app"."contact_activities"."automation_kind" IS NULL OR ("app"."contact_activities"."automation_kind" IN ('booking_confirm', 'booking_reminder', 'payment_receipt', 'payment_reminder', 'feedback_request') AND "app"."contact_activities"."type" = 'whatsapp' AND "app"."contact_activities"."direction" = 'sent' AND "app"."contact_activities"."author_membership_id" IS NULL)),
-	CONSTRAINT "chk_contact_activities_template_parameters" CHECK (cardinality("app"."contact_activities"."template_parameters") <= 12 AND (cardinality("app"."contact_activities"."template_parameters") = 0 OR "app"."contact_activities"."automation_kind" IS NOT NULL)),
 	CONSTRAINT "chk_contact_activities_updated" CHECK ("app"."contact_activities"."updated_at" >= "app"."contact_activities"."created_at")
 );
 --> statement-breakpoint
@@ -3187,8 +3145,6 @@ ALTER TABLE "app"."contact_activities" ADD CONSTRAINT "contact_activities_patien
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_contact_activities_public_id" ON "app"."contact_activities" USING btree ("public_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_activities_contact_id_occurred_at" ON "app"."contact_activities" USING btree ("contact_id","occurred_at","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_activities_contact_id_created_at" ON "app"."contact_activities" USING btree ("contact_id","created_at","id");--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_contact_activities_organization_provider_message_id" ON "app"."contact_activities" USING btree ("organization_id","provider_message_id") WHERE "app"."contact_activities"."provider_message_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_contact_activities_organization_provider_sender_id" ON "app"."contact_activities" USING btree ("organization_id","provider_sender_id") WHERE "app"."contact_activities"."provider_sender_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_activities_organization_delivery_queue" ON "app"."contact_activities" USING btree ("organization_id","occurred_at") WHERE "app"."contact_activities"."delivery_status" IN ('queued', 'failed');--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_activities_contact_message_template_id" ON "app"."contact_activities" USING btree ("contact_message_template_id") WHERE "app"."contact_activities"."contact_message_template_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_contact_activities_reply_to_contact_activity_id" ON "app"."contact_activities" USING btree ("reply_to_contact_activity_id") WHERE "app"."contact_activities"."reply_to_contact_activity_id" IS NOT NULL;--> statement-breakpoint
@@ -3211,50 +3167,11 @@ CREATE INDEX IF NOT EXISTS "idx_contact_activities_organization_id" ON "app"."co
 CREATE POLICY "contact_activities_tenant_isolation" ON "app"."contact_activities" AS PERMISSIVE FOR ALL TO public USING ("app"."contact_activities"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."contact_activities"."organization_id" = (
+          )) WITH CHECK ("app"."contact_activities"."organization_id" = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
 ALTER TABLE "app"."contact_activities" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.messaging_webhook_events — one update from a Meta callback (a WhatsApp change, an Instagram messaging event), stored for its organization before the 200 and applied by the messaging worker (launch D77).
-CREATE TABLE IF NOT EXISTS "app"."messaging_webhook_events" (
-	"id" bigserial PRIMARY KEY NOT NULL,
-	"organization_id" bigint NOT NULL,
-	"channel" varchar(9) NOT NULL,
-	"payload" jsonb NOT NULL,
-	"payload_hash" varchar(64) NOT NULL,
-	"status" varchar(9) DEFAULT 'pending' NOT NULL,
-	"claimed_at" timestamp with time zone,
-	"attempt_count" integer DEFAULT 0 NOT NULL,
-	"failure_reason" varchar(280),
-	"received_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"processed_at" timestamp with time zone,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "chk_messaging_webhook_events_channel" CHECK ("app"."messaging_webhook_events"."channel" IN ('whatsapp', 'instagram')),
-	CONSTRAINT "chk_messaging_webhook_events_status" CHECK ("app"."messaging_webhook_events"."status" IN ('pending', 'processed', 'failed')),
-	CONSTRAINT "chk_messaging_webhook_events_payload_hash" CHECK ("app"."messaging_webhook_events"."payload_hash" ~ '^[0-9a-f]{64}$'),
-	CONSTRAINT "chk_messaging_webhook_events_attempt_count" CHECK ("app"."messaging_webhook_events"."attempt_count" >= 0),
-	CONSTRAINT "chk_messaging_webhook_events_claim" CHECK ("app"."messaging_webhook_events"."claimed_at" IS NULL OR "app"."messaging_webhook_events"."status" = 'pending'),
-	CONSTRAINT "chk_messaging_webhook_events_failure" CHECK ("app"."messaging_webhook_events"."status" <> 'failed' OR "app"."messaging_webhook_events"."failure_reason" IS NOT NULL),
-	CONSTRAINT "chk_messaging_webhook_events_updated" CHECK ("app"."messaging_webhook_events"."updated_at" >= "app"."messaging_webhook_events"."created_at")
-);
---> statement-breakpoint
-ALTER TABLE "app"."messaging_webhook_events" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-ALTER TABLE "app"."messaging_webhook_events" ADD CONSTRAINT "messaging_webhook_events_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_messaging_webhook_events_organization_payload_hash" ON "app"."messaging_webhook_events" USING btree ("organization_id","payload_hash");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_messaging_webhook_events_organization_pending" ON "app"."messaging_webhook_events" USING btree ("organization_id","received_at","id") WHERE "app"."messaging_webhook_events"."status" = 'pending';--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_messaging_webhook_events_received_at" ON "app"."messaging_webhook_events" USING btree ("received_at");--> statement-breakpoint
-CREATE POLICY "messaging_webhook_events_tenant_isolation" ON "app"."messaging_webhook_events" AS PERMISSIVE FOR ALL TO public USING ("app"."messaging_webhook_events"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR ((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance')) WITH CHECK ("app"."messaging_webhook_events"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."messaging_webhook_events" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."leads" ADD CONSTRAINT "leads_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -3361,7 +3278,6 @@ CREATE INDEX IF NOT EXISTS "idx_patients_doctor_membership_id" ON "app"."patient
 CREATE INDEX IF NOT EXISTS "idx_patients_lead_id" ON "app"."patients" USING btree ("lead_id") WHERE "app"."patients"."lead_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patients_contact_id" ON "app"."patients" USING btree ("contact_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patients_deleted_at" ON "app"."patients" USING btree ("deleted_at") WHERE "app"."patients"."deleted_at" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patients_ideas_stale" ON "app"."patients" USING btree ("organization_id","ideas_stale_since") WHERE "app"."patients"."ideas_stale_since" IS NOT NULL AND "app"."patients"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patients_created_by_user_id" ON "app"."patients" USING btree ("created_by_user_id") WHERE "app"."patients"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_patients_updated_by_user_id" ON "app"."patients" USING btree ("updated_by_user_id") WHERE "app"."patients"."updated_by_user_id" IS NOT NULL;--> statement-breakpoint
 CREATE POLICY "patients_tenant_isolation" ON "app"."patients" AS PERMISSIVE FOR ALL TO public USING ("app"."patients"."organization_id" = (
@@ -3371,7 +3287,6 @@ CREATE POLICY "patients_tenant_isolation" ON "app"."patients" AS PERMISSIVE FOR 
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
-CREATE POLICY "patients_ideas_sweep_read" ON "app"."patients" AS PERMISSIVE FOR SELECT TO public USING (((SELECT current_setting('app.global_retention_cleanup', true)) = 'true' AND (SELECT current_user) = 'clinozy_be_maintenance'));--> statement-breakpoint
 ALTER TABLE "app"."patients" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TRIGGER trg_patients_patient_number BEFORE INSERT ON "app"."patients" FOR EACH ROW EXECUTE FUNCTION app.fn_assign_record_number('patient_number');--> statement-breakpoint
 -- app.patient_diagnoses (folded from the Drizzle schema): keys, indexes, RLS.
@@ -3810,7 +3725,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS "idx_day_closes_organization_branch_date" ON "
 CREATE INDEX IF NOT EXISTS "idx_day_closes_organization_close_date" ON "app"."day_closes" USING btree ("organization_id","close_date","id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_branch_close_date" ON "app"."day_closes" USING btree ("branch_id","close_date");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_organization_open" ON "app"."day_closes" USING btree ("organization_id","close_date") WHERE "app"."day_closes"."status" = 'open';--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_day_closes_summary_pending" ON "app"."day_closes" USING btree ("closed_at") WHERE "app"."day_closes"."status" = 'closed' AND "app"."day_closes"."summary_sent_at" IS NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_opening_accepted_by" ON "app"."day_closes" USING btree ("organization_id","opening_accepted_by_membership_id") WHERE "app"."day_closes"."opening_accepted_by_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_closed_by" ON "app"."day_closes" USING btree ("organization_id","closed_by_membership_id") WHERE "app"."day_closes"."closed_by_membership_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_day_closes_created_by_user_id" ON "app"."day_closes" USING btree ("created_by_user_id") WHERE "app"."day_closes"."created_by_user_id" IS NOT NULL;--> statement-breakpoint
@@ -3857,68 +3771,6 @@ CREATE POLICY "patient_offerings_tenant_isolation" ON "app"."patient_offerings" 
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           ));--> statement-breakpoint
 ALTER TABLE "app"."patient_offerings" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
--- app.patient_ideas — a patient's AI offering ideas: a derived cache, replaced as a whole by each refresh, no soft delete, no routes of its own (launch ROUTE #152, routes-final 7.N, D80).
-CREATE TABLE IF NOT EXISTS "app"."patient_ideas" (
-	"id" bigserial PRIMARY KEY NOT NULL,
-	"organization_id" bigint NOT NULL,
-	"patient_id" bigint NOT NULL,
-	"offering_id" bigint NOT NULL,
-	"position" smallint NOT NULL,
-	"reason" varchar(200) NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "chk_patient_ideas_position" CHECK ("app"."patient_ideas"."position" BETWEEN 1 AND 4),
-	CONSTRAINT "chk_patient_ideas_reason" CHECK (char_length("app"."patient_ideas"."reason") > 0)
-);
---> statement-breakpoint
-ALTER TABLE "app"."patient_ideas" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-ALTER TABLE "app"."patient_ideas" ADD CONSTRAINT "patient_ideas_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_ideas" ADD CONSTRAINT "patient_ideas_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "app"."patients"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "app"."patient_ideas" ADD CONSTRAINT "patient_ideas_offering_id_offerings_id_fk" FOREIGN KEY ("offering_id") REFERENCES "app"."offerings"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "idx_patient_ideas_patient_offering" ON "app"."patient_ideas" USING btree ("patient_id","offering_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_ideas_organization_id" ON "app"."patient_ideas" USING btree ("organization_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_patient_ideas_offering_id" ON "app"."patient_ideas" USING btree ("offering_id");--> statement-breakpoint
-CREATE POLICY "patient_ideas_tenant_isolation" ON "app"."patient_ideas" AS PERMISSIVE FOR ALL TO public USING ("app"."patient_ideas"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )) WITH CHECK ("app"."patient_ideas"."organization_id" = (
-            SELECT id FROM tenancy.organizations
-            WHERE public_id = current_setting('app.current_organization_public_id', true)
-          ));--> statement-breakpoint
-ALTER TABLE "app"."patient_ideas" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
--- A patient's ideas are due a refresh (D80, WC-47): a write to one of their clinical notes, treatments, patient offerings or plan rows marks them (soft deletes included — they are updates). The mark moves forward on every write, so the refresh clears it only when nothing marked it again meanwhile. Under a context without the organization the row is not visible and nothing is marked.
-CREATE OR REPLACE FUNCTION app.fn_mark_patient_ideas_stale() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  UPDATE app.patients SET ideas_stale_since = clock_timestamp() WHERE id = NEW.patient_id;
-  RETURN NULL;
-END;
-$$;
---> statement-breakpoint
--- A completed visit marks the contact's live patient file (appointments name the contact, not the file).
-CREATE OR REPLACE FUNCTION app.fn_mark_patient_ideas_stale_by_contact() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  UPDATE app.patients SET ideas_stale_since = clock_timestamp()
-  WHERE contact_id = NEW.contact_id AND organization_id = NEW.organization_id AND deleted_at IS NULL;
-  RETURN NULL;
-END;
-$$;
---> statement-breakpoint
--- A change of Data consent marks the file itself: given, the ideas are made; withdrawn, they are deleted.
-CREATE OR REPLACE FUNCTION app.fn_mark_patient_ideas_stale_on_consent() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  NEW.ideas_stale_since := clock_timestamp();
-  RETURN NEW;
-END;
-$$;
---> statement-breakpoint
-CREATE TRIGGER trg_patient_clinical_notes_ideas_stale AFTER INSERT OR UPDATE ON "app"."patient_clinical_notes" FOR EACH ROW EXECUTE FUNCTION app.fn_mark_patient_ideas_stale();--> statement-breakpoint
-CREATE TRIGGER trg_patient_treatments_ideas_stale AFTER INSERT OR UPDATE ON "app"."patient_treatments" FOR EACH ROW EXECUTE FUNCTION app.fn_mark_patient_ideas_stale();--> statement-breakpoint
-CREATE TRIGGER trg_patient_offerings_ideas_stale AFTER INSERT OR UPDATE ON "app"."patient_offerings" FOR EACH ROW EXECUTE FUNCTION app.fn_mark_patient_ideas_stale();--> statement-breakpoint
-CREATE TRIGGER trg_patient_offering_suggestions_ideas_stale AFTER INSERT OR UPDATE ON "app"."patient_offering_suggestions" FOR EACH ROW EXECUTE FUNCTION app.fn_mark_patient_ideas_stale();--> statement-breakpoint
-CREATE TRIGGER trg_appointments_ideas_stale AFTER UPDATE OF "status" ON "app"."appointments" FOR EACH ROW WHEN (NEW.status = 'completed' AND OLD.status IS DISTINCT FROM 'completed') EXECUTE FUNCTION app.fn_mark_patient_ideas_stale_by_contact();--> statement-breakpoint
-CREATE TRIGGER trg_patients_ideas_stale_on_consent BEFORE UPDATE OF "has_data_consent" ON "app"."patients" FOR EACH ROW WHEN (OLD.has_data_consent IS DISTINCT FROM NEW.has_data_consent) EXECUTE FUNCTION app.fn_mark_patient_ideas_stale_on_consent();--> statement-breakpoint
 -- app.stock_vendors (folded from the Drizzle schema): keys, indexes, RLS.
 ALTER TABLE "app"."stock_vendors" ADD CONSTRAINT "stock_vendors_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "tenancy"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app"."stock_vendors" ADD CONSTRAINT "stock_vendors_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -4651,8 +4503,6 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA upload GRANT SELECT, INSERT, UPDATE, DELETE O
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clinozy_be_app;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION billing.resolve_organization_public_id_for_stripe_subscription (TEXT) TO clinozy_be_app;
---> statement-breakpoint
-GRANT EXECUTE ON FUNCTION tenancy.resolve_organization_public_id_for_messaging_account (TEXT, TEXT) TO clinozy_be_app;
 --> statement-breakpoint
 ALTER TABLE tenancy.organizations FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint

@@ -2710,6 +2710,8 @@ None beyond 4.10.
 | M8 | Delivery is not built: the messaging worker (launch D32) does not exist, so whatsapp / instagram messages stay `queued` and resend only re-queues a `failed` one. It joins the not-built list as its own row, next to #68–#72. `provider_message_id` is unique per organization, so a repeated delivery callback cannot double-apply. |
 | M12 | **One route per action** (your call), instead of one create taking any `type`: `…/activities/send-message` (WhatsApp or Instagram), `…/activities/log-call` (a call that happened, `direction` required), `…/activities/add-note` (internal). Each has its own body and errors, so a note cannot carry a template and a message cannot be logged as received. The bulk send is `POST /contact-activities/message-batches` (was `batches`). `system` entries have no route — the server writes them. |
 
+**Rev (D87, 2026-10-12, the user):** M8 stands — delivery is a separate messaging service, not Clinozy's. The platform Meta app built at ROUTE #139 (D77) is removed again with its webhook and `messaging-status`; `provider_message_id` leaves the table; `delivery_status`, `failure_reason`, `delivered_at`, `read_at` and `failed_at` stay for that service to write back.
+
 #### 4.C.2 Open questions
 
 None.
@@ -4928,6 +4930,8 @@ its feature is built" ends, and PK10's "the design's ideas are not in this API" 
 | PI4 | **Staleness:** `app.patients.ideas_stale_since`, set by triggers on a clinical note, treatment, patient offering or plan row written for the patient, an appointment of theirs completed, or their Data consent changed; cleared by the refresh only when unchanged since it read (compare-and-clear). |
 | PI5 | **Refresh (WC-47):** `patient-ideas-sweep` (every 5 minutes) → one `patient-ideas` job per organization with stale consenting patients; the job refreshes up to 20, oldest first: a short read, Claude outside the context, a short write. No consent: the stored ideas are deleted. |
 | PI6 | **What Claude sees:** complaint and diagnosis labels — a complaint or an unlinked diagnosis reduced to a fixed vocabulary of concerns (`pigmentation`, `acne`, `hair fall`, …), a linked diagnosis by its catalogue name —, treatment names with their months, packages with sessions left, the completed visit count, the plan's offering names and the active offerings — never a name, phone, photo, free-text note or id of the patient. |
+
+**Rev 2 (D87, 2026-10-12, the user):** the AI ideas leave Clinozy for a separate service. PI2–PI6 are withdrawn — no `app.patient_ideas`, no stale mark or triggers, no refresh; route 74 answers PI1's rules on every read, with no `meta.source` / `meta.ai_refreshed_at`, and an idea's `source` loses `ai`.
 
 ## 8. Billing — final (rev 2, confirmed 2026-10-08) — nested sub-domains 8.A–8.E
 

@@ -5,14 +5,12 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**27 / 254** variables migrated to an explicit `{ allowed, description }` entry.
+**16 / 243** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
+| `AI_SERVICE_URL` | URL | — *(optional)* | ✓ | Reserved: the base URL of the AI service that will suggest a patient's offering ideas. Nothing reads it yet; the ideas come from the rules. |
 | `ALLOWED_ORIGINS` | — | — *(required)* |  | — |
-| `ANTHROPIC_API_BASE_URL` | URL | `https://api.anthropic.com` | ✓ | The Anthropic API base URL. |
-| `ANTHROPIC_API_KEY` | string (secret) | — *(optional)* | ✓ | The Anthropic API key the ideas worker calls the Messages API with. |
-| `ANTHROPIC_HTTP_TIMEOUT_MS` | integer 1000–120000 (ms) | `60000` | ✓ | Messages API request timeout — each patient's ideas call. |
 | `API_DOCS_BASE_URL` | — | — *(optional)* |  | — |
 | `API_REFERENCE_ALLOW_PRODUCTION` | — | `false` |  | — |
 | `APP_RECORD_PURGE_CRON` | — | — *(optional)* |  | — |
@@ -120,12 +118,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `MEMBER_ROLE_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
 | `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` | — | `false` |  | — |
 | `MEMBERSHIP_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
-| `MESSAGING_DELIVERY_ENABLED` | true \| false | `false` | ✓ | Sends the queued WhatsApp and Instagram messages through the Meta Graph API. Off, messages stay queued and nothing is enqueued or swept. On needs META_GRAPH_ACCESS_TOKEN, META_APP_SECRET and META_WEBHOOK_VERIFY_TOKEN. |
-| `META_APP_SECRET` | string (secret) | — *(optional)* | ✓ | The Meta app's secret — verifies every webhook callback's X-Hub-Signature-256. Unset, the messaging webhook answers 503. |
-| `META_GRAPH_ACCESS_TOKEN` | string (secret) | — *(optional)* | ✓ | The platform Meta app's system-user token (whatsapp_business_messaging, instagram_manage_messages) — every send and Instagram name lookup. |
-| `META_GRAPH_API_BASE_URL` | URL, the Graph API version included | `https://graph.facebook.com/v21.0` | ✓ | The Meta Graph API base URL. |
-| `META_HTTP_TIMEOUT_MS` | integer 1000–60000 (ms) | `10000` | ✓ | Graph API request timeout — each send or lookup the messaging workers make. |
-| `META_WEBHOOK_VERIFY_TOKEN` | string (secret) | — *(optional)* | ✓ | The token typed into the Meta app's webhook settings; Meta echoes it as hub.verify_token when subscribing. |
+| `MESSAGING_SERVICE_URL` | URL | — *(optional)* | ✓ | Reserved: the base URL of the messaging service that will deliver the outbox (the queued WhatsApp and Instagram messages). Nothing reads it yet. |
 | `METRICS_AUTH_REQUIRED` | — | `true` |  | — |
 | `METRICS_ENABLED` | — | `true` |  | — |
 | `METRICS_SCRAPE_TOKEN` | — | — *(optional)* |  | — |
@@ -149,9 +142,6 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS` | integer 0–60000 (ms; 0 disables) | `2000` | ✓ | Overload-guard shed threshold: how long the oldest unit of work may wait for a pooled connection before new requests get a 503. |
 | `OVERLOAD_DB_POOL_SHED_RATIO` | number 0–10 | `10` | ✓ | Multiple of DATABASE_POOL_MAX in-flight units of work (running plus waiting for a connection) at which the overload guard sheds requests; above 1 lets a bounded queue form. |
 | `OVERLOAD_MAX_EVENT_LOOP_DELAY_MS` | integer 1–60000 | `250` | ✓ | Overload-guard shed threshold: p99 event-loop delay (ms) above which requests get a 503. |
-| `PATIENT_IDEAS_AI_ENABLED` | true \| false | `false` | ✓ | Refreshes each consenting patient's offering ideas with Claude from a de-identified summary. Off, nothing is swept or sent and the patient file shows the rule-based ideas. On needs ANTHROPIC_API_KEY. |
-| `PATIENT_IDEAS_AI_MODEL` | Claude model id (1–100 characters) | `claude-opus-5-5` | ✓ | The Claude model that suggests the offerings. |
-| `PATIENT_IDEAS_DAILY_CALL_LIMIT` | integer 1–100000 | `500` | ✓ | Claude calls the ideas worker makes per organization per day (UTC) — a cost guard. Past it the patients stay marked and are refreshed the next day. |
 | `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` | — | `true` |  | — |
 | `PERSONAL_ORGANIZATION_ENABLED` | — | `true` |  | — |
 | `PORT` | integer 1–65535 | `3000` | ✓ | HTTP port the API server binds to. |
@@ -254,7 +244,6 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `WEBHOOK_SECRET_ROTATION_OVERLAP_HOURS` | — | `24` |  | — |
 | `WEBHOOK_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
 | `WEBHOOK_URL_ALLOWLIST` | — | — *(optional)* |  | — |
-| `WHATSAPP_TEMPLATES_ENABLED` | true \| false | `false` | ✓ | Sends the clinic's automated WhatsApp notices outside the person's 24-hour window as the approved Meta templates (launch D32), and the day-close summaries to the admins always. Off, every notice goes as free text, which Meta refuses outside the window; turn it on once the templates are approved. |
 | `WORKER_CONCURRENCY` | — | `4` |  | — |
 | `WORKER_CONCURRENCY_MAIL` | — | — *(optional)* |  | — |
 | `WORKER_CONCURRENCY_NOTIFY` | — | — *(optional)* |  | — |

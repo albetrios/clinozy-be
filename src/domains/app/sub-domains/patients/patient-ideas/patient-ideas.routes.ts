@@ -25,7 +25,7 @@ export function patientIdeasRoutes(service: PatientIdeasService): FastifyPluginA
         schema: {
           summary: "A patient's ideas from history",
           description:
-            "Returns at most 4 offering ideas for the patient's plan, each with `offering_id`, `offering_name`, `category`, `sessions`, `price`, `reason` and `source`. With Data consent and the AI ideas switched on, the ideas Claude suggested from a de-identified summary (`source` `ai`; `meta.source` `ai`, `meta.ai_refreshed_at`), refreshed in the background after a visit, treatment, package or plan change; otherwise the rules (`meta.source` `rules`): the doctor's treatment suggestions (`note`), complaints and diagnoses (`history`), two or more visits → a package (`consistency`), a package almost used up → renew (`renew`), no visit → a consultation (`first`). Never an inactive offering or one already in the plan (any status but declined). A removed or unknown patient is a 404. Requires patient:read.",
+            "Returns at most 4 offering ideas for the patient's plan, each with `offering_id`, `offering_name`, `category`, `sessions`, `price`, `reason` and `source`. From the patient's history, by rule: the doctor's treatment suggestions (`note`), complaints and diagnoses (`history`), two or more visits → a package (`consistency`), a package almost used up → renew (`renew`), no visit → a consultation (`first`). Never an inactive offering or one already in the plan (any status but declined). A removed or unknown patient is a 404. Requires patient:read.",
           tags: ['Patient file'],
           params: patientIdeasParamsDto,
         },

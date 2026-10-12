@@ -5,8 +5,6 @@ import {
   THIRTY_SECONDS_MS,
 } from '@/shared/constants/ttl.constants.js';
 import {
-  anthropicCircuit,
-  metaCircuit,
   resendCircuit,
   s3Circuit,
   stripeCircuit,
@@ -25,8 +23,6 @@ export type OutboundIntegrationName =
   | 'stripe'
   | 's3'
   | 'resend'
-  | 'meta'
-  | 'anthropic'
   | 'webhook'
   | 'webhook-test'
   | 'oauth-google'
@@ -69,14 +65,6 @@ const OUTBOUND_DEFAULT_FACTORIES: Record<OutboundIntegrationName, OutboundDefaul
   resend: () => ({
     timeoutMs: env.RESEND_HTTP_TIMEOUT_MS,
     circuit: resendCircuit,
-  }),
-  meta: () => ({
-    timeoutMs: env.META_HTTP_TIMEOUT_MS,
-    circuit: metaCircuit,
-  }),
-  anthropic: () => ({
-    timeoutMs: env.ANTHROPIC_HTTP_TIMEOUT_MS,
-    circuit: anthropicCircuit,
   }),
   webhook: () => ({
     timeoutMs: WEBHOOK_DELIVERY_TIMEOUT_MS,

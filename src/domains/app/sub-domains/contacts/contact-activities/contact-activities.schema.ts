@@ -13,7 +13,7 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { appSchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -33,7 +33,6 @@ import { patient_images } from '@/domains/app/sub-domains/patients/patient-image
 import { patient_reports } from '@/domains/app/sub-domains/patients/patient-reports/patient-reports.schema.js';
 import {
   CONTACT_ACTIVITY_ATTACHMENTS_MAX,
-  CONTACT_ACTIVITY_TEMPLATE_PARAMETERS_MAX,
   CONTACT_ACTIVITY_AUTOMATION_KIND_VALUES,
   CONTACT_ACTIVITY_DELIVERY_STATUS_VALUES,
   CONTACT_ACTIVITY_DIRECTION_VALUES,
@@ -69,17 +68,9 @@ const contactActivityColumns = {
   // The entry this one answers — in the same stream (M6)
   reply_to_contact_activity_id: bigint('reply_to_contact_activity_id', { mode: 'number' }),
   delivery_status: varchar('delivery_status', { length: 9 }),
-  // The provider's id (WhatsApp wamid) — matches delivery reports, once per organization (M8)
-  provider_message_id: varchar('provider_message_id', { length: 128 }),
   failure_reason: varchar('failure_reason', { length: 280 }),
-  // The delivery worker's claim on a queued message — stale after 5 minutes (launch D77)
-  delivery_claimed_at: timestamp('delivery_claimed_at', { withTimezone: true }),
-  // A received Instagram message's sender (Instagram-scoped id) — the address a reply goes to
-  provider_sender_id: varchar('provider_sender_id', { length: 64 }),
   // What a message the app queued is for — the booking's, a receipt, TK10's (launch D78)
   automation_kind: varchar('automation_kind', { length: 16 }),
-  // Its WhatsApp template's parameters, in order — sent as the template outside the 24-hour window (D32)
-  template_parameters: text('template_parameters').array().notNull().default([]),
   occurred_at: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
   delivered_at: timestamp('delivered_at', { withTimezone: true }),
   read_at: timestamp('read_at', { withTimezone: true }),
@@ -163,7 +154,7 @@ type ContactActivityTable = BuildExtraConfigColumns<
   'pg'
 >;
 
-/** The CHECKs of M2 (direction, delivery status), M5 (one link), the claim and the sender (D77). */
+/** The CHECKs of M2 (direction, delivery status), M5 (one link) and the app's notices (D78). */
 function contactActivityChecks(table: ContactActivityTable) {
   return [
     check(
@@ -207,20 +198,8 @@ function contactActivityChecks(table: ContactActivityTable) {
       )}) <= 1`,
     ),
     check(
-      'chk_contact_activities_delivery_claim',
-      sql`${table.delivery_claimed_at} IS NULL OR ${table.delivery_status} = 'queued'`,
-    ),
-    check(
-      'chk_contact_activities_provider_sender',
-      sql`${table.provider_sender_id} IS NULL OR ${table.direction} = 'received'`,
-    ),
-    check(
       'chk_contact_activities_automation_kind',
       sql`${table.automation_kind} IS NULL OR (${table.automation_kind} IN (${joinValues(CONTACT_ACTIVITY_AUTOMATION_KIND_VALUES)}) AND ${table.type} = 'whatsapp' AND ${table.direction} = 'sent' AND ${table.author_membership_id} IS NULL)`,
-    ),
-    check(
-      'chk_contact_activities_template_parameters',
-      sql`cardinality(${table.template_parameters}) <= ${sql.raw(String(CONTACT_ACTIVITY_TEMPLATE_PARAMETERS_MAX))} AND (cardinality(${table.template_parameters}) = 0 OR ${table.automation_kind} IS NOT NULL)`,
     ),
     check('chk_contact_activities_updated', sql`${table.updated_at} >= ${table.created_at}`),
   ];
@@ -237,11 +216,8 @@ function contactActivityChecks(table: ContactActivityTable) {
  *   status exactly on a sent message; no author on a system or received entry) and M5 (at most one
  *   of the twelve record links — each pointing at today's table, D63). The author is a composite
  *   key into the organization's memberships, kept when they leave (K2, K8). RLS is the
- *   organization policy with the global-retention read arm (the delivery sweep finds the
- *   organizations with unclaimed queued messages, launch D77); not branch-scoped (CT6). The
- *   messaging worker claims a queued message (`delivery_claimed_at`) and writes `sent` +
- *   `provider_message_id`; a received Instagram message keeps its sender's id
- *   (`provider_sender_id`), the address the reply goes to.
+ *   organization policy; not branch-scoped (CT6). A sent message starts `queued` — the outbox the
+ *   messaging service delivers; this API sends nothing itself.
  */
 export const contact_activities = appSchema
   .table('contact_activities', contactActivityColumns, (table) => [
@@ -258,14 +234,7 @@ export const contact_activities = appSchema
       table.created_at,
       table.id,
     ),
-    uniqueIndex('idx_contact_activities_organization_provider_message_id')
-      .on(table.organization_id, table.provider_message_id)
-      .where(sql`${table.provider_message_id} IS NOT NULL`),
-    // An Instagram sender's stream (launch D77) — matches a reply to its contact
-    index('idx_contact_activities_organization_provider_sender_id')
-      .on(table.organization_id, table.provider_sender_id)
-      .where(sql`${table.provider_sender_id} IS NOT NULL`),
-    // The messaging worker's queue (M8)
+    // The outbox (M8): each organization's queued and failed messages
     index('idx_contact_activities_organization_delivery_queue')
       .on(table.organization_id, table.occurred_at)
       .where(sql`${table.delivery_status} IN ('queued', 'failed')`),
@@ -314,8 +283,7 @@ export const contact_activities = appSchema
       using: sql`${table.organization_id} = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
-          )
-          OR ${maintenanceBypassArm('app.global_retention_cleanup')}`,
+          )`,
       withCheck: sql`${table.organization_id} = (
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)

@@ -19,10 +19,6 @@ export interface OrganizationSettingsOutput {
   retarget_after_days: number;
   /** Days a deleted record stays restorable before it is erased (D38). */
   deleted_record_purge_days: number;
-  /** The clinic's WhatsApp Business phone-number id on the platform Meta app (D77); null = not connected. */
-  whatsapp_phone_number_id: string | null;
-  /** The clinic's Instagram account id on the platform Meta app (D77); null = not connected. */
-  instagram_account_id: string | null;
   created_at: string;
   updated_at: string;
 }

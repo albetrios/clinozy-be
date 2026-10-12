@@ -87,8 +87,8 @@ export class AppointmentsRepository extends BaseRecordRepository {
   }
 
   /**
-   * WC-7 (launch D78): the booking's confirm request or reminder still waiting in the queue — no
-   * delivery job holds it — is stopped (`failed`, `reminder_stopped`); one in flight goes.
+   * WC-7 (launch D78): the booking's confirm request or reminder still waiting in the outbox
+   * (`queued`) is stopped (`failed`, `reminder_stopped`).
    */
   async stopQueuedBookingMessages(appointmentId: number): Promise<void> {
     await getRequestDatabase()
@@ -106,7 +106,6 @@ export class AppointmentsRepository extends BaseRecordRepository {
             ...CONTACT_ACTIVITY_BOOKING_AUTOMATION_KINDS,
           ]),
           eq(contact_activities.delivery_status, CONTACT_ACTIVITY_DELIVERY_STATUS.QUEUED),
-          isNull(contact_activities.delivery_claimed_at),
         ),
       );
   }

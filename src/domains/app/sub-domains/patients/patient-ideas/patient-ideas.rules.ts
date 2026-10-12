@@ -1,11 +1,25 @@
 import {
   PATIENT_IDEA_SOURCE,
+  PATIENT_IDEAS_CONCERN_LABELS,
   PATIENT_IDEAS_MAX,
   PATIENT_IDEAS_PACKAGE_VISITS,
   type PatientIdeaSource,
 } from './patient-ideas.constants.js';
 import type { IdeaOffering, PatientIdea, PatientIdeasHistory } from './patient-ideas.types.js';
-import { concernLabels } from './patient-ideas.ai.js';
+
+/**
+ * The concerns free-text notes name, as labels of {@link PATIENT_IDEAS_CONCERN_LABELS} — each
+ * once, in the vocabulary's order; a note naming none adds nothing.
+ *
+ * @remarks
+ * - **Notes:** pure.
+ */
+export function concernLabels(texts: readonly string[]): string[] {
+  const joined = texts.join(' ');
+  return PATIENT_IDEAS_CONCERN_LABELS.filter((concern) => concern.words.test(joined)).map(
+    (concern) => concern.label,
+  );
+}
 
 /** A doctor's suggestion note → the offerings it points at (the prototype's keyword map). */
 const SUGGESTION_KEYWORDS: readonly { note: RegExp; offering: RegExp }[] = [

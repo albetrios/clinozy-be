@@ -6,10 +6,28 @@ import { registerMethodStatusPolicy } from '@/shared/middlewares/core/method-sta
 import { registerEventHandlers } from '@/core/events/register-event-handlers.js';
 import { registerRoutes } from '@/routes.js';
 import { buildFastifyServerOptions } from '@/shared/utils/http/fastify-server.util.js';
-import { shouldCaptureRawBody } from '@/shared/utils/http/raw-body-route.registry.js';
+import { isStripeWebhookRawBodyRoute } from '@/domains/billing/sub-domains/stripe-webhook/stripe-webhook-raw-body.registry.js';
 import { API_SERVER_NAME } from '@/shared/constants/project-identity.constants.js';
 
 const API_SERVER_VERSION = '1.0.0';
+const STRIPE_SIGNATURE_HEADER = 'stripe-signature';
+
+/**
+ * sec-B finding #7: the prior implementation used a hardcoded
+ * `RAW_BODY_CAPTURE_PATHS = new Set([...])` Set of webhook URLs, which had to stay
+ * in lockstep with `stripe-webhook.routes.ts` by string equality. Any restructure
+ * (API version bump, route move, prefix change) that didn't update both files
+ * silently broke every webhook signature verification for the 3-day Stripe retry
+ * window. We now read from `stripe-webhook-raw-body.registry.ts`, which the routes
+ * module populates at registration time via its `onRoute` hook — the URLs are
+ * authored once in the route declaration.
+ */
+function shouldCaptureRawBody(request: { url: string; headers: Record<string, unknown> }): boolean {
+  const path = request.url.split('?')[0] ?? request.url;
+  return (
+    isStripeWebhookRawBodyRoute(path) && request.headers[STRIPE_SIGNATURE_HEADER] !== undefined
+  );
+}
 
 /**
  * Shape captured by `BuildAppOptions.captureRegisteredRoutes` — one entry per
@@ -117,8 +135,7 @@ export async function buildApp(options?: BuildAppOptions) {
   app.server.keepAliveTimeout = keepAliveTimeoutMs;
   app.server.headersTimeout = headersTimeoutMs;
 
-  // Capture the raw body only for signed webhook requests (Stripe, Meta) — the routes register
-  // their URLs and signature headers (`raw-body-route.registry.ts`, sec-B finding #7).
+  // Capture raw body only for signed Stripe webhook requests.
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (request, body, done) => {
     const buffer = typeof body === 'string' ? Buffer.from(body) : body;
     if (shouldCaptureRawBody(request)) {

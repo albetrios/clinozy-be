@@ -1,7 +1,5 @@
-import { isMessagingDeliveryEnabled } from '@/infrastructure/messaging/meta-messaging.config.js';
 import { rupees } from '@/shared/utils/validation/record-fields.util.js';
 import { CONTACT_ACTIVITY_AUTOMATION_KIND } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
-import { templateParameter } from '@/domains/app/sub-domains/contacts/contact-activities/whatsapp-notice-templates.js';
 import {
   APPOINTMENT_REMINDER_STATUS,
   APPOINTMENT_STATUS,
@@ -39,39 +37,6 @@ export function bookingConfirmBody(booking: BookingMessageCandidate): string {
 }
 
 /**
- * WC-6's parameters for the `booking_reminder` template (D32): name, branch, date, time.
- *
- * @remarks
- * - **Notes:** in `WHATSAPP_NOTICE_TEMPLATES` order; each on one line, never empty.
- */
-export function bookingReminderParameters(booking: BookingMessageCandidate): string[] {
-  return [
-    templateParameter({ value: booking.firstName, fallback: 'there' }),
-    templateParameter({ value: booking.branchName, fallback: 'the clinic' }),
-    templateParameter({ value: booking.visitDate, fallback: '-' }),
-    templateParameter({ value: booking.visitTime, fallback: '-' }),
-  ];
-}
-
-/**
- * WC-5's parameters for the `booking_confirm` template (D32): name, date, time.
- *
- * @remarks
- * - **Notes:** in `WHATSAPP_NOTICE_TEMPLATES` order; each on one line, never empty.
- */
-export function bookingConfirmParameters(booking: {
-  firstName: string | null;
-  visitDate: string | null;
-  visitTime: string | null;
-}): string[] {
-  return [
-    templateParameter({ value: booking.firstName, fallback: 'there' }),
-    templateParameter({ value: booking.visitDate, fallback: '-' }),
-    templateParameter({ value: booking.visitTime, fallback: '-' }),
-  ];
-}
-
-/**
  * WC-9: the receipt — the amount, its invoice when it has one, the day it was paid.
  *
  * @remarks
@@ -83,29 +48,14 @@ export function receiptBody(receipt: ReceiptMessageCandidate): string {
 }
 
 /**
- * WC-9's parameters for the `payment_receipt` template (D32): name, amount, what it paid for, day.
- *
- * @remarks
- * - **Notes:** "invoice …" when it has one, else "your visit".
- */
-export function receiptParameters(receipt: ReceiptMessageCandidate): string[] {
-  return [
-    templateParameter({ value: receipt.firstName, fallback: 'there' }),
-    rupees(receipt.amount),
-    receipt.invoiceNumber === null ? 'your visit' : `invoice ${receipt.invoiceNumber}`,
-    templateParameter({ value: receipt.paidOn, fallback: '-' }),
-  ];
-}
-
-/**
  * The messages the app queues in an organization's rules run (launch D78): the day-before
  * reminders (WC-6), the confirm requests (WC-5) and the receipts (WC-9) — each a queued WhatsApp
- * notice on the person's stream, linked to its booking or payment, sent by the messaging worker.
+ * notice on the person's stream, linked to its booking or payment, waiting in the outbox for the
+ * messaging service.
  * Answers how many it queued.
  *
  * @remarks
- * - **Algorithm:** nothing unless the clinic's WhatsApp is connected and delivery is on. Reminders
- *   go first, so a booking due both a confirm request and its reminder in one run gets the
+ * - **Algorithm:** reminders go first, so a booking due both a confirm request and its reminder in one run gets the
  *   reminder alone (it asks for the "Yes" too). Each booking message moves the booking's
  *   `reminder_status` (`reminder_queued`, `confirm_requested`) in the same transaction.
  * - **Failure modes:** a database error rolls the run back and propagates (BullMQ retries).
@@ -118,7 +68,6 @@ export async function queueClinozyMessages(options: {
   organization: TaskRulesOrganization;
 }): Promise<number> {
   const { repository, messages, organization } = options;
-  if (!(organization.isWhatsAppConnected && isMessagingDeliveryEnabled())) return 0;
   const scope = { organizationId: organization.id, timeZone: organization.timeZone };
   let queuedCount = 0;
   const queueBooking = async ({
@@ -132,9 +81,6 @@ export async function queueClinozyMessages(options: {
       organizationId: organization.id,
       contactId: booking.contactId,
       body: reminder ? bookingReminderBody(booking) : bookingConfirmBody(booking),
-      templateParameters: reminder
-        ? bookingReminderParameters(booking)
-        : bookingConfirmParameters(booking),
       link: { appointment_id: booking.appointmentId },
       automationKind: reminder
         ? CONTACT_ACTIVITY_AUTOMATION_KIND.BOOKING_REMINDER
@@ -166,7 +112,6 @@ export async function queueClinozyMessages(options: {
       organizationId: organization.id,
       contactId: receipt.contactId,
       body: receiptBody(receipt),
-      templateParameters: receiptParameters(receipt),
       link: { payment_id: receipt.paymentId },
       automationKind: CONTACT_ACTIVITY_AUTOMATION_KIND.PAYMENT_RECEIPT,
       isNotice: true,

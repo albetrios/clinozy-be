@@ -50,8 +50,6 @@ export interface TaskRulesOrganization {
   timeZone: string;
   /** The clinic's hour for the day-before reminder (D34). */
   reminderHour: number;
-  /** Whether the clinic's WhatsApp number is on the platform Meta app (D77). */
-  isWhatsAppConnected: boolean;
   /** The days without a visit after which a patient gets a re-target lead (D35). */
   retargetAfterDays: number;
 }
@@ -85,8 +83,6 @@ export interface ClinozyStepTask {
   reminderStatus: string | null;
   invoiceNumber: string | null;
   dueAmount: string | null;
-  /** The person replied STOP to automated messages (D32) — no message goes to them. */
-  areNoticesStopped: boolean;
 }
 
 /** A candidate row of a rule's SELECT (bigint and timestamp columns come back as text or Date). */
@@ -148,7 +144,7 @@ export async function findOrganizationsForTaskRules(
 export class TaskRulesRepository {
   constructor(private readonly databaseHandle: WorkerDatabaseHandle) {}
 
-  /** The organization's internal id, time zone, reminder hour and WhatsApp connection. */
+  /** The organization's internal id, time zone, reminder hour and re-target days. */
   async findOrganization(organizationPublicId: string): Promise<TaskRulesOrganization | null> {
     const rows = await this.databaseHandle
       .select({
@@ -156,7 +152,6 @@ export class TaskRulesRepository {
         timeZone: organizations.timezone,
         reminderHour: organization_settings.reminder_hour,
         retargetAfterDays: organization_settings.retarget_after_days,
-        whatsappPhoneNumberId: organization_settings.whatsapp_phone_number_id,
       })
       .from(organizations)
       .leftJoin(organization_settings, eq(organization_settings.organization_id, organizations.id))
@@ -168,7 +163,6 @@ export class TaskRulesRepository {
           id: row.id,
           timeZone: row.timeZone ?? 'UTC',
           reminderHour: row.reminderHour ?? ORGANIZATION_SETTINGS_DEFAULT_REMINDER_HOUR,
-          isWhatsAppConnected: (row.whatsappPhoneNumberId ?? null) !== null,
           retargetAfterDays:
             row.retargetAfterDays ?? ORGANIZATION_SETTINGS_DEFAULT_RETARGET_AFTER_DAYS,
         }
@@ -289,7 +283,6 @@ export class TaskRulesRepository {
         rule: tasks.rule_key,
         contactId: tasks.contact_id,
         firstName: contacts.first_name,
-        areNoticesStopped: sql<boolean>`${contacts.notices_stopped_at} is not null`,
         branchId: tasks.branch_id,
         appointmentId: tasks.appointment_id,
         invoiceId: tasks.invoice_id,
@@ -319,8 +312,8 @@ export class TaskRulesRepository {
   }
 
   /**
-   * A queued WhatsApp message from the app (no author) on the person's stream — the messaging
-   * worker sends it — marked with what it is for (`automationKind`, D78). TK10's outreach moves
+   * A queued WhatsApp message from the app (no author) on the person's stream — the outbox the
+   * messaging service delivers — marked with what it is for (`automationKind`, D78). TK10's outreach moves
    * the contact's activity times and a `new` lead to `contacted`, as a person's send does (M7,
    * 5.10); a notice (`isNotice` — a booking message, a receipt) moves only the last activity, so
    * a question the person asked still waits for a person (the `reply` rule).
@@ -331,8 +324,6 @@ export class TaskRulesRepository {
     body: string;
     link: ClinozyMessageLink;
     automationKind: ContactActivityAutomationKind;
-    /** Its WhatsApp template's parameters, in order (D32). */
-    templateParameters: readonly string[];
     isNotice?: boolean;
   }): Promise<void> {
     await this.databaseHandle.insert(contact_activities).values({
@@ -344,7 +335,6 @@ export class TaskRulesRepository {
       body: options.body.slice(0, 1000),
       delivery_status: 'queued',
       automation_kind: options.automationKind,
-      template_parameters: [...options.templateParameters],
       ...options.link,
     } as never);
     const latest = (column: AnyPgColumn) =>

@@ -254,113 +254,26 @@ const SERVER_VARS = {
 } satisfies Record<string, EnvVarSpec>;
 
 /**
- * Messaging — the platform Meta app (WhatsApp Business Platform + Instagram messaging, launch D77).
- * Delivery is off by default; on, it needs all three Meta credentials (refine below).
+ * The services the clinic features will hand work to once they exist — reserved addresses, read by
+ * nothing yet. Messaging (WhatsApp and Instagram delivery) and the AI features (a patient's
+ * offering ideas) are separate services, kept out of this API: until they exist, a sent message
+ * waits `queued` in the outbox and the ideas come from the rules.
  */
-const MESSAGING_VARS = {
-  MESSAGING_DELIVERY_ENABLED: envVar({
-    schema: booleanString('false'),
-    meta: {
-      allowed: 'true | false',
-      description:
-        'Sends the queued WhatsApp and Instagram messages through the Meta Graph API. Off, messages stay queued and nothing is enqueued or swept. On needs META_GRAPH_ACCESS_TOKEN, META_APP_SECRET and META_WEBHOOK_VERIFY_TOKEN.',
-    },
-  }),
-  WHATSAPP_TEMPLATES_ENABLED: envVar({
-    schema: booleanString('false'),
-    meta: {
-      allowed: 'true | false',
-      description:
-        "Sends the clinic's automated WhatsApp notices outside the person's 24-hour window as the approved Meta templates (launch D32), and the day-close summaries to the admins always. Off, every notice goes as free text, which Meta refuses outside the window; turn it on once the templates are approved.",
-    },
-  }),
-  META_GRAPH_ACCESS_TOKEN: envVar({
-    schema: z.string().min(1).optional(),
-    meta: {
-      allowed: 'string (secret)',
-      description:
-        "The platform Meta app's system-user token (whatsapp_business_messaging, instagram_manage_messages) — every send and Instagram name lookup.",
-    },
-  }),
-  META_APP_SECRET: envVar({
-    schema: z.string().min(1).optional(),
-    meta: {
-      allowed: 'string (secret)',
-      description:
-        "The Meta app's secret — verifies every webhook callback's X-Hub-Signature-256. Unset, the messaging webhook answers 503.",
-    },
-  }),
-  META_WEBHOOK_VERIFY_TOKEN: envVar({
-    schema: z.string().min(1).optional(),
-    meta: {
-      allowed: 'string (secret)',
-      description:
-        "The token typed into the Meta app's webhook settings; Meta echoes it as hub.verify_token when subscribing.",
-    },
-  }),
-  META_GRAPH_API_BASE_URL: envVar({
-    schema: z.url().default('https://graph.facebook.com/v21.0'),
-    meta: {
-      allowed: 'URL, the Graph API version included',
-      description: 'The Meta Graph API base URL.',
-    },
-  }),
-  META_HTTP_TIMEOUT_MS: envVar({
-    schema: z.coerce.number().int().min(1000).max(60_000).default(10_000),
-    meta: {
-      allowed: 'integer 1000–60000 (ms)',
-      description: 'Graph API request timeout — each send or lookup the messaging workers make.',
-    },
-  }),
-} satisfies Record<string, EnvVarSpec>;
-
-/**
- * Ideas from history — a patient's AI offering ideas (launch D39, D80, WC-47), from Claude through
- * the Anthropic Messages API. Off by default; on, it needs ANTHROPIC_API_KEY (refine below).
- */
-const PATIENT_IDEAS_VARS = {
-  PATIENT_IDEAS_AI_ENABLED: envVar({
-    schema: booleanString('false'),
-    meta: {
-      allowed: 'true | false',
-      description:
-        "Refreshes each consenting patient's offering ideas with Claude from a de-identified summary. Off, nothing is swept or sent and the patient file shows the rule-based ideas. On needs ANTHROPIC_API_KEY.",
-    },
-  }),
-  ANTHROPIC_API_KEY: envVar({
-    schema: z.string().min(1).optional(),
-    meta: {
-      allowed: 'string (secret)',
-      description: 'The Anthropic API key the ideas worker calls the Messages API with.',
-    },
-  }),
-  PATIENT_IDEAS_AI_MODEL: envVar({
-    schema: z.string().min(1).max(100).default('claude-opus-5-5'),
-    meta: {
-      allowed: 'Claude model id (1–100 characters)',
-      description: 'The Claude model that suggests the offerings.',
-    },
-  }),
-  PATIENT_IDEAS_DAILY_CALL_LIMIT: envVar({
-    schema: z.coerce.number().int().min(1).max(100_000).default(500),
-    meta: {
-      allowed: 'integer 1–100000',
-      description:
-        'Claude calls the ideas worker makes per organization per day (UTC) — a cost guard. Past it the patients stay marked and are refreshed the next day.',
-    },
-  }),
-  ANTHROPIC_API_BASE_URL: envVar({
-    schema: z.url().default('https://api.anthropic.com'),
+const EXTERNAL_SERVICE_VARS = {
+  MESSAGING_SERVICE_URL: envVar({
+    schema: z.url().optional(),
     meta: {
       allowed: 'URL',
-      description: 'The Anthropic API base URL.',
+      description:
+        'Reserved: the base URL of the messaging service that will deliver the outbox (the queued WhatsApp and Instagram messages). Nothing reads it yet.',
     },
   }),
-  ANTHROPIC_HTTP_TIMEOUT_MS: envVar({
-    schema: z.coerce.number().int().min(1000).max(120_000).default(60_000),
+  AI_SERVICE_URL: envVar({
+    schema: z.url().optional(),
     meta: {
-      allowed: 'integer 1000–120000 (ms)',
-      description: "Messages API request timeout — each patient's ideas call.",
+      allowed: 'URL',
+      description:
+        "Reserved: the base URL of the AI service that will suggest a patient's offering ideas. Nothing reads it yet; the ideas come from the rules.",
     },
   }),
 } satisfies Record<string, EnvVarSpec>;
@@ -798,11 +711,8 @@ const envSchemaBase = z.object({
    */
   PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED: booleanString('true'),
 
-  // Messaging — the platform Meta app (WhatsApp + Instagram, launch D77) — the MESSAGING_VARS registry.
-  ...toSchemaShape(MESSAGING_VARS),
-
-  // Ideas from history — a patient's AI offering ideas (launch D39, D80) — the PATIENT_IDEAS_VARS registry.
-  ...toSchemaShape(PATIENT_IDEAS_VARS),
+  // The future services' reserved addresses — the EXTERNAL_SERVICE_VARS registry.
+  ...toSchemaShape(EXTERNAL_SERVICE_VARS),
 
   // Sentry
   SENTRY_DSN: z.url().optional(),
@@ -1590,33 +1500,6 @@ export const envSchema = envSchemaBase
   .refine(
     (data) =>
       /**
-       * Delivery calls the Graph API with the token, and the replies and delivery reports it waits
-       * for arrive on the webhook — verified with the app secret, subscribed with the verify token.
-       */
-      !data.MESSAGING_DELIVERY_ENABLED ||
-      (Boolean(data.META_GRAPH_ACCESS_TOKEN) &&
-        Boolean(data.META_APP_SECRET) &&
-        Boolean(data.META_WEBHOOK_VERIFY_TOKEN)),
-    {
-      message:
-        'MESSAGING_DELIVERY_ENABLED=true needs META_GRAPH_ACCESS_TOKEN, META_APP_SECRET and META_WEBHOOK_VERIFY_TOKEN.',
-      path: ['MESSAGING_DELIVERY_ENABLED'],
-    },
-  )
-  .refine(
-    (data) =>
-      /**
-       * The ideas worker calls the Anthropic Messages API (launch D80) — on, it needs the key.
-       */
-      !data.PATIENT_IDEAS_AI_ENABLED || Boolean(data.ANTHROPIC_API_KEY),
-    {
-      message: 'PATIENT_IDEAS_AI_ENABLED=true needs ANTHROPIC_API_KEY.',
-      path: ['PATIENT_IDEAS_AI_ENABLED'],
-    },
-  )
-  .refine(
-    (data) =>
-      /**
        * Email codes, password resets and invitations are sent through Resend. Without a key the
        * mail worker never starts and every one of those mails waits in the outbox forever.
        */
@@ -2199,8 +2082,7 @@ export const envSchema = envSchemaBase
  */
 export const ENV_VAR_REGISTRY: Readonly<Record<string, EnvVarSpec>> = {
   ...SERVER_VARS,
-  ...MESSAGING_VARS,
-  ...PATIENT_IDEAS_VARS,
+  ...EXTERNAL_SERVICE_VARS,
 };
 
 /** Ordered list of env var names from the schema (for .env.example sync and scripts). */

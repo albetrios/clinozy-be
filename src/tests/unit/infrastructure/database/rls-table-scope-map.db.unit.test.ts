@@ -116,7 +116,7 @@ const RLS_TABLE_SCOPE_MAP: Record<string, readonly string[]> = {
   'app.branch_members': ['app.current_organization_public_id'],
   'app.branch_rooms': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.branches': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
-  'app.contact_activities': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
+  'app.contact_activities': ['app.current_organization_public_id'],
   'app.contact_members': ['app.current_organization_public_id'],
   'app.contact_message_templates': [
     'app.current_organization_public_id',
@@ -153,10 +153,6 @@ const RLS_TABLE_SCOPE_MAP: Record<string, readonly string[]> = {
   'app.membership_preference_branches': ['app.current_organization_public_id'],
   'app.membership_preferences': ['app.current_organization_public_id'],
   'app.membership_saved_views': ['app.current_organization_public_id'],
-  'app.messaging_webhook_events': [
-    'app.current_organization_public_id',
-    'app.global_retention_cleanup',
-  ],
   'app.offer_branches': ['app.current_organization_public_id'],
   'app.offer_offerings': ['app.current_organization_public_id'],
   'app.offering_branches': ['app.current_organization_public_id'],
@@ -170,7 +166,6 @@ const RLS_TABLE_SCOPE_MAP: Record<string, readonly string[]> = {
   ],
   'app.patient_diagnoses': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.patient_feedback_actions': ['app.current_organization_public_id'],
-  'app.patient_ideas': ['app.current_organization_public_id'],
   'app.patient_images': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.patient_offering_suggestions': [
     'app.current_organization_public_id',
@@ -185,7 +180,7 @@ const RLS_TABLE_SCOPE_MAP: Record<string, readonly string[]> = {
   'app.patient_reviews': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.patient_treatments': ['app.current_organization_public_id'],
   // The AI ideas sweep reads the stale marks across organizations (WC-47, D80)
-  'app.patients': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
+  'app.patients': ['app.current_organization_public_id'],
   'app.payment_edits': ['app.current_organization_public_id'],
   'app.payments': ['app.current_organization_public_id', 'app.global_retention_cleanup'],
   'app.pending_credits': ['app.current_organization_public_id', 'app.global_retention_cleanup'],

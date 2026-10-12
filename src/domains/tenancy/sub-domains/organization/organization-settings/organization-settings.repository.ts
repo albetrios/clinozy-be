@@ -32,21 +32,6 @@ function operatingSettings(data: {
   };
 }
 
-/** The messaging accounts a write names (launch D77) — `null` disconnects one. */
-function messagingAccounts(data: {
-  whatsapp_phone_number_id?: string | null;
-  instagram_account_id?: string | null;
-}) {
-  return {
-    ...(data.whatsapp_phone_number_id !== undefined && {
-      whatsapp_phone_number_id: data.whatsapp_phone_number_id,
-    }),
-    ...(data.instagram_account_id !== undefined && {
-      instagram_account_id: data.instagram_account_id,
-    }),
-  };
-}
-
 /**
  * Drizzle data-access for `tenancy.organization_settings`. The `upsert`
  * primary path is keyed on `organization_id` (1:1 with the organization row). Two
@@ -104,8 +89,6 @@ export class OrganizationSettingsRepository {
       reminder_hour?: number;
       retarget_after_days?: number;
       deleted_record_purge_days?: number;
-      whatsapp_phone_number_id?: string | null;
-      instagram_account_id?: string | null;
       updated_by_user_id?: number | null;
     },
   ) {
@@ -115,7 +98,6 @@ export class OrganizationSettingsRepository {
       default_locale: data.default_locale ?? 'en',
       security_policy: data.security_policy ?? {},
       ...operatingSettings(data),
-      ...messagingAccounts(data),
       updated_by_user_id: data.updated_by_user_id ?? undefined,
     };
     const rows = await getRequestDatabase()
@@ -137,7 +119,6 @@ export class OrganizationSettingsRepository {
           }),
           ...(data.default_locale !== undefined && { default_locale: data.default_locale }),
           ...operatingSettings(data),
-          ...messagingAccounts(data),
           updated_at: databaseNowTimestamp,
           updated_by_user_id: data.updated_by_user_id ?? undefined,
         },

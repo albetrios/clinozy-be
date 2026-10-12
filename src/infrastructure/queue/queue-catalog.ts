@@ -29,14 +29,6 @@ import { DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains
 import { DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/queues/day-close-auto-close.queue.js';
 import { TASK_RULES_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/workers/task-rules.constants.js';
 import { TASK_RULES_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/queues/task-rules.queue.js';
-import { PATIENT_IDEAS_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/patients/patient-ideas/workers/patient-ideas.constants.js';
-import { PATIENT_IDEAS_QUEUE_NAME } from '@/domains/app/sub-domains/patients/patient-ideas/queues/patient-ideas.queue.js';
-import { CONTACT_MESSAGE_DELIVERY_QUEUE_NAME } from '@/domains/app/sub-domains/contacts/contact-activities/queues/contact-message-delivery.queue.js';
-import { MESSAGING_WEBHOOK_EVENT_QUEUE_NAME } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/queues/messaging-webhook-event.queue.js';
-import {
-  CONTACT_MESSAGING_SWEEP_QUEUE_NAME,
-  MESSAGING_WEBHOOK_EVENT_RETENTION_QUEUE_NAME,
-} from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/workers/contact-messaging-webhook.constants.js';
 import { MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.constants.js';
 import { ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/organization-api-key/workers/organization-api-key-tombstone-retention.constants.js';
 import { UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/upload/workers/upload-tombstone-retention.constants.js';
@@ -91,12 +83,6 @@ export const WORKER_QUEUE_NAMES = [
   DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME,
   TASK_RULES_SWEEP_QUEUE_NAME,
   TASK_RULES_QUEUE_NAME,
-  PATIENT_IDEAS_SWEEP_QUEUE_NAME,
-  PATIENT_IDEAS_QUEUE_NAME,
-  CONTACT_MESSAGE_DELIVERY_QUEUE_NAME,
-  MESSAGING_WEBHOOK_EVENT_QUEUE_NAME,
-  CONTACT_MESSAGING_SWEEP_QUEUE_NAME,
-  MESSAGING_WEBHOOK_EVENT_RETENTION_QUEUE_NAME,
   MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME,
   ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_QUEUE_NAME,
   UPLOAD_TOMBSTONE_RETENTION_QUEUE_NAME,
@@ -126,7 +112,4 @@ export const WORKER_THROUGHPUT_QUEUE_NAMES = [
   SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME,
   DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME,
   TASK_RULES_QUEUE_NAME,
-  PATIENT_IDEAS_QUEUE_NAME,
-  CONTACT_MESSAGE_DELIVERY_QUEUE_NAME,
-  MESSAGING_WEBHOOK_EVENT_QUEUE_NAME,
 ] as const;

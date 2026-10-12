@@ -39,7 +39,7 @@ Workers are grouped into six families in the [worker registry](../../reference/r
 
 | When to split                                              | Why                                                                                                                     |
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Monolithic worker exceeds `DATABASE_POOL_MAX`              | Default demand is 51 Postgres slots; splitting reduces per-process demand and avoids contention.                       |
+| Monolithic worker exceeds `DATABASE_POOL_MAX`              | Default demand is 54 Postgres slots; splitting reduces per-process demand and avoids contention.                       |
 | Retention crons compete with throughput jobs at peak hours | Isolate `retention` to its own service so audit/tombstone runs do not steal connections from `mail`/`webhook`/`stripe`. |
 | Need to size memory or replicas differently per workload   | Throughput families benefit from more replicas; retention typically needs only one replica.                             |
 
@@ -51,7 +51,7 @@ Recommended layout (see [resource-limits.md → Example Railway split](resource-
 | `worker-retention`     | `retention`                  | `true`              | Run **one replica** — cron jobs are not idempotent across overlapping processes. |
 | `worker-observability` | `observability`              | `true`              | Mostly Redis-only (`dlq-auto-retry` takes one Postgres connection); tiny footprint. |
 
-Keep `SCHEDULER_ENABLED=true` (the default) on **every** worker service. The scheduler in each process registers only the crons of the queues whose workers run in that process, so turning it off on a service leaves that service's crons unregistered — on `worker-throughput` that means the mail outbox sweeper, commit-dispatch recovery, the Stripe reclaim / catch-up / retention, the webhook delivery reclaim and the messaging sweep never run, and lost work is never recovered. Registration is an idempotent upsert keyed by scheduler id, so replicas never double a cron. A process that runs cron queues with the scheduler off logs `scheduler.disabled.crons_not_registered` listing them.
+Keep `SCHEDULER_ENABLED=true` (the default) on **every** worker service. The scheduler in each process registers only the crons of the queues whose workers run in that process, so turning it off on a service leaves that service's crons unregistered — on `worker-throughput` that means the mail outbox sweeper, commit-dispatch recovery, the Stripe reclaim / catch-up / retention and the webhook delivery reclaim never run, and lost work is never recovered. Registration is an idempotent upsert keyed by scheduler id, so replicas never double a cron. A process that runs cron queues with the scheduler off logs `scheduler.disabled.crons_not_registered` listing them.
 
 Adding a new worker is a one-line entry in `worker-registration.registry.ts` with a `family` choice; `bootstrap.ts`, `scheduler.ts`, and `assertPostgresConnectionBudget()` pick it up automatically.
 

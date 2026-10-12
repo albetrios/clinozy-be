@@ -15,7 +15,6 @@ import { runWithPropagatedTraceContext } from '@/infrastructure/observability/tr
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { taskRulesJobDataSchema } from '@/domains/app/sub-domains/tasks/queues/task-rules.job.schema.js';
 import { TASK_RULES_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/queues/task-rules.queue.js';
-import { requestContactMessageDelivery } from '@/domains/app/sub-domains/contacts/contact-activities/queues/contact-message-delivery.queue.js';
 import { runTaskRulesJob } from './task-rules.processor.js';
 
 /**
@@ -24,8 +23,7 @@ import { runTaskRulesJob } from './task-rules.processor.js';
  * @remarks
  * - **Algorithm:** validates the payload (`parseJobDataOrDeadLetter` — a malformed one is
  *   dead-lettered at once), carries the trace, and runs {@link runTaskRulesJob} inside the
- *   organization's context (`runOrganizationScopedWorkerJob`); when the app's steps queued messages,
- *   asks for the organization's delivery job after the commit (launch D77).
+ *   organization's context (`runOrganizationScopedWorkerJob`).
  * - **Failure modes:** a database error takes BullMQ's retry/backoff, then the dead letter;
  *   stalled jobs are warn-logged.
  * - **Side effects:** a BullMQ Redis connection; one Postgres checkout per running job.
@@ -50,9 +48,6 @@ export function createTaskRulesWorker(): WorkerHandle {
             processor: (databaseHandle) =>
               runTaskRulesJob({ databaseHandle, organizationPublicId }),
           });
-          // The app's steps queued messages (TK10): send them now, after the commit (D77).
-          if (counts.handledCount + counts.messageCount > 0)
-            await requestContactMessageDelivery(organizationPublicId);
           return counts;
         },
       });

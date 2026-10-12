@@ -14,8 +14,6 @@ import { LEAD_INTEREST_LABELS } from '@/domains/app/sub-domains/leads/leads.cons
 import { LeadsRepository } from '@/domains/app/sub-domains/leads/leads.repository.js';
 import { requestTaskRulesRun } from '@/domains/app/sub-domains/tasks/queues/task-rules.queue.js';
 import { runEnqueueAfterCommit } from '@/core/events/event-bus.js';
-import { isMetaProviderDown } from '@/infrastructure/messaging/meta-graph.client.js';
-import { isMessagingDeliveryEnabled } from '@/infrastructure/messaging/meta-messaging.config.js';
 import { fieldValidationError } from '@/shared/errors/index.js';
 import {
   CONTACT_ACTIVITY_BODY_MAX,
@@ -27,9 +25,7 @@ import {
   type ContactActivityLinkColumn,
 } from './contact-activities.constants.js';
 import type { ContactActivitiesRepository } from './contact-activities.repository.js';
-import type { ContactMessagingStatusOutput } from './contact-activities.types.js';
 import { validateContactMessageBatch } from './contact-activities.validator.js';
-import { requestContactMessageDelivery } from './queues/contact-message-delivery.queue.js';
 
 /** The read gate of each record link today (M10, D63) — an entry linked to one the caller cannot read is hidden. */
 const LINK_READ_PERMISSIONS: Readonly<Record<ContactActivityLinkColumn, string>> = {
@@ -83,12 +79,6 @@ function fillPlaceholders({
   return filled;
 }
 
-/** After the write commits, asks for the organization's delivery job (launch D77) — never fails the write. */
-async function scheduleDelivery(context: BaseRecordWriteContext): Promise<void> {
-  const { organizationPublicId } = context.scope;
-  await runEnqueueAfterCommit(() => requestContactMessageDelivery(organizationPublicId));
-}
-
 /**
  * After the write commits, asks for the organization's task rules run (D81 T7, WC-48) — a message
  * or a call moves the contact's last sent / received time, so the `reply` and `failed_message`
@@ -97,30 +87,6 @@ async function scheduleDelivery(context: BaseRecordWriteContext): Promise<void> 
 async function scheduleTaskRules(context: BaseRecordWriteContext): Promise<void> {
   const { organizationPublicId } = context.scope;
   await runEnqueueAfterCommit(() => requestTaskRulesRun(organizationPublicId));
-}
-
-/** What the composer shows (D77, WC-2): delivery on, Meta up, each channel's account and queue. */
-async function readMessagingStatus({
-  repository,
-  organizationId,
-}: {
-  repository: ContactActivitiesRepository;
-  organizationId: number;
-}): Promise<ContactMessagingStatusOutput> {
-  const accounts = await repository.findMessagingAccounts(organizationId);
-  const queued = await repository.countQueuedByType(organizationId);
-  return {
-    is_delivery_enabled: isMessagingDeliveryEnabled(),
-    is_provider_down: await isMetaProviderDown(),
-    whatsapp: {
-      is_connected: accounts.whatsappPhoneNumberId !== null,
-      queued_count: queued.get(CONTACT_ACTIVITY_TYPE.WHATSAPP) ?? 0,
-    },
-    instagram: {
-      is_connected: accounts.instagramAccountId !== null,
-      queued_count: queued.get(CONTACT_ACTIVITY_TYPE.INSTAGRAM) ?? 0,
-    },
-  };
 }
 
 /** M9's batch check: every contact named is a live one of the organization — 400 naming the rest. */
@@ -172,10 +138,9 @@ async function involveAuthor({
  *   lead's first interest). In the entry's transaction the contact's last activity, last sent /
  *   received time and default channel move (`recordActivity`), and a sent line moves the open lead
  *   from `new` to `contacted`. Reads hide an entry linked to a record the caller cannot read (M10).
- *   `message-batches` writes one queued message per contact the same way. A queued message (a
- *   send, a batch, a resend) asks for the organization's delivery job once the write commits
- *   (launch D77); a message or a call (written, batched or resent) asks for the task rules run, so
- *   a reply closes its `reply` task at once (D81 T7, WC-48).
+ *   `message-batches` writes one queued message per contact the same way. A queued message waits
+ *   in the outbox for the messaging service; a message or a call (written, batched or resent) asks
+ *   for the task rules run, so a reply closes its `reply` task at once (D81 T7, WC-48).
  * - **Failure modes:** `ValidationError` (400) on `contact_message_template_id`, `attachment_keys`,
  *   `reply_to_contact_activity_id`, `body` (over 1000 once filled) or `contact_ids`.
  */
@@ -272,17 +237,9 @@ export function createContactActivitiesRules(
         await touchContact(row);
         await involveAuthor({ leads: leadsRepository, row, context });
       }
-      // A queued message — written, or a failed one resent — goes to the messaging worker (D77).
-      if (row.delivery_status === CONTACT_ACTIVITY_DELIVERY_STATUS.QUEUED) {
-        await scheduleDelivery(context);
-      }
       // A message or a call — written, or resent — may open or close a task (D81 T7).
       const movesTasks = change.kind === 'create' || change.kind === 'transition';
       if (movesTasks && typeof row.direction === 'string') await scheduleTaskRules(context);
-    },
-    collectionViews: {
-      'messaging-status': ({ context }) =>
-        readMessagingStatus({ repository, organizationId: context.organizationId }),
     },
     collectionActions: {
       'message-batches': async ({ input, context, present, resolveReferences }) => {
@@ -317,7 +274,6 @@ export function createContactActivitiesRules(
           await touchContact(entry);
           entries.push(entry);
         }
-        await scheduleDelivery(context);
         await scheduleTaskRules(context);
         return present(entries);
       },

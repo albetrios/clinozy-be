@@ -37,11 +37,7 @@ import { listOffersQueryDto as appOffersListQueryDto } from '@/domains/app/sub-d
 import { listPatientsQueryDto as appPatientsListQueryDto } from '@/domains/app/sub-domains/patients/patients.dto.js';
 import { listLeadsQueryDto as appLeadsListQueryDto } from '@/domains/app/sub-domains/leads/leads.dto.js';
 import { listContactMessageTemplatesQueryDto } from '@/domains/app/sub-domains/contacts/contact-message-templates/contact-message-templates.dto.js';
-import {
-  listContactActivitiesQueryDto,
-  messagingStatusQueryDto,
-} from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.dto.js';
-import { messagingWebhookVerifyQueryDto } from '@/domains/app/sub-domains/contacts/contact-messaging-webhook/contact-messaging-webhook.dto.js';
+import { listContactActivitiesQueryDto } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.dto.js';
 import {
   dailyCountsAppointmentsQueryDto as appDailyCountsAppointmentsQueryDto,
   listAppointmentsQueryDto as appAppointmentsListQueryDto,
@@ -178,9 +174,6 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/contacts/{contact_id}/activities': listContactActivitiesQueryDto,
   'GET /api/v1/app/appointments/slots': appSlotsAppointmentsQueryDto,
   'GET /api/v1/app/appointments/daily-counts': appDailyCountsAppointmentsQueryDto,
-  // Not lists: an unknown query key is a 400 (the status read), the handshake's fields (Meta)
-  'GET /api/v1/app/contact-activities/messaging-status': messagingStatusQueryDto,
-  'GET /api/v1/app/messaging-webhook': messagingWebhookVerifyQueryDto,
   // Record deletes (launch D83 (6), QA B2): the `reason` (and `note`, required for `other`) every
   // one requires — the document read no query on a DELETE before.
   'DELETE /api/v1/app/appointments/{appointment_id}': recordDeleteQuerySchema,

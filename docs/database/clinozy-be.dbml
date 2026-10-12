@@ -42,7 +42,6 @@ TableGroup app {
   app.membership_preference_branches
   app.membership_preferences
   app.membership_saved_views
-  app.messaging_webhook_events
   app.offer_branches
   app.offer_offerings
   app.offering_branches
@@ -53,7 +52,6 @@ TableGroup app {
   app.patient_clinical_notes
   app.patient_diagnoses
   app.patient_feedback_actions
-  app.patient_ideas
   app.patient_images
   app.patient_offering_suggestions
   app.patient_offerings
@@ -278,7 +276,6 @@ Table app.contact_activities {
   created_at timestamptz [not null]
   created_by_user_id bigint
   delivered_at timestamptz
-  delivery_claimed_at timestamptz
   delivery_status varchar(9)
   direction varchar(8)
   failed_at timestamptz
@@ -297,13 +294,10 @@ Table app.contact_activities {
   patient_review_id bigint
   patient_treatment_id bigint
   payment_id bigint
-  provider_message_id varchar(128)
-  provider_sender_id varchar(64)
   public_id varchar(28) [not null]
   read_at timestamptz
   reply_to_contact_activity_id bigint
   task_id bigint
-  template_parameters text [not null]
   type varchar(9) [not null]
   updated_at timestamptz [not null]
   updated_by_user_id bigint
@@ -386,7 +380,6 @@ Table app.contacts {
   last_name varchar(60)
   last_received_at timestamptz
   last_sent_at timestamptz
-  notices_stopped_at timestamptz
   organization_id bigint [not null]
   preference_tags text [not null]
   primary_phone varchar(13) [not null]
@@ -440,7 +433,6 @@ Table app.day_closes {
   organization_id bigint [not null]
   public_id varchar(28) [not null]
   status varchar(6) [not null]
-  summary_sent_at timestamptz
   updated_at timestamptz [not null]
   updated_by_user_id bigint
 }
@@ -903,26 +895,6 @@ Note app.membership_saved_views {
   'RLS: enabled\nPolicies: membership_saved_views_tenant_isolation\nFORCE ROW LEVEL SECURITY'
 }
 
-Table app.messaging_webhook_events {
-  attempt_count int [not null]
-  channel varchar(9) [not null]
-  claimed_at timestamptz
-  created_at timestamptz [not null]
-  failure_reason varchar(280)
-  id bigint [pk, increment, not null]
-  organization_id bigint [not null]
-  payload jsonb [not null]
-  payload_hash varchar(64) [not null]
-  processed_at timestamptz
-  received_at timestamptz [not null]
-  status varchar(9) [not null]
-  updated_at timestamptz [not null]
-}
-
-Note app.messaging_webhook_events {
-  'RLS: enabled\nPolicies: messaging_webhook_events_tenant_isolation\nFORCE ROW LEVEL SECURITY'
-}
-
 Table app.offer_branches {
   branch_id bigint [not null]
   created_at timestamptz [not null]
@@ -1134,20 +1106,6 @@ Note app.patient_feedback_actions {
   'RLS: enabled\nPolicies: patient_feedback_actions_tenant_isolation\nFORCE ROW LEVEL SECURITY'
 }
 
-Table app.patient_ideas {
-  created_at timestamptz [not null]
-  id bigint [pk, increment, not null]
-  offering_id bigint [not null]
-  organization_id bigint [not null]
-  patient_id bigint [not null]
-  position smallint [not null]
-  reason varchar(200) [not null]
-}
-
-Note app.patient_ideas {
-  'RLS: enabled\nPolicies: patient_ideas_tenant_isolation\nFORCE ROW LEVEL SECURITY'
-}
-
 Table app.patient_images {
   album varchar(7) [not null]
   appointment_id bigint
@@ -1351,7 +1309,6 @@ Table app.patients {
   has_photo_consent boolean [not null]
   home_branch_id bigint [not null]
   id bigint [pk, increment, not null]
-  ideas_stale_since timestamptz
   lead_id bigint
   notes text
   organization_id bigint [not null]
@@ -1364,7 +1321,7 @@ Table app.patients {
 }
 
 Note app.patients {
-  'RLS: enabled\nPolicies: patients_tenant_isolation, patients_ideas_sweep_read\nFORCE ROW LEVEL SECURITY'
+  'RLS: enabled\nPolicies: patients_tenant_isolation\nFORCE ROW LEVEL SECURITY'
 }
 
 Table app.payment_edits {
@@ -2300,7 +2257,6 @@ Table tenancy.organization_settings {
   default_day_float numeric(12, 2) [not null]
   default_locale varchar(5) [not null]
   deleted_record_purge_days int [not null]
-  instagram_account_id varchar(32)
   is_email_notifications_enabled boolean [not null]
   lead_hold_days int [not null]
   organization_id bigint [pk, not null]
@@ -2309,7 +2265,6 @@ Table tenancy.organization_settings {
   security_policy jsonb [not null]
   updated_at timestamptz [not null]
   updated_by_user_id bigint
-  whatsapp_phone_number_id varchar(32)
 }
 
 Note tenancy.organization_settings {
@@ -2564,7 +2519,6 @@ Ref: app.membership_preferences.updated_by_user_id > auth.users.id [delete: no a
 Ref: app.membership_saved_views.created_by_user_id > auth.users.id [delete: no action]
 Ref: app.membership_saved_views.organization_id > tenancy.organizations.id [delete: cascade]
 Ref: app.membership_saved_views.updated_by_user_id > auth.users.id [delete: no action]
-Ref: app.messaging_webhook_events.organization_id > tenancy.organizations.id [delete: cascade]
 Ref: app.offer_branches.branch_id > app.branches.id [delete: cascade]
 Ref: app.offer_branches.created_by_user_id > auth.users.id [delete: no action]
 Ref: app.offer_branches.offer_id > app.offers.id [delete: cascade]
@@ -2606,9 +2560,6 @@ Ref: app.patient_feedback_actions.created_by_user_id > auth.users.id [delete: no
 Ref: app.patient_feedback_actions.organization_id > tenancy.organizations.id [delete: cascade]
 Ref: app.patient_feedback_actions.patient_check_in_id > app.patient_check_ins.id [delete: cascade]
 Ref: app.patient_feedback_actions.patient_review_id > app.patient_reviews.id [delete: cascade]
-Ref: app.patient_ideas.offering_id > app.offerings.id [delete: cascade]
-Ref: app.patient_ideas.organization_id > tenancy.organizations.id [delete: cascade]
-Ref: app.patient_ideas.patient_id > app.patients.id [delete: cascade]
 Ref: app.patient_images.appointment_id > app.appointments.id [delete: set null]
 Ref: app.patient_images.created_by_user_id > auth.users.id [delete: no action]
 Ref: app.patient_images.organization_id > tenancy.organizations.id [delete: cascade]

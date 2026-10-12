@@ -75,8 +75,6 @@ export const day_closes = appSchema
       close_kind: varchar('close_kind', { length: 6 }),
       closed_at: timestamp('closed_at', { withTimezone: true }),
       closed_by_membership_id: bigint('closed_by_membership_id', { mode: 'number' }),
-      // When the closed day's summary went to the admins on WhatsApp — cleared on reopen (WC-10, D78)
-      summary_sent_at: timestamp('summary_sent_at', { withTimezone: true }),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
@@ -103,10 +101,6 @@ export const day_closes = appSchema
       index('idx_day_closes_organization_open')
         .on(table.organization_id, table.close_date)
         .where(sql`${table.status} = ${OPEN}`),
-      // The day-close summary's pending read (WC-10, D78)
-      index('idx_day_closes_summary_pending')
-        .on(table.closed_at)
-        .where(sql`${table.status} = ${CLOSED} AND ${table.summary_sent_at} IS NULL`),
       index('idx_day_closes_opening_accepted_by')
         .on(table.organization_id, table.opening_accepted_by_membership_id)
         .where(sql`${table.opening_accepted_by_membership_id} IS NOT NULL`),
@@ -152,10 +146,6 @@ export const day_closes = appSchema
       check(
         'chk_day_closes_difference_reason',
         sql`${table.counted_cash} IS NULL OR ${table.counted_cash} = ${table.expected_cash} OR ${table.difference_reason} IS NOT NULL`,
-      ),
-      check(
-        'chk_day_closes_summary_sent',
-        sql`${table.summary_sent_at} IS NULL OR ${table.status} = ${CLOSED}`,
       ),
       check('chk_day_closes_updated', sql`${table.updated_at} >= ${table.created_at}`),
       pgPolicy('day_closes_tenant_isolation', {

@@ -1,6 +1,6 @@
 # Contract tests (outbound integrations)
 
-Offline HTTP contract checks for **Stripe**, **Resend**, **S3**, **Cloudflare Turnstile**, **Anthropic Messages API**, and **OAuth (Google + GitHub)** wrappers.
+Offline HTTP contract checks for **Stripe**, **Resend**, **S3**, **Cloudflare Turnstile**, and **OAuth (Google + GitHub)** wrappers.
 
 ## Run
 

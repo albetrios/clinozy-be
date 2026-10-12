@@ -279,6 +279,7 @@ erDiagram
 - **Added** (a frontend request, D3, unless a decision is named): `specialties` (D7), `timezone` (D7), `currency` (D7), `default_day_float` (payments.md:76, 327), `lead_hold_days` (leads.md:180, 402), `reminder_hour` (D34), `retarget_after_days` (D35), `deleted_record_purge_days` (D38)
 - **Open:** none
 - **Built (ROUTE #139, D77):** `tenancy.organization_settings` gains `whatsapp_phone_number_id` and `instagram_account_id` (`varchar(32)`, digits only — `chk_organization_settings_whatsapp_phone_number_id` / `_instagram_account_id` `^[0-9]{5,32}$`), each unique across organizations (partial unique indexes over the set values) — the clinic's accounts on the platform Meta app, written through `PATCH /tenancy/organization/settings` (409 `messaging_account_taken`); the webhook finds an account's organization through the SECURITY DEFINER resolver `tenancy.resolve_organization_public_id_for_messaging_account(channel, account_id)`
+- **Removed (D87, 2026-10-12):** `whatsapp_phone_number_id` and `instagram_account_id` with their indexes and checks, and `tenancy.resolve_organization_public_id_for_messaging_account` — messaging is a separate service now.
 
 ```mermaid
 erDiagram
@@ -663,6 +664,7 @@ erDiagram
 - **Built (ROUTE #139, D77):** `delivery_claimed_at` (timestamptz — a delivery job's claim on a `queued` message, stale after 5 minutes; `chk_contact_activities_delivery_claim` keeps it on queued WhatsApp / Instagram messages only) and `provider_sender_id` (`varchar(64)` — the Instagram-scoped id of a received Instagram message, the reply address; `chk_contact_activities_provider_sender`, index `idx_contact_activities_organization_provider_sender_id`); the RLS policy gains the `global_retention_cleanup` arm (the delivery sweep reads across organizations)
 - **Built (ROUTE #140–#142, D78):** `automation_kind` (`varchar(16)` — what a message Clinozy queued is for: `booking_confirm`, `booking_reminder`, `payment_receipt`, `payment_reminder`, `feedback_request`; `chk_contact_activities_automation_kind` keeps it on sent WhatsApp entries with no author) — the booking messages move their appointment's `reminder_status`, a move or cancel stops the unclaimed one (`failure_reason` `reminder_stopped`), and a receipt goes once per payment; no change to `app.appointments` (its `reminder_status` and `is_confirmed_by_reply` were already there, A13)
 - **Built (launch-confidence M1, M5 — D32):** `template_parameters` (`text[]`, at most 12, only with an `automation_kind` — `chk_contact_activities_template_parameters`): the notice's WhatsApp template parameters, sent as the approved template outside the person's 24-hour window; `app.contacts.notices_stopped_at` (`timestamptz`): a STOP reply on WhatsApp stops the automated notices to the person until START
+- **Removed (D87, 2026-10-12):** `provider_message_id` (and its unique index), `delivery_claimed_at`, `provider_sender_id` (and its index), `template_parameters` with their checks, and the global-retention read arm — Clinozy keeps the outbox (`delivery_status` `queued` until the separate messaging service delivers it); the service, its webhook and its claim are not Clinozy's.
 ```mermaid
 erDiagram
   contact_activities["app.contact_activities · NEW"] {
@@ -675,10 +677,7 @@ erDiagram
     json attachment_keys
     id reply_to_contact_activity_id FK "→ contact_activity"
     choice delivery_status
-    text provider_message_id
     text failure_reason
-    datetime delivery_claimed_at "ADDED #139"
-    text provider_sender_id "ADDED #139"
     datetime occurred_at
     id author_membership_id FK "→ membership"
     id appointment_id FK "→ appointment (one of twelve links)"
@@ -691,28 +690,6 @@ erDiagram
   }
   contacts ||--o{ contact_activities : "has a stream"
   contact_message_templates |o--o{ contact_activities : "is used by"
-```
-
-### messaging_webhook_event · NEW (built, not planned)
-
-- **Holds:** a Meta webhook update (a WhatsApp or Instagram message, or a delivery report) stored for its organization until the processing job applies it (D77).
-- **Built (ROUTE #139, D77):** `app.messaging_webhook_events` — `organization_id`, `channel` (`whatsapp` · `instagram`), `payload` jsonb (the update with its `account_id`), `payload_hash` (sha256 — Meta's retry is the same row: unique `(organization_id, payload_hash)`), `status` (`pending` · `processed` · `failed`), `claimed_at`, `attempt_count` (failed after 5), `failure_reason` ≤ 280, `received_at`, `processed_at`; the pending index `(organization_id, received_at, id)` and `(received_at)` for the 30-day purge of processed and failed rows; ENABLE + FORCE RLS with the organization policy and the `global_retention_cleanup` arm. The webhook splits a callback per organization at ingress — a tenant table, not a system one
-
-```mermaid
-erDiagram
-  messaging_webhook_events["app.messaging_webhook_events · NEW #139"] {
-    id id PK
-    id organization_id FK "→ organization"
-    choice channel
-    json payload
-    text payload_hash
-    choice status
-    datetime claimed_at
-    number attempt_count
-    text failure_reason
-    datetime received_at
-    datetime processed_at
-  }
 ```
 
 ### patient · NEW
@@ -1294,34 +1271,10 @@ erDiagram
   }
 ```
 
-### patient_idea · NEW
+### patient_idea · not built (D87)
 
-- **Holds:** A patient's latest ideas from history — from the AI on a de-identified summary, or the rules as the fallback (D39); agent-os may hold it as a cache instead.
-- **Table (proposal):** `app.patient_ideas` — domain not chosen yet (Step 4)
-- **Sources:** D39 · schema-routes.md:1635 · H:4355–4367
-- **Open:** none — the AI provider is chosen at kickoff (D39); only patients with Data consent; never name, phone, photos or note text
-
-- **Built:** `app.patient_ideas` · ROUTE #33 (2026-10-07)
-- **Dropped (ROUTE #133, P20):** `app.patient_ideas` (no routes) until its feature is built
-- **Built again (ROUTE #152, D80, routes-final 7.N PI3–PI4):** `app.patient_ideas` — the stored AI
-  ideas, a derived cache: one row per idea (at most 4), unique per patient and offering, no soft
-  delete; the rules' ideas are computed on read, never stored. The stale mark lives on the patient:
-  `app.patients.ideas_stale_since`, set by database triggers.
-```mermaid
-erDiagram
-  patient_idea["app.patient_ideas · NEW"] {
-    id id PK
-    id organization_id FK "→ organization"
-    id patient_id FK "→ patient (cascade)"
-    id offering_id FK "→ offering (cascade)"
-    number position "1–4"
-    text reason "≤ 200"
-    datetime created_at
-  }
-  patient["app.patients · CHANGED"] {
-    datetime ideas_stale_since "NEW — the refresh's mark (PI4)"
-  }
-```
+- **Holds:** a patient's ideas from history — computed on read by the prototype's rules (routes-final 7.N PI1); nothing stored.
+- **History:** built at ROUTE #33, dropped at #133 (P20), built again at #152 as the stored AI ideas (D80); **removed again (D87, 2026-10-12):** `app.patient_ideas`, `app.patients.ideas_stale_since` with its index, triggers and the ideas sweep's read policy — AI ideas are a separate service.
 
 ### payment · NEW
 

@@ -71,7 +71,6 @@ describe('organization serializers', () => {
           reminder_hour: 16,
           retarget_after_days: 90,
           deleted_record_purge_days: 7,
-          whatsapp_phone_number_id: '109876543210',
           created_at: createdAt,
           updated_at: updatedAt,
         },
@@ -86,9 +85,6 @@ describe('organization serializers', () => {
       reminder_hour: 16,
       retarget_after_days: 90,
       deleted_record_purge_days: 7,
-      // Launch D77: a connected WhatsApp number; an Instagram account never set is null.
-      whatsapp_phone_number_id: '109876543210',
-      instagram_account_id: null,
       created_at: createdAt.toISOString(),
       updated_at: updatedAt.toISOString(),
     });

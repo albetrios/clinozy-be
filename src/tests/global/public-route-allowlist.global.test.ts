@@ -40,11 +40,6 @@ const EXPECTED_PUBLIC_ROUTES: readonly string[] = [
   'GET /api/v1/billing/plans',
   'GET /api/v1/billing/plans/:plan_id',
   'POST /api/v1/billing/webhook',
-  // App — the platform Meta app's WhatsApp and Instagram webhook (launch D77): the handshake
-  // answers only Meta's verify token; every callback sits behind the raw-body
-  // `X-Hub-Signature-256` HMAC preHandler (contact-messaging-webhook-ingress.plugin.ts).
-  'GET /api/v1/app/messaging-webhook',
-  'POST /api/v1/app/messaging-webhook',
 ];
 
 describe('Security: public route allowlist', () => {

@@ -14,11 +14,10 @@ export function createPatientIdeasController(service: PatientIdeasService) {
         scope: requireOrganizationScope(request),
         params: request.params,
       });
-      const body = successResponse({
+      return successResponse({
         data: result.data,
         request_id: getRequestIdentifier(request),
       });
-      return { ...body, meta: { ...body.meta, ...result.meta } };
     },
   };
 }

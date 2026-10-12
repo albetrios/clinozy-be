@@ -8,7 +8,6 @@ import { taskRuleSettingsRoutes } from './sub-domains/tasks/task-rule-settings/t
 import { patientIdeasRoutes } from './sub-domains/patients/patient-ideas/patient-ideas.routes.js';
 import { appMembershipsRoutes } from './sub-domains/memberships/memberships.routes.js';
 import { contactMembersRoutes } from './sub-domains/contacts/contact-members/contact-members.routes.js';
-import { contactMessagingWebhookRoutes } from './sub-domains/contacts/contact-messaging-webhook/contact-messaging-webhook.routes.js';
 
 /** Registers the app domain's routes under `/api/v1/app`. */
 export const appRoutesPlugin: FastifyPluginAsync = async (app) => {
@@ -21,7 +20,5 @@ export const appRoutesPlugin: FastifyPluginAsync = async (app) => {
   await app.register(membershipPreferencesRoutes(appDomain.membershipPreferencesService));
   await app.register(membershipSavedViewsRoutes(appDomain.membershipSavedViewsService));
   await app.register(contactMembersRoutes(appDomain.contactMembersService));
-  // Public: the platform Meta app's webhook (signature-checked, no authentication — D77).
-  await app.register(contactMessagingWebhookRoutes(appDomain.contactMessagingWebhookService));
   await registerAppRecordRoutes({ app, services: appDomain });
 };

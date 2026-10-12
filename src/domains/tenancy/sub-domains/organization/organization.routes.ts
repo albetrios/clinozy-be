@@ -243,7 +243,7 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Update organization settings',
           description:
-            "Updates organization settings — notifications, locale, security policy, the operating settings, and the clinic's WhatsApp Business phone-number id and Instagram account id on the platform Meta app (launch D77; `null` disconnects one, and an account another organization already connected is a 409 `messaging_account_taken`). Requires ORGANIZATION_UPDATE permission.",
+            'Updates organization settings — notifications, locale, security policy and the operating settings. Requires ORGANIZATION_UPDATE permission.',
           tags: ['Organization Settings'],
           body: updateOrganizationSettingsDto,
         },

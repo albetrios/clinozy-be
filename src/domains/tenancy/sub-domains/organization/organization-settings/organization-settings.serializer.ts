@@ -20,8 +20,6 @@ export function serializeOrganizationSettings({
     reminder_hour: number;
     retarget_after_days: number;
     deleted_record_purge_days: number;
-    whatsapp_phone_number_id?: string | null;
-    instagram_account_id?: string | null;
     created_at: Date;
     updated_at: Date;
   };
@@ -37,8 +35,6 @@ export function serializeOrganizationSettings({
     reminder_hour: row.reminder_hour,
     retarget_after_days: row.retarget_after_days,
     deleted_record_purge_days: row.deleted_record_purge_days,
-    whatsapp_phone_number_id: row.whatsapp_phone_number_id ?? null,
-    instagram_account_id: row.instagram_account_id ?? null,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
   };

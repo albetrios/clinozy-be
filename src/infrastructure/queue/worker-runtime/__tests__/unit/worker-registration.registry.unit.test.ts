@@ -54,7 +54,7 @@ describe('worker-registration.registry', () => {
     // delivery and callback-processing workers, the one-minute sweep and the callbacks' purge; +2 for
     // the AI ideas sweep and its per-organization refreshes (D80, WC-47); +1 for the membership
     // invitation expiry sweep (launch D84).
-    expect(definitions).toHaveLength(45);
+    expect(definitions).toHaveLength(39);
     for (const definition of definitions) {
       expect(definition.queueName).toBeTruthy();
       expect(definition.logLabel).toBeTruthy();
@@ -81,18 +81,16 @@ describe('worker-registration.registry', () => {
     // scheduled, maintenance worker; user-data-export also runs its lost-enqueue sweep. The app
     // record purge and the day auto-close sweep add two more, and the auto-close jobs one
     // Postgres-backed, event-driven (the sweep adds them), throughput worker; the task rules sweep and
-    // its runs the same pair again; messaging (D77) two event-driven throughput workers and two
-    // scheduled maintenance ones; the AI ideas sweep and its refreshes (D80) the task rules' pair
-    // again; the membership invitation expiry sweep (D84) one Postgres-backed, scheduled, maintenance
-    // worker.
-    expect(definitions.filter((definition) => definition.usesPostgres)).toHaveLength(42);
-    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(36);
+    // its runs the same pair again; the membership invitation expiry sweep (D84) one Postgres-backed,
+    // scheduled, maintenance worker.
+    expect(definitions.filter((definition) => definition.usesPostgres)).toHaveLength(36);
+    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(33);
     expect(
       definitions.filter((definition) => definition.criticality === 'throughput'),
-    ).toHaveLength(11);
+    ).toHaveLength(8);
     expect(
       definitions.filter((definition) => definition.criticality === 'maintenance'),
-    ).toHaveLength(32);
+    ).toHaveLength(29);
     expect(
       definitions.filter((definition) => definition.criticality === 'observability'),
     ).toHaveLength(2);

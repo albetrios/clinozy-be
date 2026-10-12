@@ -147,7 +147,7 @@ Flat domains (`audit`, `upload`) keep layers at domain root (no `sub-domains/`).
 | **billing**     | plan, subscription, stripe-webhook                                                                                                                                                                                                                                                          |
 | **notify**      | notification, webhook (webhook-event, webhook-delivery)                                                                                                                                                                                                                                     |
 | **upload**      | (single domain, no sub-domains)                                                                                                                                                                                                                                                             |
-| **app**         | the app's own records, Postgres schema `app` — one sub-domain per section of the launch route review, each with its nested sub-domains inside: branches (branch-members, branch-rooms, branch-machines, branch-holidays), memberships (membership-preferences, membership-saved-views), offerings (offering-groups, offers), contacts (contact-members, contact-activities, contact-message-templates, contact-messaging-webhook), leads, appointments, patients (patient-clinical-notes, patient-prescriptions, prescription-kits, patient-diagnoses, patient-images, patient-reports, patient-treatments, patient-check-ins, patient-reviews, patient-feedback-actions, patient-offerings, patient-offering-suggestions, patient-ideas), billing (invoices, invoice-credit-notes, payments, pending-credits, day-closes), stock (stock-items, stock-item-movements, stock-counts, stock-purchases, stock-vendors), tasks (task-rule-settings), medical (manufacturers, suppliers (supplier-credits), medicines, medical-purchase-orders, medical-reps (medical-rep-visits), medical-sales) — rebuilt one by one, launch ROUTE #125–#138, #152 and #153 |
+| **app**         | the app's own records, Postgres schema `app` — one sub-domain per section of the launch route review, each with its nested sub-domains inside: branches (branch-members, branch-rooms, branch-machines, branch-holidays), memberships (membership-preferences, membership-saved-views), offerings (offering-groups, offers), contacts (contact-members, contact-activities, contact-message-templates), leads, appointments, patients (patient-clinical-notes, patient-prescriptions, prescription-kits, patient-diagnoses, patient-images, patient-reports, patient-treatments, patient-check-ins, patient-reviews, patient-feedback-actions, patient-offerings, patient-offering-suggestions, patient-ideas), billing (invoices, invoice-credit-notes, payments, pending-credits, day-closes), stock (stock-items, stock-item-movements, stock-counts, stock-purchases, stock-vendors), tasks (task-rule-settings), medical (manufacturers, suppliers (supplier-credits), medicines, medical-purchase-orders, medical-reps (medical-rep-visits), medical-sales) — rebuilt one by one, launch ROUTE #125–#138, #152 and #153 |
 
 **Permission resolution** (tenancy domain, not under `shared/`):
 
@@ -222,12 +222,6 @@ src/infrastructure/
       mail.worker.ts          # BullMQ processor for email delivery (+ mail-outbox-sweeper.worker.ts)
   payment/
     stripe.client.ts          # Stripe SDK client + helpers (customer, subscription, webhook)
-  messaging/
-    meta-graph.client.ts      # Meta Graph API: WhatsApp / Instagram sends, Instagram usernames (launch D77)
-    meta-messaging.config.ts  # Delivery flag, webhook configured, X-Hub-Signature-256 + verify-token checks
-  ai/
-    anthropic-messages.client.ts  # Anthropic Messages API: one Claude completion (the patients' AI ideas, launch D80)
-    anthropic-messages.config.ts  # PATIENT_IDEAS_AI_ENABLED flag (+ anthropic-error.util.ts: throttle / refusal / circuit classifier)
   storage/
     object-storage.port.ts    # ObjectStoragePort — the one storage contract (services inject it; workers use the default adapter)
     s3-adapter.ts             # Its S3 implementation, getDefaultS3ObjectStorageAdapter() (+ s3-error.util.ts: not-found +

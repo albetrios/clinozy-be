@@ -15,7 +15,6 @@ import { runWithPropagatedTraceContext } from '@/infrastructure/observability/tr
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { dayCloseAutoCloseJobDataSchema } from '@/domains/app/sub-domains/billing/day-closes/queues/day-close-auto-close.job.schema.js';
 import { DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/queues/day-close-auto-close.queue.js';
-import { requestContactMessageDelivery } from '@/domains/app/sub-domains/contacts/contact-activities/queues/contact-message-delivery.queue.js';
 import { runDayCloseAutoCloseJob } from './day-close-auto-close.processor.js';
 
 /**
@@ -49,8 +48,6 @@ export function createDayCloseAutoCloseWorker(): WorkerHandle {
             processor: (databaseHandle) =>
               runDayCloseAutoCloseJob({ databaseHandle, organizationPublicId }),
           });
-          // The closed days' summaries go to the admins now, after the commit (WC-10, D78).
-          if (counts.closedCount > 0) await requestContactMessageDelivery(organizationPublicId);
           return counts;
         },
       });

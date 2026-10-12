@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 442
+  Total routes: 439
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 306
+  Routes: 303
 ================================================================================
 
   — Sub Domains —
@@ -63,7 +63,6 @@ Legend:
   POST   /api/v1/app/branches/:branch_id/rooms/:branch_room_id/restore  200  req  both  PERM: branch:delete
   GET    /api/v1/app/branches/my                                  200  -    both  PERM: organization:read
   POST   /api/v1/app/contact-activities/message-batches           200  req  both  PERM: contact_activity:create
-  GET    /api/v1/app/contact-activities/messaging-status          200  -    both  PERM: contact_activity:read
   GET    /api/v1/app/contact-message-templates                    200  -    both  PERM: organization:read
   POST   /api/v1/app/contact-message-templates                    200  req  both  PERM: contact_activity:create
   GET    /api/v1/app/contact-message-templates/:contact_message_template_id  200  -    both  PERM: organization:read
@@ -161,8 +160,6 @@ Legend:
   GET    /api/v1/app/memberships/me/saved-views/:membership_saved_view_id  200  -    both  PERM: organization:read
   PATCH  /api/v1/app/memberships/me/saved-views/:membership_saved_view_id  200  -    both  PERM: organization:read
   DELETE /api/v1/app/memberships/me/saved-views/:membership_saved_view_id  204  -    both  PERM: organization:read
-  GET    /api/v1/app/messaging-webhook                            200  -    both  PUBLIC
-  POST   /api/v1/app/messaging-webhook                            200  -    both  PUBLIC
   GET    /api/v1/app/offering-groups                              200  -    both  PERM: organization:read
   POST   /api/v1/app/offering-groups                              200  req  both  PERM: offering:create
   GET    /api/v1/app/offering-groups/:offering_group_id           200  -    both  PERM: organization:read
@@ -533,11 +530,11 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 442
-  Public          : 18
+  Total routes    : 439
+  Public          : 16
   Authenticated   : 53
   Role-guarded    : 9
-  Perm-guarded    : 357
+  Perm-guarded    : 356
   Token-guarded   : 5
   Team-only (O)   : 10
 

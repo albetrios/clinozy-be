@@ -14,7 +14,7 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { appSchema } from '@/infrastructure/database/pg-schemas.js';
 import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
@@ -76,9 +76,6 @@ export const patients = appSchema
       has_photo_consent: boolean('has_photo_consent').notNull().default(false),
       allergies: text('allergies').array().notNull().default([]),
       contraindications: text('contraindications').array().notNull().default([]),
-      // The AI offering ideas are due a refresh since then (D80, WC-47) — set by the database's
-      // triggers, cleared by the refresh
-      ideas_stale_since: timestamp('ideas_stale_since', { withTimezone: true }),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
@@ -119,10 +116,6 @@ export const patients = appSchema
       index('idx_patients_deleted_at')
         .on(table.deleted_at)
         .where(sql`${table.deleted_at} IS NOT NULL`),
-      // The ideas sweep (D80): files due a refresh, per organization, oldest mark first
-      index('idx_patients_ideas_stale')
-        .on(table.organization_id, table.ideas_stale_since)
-        .where(sql`${table.ideas_stale_since} IS NOT NULL AND ${table.deleted_at} IS NULL`),
       index('idx_patients_created_by_user_id')
         .on(table.created_by_user_id)
         .where(sql`${table.created_by_user_id} IS NOT NULL`),
@@ -185,14 +178,6 @@ export const patients = appSchema
             SELECT id FROM tenancy.organizations
             WHERE public_id = current_setting('app.current_organization_public_id', true)
           )`,
-      }),
-      // The AI ideas sweep (WC-47, D80) reads the stale marks across organizations — a read only:
-      // a patient file is never purged (P7), so the maintenance role gets no write arm here.
-      pgPolicy('patients_ideas_sweep_read', {
-        as: 'permissive',
-        for: 'select',
-        to: 'public',
-        using: sql`${maintenanceBypassArm('app.global_retention_cleanup')}`,
       }),
     ],
   )

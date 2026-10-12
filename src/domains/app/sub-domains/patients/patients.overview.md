@@ -15,7 +15,7 @@ care, in the nested sub-domains below. **The person lives on the contact** (P1, 
 
 | File / folder | Role |
 | --- | --- |
-| `patients.schema.ts` | `app.patients` — one live file per contact (`idx_patients_organization_contact_unique`), the counter, the K8 usual doctor, the AI ideas' stale mark (`ideas_stale_since`, D80), RLS on the organization plus `patients_ideas_sweep_read`, a `FOR SELECT` policy for the ideas sweep's cross-organization read (never purged, P7 — the maintenance role cannot write) |
+| `patients.schema.ts` | `app.patients` — one live file per contact (`idx_patients_organization_contact_unique`), the counter, the K8 usual doctor, RLS on the organization (never purged, P7) |
 | `patients.constants.ts` | types, statuses, conversion, the clinical-list limits, the patient file's one body-part list (TR8), `PT` |
 | `patients.{dto,validator,serializer,types}.ts` | request shapes (a contact or an inline new one), the list's `q` (`PT-0412`, `#412`, the contact's text), the response, the export row |
 | `patients.rules.ts` | one file per contact, the usual doctor on the contact's team; the shared patient-file helpers — the same-patient visit and session checks (TR3), the organization's today, the `system` entry in the contact's activity (M10) |
@@ -32,7 +32,7 @@ care, in the nested sub-domains below. **The person lives on the contact** (P1, 
 | `patient-feedback-actions/` | 7.K — what was done about a check-in or a review (routes 63–64, under their parent) |
 | `patient-offerings/` | 7.L — what the patient bought, spent by treatments (routes 65–67) |
 | `patient-offering-suggestions/` | 7.M — the plan (routes 68–73) |
-| `patient-ideas/` | 7.N — ideas from history: the rules, or Claude's ideas refreshed in the background (route 74, D80) |
+| `patient-ideas/` | 7.N — ideas from history, by the prototype's rules (route 74) |
 
 ## Routes
 

@@ -1,15 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const mocks = vi.hoisted(() => ({ aiEnabled: false }));
+import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/infrastructure/database/contexts/database-context.js', async (importOriginal) => ({
   ...(await importOriginal<
     typeof import('@/infrastructure/database/contexts/database-context.js')
   >()),
   withAppDatabaseContext: ({ callback }: { callback: () => unknown }) => callback(),
-}));
-vi.mock('@/infrastructure/ai/anthropic-messages.config.js', () => ({
-  isPatientIdeasAiEnabled: () => mocks.aiEnabled,
 }));
 
 import type { OrganizationPrincipalDatabaseScope } from '@/infrastructure/database/contexts/database-context.js';
@@ -42,10 +37,9 @@ const PRP = offering(3, 'PRP');
 /** A repository answering one patient with no history; each case overrides what it needs. */
 function repository(overrides: Partial<Record<keyof PatientIdeasRepository, unknown>> = {}) {
   return {
-    findPatient: vi.fn().mockResolvedValue({ id: 5, contactId: 50, hasDataConsent: true }),
+    findPatient: vi.fn().mockResolvedValue({ id: 5, contactId: 50 }),
     findActiveOfferings: vi.fn().mockResolvedValue([CONSULTATION, PEEL, PRP]),
     findPlannedOfferingIds: vi.fn().mockResolvedValue([]),
-    findStoredIdeas: vi.fn().mockResolvedValue([]),
     findHistory: vi.fn().mockResolvedValue({
       treatmentSuggestions: [],
       complaints: [],
@@ -66,12 +60,8 @@ function service(ideasRepository: PatientIdeasRepository) {
   return new PatientIdeasService(organizationService as never, ideasRepository);
 }
 
-/** A patient's offering ideas (routes-final 7.N, D80): AI ideas when fit, else the rules. */
+/** A patient's offering ideas (routes-final 7.N): the prototype's rules on the history. */
 describe('PatientIdeasService.list', () => {
-  beforeEach(() => {
-    mocks.aiEnabled = false;
-  });
-
   it('refuses a missing or oversized patient id (400) before any database work', async () => {
     const ideasRepository = repository();
     await expect(
@@ -93,7 +83,7 @@ describe('PatientIdeasService.list', () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it('answers the rules when the AI is off — stored ideas are not read', async () => {
+  it("answers the rules on the patient's history", async () => {
     const ideasRepository = repository();
 
     const result = await service(ideasRepository).list({
@@ -113,81 +103,6 @@ describe('PatientIdeasService.list', () => {
           source: 'first',
         },
       ],
-      meta: { source: 'rules', ai_refreshed_at: null },
     });
-    expect(ideasRepository.findStoredIdeas).not.toHaveBeenCalled();
-  });
-
-  it('answers the stored AI ideas that still hold, with the latest refresh time', async () => {
-    mocks.aiEnabled = true;
-    const ideasRepository = repository({
-      findPlannedOfferingIds: vi.fn().mockResolvedValue([PRP.id]),
-      findStoredIdeas: vi.fn().mockResolvedValue([
-        {
-          offeringId: PEEL.id,
-          reason: 'Evens the tone',
-          position: 1,
-          createdAt: new Date('2026-10-01T10:00:00Z'),
-        },
-        // Planned since the refresh — dropped
-        {
-          offeringId: PRP.id,
-          reason: 'Hair',
-          position: 2,
-          createdAt: new Date('2026-10-02T10:00:00Z'),
-        },
-        // Switched off since the refresh — dropped
-        {
-          offeringId: 99,
-          reason: 'Gone',
-          position: 3,
-          createdAt: new Date('2026-10-01T10:00:00Z'),
-        },
-      ]),
-    });
-
-    const result = await service(ideasRepository).list({
-      scope: SCOPE,
-      params: { patient_id: PATIENT_PUBLIC_ID },
-    });
-
-    expect(result.meta).toEqual({ source: 'ai', ai_refreshed_at: '2026-10-02T10:00:00.000Z' });
-    expect(result.data.map((idea) => [idea.offering_id, idea.reason, idea.source])).toEqual([
-      [PEEL.publicId, 'Evens the tone', 'ai'],
-    ]);
-    expect(ideasRepository.findHistory).not.toHaveBeenCalled();
-  });
-
-  it('falls back to the rules when no stored AI idea still holds', async () => {
-    mocks.aiEnabled = true;
-    const ideasRepository = repository({
-      findStoredIdeas: vi
-        .fn()
-        .mockResolvedValue([
-          { offeringId: 99, reason: 'Gone', position: 1, createdAt: new Date('2026-10-01') },
-        ]),
-    });
-
-    const result = await service(ideasRepository).list({
-      scope: SCOPE,
-      params: { patient_id: PATIENT_PUBLIC_ID },
-    });
-
-    expect(result.meta.source).toBe('rules');
-  });
-
-  it('never shows AI ideas for a patient without Data consent', async () => {
-    mocks.aiEnabled = true;
-    const ideasRepository = repository({
-      findPatient: vi.fn().mockResolvedValue({ id: 5, contactId: 50, hasDataConsent: false }),
-    });
-
-    const result = await service(ideasRepository).list({
-      scope: SCOPE,
-      params: { patient_id: PATIENT_PUBLIC_ID },
-    });
-
-    expect(result.meta.source).toBe('rules');
-    expect(ideasRepository.findStoredIdeas).not.toHaveBeenCalled();
   });
 });

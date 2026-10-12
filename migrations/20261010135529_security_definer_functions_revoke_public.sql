@@ -90,8 +90,4 @@ REVOKE EXECUTE ON FUNCTION tenancy.fn_sync_membership_display_names() FROM PUBLI
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION tenancy.fn_sync_membership_display_names() TO clinozy_be_app, clinozy_be_maintenance;
 --> statement-breakpoint
-REVOKE EXECUTE ON FUNCTION tenancy.resolve_organization_public_id_for_messaging_account(text,text) FROM PUBLIC;
---> statement-breakpoint
-GRANT EXECUTE ON FUNCTION tenancy.resolve_organization_public_id_for_messaging_account(text,text) TO clinozy_be_app, clinozy_be_maintenance;
---> statement-breakpoint
 ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;

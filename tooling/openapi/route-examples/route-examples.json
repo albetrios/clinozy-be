@@ -3671,66 +3671,6 @@
       }
     }
   },
-  "GET /api/v1/app/contact-activities/messaging-status": {
-    "responses": {
-      "200": {
-        "data": {
-          "is_delivery_enabled": false,
-          "is_provider_down": false,
-          "whatsapp": {
-            "is_connected": false,
-            "queued_count": 0
-          },
-          "instagram": {
-            "is_connected": false,
-            "queued_count": 0
-          }
-        },
-        "meta": {
-          "request_id": "65357218-58a7-430c-9878-af33f02622f0"
-        }
-      },
-      "400": {
-        "error": {
-          "type": "validation_error",
-          "code": "invalid_field",
-          "detail": "Invalid values for fields in request",
-          "documentation_url": "https://example.com/resource",
-          "errors": [
-            {
-              "field": "querystring.x",
-              "message": "Unrecognized key: \"x\""
-            }
-          ]
-        },
-        "meta": {
-          "request_id": "cd04b596-7df2-48d9-9768-4c06201b98c1"
-        }
-      },
-      "401": {
-        "error": {
-          "type": "request_error",
-          "code": "unauthorized",
-          "detail": "Missing Authorization header",
-          "documentation_url": "https://example.com/resource"
-        },
-        "meta": {
-          "request_id": "9c4362ce-7136-4804-9dd7-326031de9e44"
-        }
-      },
-      "403": {
-        "error": {
-          "type": "request_error",
-          "code": "forbidden",
-          "detail": "Organization context required",
-          "documentation_url": "https://example.com/resource"
-        },
-        "meta": {
-          "request_id": "8f24e97e-cd96-4bbe-9d58-82128bdc868f"
-        }
-      }
-    }
-  },
   "GET /api/v1/app/contact-message-templates": {
     "responses": {
       "200": {
@@ -6492,44 +6432,6 @@
         },
         "meta": {
           "request_id": "dab98dfd-1dd3-4caf-90ff-bb2a9610d865"
-        }
-      }
-    }
-  },
-  "GET /api/v1/app/messaging-webhook": {
-    "responses": {
-      "200": 8231,
-      "400": {
-        "error": {
-          "type": "validation_error",
-          "code": "invalid_field",
-          "detail": "Invalid values for fields in request",
-          "documentation_url": "https://example.com/resource",
-          "errors": [
-            {
-              "field": "querystring.hub.mode",
-              "message": "Invalid input: expected string, received undefined"
-            },
-            {
-              "field": "querystring.hub.verify_token",
-              "message": "Invalid input: expected string, received undefined"
-            }
-          ]
-        },
-        "meta": {
-          "request_id": "f42b0d96-73bf-4d1a-9095-c388e365d13d"
-        }
-      },
-      "403": {
-        "error": {
-          "type": "request_error",
-          "code": "forbidden",
-          "reason": "verify_token_mismatch",
-          "detail": "The webhook verify token does not match",
-          "documentation_url": "https://example.com/resource"
-        },
-        "meta": {
-          "request_id": "aa165bc9-24a1-4eff-99c1-130579c7b33a"
         }
       }
     }
@@ -22665,65 +22567,6 @@
         },
         "meta": {
           "request_id": "6cdd64eb-155f-4b1d-9a58-648fbd4f2dd3"
-        }
-      }
-    }
-  },
-  "POST /api/v1/app/messaging-webhook": {
-    "request_body": {
-      "object": "whatsapp_business_account",
-      "entry": [
-        {
-          "id": "waba-1",
-          "changes": [
-            {
-              "field": "messages",
-              "value": {
-                "messaging_product": "whatsapp",
-                "metadata": {
-                  "phone_number_id": "101617924505"
-                },
-                "statuses": [
-                  {
-                    "id": "wamid.ONE",
-                    "status": "delivered",
-                    "timestamp": "1791500000"
-                  }
-                ]
-              }
-            }
-          ]
-        }
-      ]
-    },
-    "responses": {
-      "200": {
-        "data": {
-          "stored_count": 1
-        },
-        "meta": {
-          "request_id": "2c1dd1c9-2352-4b1c-94b2-552d21d450c3"
-        }
-      },
-      "400": {
-        "error": {
-          "type": "validation_error",
-          "code": "invalid_field",
-          "detail": "Invalid values for fields in request",
-          "documentation_url": "https://example.com/resource",
-          "errors": [
-            {
-              "field": "body.object",
-              "message": "Invalid input: expected string, received undefined"
-            },
-            {
-              "field": "body.entry",
-              "message": "Invalid input: expected array, received undefined"
-            }
-          ]
-        },
-        "meta": {
-          "request_id": "1dc1aa49-4a31-4b44-95ff-fea38cf900bb"
         }
       }
     }

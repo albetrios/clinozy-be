@@ -69,7 +69,6 @@ src/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   ├── day-close-auto-close-sweep.processor.unit.test.ts
     │   │   │   │   │   │   ├── day-close-auto-close.processor.unit.test.ts
-    │   │   │   │   │   │   ├── day-close-summary.message.unit.test.ts
     │   │   │   │   │   │   └── day-closes.service.unit.test.ts
     │   │   │   │   ├── queues/
     │   │   │   │   │   ├── day-close-auto-close.job.schema.ts
@@ -81,8 +80,6 @@ src/
     │   │   │   │   │   ├── day-close-auto-close.processor.ts
     │   │   │   │   │   └── day-close-auto-close.worker.ts
     │   │   │   │   ├── day-close-auto-close.repository.ts
-    │   │   │   │   ├── day-close-summary.message.ts
-    │   │   │   │   ├── day-close-summary.repository.ts
     │   │   │   │   ├── day-closes.constants.ts
     │   │   │   │   ├── day-closes.controller.ts
     │   │   │   │   ├── day-closes.dto.ts
@@ -249,7 +246,6 @@ src/
     │   │   │   ├── __tests__/
     │   │   │   │   ├── integration/
     │   │   │   │   │   ├── contact-activities.integration.test.ts
-    │   │   │   │   │   ├── contact-messaging.integration.test.ts
     │   │   │   │   │   ├── contacts-household.integration.test.ts
     │   │   │   │   │   └── contacts.integration.test.ts
     │   │   │   │   └── unit/
@@ -258,16 +254,7 @@ src/
     │   │   │   ├── contact-activities/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
-    │   │   │   │   │   │   ├── contact-activities.service.unit.test.ts
-    │   │   │   │   │   │   ├── contact-message-delivery.processor.unit.test.ts
-    │   │   │   │   │   │   └── whatsapp-notice-templates.unit.test.ts
-    │   │   │   │   ├── queues/
-    │   │   │   │   │   ├── contact-message-delivery.job.schema.ts
-    │   │   │   │   │   └── contact-message-delivery.queue.ts
-    │   │   │   │   ├── workers/
-    │   │   │   │   │   ├── contact-message-delivery.constants.ts
-    │   │   │   │   │   ├── contact-message-delivery.processor.ts
-    │   │   │   │   │   └── contact-message-delivery.worker.ts
+    │   │   │   │   │   │   └── contact-activities.service.unit.test.ts
     │   │   │   │   ├── contact-activities.constants.ts
     │   │   │   │   ├── contact-activities.controller.ts
     │   │   │   │   ├── contact-activities.dto.ts
@@ -279,9 +266,7 @@ src/
     │   │   │   │   ├── contact-activities.serializer.ts
     │   │   │   │   ├── contact-activities.service.ts
     │   │   │   │   ├── contact-activities.types.ts
-    │   │   │   │   ├── contact-activities.validator.ts
-    │   │   │   │   ├── contact-message-delivery.repository.ts
-    │   │   │   │   └── whatsapp-notice-templates.ts
+    │   │   │   │   └── contact-activities.validator.ts
     │   │   │   ├── contact-members/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
@@ -310,35 +295,6 @@ src/
     │   │   │   │   ├── contact-message-templates.service.ts
     │   │   │   │   ├── contact-message-templates.types.ts
     │   │   │   │   └── contact-message-templates.validator.ts
-    │   │   │   ├── contact-messaging-webhook/
-    │   │   │   │   ├── __tests__/
-    │   │   │   │   │   └── unit/
-    │   │   │   │   │   │   ├── contact-messaging-sweep.processor.unit.test.ts
-    │   │   │   │   │   │   ├── contact-messaging-webhook.replies.unit.test.ts
-    │   │   │   │   │   │   ├── contact-messaging-webhook.service.unit.test.ts
-    │   │   │   │   │   │   └── messaging-webhook-event.processor.unit.test.ts
-    │   │   │   │   ├── queues/
-    │   │   │   │   │   ├── messaging-webhook-event.job.schema.ts
-    │   │   │   │   │   └── messaging-webhook-event.queue.ts
-    │   │   │   │   ├── workers/
-    │   │   │   │   │   ├── contact-messaging-sweep.processor.ts
-    │   │   │   │   │   ├── contact-messaging-sweep.worker.ts
-    │   │   │   │   │   ├── contact-messaging-webhook.constants.ts
-    │   │   │   │   │   ├── messaging-webhook-event-retention.worker.ts
-    │   │   │   │   │   ├── messaging-webhook-event.processor.ts
-    │   │   │   │   │   └── messaging-webhook-event.worker.ts
-    │   │   │   │   ├── contact-messaging-inbound.repository.ts
-    │   │   │   │   ├── contact-messaging-webhook-ingress.plugin.ts
-    │   │   │   │   ├── contact-messaging-webhook.constants.ts
-    │   │   │   │   ├── contact-messaging-webhook.controller.ts
-    │   │   │   │   ├── contact-messaging-webhook.dto.ts
-    │   │   │   │   ├── contact-messaging-webhook.overview.md
-    │   │   │   │   ├── contact-messaging-webhook.replies.ts
-    │   │   │   │   ├── contact-messaging-webhook.repository.ts
-    │   │   │   │   ├── contact-messaging-webhook.routes.ts
-    │   │   │   │   ├── contact-messaging-webhook.schema.ts
-    │   │   │   │   ├── contact-messaging-webhook.service.ts
-    │   │   │   │   └── contact-messaging-webhook.types.ts
     │   │   │   ├── seed/
     │   │   │   │   ├── contacts.bulk.seed.ts
     │   │   │   │   ├── contacts.seed.ts
@@ -680,23 +636,8 @@ src/
     │   │   │   │   │   ├── integration/
     │   │   │   │   │   │   └── patient-ideas.integration.test.ts
     │   │   │   │   │   └── unit/
-    │   │   │   │   │   │   ├── patient-ideas-sweep.processor.unit.test.ts
-    │   │   │   │   │   │   ├── patient-ideas.ai.unit.test.ts
-    │   │   │   │   │   │   ├── patient-ideas.call-budget.unit.test.ts
-    │   │   │   │   │   │   ├── patient-ideas.processor.unit.test.ts
     │   │   │   │   │   │   ├── patient-ideas.rules.unit.test.ts
     │   │   │   │   │   │   └── patient-ideas.service.unit.test.ts
-    │   │   │   │   ├── queues/
-    │   │   │   │   │   ├── patient-ideas.job.schema.ts
-    │   │   │   │   │   └── patient-ideas.queue.ts
-    │   │   │   │   ├── workers/
-    │   │   │   │   │   ├── patient-ideas-sweep.processor.ts
-    │   │   │   │   │   ├── patient-ideas-sweep.worker.ts
-    │   │   │   │   │   ├── patient-ideas.constants.ts
-    │   │   │   │   │   ├── patient-ideas.processor.ts
-    │   │   │   │   │   └── patient-ideas.worker.ts
-    │   │   │   │   ├── patient-ideas.ai.ts
-    │   │   │   │   ├── patient-ideas.call-budget.ts
     │   │   │   │   ├── patient-ideas.constants.ts
     │   │   │   │   ├── patient-ideas.controller.ts
     │   │   │   │   ├── patient-ideas.dto.ts
@@ -704,7 +645,6 @@ src/
     │   │   │   │   ├── patient-ideas.repository.ts
     │   │   │   │   ├── patient-ideas.routes.ts
     │   │   │   │   ├── patient-ideas.rules.ts
-    │   │   │   │   ├── patient-ideas.schema.ts
     │   │   │   │   ├── patient-ideas.serializer.ts
     │   │   │   │   ├── patient-ideas.service.ts
     │   │   │   │   ├── patient-ideas.types.ts
@@ -1369,6 +1309,7 @@ src/
     │   │   │   │   │   ├── stripe-webhook-event.repository.ledger-immutability.db.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook-ingress.plugin.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook-organization.util.unit.test.ts
+    │   │   │   │   │   ├── stripe-webhook-raw-body.registry.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook.controller.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook.job.schema.unit.test.ts
     │   │   │   │   │   ├── stripe-webhook.processor-race.unit.test.ts
@@ -1394,6 +1335,7 @@ src/
     │   │   │   ├── stripe-webhook-event.repository.ts
     │   │   │   ├── stripe-webhook-ingress.plugin.ts
     │   │   │   ├── stripe-webhook-organization.util.ts
+    │   │   │   ├── stripe-webhook-raw-body.registry.ts
     │   │   │   ├── stripe-webhook.controller.ts
     │   │   │   ├── stripe-webhook.overview.md
     │   │   │   ├── stripe-webhook.routes.ts
@@ -2166,14 +2108,6 @@ src/
     │   └── user.validator.ts
     └── domain-containers.plugin.ts
 ├── infrastructure/
-    ├── ai/
-    │   ├── __tests__/
-    │   │   └── unit/
-    │   │   │   └── anthropic-error.util.unit.test.ts
-    │   ├── ai.overview.md
-    │   ├── anthropic-error.util.ts
-    │   ├── anthropic-messages.client.ts
-    │   └── anthropic-messages.config.ts
     ├── api-reference/
     │   ├── api-reference.overview.md
     │   └── scalar-api-reference.ts
@@ -2290,14 +2224,6 @@ src/
     │   ├── mcp-client-guide.ts
     │   ├── mcp-server.ts
     │   └── mcp.overview.md
-    ├── messaging/
-    │   ├── __tests__/
-    │   │   └── unit/
-    │   │   │   └── meta-graph-error.util.unit.test.ts
-    │   ├── messaging.overview.md
-    │   ├── meta-graph-error.util.ts
-    │   ├── meta-graph.client.ts
-    │   └── meta-messaging.config.ts
     ├── observability/
     │   ├── __tests__/
     │   │   └── unit/
@@ -2478,9 +2404,6 @@ src/
     │   ├── db-sequences-advance.ts
     │   ├── memory-soak.ts
     │   ├── next-migration-prefix.ts
-    │   ├── patient-ideas-eval.evaluate.ts
-    │   ├── patient-ideas-eval.set.ts
-    │   ├── patient-ideas-eval.ts
     │   ├── process-tree.util.ts
     │   ├── route-coverage-audit.ts
     │   ├── secrets-key-rotate.ts
@@ -2655,7 +2578,6 @@ src/
     │   │   ├── http-cache.util.ts
     │   │   ├── list-query.util.ts
     │   │   ├── pagination.util.ts
-    │   │   ├── raw-body-route.registry.ts
     │   │   ├── request.util.ts
     │   │   ├── response.util.ts
     │   │   ├── trust-proxy.util.ts
@@ -2747,7 +2669,6 @@ src/
     │   ├── postgres-reset-peer.chaos.test.ts
     │   ├── postgres-timeout-toxic.chaos.test.ts
     │   ├── postgres-webhook-queue-retry.chaos.test.ts
-    │   ├── provider-circuit-pause.chaos.test.ts
     │   ├── provision-proxies.ts
     │   ├── redis-circuit-breaker.chaos.test.ts
     │   ├── redis-idempotency.chaos.test.ts
@@ -2802,12 +2723,10 @@ src/
     │   │   ├── s3.schemas.ts
     │   │   └── stripe.schemas.ts
     │   ├── README.md
-    │   ├── anthropic-messages.contract.test.ts
     │   ├── contract-vitest-setup.ts
     │   ├── contract.overview.md
     │   ├── github-oauth.contract.test.ts
     │   ├── google-oauth.contract.test.ts
-    │   ├── meta-graph.contract.test.ts
     │   ├── request-id-eventbus.contract.test.ts
     │   ├── resend.contract.test.ts
     │   ├── resend.live.contract.test.ts
@@ -3387,7 +3306,6 @@ src/
     │   │   ├── lint-migrations-rollback.unit.test.ts
     │   │   ├── lint-migrations-row-security-guc.unit.test.ts
     │   │   ├── lint-migrations-timestamp.unit.test.ts
-    │   │   ├── patient-ideas-eval.evaluate.unit.test.ts
     │   │   ├── process-tree.util.unit.test.ts
     │   │   ├── route-catalog-registry.unit.test.ts
     │   │   ├── route-http-coverage-validation.unit.test.ts
@@ -3452,7 +3370,6 @@ src/
     │   │   │   ├── fastify-server.util.unit.test.ts
     │   │   │   ├── list-query.util.unit.test.ts
     │   │   │   ├── pagination.util.unit.test.ts
-    │   │   │   ├── raw-body-route.registry.unit.test.ts
     │   │   │   ├── request.util.unit.test.ts
     │   │   │   ├── response-format-envelope.util.unit.test.ts
     │   │   │   ├── response-format-payload.util.unit.test.ts

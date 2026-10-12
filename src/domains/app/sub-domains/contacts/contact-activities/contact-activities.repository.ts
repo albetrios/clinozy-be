@@ -1,11 +1,9 @@
-import { and, count, eq, sql, type SQL } from 'drizzle-orm';
+import { eq, sql, type SQL } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { BaseRecordRepository, columnOf } from '@/domains/app/base-record.repository.js';
-import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
 import { contact_activities } from './contact-activities.schema.js';
 import {
   CONTACT_ACTIVITY_CLINICAL_LINKS,
-  CONTACT_ACTIVITY_DELIVERY_STATUS,
   CONTACT_ACTIVITY_GROUP,
   CONTACT_ACTIVITY_MONEY_LINKS,
   CONTACT_ACTIVITY_TASK_LINK,
@@ -59,40 +57,6 @@ export class ContactActivitiesRepository extends BaseRecordRepository {
       defaultSort: 'occurred_at',
       defaultOrder: 'asc',
     });
-  }
-
-  /** The clinic's messaging accounts on the platform Meta app (launch D77) — null when not connected. */
-  async findMessagingAccounts(organizationId: number): Promise<{
-    whatsappPhoneNumberId: string | null;
-    instagramAccountId: string | null;
-  }> {
-    const rows = await getRequestDatabase()
-      .select({
-        whatsappPhoneNumberId: organization_settings.whatsapp_phone_number_id,
-        instagramAccountId: organization_settings.instagram_account_id,
-      })
-      .from(organization_settings)
-      .where(eq(organization_settings.organization_id, organizationId))
-      .limit(1);
-    return {
-      whatsappPhoneNumberId: rows[0]?.whatsappPhoneNumberId ?? null,
-      instagramAccountId: rows[0]?.instagramAccountId ?? null,
-    };
-  }
-
-  /** How many messages wait in the delivery queue, by channel (launch D77). */
-  async countQueuedByType(organizationId: number): Promise<Map<string, number>> {
-    const rows = await getRequestDatabase()
-      .select({ type: contact_activities.type, total: count() })
-      .from(contact_activities)
-      .where(
-        and(
-          eq(contact_activities.organization_id, organizationId),
-          eq(contact_activities.delivery_status, CONTACT_ACTIVITY_DELIVERY_STATUS.QUEUED),
-        ),
-      )
-      .groupBy(contact_activities.type);
-    return new Map(rows.map((row) => [row.type, Number(row.total)]));
   }
 
   /**

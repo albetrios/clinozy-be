@@ -6,8 +6,7 @@
  * @remarks
  * Keys are forced with `=`, never `??=`: the env loader layers the machine-local env file over the
  * shell, and `pnpm setup:local` copies the hosted development Stripe, Resend, S3 and PostHog
- * keys into it. With `??=` the suite ran with those real keys. The Meta app's keys (messaging) and
- * the Anthropic key (the patients' ideas) are faked the same way.
+ * keys into it. With `??=` the suite ran with those real keys.
  *
  * Fake keys alone were not enough: a suite that created a subscription still reached
  * api.stripe.com, and one confirm path reached AWS S3 — passing only because the fake key was
@@ -65,15 +64,6 @@ function useFakeProviderKeys(): void {
   process.env.S3_REGION = 'us-east-1';
   process.env.S3_ACCESS_KEY_ID = 'test-s3-access-key-id';
   process.env.S3_SECRET_ACCESS_KEY = 'test-s3-secret-access-key';
-  // The platform Meta app (launch D77): the webhook verifies with the secret; delivery stays off
-  // unless a suite turns it on, and nock answers its Graph API calls.
-  process.env.META_GRAPH_ACCESS_TOKEN = 'test-meta-graph-access-token';
-  process.env.META_APP_SECRET = 'test-meta-app-secret';
-  process.env.META_WEBHOOK_VERIFY_TOKEN = 'test-meta-webhook-verify-token';
-  process.env.MESSAGING_DELIVERY_ENABLED = 'false';
-  // The ideas worker (launch D80): off unless a suite turns it on, and nock answers Anthropic.
-  process.env.ANTHROPIC_API_KEY = 'test-anthropic-api-key';
-  process.env.PATIENT_IDEAS_AI_ENABLED = 'false';
   // The harness's uploads have no stored object (S3 is out of reach): the photo's location removal
   // (launch D79) is off unless a suite turns it on and answers the S3 calls.
   process.env.PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED = 'false';

@@ -76,7 +76,6 @@ describe('runTaskRulesJob', () => {
       id: 7,
       timeZone: 'Asia/Kolkata',
       reminderHour: 16,
-      isWhatsAppConnected: true,
       retargetAfterDays: 90,
     });
     repository.findLapsedPatients.mockResolvedValue([]);
@@ -149,7 +148,6 @@ describe('runTaskRulesJob', () => {
       expect.objectContaining({
         contactId: 5,
         automationKind: 'booking_confirm',
-        templateParameters: ['Asha', '12 Oct', '10:30'],
       }),
     );
     expect(repository.markBookingMessageQueued).toHaveBeenCalledWith({

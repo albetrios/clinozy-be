@@ -1,5 +1,4 @@
-import { ConflictError, NotFoundError } from '@/shared/errors/index.js';
-import { isPostgresUniqueViolation } from '@/shared/utils/infrastructure/postgres-error.util.js';
+import { NotFoundError } from '@/shared/errors/index.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import {
   PRINCIPAL_SCOPE,
@@ -88,9 +87,9 @@ export class OrganizationSettingsService {
           scope.organizationPublicId,
         );
         if (!organization) throw new NotFoundError('Organization');
-        const updated = await this.upsertMessagingAware({
-          organizationId: organization.id,
-          data: omitUndefined({
+        const updated = await this.settingsRepository.upsert(
+          organization.id,
+          omitUndefined({
             is_email_notifications_enabled: parsed.is_email_notifications_enabled,
             default_locale: parsed.default_locale,
             security_policy: parsed.security_policy as object | undefined,
@@ -99,10 +98,8 @@ export class OrganizationSettingsService {
             reminder_hour: parsed.reminder_hour,
             retarget_after_days: parsed.retarget_after_days,
             deleted_record_purge_days: parsed.deleted_record_purge_days,
-            whatsapp_phone_number_id: parsed.whatsapp_phone_number_id,
-            instagram_account_id: parsed.instagram_account_id,
           }),
-        });
+        );
         return serializeOrganizationSettings({
           organization_public_id: organization.public_id,
           row: updated,
@@ -121,29 +118,6 @@ export class OrganizationSettingsService {
       await invalidateOrganizationMfaPolicy(scope.organizationPublicId);
     }
     return result;
-  }
-
-  /**
-   * The upsert, with a messaging account another clinic already connected as a 409
-   * `messaging_account_taken` (each account belongs to one organization — launch D77).
-   */
-  private async upsertMessagingAware({
-    organizationId,
-    data,
-  }: {
-    organizationId: number;
-    data: Parameters<OrganizationSettingsRepository['upsert']>[1];
-  }) {
-    try {
-      return await this.settingsRepository.upsert(organizationId, data);
-    } catch (error) {
-      if (isPostgresUniqueViolation(error)) {
-        throw new ConflictError('errors:messagingAccountTaken').withReason(
-          'messaging_account_taken',
-        );
-      }
-      throw error;
-    }
   }
 
   async resolveDefaultLocaleForOrganization(

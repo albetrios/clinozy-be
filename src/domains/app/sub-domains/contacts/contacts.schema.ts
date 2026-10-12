@@ -85,9 +85,6 @@ export const contacts = appSchema
       default_channel: varchar('default_channel', { length: 9 }).notNull().default('whatsapp'),
       preference_tags: text('preference_tags').array().notNull().default([]),
       has_marketing_consent: boolean('has_marketing_consent').notNull().default(false),
-      // The person replied STOP to the clinic's automated WhatsApp messages — the server sends them
-      // no more notices until they reply START (Meta's opt-out policy, launch D32)
-      notices_stopped_at: timestamp('notices_stopped_at', { withTimezone: true }),
       referral_source: varchar('referral_source', { length: 9 }),
       referred_by_contact_id: bigint('referred_by_contact_id', { mode: 'number' }).references(
         (): AnyPgColumn => contacts.id,

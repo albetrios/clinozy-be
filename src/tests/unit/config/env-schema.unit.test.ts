@@ -346,77 +346,32 @@ describe('env-schema', () => {
     expect(parsed.success).toBe(true);
   });
 
-  describe('MESSAGING_DELIVERY_ENABLED (launch D77)', () => {
-    const metaKeys = {
-      META_GRAPH_ACCESS_TOKEN: 'EAAG-test',
-      META_APP_SECRET: 'meta-app-secret',
-      META_WEBHOOK_VERIFY_TOKEN: 'meta-verify-token',
-    };
-
-    it('is off by default and needs no Meta keys', () => {
+  describe("the future services' reserved URLs", () => {
+    it('are unset by default — nothing reads them yet', () => {
       const parsed = envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' });
       expect(parsed.success).toBe(true);
-      if (parsed.success) expect(parsed.data.MESSAGING_DELIVERY_ENABLED).toBe(false);
+      if (parsed.success) {
+        expect(parsed.data.MESSAGING_SERVICE_URL).toBeUndefined();
+        expect(parsed.data.AI_SERVICE_URL).toBeUndefined();
+      }
     });
 
-    it('rejects delivery on without every Meta key', () => {
-      for (const missing of Object.keys(metaKeys)) {
+    it('accept URLs and refuse anything else', () => {
+      const urls = {
+        MESSAGING_SERVICE_URL: 'https://messaging.example.com',
+        AI_SERVICE_URL: 'https://ai.example.com',
+      };
+      expect(
+        envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development', ...urls }).success,
+      ).toBe(true);
+      for (const key of Object.keys(urls)) {
         const parsed = envSchema.safeParse({
           ...commonRequiredBase,
           NODE_ENV: 'development',
-          MESSAGING_DELIVERY_ENABLED: 'true',
-          ...metaKeys,
-          [missing]: undefined,
+          [key]: 'not a url',
         });
-        expect(parsed.success, missing).toBe(false);
-        if (!parsed.success) {
-          expect(
-            parsed.error.issues.some((issue) => issue.path.includes('MESSAGING_DELIVERY_ENABLED')),
-          ).toBe(true);
-        }
+        expect(parsed.success, key).toBe(false);
       }
-    });
-
-    it('accepts delivery on with the three Meta keys', () => {
-      const parsed = envSchema.safeParse({
-        ...commonRequiredBase,
-        NODE_ENV: 'development',
-        MESSAGING_DELIVERY_ENABLED: 'true',
-        ...metaKeys,
-      });
-      expect(parsed.success).toBe(true);
-    });
-  });
-
-  describe('PATIENT_IDEAS_AI_ENABLED (launch D80)', () => {
-    it('is off by default and needs no Anthropic key', () => {
-      const parsed = envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' });
-      expect(parsed.success).toBe(true);
-      if (parsed.success) expect(parsed.data.PATIENT_IDEAS_AI_ENABLED).toBe(false);
-    });
-
-    it('rejects the AI ideas on without ANTHROPIC_API_KEY', () => {
-      const parsed = envSchema.safeParse({
-        ...commonRequiredBase,
-        NODE_ENV: 'development',
-        PATIENT_IDEAS_AI_ENABLED: 'true',
-      });
-      expect(parsed.success).toBe(false);
-      if (!parsed.success) {
-        expect(
-          parsed.error.issues.some((issue) => issue.path.includes('PATIENT_IDEAS_AI_ENABLED')),
-        ).toBe(true);
-      }
-    });
-
-    it('accepts the AI ideas on with ANTHROPIC_API_KEY', () => {
-      const parsed = envSchema.safeParse({
-        ...commonRequiredBase,
-        NODE_ENV: 'development',
-        PATIENT_IDEAS_AI_ENABLED: 'true',
-        ANTHROPIC_API_KEY: 'sk-ant-test',
-      });
-      expect(parsed.success).toBe(true);
     });
   });
 
