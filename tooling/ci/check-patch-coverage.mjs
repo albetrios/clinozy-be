@@ -35,13 +35,15 @@
  * executable statement are excluded — so the denominator is executable new code.
  *
  * Measured surface (mirrors `vitest.config.ts` `coverage.include`/`exclude`):
- * only domain `*.service.ts`, `*.repository.ts`, `*.controller.ts` files and
+ * only domain `*.service.ts`, `*.repository.ts`, `*.controller.ts` files, the
+ * app domain's own logic beside them (`*.rules.ts`, `*.ledger.ts`,
+ * `*.amounts.ts`, `*.pricing.ts`, `*.lines.ts` and its `workers/*.ts`) and
  * everything under `src/shared/` count. Validators, serializers, schemas,
- * workers, DTOs, `src/infrastructure/`, tests, scripts, and `__tests__/` are
- * outside the coverage scope and are therefore excluded from patch coverage too
- * — a change to those files neither helps nor hurts the patch number. Keeping
- * this in lock step with the global coverage scope is what makes the metric
- * honest.
+ * other domains' workers, DTOs, `src/infrastructure/`, tests, scripts, and
+ * `__tests__/` are outside the coverage scope and are therefore excluded from
+ * patch coverage too — a change to those files neither helps nor hurts the patch
+ * number. Keeping this in lock step with the global coverage scope is what makes
+ * the metric honest.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -90,7 +92,8 @@ function parseArguments(argv) {
  * Returns true when a path is inside the measured coverage surface — i.e. it
  * would be instrumented by `vitest.config.ts` `coverage.include`/`exclude`.
  * Only these files contribute to patch coverage. Mirrors that config:
- *   include — domain service/repository/controller files; all of src/shared
+ *   include — domain service/repository/controller files; the app domain's
+ *             rules/ledger/amounts/pricing/lines files and workers; all of src/shared
  *   exclude — src/tests, src/scripts, any __tests__ directory, and .d.ts files
  */
 function isMeasuredPath(relativePath) {
@@ -107,6 +110,10 @@ function isMeasuredPath(relativePath) {
     /\.(service|repository|controller)\.ts$/.test(relativePath)
   ) {
     return true;
+  }
+  if (relativePath.startsWith('src/domains/app/')) {
+    if (/\.(rules|ledger|amounts|pricing|lines)\.ts$/.test(relativePath)) return true;
+    if (/\/workers\/[^/]+\.ts$/.test(relativePath)) return true;
   }
   return false;
 }

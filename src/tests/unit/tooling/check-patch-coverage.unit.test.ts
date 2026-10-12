@@ -13,6 +13,33 @@ describe('isMeasuredPath', () => {
     expect(isMeasuredPath('src/domains/notify/webhook.controller.ts')).toBe(true);
   });
 
+  it("includes the app domain's own logic: rules, ledgers, invoice arithmetic and its workers", () => {
+    expect(isMeasuredPath('src/domains/app/sub-domains/leads/leads.rules.ts')).toBe(true);
+    expect(isMeasuredPath('src/domains/app/sub-domains/billing/payments/payments.ledger.ts')).toBe(
+      true,
+    );
+    expect(isMeasuredPath('src/domains/app/sub-domains/billing/invoices/invoices.amounts.ts')).toBe(
+      true,
+    );
+    expect(isMeasuredPath('src/domains/app/sub-domains/billing/invoices/invoices.pricing.ts')).toBe(
+      true,
+    );
+    expect(isMeasuredPath('src/domains/app/sub-domains/billing/invoices/invoices.lines.ts')).toBe(
+      true,
+    );
+    expect(
+      isMeasuredPath('src/domains/app/sub-domains/tasks/workers/task-rules.processor.ts'),
+    ).toBe(true);
+  });
+
+  it('keeps the app-only patterns to the app domain', () => {
+    expect(isMeasuredPath('src/domains/billing/sub-domains/plan/plan.rules.ts')).toBe(false);
+    expect(isMeasuredPath('src/domains/app/sub-domains/leads/leads.validator.ts')).toBe(false);
+    expect(isMeasuredPath('src/domains/app/sub-domains/tasks/workers/nested/helper.ts')).toBe(
+      false,
+    );
+  });
+
   it('includes everything under src/shared', () => {
     expect(isMeasuredPath('src/shared/middlewares/core/idempotency.middleware.ts')).toBe(true);
     expect(isMeasuredPath('src/shared/utils/http/response.util.ts')).toBe(true);
