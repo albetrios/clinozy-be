@@ -15,7 +15,9 @@ export const ReplaceContactMembersDto = z
     membership_ids: z
       .array(recordIdSchema)
       .max(CONTACT_MEMBERSHIP_IDS_MAX)
-      .refine((ids) => new Set(ids).size === ids.length, { message: 'Each membership once' }),
+      .refine((ids) => new Set(ids).size === ids.length, {
+        message: 'errors:validation.eachMembershipOnce',
+      }),
   })
   .strict();
 

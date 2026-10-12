@@ -24,7 +24,10 @@ const branchCreateFields = {
   area: trimmedStringMinMax({ min: 1, max: 60 }),
   city: trimmedStringMinMax({ min: 1, max: 60 }),
   state: trimmedStringMinMax({ min: 1, max: 60 }).optional(),
-  postal_code: trimmedString().regex(new RegExp(BRANCH_POSTAL_CODE_PATTERN), 'Six digits'),
+  postal_code: trimmedString().regex(
+    new RegExp(BRANCH_POSTAL_CODE_PATTERN),
+    'errors:validation.sixDigits',
+  ),
   phone: phoneNumberSchema,
   email: trimmedStringMinMax({ min: 3, max: 120 }).pipe(z.email()),
   gst_number: gstNumberSchema.nullable().optional(),
@@ -52,7 +55,7 @@ function closesAfterOpens({
     start: value.opens_at,
     end: value.closes_at,
     endField: 'closes_at',
-    message: 'Closing time must be after opening time',
+    message: 'errors:validation.branchClosesBeforeOpens',
     context,
   });
 }
@@ -98,7 +101,7 @@ export const UpdateBranchDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   })
   .superRefine((value, context) => closesAfterOpens({ value, context }));
 

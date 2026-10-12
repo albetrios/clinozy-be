@@ -8,7 +8,7 @@ import { manufacturers } from '@/domains/app/sub-domains/medical/manufacturers/m
 import { suppliers } from '@/domains/app/sub-domains/medical/suppliers/suppliers.schema.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { roundToPaise, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import { MEDICINE_DEFAULT_MAX_STOCK, MEDICINE_DEFAULT_MIN_STOCK } from './medicines.constants.js';
 import {
   type MedicineBatchInput,
@@ -254,11 +254,6 @@ async function writeBatchesAndPrices(options: {
   }
 }
 
-/** Two decimals. */
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
 /** MD12: the batches, prices, nearest expiry, best rate, margin and manufacturer of a page. */
 async function decorateMedicines(options: {
   repository: MedicinesRepository;
@@ -314,7 +309,7 @@ async function decorateMedicines(options: {
         }
       : null;
     output.margin_percent =
-      best && mrp > 0 ? round2(((mrp - (toAmount(best.rate) ?? 0)) / mrp) * 100) : null;
+      best && mrp > 0 ? roundToPaise(((mrp - (toAmount(best.rate) ?? 0)) / mrp) * 100) : null;
     const manufacturer = output.manufacturer as { id: string } | null;
     const manufacturerId = manufacturer ? manufacturerIds.get(manufacturer.id) : undefined;
     output.manufacturer =

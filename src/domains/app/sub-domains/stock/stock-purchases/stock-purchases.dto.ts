@@ -47,7 +47,7 @@ const stockPurchaseItemDto = z
   })
   .strict()
   .refine((line) => (line.stock_item_id === undefined) !== (line.new_item === undefined), {
-    message: 'A stock_item_id or a new_item',
+    message: 'errors:validation.stockItemIdOrNewItem',
   });
 
 /**
@@ -62,7 +62,7 @@ const stockPurchasePaymentDto = z
       .min(1)
       .max(PAYMENT_MONEY_MODE_VALUES.length)
       .refine((splits) => distinct(splits.map((split) => split.mode)), {
-        message: 'Each mode once',
+        message: 'errors:validation.eachModeOnce',
       }),
     paid_at: instantSchema.optional(),
     reference: trimmedStringMinMax({ min: 1, max: 60 }).optional(),
@@ -111,7 +111,7 @@ export const UpdateStockPurchaseDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

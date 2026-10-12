@@ -6,6 +6,7 @@ import {
   expectedUpdatedAtSchema,
   instantSchema,
   moneySchema,
+  paiseOf,
   recordIdSchema,
   valueListSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
@@ -23,7 +24,9 @@ import {
 const distinct = (values: readonly unknown[]) => new Set(values).size === values.length;
 
 /** More than 0 rupees. */
-const positiveMoneySchema = moneySchema.refine((amount) => amount > 0, { message: 'More than 0' });
+const positiveMoneySchema = moneySchema.refine((amount) => amount > 0, {
+  message: 'errors:validation.moreThanZero',
+});
 
 /** The fields a create and a change share (routes-final 8.D.8 #22). */
 const pendingCreditFields = {
@@ -84,7 +87,7 @@ export const UpdatePendingCreditDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**
@@ -102,7 +105,7 @@ export const SettlePendingCreditDto = z
       .min(1)
       .max(PAYMENT_MONEY_MODE_VALUES.length)
       .refine((splits) => distinct(splits.map((split) => split.mode)), {
-        message: 'Each mode once',
+        message: 'errors:validation.eachModeOnce',
       })
       .optional(),
     paid_at: instantSchema.optional(),
@@ -120,25 +123,31 @@ export const SettlePendingCreditDto = z
         context.addIssue({
           code: 'custom',
           path: [field],
-          message: `Required for ${value.method}`,
+          message: 'errors:validation.requiredForSettleMethod',
+          params: { messageParams: { method: value.method } },
         });
       }
     }
     for (const field of refused) {
       if (value[field] !== undefined) {
-        context.addIssue({ code: 'custom', path: [field], message: `Not for ${value.method}` });
+        context.addIssue({
+          code: 'custom',
+          path: [field],
+          message: 'errors:validation.notForSettleMethod',
+          params: { messageParams: { method: value.method } },
+        });
       }
     }
     if (
       money &&
       value.splits !== undefined &&
-      Math.round(value.splits.reduce((total, split) => total + split.amount, 0) * 100) !==
-        Math.round(value.amount * 100)
+      paiseOf(value.splits.reduce((total, split) => total + split.amount, 0)) !==
+        paiseOf(value.amount)
     ) {
       context.addIssue({
         code: 'custom',
         path: ['splits'],
-        message: 'The splits add up to the amount',
+        message: 'errors:validation.splitsAddUpToAmount',
       });
     }
   });

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   and,
   asc,
@@ -22,9 +21,13 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { branch_members } from '@/domains/app/sub-domains/branches/branch-members/branch-members.schema.js';
 import { countWithCap } from '@/infrastructure/database/utils/capped-count.util.js';
-import { buildSearchCondition } from '@/shared/utils/http/list-query.util.js';
 import {
-  createOpaqueCursorFromRow,
+  buildSearchCondition,
+  computeListFilterFingerprint,
+  finishKeysetPage,
+} from '@/shared/utils/http/list-query.util.js';
+import {
+  type CursorTimestampRow,
   cursorTimestampSelection,
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
@@ -202,7 +205,7 @@ function keysetCondition(options: {
  */
 function listFingerprint(
   query: BaseRecordListQuery,
-  sort: { name: string; order: string },
+  sort: { name: string; order: 'asc' | 'desc' },
 ): string {
   const linked = query.linked?.length
     ? query.linked.map((filter) => [
@@ -212,21 +215,19 @@ function listFingerprint(
         filter.orUnlinked,
       ])
     : undefined;
-  return createHash('sha256')
-    .update(
-      JSON.stringify({
-        q: query.q ?? '',
-        sort: sort.name,
-        order: sort.order,
-        equals: query.equals ?? {},
-        ranges: query.ranges ?? {},
-        branch: query.branchScope?.ids ?? null,
-        ...(linked ? { linked } : {}),
-        ...(query.derived ? { derived: query.derived } : {}),
-        ...(query.deletedRows ? { deleted_rows: query.deletedRows } : {}),
-      }),
-    )
-    .digest('hex');
+  return computeListFilterFingerprint({
+    q: query.q,
+    sort: sort.name,
+    order: sort.order,
+    filters: {
+      equals: query.equals ?? {},
+      ranges: query.ranges ?? {},
+      branch: query.branchScope?.ids ?? null,
+      ...(linked ? { linked } : {}),
+      ...(query.derived ? { derived: query.derived } : {}),
+      ...(query.deletedRows ? { deleted_rows: query.deletedRows } : {}),
+    },
+  });
 }
 
 /** A cursor's sort values: the plain text of a one-key sort, a JSON list for several keys; null when unreadable. */
@@ -843,10 +844,10 @@ export class BaseRecordRepository {
           : sql<string>`${key.expression}::text`,
       ]),
     );
-    // The cursor's microsecond created_at (createOpaqueCursorFromRow), selected beside the sort texts.
+    // The cursor's microsecond created_at (finishKeysetPage), selected beside the sort texts.
     const pageTexts = {
       ...sortTexts,
-      page_cursor_created_at: cursorTimestampSelection(this.column('created_at')),
+      cursor_created_at: cursorTimestampSelection(this.column('created_at')),
     };
     const idDirection = sort.keys.at(-1)?.direction ?? sort.order;
     const database = getRequestDatabase();
@@ -860,33 +861,30 @@ export class BaseRecordRepository {
         ),
         idDirection === 'desc' ? desc(idColumn) : asc(idColumn),
       )
-      .limit(query.limit + 1)) as unknown as (BaseRecordRow & Record<string, unknown>)[];
-    const has_more = fetched.length > query.limit;
-    const page = has_more ? fetched.slice(0, query.limit) : fetched;
-    const last = page.at(-1);
-    const sortValues = last
-      ? sort.keys.map((_key, index) => String(last[`page_sort_${index}`]))
-      : [];
-    const next_cursor =
-      has_more && last
-        ? createOpaqueCursorFromRow({
-            cursor_created_at: String(last.page_cursor_created_at),
-            id: last.id,
-            sort_value: sortValues.length === 1 ? sortValues[0]! : JSON.stringify(sortValues),
-            filter_fingerprint: fingerprint,
-          })
-        : null;
-    const items = page.map((row) => {
-      const item = { ...row };
-      for (const name of Object.keys(pageTexts)) delete item[name];
-      return item as BaseRecordRow;
-    });
+      .limit(query.limit + 1)) as unknown as (BaseRecordRow & CursorTimestampRow)[];
     // The total is the first page's: later pages and internal readers skip the count (M1).
     const total =
       query.after === undefined && query.withTotal !== false
         ? await countWithCap({ database, table: this.config.table, where })
         : null;
-    return { items, total, limit: query.limit, has_more, next_cursor };
+    const page = finishKeysetPage({
+      rows: fetched,
+      args: {
+        limit: query.limit,
+        total,
+        sortValueFor: (row) => {
+          const values = sort.keys.map((_key, index) => String(row[`page_sort_${index}`]));
+          return values.length === 1 ? values[0] : JSON.stringify(values);
+        },
+        filterFingerprint: fingerprint,
+      },
+    });
+    const items = page.items.map((row) => {
+      const item: Record<string, unknown> = { ...row };
+      for (const name of Object.keys(pageTexts)) delete item[name];
+      return item as BaseRecordRow;
+    });
+    return { ...page, items };
   }
 
   /** A list query's conditions — the organization's live rows, the search and the filters. */
@@ -928,7 +926,12 @@ export class BaseRecordRepository {
   }): Promise<number> {
     const rows = await getRequestDatabase()
       .update(this.config.table)
-      .set({ ...options.values, updated_at: new Date(), updated_by_user_id: options.userId })
+      .set({
+        ...options.values,
+        // The database clock, as every other write here (updated_at >= created_at holds).
+        updated_at: sql`greatest(${this.column('created_at')}, now())`,
+        updated_by_user_id: options.userId,
+      })
       .where(
         and(
           this.liveInOrganization(options.organizationId),

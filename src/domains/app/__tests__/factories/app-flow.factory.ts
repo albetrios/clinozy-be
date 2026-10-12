@@ -8,6 +8,10 @@ import type {
 import { type JsonValue, jsonQuery } from '@/tests/helpers/json-query.helper.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 import { injectAuthenticated, injectRoute } from '@/tests/helpers/test-http-inject.helper.js';
+import {
+  addDaysToCalendarDate,
+  calendarDateInTimeZone,
+} from '@/shared/utils/validation/record-fields.util.js';
 
 /** HTTP methods the app routes answer. */
 export type AppFlowMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -156,7 +160,8 @@ export class AppFlow {
  * the curl helper's `calendar_day`.
  */
 export function calendarDay(fixture: AppFixture, offset: number): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: fixture.organization.timezone }).format(
-    new Date(Date.now() + offset * 86_400_000),
-  );
+  return addDaysToCalendarDate({
+    date: calendarDateInTimeZone({ timeZone: fixture.organization.timezone }),
+    days: offset,
+  });
 }

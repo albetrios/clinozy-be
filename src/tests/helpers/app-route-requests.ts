@@ -1,4 +1,8 @@
 import { publicIdPlaceholderFor } from '@/shared/utils/identity/public-id.util.js';
+import {
+  addDaysToCalendarDate,
+  calendarDateInTimeZone,
+} from '@/shared/utils/validation/record-fields.util.js';
 
 /**
  * The ids and dates a request body names: real records of the caller's own organization (the
@@ -29,9 +33,7 @@ export interface AppRouteReferences {
 
 /** A calendar day `offset` days from now, `YYYY-MM-DD` in `timeZone`. */
 function dayFrom(offset: number, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(
-    new Date(Date.now() + offset * 86_400_000),
-  );
+  return addDaysToCalendarDate({ date: calendarDateInTimeZone({ timeZone }), days: offset });
 }
 
 /**

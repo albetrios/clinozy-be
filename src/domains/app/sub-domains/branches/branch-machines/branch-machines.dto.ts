@@ -38,7 +38,7 @@ export const UpdateBranchMachineDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /** Query of the `machines` list — keyset paging, `q` search, sort and filters. */

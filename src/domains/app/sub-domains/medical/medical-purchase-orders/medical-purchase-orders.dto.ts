@@ -32,11 +32,11 @@ const medicalPurchaseOrderItemDto = z
     new_medicine_name: trimmedStringMinMax({ min: 1, max: 120 }).optional(),
     quantity: z.number().int().min(1).max(MEDICINE_QUANTITY_MAX),
     free_quantity: z.number().int().min(0).max(MEDICINE_QUANTITY_MAX).optional(),
-    rate: moneySchema.refine((rate) => rate > 0, { message: 'More than 0' }),
+    rate: moneySchema.refine((rate) => rate > 0, { message: 'errors:validation.moreThanZero' }),
   })
   .strict()
   .refine((item) => (item.medicine_id === undefined) !== (item.new_medicine_name === undefined), {
-    message: 'Send a medicine_id or a new_medicine_name',
+    message: 'errors:validation.medicineIdOrNewMedicineName',
   });
 
 /** An order's lines — 1–50. */
@@ -83,7 +83,7 @@ export const UpdateMedicalPurchaseOrderDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**
@@ -104,7 +104,9 @@ export const ReceiveMedicalPurchaseOrderDto = z
           .strict(),
       )
       .max(MEDICAL_PURCHASE_ORDER_ITEMS_MAX)
-      .refine((items) => distinct(items.map((item) => item.id)), { message: 'Each line once' })
+      .refine((items) => distinct(items.map((item) => item.id)), {
+        message: 'errors:validation.eachLineOnce',
+      })
       .optional(),
     supplier_bill_number: supplierBillNumberSchema.optional(),
   })

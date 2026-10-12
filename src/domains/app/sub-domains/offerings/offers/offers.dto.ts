@@ -27,9 +27,9 @@ const distinct = (values: readonly unknown[]) => new Set(values).size === values
 const offerCodeSchema = z
   .string()
   .trim()
-  .regex(new RegExp(`^[A-Za-z0-9]{1,${OFFER_CODE_MAX_LENGTH}}$`), {
-    message: `Letters A–Z and digits 0–9 only, up to ${OFFER_CODE_MAX_LENGTH}`,
-  })
+  .min(1)
+  .max(OFFER_CODE_MAX_LENGTH)
+  .regex(/^[A-Za-z0-9]+$/, 'errors:validation.offerCodeCharacters')
   .meta({
     description: `The offer's code — the code typed at the bill: letters A–Z (any case) and digits 0–9, up to ${OFFER_CODE_MAX_LENGTH}; stored and answered uppercase (\`diwali25\` → \`DIWALI25\`); unique among the live offers in any case (a 409 \`offer_code_in_use\`); null for none (a change clears it).`,
     example: 'DIWALI25',
@@ -40,13 +40,13 @@ const offeringIdsSchema = z
   .array(recordIdSchema)
   .min(1)
   .max(OFFER_OFFERING_IDS_MAX)
-  .refine(distinct, { message: 'Each id once' });
+  .refine(distinct, { message: 'errors:validation.eachIdOnce' });
 
 /** An offer's branches: up to 20 ids, each once; empty = every branch (O5). */
 const branchIdsSchema = z
   .array(recordIdSchema)
   .max(OFFER_BRANCH_IDS_MAX)
-  .refine(distinct, { message: 'Each id once' });
+  .refine(distinct, { message: 'errors:validation.eachIdOnce' });
 
 /** Path params of the by-id `offers` routes. */
 export const offersIdParamsDto = z
@@ -97,7 +97,7 @@ export const UpdateOfferDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

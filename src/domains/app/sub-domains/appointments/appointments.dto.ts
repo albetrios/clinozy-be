@@ -28,7 +28,7 @@ const durationSchema = z
   .min(APPOINTMENT_DURATION_MIN)
   .max(APPOINTMENT_DURATION_MAX)
   .refine((value) => value % APPOINTMENT_DURATION_STEP === 0, {
-    message: 'A multiple of 5 minutes',
+    message: 'errors:validation.multipleOfFiveMinutes',
   });
 
 /** The fields a booking is written with (6.8 #5, #7) — each optional; create and update narrow them. */
@@ -90,10 +90,18 @@ function checkPlacement({
 }): void {
   for (const field of ['appointment_date', 'start_time'] as const) {
     if (value.is_walk_in === true && value[field] !== undefined) {
-      context.addIssue({ code: 'custom', path: [field], message: 'A walk-in is placed at now' });
+      context.addIssue({
+        code: 'custom',
+        path: [field],
+        message: 'errors:validation.walkInPlacedAtNow',
+      });
     }
     if (value.is_walk_in !== true && value[field] === undefined) {
-      context.addIssue({ code: 'custom', path: [field], message: 'Required for a booking' });
+      context.addIssue({
+        code: 'custom',
+        path: [field],
+        message: 'errors:validation.requiredForBooking',
+      });
     }
   }
 }
@@ -142,7 +150,7 @@ export const UpdateAppointmentDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

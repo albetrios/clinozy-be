@@ -12,7 +12,7 @@ import {
 } from '@/domains/app/sub-domains/billing/payments/payments.ledger.js';
 import { PaymentsRepository } from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
 import { ConflictError } from '@/shared/errors/index.js';
-import { toAmount, toText } from '@/shared/utils/validation/record-fields.util.js';
+import { paiseOf, toAmount, toText } from '@/shared/utils/validation/record-fields.util.js';
 import { InvoiceCreditNotesRepository } from './invoice-credit-notes.repository.js';
 import { invoice_credit_notes } from './invoice-credit-notes.schema.js';
 
@@ -50,7 +50,7 @@ export async function recordCreditNote(options: {
   note: string | null;
 }): Promise<BaseRecordRow> {
   const { context, invoice } = options;
-  if (Math.round(options.amount * 100) > Math.round((toAmount(invoice.paid_amount) ?? 0) * 100)) {
+  if (paiseOf(options.amount) > paiseOf(invoice.paid_amount)) {
     throw new ConflictError('errors:paymentMoreThanPaid').withReason('more_than_paid');
   }
   const creditNote = await creditNotesRepository.insert({
@@ -96,7 +96,7 @@ export function createInvoiceCreditNotesRules(): BaseRecordRules {
     prepareCreate: async (values, context) => {
       const invoice = await invoicesRepository.findById(values.invoice_id as number);
       const paid = toAmount(invoice?.paid_amount) ?? 0;
-      if (!invoice || Math.round(Number(values.amount) * 100) > Math.round(paid * 100)) {
+      if (!invoice || paiseOf(values.amount) > paiseOf(paid)) {
         throw new ConflictError('errors:paymentMoreThanPaid').withReason('more_than_paid');
       }
       pendingRefunds.set(context, {

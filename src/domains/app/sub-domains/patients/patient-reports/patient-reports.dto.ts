@@ -24,7 +24,7 @@ const reportFields = {
   file_keys: z
     .array(trimmedStringMinMax({ min: 1, max: 512 }))
     .max(PATIENT_REPORT_FILE_KEYS_MAX)
-    .refine(distinct, { message: 'Each file once' }),
+    .refine(distinct, { message: 'errors:validation.eachFileOnce' }),
   notes: trimmedStringMinMax({ min: 1, max: PATIENT_REPORT_NOTES_MAX }).nullable(),
 };
 
@@ -69,7 +69,7 @@ export const UpdatePatientReportDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /** Query of a patient's reports (7.G.8 #39): `type`, `q` (the name); sort `report_date` (default, newest first) | `created_at`. */

@@ -21,7 +21,7 @@ const medicalRepFields = {
   manufacturer_ids: z
     .array(recordIdSchema)
     .max(MEDICAL_REP_MANUFACTURERS_MAX)
-    .refine(distinct, { message: 'Each manufacturer once' }),
+    .refine(distinct, { message: 'errors:validation.eachManufacturerOnce' }),
 };
 
 /** Path params of the by-id MR routes. */
@@ -59,7 +59,7 @@ export const UpdateMedicalRepDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

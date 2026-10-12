@@ -15,7 +15,9 @@ export const ReplaceBranchMembersDto = z
     membership_ids: z
       .array(trimmedStringMinMax({ min: 1, max: 28 }))
       .max(BRANCH_MEMBERSHIP_IDS_MAX)
-      .refine((ids) => new Set(ids).size === ids.length, { message: 'Each membership once' }),
+      .refine((ids) => new Set(ids).size === ids.length, {
+        message: 'errors:validation.eachMembershipOnce',
+      }),
   })
   .strict();
 

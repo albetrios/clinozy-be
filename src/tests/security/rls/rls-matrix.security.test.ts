@@ -72,9 +72,10 @@ const TENANT_CRUD_EXCLUDED_POLICY_SHAPES = new Set([
 ]);
 
 // The app's own records (schema `app`, launch ROUTE #125–#153) are tenant tables, but this matrix
-// seeds none of them: their cross-organization isolation is asserted route by route, against real
-// records of another organization, in `app-cross-organization.security.test.ts`, and their policies
-// by `force-rls-policies-restrict.security.test.ts`. Excluded by name here, not skipped silently.
+// seeds none of them: their CRUD isolation as the application role is asserted against rows the
+// API wrote in `app-tables-rls-matrix.security.test.ts`, route by route in
+// `app-cross-organization.security.test.ts`, and their policies by
+// `force-rls-policies-restrict.security.test.ts`. Excluded by name here, not skipped silently.
 const TENANT_CRUD_EXCLUDED_SCHEMAS = new Set(['app']);
 
 async function tenantRowSnapshot(

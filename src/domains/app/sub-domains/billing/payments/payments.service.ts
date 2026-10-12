@@ -15,6 +15,8 @@ import { invoice_credit_notes } from '@/domains/app/sub-domains/billing/invoice-
 import { pending_credits } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.schema.js';
 import { stock_purchases } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.schema.js';
 import { medical_purchase_orders } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.schema.js';
+import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
+import { parseListCursor } from '@/shared/utils/http/pagination.util.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import { listPaymentEditsQueryDto } from './payments.dto.js';
 import type { PaymentsRepository } from './payments.repository.js';
@@ -76,7 +78,7 @@ export class PaymentsService extends BaseRecordService<PaymentOutput> {
   }
 
   /**
-   * B20: one page of a payment's recorded changes, newest first (`after` = the last edit's id).
+   * B20: one page of a payment's recorded changes, newest first (`after` = the page's `next_cursor`).
    *
    * @remarks
    * - **Failure modes:** `NotFoundError('Payment')` — not here, or another branch without
@@ -108,21 +110,15 @@ export class PaymentsService extends BaseRecordService<PaymentOutput> {
           userId,
           visibility: options.visibility,
         });
-        const afterId =
-          after === undefined ? undefined : await this.paymentsRepository.findEditId(after);
         const rows = await this.paymentsRepository.listEdits({
           paymentId: payment.id,
-          limit: limit + 1,
-          after: afterId,
-        });
-        const page = rows.slice(0, limit);
-        const hasMore = rows.length > limit;
-        return {
-          items: page.map(serializePaymentEdit),
-          total: null,
           limit,
-          has_more: hasMore,
-          next_cursor: hasMore ? (page.at(-1)?.id ?? null) : null,
+          cursor: parseListCursor(after),
+        });
+        const page = finishKeysetPage({ rows, args: { limit } });
+        return {
+          ...page,
+          items: page.items.map((row) => serializePaymentEdit({ ...row, id: row.public_id })),
         };
       },
     });

@@ -30,7 +30,7 @@ import {
   PaymentsRepository,
 } from '@/domains/app/sub-domains/billing/payments/payments.repository.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
-import { rupees, toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { paiseOf, rupees, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import { INVOICE_TYPE } from './invoices.constants.js';
 import type { InvoiceItemInput, InvoicePaidNowInput } from './invoices.dto.js';
 import { type InvoiceLinePlan, planInvoiceLines, writeInvoiceLines } from './invoices.lines.js';
@@ -223,7 +223,7 @@ async function replanChangedLines(options: {
     existing: stored,
   });
   const paid = toAmount(existing.paid_amount) ?? 0;
-  if (Math.round((plan.totals.total ?? 0) * 100) < Math.round(paid * 100)) {
+  if (paiseOf(plan.totals.total) < paiseOf(paid)) {
     throw new ConflictError('errors:invoiceBelowPaid').withReason('below_paid');
   }
   return plan;

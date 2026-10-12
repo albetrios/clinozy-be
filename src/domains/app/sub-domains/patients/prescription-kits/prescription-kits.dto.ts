@@ -36,7 +36,7 @@ export const UpdatePrescriptionKitDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /** Query of the caller's kits (7.D.8 #21): `q` (the name); sort `created_at` (default, newest first) | `name`. */

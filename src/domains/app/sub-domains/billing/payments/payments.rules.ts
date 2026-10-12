@@ -20,7 +20,7 @@ import { InvoiceCreditNotesRepository } from '@/domains/app/sub-domains/billing/
 import { DAY_CLOSE_STATUS } from '@/domains/app/sub-domains/billing/day-closes/day-closes.constants.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { toAmount, toInstant } from '@/shared/utils/validation/record-fields.util.js';
+import { paiseOf, toInstant } from '@/shared/utils/validation/record-fields.util.js';
 import {
   PAYMENT_CREATE_KIND_VALUES,
   PAYMENT_DIRECTION,
@@ -51,11 +51,6 @@ import { serializePaymentEdit } from './payments.serializer.js';
 
 const invoicesRepository = new InvoicesRepository();
 const creditNotesRepository = new InvoiceCreditNotesRepository();
-
-/** A row's split columns as the ledger's money, in paise. */
-function paiseOf(value: unknown): number {
-  return Math.round((toAmount(value) ?? 0) * 100);
-}
 
 /** The direction a kind fixes (B17). */
 function directionOf(kind: string): string {

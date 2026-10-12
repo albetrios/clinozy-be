@@ -40,7 +40,9 @@ export const CreateDayCloseDto = z
       context.addIssue({
         code: 'custom',
         path: ['opening_cash'],
-        message: recounted ? 'Required for a recount' : 'Only for a recount',
+        message: recounted
+          ? 'errors:validation.requiredForRecount'
+          : 'errors:validation.onlyForRecount',
       });
     }
   });

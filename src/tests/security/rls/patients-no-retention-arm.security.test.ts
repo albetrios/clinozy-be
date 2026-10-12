@@ -43,12 +43,12 @@ async function probe(options: { role: RoleSwitch; statement: SQL }): Promise<num
 }
 
 /**
- * The AI ideas sweep's arm on `app.patients` is a read (task RL2,
- * docs/reviews/launch-confidence-plan-2026-10-09.md; D80, WC-47; P7 — a patient file is never
- * purged): under the global retention context the maintenance role reads the files of every
- * organization, and can neither change nor delete one. The application role reads none.
+ * `app.patients` has no retention arm (P7 — a patient file is never purged; the AI ideas sweep's
+ * read arm left with D87): under the global retention context neither the maintenance role nor
+ * the application role reads, changes or deletes a file. Before D87 the sweep's arm was a read
+ * only (task RL2, docs/reviews/launch-confidence-plan-2026-10-09.md).
  */
-describe('Security: the patients retention arm is read-only', () => {
+describe('Security: no retention context reaches a patient file', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
@@ -71,13 +71,13 @@ describe('Security: the patients retention arm is read-only', () => {
     await app.close();
   });
 
-  it('lets the maintenance role read the files across organizations (the sweep)', async () => {
+  it('gives the maintenance role no read of the files across organizations', async () => {
     expect(
       await probe({
         role: setLocalMaintenanceRole,
         statement: drizzleSql`SELECT id FROM app.patients`,
       }),
-    ).toBeGreaterThan(0);
+    ).toBe(0);
   });
 
   it('gives the maintenance role no update of a file', async () => {

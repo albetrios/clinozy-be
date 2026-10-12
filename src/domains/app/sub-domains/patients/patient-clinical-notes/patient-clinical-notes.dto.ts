@@ -45,7 +45,7 @@ export const CreatePatientClinicalNoteDto = z
       value.patient_diagnosis_id == null || value.kind === PATIENT_CLINICAL_NOTE_KIND.DIAGNOSIS,
     {
       path: ['patient_diagnosis_id'],
-      message: 'Only a diagnosis note points at the diagnosis catalogue',
+      message: 'errors:validation.clinicalNoteDiagnosisKindOnly',
     },
   );
 

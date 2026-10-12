@@ -22,7 +22,7 @@ const supplierFields = {
   manufacturer_ids: z
     .array(recordIdSchema)
     .max(SUPPLIER_MANUFACTURERS_MAX)
-    .refine(distinct, { message: 'Each manufacturer once' }),
+    .refine(distinct, { message: 'errors:validation.eachManufacturerOnce' }),
 };
 
 /** Path params of the by-id supplier routes. */
@@ -62,7 +62,7 @@ export const UpdateSupplierDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

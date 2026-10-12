@@ -19,7 +19,7 @@ const distinct = (values: readonly unknown[]) => new Set(values).size === values
 const linkIdsSchema = z
   .array(recordIdSchema)
   .max(MANUFACTURER_LINKS_MAX)
-  .refine(distinct, { message: 'Each id once' });
+  .refine(distinct, { message: 'errors:validation.eachIdOnce' });
 
 /** The fields a create and a change share (routes-final 11.A.8). */
 const manufacturerFields = {
@@ -65,7 +65,7 @@ export const UpdateManufacturerDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

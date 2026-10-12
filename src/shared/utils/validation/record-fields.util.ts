@@ -22,25 +22,30 @@ const HOUR_MINUTE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const chipToneSchema = z.enum(CHIP_TONE_VALUES as [ChipTone, ...ChipTone[]]);
 
 /** A time of day as `HH:mm` (opening hours, working hours). */
-export const hourMinuteSchema = trimmedString().regex(HOUR_MINUTE, 'Use HH:mm');
+export const hourMinuteSchema = trimmedString().regex(
+  HOUR_MINUTE,
+  'errors:validation.hourMinuteFormat',
+);
 
 /** One to seven distinct weekdays (`working_days`). */
 export const workingDaysSchema = z
   .array(z.enum(WEEKDAY_VALUES as [Weekday, ...Weekday[]]))
   .min(1)
   .max(WEEKDAY_VALUES.length)
-  .refine((days) => new Set(days).size === days.length, { message: 'Each day once' });
+  .refine((days) => new Set(days).size === days.length, {
+    message: 'errors:validation.eachDayOnce',
+  });
 
 /** An Indian mobile or landline as `+91` and ten digits ({@link PHONE_NUMBER_PATTERN}). */
 export const phoneNumberSchema = trimmedString().regex(
   new RegExp(PHONE_NUMBER_PATTERN),
-  'Use +91 and ten digits',
+  'errors:validation.indianPhoneFormat',
 );
 
 /** A GSTIN ({@link GST_NUMBER_PATTERN}) — a branch's, a supplier's. */
 export const gstNumberSchema = trimmedString().regex(
   new RegExp(GST_NUMBER_PATTERN),
-  'Not a valid GSTIN',
+  'errors:validation.invalidGstin',
 );
 
 /**
@@ -84,7 +89,7 @@ export function recordDeleteQuerySchemaOf<const Reasons extends readonly [string
     .strict()
     .refine((value) => value.reason !== RECORD_DELETE_REASON.OTHER || value.note !== undefined, {
       path: ['note'],
-      message: 'Add a note when the reason is other',
+      message: 'errors:validation.noteWhenReasonIsOther',
     });
 }
 
@@ -141,7 +146,11 @@ export const percentSchema = z.number().min(0).max(100).multipleOf(0.01);
 export function httpsLinkSchema(maxLength: number): z.ZodType<string> {
   return trimmedString()
     .max(maxLength)
-    .pipe(z.url().refine((url) => url.startsWith('https://'), { message: 'Link must use HTTPS' }));
+    .pipe(
+      z.url().refine((url) => url.startsWith('https://'), {
+        message: 'errors:validation.linkMustUseHttps',
+      }),
+    );
 }
 
 /** A calendar date as `YYYY-MM-DD` (Postgres `date`). */
@@ -207,7 +216,7 @@ export function valueListSchema(values: readonly string[]): z.ZodType<string> {
       // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — built once per call site from a code enum (the allowed values), never from input; linear pattern
       .regex(new RegExp(`^(${body})(,(${body}))*$`), `Comma-separated: ${values.join(', ')}`)
       .refine((value) => new Set(value.split(',')).size === value.split(',').length, {
-        message: 'Each value once',
+        message: 'errors:validation.eachValueOnce',
       })
       .meta({
         description: `Several, comma-separated, each once: ${quotedValues}.`,
@@ -275,6 +284,29 @@ export function rupees(amount: number): string {
  */
 export function toAmount(value: unknown): number | null {
   return value === null || value === undefined ? null : Number(value);
+}
+
+/**
+ * An amount in whole paise — the exact integer the money rules add and compare.
+ *
+ * @remarks
+ * - **Algorithm:** {@link toAmount} of a number or a stored `numeric` (decimal text), × 100, rounded;
+ *   `null` / missing is 0.
+ * - **Failure modes:** none.
+ */
+export function paiseOf(value: unknown): number {
+  return Math.round((toAmount(value) ?? 0) * 100);
+}
+
+/**
+ * An amount rounded to whole paise (two decimals), as the API answers money.
+ *
+ * @remarks
+ * - **Algorithm:** `Math.round(value × 100) / 100`.
+ * - **Failure modes:** none.
+ */
+export function roundToPaise(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 /**

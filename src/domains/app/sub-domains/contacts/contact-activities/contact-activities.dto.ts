@@ -24,7 +24,7 @@ const bodySchema = trimmedStringMinMax({ min: 1, max: CONTACT_ACTIVITY_BODY_MAX 
 const attachmentKeysSchema = z
   .array(trimmedStringMinMax({ min: 1, max: 512 }))
   .max(CONTACT_ACTIVITY_ATTACHMENTS_MAX)
-  .refine(distinct, { message: 'Each attachment once' });
+  .refine(distinct, { message: 'errors:validation.eachAttachmentOnce' });
 
 /** The twelve optional record links (M5) — `con_`-style public ids of today's tables. */
 const linkFields = Object.fromEntries(
@@ -41,7 +41,11 @@ function atMostOneLink({
 }): void {
   const named = CONTACT_ACTIVITY_LINK_COLUMNS.filter((column) => value[column] !== undefined);
   for (const column of named.slice(1)) {
-    context.addIssue({ code: 'custom', path: [column], message: 'Link one record at most' });
+    context.addIssue({
+      code: 'custom',
+      path: [column],
+      message: 'errors:validation.taskOneRecord',
+    });
   }
 }
 
@@ -104,7 +108,7 @@ export const ContactMessageBatchDto = z
       .array(recordIdSchema)
       .min(1)
       .max(CONTACT_ACTIVITY_BATCH_CONTACTS_MAX)
-      .refine(distinct, { message: 'Each contact once' }),
+      .refine(distinct, { message: 'errors:validation.eachContactOnce' }),
     type: z.enum(CONTACT_ACTIVITY_MESSAGE_TYPE_VALUES),
     body: bodySchema,
     contact_message_template_id: recordIdSchema.optional(),

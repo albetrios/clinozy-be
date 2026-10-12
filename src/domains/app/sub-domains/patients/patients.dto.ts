@@ -31,7 +31,7 @@ const patientFields = {
   types: z
     .array(z.enum(PATIENT_TYPES_VALUES))
     .max(PATIENT_TYPES_VALUES.length)
-    .refine(distinct, { message: 'Each type once' }),
+    .refine(distinct, { message: 'errors:validation.eachTypeOnce' }),
   status: z.enum(PATIENT_STATUS_VALUES),
   conversion: z.enum(PATIENT_CONVERSION_VALUES),
   doctor_membership_id: recordIdSchema.nullable(),
@@ -74,7 +74,7 @@ export const CreatePatientDto = z
   .strict()
   .refine((value) => (value.contact_id === undefined) !== (value.contact === undefined), {
     path: ['contact_id'],
-    message: 'Send contact_id or contact, not both',
+    message: 'errors:validation.contactIdOrContactNotBoth',
   });
 
 /**
@@ -98,7 +98,7 @@ export const UpdatePatientDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

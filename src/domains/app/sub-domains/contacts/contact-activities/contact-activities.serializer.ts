@@ -40,7 +40,6 @@ export function serializeContactActivity({
       row,
     }),
     delivery_status: row.delivery_status as string | null,
-    provider_message_id: row.provider_message_id as string | null,
     failure_reason: row.failure_reason as string | null,
     occurred_at: toInstant(row.occurred_at) as string,
     delivered_at: toInstant(row.delivered_at),

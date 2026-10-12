@@ -1,6 +1,6 @@
 import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { roundToPaise, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import type { InvoiceLinePlan, PlannedInvoiceLine } from './invoices.lines.js';
 import type { InvoiceItemReadRow } from './invoices.repository.js';
 import type {
@@ -174,6 +174,6 @@ export function serializeInvoicePreview(options: {
     gst_total: totals.gst_total ?? 0,
     total,
     paid_amount: options.paid_amount,
-    due_amount: Math.round((total - options.paid_amount) * 100) / 100,
+    due_amount: roundToPaise(total - options.paid_amount),
   };
 }

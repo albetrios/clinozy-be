@@ -6,12 +6,13 @@ import {
   type AppFixture,
   createAppFixture,
 } from '@/domains/app/__tests__/factories/app-fixture.factory.js';
-import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow.factory.js';
+import { AppFlow } from '@/domains/app/__tests__/factories/app-flow.factory.js';
 import {
-  type AppRouteReferences,
-  appRouteBody,
-  placeholderAppRouteReferences,
-} from '@/tests/helpers/app-route-requests.js';
+  APP_COLLECTION_WRITES,
+  findBookableDay,
+  seedAppRouteReferences,
+} from '@/domains/app/__tests__/factories/app-route-references.factory.js';
+import { type AppRouteReferences, appRouteBody } from '@/tests/helpers/app-route-requests.js';
 
 /** The statuses that refuse a request — anything but a write that went through. */
 const REFUSED = [400, 403, 404, 409, 422];
@@ -29,29 +30,6 @@ const REFERENCE_KEYS = [
   'stockItemId',
   'stockVendorId',
 ] as const satisfies readonly (keyof AppRouteReferences)[];
-
-/**
- * The app's collection writes: their bodies name records, their paths none. The patient comes
- * first: its own write files the attacker's contact as a patient, which an invoice needs.
- */
-const COLLECTION_WRITES = [
-  'POST /app/patients',
-  'POST /app/appointments',
-  'POST /app/contact-activities/message-batches',
-  'POST /app/day-closes',
-  'POST /app/invoices',
-  'POST /app/invoices/preview',
-  'POST /app/leads',
-  'POST /app/medical-purchase-orders',
-  'POST /app/medical-sales',
-  'POST /app/offers',
-  'POST /app/payments',
-  'POST /app/pending-credits',
-  'POST /app/prescription-kits',
-  'POST /app/stock-counts',
-  'POST /app/stock-purchases',
-  'POST /app/supplier-credits',
-] as const;
 
 /**
  * Each list's id-valued filters (from the OpenAPI document) and the reference that fills them.
@@ -123,77 +101,6 @@ describe('Security: app bodies and filters never reach another organization’s 
   let victimReferences: AppRouteReferences;
   let attackerReferences: AppRouteReferences;
 
-  /** One record of every kind a body names, made through the API as `fixture`'s owner. */
-  async function seedReferences(fixture: AppFixture, phone: string): Promise<AppRouteReferences> {
-    const flow = new AppFlow(app, fixture).as('owner');
-    const created = async (path: string, body: unknown): Promise<string> => {
-      await flow.expect(200, `${fixture.organization.publicId}: POST ${path}`, 'POST', path, body);
-      return flow.last('.data.id');
-    };
-    const [year = 0, month = 1] = calendarDay(fixture, 0).split('-').map(Number);
-    const contactId = await created('/app/contacts', {
-      first_name: 'Asha',
-      last_name: 'Reference',
-      phones: [{ phone, is_primary: true }],
-    });
-    const offeringId = await created('/app/offerings', { name: 'Consultation', price: 500 });
-    const manufacturer = await created('/app/manufacturers', { name: 'Alvi' });
-    const supplierId = await created('/app/suppliers', {
-      name: 'Shree Agency',
-      manufacturer_ids: [manufacturer],
-    });
-    const medicineId = await created('/app/medicines', {
-      name: 'Glycolac',
-      manufacturer_id: manufacturer,
-      mrp: 369,
-      batches: [
-        {
-          batch_number: 'B1',
-          expiry_month: `${year + 1}-${String(month).padStart(2, '0')}`,
-          quantity: 10,
-          purchase_rate: 246,
-          supplier_id: supplierId,
-        },
-      ],
-    });
-    const medicineBatchId = flow.last('.data.batches[0].id');
-    const stockVendorId = await created('/app/stock-vendors', { name: 'Skin Supplies' });
-    const stockItemId = await created('/app/stock-items', { name: 'Gauze' });
-    return {
-      ...placeholderAppRouteReferences(fixture.organization.timezone),
-      branchId: fixture.branches.vesu,
-      membershipId: fixture.members.front_desk.membershipPublicId,
-      doctorMembershipId: fixture.members.doctor.membershipPublicId,
-      contactId,
-      offeringId,
-      medicineId,
-      medicineBatchId,
-      supplierId,
-      stockItemId,
-      stockVendorId,
-      today: calendarDay(fixture, 0),
-      yesterday: calendarDay(fixture, -1),
-      tomorrow: calendarDay(fixture, 1),
-    };
-  }
-
-  /** A day the attacker's doctor takes bookings — found with a booking at 15:00, clear of 11:00. */
-  async function bookableDay(): Promise<string> {
-    for (let offset = 30; offset <= 44; offset += 1) {
-      const day = calendarDay(attacker, offset);
-      const probe = await attackFlow.call('POST', '/app/appointments', {
-        contact_id: attackerReferences.contactId,
-        branch_id: attackerReferences.branchId,
-        doctor_membership_id: attackerReferences.doctorMembershipId,
-        appointment_date: day,
-        start_time: '15:00',
-        service_label: 'Probe',
-      });
-      if (probe.status === 200) return day;
-    }
-    throw new Error('the attacker’s doctor takes no booking in the next weeks');
-  }
-
   /** The route's `METHOD /path` split. */
   function split(route: string): { method: 'POST'; path: string } {
     const [, path = ''] = route.split(' ');
@@ -206,9 +113,21 @@ describe('Security: app bodies and filters never reach another organization’s 
     victim = await createAppFixture(app);
     attacker = await createAppFixture(app);
     attackFlow = new AppFlow(app, attacker).as('owner');
-    victimReferences = await seedReferences(victim, '+919812300011');
-    attackerReferences = await seedReferences(attacker, '+919812300022');
-    attackerReferences.laterDay = await bookableDay();
+    victimReferences = await seedAppRouteReferences({
+      app,
+      fixture: victim,
+      phone: '+919812300011',
+    });
+    attackerReferences = await seedAppRouteReferences({
+      app,
+      fixture: attacker,
+      phone: '+919812300022',
+    });
+    attackerReferences.laterDay = await findBookableDay({
+      flow: attackFlow,
+      fixture: attacker,
+      references: attackerReferences,
+    });
   });
 
   afterAll(async () => {
@@ -219,7 +138,7 @@ describe('Security: app bodies and filters never reach another organization’s 
     attackFlow.as('owner');
     const unproven: string[] = [];
     let swaps = 0;
-    for (const route of COLLECTION_WRITES) {
+    for (const route of APP_COLLECTION_WRITES) {
       const { method, path } = split(route);
       const base = JSON.stringify(appRouteBody({ method, path, references: attackerReferences }));
       for (const key of REFERENCE_KEYS) {

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import type { PostgresDatabaseHandle } from '@/infrastructure/database/utils/database-handle.types.js';
 
 /**
  * Postgres advisory-lock namespaces (`classid`) for per-scope resource-creation quotas (audit-#8).
@@ -76,17 +77,20 @@ export const RESOURCE_QUOTA_LOCK_NAMESPACE = {
  * - **Failure modes:** blocks until the lock is granted; no application-level timeout (the
  *   surrounding statement timeout bounds it).
  * - **Side effects:** holds a Postgres advisory lock for the remainder of the transaction.
- * - **Notes:** closes the count-then-insert race where concurrent create requests each pass the
+ * - **Notes:** a worker passes its pinned `databaseHandle` (it has no request database). Closes the count-then-insert race where concurrent create requests each pass the
  *   same pre-check before any row is inserted and overshoot the configured cap.
  */
 export async function acquireResourceQuotaLock({
   namespace,
   key,
+  databaseHandle,
 }: {
   namespace: number;
   key: number | string;
+  /** A worker's pinned handle; the request's database otherwise. */
+  databaseHandle?: PostgresDatabaseHandle;
 }): Promise<void> {
-  await getRequestDatabase().execute(
+  await (databaseHandle ?? getRequestDatabase()).execute(
     sql`SELECT pg_advisory_xact_lock(${namespace}::int, (hashtextextended(${key}::text, 0) & 2147483647::bigint)::int)`,
   );
 }

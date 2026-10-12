@@ -1,7 +1,10 @@
 import { and, asc, eq, gt, inArray, isNull, lte, type SQL, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { assertWorkerDatabaseContext } from '@/infrastructure/database/contexts/database-context-runtime.js';
-import { RESOURCE_QUOTA_LOCK_NAMESPACE } from '@/infrastructure/database/resource-quota-lock.util.js';
+import {
+  acquireResourceQuotaLock,
+  RESOURCE_QUOTA_LOCK_NAMESPACE,
+} from '@/infrastructure/database/resource-quota-lock.util.js';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
@@ -176,9 +179,11 @@ export class TaskRulesRepository {
    * queued, so nothing goes out twice. Released at the run's commit or rollback.
    */
   async lockRun(organizationId: number): Promise<void> {
-    await this.databaseHandle.execute(
-      sql`SELECT pg_advisory_xact_lock(${RESOURCE_QUOTA_LOCK_NAMESPACE.TASK_RULES_RUN}::int, ${organizationId}::int)`,
-    );
+    await acquireResourceQuotaLock({
+      namespace: RESOURCE_QUOTA_LOCK_NAMESPACE.TASK_RULES_RUN,
+      key: organizationId,
+      databaseHandle: this.databaseHandle,
+    });
   }
 
   /** TK7: snoozed tasks whose time has come are open again. */

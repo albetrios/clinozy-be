@@ -1,6 +1,6 @@
 import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { roundToPaise, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import { MEDICINE_STOCK_LEVEL } from './medicines.constants.js';
 import type { MedicineOutput } from './medicines.types.js';
 
@@ -14,11 +14,6 @@ export function medicineStockLevel({
 }): string {
   if (quantity === 0) return MEDICINE_STOCK_LEVEL.OUT;
   return quantity <= minStock ? MEDICINE_STOCK_LEVEL.LOW : MEDICINE_STOCK_LEVEL.OK;
-}
-
-/** Two decimals. */
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 /**
@@ -47,7 +42,7 @@ export function serializeMedicine({
     is_prescription_only: row.is_prescription_only as boolean,
     mrp,
     gst_percent: gstPercent,
-    price_before_gst: round2(mrp / (1 + gstPercent / 100)),
+    price_before_gst: roundToPaise(mrp / (1 + gstPercent / 100)),
     min_stock: Number(row.min_stock),
     max_stock: Number(row.max_stock),
     quantity,

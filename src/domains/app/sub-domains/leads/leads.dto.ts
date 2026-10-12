@@ -29,12 +29,12 @@ const leadFields = {
   interests: z
     .array(z.enum(LEAD_INTERESTS_VALUES))
     .max(LEAD_INTERESTS_VALUES.length)
-    .refine(distinct, { message: 'Each interest once' }),
+    .refine(distinct, { message: 'errors:validation.eachInterestOnce' }),
   owner_membership_id: recordIdSchema.nullable(),
   involved_membership_ids: z
     .array(recordIdSchema)
     .max(LEAD_INVOLVED_MEMBERSHIPS_MAX)
-    .refine(distinct, { message: 'Each team member once' }),
+    .refine(distinct, { message: 'errors:validation.eachTeamMemberOnce' }),
   follow_up_at: instantSchema.nullable(),
   branch_id: recordIdSchema.nullable(),
   notes: trimmedStringMinMax({ min: 1, max: LEAD_NOTES_MAX }).nullable(),
@@ -50,7 +50,7 @@ const ownerNotInvolved = {
       value.owner_membership_id &&
       (value.involved_membership_ids ?? []).includes(value.owner_membership_id)
     ),
-  options: { path: ['involved_membership_ids'], message: 'The owner is not also involved' },
+  options: { path: ['involved_membership_ids'], message: 'errors:validation.ownerNotAlsoInvolved' },
 };
 
 /** Path params of the by-id `leads` routes. */
@@ -80,7 +80,7 @@ export const CreateLeadDto = z
   .strict()
   .refine((value) => (value.contact_id === undefined) !== (value.contact === undefined), {
     path: ['contact_id'],
-    message: 'Send contact_id or contact, not both',
+    message: 'errors:validation.contactIdOrContactNotBoth',
   })
   .refine(ownerNotInvolved.check, ownerNotInvolved.options);
 
@@ -103,7 +103,7 @@ export const UpdateLeadDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   })
   .refine(ownerNotInvolved.check, ownerNotInvolved.options);
 

@@ -37,7 +37,7 @@ const invoiceItemFields = {
   patient_treatment_ids: z
     .array(recordIdSchema)
     .max(INVOICE_ITEM_QUANTITY_MAX)
-    .refine(distinct, { message: 'Each treatment once' }),
+    .refine(distinct, { message: 'errors:validation.eachTreatmentOnce' }),
   batch_number: trimmedStringMinMax({ min: 1, max: 20 }).nullable(),
 };
 
@@ -54,7 +54,7 @@ const newInvoiceItem = z
   })
   .strict()
   .refine((item) => (item.offering_id === undefined) !== (item.medicine_id === undefined), {
-    message: 'Send an offering_id or a medicine_id',
+    message: 'errors:validation.offeringIdOrMedicineId',
   });
 
 /** A line of a change (B12): with its `id` it is changed (the item may stay as it is), without it added. */
@@ -75,14 +75,16 @@ const changedInvoiceItem = z
       item.id === undefined
         ? (item.offering_id === undefined) !== (item.medicine_id === undefined)
         : !(item.offering_id !== undefined && item.medicine_id !== undefined),
-    { message: 'Send an offering_id or a medicine_id' },
+    { message: 'errors:validation.offeringIdOrMedicineId' },
   );
 
 /** One split of money (B18) — cash, UPI or card. */
 export const invoicePaymentSplitDto = z
   .object({
     mode: z.enum(PAYMENT_MONEY_MODE_VALUES),
-    amount: moneySchema.refine((amount) => amount > 0, { message: 'More than 0' }),
+    amount: moneySchema.refine((amount) => amount > 0, {
+      message: 'errors:validation.moreThanZero',
+    }),
   })
   .strict();
 
@@ -94,7 +96,7 @@ export const invoicePaidNowDto = z
       .min(1)
       .max(PAYMENT_MONEY_MODE_VALUES.length)
       .refine((splits) => distinct(splits.map((split) => split.mode)), {
-        message: 'Each mode once',
+        message: 'errors:validation.eachModeOnce',
       }),
     paid_at: instantSchema.optional(),
     reference: trimmedStringMinMax({ min: 1, max: 60 }).nullable().optional(),
@@ -108,7 +110,7 @@ const invoiceFields = {
   member_ids: z
     .array(recordIdSchema)
     .max(INVOICE_MEMBERS_MAX)
-    .refine(distinct, { message: 'Each member once' }),
+    .refine(distinct, { message: 'errors:validation.eachMemberOnce' }),
   overall_discount: moneySchema,
   remark: trimmedStringMinMax({ min: 1, max: INVOICE_REMARK_MAX }).nullable(),
   patient_prescription_id: recordIdSchema.nullable(),
@@ -151,7 +153,7 @@ const invoiceChangeFields = {
     .min(1)
     .max(INVOICE_ITEMS_MAX)
     .refine((items) => distinct(items.flatMap((item) => (item.id ? [item.id] : []))), {
-      message: 'Each line once',
+      message: 'errors:validation.eachLineOnce',
     })
     .optional(),
   member_ids: invoiceFields.member_ids.optional(),
@@ -173,7 +175,7 @@ export const UpdateInvoiceDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

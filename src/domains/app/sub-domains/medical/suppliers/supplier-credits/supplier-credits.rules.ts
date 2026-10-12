@@ -2,7 +2,7 @@ import { findMembershipIdOfUser, resolveRecordIds } from '@/domains/app/base-rec
 import type { BaseRecordRules } from '@/domains/app/base-record.types.js';
 import { MedicinesRepository } from '@/domains/app/sub-domains/medical/medicines/medicines.repository.js';
 import { moveMedicineBatch } from '@/domains/app/sub-domains/medical/medicines/medicines.stock.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { roundToPaise, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import { applySupplierCredits } from './supplier-credits.ledger.js';
 import type { SupplierCreditsRepository } from './supplier-credits.repository.js';
 import { supplier_credits } from './supplier-credits.schema.js';
@@ -31,7 +31,7 @@ export function createSupplierCreditsRules(repository: SupplierCreditsRepository
       const rate = toAmount(batch?.purchase_rate) ?? 0;
       values.medicine_id = batch?.medicine_id;
       values.rate = rate.toFixed(2);
-      values.amount = (Math.round(quantity * rate * 100) / 100).toFixed(2);
+      values.amount = roundToPaise(quantity * rate).toFixed(2);
       values.created_by_membership_id = await findMembershipIdOfUser({
         organizationId: context.organizationId,
         userId: context.userId,

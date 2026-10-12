@@ -29,7 +29,7 @@ import {
   MISSING_PERMISSION_REASON,
 } from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { paiseOf } from '@/shared/utils/validation/record-fields.util.js';
 import {
   PENDING_CREDIT_DIRECTION,
   PENDING_CREDIT_SETTLE_METHOD,
@@ -41,11 +41,6 @@ import { pending_credits } from './pending-credits.schema.js';
 const invoicesRepository = new InvoicesRepository();
 const creditNotesRepository = new InvoiceCreditNotesRepository();
 const paymentsRepository = new PaymentsRepository();
-
-/** Paise for exact comparisons. */
-function paiseOf(value: unknown): number {
-  return Math.round((toAmount(value) ?? 0) * 100);
-}
 
 /**
  * B23: a contact or a typed name — and an invoice it names is that contact's.
@@ -113,7 +108,7 @@ async function settleByRefund(options: {
       : null;
   let creditNoteId: number | null = null;
   if (invoice) {
-    if (Math.round(body.amount * 100) > paiseOf(invoice.paid_amount)) {
+    if (paiseOf(body.amount) > paiseOf(invoice.paid_amount)) {
       throw new ConflictError('errors:paymentMoreThanPaid').withReason('more_than_paid');
     }
     const creditNote = await creditNotesRepository.insert({
@@ -229,7 +224,7 @@ async function settlePendingCredit(input: BaseRecordActionInput): Promise<BaseRe
   if (existing.status !== PENDING_CREDIT_STATUS.OPEN) {
     throw new ConflictError('errors:pendingCreditClosed').withReason('credit_closed');
   }
-  if (Math.round(body.amount * 100) > paiseOf(existing.amount) - paiseOf(existing.settled_amount)) {
+  if (paiseOf(body.amount) > paiseOf(existing.amount) - paiseOf(existing.settled_amount)) {
     throw fieldValidationError({
       field: 'amount',
       messageKey: 'errors:validation.pendingCreditAmountMoreThanLeft',

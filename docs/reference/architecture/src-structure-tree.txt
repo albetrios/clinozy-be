@@ -22,7 +22,9 @@ src/
     │   │   │   └── flow-visit-to-payment.e2e.test.ts
     │   │   ├── factories/
     │   │   │   ├── app-fixture.factory.ts
-    │   │   │   └── app-flow.factory.ts
+    │   │   │   ├── app-flow.factory.ts
+    │   │   │   ├── app-records.factory.ts
+    │   │   │   └── app-route-references.factory.ts
     │   │   ├── integration/
     │   │   │   ├── app-automation.integration.test.ts
     │   │   │   ├── app-branch-access.integration.test.ts
@@ -33,6 +35,7 @@ src/
     │   │   │   ├── app-team-access.integration.test.ts
     │   │   │   └── clinozy-messages.integration.test.ts
     │   │   └── unit/
+    │   │   │   ├── app-record-purge.worker.unit.test.ts
     │   │   │   └── app-role-presets.policy.unit.test.ts
     │   ├── seed/
     │   │   └── index.ts
@@ -69,6 +72,8 @@ src/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   ├── day-close-auto-close-sweep.processor.unit.test.ts
     │   │   │   │   │   │   ├── day-close-auto-close.processor.unit.test.ts
+    │   │   │   │   │   │   ├── day-close-auto-close.worker.unit.test.ts
+    │   │   │   │   │   │   ├── day-closes.expected-cash.unit.test.ts
     │   │   │   │   │   │   └── day-closes.service.unit.test.ts
     │   │   │   │   ├── queues/
     │   │   │   │   │   ├── day-close-auto-close.job.schema.ts
@@ -133,6 +138,7 @@ src/
     │   │   │   ├── payments/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   ├── payments.ledger.unit.test.ts
     │   │   │   │   │   │   └── payments.service.unit.test.ts
     │   │   │   │   ├── payments.constants.ts
     │   │   │   │   ├── payments.controller.ts
@@ -890,6 +896,8 @@ src/
     │   │   │       │   ├── task-rules-sweep.processor.unit.test.ts
     │   │   │       │   ├── task-rules.processor.unit.test.ts
     │   │   │       │   ├── task-rules.queue.unit.test.ts
+    │   │   │       │   ├── task-rules.worker.unit.test.ts
+    │   │   │       │   ├── tasks.organization-clock.unit.test.ts
     │   │   │       │   ├── tasks.service.unit.test.ts
     │   │   │       │   └── tasks.validator.unit.test.ts
     │   │   │   ├── queues/
@@ -3060,6 +3068,7 @@ src/
     │   │   ├── rate-limit-burst.security.test.ts
     │   │   └── rate-limiting.security.test.ts
     │   ├── rls/
+    │   │   ├── app-tables-rls-matrix.security.test.ts
     │   │   ├── audit-append-only.security.test.ts
     │   │   ├── audit-insert-rls-privilege-bypass.security.test.ts
     │   │   ├── audit-outbox-insert-rls.security.test.ts
@@ -3077,7 +3086,7 @@ src/
     │   │   ├── organization-settings-resolvers.security.test.ts
     │   │   ├── organization-user-discovery.security.test.ts
     │   │   ├── organizations-rls-deleted.security.test.ts
-    │   │   ├── patients-ideas-sweep-read-only.security.test.ts
+    │   │   ├── patients-no-retention-arm.security.test.ts
     │   │   ├── retention-cleanup-rls.security.test.ts
     │   │   ├── rls-matrix.security.test.ts
     │   │   ├── savepoint-guc-totality.security.test.ts
@@ -3414,6 +3423,7 @@ src/
     │   │   │   ├── bullmq-job-validation.unit.test.ts
     │   │   │   ├── file-magic.util.unit.test.ts
     │   │   │   ├── parse-with-schema.util.unit.test.ts
+    │   │   │   ├── record-fields.money.unit.test.ts
     │   │   │   ├── record-fields.rupees.unit.test.ts
     │   │   │   ├── record-fields.time-zone.unit.test.ts
     │   │   │   ├── record-fields.to-text.unit.test.ts

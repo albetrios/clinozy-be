@@ -49,12 +49,20 @@ export const CreateStockItemMovementDto = z
   .strict()
   .superRefine((value, context) => {
     if (value.type !== STOCK_ITEM_MOVEMENT_TYPE.ADJUST && value.quantity <= 0) {
-      context.addIssue({ code: 'custom', path: ['quantity'], message: 'More than 0' });
+      context.addIssue({
+        code: 'custom',
+        path: ['quantity'],
+        message: 'errors:validation.moreThanZero',
+      });
     }
     if (value.type === STOCK_ITEM_MOVEMENT_TYPE.USED) return;
     for (const field of ['used_for', 'patient_treatment_id'] as const) {
       if (value[field] !== undefined) {
-        context.addIssue({ code: 'custom', path: [field], message: 'Only on used' });
+        context.addIssue({
+          code: 'custom',
+          path: [field],
+          message: 'errors:validation.onlyOnUsed',
+        });
       }
     }
   });
@@ -71,7 +79,11 @@ export const RevertStockItemMovementDto = z
   .strict()
   .superRefine((value, context) => {
     if (value.reason === STOCK_ITEM_MOVEMENT_REVERT_REASON.OTHER && value.note === undefined) {
-      context.addIssue({ code: 'custom', path: ['note'], message: 'Required for other' });
+      context.addIssue({
+        code: 'custom',
+        path: ['note'],
+        message: 'errors:validation.requiredForOther',
+      });
     }
   });
 

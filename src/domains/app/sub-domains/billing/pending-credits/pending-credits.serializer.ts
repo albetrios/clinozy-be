@@ -1,7 +1,7 @@
 import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.js';
 import { billedContactRef } from '@/domains/app/sub-domains/billing/invoices/invoices.serializer.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { roundToPaise, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import type { PendingCreditOutput } from './pending-credits.types.js';
 
 /**
@@ -26,7 +26,7 @@ export function serializePendingCredit({
     party_name: (row.party_name as string | null) ?? null,
     amount,
     settled_amount: settled,
-    left_amount: Math.round((amount - settled) * 100) / 100,
+    left_amount: roundToPaise(amount - settled),
     status: row.status as string,
     reason: row.reason as string,
     note: (row.note as string | null) ?? null,

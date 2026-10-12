@@ -31,7 +31,7 @@ import { PatientPrescriptionsRepository } from '@/domains/app/sub-domains/patien
 import { organizationToday } from '@/domains/app/sub-domains/patients/patients.rules.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { paiseOf, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import {
   MEDICAL_SALE_RESTOCKED_REASON_VALUES,
   MEDICAL_SALE_STATUS,
@@ -43,11 +43,6 @@ const contactsRepository = new ContactsRepository();
 const invoicesRepository = new InvoicesRepository();
 const medicinesRepository = new MedicinesRepository();
 const prescriptionsRepository = new PatientPrescriptionsRepository();
-
-/** Rupees as paise, for exact sums. */
-function paiseOf(value: unknown): number {
-  return Math.round((toAmount(value) ?? 0) * 100);
-}
 
 /** `S-983` — a sale's display number. */
 function saleLabel(sale: BaseRecordRow): string {
@@ -273,10 +268,7 @@ async function returnSale(input: BaseRecordActionInput): Promise<BaseRecordRow> 
   const body = parseWithSchema({ schema: ReturnMedicalSaleDto, data: input.input });
   const invoice = await invoicesRepository.findById(sale.invoice_id as number);
   const credited = await repository.findCreditedAmount(sale.invoice_id as number);
-  if (
-    !invoice ||
-    paiseOf(invoice.paid_amount) + Math.round(credited * 100) < paiseOf(invoice.total)
-  ) {
+  if (!invoice || paiseOf(invoice.paid_amount) + paiseOf(credited) < paiseOf(invoice.total)) {
     throw new ConflictError('errors:medicalSaleNotPaid').withReason('sale_not_paid');
   }
   const lines = new Map(

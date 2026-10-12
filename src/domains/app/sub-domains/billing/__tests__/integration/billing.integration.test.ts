@@ -708,6 +708,18 @@ describe('Billing — integration (routes-final §8)', () => {
       '[(.data | length), .data[0].changes.invoice_id.to, .meta.pagination.has_more] | map(tostring) | join(",")',
       `1,${invoiceAsha},true`,
     );
+    const nextEdits = flow.last('.meta.pagination.next');
+    await flow.expect(
+      200,
+      'the next page follows the cursor',
+      'GET',
+      `/app/payments/${firstReceipt}/edits?limit=1&after=${encodeURIComponent(nextEdits)}`,
+    );
+    flow.expectValue(
+      'the change before it — made an advance — and more behind it',
+      '[(.data | length), .data[0].changes.invoice_id.from, .data[0].changes.invoice_id.to, .meta.pagination.has_more] | map(tostring) | join(",")',
+      `1,${invoiceAsha},null,true`,
+    );
     await flow.expect(400, 'the kind never changes', 'PATCH', `/app/payments/${firstReceipt}`, {
       kind: 'money_back',
     });

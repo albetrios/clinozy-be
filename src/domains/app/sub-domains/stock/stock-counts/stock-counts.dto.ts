@@ -31,7 +31,7 @@ export const CreateStockCountDto = z
       .min(1)
       .max(STOCK_COUNT_LINES_MAX)
       .refine((lines) => new Set(lines.map((line) => line.stock_item_id)).size === lines.length, {
-        message: 'Each item once',
+        message: 'errors:validation.eachItemOnce',
       }),
   })
   .strict();

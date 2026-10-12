@@ -13,7 +13,11 @@ import { PATIENT_TREATMENT_STATUS } from '@/domains/app/sub-domains/patients/pat
 import { patient_treatments } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.schema.js';
 import { PatientTreatmentsRepository } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.repository.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
-import { addDaysToCalendarDate, toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import {
+  addDaysToCalendarDate,
+  paiseOf,
+  toAmount,
+} from '@/shared/utils/validation/record-fields.util.js';
 import { computeInvoiceAmounts, type InvoiceLineAmounts } from './invoices.amounts.js';
 import { INVOICE_SESSION_CATEGORY_VALUES, INVOICE_TYPE } from './invoices.constants.js';
 import type { InvoiceItemInput } from './invoices.dto.js';
@@ -626,7 +630,7 @@ async function assertNotBelowLowestPrice({
   for (const line of lines) {
     const floor = toAmount(line.offering?.min_price) ?? 0;
     const quantity = Number(line.values.quantity);
-    if (line.offering && Math.round(line.amounts.net * 100) < Math.round(floor * 100) * quantity) {
+    if (line.offering && paiseOf(line.amounts.net) < paiseOf(floor) * quantity) {
       const showsFloor = await context.can(APP_PERMISSIONS.OFFERING_LOWER_PRICE_READ);
       throw fieldValidationError({
         field: `items/${line.index}`,

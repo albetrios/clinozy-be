@@ -1,7 +1,12 @@
-import { and, desc, eq, inArray, isNull, lt, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import {
+  buildDescendingCreatedAtIdCursorCondition,
+  cursorTimestampSelection,
+  type ParsedListCursor,
+} from '@/shared/utils/http/pagination.util.js';
 import {
   BaseRecordRepository,
   type BaseRecordRow,
@@ -161,6 +166,13 @@ export interface PaymentEditRow {
   author_membership_id: string | null;
   created_at: Date;
 }
+
+/** A payment edit on the edits page: its internal id and microsecond time for the keyset cursor. */
+export type PaymentEditPageRow = Omit<PaymentEditRow, 'id'> & {
+  id: number;
+  public_id: string;
+  cursor_created_at: string;
+};
 
 /**
  * MD22: a payment of the medical store — money on a `medical` invoice (receipts, refunds and their
@@ -343,15 +355,17 @@ export class PaymentsRepository extends BaseRecordRepository {
       });
   }
 
-  /** A payment's edits, newest first — one page (`after` = the last id read). */
+  /** A payment's edits, newest first — one `limit + 1` keyset page after `cursor` (finishKeysetPage). */
   async listEdits(options: {
     paymentId: number;
     limit: number;
-    after?: number | undefined;
-  }): Promise<PaymentEditRow[]> {
+    cursor: ParsedListCursor | null;
+  }): Promise<PaymentEditPageRow[]> {
     return getRequestDatabase()
       .select({
-        id: payment_edits.public_id,
+        id: payment_edits.id,
+        public_id: payment_edits.public_id,
+        cursor_created_at: cursorTimestampSelection(payment_edits.created_at),
         payment_id: payment_edits.payment_id,
         changes: payment_edits.changes,
         author_membership_id: memberships.public_id,
@@ -362,21 +376,15 @@ export class PaymentsRepository extends BaseRecordRepository {
       .where(
         and(
           eq(payment_edits.payment_id, options.paymentId),
-          options.after === undefined ? undefined : lt(payment_edits.id, options.after),
+          buildDescendingCreatedAtIdCursorCondition({
+            createdAtColumn: payment_edits.created_at,
+            idColumn: payment_edits.id,
+            cursor: options.cursor,
+          }),
         ),
       )
-      .orderBy(desc(payment_edits.id))
-      .limit(options.limit);
-  }
-
-  /** The internal id of an edit by its public id (the edits page's cursor). */
-  async findEditId(publicId: string): Promise<number | undefined> {
-    const rows = await getRequestDatabase()
-      .select({ id: payment_edits.id })
-      .from(payment_edits)
-      .where(eq(payment_edits.public_id, publicId))
-      .limit(1);
-    return rows[0]?.id;
+      .orderBy(desc(payment_edits.created_at), desc(payment_edits.id))
+      .limit(options.limit + 1);
   }
 
   /** Each payment's edit count and its latest edit (the ledger's "Edited 1×", B20). */

@@ -17,7 +17,7 @@ export const LogPatientFeedbackActionDto = z
   .strict()
   .refine((value) => value.action !== PATIENT_FEEDBACK_ACTION.OTHER || value.note !== undefined, {
     path: ['note'],
-    message: 'Say what was done',
+    message: 'errors:validation.sayWhatWasDone',
   });
 
 /** Parsed {@link LogPatientFeedbackActionDto}. */

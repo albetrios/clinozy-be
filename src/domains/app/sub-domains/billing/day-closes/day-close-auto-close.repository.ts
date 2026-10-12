@@ -24,6 +24,7 @@ import {
   DAY_CLOSE_AUTO_CLOSE_DAYS_PER_JOB,
   DAY_CLOSE_AUTO_CLOSE_SWEEP_BATCH,
 } from './workers/day-close-auto-close.constants.js';
+import { paiseOf, rupees } from '@/shared/utils/validation/record-fields.util.js';
 
 /** A branch-day the worker closes: its open day close, or none yet (money moved, nobody opened it). */
 export interface DayToAutoClose {
@@ -173,9 +174,8 @@ export class DayCloseAutoCloseRepository {
           organizationId: options.organizationId,
         })
       ).get(options.dayCloseId) ?? EMPTY_DAY_CLOSE_FIGURES;
-    const opening = Math.round(Number(locked[0].opening) * 100);
-    const expected =
-      (opening + Math.round(figures.cash_in * 100) - Math.round(figures.cash_out * 100)) / 100;
+    const opening = paiseOf(locked[0].opening);
+    const expected = (opening + paiseOf(figures.cash_in) - paiseOf(figures.cash_out)) / 100;
     await this.databaseHandle
       .update(day_closes)
       .set({
@@ -194,7 +194,7 @@ export class DayCloseAutoCloseRepository {
       organizationId: options.organizationId,
       dayCloseId: options.dayCloseId,
       kind: DAY_CLOSE_EVENT_KIND.AUTO_CLOSED,
-      text: `Auto-closed: counted as expected ₹${expected.toFixed(2)}`,
+      text: `Auto-closed: counted as expected ${rupees(expected)}`,
       membershipId: null,
       userId: null,
     });

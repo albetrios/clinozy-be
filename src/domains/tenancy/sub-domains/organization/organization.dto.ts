@@ -65,11 +65,11 @@ export const updateOrganizationDto = z
       .min(1)
       .max(ORGANIZATION_SPECIALTIES_MAX_COUNT)
       .refine((values) => new Set(values).size === values.length, {
-        message: 'Each specialty once',
+        message: 'errors:validation.eachSpecialtyOnce',
       })
       .optional(),
     timezone: trimmedStringMinMax({ min: 1, max: 64 })
-      .refine(isKnownTimeZone, { message: 'Not an IANA time zone (e.g. Asia/Kolkata)' })
+      .refine(isKnownTimeZone, { message: 'errors:validation.notIanaTimeZone' })
       .optional(),
   })
   .strict();

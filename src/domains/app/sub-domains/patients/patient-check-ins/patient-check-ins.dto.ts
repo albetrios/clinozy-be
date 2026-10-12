@@ -67,7 +67,7 @@ export const CreatePatientCheckInDto = z
     next_offering_ids: z
       .array(recordIdSchema)
       .max(PATIENT_CHECK_IN_NEXT_OFFERINGS_MAX)
-      .refine(distinct, { message: 'Each offering once' })
+      .refine(distinct, { message: 'errors:validation.eachOfferingOnce' })
       .optional(),
   })
   .strict();
@@ -92,7 +92,7 @@ export const UpdatePatientCheckInDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

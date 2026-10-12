@@ -1,6 +1,6 @@
 import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { paiseOf, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import { SUPPLIER_CREDIT_STATUS } from './supplier-credits.constants.js';
 import type { SupplierCreditOutput } from './supplier-credits.types.js';
 
@@ -30,7 +30,7 @@ export function serializeSupplierCredit({
     amount,
     applied_amount: applied,
     status:
-      Math.round(applied * 100) < Math.round(amount * 100)
+      paiseOf(applied) < paiseOf(amount)
         ? SUPPLIER_CREDIT_STATUS.OPEN
         : SUPPLIER_CREDIT_STATUS.ADJUSTED,
     created_by_membership_id: references.publicIdOf({ field: 'created_by_membership_id', row }),

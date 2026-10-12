@@ -7,12 +7,14 @@ import {
   createAppFixture,
 } from '@/domains/app/__tests__/factories/app-fixture.factory.js';
 import { AppFlow } from '@/domains/app/__tests__/factories/app-flow.factory.js';
+import {
+  addDaysToCalendarDate,
+  calendarDateInTimeZone,
+} from '@/shared/utils/validation/record-fields.util.js';
 
 /** `YYYY-MM-DD` in the organization's time zone, `days` from today. */
 function calendarDay(timeZone: string, days: number): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(
-    new Date(Date.now() + days * 86_400_000),
-  );
+  return addDaysToCalendarDate({ date: calendarDateInTimeZone({ timeZone }), days });
 }
 
 /**

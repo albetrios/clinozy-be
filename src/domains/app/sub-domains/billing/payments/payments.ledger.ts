@@ -12,6 +12,7 @@ import { ConflictError, ValidationError } from '@/shared/errors/index.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import {
   calendarDateInTimeZone,
+  paiseOf,
   rupees,
   toAmount,
 } from '@/shared/utils/validation/record-fields.util.js';
@@ -47,15 +48,10 @@ export interface PaymentSplitColumns {
   credit_amount: number;
 }
 
-/** Paise for exact sums. */
-function toPaise(amount: number): number {
-  return Math.round(amount * 100);
-}
-
 /** B18: the splits as columns, and `amount` their total. */
 export function splitsToColumns(splits: readonly PaymentSplit[]): PaymentSplitColumns {
   const paise = { cash: 0, upi: 0, card: 0, credit: 0 };
-  for (const split of splits) paise[split.mode] += toPaise(split.amount);
+  for (const split of splits) paise[split.mode] += paiseOf(split.amount);
   return {
     amount: (paise.cash + paise.upi + paise.card + paise.credit) / 100,
     cash_amount: paise.cash / 100,

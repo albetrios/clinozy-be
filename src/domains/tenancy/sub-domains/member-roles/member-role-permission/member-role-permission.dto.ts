@@ -13,7 +13,9 @@ export const putMemberRolePermissionsDto = z
       .min(0)
       .max(200)
       // TC14: a repeated code is a 400 (it was a database error).
-      .refine((codes) => new Set(codes).size === codes.length, { message: 'Each code once' }),
+      .refine((codes) => new Set(codes).size === codes.length, {
+        message: 'errors:validation.eachCodeOnce',
+      }),
   })
   .strict();
 

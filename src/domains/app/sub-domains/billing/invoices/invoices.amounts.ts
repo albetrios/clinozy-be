@@ -1,3 +1,4 @@
+import { paiseOf } from '@/shared/utils/validation/record-fields.util.js';
 /** What a line contributes to the amounts (rupees; the rate is per unit). */
 export interface InvoiceLinePricing {
   quantity: number;
@@ -29,11 +30,6 @@ export interface InvoiceAmounts {
   total: number;
   /** What the lines come to after their own discounts — the overall discount's ceiling. */
   afterLineDiscounts: number;
-}
-
-/** Rupees → paise (exact for 2-decimal amounts). */
-function toPaise(rupees: number): number {
-  return Math.round(rupees * 100);
 }
 
 /** Paise → rupees. */
@@ -97,13 +93,13 @@ export function computeInvoiceAmounts(options: {
   lines: readonly InvoiceLinePricing[];
   overallDiscount: number;
 }): InvoiceAmounts {
-  const gross = options.lines.map((line) => line.quantity * toPaise(line.rate));
+  const gross = options.lines.map((line) => line.quantity * paiseOf(line.rate));
   const lineDiscounts = options.lines.map((line, index) =>
-    Math.round(((gross[index] ?? 0) * toPaise(line.discountPercent)) / 10_000),
+    Math.round(((gross[index] ?? 0) * paiseOf(line.discountPercent)) / 10_000),
   );
   const after = gross.map((value, index) => value - (lineDiscounts[index] ?? 0));
   const afterTotal = sum(after);
-  const overall = Math.min(toPaise(options.overallDiscount), afterTotal);
+  const overall = Math.min(paiseOf(options.overallDiscount), afterTotal);
   const absorbingIndex = lastIndexWithValue(after);
   const shares = after.map((value, index) =>
     index === absorbingIndex || afterTotal === 0 ? 0 : Math.floor((overall * value) / afterTotal),
@@ -127,7 +123,7 @@ export function computeInvoiceAmounts(options: {
     };
   });
   const totalOf = (pick: (line: InvoiceLineAmounts) => number) =>
-    toRupees(sum(lines.map((line) => toPaise(pick(line)))));
+    toRupees(sum(lines.map((line) => paiseOf(pick(line)))));
   return {
     lines,
     subtotal: toRupees(sum(gross)),

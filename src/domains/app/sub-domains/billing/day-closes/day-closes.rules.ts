@@ -5,6 +5,7 @@ import { organizationToday } from '@/domains/app/sub-domains/patients/patients.r
 import { fieldValidationError } from '@/shared/errors/index.js';
 import {
   addDaysToCalendarDate,
+  paiseOf,
   rupees,
   toAmount,
   toInstant,
@@ -31,11 +32,6 @@ interface PendingDayEvent {
 
 /** The events in flight, by their write context — set by `prepare*`, read by `afterWrite`. */
 const pendingEvents = new WeakMap<BaseRecordWriteContext, PendingDayEvent[]>();
-
-/** Paise for exact sums. */
-function paiseOf(value: number): number {
-  return Math.round(value * 100);
-}
 
 /** B25: the expected cash — the opening, plus the cash received, less the cash paid that day. */
 export function expectedCashOf({

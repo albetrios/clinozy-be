@@ -28,7 +28,9 @@ const distinct = (values: readonly unknown[]) => new Set(values).size === values
 const paymentSplitDto = z
   .object({
     mode: z.enum(PAYMENT_MODE_VALUES),
-    amount: moneySchema.refine((amount) => amount > 0, { message: 'More than 0' }),
+    amount: moneySchema.refine((amount) => amount > 0, {
+      message: 'errors:validation.moreThanZero',
+    }),
   })
   .strict();
 
@@ -37,19 +39,21 @@ const splitsSchema = z
   .array(paymentSplitDto)
   .min(1)
   .max(PAYMENT_MODE_VALUES.length)
-  .refine((splits) => distinct(splits.map((split) => split.mode)), { message: 'Each mode once' });
+  .refine((splits) => distinct(splits.map((split) => split.mode)), {
+    message: 'errors:validation.eachModeOnce',
+  });
 
 /** Money splits only — `credit` is a pending credit used on a bill (8.D route 27). */
 const moneySplitsSchema = splitsSchema.refine(
   (splits) => splits.every((split) => split.mode !== PAYMENT_MODE.CREDIT),
-  { message: 'Credit only through a pending credit' },
+  { message: 'errors:validation.creditOnlyThroughPendingCredit' },
 );
 
 /** Up to five upload keys, each once — confirmed uploads of the organization. */
 const attachmentKeysSchema = z
   .array(trimmedStringMinMax({ min: 1, max: 512 }))
   .max(PAYMENT_ATTACHMENT_KEYS_MAX)
-  .refine(distinct, { message: 'Each attachment once' });
+  .refine(distinct, { message: 'errors:validation.eachAttachmentOnce' });
 
 /** The fields a create and a change share. */
 const paymentFields = {
@@ -122,7 +126,7 @@ export const UpdatePaymentDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /** Body of `POST /app/payments/{payment_id}/reverse` (8.C.8 #18): why, and the reversal's day. */

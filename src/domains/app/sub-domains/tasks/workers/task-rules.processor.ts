@@ -22,6 +22,7 @@ import {
 } from '@/domains/app/sub-domains/tasks/tasks.constants.js';
 import { queueClinozyMessages } from './task-rules-messages.processor.js';
 import { TASK_RULES_GONE_QUIET_REASON } from './task-rules.constants.js';
+import { paiseOf, rupees } from '@/shared/utils/validation/record-fields.util.js';
 
 /**
  * What one organization's run did (the job's return value, logged as `task-rules.completed`).
@@ -70,7 +71,7 @@ function clinozyMessageOf(step: ClinozyStepTask): {
     };
   }
   if (step.rule === TASK_RULE.PAYMENT_DUE && step.invoiceId !== null) {
-    const due = `₹${step.dueAmount}`;
+    const due = rupees(paiseOf(step.dueAmount) / 100);
     const invoice = step.invoiceNumber ?? '-';
     return {
       body: `Hi ${first}, ${due} is still due on invoice ${invoice}. You can pay at your next visit, or reply here and we will help.`,

@@ -4,6 +4,7 @@ import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.j
 import {
   instantSchema,
   moneySchema,
+  paiseOf,
   recordIdListSchema,
   recordIdSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
@@ -36,14 +37,16 @@ export const invoiceCreditNotesIdParamsDto = z
  */
 export const CreateInvoiceCreditNoteDto = z
   .object({
-    amount: moneySchema.refine((amount) => amount > 0, { message: 'More than 0' }),
+    amount: moneySchema.refine((amount) => amount > 0, {
+      message: 'errors:validation.moreThanZero',
+    }),
     reason: trimmedStringMinMax({ min: 1, max: INVOICE_CREDIT_NOTE_REASON_MAX }),
     splits: z
       .array(invoicePaymentSplitDto)
       .min(1)
       .max(PAYMENT_MONEY_MODE_VALUES.length)
       .refine((splits) => distinct(splits.map((split) => split.mode)), {
-        message: 'Each mode once',
+        message: 'errors:validation.eachModeOnce',
       }),
     paid_at: instantSchema.optional(),
     reference: trimmedStringMinMax({ min: 1, max: 60 }).nullable().optional(),
@@ -52,9 +55,9 @@ export const CreateInvoiceCreditNoteDto = z
   .strict()
   .refine(
     (value) =>
-      Math.round(value.splits.reduce((total, split) => total + split.amount, 0) * 100) ===
-      Math.round(value.amount * 100),
-    { path: ['splits'], message: 'The splits add up to the amount' },
+      paiseOf(value.splits.reduce((total, split) => total + split.amount, 0)) ===
+      paiseOf(value.amount),
+    { path: ['splits'], message: 'errors:validation.splitsAddUpToAmount' },
   );
 
 /**

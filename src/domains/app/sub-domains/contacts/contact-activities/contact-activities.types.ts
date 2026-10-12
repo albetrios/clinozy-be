@@ -20,7 +20,6 @@ export type ContactActivityOutput = {
   attachment_keys: string[];
   reply_to_contact_activity_id: string | null;
   delivery_status: string | null;
-  provider_message_id: string | null;
   failure_reason: string | null;
   occurred_at: string;
   delivered_at: string | null;

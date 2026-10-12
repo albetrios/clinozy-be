@@ -43,7 +43,7 @@ export const CreateOfferingDto = z
     branch_ids: z
       .array(recordIdSchema)
       .max(20)
-      .refine(distinct, { message: 'Each id once' })
+      .refine(distinct, { message: 'errors:validation.eachIdOnce' })
       .optional(),
     is_gst_inclusive: z.boolean().optional(),
     search_terms: z
@@ -78,7 +78,7 @@ export const UpdateOfferingDto = z
     branch_ids: z
       .array(recordIdSchema)
       .max(20)
-      .refine(distinct, { message: 'Each id once' })
+      .refine(distinct, { message: 'errors:validation.eachIdOnce' })
       .optional(),
     is_gst_inclusive: z.boolean().optional(),
     search_terms: z
@@ -90,7 +90,7 @@ export const UpdateOfferingDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

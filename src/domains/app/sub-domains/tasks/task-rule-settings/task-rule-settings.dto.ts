@@ -20,7 +20,7 @@ export const ReplaceTaskRulesDto = z
       .min(1)
       .max(TASK_RULE_VALUES.length)
       .refine((rules) => new Set(rules.map((rule) => rule.rule_key)).size === rules.length, {
-        message: 'Each rule once',
+        message: 'errors:validation.eachRuleOnce',
       }),
   })
   .strict();

@@ -21,7 +21,7 @@ import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.uti
 import {
   calendarDateInTimeZone,
   daysBetweenCalendarDates,
-  toAmount,
+  paiseOf,
 } from '@/shared/utils/validation/record-fields.util.js';
 import { applySupplierCredits } from './supplier-credits/supplier-credits.ledger.js';
 import { PaySupplierDto } from './suppliers.dto.js';
@@ -29,11 +29,6 @@ import type { SuppliersRepository } from './suppliers.repository.js';
 import { suppliers } from './suppliers.schema.js';
 
 const ordersRepository = new MedicalPurchaseOrdersRepository();
-
-/** Rupees as paise, for exact sums. */
-function paiseOf(value: unknown): number {
-  return Math.round((toAmount(value) ?? 0) * 100);
-}
 
 /**
  * MD10: takes `paise` out of what is left of the splits, mode by mode in their order — the splits

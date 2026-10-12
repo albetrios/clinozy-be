@@ -81,7 +81,7 @@ export const UpdateTaskDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /** Body of `POST …/snooze` (10.A.8 #6): `snoozed_until*` (in the future), `snooze_label`. */

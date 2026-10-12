@@ -36,7 +36,7 @@ const treatmentFields = {
   body_parts: z
     .array(z.enum(PATIENT_BODY_PART_VALUES))
     .max(PATIENT_TREATMENT_BODY_PARTS_MAX)
-    .refine(distinct, { message: 'Each body part once' }),
+    .refine(distinct, { message: 'errors:validation.eachBodyPartOnce' }),
   session_number: z.number().int().min(1).max(PATIENT_TREATMENT_SESSION_MAX),
   parameters: z
     .record(
@@ -44,7 +44,8 @@ const treatmentFields = {
       z.string().max(PATIENT_TREATMENT_PARAMETER_VALUE_MAX),
     )
     .refine((value) => Object.keys(value).length <= PARAMETERS_MAX, {
-      message: `Up to ${PARAMETERS_MAX} parameters`,
+      message: 'errors:validation.upToParameters',
+      params: { messageParams: { max: PARAMETERS_MAX } },
     }),
   remark: trimmedStringMinMax({ min: 1, max: PATIENT_TREATMENT_REMARK_MAX }).nullable(),
   aftercare_call: z.enum(PATIENT_TREATMENT_AFTERCARE_CALL_VALUES),
@@ -90,7 +91,7 @@ export const CreatePatientTreatmentDto = z
   .strict()
   .refine((value) => !(value.patient_offering_id && value.session_number !== undefined), {
     path: ['session_number'],
-    message: 'A session spent from a bought offering takes its number from it',
+    message: 'errors:validation.spentSessionTakesOfferingNumber',
   });
 
 /**
@@ -116,7 +117,7 @@ export const UpdatePatientTreatmentDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /** Body of `POST …/treatments/{patient_treatment_id}/reverse` (7.H.8 #50): `reason*` (1–280). */

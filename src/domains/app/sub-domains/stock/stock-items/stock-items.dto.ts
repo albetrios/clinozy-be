@@ -21,7 +21,7 @@ export const stockQuantitySchema = z.number().min(0).max(STOCK_QUANTITY_MAX).mul
 
 /** A stock quantity above 0. */
 export const positiveStockQuantitySchema = stockQuantitySchema.refine((value) => value > 0, {
-  message: 'More than 0',
+  message: 'errors:validation.moreThanZero',
 });
 
 /** The fields a create and a change share (routes-final 9.A.8 #3). */
@@ -85,7 +85,7 @@ export const UpdateStockItemDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

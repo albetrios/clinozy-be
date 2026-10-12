@@ -58,13 +58,13 @@ export const CreateMedicalSaleDto = z
       .min(1)
       .max(MEDICAL_SALE_ITEMS_MAX)
       .refine((items) => distinct(items.map((item) => item.medicine_id)), {
-        message: 'Each medicine once',
+        message: 'errors:validation.eachMedicineOnce',
       }),
     overall_discount: moneySchema.optional(),
     member_ids: z
       .array(recordIdSchema)
       .max(MEDICAL_SALE_MEMBERS_MAX)
-      .refine(distinct, { message: 'Each member once' })
+      .refine(distinct, { message: 'errors:validation.eachMemberOnce' })
       .optional(),
     patient_prescription_id: recordIdSchema.optional(),
     remark: trimmedStringMinMax({ min: 1, max: INVOICE_REMARK_MAX }).optional(),
@@ -90,7 +90,7 @@ export const ReturnMedicalSaleDto = z
       .min(1)
       .max(MEDICAL_SALE_ITEMS_MAX)
       .refine((items) => distinct(items.map((item) => item.invoice_item_id)), {
-        message: 'Each line once',
+        message: 'errors:validation.eachLineOnce',
       }),
     reason: z.enum(MEDICAL_SALE_RETURN_REASON_VALUES),
     refund_mode: z.enum(MEDICAL_SALE_REFUND_MODE_VALUES),

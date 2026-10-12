@@ -20,7 +20,7 @@ const recentPickSchema = z
   .string()
   .trim()
   .max(160)
-  .regex(/^[^:]+:[^:]+:.+$/, { message: 'Each entry is room:field:value' });
+  .regex(/^[^:]+:[^:]+:.+$/, { message: 'errors:validation.recentPickFormat' });
 
 /**
  * Body of `PATCH /app/memberships/me/preferences` (launch §2.F, U4) — at least one field; each list
@@ -32,25 +32,25 @@ export const updateMembershipPreferencesDto = z
     pinned_sections: z
       .array(z.enum(MEMBERSHIP_PREFERENCE_PINNED_SECTIONS_VALUES))
       .max(MEMBERSHIP_PREFERENCE_PINNED_SECTIONS_MAX)
-      .refine(distinct, { message: 'Each value once' })
+      .refine(distinct, { message: 'errors:validation.eachValueOnce' })
       .optional(),
     theme: z.enum(MEMBERSHIP_PREFERENCE_THEME_VALUES).optional(),
     branch_ids: z
       .array(recordIdSchema)
       .max(MEMBERSHIP_PREFERENCE_BRANCH_IDS_MAX)
-      .refine(distinct, { message: 'Each id once' })
+      .refine(distinct, { message: 'errors:validation.eachIdOnce' })
       .optional(),
     patient_file_pins: z
       .array(z.enum(MEMBERSHIP_PREFERENCE_PATIENT_FILE_PINS_VALUES))
       .max(MEMBERSHIP_PREFERENCE_PATIENT_FILE_PINS_VALUES.length)
-      .refine(distinct, { message: 'Each value once' })
+      .refine(distinct, { message: 'errors:validation.eachValueOnce' })
       .optional(),
     recent_picks: z.array(recentPickSchema).max(MEMBERSHIP_PREFERENCE_RECENT_PICKS_MAX).optional(),
     expected_updated_at: expectedUpdatedAtSchema,
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /** Parsed {@link updateMembershipPreferencesDto}. */

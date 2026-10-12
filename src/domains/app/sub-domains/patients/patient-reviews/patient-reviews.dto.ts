@@ -28,7 +28,7 @@ const reviewFields = {
   file_keys: z
     .array(trimmedStringMinMax({ min: 1, max: 512 }))
     .max(PATIENT_REVIEW_FILE_KEYS_MAX)
-    .refine(distinct, { message: 'Each file once' }),
+    .refine(distinct, { message: 'errors:validation.eachFileOnce' }),
   appointment_id: recordIdSchema.nullable(),
 };
 
@@ -81,7 +81,7 @@ export const UpdatePatientReviewDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

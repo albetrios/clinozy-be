@@ -24,7 +24,7 @@ import { StockItemsRepository } from '@/domains/app/sub-domains/stock/stock-item
 import { stock_items } from '@/domains/app/sub-domains/stock/stock-items/stock-items.schema.js';
 import { StockVendorsRepository } from '@/domains/app/sub-domains/stock/stock-vendors/stock-vendors.repository.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
-import { toAmount, toText } from '@/shared/utils/validation/record-fields.util.js';
+import { paiseOf, toAmount, toText } from '@/shared/utils/validation/record-fields.util.js';
 import type { StockPurchaseItemInput, StockPurchasePaymentInput } from './stock-purchases.dto.js';
 import type { StockPurchasesRepository } from './stock-purchases.repository.js';
 import { stock_purchases } from './stock-purchases.schema.js';
@@ -49,11 +49,6 @@ interface PendingPurchase {
 
 /** The purchases in flight, by their write context — set by `prepareCreate`, read by `afterWrite`. */
 const pendingPurchases = new WeakMap<BaseRecordWriteContext, PendingPurchase>();
-
-/** Rupees as paise, for exact sums. */
-function paiseOf(value: unknown): number {
-  return Math.round((toAmount(value) ?? 0) * 100);
-}
 
 /**
  * S10: "Not in the list · add as typed" — the live item of that name (any case) when one exists,

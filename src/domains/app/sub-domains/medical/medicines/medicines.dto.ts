@@ -26,7 +26,9 @@ const distinct = (values: readonly unknown[]) => new Set(values).size === values
 const packsSchema = z.number().int().min(0).max(MEDICINE_QUANTITY_MAX);
 
 /** `2027-03` — a batch's expiry month (MD5). */
-export const expiryMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Use YYYY-MM');
+export const expiryMonthSchema = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'errors:validation.yearMonthFormat');
 
 /** The near-expiry discount, 1–90 % (MD14). */
 const discountPercentSchema = z
@@ -54,7 +56,7 @@ const medicineBatchDto = z
 const medicineSupplierPriceDto = z
   .object({
     supplier_id: recordIdSchema,
-    rate: moneySchema.refine((rate) => rate > 0, { message: 'More than 0' }),
+    rate: moneySchema.refine((rate) => rate > 0, { message: 'errors:validation.moreThanZero' }),
     free_quantity: packsSchema.optional(),
     lead_days: z.number().int().min(0).max(365).optional(),
   })
@@ -65,10 +67,10 @@ const batchesSchema = z
   .array(medicineBatchDto)
   .max(MEDICINE_BATCHES_MAX)
   .refine((batches) => distinct(batches.map((batch) => batch.batch_number.toLowerCase())), {
-    message: 'Each batch number once',
+    message: 'errors:validation.eachBatchNumberOnce',
   })
   .refine((batches) => distinct(batches.flatMap((batch) => (batch.id ? [batch.id] : []))), {
-    message: 'Each batch once',
+    message: 'errors:validation.eachBatchOnce',
   });
 
 /** The supplier prices (each supplier once). */
@@ -76,7 +78,7 @@ const supplierPricesSchema = z
   .array(medicineSupplierPriceDto)
   .max(MEDICINE_SUPPLIER_PRICES_MAX)
   .refine((prices) => distinct(prices.map((price) => price.supplier_id)), {
-    message: 'Each supplier once',
+    message: 'errors:validation.eachSupplierOnce',
   });
 
 /** The fields a create and a change share (routes-final 11.D.8). */
@@ -145,7 +147,7 @@ export const UpdateMedicineDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

@@ -1,16 +1,11 @@
 import type { BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { MedicalPurchaseOrdersRepository } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.repository.js';
 import { ConflictError } from '@/shared/errors/index.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { paiseOf } from '@/shared/utils/validation/record-fields.util.js';
 import { SupplierCreditsRepository } from './supplier-credits.repository.js';
 
 const creditsRepository = new SupplierCreditsRepository();
 const ordersRepository = new MedicalPurchaseOrdersRepository();
-
-/** Rupees as paise, for exact sums. */
-function paiseOf(value: unknown): number {
-  return Math.round((toAmount(value) ?? 0) * 100);
-}
 
 /**
  * MD11: applies a supplier's open credits to their received orders still due — the oldest credit

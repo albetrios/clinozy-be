@@ -55,7 +55,7 @@ Biome, typecheck and tsdoc, then is committed and pushed. The full `pnpm test`,
 | T3 — the locked Admin role | 3 | done | `app-team-access.integration.test.ts` › T3 |
 | P2 — branch access per section | 3 | done | `app-branch-access.integration.test.ts` (appointments, leads, invoices, payments, day closes, medical sales) |
 | RL1 — unit-db lane as the RLS role | 3 | dropped (decision) | see Decisions |
-| RL2 — read-only retention arm | 3 | done | `patients-ideas-sweep-read-only.security.test.ts` — after the fix below |
+| RL2 — read-only retention arm | 3 | done | `patients-ideas-sweep-read-only.security.test.ts` — after the fix below; since D87 the arm is gone and `patients-no-retention-arm.security.test.ts` proves no retention context reaches a file |
 | AP1 — time zones and midnight | 4 | done | `record-fields.time-zone.unit.test.ts` (India across UTC midnight, UTC+14 vs UTC−11, a daylight-saving jump and its skipped hour, a round trip every 7 hours of a year in 6 zones) |
 | P1 — holidays, rooms and machines in booking | 4 | done | `appointments-places.integration.test.ts` (a booked room or machine deleted: the booking stands, new and moved bookings refused until the place is cleared or restored; a holiday added after booking: the bookings stand, the day books nothing) |
 | R1 — task rules at their due times | 4 | done | `task-rules-clock.integration.test.ts` — the organization's zone is the clock: a step due 11:00 run at 10:xx and 11:xx, arrive at 13 and 18 minutes past the start, a visit moved to tomorrow, a follow-up turning due at the organization's midnight, a snooze to midnight |

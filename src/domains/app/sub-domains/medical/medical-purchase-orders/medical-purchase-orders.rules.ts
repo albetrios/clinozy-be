@@ -12,7 +12,7 @@ import { SuppliersRepository } from '@/domains/app/sub-domains/medical/suppliers
 import { organizationToday } from '@/domains/app/sub-domains/patients/patients.rules.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { paiseOf, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import {
   MEDICAL_PURCHASE_ORDER_DEFAULT_EXPIRY_MONTHS,
   MEDICAL_PURCHASE_ORDER_STAGE,
@@ -33,11 +33,6 @@ const suppliersRepository = new SuppliersRepository();
 
 /** The lines a save writes after its order row (MD15) — set by `prepare*`, read by `afterWrite`. */
 const pendingLines = new WeakMap<BaseRecordWriteContext, MedicalPurchaseOrderItemValues[]>();
-
-/** Rupees as paise, for exact sums. */
-function paiseOf(value: unknown): number {
-  return Math.round((toAmount(value) ?? 0) * 100);
-}
 
 /** MD15: a received order is read-only — a 409 `transition_not_allowed`. */
 function assertNotReceived({

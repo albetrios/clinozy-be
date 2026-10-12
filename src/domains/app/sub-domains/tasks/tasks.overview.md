@@ -48,7 +48,7 @@ task is resolved, and the tasks the rules open and close by themselves. Tables `
 Every five minutes `task-rules-sweep` pages through the active team organizations and adds one
 deduplicated `task-rules` job each. The job, in the organization's context and one transaction,
 first takes the organization's run lock (`TaskRulesRepository.lockRun` — a transaction-scoped
-advisory lock in the `TASK_RULES_RUN` space), so a retried or stalled job running beside a fresh
+advisory lock in the `TASK_RULES_RUN` space, main's `acquireResourceQuotaLock` on the worker's handle), so a retried or stalled job running beside a fresh
 one waits its turn and then finds the steps taken and the notices queued. Then it:
 wakes the snoozed tasks whose time came; per rule closes the open tasks whose record no longer
 qualifies ("Done by Clinozy"), then — when the rule is on — opens one task for each record that

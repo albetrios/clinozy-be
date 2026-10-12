@@ -31,13 +31,15 @@ const roleIds = z
   .array(trimmedStringMinMax({ min: 1, max: 28 }))
   .min(1)
   .max(MEMBERSHIP_ROLE_IDS_MAX)
-  .refine((ids) => new Set(ids).size === ids.length, { message: 'Each role once' });
+  .refine((ids) => new Set(ids).size === ids.length, { message: 'errors:validation.eachRoleOnce' });
 
 /** Branch ids the member works in (`brn_…`); `[]` for none. */
 const branchIds = z
   .array(trimmedStringMinMax({ min: 1, max: 28 }))
   .max(100)
-  .refine((ids) => new Set(ids).size === ids.length, { message: 'Each branch once' });
+  .refine((ids) => new Set(ids).size === ids.length, {
+    message: 'errors:validation.eachBranchOnce',
+  });
 
 /** The staff profile fields a create or update accepts (launch ROUTE #4, D3). */
 const staffProfileFields = {
@@ -67,7 +69,7 @@ function workEndsAfterStarts({
     start: value.work_starts_at,
     end: value.work_ends_at,
     endField: 'work_ends_at',
-    message: 'Working hours must end after they start',
+    message: 'errors:validation.workEndsBeforeStarts',
     context,
   });
 }
@@ -111,7 +113,7 @@ export const updateMembershipDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   })
   .superRefine((value, context) => workEndsAfterStarts({ value, context }));
 

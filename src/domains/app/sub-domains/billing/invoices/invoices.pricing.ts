@@ -3,6 +3,7 @@ import {
   OFFER_STATUS,
 } from '@/domains/app/sub-domains/offerings/offers/offers.constants.js';
 import { offerStatusOn } from '@/domains/app/sub-domains/offerings/offers/offers.rules.js';
+import { paiseOf } from '@/shared/utils/validation/record-fields.util.js';
 
 /** An offer that names an offering and runs at the invoice's branch — live or not (the rule decides). */
 export interface InvoiceOfferCandidate {
@@ -28,11 +29,6 @@ export interface InvoiceBilledPrice {
   extraOfferId: string | null;
 }
 
-/** Rupees → paise (exact for 2-decimal amounts). */
-function toPaise(rupees: number): number {
-  return Math.round(rupees * 100);
-}
-
 /**
  * A price offer applied to a base (rupees): a percentage rounds to the whole rupee (₹1,350 at 15%
  * off is ₹1,148 — the screen's "Billed today"), an amount off never goes below 0, a fixed price
@@ -43,7 +39,7 @@ function priceAfter({ base, offer }: { base: number; offer: InvoiceOfferCandidat
     case OFFER_KIND.PERCENT:
       return Math.round(base * (1 - offer.value / 100));
     case OFFER_KIND.AMOUNT:
-      return Math.max(0, toPaise(base) - toPaise(offer.value)) / 100;
+      return Math.max(0, paiseOf(base) - paiseOf(offer.value)) / 100;
     case OFFER_KIND.FIXED:
       return offer.value > 0 ? Math.min(base, offer.value) : base;
     default:
@@ -88,11 +84,11 @@ export function billedPriceOf(options: {
       continue;
     }
     const after = priceAfter({ base, offer });
-    if (toPaise(after) < toPaise(rate)) {
+    if (paiseOf(after) < paiseOf(rate)) {
       rate = after;
       priceOfferId = offer.id;
     }
   }
-  if (minPrice > 0 && toPaise(rate) < toPaise(minPrice)) rate = minPrice;
+  if (minPrice > 0 && paiseOf(rate) < paiseOf(minPrice)) rate = minPrice;
   return { rate, priceOfferId, extraSessions, extraOfferId };
 }

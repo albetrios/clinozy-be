@@ -26,7 +26,7 @@ const distinct = (values: readonly unknown[]) => new Set(values).size === values
 /** One preference tag — a lowercase snake_case key (CT14). */
 const preferenceTagSchema = z
   .string()
-  .regex(new RegExp(CONTACT_PREFERENCE_TAG_PATTERN), 'Use a lowercase key such as no_calls');
+  .regex(new RegExp(CONTACT_PREFERENCE_TAG_PATTERN), 'errors:validation.lowercaseKey');
 
 /** The tag body without its anchors, for the comma-separated list filter. */
 const TAG_BODY = CONTACT_PREFERENCE_TAG_PATTERN.slice(1, -1);
@@ -46,10 +46,10 @@ const contactPhonesSchema = z
   .min(CONTACT_PHONES_MIN)
   .max(CONTACT_PHONES_MAX)
   .refine((phones) => distinct(phones.map((entry) => entry.phone)), {
-    message: 'Each number once',
+    message: 'errors:validation.eachNumberOnce',
   })
   .refine((phones) => phones.filter((entry) => entry.is_primary).length === 1, {
-    message: 'Mark exactly one number as primary',
+    message: 'errors:validation.exactlyOnePrimaryNumber',
   });
 
 /** The fields a contact is written with — every one optional; create and update narrow it. */
@@ -64,12 +64,12 @@ const contactFields = {
   instagram_handles: z
     .array(trimmedStringMinMax({ min: 1, max: 30 }))
     .max(CONTACT_INSTAGRAM_HANDLES_MAX)
-    .refine(distinct, { message: 'Each handle once' }),
+    .refine(distinct, { message: 'errors:validation.eachHandleOnce' }),
   default_channel: z.enum(CONTACT_DEFAULT_CHANNEL_VALUES),
   preference_tags: z
     .array(preferenceTagSchema)
     .max(CONTACT_PREFERENCE_TAGS_MAX)
-    .refine(distinct, { message: 'Each tag once' }),
+    .refine(distinct, { message: 'errors:validation.eachTagOnce' }),
   has_marketing_consent: z.boolean(),
   referral_source: z.enum(CONTACT_REFERRAL_SOURCE_VALUES).nullable(),
   referred_by_contact_id: recordIdSchema.nullable(),
@@ -134,7 +134,7 @@ export const UpdateContactDto = z
   })
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
-    message: 'Send at least one field',
+    message: 'errors:validation.sendAtLeastOneField',
   });
 
 /**

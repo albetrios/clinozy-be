@@ -51,6 +51,22 @@ describe('renderZodIssueMessages', () => {
     });
   });
 
+  it("fills a message key's placeholders from the custom issue's params.messageParams", () => {
+    const schema = z.object({
+      method: z.string().superRefine((method, context) => {
+        context.addIssue({
+          code: 'custom',
+          message: 'errors:validation.requiredForSettleMethod',
+          params: { messageParams: { method } },
+        });
+      }),
+    });
+    expect(renderZodIssueMessages(firstIssue(schema, { method: 'money' }))).toEqual({
+      en: 'Required for money',
+      es: 'Obligatorio para money',
+    });
+  });
+
   it('keeps plain text a schema wrote in every language', () => {
     const schema = z.object({ name: z.string().min(3, { message: 'Too short for us' }) });
     expect(renderZodIssueMessages(firstIssue(schema, { name: 'x' }))).toEqual({
