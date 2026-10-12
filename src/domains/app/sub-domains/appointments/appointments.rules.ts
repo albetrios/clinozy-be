@@ -28,6 +28,7 @@ import {
   calendarDateInTimeZone,
   clockTimeInTimeZone,
   clockTimeOfMinutes,
+  daysBetweenCalendarDates,
   instantInTimeZone,
   minutesOfClockTime,
   splitRecordIds,
@@ -383,7 +384,7 @@ async function decorateAppointments(outputs: Record<string, unknown>[]): Promise
 /** The days of a `daily-counts` window, after checking it is 1 to 62 days (400 on `date_to`). */
 function countsWindow(input: Record<string, unknown>): { from: string; days: number } {
   const from = String(input.date_from);
-  const days = Math.round((Date.parse(String(input.date_to)) - Date.parse(from)) / 86_400_000) + 1;
+  const days = daysBetweenCalendarDates({ from, to: String(input.date_to) }) + 1;
   if (days < 1 || days > APPOINTMENT_DAILY_COUNTS_MAX_DAYS) {
     throw fieldValidationError({
       field: 'date_to',

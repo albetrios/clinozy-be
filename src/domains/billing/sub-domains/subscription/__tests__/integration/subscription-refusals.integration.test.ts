@@ -17,37 +17,13 @@ import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 
-// A configured payment provider that bills a plan only through the plan's own provider price —
-// the real `getProviderPriceId` rule — so a plan without a price is refused before any provider call.
-vi.mock('@/domains/billing/sub-domains/subscription/stripe-payment-provider.js', () => {
-  class PriceAwarePaymentProvider {
-    isConfigured(): boolean {
-      return true;
-    }
-    getProviderPriceId({
-      plan,
-      billingCycle,
-    }: {
-      plan: { stripe_price_monthly_id: string | null; stripe_price_yearly_id: string | null };
-      billingCycle: 'monthly' | 'yearly';
-    }): string | null {
-      return billingCycle === 'yearly' ? plan.stripe_price_yearly_id : plan.stripe_price_monthly_id;
-    }
-    async createSubscription(): Promise<{
-      providerSubscriptionId: string;
-      providerCustomerId: string;
-    }> {
-      return {
-        providerSubscriptionId: `sub_refusal_${randomUUID()}`,
-        providerCustomerId: `cus_refusal_${randomUUID()}`,
-      };
-    }
-    async cancelSubscriptionAtPeriodEnd(): Promise<void> {}
-    async cancelSubscriptionImmediately(): Promise<void> {}
-    async resumeSubscription(): Promise<void> {}
-    async updateSubscriptionPrice(): Promise<void> {}
-  }
-  return { StripePaymentProvider: PriceAwarePaymentProvider };
+// A configured provider that bills a plan only through the plan's own provider price — the real
+// `getProviderPriceId` rule — so a plan without a price is refused before any provider call.
+vi.mock('@/domains/billing/sub-domains/subscription/stripe-payment-provider.js', async () => {
+  const { FakePaymentProvider } = await import(
+    '@/domains/billing/__tests__/factories/fake-payment-provider.js'
+  );
+  return { StripePaymentProvider: FakePaymentProvider };
 });
 
 const SUBSCRIPTION_PERMISSIONS = ['subscription:read', 'subscription:manage'];

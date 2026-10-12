@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDaysToCalendarDate,
+  daysBetweenCalendarDates,
   calendarDateInTimeZone,
   clockTimeInTimeZone,
   clockTimeOfMinutes,
@@ -124,6 +125,13 @@ describe('time-zone helpers', () => {
     expect(addDaysToCalendarDate({ date: '2028-02-28', days: 1 })).toBe('2028-02-29');
     expect(addDaysToCalendarDate({ date: '2027-03-01', days: -1 })).toBe('2027-02-28');
     expect(addDaysToCalendarDate({ date: '2026-03-31', days: 1 })).toBe('2026-04-01');
+  });
+
+  it('counts whole days between two dates, across month, year and leap-day ends', () => {
+    expect(daysBetweenCalendarDates({ from: '2026-01-31', to: '2026-02-01' })).toBe(1);
+    expect(daysBetweenCalendarDates({ from: '2027-12-31', to: '2028-03-01' })).toBe(61);
+    expect(daysBetweenCalendarDates({ from: '2026-10-12', to: '2026-10-12' })).toBe(0);
+    expect(daysBetweenCalendarDates({ from: '2026-10-12', to: '2026-10-05' })).toBe(-7);
   });
 
   it('wraps clock minutes past midnight in both directions', () => {

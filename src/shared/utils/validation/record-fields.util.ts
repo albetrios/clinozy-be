@@ -12,7 +12,8 @@ import {
   type Weekday,
 } from '@/shared/constants/record-fields.constants.js';
 import { ConflictError } from '@/shared/errors/index.js';
-import { trimmedString } from '@/shared/utils/validation/validation.util.js';
+import { trimmedString, trimmedStringMinMax } from '@/shared/utils/validation/validation.util.js';
+import { MILLISECONDS_PER_DAY } from '@/shared/constants/ttl.constants.js';
 
 /** `HH:mm`, 00:00–23:59. */
 const HOUR_MINUTE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -21,7 +22,7 @@ const HOUR_MINUTE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const chipToneSchema = z.enum(CHIP_TONE_VALUES as [ChipTone, ...ChipTone[]]);
 
 /** A time of day as `HH:mm` (opening hours, working hours). */
-export const hourMinuteSchema = z.string().trim().regex(HOUR_MINUTE, 'Use HH:mm');
+export const hourMinuteSchema = trimmedString().regex(HOUR_MINUTE, 'Use HH:mm');
 
 /** One to seven distinct weekdays (`working_days`). */
 export const workingDaysSchema = z
@@ -150,7 +151,7 @@ export const calendarDateSchema = z.iso.date();
 export const instantSchema = z.iso.datetime({ offset: true });
 
 /** A referenced record's public id (`pat_…`); the service resolves it inside the organization. */
-export const recordIdSchema = trimmedString().min(1).max(28);
+export const recordIdSchema = trimmedStringMinMax({ min: 1, max: 28 });
 
 /**
  * The OpenAPI extension key a comma-separated public-id query list carries (`true`): the document
@@ -402,6 +403,14 @@ export function clockTimeOfMinutes(minutes: number): string {
 /** The weekday (`mon` … `sun`) of a calendar date (`YYYY-MM-DD`). */
 export function weekdayOfCalendarDate(date: string): Weekday {
   return WEEKDAY_BY_UTC_DAY[new Date(`${date}T00:00:00Z`).getUTCDay()] as Weekday;
+}
+
+/** Whole days from the calendar date `from` to `to` (negative when `to` is earlier). */
+export function daysBetweenCalendarDates(options: { from: string; to: string }): number {
+  return Math.round(
+    (Date.parse(`${options.to}T00:00:00Z`) - Date.parse(`${options.from}T00:00:00Z`)) /
+      MILLISECONDS_PER_DAY,
+  );
 }
 
 /** The calendar date `days` after `date` (negative for before). */

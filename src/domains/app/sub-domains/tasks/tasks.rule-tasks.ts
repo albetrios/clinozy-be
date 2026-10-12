@@ -5,6 +5,7 @@ import {
 } from '@/shared/utils/validation/record-fields.util.js';
 import { TASK_OWNER_ROLE, TASK_RULE, type TaskRule } from './tasks.constants.js';
 import { TasksRepository } from './tasks.repository.js';
+import { MILLISECONDS_PER_HOUR } from '@/shared/constants/ttl.constants.js';
 
 /** The record columns a task may point at — at most one (TK5). */
 export type TaskRecordLink =
@@ -102,7 +103,7 @@ export async function openCallBackTask(options: {
     contactId: options.contactId,
     link: options.link,
     branchId: options.branchId,
-    dueAt: new Date(Date.now() + hours * 3_600_000),
+    dueAt: new Date(Date.now() + hours * MILLISECONDS_PER_HOUR),
     priority: 'high',
     userId: options.userId,
   });

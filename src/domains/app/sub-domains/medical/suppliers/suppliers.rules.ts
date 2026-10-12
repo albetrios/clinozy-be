@@ -18,7 +18,11 @@ import { MedicalPurchaseOrdersRepository } from '@/domains/app/sub-domains/medic
 import { organizationToday } from '@/domains/app/sub-domains/patients/patients.rules.js';
 import { ConflictError } from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { calendarDateInTimeZone, toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import {
+  calendarDateInTimeZone,
+  daysBetweenCalendarDates,
+  toAmount,
+} from '@/shared/utils/validation/record-fields.util.js';
 import { applySupplierCredits } from './supplier-credits/supplier-credits.ledger.js';
 import { PaySupplierDto } from './suppliers.dto.js';
 import type { SuppliersRepository } from './suppliers.repository.js';
@@ -29,11 +33,6 @@ const ordersRepository = new MedicalPurchaseOrdersRepository();
 /** Rupees as paise, for exact sums. */
 function paiseOf(value: unknown): number {
   return Math.round((toAmount(value) ?? 0) * 100);
-}
-
-/** Whole days from `from` to `to` (calendar dates). */
-function daysBetween({ from, to }: { from: string; to: string }): number {
-  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
 
 /**
@@ -150,7 +149,7 @@ async function decorateSuppliers(options: {
     output.ageing_days =
       oldest === null
         ? null
-        : daysBetween({
+        : daysBetweenCalendarDates({
             from: calendarDateInTimeZone({ timeZone: timezone, at: oldest }),
             to: today,
           });

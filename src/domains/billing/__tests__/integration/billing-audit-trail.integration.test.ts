@@ -27,29 +27,11 @@ import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js'
 
 // The payment provider is replaced at its port so a subscription can be created without Stripe —
 // the same fake the subscription happy-path suite uses.
-vi.mock('@/domains/billing/sub-domains/subscription/stripe-payment-provider.js', () => {
-  class FakeStripePaymentProvider {
-    isConfigured(): boolean {
-      return true;
-    }
-    getProviderPriceId(): string {
-      return 'price_test_fake';
-    }
-    async createSubscription(): Promise<{
-      providerSubscriptionId: string;
-      providerCustomerId: string;
-    }> {
-      return {
-        providerSubscriptionId: `sub_fake_${randomUUID()}`,
-        providerCustomerId: `cus_fake_${randomUUID()}`,
-      };
-    }
-    async cancelSubscriptionAtPeriodEnd(): Promise<void> {}
-    async cancelSubscriptionImmediately(): Promise<void> {}
-    async resumeSubscription(): Promise<void> {}
-    async updateSubscriptionPrice(): Promise<void> {}
-  }
-  return { StripePaymentProvider: FakeStripePaymentProvider };
+vi.mock('@/domains/billing/sub-domains/subscription/stripe-payment-provider.js', async () => {
+  const { FakePaymentProvider } = await import(
+    '@/domains/billing/__tests__/factories/fake-payment-provider.js'
+  );
+  return { StripePaymentProvider: FakePaymentProvider };
 });
 
 const SUBSCRIPTION_PERMISSIONS = ['subscription:read', 'subscription:manage'];
@@ -128,7 +110,7 @@ describe('billing audit trail — subscription changes reach the audit log', () 
 
   it('records a new subscription with its plan', async () => {
     const { user, organization, token } = await createBillingContext();
-    const plan = await createTestPlan();
+    const plan = await createTestPlan({ stripePriceMonthlyId: 'price_test_fake' });
 
     const response = await post({
       token,
@@ -157,7 +139,7 @@ describe('billing audit trail — subscription changes reach the audit log', () 
 
   it('records a plan change, a cancellation and a resumption', async () => {
     const { user, organization, token } = await createBillingContext();
-    const plan = await createTestPlan();
+    const plan = await createTestPlan({ stripePriceMonthlyId: 'price_test_fake' });
     // Local-only (no provider id), so the transitions run deterministically without Stripe.
     const subscription = await createTestSubscription({
       organizationId: organization.id,
@@ -165,7 +147,10 @@ describe('billing audit trail — subscription changes reach the audit log', () 
       status: 'ACTIVE',
       providerSubscriptionId: null,
     });
-    const newPlan = await createTestPlan({ name: 'Bigger Plan' });
+    const newPlan = await createTestPlan({
+      stripePriceMonthlyId: 'price_test_fake',
+      name: 'Bigger Plan',
+    });
     const path = `/billing/subscriptions/${subscription.public_id}`;
 
     expect(

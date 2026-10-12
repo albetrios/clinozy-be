@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   AnthropicApiError,
-  countsAnthropicErrorAsCircuitFailure,
   findAnthropicApiError,
 } from '@/infrastructure/ai/anthropic-error.util.js';
 import { ExternalServiceError } from '@/infrastructure/outbound/outbound-error.js';
+import { countsAsCircuitFailure } from '@/infrastructure/resilience/circuit-breaker.js';
 
 /** A Messages API error answer. */
 function anthropicError(statusCode: number, retryAfterSeconds: string | null = null) {
@@ -79,7 +79,7 @@ describe('AnthropicApiError', () => {
   });
 });
 
-describe('findAnthropicApiError / countsAnthropicErrorAsCircuitFailure', () => {
+describe('findAnthropicApiError and the anthropic circuit', () => {
   it('finds the error itself or inside the outbound wrapper', () => {
     const error = anthropicError(429);
     const wrapped = new ExternalServiceError({
@@ -94,9 +94,9 @@ describe('findAnthropicApiError / countsAnthropicErrorAsCircuitFailure', () => {
   });
 
   it('counts a timeout or network failure, but not a throttle or a refused request', () => {
-    expect(countsAnthropicErrorAsCircuitFailure(new Error('socket hang up'))).toBe(true);
-    expect(countsAnthropicErrorAsCircuitFailure(anthropicError(429))).toBe(false);
-    expect(countsAnthropicErrorAsCircuitFailure(anthropicError(400))).toBe(false);
-    expect(countsAnthropicErrorAsCircuitFailure(anthropicError(500))).toBe(true);
+    expect(countsAsCircuitFailure(new Error('socket hang up'))).toBe(true);
+    expect(countsAsCircuitFailure(anthropicError(429))).toBe(false);
+    expect(countsAsCircuitFailure(anthropicError(400))).toBe(false);
+    expect(countsAsCircuitFailure(anthropicError(500))).toBe(true);
   });
 });

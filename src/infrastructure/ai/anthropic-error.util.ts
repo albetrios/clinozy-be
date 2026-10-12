@@ -1,7 +1,8 @@
 import { ExternalServiceError } from '@/infrastructure/outbound/outbound-error.js';
+import { MILLISECONDS_PER_MINUTE } from '@/shared/constants/ttl.constants.js';
 
 /** How long a throttle waits when Anthropic sends no `retry-after`. */
-const DEFAULT_THROTTLE_RETRY_AFTER_MS = 60_000;
+const DEFAULT_THROTTLE_RETRY_AFTER_MS = MILLISECONDS_PER_MINUTE;
 
 /** HTTP 529: Anthropic is overloaded — a throttle, not this request's fault. */
 const OVERLOADED_STATUS = 529;
@@ -108,7 +109,8 @@ function readApiError(body: string): AnthropicErrorBody | null {
  * `ExternalServiceError` `outboundCall` wraps it in — or `null` for any other failure.
  *
  * @remarks
- * - **Notes:** pure; used by the circuit classifier and the ideas worker.
+ * - **Notes:** pure; used by the ideas worker. The circuit reads the error's own
+ *   `countsAsCircuitFailure`.
  */
 export function findAnthropicApiError(error: unknown): AnthropicApiError | null {
   if (error instanceof AnthropicApiError) return error;
@@ -116,17 +118,4 @@ export function findAnthropicApiError(error: unknown): AnthropicApiError | null 
     return error.cause;
   }
   return null;
-}
-
-/**
- * Whether a failed Anthropic call counts against the `anthropic` circuit — a throttle and a refused
- * request do not (they say nothing about Anthropic being down); a timeout, a network failure, 401,
- * 403 and 5xx do.
- *
- * @remarks
- * - **Notes:** the outbound defaults' `countsAsCircuitFailure` for the `anthropic` integration.
- */
-export function countsAnthropicErrorAsCircuitFailure(error: unknown): boolean {
-  const apiError = findAnthropicApiError(error);
-  return apiError === null ? true : apiError.countsAsCircuitFailure;
 }

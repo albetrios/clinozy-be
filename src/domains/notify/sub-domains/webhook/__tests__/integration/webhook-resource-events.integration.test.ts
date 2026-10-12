@@ -73,26 +73,11 @@ vi.mock(
   },
 );
 
-vi.mock('@/domains/billing/sub-domains/subscription/stripe-payment-provider.js', () => {
-  class FakeStripePaymentProvider {
-    isConfigured(): boolean {
-      return true;
-    }
-    getProviderPriceId(): string {
-      return 'price_test_fake';
-    }
-    async createSubscription() {
-      return {
-        providerSubscriptionId: `sub_fake_${randomUUID()}`,
-        providerCustomerId: `cus_fake_${randomUUID()}`,
-      };
-    }
-    async cancelSubscriptionAtPeriodEnd(): Promise<void> {}
-    async cancelSubscriptionImmediately(): Promise<void> {}
-    async resumeSubscription(): Promise<void> {}
-    async updateSubscriptionPrice(): Promise<void> {}
-  }
-  return { StripePaymentProvider: FakeStripePaymentProvider };
+vi.mock('@/domains/billing/sub-domains/subscription/stripe-payment-provider.js', async () => {
+  const { FakePaymentProvider } = await import(
+    '@/domains/billing/__tests__/factories/fake-payment-provider.js'
+  );
+  return { StripePaymentProvider: FakePaymentProvider };
 });
 
 const PERMISSIONS = [
@@ -305,7 +290,7 @@ describe('Integration: organization resource events reach subscribed webhooks', 
 
   it('subscription.created and .updated follow create, cancel at period end and resume', async () => {
     const { webhook, token } = await createSubscribedOrganization();
-    const plan = await createTestPlan();
+    const plan = await createTestPlan({ stripePriceMonthlyId: 'price_test_fake' });
 
     const created = await injectAuthenticated(app, {
       method: 'POST',
@@ -338,7 +323,7 @@ describe('Integration: organization resource events reach subscribed webhooks', 
 
   it('subscription.cancelled fires from the Stripe deletion, with its job queued after the commit', async () => {
     const { organization, webhook } = await createSubscribedOrganization();
-    const plan = await createTestPlan();
+    const plan = await createTestPlan({ stripePriceMonthlyId: 'price_test_fake' });
     const providerSubscriptionId = `sub_deleted_${randomUUID()}`;
     const subscription = await createTestSubscription({
       organizationId: organization.id,
@@ -537,7 +522,7 @@ describe('Integration: organization resource events reach subscribed webhooks', 
 
   it('a Stripe sync that changes no customer-visible field emits nothing', async () => {
     const { organization, webhook } = await createSubscribedOrganization();
-    const plan = await createTestPlan();
+    const plan = await createTestPlan({ stripePriceMonthlyId: 'price_test_fake' });
     const providerSubscriptionId = `sub_unchanged_${randomUUID()}`;
     const subscription = await createTestSubscription({
       organizationId: organization.id,
@@ -587,7 +572,7 @@ describe('Integration: organization resource events reach subscribed webhooks', 
 
   it('cancelling for organization offboarding emits no event (nothing could deliver it)', async () => {
     const { organization, webhook } = await createSubscribedOrganization();
-    const plan = await createTestPlan();
+    const plan = await createTestPlan({ stripePriceMonthlyId: 'price_test_fake' });
     await createTestSubscription({ organizationId: organization.id, planId: plan.id });
 
     await app.billingDomain.subscriptionService.cancelActiveForOrganizationOffboarding(

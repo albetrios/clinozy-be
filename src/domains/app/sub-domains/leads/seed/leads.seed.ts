@@ -4,9 +4,8 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
+import { MILLISECONDS_PER_DAY } from '@/shared/constants/ttl.constants.js';
 
-/** A day in milliseconds. */
-const DAY_MILLISECONDS = 86_400_000;
 /** The default `lead_hold_days` (D40) — how long a seeded owner holds their lead. */
 const HOLD_DAYS = 3;
 
@@ -72,7 +71,7 @@ export async function seedLead(payload: SeedLeadPayload): Promise<void> {
     ...(owner
       ? {
           owner_membership_id: owner.id,
-          held_until: new Date(Date.now() + HOLD_DAYS * DAY_MILLISECONDS),
+          held_until: new Date(Date.now() + HOLD_DAYS * MILLISECONDS_PER_DAY),
         }
       : {}),
     created_by_user_id: payload.created_by_user_id,

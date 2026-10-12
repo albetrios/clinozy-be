@@ -1,7 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
-  countsMetaGraphErrorAsCircuitFailure,
   findMetaGraphApiError,
   MetaGraphApiError,
 } from '@/infrastructure/messaging/meta-graph-error.util.js';
@@ -10,6 +9,7 @@ import {
   verifyMetaWebhookSignature,
 } from '@/infrastructure/messaging/meta-messaging.config.js';
 import { ExternalServiceError } from '@/infrastructure/outbound/outbound-error.js';
+import { countsAsCircuitFailure } from '@/infrastructure/resilience/circuit-breaker.js';
 
 /** A Graph API error answer. */
 function graphError(statusCode: number, code?: number, retryAfterSeconds: string | null = null) {
@@ -76,8 +76,9 @@ describe('MetaGraphApiError (launch D77)', () => {
     });
     expect(findMetaGraphApiError(wrapped)).toBe(inner);
     expect(findMetaGraphApiError(new Error('timeout'))).toBeNull();
-    expect(countsMetaGraphErrorAsCircuitFailure(wrapped)).toBe(false);
-    expect(countsMetaGraphErrorAsCircuitFailure(new Error('timeout'))).toBe(true);
+    // The circuit sees the Graph error itself (outboundFetch wraps it only after the circuit).
+    expect(countsAsCircuitFailure(inner)).toBe(false);
+    expect(countsAsCircuitFailure(new Error('timeout'))).toBe(true);
   });
 });
 

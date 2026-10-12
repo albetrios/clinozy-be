@@ -1,9 +1,10 @@
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { SECONDS_PER_DAY } from '@/shared/constants/ttl.constants.js';
 
 /** How long a day's counter lives — past its day, so a late run on either side still reads it. */
-const CALL_BUDGET_TTL_SECONDS = 2 * 24 * 60 * 60;
+const CALL_BUDGET_TTL_SECONDS = 2 * SECONDS_PER_DAY;
 
 /**
  * Atomic "under the limit? then count one": the day's count, or `-1` when the limit is reached

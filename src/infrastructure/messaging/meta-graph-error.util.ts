@@ -1,4 +1,5 @@
 import { ExternalServiceError } from '@/infrastructure/outbound/outbound-error.js';
+import { MILLISECONDS_PER_MINUTE } from '@/shared/constants/ttl.constants.js';
 
 /**
  * Graph API error codes that mean "slow down" — the app, the account or the WhatsApp number is
@@ -9,7 +10,7 @@ const RATE_LIMIT_ERROR_CODES: ReadonlySet<number> = new Set([
 ]);
 
 /** Wait used when Meta throttles without saying how long. */
-const DEFAULT_THROTTLE_RETRY_AFTER_MS = 60_000;
+const DEFAULT_THROTTLE_RETRY_AFTER_MS = MILLISECONDS_PER_MINUTE;
 
 /** The `error` object of a Graph API error body. */
 interface GraphErrorBody {
@@ -103,18 +104,4 @@ export function findMetaGraphApiError(error: unknown): MetaGraphApiError | null 
     return error.cause;
   }
   return null;
-}
-
-/**
- * The `meta` integration's circuit classifier: false for a Graph error that is Meta refusing or
- * throttling one request, true for everything else (a 5xx, a 401, a timeout).
- *
- * @remarks
- * - **Algorithm:** a {@link MetaGraphApiError} answers with its own `countsAsCircuitFailure`;
- *   anything else counts.
- * - **Failure modes:** none.
- */
-export function countsMetaGraphErrorAsCircuitFailure(error: unknown): boolean {
-  const graphError = findMetaGraphApiError(error);
-  return graphError === null ? true : graphError.countsAsCircuitFailure;
 }

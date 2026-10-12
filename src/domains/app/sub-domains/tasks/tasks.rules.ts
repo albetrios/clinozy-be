@@ -46,6 +46,7 @@ import type { TasksRepository } from './tasks.repository.js';
 import { openRuleTask, organizationClock, TASK_RECORD_LINK_VALUES } from './tasks.rule-tasks.js';
 import { tasks } from './tasks.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { MILLISECONDS_PER_DAY, MILLISECONDS_PER_HOUR } from '@/shared/constants/ttl.constants.js';
 
 const contactsRepository = new ContactsRepository();
 const leadsRepository = new LeadsRepository();
@@ -301,7 +302,9 @@ async function moveLeadOwner(options: {
     {
       owner_membership_id: options.membershipId,
       held_until:
-        options.membershipId === null ? null : new Date(Date.now() + holdDays * 86_400_000),
+        options.membershipId === null
+          ? null
+          : new Date(Date.now() + holdDays * MILLISECONDS_PER_DAY),
     },
     options.context.userId,
   );
@@ -358,7 +361,7 @@ async function resolvedValues(options: {
     return {
       ...kept,
       status: TASK_STATUS.SNOOZED,
-      snoozed_until: new Date(Date.now() + TASK_NO_ANSWER_SNOOZE_HOURS * 3_600_000),
+      snoozed_until: new Date(Date.now() + TASK_NO_ANSWER_SNOOZE_HOURS * MILLISECONDS_PER_HOUR),
       snooze_label: 'No answer',
     };
   }
