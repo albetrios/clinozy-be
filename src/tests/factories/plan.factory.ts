@@ -13,6 +13,8 @@ export interface CreatePlanOptions {
   features?: Record<string, boolean | number | string>;
   /** The Stripe monthly price a webhook resolves back to this plan (none by default). */
   stripePriceMonthlyId?: string;
+  /** The Stripe yearly price (none by default). */
+  stripePriceYearlyId?: string;
 }
 
 /**
@@ -33,6 +35,7 @@ export async function createTestPlan(options: CreatePlanOptions = {}) {
       // REQ-4: defaults to null (unlimited) so existing callers keep the no-seat-limit behaviour.
       included_seats: options.includedSeats ?? null,
       stripe_price_monthly_id: options.stripePriceMonthlyId ?? null,
+      stripe_price_yearly_id: options.stripePriceYearlyId ?? null,
     })
     .returning();
 
