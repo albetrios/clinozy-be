@@ -3088,6 +3088,7 @@ src/
     │   │   └── session-invalidation.security.test.ts
     │   ├── authz/
     │   │   ├── admin-only.security.test.ts
+    │   │   ├── app-cross-organization-references.security.test.ts
     │   │   ├── app-cross-organization.security.test.ts
     │   │   ├── auth-token-flow.security.test.ts
     │   │   ├── billing-privilege.security.test.ts
