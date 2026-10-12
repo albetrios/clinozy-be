@@ -32,6 +32,10 @@ process.env.REDIS_READY_CHECK_ENABLED = 'false';
 // `.env.local` on top, and a machine that opted out of the spacing locally must not silently lose
 // the coverage for it.
 process.env.AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED = 'true';
+// The invitation accept-token echo (launch ROUTE #164) ships ON in `.env.example` for local QA, so
+// pin it OFF with a plain assignment: the suite tests the production-safe answer (no token), and the
+// suites that cover the echo switch it on per test.
+process.env.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED = 'false';
 // Category-B security flags now default to their HARDENED value everywhere; the harness sets the
 // relaxed values explicitly (previously implied by the non-production runtime) so e2e behaves as
 // before: captcha bypass, Referer-fallback origin check, empty webhook allowlist, and unauthenticated

@@ -1,12 +1,17 @@
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import {
   type CursorTimestampRow,
   cursorTimestampSelection,
 } from '@/shared/utils/http/pagination.util.js';
-import { getTableColumns, and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { getTableColumns, and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import {
+  membership_additional_roles,
+  membershipHoldsRole,
+} from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import {
@@ -38,7 +43,7 @@ interface MemberRoleListPagination {
  * excluded (a suspended seat is not in use). This constant is the single lever
  * for the counted-status policy — change it here to change every `member_count`.
  */
-const MEMBER_COUNT_STATUSES = ['ACTIVE', 'INVITED'] as const;
+const MEMBER_COUNT_STATUSES = [MEMBERSHIP_STATUS.ACTIVE, MEMBERSHIP_STATUS.INVITED] as const;
 
 /**
  * Drizzle data access for `tenancy.roles`. Active rows are filtered via
@@ -135,7 +140,28 @@ export class MemberRoleRepository {
         ),
       )
       .groupBy(memberships.role_id);
-    return new Map(rows.map((row) => [row.role_id, row.member_count]));
+    const counts = new Map(rows.map((row) => [row.role_id, row.member_count]));
+    // Plus the people holding the role as an additional one (D5). A person holds a role once —
+    // main or additional — so the two counts add up without double counting.
+    const additionalRows = await getRequestDatabase()
+      .select({
+        role_id: membership_additional_roles.role_id,
+        member_count: sql<number>`count(*)::int`,
+      })
+      .from(membership_additional_roles)
+      .innerJoin(memberships, eq(memberships.id, membership_additional_roles.membership_id))
+      .where(
+        and(
+          eq(memberships.organization_id, organization_id),
+          inArray(memberships.status, [...MEMBER_COUNT_STATUSES]),
+          isNull(memberships.deleted_at),
+        ),
+      )
+      .groupBy(membership_additional_roles.role_id);
+    for (const row of additionalRows) {
+      counts.set(row.role_id, (counts.get(row.role_id) ?? 0) + row.member_count);
+    }
+    return counts;
   }
 
   /**
@@ -155,7 +181,7 @@ export class MemberRoleRepository {
       .from(memberships)
       .where(
         and(
-          eq(memberships.role_id, role_id),
+          membershipHoldsRole(role_id),
           eq(memberships.organization_id, organization_id),
           inArray(memberships.status, [...MEMBER_COUNT_STATUSES]),
           isNull(memberships.deleted_at),
@@ -202,6 +228,7 @@ export class MemberRoleRepository {
     name: string;
     description?: string | null;
     is_system?: boolean;
+    tone?: string;
     created_by_user_id?: number | null;
   }) {
     return runInsertWithPublicIdentifierRetry({
@@ -213,6 +240,7 @@ export class MemberRoleRepository {
           name: data.name,
           description: data.description ?? null,
           is_system: data.is_system ?? false,
+          ...(data.tone === undefined ? {} : { tone: data.tone }),
           created_by_user_id: data.created_by_user_id ?? undefined,
           updated_by_user_id: data.created_by_user_id ?? undefined,
         };
@@ -225,7 +253,7 @@ export class MemberRoleRepository {
   async update(
     public_id: string,
     organization_id: number,
-    data: { name?: string; description?: string | null },
+    data: { name?: string; description?: string | null; tone?: string },
     updated_by_user_id: number | null,
   ): Promise<MemberRoleRow | null> {
     const rows = await getRequestDatabase()
@@ -246,23 +274,9 @@ export class MemberRoleRepository {
     return (rows[0] ?? null) as MemberRoleRow | null;
   }
 
-  async softDelete(public_id: string, organization_id: number): Promise<MemberRoleRow | null> {
-    const rows = await getRequestDatabase()
-      .update(roles)
-      .set({ deleted_at: databaseNowTimestamp, updated_at: databaseNowTimestamp })
-      .where(
-        and(
-          eq(roles.public_id, public_id),
-          eq(roles.organization_id, organization_id),
-          isNull(roles.deleted_at),
-        ),
-      )
-      .returning();
-    return (rows[0] ?? null) as MemberRoleRow | null;
-  }
-
   /**
-   * Soft-deletes a role ONLY if it has no active (not soft-deleted) members, in ONE statement.
+   * Soft-deletes a role, with why (T12), ONLY if no live member holds it (any status), in ONE
+   * statement.
    *
    * @remarks
    * A `NOT EXISTS` over `memberships` is folded into the delete's WHERE so a concurrent
@@ -275,10 +289,23 @@ export class MemberRoleRepository {
   async softDeleteIfNoActiveMembers(
     public_id: string,
     organization_id: number,
+    removal: {
+      delete_reason: string;
+      delete_note: string | null;
+      updated_by_user_id: number | null;
+    },
   ): Promise<MemberRoleRow | null> {
     const rows = await getRequestDatabase()
       .update(roles)
-      .set({ deleted_at: databaseNowTimestamp, updated_at: databaseNowTimestamp })
+      .set({
+        deleted_at: databaseNowTimestamp,
+        updated_at: databaseNowTimestamp,
+        delete_reason: removal.delete_reason,
+        delete_note: removal.delete_note,
+        ...(removal.updated_by_user_id === null
+          ? {}
+          : { updated_by_user_id: removal.updated_by_user_id }),
+      })
       .where(
         and(
           eq(roles.public_id, public_id),
@@ -287,10 +314,58 @@ export class MemberRoleRepository {
           sql`NOT EXISTS (
             SELECT 1
             FROM ${memberships}
-            WHERE ${memberships.role_id} = ${roles.id}
+            WHERE ${membershipHoldsRole(roles.id)}
               AND ${memberships.organization_id} = ${organization_id}
               AND ${memberships.deleted_at} IS NULL
           )`,
+        ),
+      )
+      .returning();
+    return (rows[0] ?? null) as MemberRoleRow | null;
+  }
+
+  /** A deleted role of the organization by public id (the restore path, launch T12), or null. */
+  async findDeletedByPublicId(
+    public_id: string,
+    organization_id: number,
+  ): Promise<MemberRoleRow | null> {
+    const rows = await getRequestDatabase()
+      .select()
+      .from(roles)
+      .where(
+        and(
+          eq(roles.public_id, public_id),
+          eq(roles.organization_id, organization_id),
+          isNotNull(roles.deleted_at),
+        ),
+      )
+      .limit(1);
+    return (rows[0] ?? null) as MemberRoleRow | null;
+  }
+
+  /**
+   * Undoes a role's delete (launch T12): clears `deleted_at`, the reason and the note. Throws a
+   * Postgres unique violation when a live role took the name meanwhile — the caller maps it to a 409.
+   */
+  async restore(
+    public_id: string,
+    organization_id: number,
+    updated_by_user_id: number | null,
+  ): Promise<MemberRoleRow | null> {
+    const rows = await getRequestDatabase()
+      .update(roles)
+      .set({
+        deleted_at: null,
+        delete_reason: null,
+        delete_note: null,
+        updated_at: databaseNowTimestamp,
+        ...(updated_by_user_id === null ? {} : { updated_by_user_id }),
+      })
+      .where(
+        and(
+          eq(roles.public_id, public_id),
+          eq(roles.organization_id, organization_id),
+          isNotNull(roles.deleted_at),
         ),
       )
       .returning();

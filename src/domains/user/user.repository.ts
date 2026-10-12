@@ -22,6 +22,7 @@ import {
   assertWorkerDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { users } from '@/domains/user/user.schema.js';
+import type { UserPresence } from '@/domains/user/user.constants.js';
 import { escapeLikePattern } from '@/shared/utils/validation/validation.util.js';
 import {
   buildAscendingCreatedAtIdCursorCondition,
@@ -226,6 +227,7 @@ export class UserRepository {
       last_name?: string | null;
       job_title?: string | null;
       avatar_url?: string | null;
+      presence?: UserPresence;
     },
   ) {
     return this.updateByPublicId(public_id, data as Record<string, unknown>);

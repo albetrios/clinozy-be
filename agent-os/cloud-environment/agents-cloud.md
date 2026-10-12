@@ -33,6 +33,7 @@ full demo seed, then the API (:3000) and the worker (health on :9090) **left run
 pnpm dev:stack:status                 # the running step (or "live"), API + worker health, logs
 tail -f /tmp/agent-stack/bootstrap.log
 pnpm dev:stack:stop                   # stop the API + worker (Postgres + Redis stay)
+pnpm dev:stack:reset-db               # drop + recreate the Compose database, migrate, seed, restart
 ```
 
 Run it yourself (another platform, after a stop, or with `AGENT_AUTO_STACK=0`):

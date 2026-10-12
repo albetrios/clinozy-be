@@ -24,7 +24,7 @@ describe('Integration: constraint validation', () => {
       FROM pg_constraint c
       JOIN pg_namespace n ON n.oid = c.connamespace
       WHERE NOT c.convalidated
-        AND n.nspname IN ('auth', 'tenancy', 'billing', 'notify', 'audit', 'upload', 'public')
+        AND n.nspname IN ('auth', 'tenancy', 'billing', 'notify', 'audit', 'upload', 'app', 'public')
       ORDER BY 1
     `),
     );

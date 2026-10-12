@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
+import {
+  emptyMembershipAdditionalRolesRepository,
+  membershipRowFixture,
+} from '@/domains/tenancy/__tests__/factories/membership-row.factory.js';
 
 vi.mock('@/domains/tenancy/sub-domains/permission/permission-cache.service.js', () => ({
   invalidatePermissions: vi.fn().mockResolvedValue(undefined),
@@ -53,7 +57,9 @@ describe('MembershipService — permission cache invalidation', () => {
   };
 
   const memberRoleService = {
-    requireRoleRecordByPublicId: vi.fn().mockResolvedValue({ id: 2, public_id: 'role_public' }),
+    requireRoleRecordForOrganization: vi
+      .fn()
+      .mockResolvedValue({ id: 2, public_id: 'role_public' }),
   };
 
   const memberRolePermissionService = {
@@ -61,39 +67,38 @@ describe('MembershipService — permission cache invalidation', () => {
   };
 
   const membershipRepository = {
-    create: vi.fn().mockResolvedValue({
-      public_id: 'membership_public',
-      user_id: 5,
-      role_id: 2,
-      status: 'ACTIVE',
-      created_at: new Date(),
-      updated_at: new Date(),
-    }),
-    findByPublicId: vi.fn().mockResolvedValue({
-      public_id: 'membership_public',
-      user_id: 5,
-      role_id: 2,
-      status: 'ACTIVE',
-      created_at: new Date(),
-      updated_at: new Date(),
-    }),
-    update: vi.fn().mockResolvedValue({
-      public_id: 'membership_public',
-      user_id: 5,
-      role_id: 3,
-      status: 'ACTIVE',
-      created_at: new Date(),
-      updated_at: new Date(),
-    }),
-    softDelete: vi.fn().mockResolvedValue({
-      public_id: 'membership_public',
-      user_id: 20,
-      role_id: 2,
-      status: 'ACTIVE',
-      joined_at: null,
-      created_at: new Date(),
-      updated_at: new Date(),
-    }),
+    create: vi.fn().mockResolvedValue(
+      membershipRowFixture({
+        public_id: 'membership_public',
+        user_id: 5,
+        role_id: 2,
+      }),
+    ),
+    findByPublicId: vi.fn().mockResolvedValue(
+      membershipRowFixture({
+        public_id: 'membership_public',
+        user_id: 5,
+        role_id: 2,
+      }),
+    ),
+    findAnyByPublicId: vi
+      .fn()
+      .mockResolvedValue(
+        membershipRowFixture({ public_id: 'membership_public', user_id: 5, role_id: 2 }),
+      ),
+    findLatestEndedForUser: vi.fn().mockResolvedValue(null),
+    update: vi.fn().mockResolvedValue(
+      membershipRowFixture({
+        public_id: 'membership_public',
+        user_id: 5,
+        role_id: 3,
+      }),
+    ),
+    softDelete: vi
+      .fn()
+      .mockResolvedValue(
+        membershipRowFixture({ public_id: 'membership_public', user_id: 20, role_id: 2 }),
+      ),
     resolveUserSummariesByInternalIds: vi.fn(
       async (ids: readonly number[]) =>
         new Map(
@@ -114,14 +119,11 @@ describe('MembershipService — permission cache invalidation', () => {
         new Map(ids.map((id) => [id, { public_id: `role_public_${id}`, name: 'Admin' }])),
     ),
     resolveLiveInvitationsByMembershipIds: vi.fn(async () => new Map()),
-    findByUserAndOrganization: vi.fn().mockResolvedValue({
-      public_id: 'membership_public',
-      user_id: 20,
-      role_id: 2,
-      status: 'ACTIVE',
-      created_at: new Date(),
-      updated_at: new Date(),
-    }),
+    findByUserAndOrganization: vi
+      .fn()
+      .mockResolvedValue(
+        membershipRowFixture({ public_id: 'membership_public', user_id: 20, role_id: 2 }),
+      ),
   };
 
   const authorizationService = {
@@ -139,7 +141,7 @@ describe('MembershipService — permission cache invalidation', () => {
     }),
   };
 
-  const memberInvitationService = {
+  const membershipInvitationService = {
     createForMembership: vi.fn().mockResolvedValue({ id: 'inv_public' }),
   };
 
@@ -155,7 +157,8 @@ describe('MembershipService — permission cache invalidation', () => {
     undefined,
     undefined,
     userService as never,
-    memberInvitationService as never,
+    membershipInvitationService as never,
+    emptyMembershipAdditionalRolesRepository(),
   );
 
   beforeEach(() => {
@@ -165,7 +168,7 @@ describe('MembershipService — permission cache invalidation', () => {
   it('create invalidates user permission cache after membership is created', async () => {
     await service.create({
       scope: asScope('org_public_abc'),
-      body: { email: 'invitee@example.com', role_id: 'role_public' },
+      body: { email: 'invitee@example.com', role_ids: ['role_public'] },
       invited_by_user_public_id: 'inviter_public',
     });
 
@@ -179,7 +182,7 @@ describe('MembershipService — permission cache invalidation', () => {
     await service.update({
       scope: asScope('org_public_abc'),
       membership_public_id: 'membership_public',
-      body: { status: 'SUSPENDED' },
+      body: { status: 'suspended' },
       updated_by_user_public_id: 'admin',
     });
 
@@ -191,19 +194,14 @@ describe('MembershipService — permission cache invalidation', () => {
   });
 
   it('delete invalidates the affected user permission cache', async () => {
-    membershipRepository.softDelete.mockResolvedValueOnce({
-      public_id: 'membership_public',
-      user_id: 5,
-      role_id: 2,
-      status: 'ACTIVE',
-      joined_at: null,
-      created_at: new Date(),
-      updated_at: new Date(),
-    });
+    membershipRepository.softDelete.mockResolvedValueOnce(
+      membershipRowFixture({ public_id: 'membership_public', user_id: 5, role_id: 2 }),
+    );
 
     await service.delete({
       scope: asScope('org_public_abc'),
       membership_public_id: 'membership_public',
+      query: { reason: 'mistake' },
     });
 
     expect(organizationService.resolveUserPublicIdByInternalId).toHaveBeenCalledWith(5);

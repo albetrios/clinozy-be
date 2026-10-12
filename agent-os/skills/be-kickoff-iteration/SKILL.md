@@ -25,8 +25,8 @@ The iteration rules: [`iterations/README.md`](../../../iterations/README.md).
 
 ## The plan proposes; agent-os decides — remember this on every row
 
-The plan (`KICKOFF.md`, `plans/db-changes.md`, `route-changes.md`, `worker-changes.md`) states
-requirements and proposals in logical terms. **The backend's agent-os — its skills, rules and agents
+The plan (`KICKOFF.md`, `plans/routes-final.md`, `db-changes.md`, `route-changes.md`, `worker-changes.md`)
+states requirements and proposals — the route review in full design detail, the rest in logical terms. **The backend's agent-os — its skills, rules and agents
 under `agent-os/` — is the expert.** Whenever the plan and agent-os disagree, or anything is unclear,
 follow agent-os. That covers the skills each row runs — the
 schema chain (`be-schema-generator`, `be-sql-design-guard`, `be-db-migration-maintainer`,
@@ -37,6 +37,12 @@ rules, paths, statuses, idempotency, job names. Follow them, never the plan's wo
 differ; record each difference in the row's `AS-BUILT.md` entry and sync the change files (Each ROUTE
 row › Record). Only a scope change — a row added or removed, an acceptance changed, the order changed
 — stops for the user.
+
+**With a route review it is ditto.** When the plan has `plans/routes-final.md`, the agent-os checks already
+shaped it, so each row builds its sub-domain **exactly as written** — names, routes, gates, statuses, errors,
+codes, folders. Where a skill, rule or gate still cannot build something as written, **stop and ask**; the
+agreed change goes into `routes-final.md` first, then into the build — never a silent difference. Only what
+the review leaves open is decided on the way and recorded in `AS-BUILT.md`.
 
 ## Step 0 — Confirm the iteration, then stop until confirmed
 
@@ -67,7 +73,8 @@ shape below, dated today, with the Baseline's Standing deviations copied in as t
 
 ## Before the first row — read
 
-- `KICKOFF.md` (the plan and its ROUTE) and every file under `plans/`.
+- `KICKOFF.md` (the plan and its ROUTE) and every file under `plans/` — for each row, its sub-domain's
+  section in `plans/routes-final.md` is the spec and its code changes the checklist.
 - The repository's conventions: `CLAUDE.md`, the skill index
   (`agent-os/skills/be-skill-index/SKILL.md`), the existing domains under `src/domains/`, the
   permission model (`src/domains/tenancy/sub-domains/permission/authorization.service.ts` and the
@@ -103,13 +110,19 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
 
 ## Each ROUTE row — do → verify → record → check impact → stop
 
+Before marking a row in progress, check its dependencies are done, compare existing code with
+the approved module specification, identify unresolved decisions, and select the affected tests.
+Use the [document ownership and row execution guidance](../../../docs/design-workflow/process/README.md#document-ownership--write-once-reference-elsewhere)
+for what each record owns. Keep the approved row order and scope; a preflight finding does not
+authorize changing either.
+
 1. **Do** — mark the row `in progress` in `KICKOFF.md` and build it through its driver.
 2. **Verify** — the row's acceptance, its tests, `pnpm validate` — by the README's Intake mode:
    `full` / `overlay` → the acceptance traced to the PRD; `brief` → the `BRIEF.md` acceptance
    criteria the row covers, and the parts it touches still match the carried-forward PRD and
    `schema-routes.md` except where the brief changes them. MODE incremental, every mode: re-run the
-   existing end-to-end tests for everything touched. Against the plan's own files: every route the
-   row built matches its proposal in `plans/route-changes.md`, every table it built matches
+   existing end-to-end tests for everything touched. Against the plan's own files: what the row built matches its sub-domain's
+   section in `plans/routes-final.md`, every route matches its proposal in `plans/route-changes.md`, every table it built matches
    `plans/db-changes.md` (`pnpm db:viewer` — the built table now stands where the plan drew it), and
    every piece of background work it built matches `plans/worker-changes.md` (now with its real queue
    and job names); any difference goes into the AS-BUILT row.
@@ -119,7 +132,10 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
    | --- | --- | --- | --- | --- | --- | --- |
 
    Every technical decision the row made (table and column design, endpoints, permission codes,
-   queue names) goes here. Where the build now differs from the drop on purpose, add a **Standing
+   queue names) is recorded here or referenced from its approved specification or decision.
+   Do not copy an unchanged module specification. Record verification commands, outcomes and
+   acceptance references once in this row or an adjacent verification section; `plans/acceptance.md`
+   links to that evidence. Where the build now differs from the drop on purpose, add a **Standing
    deviation** (item · design says · built as · since iteration · decision); where this row resolves
    one, remove it.
 
@@ -127,7 +143,9 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
    `plans/db-changes.md` — the table's final `domain.table` on its label and its final field names
    (still logical types; the physical types live in the schema code the DB Viewer draws);
    `plans/route-changes.md` and `plans/worker-changes.md` — a `Built` column (added on the first
-   row) with the final method + path, or the final job, and the commit. `KICKOFF.md` stays frozen
+   row) with the final method + path, or the final job, and the commit. Keep these updates concise:
+   link to the AS-BUILT row for evidence and deviation explanations rather than repeating them.
+   `KICKOFF.md` stays frozen
    apart from its ROUTE Status column.
 4. **Check the impact on upcoming rows.**
    - Small and inside the row → record it in `AS-BUILT.md` and continue.
@@ -136,7 +154,8 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
      `AS-BUILT.md` › Revisions to upcoming rows (the revised row text), and mark the affected
      `KICKOFF.md` row "revised → AS-BUILT #n". Never rewrite `KICKOFF.md` otherwise — it is frozen.
 5. **Stop** — mark the row `done`, show the user what was built and the AS-BUILT row, and wait for
-   their review before the next row.
+   their review before the next row. Use the review summary from the linked row execution guidance:
+   changes and contracts, verification evidence, deviations or blockers, impact, and the next row.
 
 ## Close
 
@@ -144,6 +163,10 @@ Each driver runs the matching skill chain (schema-change, route-change, worker-c
 - Run `/be-pre-merge-review` as a review only — report its findings, change nothing on its say-so.
 - Every ROUTE row is `done`, or `deferred` with the user's explicit OK.
 - Fill `plans/acceptance.md` — a Result and Evidence for every item.
+- Write the frontend's route map, `plans/frontend-route-map.md`: section 1 the contract changes, section 2
+  each design operation (`intake-files/schema-routes.md` › Operations) → the route that serves it, section 4
+  the design features dropped (to remove from the frontend) — by hand; section 3, every route, by
+  `pnpm iteration:frontend-map <iteration>` (rerun after any route change; `--check` fails when stale).
 - Finish `AS-BUILT.md` with its closing summary: planned but not built (deferred, user OK), built but
   not planned, follow-ups for the next iteration — and the **Standing deviations**: the complete list
   of where the code now differs from the drop (the Baseline's list, minus what this iteration

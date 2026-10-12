@@ -31,6 +31,7 @@ const ALL_DOMAIN_NAMES = [
   'notify',
   'audit',
   'upload',
+  'app',
 ] as const;
 
 type DomainName = (typeof ALL_DOMAIN_NAMES)[number];

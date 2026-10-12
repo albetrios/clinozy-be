@@ -17,6 +17,9 @@ import { logs } from '@/domains/audit/audit.schema.js';
 import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
 import { organization_notification_policies } from '@/domains/tenancy/sub-domains/organization/organization-notification-policy/organization-notification-policy.schema.js';
 import { api_keys } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.schema.js';
+import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
+import { branch_members } from '@/domains/app/sub-domains/branches/branch-members/branch-members.schema.js';
+import { membership_additional_roles } from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
 import { user_settings } from '@/domains/user/sub-domains/user-settings/user-settings.schema.js';
 import { user_data_exports } from '@/domains/user/sub-domains/user-data-export/user-data-export.schema.js';
 import { webauthn_credentials } from '@/domains/auth/sub-domains/auth-webauthn/webauthn-credential.schema.js';
@@ -73,9 +76,14 @@ export type RlsUserFixture = {
 /** Tables excluded from generic UPDATE/DELETE matrix (policy shape or parent FK setup). */
 export const RLS_MATRIX_SKIP_CRUD_TABLES = new Set([
   tableKey({ schemaName: 'tenancy', tableName: 'organizations' }),
-  tableKey({ schemaName: 'tenancy', tableName: 'member_invitations' }),
+  tableKey({ schemaName: 'tenancy', tableName: 'membership_invitations' }),
   tableKey({ schemaName: 'tenancy', tableName: 'role_permissions' }),
   tableKey({ schemaName: 'tenancy', tableName: 'organization_settings' }),
+  // Composite key (branch_id, membership_id), no `id` — cross-organization isolation is asserted
+  // through the user-accesses routes in the authz security suites.
+  tableKey({ schemaName: 'app', tableName: 'branch_members' }),
+  // Composite key (membership_id, role_id), no `id` — same reason as branch_members.
+  tableKey({ schemaName: 'tenancy', tableName: 'membership_additional_roles' }),
   tableKey({ schemaName: 'notify', tableName: 'webhook_delivery_attempts' }),
   tableKey({ schemaName: 'auth', tableName: 'verification_tokens' }),
   // sec-U3: audit.logs is append-only — REVOKE UPDATE causes UPDATE to throw
@@ -377,6 +385,55 @@ export async function seedRlsMatrixFixtures(): Promise<RlsTenantFixture> {
     organizationA: apiKeyA!.id,
     organizationB: apiKeyB!.id,
   });
+
+  const branchValues = {
+    address_line_one: '1 Main Road',
+    area: 'Adajan',
+    city: 'Surat',
+    postal_code: '395009',
+    phone: '+919800000000',
+    email: 'branch@example.com',
+  };
+  const [branchA] = await database
+    .insert(branches)
+    .values({
+      ...branchValues,
+      public_id: generatePublicId('branch'),
+      organization_id: organizationA.id,
+      name: 'branch-a',
+    })
+    .returning();
+  const [branchB] = await database
+    .insert(branches)
+    .values({
+      ...branchValues,
+      public_id: generatePublicId('branch'),
+      organization_id: organizationB.id,
+      name: 'branch-b',
+    })
+    .returning();
+  rowIdsByTable.set(tableKey({ schemaName: 'app', tableName: 'branches' }), {
+    organizationA: branchA!.id,
+    organizationB: branchB!.id,
+  });
+  await database.insert(branch_members).values([
+    { branch_id: branchA!.id, membership_id: membershipA.id, organization_id: organizationA.id },
+    { branch_id: branchB!.id, membership_id: membershipB.id, organization_id: organizationB.id },
+  ]);
+  await database.insert(membership_additional_roles).values([
+    {
+      membership_id: membershipA.id,
+      role_id: roleA.id,
+      organization_id: organizationA.id,
+      position: 1,
+    },
+    {
+      membership_id: membershipB.id,
+      role_id: roleB.id,
+      organization_id: organizationB.id,
+      position: 1,
+    },
+  ]);
 
   const webhookA = await createTestWebhook({ organizationId: organizationA.id });
   const webhookB = await createTestWebhook({ organizationId: organizationB.id });

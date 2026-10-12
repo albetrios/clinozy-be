@@ -8,6 +8,7 @@
  * Idempotency: a user who already has a personal organization keeps it, and only organization
  * indices beyond those already present are created, so a re-run with the same counts is a no-op.
  */
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { and, eq, isNull, like } from 'drizzle-orm';
 import { env } from '@/shared/config/env.config.js';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
@@ -101,7 +102,7 @@ export async function seedOrganizationsBulk(context: SeedContext): Promise<void>
         user_id: member.id,
         organization_id: organization.id,
         role_id: adminRole.id,
-        status: 'ACTIVE',
+        status: MEMBERSHIP_STATUS.ACTIVE,
         created_by_user_id: owner.id,
       });
     }

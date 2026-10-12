@@ -10,7 +10,8 @@ import {
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
-import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
+import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { notifications } from '@/domains/notify/sub-domains/notification/notification.schema.js';
 import { createTestNotification } from '@/tests/factories/notification.factory.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -31,8 +32,8 @@ function rowsOf<T>(result: unknown): T[] {
  *   1. `organizations_user_discovery` + `memberships_user_self_discovery` PERMISSIVE
  *      policies grant access ONLY when `app.current_user_public_id` matches the row owner
  *      or an active membership. Existing `*_tenant_isolation` policies are unchanged.
- *   2. `tenancy.resolve_member_invitation_lookup_by_public_id` and
- *      `tenancy.list_pending_member_invitations_for_email` SECURITY DEFINER helpers
+ *   2. `tenancy.resolve_membership_invitation_lookup_by_public_id` and
+ *      `tenancy.list_pending_membership_invitations_for_email` SECURITY DEFINER helpers
  *      let the invitation accept route resolve the owning organization
  *      without an active `app.current_organization_public_id` GUC, then wrap the actual write
  *      in `withAppDatabaseContext`.
@@ -156,7 +157,7 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
     expect(rows).toHaveLength(1);
   });
 
-  it('resolve_member_invitation_lookup_by_public_id returns owning organization without organization context', async () => {
+  it('resolve_membership_invitation_lookup_by_public_id returns owning organization without organization context', async () => {
     const owner = await createTestUser();
     const organization = await createTestOrganization({ ownerUserId: owner.id });
     const role = await createRoleWithPermissions({
@@ -175,7 +176,7 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
      * happen. The lookup must return the membership's owning organization.
      */
     const invitationPublicId = `inv_${Math.random().toString(36).slice(2, 12)}`;
-    await database.insert(member_invitations).values({
+    await database.insert(membership_invitations).values({
       public_id: invitationPublicId,
       membership_id: membership.id,
       email: 'invitee@example.com',
@@ -192,7 +193,7 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
     }>(
       await database.execute(drizzleSql`
       SELECT organization_public_id, organization_id, membership_public_id, membership_id
-      FROM tenancy.resolve_member_invitation_lookup_by_public_id(${invitationPublicId})
+      FROM tenancy.resolve_membership_invitation_lookup_by_public_id(${invitationPublicId})
     `),
     );
     expect(rows).toHaveLength(1);
@@ -200,64 +201,78 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
     expect(rows[0]?.membership_public_id).toBe(membership.public_id);
   });
 
-  it('list_pending_member_invitations_for_email returns active invitations across organizations', async () => {
-    const ownerA = await createTestUser();
-    const ownerB = await createTestUser();
-    const organizationA = await createTestOrganization({ ownerUserId: ownerA.id });
-    const organizationB = await createTestOrganization({ ownerUserId: ownerB.id });
-    const roleA = await createRoleWithPermissions({
-      organizationId: organizationA.id,
-      permissionCodes: [],
-    });
-    const roleB = await createRoleWithPermissions({
-      organizationId: organizationB.id,
-      permissionCodes: [],
-    });
-    const membershipA = await createMembership({
-      userId: ownerA.id,
-      organizationId: organizationA.id,
-      roleId: roleA.id,
-    });
-    const membershipB = await createMembership({
-      userId: ownerB.id,
-      organizationId: organizationB.id,
-      roleId: roleB.id,
-    });
+  it('list_pending_membership_invitations_for_email returns each invited membership’s latest live invitation across organizations', async () => {
+    const owners = await Promise.all([createTestUser(), createTestUser(), createTestUser()]);
+    const invitee = await createTestUser();
+    const invitedIn = await Promise.all(
+      owners.map(async (owner) => {
+        const organization = await createTestOrganization({ ownerUserId: owner.id });
+        const role = await createRoleWithPermissions({
+          organizationId: organization.id,
+          permissionCodes: [],
+        });
+        // An invitation's membership waits as `invited` until it is answered (launch D84).
+        const membership = await createMembership({
+          userId: invitee.id,
+          organizationId: organization.id,
+          roleId: role.id,
+          status: MEMBERSHIP_STATUS.INVITED,
+        });
+        return { owner, organization, membership };
+      }),
+    );
+    const [inA, inB, inC] = invitedIn as [
+      (typeof invitedIn)[number],
+      (typeof invitedIn)[number],
+      (typeof invitedIn)[number],
+    ];
     const invitationEmail = `invitee-${Math.random().toString(36).slice(2, 8)}@example.com`;
+    const hour = 60 * 60 * 1000;
+    const invitation = (options: {
+      membershipId: number;
+      invitedBy: number;
+      token: string;
+      createdAt?: Date;
+      expiresAt?: Date;
+    }) => ({
+      public_id: `inv_${Math.random().toString(36).slice(2, 12)}`,
+      membership_id: options.membershipId,
+      email: invitationEmail,
+      token_hash: options.token,
+      invited_by_user_id: options.invitedBy,
+      ...(options.createdAt ? { created_at: options.createdAt } : {}),
+      expires_at: options.expiresAt ?? new Date(Date.now() + 7 * 24 * hour),
+    });
+    const latestInA = invitation({
+      membershipId: inA.membership.id,
+      invitedBy: inA.owner.id,
+      token: 'hash-a-latest',
+    });
 
-    await database.insert(member_invitations).values([
-      {
-        public_id: `inv_${Math.random().toString(36).slice(2, 12)}`,
-        membership_id: membershipA.id,
-        email: invitationEmail,
-        token_hash: 'hash-a',
-        invited_by_user_id: ownerA.id,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-      {
-        public_id: `inv_${Math.random().toString(36).slice(2, 12)}`,
-        membership_id: membershipB.id,
-        email: invitationEmail,
-        token_hash: 'hash-b',
-        invited_by_user_id: ownerB.id,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-      {
-        public_id: `inv_${Math.random().toString(36).slice(2, 12)}`,
-        membership_id: membershipA.id,
-        email: invitationEmail,
-        token_hash: 'hash-expired',
-        invited_by_user_id: ownerA.id,
-        /**
-         * Expired invitation must be filtered out by
-         * `list_pending_member_invitations_for_email`. `created_at` is
-         * pinned earlier than `expires_at` so the `chk_member_inv_expires`
-         * check constraint (`expires_at > created_at`) still holds while
-         * the row remains past its `expires_at`.
-         */
-        created_at: new Date(Date.now() - 48 * 60 * 60 * 1000),
-        expires_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
-      },
+    await database.insert(membership_invitations).values([
+      // Sent again: only the latest invitation of a membership counts.
+      invitation({
+        membershipId: inA.membership.id,
+        invitedBy: inA.owner.id,
+        token: 'hash-a-earlier',
+        createdAt: new Date(Date.now() - hour),
+      }),
+      latestInA,
+      invitation({ membershipId: inB.membership.id, invitedBy: inB.owner.id, token: 'hash-b' }),
+      /**
+       * Expired invitation must be filtered out by
+       * `list_pending_membership_invitations_for_email`. `created_at` is
+       * pinned earlier than `expires_at` so the `chk_membership_invitations_expires`
+       * check constraint (`expires_at > created_at`) still holds while
+       * the row remains past its `expires_at`.
+       */
+      invitation({
+        membershipId: inC.membership.id,
+        invitedBy: inC.owner.id,
+        token: 'hash-expired',
+        createdAt: new Date(Date.now() - 48 * hour),
+        expiresAt: new Date(Date.now() - 24 * hour),
+      }),
     ]);
 
     const rows = rowsOf<{
@@ -266,13 +281,18 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
     }>(
       await database.execute(drizzleSql`
       SELECT invitation_public_id, organization_public_id
-      FROM tenancy.list_pending_member_invitations_for_email(${invitationEmail}, 100)
+      FROM tenancy.list_pending_membership_invitations_for_email(${invitationEmail}, 100)
     `),
     );
     expect(rows).toHaveLength(2);
     const organizationIds = new Set(rows.map((row) => row.organization_public_id));
-    expect(organizationIds.has(organizationA.public_id)).toBe(true);
-    expect(organizationIds.has(organizationB.public_id)).toBe(true);
+    expect(organizationIds.has(inA.organization.public_id)).toBe(true);
+    expect(organizationIds.has(inB.organization.public_id)).toBe(true);
+    expect(organizationIds.has(inC.organization.public_id)).toBe(false);
+    expect(
+      rows.find((row) => row.organization_public_id === inA.organization.public_id)
+        ?.invitation_public_id,
+    ).toBe(latestInA.public_id);
   });
 
   describe('the user identity alone grants no organization or membership writes', () => {
@@ -319,7 +339,7 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
       const updated = await executeAsClinozyBeAppUser(member.public_id, (transaction) =>
         transaction
           .update(memberships)
-          .set({ status: 'SUSPENDED' })
+          .set({ status: MEMBERSHIP_STATUS.SUSPENDED })
           .where(eq(memberships.id, membership.id))
           .returning({ id: memberships.id }),
       );
@@ -345,7 +365,7 @@ describe('Security: organization user-discovery RLS + invitation SECURITY DEFINE
             user_id: stranger.id,
             organization_id: organization.id,
             role_id: role.id,
-            status: 'ACTIVE',
+            status: MEMBERSHIP_STATUS.ACTIVE,
             joined_at: new Date(),
           }),
         ),

@@ -1,10 +1,26 @@
 import { faker } from '@faker-js/faker';
+import { getPublicIdExample } from '@tooling/openapi/enrichers/path-parameters.js';
+import { COMMA_SEPARATED_ID_LIST_OPENAPI_EXTENSION } from '@/shared/utils/validation/record-fields.util.js';
 faker.seed(42);
 
+/**
+ * A field's OpenAPI example. The schema's own example comes first — a Zod `.meta({ example })` on
+ * the DTO (a comma-separated value list's first two values, an offer's `DIWALI25`) — then the
+ * first enum value, then a name-keyed guess, then one by type.
+ */
 export function generateFieldExample(fieldName: string, schema: Record<string, unknown>): unknown {
   const type = schema.type as string | undefined;
   const format = schema.format as string | undefined;
   const enumValues = schema.enum as unknown[] | undefined;
+
+  // The schema's own example (Zod metadata) beats every guess below
+  if (schema.example !== undefined) return schema.example;
+
+  // A comma-separated public-id list: two ids of the entity its name says (`brn_…,brn_…`)
+  if (schema[COMMA_SEPARATED_ID_LIST_OPENAPI_EXTENSION] === true) {
+    const listExample = getPublicIdExample({ name: fieldName.toLowerCase(), isList: true });
+    if (listExample !== undefined) return listExample;
+  }
 
   // If there are enum values, pick the first one
   if (enumValues && enumValues.length > 0) {
@@ -71,7 +87,9 @@ export function generateFieldExample(fieldName: string, schema: Record<string, u
   if (lowerField === 'membership_id') return 'mbr_q8w3n7p2m5k1r4t6';
   if (lowerField === 'organization_id') return 'org_r4t6m3n7p2q8w5k1';
   if (lowerField === 'provider_user_id') return '110248495921238986420';
-  if (lowerField.endsWith('_id') && type === 'string') return faker.string.alphanumeric(18);
+  if (lowerField.endsWith('_id') && type === 'string') {
+    return getPublicIdExample({ name: lowerField, isList: false }) ?? faker.string.alphanumeric(18);
+  }
 
   // ── Description ──
   if (lowerField === 'description') return faker.lorem.sentence();
@@ -155,6 +173,7 @@ export function generateFieldExample(fieldName: string, schema: Record<string, u
   if (format === 'email') return faker.internet.email();
   if (format === 'uri' || format === 'url') return faker.internet.url();
   if (format === 'date-time') return '2026-02-14T10:30:00.000Z';
+  if (format === 'date') return '2026-02-14';
   if (format === 'uuid') return faker.string.uuid();
 
   if (type === 'string') return faker.lorem.word();

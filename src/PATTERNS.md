@@ -310,10 +310,10 @@ sequenceDiagram
   `runEnqueueAfterCommit`. This is the rule, not a preference — the reasoning is two paragraphs
   up, and it is also what keeps a rolled-back write from invalidating anything. Both shapes
   currently exist in the tree and a newcomer copies whichever file they open first:
-  `member-invitation.service.ts`, `organization.service.ts` and both notify handlers defer;
+  `membership-invitation.service.ts`, `organization.service.ts` and both notify handlers defer;
   four session-cache invalidations and `notification-dispatch.service.ts`'s `RPUSH` await
   inside the caller's context. Awaiting Redis inside a context is allowed **only** with a
-  comment naming the fail-safe reason — `member-invitation-accepted.event-handlers.ts`
+  comment naming the fail-safe reason — `membership-invitation.event-handlers.ts`
   documents its choice exactly that way, and is the model to copy.
 - **Invalidate after commit**, at *every* write choke point for that key, including worker paths. A writer that cannot name the scope (a retention sweep deleting by `created_at`) cannot invalidate — that is what the TTL bounds, and the direction of the resulting error belongs in the cache module's TSDoc.
 - **Nothing to register for tests**: [`cleanupTestRedis`](src/tests/helpers/test-redis.ts) deletes every key under the harness's `<product>:test:` namespace except BullMQ's before each case, so a new cache's entries — and their `NX`-blocking tombstones — cannot leak into the next case through recycled ids.

@@ -15,6 +15,7 @@ export const DOMAIN_PREFIXES: Record<string, string> = {
   billing: '/api/v1/billing',
   notify: '/api/v1/notify',
   upload: '/api/v1/uploads',
+  app: '/api/v1/app',
 };
 
 const ROUTES_DIRECTORY = join(process.cwd(), 'src', 'domains');

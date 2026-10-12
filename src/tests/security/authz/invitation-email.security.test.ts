@@ -15,15 +15,18 @@ import {
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { database } from '@/infrastructure/database/connection.js';
-import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
+import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
+import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { users } from '@/domains/user/user.schema.js';
 
 /**
  * Invitation email-binding matrix — model `email` in
  * route-authorization-model.json. The invitation accept route is bound to the
  * invitee's email, not merely "any authenticated user": a user whose email
  * differs from the invitation cannot accept it even when holding the raw token
- * (`invitationEmailMismatch`), and the invitation stays pending. The legitimate
- * invitee (matching email) can act on it. e2e — runs in CI (Postgres + Redis).
+ * (`invitationEmailMismatch`), nor decline it (launch D84), and the invitation stays
+ * pending. The legitimate invitee (matching email) can act on it. e2e — runs in CI
+ * (Postgres + Redis).
  */
 describe('Security: invitation email-binding matrix (model: email)', () => {
   let app: FastifyInstance;
@@ -47,11 +50,14 @@ describe('Security: invitation email-binding matrix (model: email)', () => {
   });
 
   // Creates an organization with a pending invitation addressed to `inviteeEmail`
-  // (tied to that user's INVITED membership), plus the invitee user record.
-  async function pendingInvitationFor(inviteeEmail: string) {
+  // (tied to that user's invited membership), plus the invitee user record.
+  async function pendingInvitationFor(inviteeEmail: string, options: { verified?: boolean } = {}) {
     const owner = await createTestUser();
     const organization = await createTestOrganization({ ownerUserId: owner.id });
-    const invitee = await createTestUser({ email: inviteeEmail });
+    const invitee = await createTestUser({
+      email: inviteeEmail,
+      ...(options.verified === undefined ? {} : { isEmailVerified: options.verified }),
+    });
     const role = await createRoleWithPermissions({
       organizationId: organization.id,
       permissionCodes: [],
@@ -61,12 +67,12 @@ describe('Security: invitation email-binding matrix (model: email)', () => {
       userId: invitee.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'INVITED',
+      status: 'invited',
     });
     const [invitation] = await database
-      .insert(member_invitations)
+      .insert(membership_invitations)
       .values({
-        public_id: generatePublicId('memberInvitation'),
+        public_id: generatePublicId('membershipInvitation'),
         membership_id: membership.id,
         email: inviteeEmail,
         token_hash: createHash('sha256').update(RAW_INVITATION_TOKEN).digest('hex'),
@@ -88,15 +94,61 @@ describe('Security: invitation email-binding matrix (model: email)', () => {
     const attackerToken = await generateTestToken({ userId: attacker.public_id });
     const res = await injectAuthenticated(app, {
       method: 'POST',
-      url: testApiPath(`/tenancy/invitations/${invitation.public_id}/accept`),
+      url: testApiPath(`/tenancy/membership-invitations/${invitation.public_id}/accept`),
+      headers: { 'x-idempotency-key': `email-${randomUUID()}` },
       token: attackerToken,
       payload: { token: RAW_INVITATION_TOKEN },
     });
     expect(res.statusCode).toBe(403);
     const [row] = await database
       .select()
-      .from(member_invitations)
-      .where(eq(member_invitations.public_id, invitation.public_id));
+      .from(membership_invitations)
+      .where(eq(membership_invitations.public_id, invitation.public_id));
     expect(row?.accepted_at).toBeNull();
+  });
+
+  it('a user whose email differs DECLINE → 403 and it stays pending (launch D84)', async () => {
+    const { invitation, membership } = await pendingInvitationFor(uniqueEmail());
+    const attacker = await createTestUser({ isEmailVerified: true });
+    const attackerToken = await generateTestToken({ userId: attacker.public_id });
+    const res = await injectAuthenticated(app, {
+      method: 'POST',
+      url: testApiPath(`/tenancy/membership-invitations/${invitation.public_id}/decline`),
+      headers: { 'x-idempotency-key': `email-${randomUUID()}` },
+      token: attackerToken,
+    });
+    expect(res.statusCode).toBe(403);
+    const [row] = await database
+      .select()
+      .from(membership_invitations)
+      .where(eq(membership_invitations.public_id, invitation.public_id));
+    expect(row?.revoked_at).toBeNull();
+    const [membershipRow] = await database
+      .select({ deleted_at: memberships.deleted_at })
+      .from(memberships)
+      .where(eq(memberships.id, membership.id));
+    expect(membershipRow?.deleted_at).toBeNull();
+  });
+
+  it('the invitee (verified, matching email) declines → 200 and the invitation is revoked', async () => {
+    const inviteeEmail = uniqueEmail();
+    const { invitation } = await pendingInvitationFor(inviteeEmail, { verified: true });
+    const [inviteeRow] = await database
+      .select({ public_id: users.public_id })
+      .from(users)
+      .where(eq(users.email, inviteeEmail));
+    const inviteeToken = await generateTestToken({ userId: inviteeRow!.public_id });
+    const res = await injectAuthenticated(app, {
+      method: 'POST',
+      url: testApiPath(`/tenancy/membership-invitations/${invitation.public_id}/decline`),
+      headers: { 'x-idempotency-key': `email-${randomUUID()}` },
+      token: inviteeToken,
+    });
+    expect(res.statusCode).toBe(200);
+    const [row] = await database
+      .select()
+      .from(membership_invitations)
+      .where(eq(membership_invitations.public_id, invitation.public_id));
+    expect(row?.revoked_at).not.toBeNull();
   });
 });

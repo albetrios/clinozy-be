@@ -16,6 +16,7 @@ export const userSchema = {
     first_name: { type: 'string', nullable: true },
     last_name: { type: 'string', nullable: true },
     avatar_url: { type: 'string', nullable: true },
+    presence: { type: 'string', enum: ['online', 'busy', 'away'] },
     status: {
       type: 'string',
       enum: ['ACTIVE', 'LOCKED', 'SUSPENDED'],
@@ -35,33 +36,45 @@ export const userExample = {
   first_name: 'John',
   last_name: 'Doe',
   avatar_url: 'https://cdn.example.com/avatars/john-doe.jpg',
+  presence: 'online',
   status: 'ACTIVE',
   created_at: '2026-01-15T10:30:00.000Z',
   updated_at: '2026-02-10T14:20:00.000Z',
 };
 
 // ── User Settings ──
+// What `serializeUserSettings` returns — no id or timestamps of the row; the analytics consent
+// decision, its policy version and when (launch D85), all three null until first answered.
 export const userSettingsSchema = {
   type: 'object',
+  required: [
+    'is_dark_mode_enabled',
+    'is_notifications_enabled',
+    'language',
+    'preferred_locales',
+    'analytics_consent',
+    'analytics_consent_version',
+    'analytics_consent_at',
+  ],
   properties: {
-    user_id: { type: 'string' },
     is_dark_mode_enabled: { type: 'boolean' },
     is_notifications_enabled: { type: 'boolean' },
     language: { type: 'string' },
     preferred_locales: { type: 'array', items: { type: 'string' } },
-    created_at: { type: 'string', format: 'date-time' },
-    updated_at: { type: 'string', format: 'date-time' },
+    analytics_consent: { type: ['string', 'null'], enum: ['granted', 'denied', null] },
+    analytics_consent_version: { type: ['integer', 'null'], minimum: 1 },
+    analytics_consent_at: { type: ['string', 'null'], format: 'date-time' },
   },
 };
 
 export const userSettingsExample = {
-  user_id: 'usr_k7x9m2pqr4w8n1v3a1b2c',
   is_dark_mode_enabled: false,
   is_notifications_enabled: true,
   language: 'en',
   preferred_locales: ['en', 'es'],
-  created_at: '2026-01-15T10:30:00.000Z',
-  updated_at: '2026-02-10T14:20:00.000Z',
+  analytics_consent: 'granted',
+  analytics_consent_version: 1,
+  analytics_consent_at: '2026-10-10T08:00:00.000Z',
 };
 
 // ── Notification Preference ──

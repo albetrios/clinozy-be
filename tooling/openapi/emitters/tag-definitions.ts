@@ -25,7 +25,7 @@ export function buildTagDefinitions(
     'Notification Policy': 'Organization notification delivery policies',
     'Audit Log': 'Audit trail of actions performed in the organization',
     Membership: 'Organization membership management',
-    Invitation: 'Member invitations — create, accept, decline, resend',
+    Invitation: 'Membership invitations — create, accept, decline, resend',
     Role: 'Custom role management within organizations',
     Permission: 'Available permissions that can be assigned to roles',
     Billing: 'Billing and subscription management',
@@ -35,6 +35,27 @@ export function buildTagDefinitions(
     Notification: 'User notification feed',
     Webhook: 'Webhook endpoint management and delivery history',
     Upload: 'Pre-signed URL generation for file uploads',
+    Branch: 'Branches — locations, hours and who works where',
+    Message: 'Conversations — every line with a patient, a lead or a walk-in buyer, on any channel',
+    Search: 'The command search and contact cards — patients, leads, appointments, invoices',
+    Task: 'Tasks — the work queue, its rules and their automatic handling',
+    Stock: 'Consumable stock — items, vendors, purchases, movements and counts',
+    'Medical store':
+      'The medical store — medicines, suppliers, manufacturers, reps, purchase orders and sales',
+    Payment: 'Payments, pending credits, credit notes and the day close',
+    Invoice:
+      'Invoices, packages and offering suggestions — numbered per branch GSTIN and financial year (D23)',
+    'Patient file':
+      "A patient's file — clinical notes, prescriptions and kits, the diagnosis catalogue, photos, reports, treatment sessions, check-ins, reviews and the actions taken on them",
+    Visit: 'Visits in progress — the floor stage, the consult note and the safety checks',
+    Appointment: 'Appointments — booking, confirming, check-in, cancel and the slots',
+    Lead: 'Leads, their conversations and message templates',
+    Patient: 'Patients — registration, contact and consent',
+    Preference: "Each person's own settings — pinned sections, branch filter, theme",
+    Offering:
+      'Offerings, offering groups and offers — what the organization sells and at what price',
+    'Saved view': "Saved list views — each person's named filters and hidden columns",
+    'Branch resource': 'Rooms, machines and holidays of a branch',
   };
   const tagDescriptions = tagStrings ?? builtInTagDescriptions;
 
@@ -71,6 +92,23 @@ export function buildTagDefinitions(
     'Notification',
     'Webhook',
     'Upload',
+    'Branch',
+    'Saved view',
+    'Offering',
+    'Contact',
+    'Contact activity',
+    'Contact message template',
+    'Branch resource',
+    'Preference',
+    'Patient',
+    'Lead',
+    'Appointment',
+    'Patient file',
+    'Invoice',
+    'Payment',
+    'Medical store',
+    'Stock',
+    'Task',
   ];
 
   const sortedTags = [...tagSet].sort((left, right) => {

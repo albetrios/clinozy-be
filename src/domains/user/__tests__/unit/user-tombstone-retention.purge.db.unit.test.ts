@@ -5,7 +5,7 @@ import { runUserTombstoneRetentionJob } from '@/domains/user/workers/user-tombst
 import { users } from '@/domains/user/user.schema.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
-import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
+import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
 import { verification_tokens } from '@/domains/auth/sub-domains/auth-method/verification-token/verification-token.schema.js';
 import { uploads } from '@/domains/upload/upload.schema.js';
 import {
@@ -57,8 +57,8 @@ describe('user tombstone retention purges a deleted account other rows still ref
       .update(memberships)
       .set({ invited_by_user_id: departed.id })
       .where(eq(memberships.id, membership.id));
-    await operator.insert(member_invitations).values({
-      public_id: generatePublicId('memberInvitation'),
+    await operator.insert(membership_invitations).values({
+      public_id: generatePublicId('membershipInvitation'),
       membership_id: membership.id,
       email: invitee.email,
       token_hash: randomUUID().replaceAll('-', '').padEnd(64, '0'),
@@ -101,8 +101,8 @@ describe('user tombstone retention purges a deleted account other rows still ref
     expect(keptMembership?.invited_by_user_id).toBeNull();
     const [keptInvitation] = await operator
       .select()
-      .from(member_invitations)
-      .where(eq(member_invitations.membership_id, membership.id));
+      .from(membership_invitations)
+      .where(eq(membership_invitations.membership_id, membership.id));
     expect(keptInvitation?.invited_by_user_id).toBeNull();
     const [keptUpload] = await operator.select().from(uploads).where(eq(uploads.id, upload.id));
     expect(keptUpload?.user_id).toBeNull();

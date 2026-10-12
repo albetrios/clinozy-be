@@ -2,6 +2,7 @@
  * The registry of domain seed modules the bulk orchestrator runs. Kept separate from `bulk.ts`
  * (which auto-runs on execution) so tests can import the module set without triggering a seed.
  */
+import { appSeedModule } from '@/domains/app/seed/index.js';
 import { auditSeedModule } from '@/domains/audit/seed/index.js';
 import { authSeedModule } from '@/domains/auth/seed/index.js';
 import { billingSeedModule } from '@/domains/billing/seed/index.js';
@@ -20,4 +21,5 @@ export const SEED_MODULES: DomainSeedModule[] = [
   notifySeedModule,
   uploadSeedModule,
   auditSeedModule,
+  appSeedModule,
 ];

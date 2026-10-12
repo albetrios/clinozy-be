@@ -73,8 +73,9 @@ function createMembershipWriteHandlers(service: MembershipService) {
       const auth = requirePrincipal(request);
       const scope = requireOrganizationScope(request);
       const _organizationId = scope.organizationPublicId;
-      // REQ-1: "Add member" — the raw invitation token is delivered ONLY via email, never returned;
-      // the response carries the created INVITED membership (with its embedded invitation ref).
+      // REQ-1: "Add member" — the raw invitation token is delivered ONLY via email, never returned
+      // (bar the dev-only `invitation.debug_invitation_token` echo, ROUTE #164); the response
+      // carries the created INVITED membership (with its embedded invitation ref).
       const data = await service.create({
         scope,
         body: request.body,
@@ -93,7 +94,7 @@ function createMembershipWriteHandlers(service: MembershipService) {
           target_user_public_id: data.user_id,
           metadata: {
             membership_public_id: data.id,
-            role_public_id: data.role_id,
+            role_public_ids: data.role_ids,
             invitation_public_id: data.invitation?.id ?? null,
           },
         },
@@ -122,7 +123,7 @@ function createMembershipWriteHandlers(service: MembershipService) {
           target_user_public_id: data.user_id,
           metadata: {
             membership_public_id: membershipId,
-            role_public_id: data.role_id,
+            role_public_ids: data.role_ids,
             changed_fields: listBodyFieldNames(request.body),
           },
         },
@@ -137,8 +138,10 @@ function createMembershipWriteHandlers(service: MembershipService) {
       await service.delete({
         scope,
         membership_public_id: membershipId,
+        query: request.query,
         options: membershipActionOptions(auth),
       });
+      const removal = request.query as { reason?: string };
       await recordScopedAuditEvent({
         request,
         input: {
@@ -146,11 +149,56 @@ function createMembershipWriteHandlers(service: MembershipService) {
           action: 'tenancy.membership.delete',
           resource_type: 'membership',
           organizationPublicId: scope.organizationPublicId,
+          metadata: { membership_public_id: membershipId, delete_reason: removal.reason },
+        },
+      });
+      return reply.code(204).send();
+    },
+    revokeInvitation: async (request: FastifyRequest, reply: FastifyReply) => {
+      const auth = requirePrincipal(request);
+      const scope = requireOrganizationScope(request);
+      const membershipId = readMembershipIdParam(request);
+      await service.revokeInvitation({ scope, membership_public_id: membershipId });
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.membership_invitation.revoke',
+          resource_type: 'membership_invitation',
+          organizationPublicId: scope.organizationPublicId,
           metadata: { membership_public_id: membershipId },
         },
       });
       return reply.code(204).send();
     },
+    restoreMembership: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const auth = requirePrincipal(request);
+      const scope = requireOrganizationScope(request);
+      const membershipId = readMembershipIdParam(request);
+      const data = await service.restore({
+        scope,
+        membership_public_id: membershipId,
+        restored_by_user_public_id: getActingUserPublicId(auth),
+      });
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.membership.restore',
+          resource_type: 'membership',
+          organizationPublicId: scope.organizationPublicId,
+          target_user_public_id: data.user_id,
+          metadata: { membership_public_id: membershipId },
+        },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
+    },
+  };
+}
+
+/** The member's own actions: leave the organization, hand the ownership over. */
+function createMembershipSelfServiceHandlers(service: MembershipService) {
+  return {
     leaveOrganization: async (request: FastifyRequest, reply: FastifyReply) => {
       const auth = requireAuth(request);
       const scope = requireOrganizationScope(request);
@@ -209,5 +257,6 @@ export function createMembershipController(service: MembershipService) {
   return {
     ...createMembershipReadHandlers(service),
     ...createMembershipWriteHandlers(service),
+    ...createMembershipSelfServiceHandlers(service),
   };
 }

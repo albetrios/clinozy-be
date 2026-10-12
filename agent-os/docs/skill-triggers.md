@@ -20,7 +20,7 @@ When you edit a file matching a pattern below, invoke the listed skill(s). Gener
 | `biome.json`, `.husky/pre-commit`, `.husky/pre-push` | be-code-quality-guard | Lint/format/pre-commit/pre-push + branch-name policy |
 | `docs/**/*.md` | be-docs-maintainer | Hand-written docs — index + cross-links |
 | `iterations/*/AS-BUILT.md` | be-kickoff-iteration | Iteration implementation — one ROUTE row at a time; every row's technical decisions go into AS-BUILT.md |
-| `iterations/*/plans/**` | be-iteration-planning | Iteration plans — requirements and decisions only, never technical design; KICKOFF.md is written at Step 5 |
+| `iterations/*/plans/**` | be-iteration-planning | Iteration plans — requirements and decisions, plus the route review in routes-final.md (Step 5); KICKOFF.md is written at Step 6 |
 | `migrations/*.sql` | be-db-migration-maintainer | Migration files (schema changes go via the schema-change chain) |
 | `package.json`, `pnpm-lock.yaml`, `tooling/setup/agent/tool-versions.sh` | be-dependency-security | Zero-vuln dependency updates + agent tool pin bumps |
 | `src/**/*.overview.md` | be-overview-doc-maintainer | Per-folder overview docs |

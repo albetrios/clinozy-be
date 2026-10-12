@@ -12,14 +12,15 @@ import {
   seedAllPermissions,
   createRoleWithPermissions,
   createMembership,
+  MEMBERSHIP_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { database } from '@/infrastructure/database/connection.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
-import { member_invitations } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.schema.js';
-import { MemberInvitationRepository } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.repository.js';
-import { hashInvitationToken } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.token.js';
+import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
+import { MembershipInvitationRepository } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.repository.js';
+import { hashInvitationToken } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.token.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 
 /**
@@ -56,9 +57,8 @@ describe('Security: invitation lifecycle flow abuse', () => {
   });
 
   const ADMIN_PERMISSIONS = [
-    TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+    ...MEMBERSHIP_WRITE_PERMISSION_CODES,
     TENANCY_PERMISSIONS.MEMBERSHIP_READ,
-    TENANCY_PERMISSIONS.INVITATION_MANAGE,
     TENANCY_PERMISSIONS.ROLE_READ,
     TENANCY_PERMISSIONS.ORGANIZATION_READ,
   ];
@@ -101,23 +101,23 @@ describe('Security: invitation lifecycle flow abuse', () => {
         user_id: invitee.id,
         organization_id: organization.id,
         role_id: memberRole.id,
-        status: 'INVITED',
+        status: 'invited',
       })
       .returning();
 
     const rawToken = `flow-token-${randomUUID()}`;
     let invitation: { public_id: string; id: number };
     if (options?.expired) {
-      // `chk_member_inv_expires` enforces `expires_at > created_at`, so an already-expired row
+      // `chk_membership_invitations_expires` enforces `expires_at > created_at`, so an already-expired row
       // cannot be created with a default `created_at` of now — the only lawful shape for one is a
       // backdated pair. Inserted directly because the repository's `create` does not take
       // `created_at` (by design: nothing in production backdates an invitation).
       const createdAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1_000);
       const expiresAt = new Date(Date.now() - 29 * 24 * 60 * 60 * 1_000);
       const [row] = await database
-        .insert(member_invitations)
+        .insert(membership_invitations)
         .values({
-          public_id: generatePublicId('memberInvitation'),
+          public_id: generatePublicId('membershipInvitation'),
           membership_id: inviteeMembership!.id,
           email: invitee.email,
           token_hash: hashInvitationToken(rawToken),
@@ -129,7 +129,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
         .returning();
       invitation = row!;
     } else {
-      invitation = await new MemberInvitationRepository().create({
+      invitation = await new MembershipInvitationRepository().create({
         membership_id: inviteeMembership!.id,
         email: invitee.email,
         token_hash: hashInvitationToken(rawToken),
@@ -153,7 +153,22 @@ describe('Security: invitation lifecycle flow abuse', () => {
   }
 
   function acceptUrl(invitationPublicId: string) {
-    return testApiPath(`/tenancy/invitations/${invitationPublicId}/accept`);
+    return testApiPath(`/tenancy/membership-invitations/${invitationPublicId}/accept`);
+  }
+
+  /** The invitation's revoke route — under the invited membership (launch §2.C). */
+  function revokeUrl(membershipPublicId: string) {
+    return testApiPath(`/tenancy/organization/memberships/${membershipPublicId}/invitation`);
+  }
+
+  /** The invitation's resend route — under the invited membership (launch §2.C). */
+  function resendUrl(membershipPublicId: string) {
+    return testApiPath(`/tenancy/organization/memberships/${membershipPublicId}/invitation/resend`);
+  }
+
+  /** A fresh `X-Idempotency-Key` — accept and resend require one. */
+  function idempotencyHeaders() {
+    return { 'x-idempotency-key': `flow-${randomUUID()}` };
   }
 
   async function readMembershipStatus(membershipId: number) {
@@ -163,18 +178,15 @@ describe('Security: invitation lifecycle flow abuse', () => {
 
   describe('revoke closes the invitation for every downstream step', () => {
     it('a revoked invitation cannot be accepted, even with the correct token', async () => {
-      // Answered **404, not 400**, and deliberately so. The accept route resolves the owning organization
-      // through the SECURITY DEFINER `resolve_member_invitation_lookup_by_public_id`, which
-      // migration 20260608051000 hardened with four guards — `accepted_at IS NULL`,
-      // `revoked_at IS NULL`, and both `deleted_at IS NULL`. A revoked invitation therefore does not
-      // resolve at all, so the caller learns nothing about its state (no "this was revoked" oracle
-      // for someone probing invitation ids). The service's `assertInvitationAcceptable` revoked
-      // branch is defense-in-depth behind that lookup, not the path a request actually takes.
+      // Answered **404**: revoking also ends the invited membership (REQ-1), and the accept lookup
+      // (`resolve_membership_invitation_lookup_by_public_id`) never resolves the invite of a removed
+      // member or a deleted organization (D59). An accepted or expired invite still resolves and is
+      // refused with a 400 — after the verified-email match, so only the invitee learns its state.
       const context = await createPendingInvitation();
 
       const revoke = await injectAuthenticated(app, {
         method: 'DELETE',
-        url: testApiPath(`/tenancy/organization/invitations/${context.invitation.public_id}`),
+        url: revokeUrl(context.inviteeMembership.public_id),
         token: context.adminToken,
       });
       expect(revoke.statusCode).toBe(204);
@@ -182,6 +194,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
       const accept = await injectAuthenticated(app, {
         method: 'POST',
         url: acceptUrl(context.invitation.public_id),
+        headers: idempotencyHeaders(),
         token: context.inviteeToken,
         payload: { token: context.rawToken },
       });
@@ -189,30 +202,29 @@ describe('Security: invitation lifecycle flow abuse', () => {
 
       // And the membership was never activated by the attempt.
       const membership = await readMembershipStatus(context.inviteeMembership.id);
-      expect(membership?.status).not.toBe('ACTIVE');
+      expect(membership?.status).not.toBe('active');
     });
 
     it('a revoked invitation cannot be resent (no re-opening a closed invite)', async () => {
       // Resend mints a fresh token. If it worked on a revoked row, revoke would be reversible by
-      // anyone holding invitation:manage — the audit trail would show a revoke that did not stick.
+      // anyone holding membership:update — the audit trail would show a revoke that did not stick.
       const context = await createPendingInvitation();
 
       await injectAuthenticated(app, {
         method: 'DELETE',
-        url: testApiPath(`/tenancy/organization/invitations/${context.invitation.public_id}`),
+        url: revokeUrl(context.inviteeMembership.public_id),
         token: context.adminToken,
       });
 
       const resend = await injectAuthenticated(app, {
         method: 'POST',
-        url: testApiPath(
-          `/tenancy/organization/invitations/${context.invitation.public_id}/resend`,
-        ),
+        url: resendUrl(context.inviteeMembership.public_id),
+        headers: idempotencyHeaders(),
         token: context.adminToken,
         payload: { expires_in_days: 7 },
       });
       // 404 rather than the service's `invitationRevoked` 400: revoke also soft-deletes the
-      // dangling INVITED membership (REQ-1), and resend resolves that membership before it ever
+      // dangling invited membership (REQ-1), and resend resolves that membership before it ever
       // reaches its own revoked-at check. Pinned as 404 because that is the contract a client sees.
       expect(resend.statusCode).toBe(404);
     });
@@ -222,7 +234,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
 
       await injectAuthenticated(app, {
         method: 'DELETE',
-        url: testApiPath(`/tenancy/organization/invitations/${context.invitation.public_id}`),
+        url: revokeUrl(context.inviteeMembership.public_id),
         token: context.adminToken,
       });
 
@@ -244,6 +256,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
       const first = await injectAuthenticated(app, {
         method: 'POST',
         url: acceptUrl(context.invitation.public_id),
+        headers: idempotencyHeaders(),
         token: context.inviteeToken,
         payload: { token: context.rawToken },
       });
@@ -252,14 +265,16 @@ describe('Security: invitation lifecycle flow abuse', () => {
       const replay = await injectAuthenticated(app, {
         method: 'POST',
         url: acceptUrl(context.invitation.public_id),
+        headers: idempotencyHeaders(),
         token: context.inviteeToken,
         payload: { token: context.rawToken },
       });
-      // Same lookup guard as the revoked case: `accepted_at IS NULL` means an accepted invitation
-      // stops resolving entirely, so the replay is a 404. The membership stays ACTIVE exactly once.
-      expect(replay.statusCode).toBe(404);
+      // An accepted invite still resolves (D59), so the replay is the service's 400
+      // (`invitation_already_accepted`); the membership stays active, joined once.
+      expect(replay.statusCode).toBe(400);
+      expect(replay.body).toContain('invitation_already_accepted');
       const membership = await readMembershipStatus(context.inviteeMembership.id);
-      expect(membership?.status).toBe('ACTIVE');
+      expect(membership?.status).toBe('active');
     });
 
     it('an accepted invitation cannot be resent', async () => {
@@ -268,15 +283,15 @@ describe('Security: invitation lifecycle flow abuse', () => {
       await injectAuthenticated(app, {
         method: 'POST',
         url: acceptUrl(context.invitation.public_id),
+        headers: idempotencyHeaders(),
         token: context.inviteeToken,
         payload: { token: context.rawToken },
       });
 
       const resend = await injectAuthenticated(app, {
         method: 'POST',
-        url: testApiPath(
-          `/tenancy/organization/invitations/${context.invitation.public_id}/resend`,
-        ),
+        url: resendUrl(context.inviteeMembership.public_id),
+        headers: idempotencyHeaders(),
         token: context.adminToken,
         payload: { expires_in_days: 7 },
       });
@@ -294,9 +309,8 @@ describe('Security: invitation lifecycle flow abuse', () => {
 
       const resend = await injectAuthenticated(app, {
         method: 'POST',
-        url: testApiPath(
-          `/tenancy/organization/invitations/${context.invitation.public_id}/resend`,
-        ),
+        url: resendUrl(context.inviteeMembership.public_id),
+        headers: idempotencyHeaders(),
         token: context.adminToken,
         payload: { expires_in_days: 7 },
       });
@@ -305,6 +319,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
       const acceptWithOldToken = await injectAuthenticated(app, {
         method: 'POST',
         url: acceptUrl(context.invitation.public_id),
+        headers: idempotencyHeaders(),
         token: context.inviteeToken,
         payload: { token: context.rawToken },
       });
@@ -312,7 +327,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
 
       // The invitation is still open — the rotation refused the stale token without consuming it.
       const membership = await readMembershipStatus(context.inviteeMembership.id);
-      expect(membership?.status).toBe('INVITED');
+      expect(membership?.status).toBe('invited');
     });
   });
 
@@ -331,6 +346,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
       const hostile = await injectAuthenticated(app, {
         method: 'POST',
         url: acceptUrl(context.invitation.public_id),
+        headers: idempotencyHeaders(),
         token: attackerToken,
         payload: { token: context.rawToken },
       });
@@ -339,13 +355,14 @@ describe('Security: invitation lifecycle flow abuse', () => {
       const legitimate = await injectAuthenticated(app, {
         method: 'POST',
         url: acceptUrl(context.invitation.public_id),
+        headers: idempotencyHeaders(),
         token: context.inviteeToken,
         payload: { token: context.rawToken },
       });
       expect(legitimate.statusCode).toBe(200);
 
       const membership = await readMembershipStatus(context.inviteeMembership.id);
-      expect(membership?.status).toBe('ACTIVE');
+      expect(membership?.status).toBe('active');
     });
 
     it('rejects a wrong token without consuming the invitation', async () => {
@@ -354,6 +371,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
       const wrongToken = await injectAuthenticated(app, {
         method: 'POST',
         url: acceptUrl(context.invitation.public_id),
+        headers: idempotencyHeaders(),
         token: context.inviteeToken,
         payload: { token: `flow-token-${randomUUID()}` },
       });
@@ -362,6 +380,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
       const legitimate = await injectAuthenticated(app, {
         method: 'POST',
         url: acceptUrl(context.invitation.public_id),
+        headers: idempotencyHeaders(),
         token: context.inviteeToken,
         payload: { token: context.rawToken },
       });
@@ -376,6 +395,7 @@ describe('Security: invitation lifecycle flow abuse', () => {
       const accept = await injectAuthenticated(app, {
         method: 'POST',
         url: acceptUrl(context.invitation.public_id),
+        headers: idempotencyHeaders(),
         token: context.inviteeToken,
         payload: { token: context.rawToken },
       });
@@ -383,22 +403,36 @@ describe('Security: invitation lifecycle flow abuse', () => {
       expect(accept.body).toContain('expired');
 
       const membership = await readMembershipStatus(context.inviteeMembership.id);
-      expect(membership?.status).toBe('INVITED');
+      expect(membership?.status).toBe('invited');
     });
 
-    it('refuses to resend an expired invitation', async () => {
+    it('resends an expired invitation with a new token and a new expiry (T11)', async () => {
       const context = await createPendingInvitation({ expired: true });
 
       const resend = await injectAuthenticated(app, {
         method: 'POST',
-        url: testApiPath(
-          `/tenancy/organization/invitations/${context.invitation.public_id}/resend`,
-        ),
+        url: resendUrl(context.inviteeMembership.public_id),
+        headers: idempotencyHeaders(),
         token: context.adminToken,
         payload: { expires_in_days: 7 },
       });
-      expect(resend.statusCode).toBe(400);
-      expect(resend.body).toContain('expired');
+      expect(resend.statusCode).toBe(200);
+      const [rotated] = await database
+        .select()
+        .from(membership_invitations)
+        .where(eq(membership_invitations.id, context.invitation.id));
+      expect(rotated!.expires_at.getTime()).toBeGreaterThan(Date.now());
+      expect(rotated!.token_hash).not.toBe(hashInvitationToken(context.rawToken));
+
+      // The old token is dead; the invitation is open again for the new one only.
+      const acceptWithOldToken = await injectAuthenticated(app, {
+        method: 'POST',
+        url: acceptUrl(context.invitation.public_id),
+        headers: idempotencyHeaders(),
+        token: context.inviteeToken,
+        payload: { token: context.rawToken },
+      });
+      expect(acceptWithOldToken.statusCode).toBe(400);
     });
   });
 });

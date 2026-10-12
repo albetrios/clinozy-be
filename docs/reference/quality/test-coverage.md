@@ -19,15 +19,27 @@ whole tree. From `vitest.config.ts`:
 include:  src/domains/**/*.service.ts
           src/domains/**/*.repository.ts
           src/domains/**/*.controller.ts
+          src/domains/app/**/*.rules.ts
+          src/domains/app/**/*.ledger.ts
+          src/domains/app/**/*.amounts.ts
+          src/domains/app/**/*.pricing.ts
+          src/domains/app/**/*.lines.ts
+          src/domains/app/**/workers/*.ts
           src/shared/**/*.ts
 exclude:  src/tests/**, src/scripts/**, src/domains/**/__tests__/**, *.d.ts
 ```
 
-So validators, serializers, schemas, DTOs, workers, queues, events, seeds, and
-all of `src/infrastructure/**` are **outside** the coverage denominator. They
-are still tested (see `docs`/`CLAUDE.md` testing sections) — they just do not
-count toward the coverage percentage. This keeps the metric focused on the code
-where an untested path is most likely to be an expensive bug.
+The `app` domain keeps much of its logic beside its services rather than in
+them — the record rules (`*.rules.ts`), the money ledgers (`*.ledger.ts`), the
+invoice arithmetic (`*.amounts.ts`, `*.pricing.ts`, `*.lines.ts`) and its
+workers (day-close auto-close, task rules, the record purge) — so those files are
+measured too. Otherwise validators, serializers, schemas, DTOs, other domains'
+workers, queues, events, seeds, and all of `src/infrastructure/**` are
+**outside** the coverage denominator. They are still tested (see
+`docs`/`CLAUDE.md` testing sections) — they just do not count toward the
+coverage percentage. This keeps the metric focused on the code where an
+untested path is most likely to be an expensive bug. Patch coverage
+(`check-patch-coverage.mjs` `isMeasuredPath`) mirrors the same list.
 
 ## Baseline — actual coverage (measured surface)
 
@@ -37,10 +49,13 @@ merging both shard reports through
 
 | Metric     | Coverage | Gate threshold |
 | ---------- | -------- | -------------- |
-| Lines      | ~93%     | 91%            |
-| Statements | ~93%     | 91%            |
-| Functions  | ~96%     | 94%            |
-| Branches   | ~84%     | 82%            |
+| Lines      | 96.40%   | 96%            |
+| Statements | 94.74%   | 94%            |
+| Functions  | 97.42%   | 97%            |
+| Branches   | 85.61%   | 85%            |
+
+Measured on the clinic launch branch with the `app` patterns above in scope,
+merged as CI merges it (unit + global, plus the DB-bound projects).
 
 The codebase already sits **above** the configured thresholds. The thresholds
 are conservative floors that **ratchet upward only** (never down).
@@ -48,7 +63,10 @@ are conservative floors that **ratchet upward only** (never down).
 **Ratchet history.** Floors started at 90/90/94/80 (lines/statements/functions/branches).
 Hardening-roadmap workstream **H6** raised lines/statements 90→91 and branches
 80→82 (each still ~2pts below the measured actual, so the merged gate stays
-green). The next H6-final step takes a fresh measured run to push branches
+green). The clinic launch brought the `app` domain's rules, ledgers, invoice
+arithmetic and workers into scope and raised the floors to just under the
+merged measurement: lines 91→96, statements 91→94, functions 94→97 and
+branches 82→85. The next H6-final step takes a fresh measured run to push branches
 toward ~88 and `functions` past 94, alongside raising the Stryker `break`
 kill-rate from 70 — both gated on the measurement so a floor never lands above
 the real number.

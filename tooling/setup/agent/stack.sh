@@ -7,6 +7,9 @@
 #   bash tooling/setup/agent/stack.sh stop     # pnpm dev:stack:stop — stop the API + worker
 #                                              #   (Postgres + Redis stay: pnpm compose:down)
 #
+# A scratch database again (drop, recreate, migrate, seed, restart): pnpm dev:stack:reset-db
+# (bootstrap.sh --reset-database).
+#
 # Works from the files bootstrap.sh writes to $AGENT_STACK_DIR (default /tmp/agent-stack):
 # `status`, `bootstrap.log`, and `<api|worker>.{log,pid}`. Linux and macOS (`ps`, no /proc).
 set -uo pipefail

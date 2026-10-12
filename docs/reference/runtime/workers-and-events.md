@@ -42,7 +42,7 @@ flowchart LR
 | Registrar                               | Example event types                                                   | Side effect             |
 | --------------------------------------- | --------------------------------------------------------------------- | ----------------------- |
 | `registerAuthMethodEventHandlers`       | `AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED`, password reset, email verification | Mail queue              |
-| `registerMemberInvitationEventHandlers` | `MEMBER_INVITATION_EVENT.CREATED`, `RESENT`                           | Mail queue              |
+| `registerMembershipInvitationEventHandlers` | `MEMBERSHIP_INVITATION_EVENT.CREATED`, `RESENT`                           | Mail queue              |
 | `registerNotifyEventHandlers`           | `NOTIFY_EVENT.WEBHOOK_DELIVERY_REQUESTED`                             | BullMQ webhook delivery |
 | `registerNotifyEventHandlers`           | `ORGANIZATION_EVENT.*`, `MEMBERSHIP_EVENT.*`, `SUBSCRIPTION_EVENT.*`   | PENDING webhook delivery attempts (organization-resource-webhook-flow) |
 
@@ -243,7 +243,7 @@ Every BullMQ worker is registered exactly once in [`worker-registration.registry
 | `isEnabled()`                     | Optional skip (e.g. mail/Stripe disabled by env)                                                                                                                                                                                                                                        |
 | `create()`                        | Factory invoked by bootstrap                                                                                                                                                                                                                                                            |
 
-Currently **33 workers** are registered (**30** use Postgres, **3** are Redis-only — `idempotency-cardinality`, `dlq-depth`, `commit-dispatch-recovery`; **27** are cron-scheduled, **6** are event-driven). Add a new worker by appending one entry — bootstrap, scheduler filtering, connection budgeting, and the scheduler-registry audit pick it up automatically — and add its queue constant to `WORKER_QUEUE_NAMES` in [`queue-catalog.ts`](../../../src/infrastructure/queue/queue-catalog.ts) (plus `WORKER_THROUGHPUT_QUEUE_NAMES` for a throughput worker), which gives it a depth gauge, a sampled and trimmed DLQ, a heartbeat read-out and a Bull Board entry. `queue-catalog.coverage.unit.test.ts` fails until you do.
+Currently **45 workers** are registered (**42** use Postgres, **3** are Redis-only — `idempotency-cardinality`, `dlq-depth`, `commit-dispatch-recovery`; **34** are cron-scheduled, **11** are event-driven). Add a new worker by appending one entry — bootstrap, scheduler filtering, connection budgeting, and the scheduler-registry audit pick it up automatically — and add its queue constant to `WORKER_QUEUE_NAMES` in [`queue-catalog.ts`](../../../src/infrastructure/queue/queue-catalog.ts) (plus `WORKER_THROUGHPUT_QUEUE_NAMES` for a throughput worker), which gives it a depth gauge, a sampled and trimmed DLQ, a heartbeat read-out and a Bull Board entry. `queue-catalog.coverage.unit.test.ts` fails until you do.
 
 Every worker the bootstrap starts carries three hooks: the dead-letter + Sentry `failed` listener, the job-duration histogram, and the queue heartbeat (`worker:queue:<name>:last_job_at`, written at most every 5 s per queue). `/readyz` answers `stalled` when every recorded throughput heartbeat is older than `WORKER_HEALTH_STALL_TIMEOUT_MS` while jobs wait in a throughput queue that is not paused for its provider.
 
@@ -302,11 +302,11 @@ Every `enqueue*` helper injects the active W3C trace context (`captureTraceConte
 
 ## Canonical examples
 
-**Tenancy — member invitation**
+**Tenancy — membership invitation**
 
 ```text
-member-invitation.service.ts  →  eventBus.emit(tenancy.member_invitation.created|resent)
-tenancy/sub-domains/member-invitation/events/*.ts  →  recordOutboxEmail() + onCommit(dispatchOutboxEmail)
+membership-invitation.service.ts  →  eventBus.emit(tenancy.membership_invitation.created|resent)
+tenancy/sub-domains/membership-invitation/events/*.ts  →  recordOutboxEmail() + onCommit(dispatchOutboxEmail)
 tenancy/events/index.ts  →  registerTenancyEventHandlers()
 ```
 

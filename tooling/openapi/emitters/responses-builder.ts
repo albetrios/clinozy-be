@@ -77,6 +77,11 @@ const errorResponseSchema = {
             'Machine-readable snake_case error code (e.g. unauthorized, forbidden, not_found, conflict, invalid_field)',
         },
         detail: { type: 'string', description: 'Human-readable explanation of what went wrong' },
+        reason: {
+          type: 'string',
+          description:
+            'Stable snake_case sub-code on select 4xx errors — the field to branch on, never `detail`. Every 403 for a permission the caller lacks carries `missing_permission` (the route gate and the service checks alike); others: `field_permission_required`, `mfa_required`, … (docs/reference/api/response-codes.md). Absent on 5xx.',
+        },
         documentation_url: {
           type: 'string',
           description: 'Link to the documentation page for this error code',
@@ -132,6 +137,20 @@ function errorExample(
     },
     meta: { request_id: EXAMPLE_REQUEST_ID },
   };
+}
+
+/**
+ * The 403 example every operation documents: the permission gate's answer, with its `reason`
+ * `missing_permission` (launch D83 (6) — the route gate and the service checks carry the same one).
+ */
+function permissionDeniedExample(): Record<string, unknown> {
+  const example = errorExample(
+    'request_error',
+    'forbidden',
+    'Your role lacks the permission this operation requires in the current organization',
+  );
+  const error = example.error as Record<string, unknown>;
+  return { ...example, error: { ...error, reason: 'missing_permission' } };
 }
 
 /**
@@ -279,11 +298,7 @@ export function buildResponses(
     content: {
       'application/json': withCapturedExample(routeKey, 403, {
         schema: errorResponseSchema,
-        example: errorExample(
-          'request_error',
-          'forbidden',
-          'Your role lacks the permission this operation requires in the current organization',
-        ),
+        example: permissionDeniedExample(),
       }),
     },
   };

@@ -220,11 +220,16 @@ export const MODERATE_AUTHED_RATE_LIMIT = {
   },
 } as const;
 
-/** Token refresh (30 req / 60s), keyed by IP — runs on the default hook (onRequest). */
+/**
+ * Token refresh (30 req / 60s in production), keyed by IP — runs on the default hook (onRequest).
+ * Lifted when RATE_LIMIT_RELAXED_CAPS is set (development/test), like its siblings: every tab of a
+ * frontend E2E run — and every k6 VU — refreshes from one loopback IP, so the shared 30/min bucket
+ * ended sessions mid-suite (launch ROUTE #156, N22).
+ */
 export const REFRESH_RATE_LIMIT = {
   config: {
     rateLimit: {
-      max: 30,
+      max: RATE_LIMIT_CAPS_RELAXED ? 5000 : 30,
       timeWindow: MILLISECONDS_PER_MINUTE,
       keyGenerator: buildRateLimitKeyFromIpAddress,
       onExceeded: recordRouteRateLimitExceeded,

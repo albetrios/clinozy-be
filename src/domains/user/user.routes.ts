@@ -8,6 +8,7 @@ import {
 import { GLOBAL_ROLES } from '@/shared/constants/index.js';
 import { requireRole } from '@/shared/utils/auth/authorization.util.js';
 import { listOrganizationsQueryDto } from '@/domains/tenancy/sub-domains/organization/organization.dto.js';
+import { listMyMembershipInvitationsQueryDto } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.dto.js';
 import { createUserController } from './user.controller.js';
 import { createUserDataExportController } from './sub-domains/user-data-export/user-data-export.controller.js';
 import { PutNotificationPreferencesDto } from './sub-domains/user-notification-preferences/user-notification-preferences.dto.js';
@@ -16,6 +17,7 @@ import {
   AdminUpdateUserDto,
   dataExportIdParamsDto,
   UpdateMeDto,
+  UpdateMyPresenceDto,
   UploadAvatarDto,
   userIdParamsDto,
 } from './user.dto.js';
@@ -27,13 +29,15 @@ import {
  * role; data-export request is rate-limited via {@link EXPENSIVE_AUTHED_RATE_LIMIT}.
  */
 export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
-  // The caller's own organizations live at `/users/me/organizations`; the data is tenancy's, so
-  // its service is injected here the same way the audit service is injected into the organization
+  // The caller's own organizations live at `/users/me/organizations`, and their pending
+  // invitations at `/users/me/membership-invitations` (launch D84); the data is tenancy's, so its
+  // services are injected here the same way the audit service is injected into the organization
   // routes for `/tenancy/organization/audit-logs`. Every container is composed before routes
-  // register, so this is always present in production wiring.
+  // register, so these are always present in production wiring.
   const controller = createUserController({
     ...app.userDomain,
     organizationService: app.tenancyDomain?.organizationService,
+    membershipInvitationService: app.tenancyDomain?.membershipInvitationService,
   });
   const dataExportController = createUserDataExportController(app.userDomain.userDataExportService);
   const zodApplication = app.withTypeProvider<ZodTypeProvider>();
@@ -160,6 +164,21 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
     },
     controller.listMyOrganizations,
   );
+  zodApplication.get(
+    '/me/membership-invitations',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        summary: 'List my invitations',
+        description:
+          "Returns the authenticated user's pending invitations — not accepted, revoked or expired — matched on their verified email, oldest first: each with the organization (id, name, slug, logo_url), the role names (the main role first) and who invited them. An unverified email reads none. Accept or decline one with POST /tenancy/membership-invitations/{membership_invitation_id}/accept or /decline.",
+        // The data is tenancy's invitations; the path follows the caller's scope (see above).
+        tags: ['Invitation'],
+        querystring: listMyMembershipInvitationsQueryDto,
+      },
+    },
+    controller.listMyMembershipInvitations,
+  );
   zodApplication.patch(
     '/me',
     {
@@ -178,6 +197,22 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       },
     },
     controller.patchMe,
+  );
+  zodApplication.put(
+    '/me/presence',
+    {
+      onRequest: [app.authenticate],
+      // A self-service write like PATCH /me — the moderate-authed tier.
+      ...MODERATE_AUTHED_RATE_LIMIT,
+      schema: {
+        summary: 'Set my presence',
+        description:
+          "Sets the authenticated user's presence — online, busy or away — the status dot the rest of the team sees. Returns the refreshed self profile.",
+        tags: ['User'],
+        body: UpdateMyPresenceDto,
+      },
+    },
+    controller.putMyPresence,
   );
   zodApplication.post(
     '/me/onboarding/complete',

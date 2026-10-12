@@ -34,7 +34,7 @@ stateDiagram-v2
 
 ## Events
 
-- Consumes: `MEMBER_INVITATION_EVENT.ACCEPTED` — the one cross-domain producer, fanning a notification out to the organization's `membership:manage` holders and invalidating each recipient's cached unread count. Every other notification row is created directly via `createAndDispatchNotification` (persist + enqueue channel dispatch), then delivered asynchronously by the `notification` BullMQ worker.
+- Consumes: `MEMBERSHIP_INVITATION_EVENT.ACCEPTED` — the one cross-domain producer, fanning a notification out to the organization's `membership:create` holders and invalidating each recipient's cached unread count. Every other notification row is created directly via `createAndDispatchNotification` (persist + enqueue channel dispatch), then delivered asynchronously by the `notification` BullMQ worker.
 
 ## Failure modes
 

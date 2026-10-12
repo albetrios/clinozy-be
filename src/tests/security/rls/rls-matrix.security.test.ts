@@ -63,12 +63,20 @@ const TENANT_CRUD_EXCLUDED_POLICY_SHAPES = new Set([
   'billing.stripe_subscription_tombstones',
   'billing.stripe_webhook_events',
   'notify.webhook_delivery_attempts',
-  'tenancy.member_invitations',
+  'tenancy.membership_additional_roles',
+  'tenancy.membership_invitations',
   'tenancy.organization_settings',
   'tenancy.organizations',
   'tenancy.permissions',
   'tenancy.role_permissions',
 ]);
+
+// The app's own records (schema `app`, launch ROUTE #125–#153) are tenant tables, but this matrix
+// seeds none of them: their CRUD isolation as the application role is asserted against rows the
+// API wrote in `app-tables-rls-matrix.security.test.ts`, route by route in
+// `app-cross-organization.security.test.ts`, and their policies by
+// `force-rls-policies-restrict.security.test.ts`. Excluded by name here, not skipped silently.
+const TENANT_CRUD_EXCLUDED_SCHEMAS = new Set(['app']);
 
 async function tenantRowSnapshot(
   schemaName: string,
@@ -147,8 +155,11 @@ describe('Security: RLS matrix (all FORCE RLS tables)', () => {
 
   const crudMatrixTables = EXPECTED_FORCE_RLS_TABLES.filter(
     (table) =>
-      !TENANT_CRUD_EXCLUDED_POLICY_SHAPES.has(
-        tableKey({ schemaName: table.schemaName, tableName: table.tableName }),
+      !(
+        TENANT_CRUD_EXCLUDED_SCHEMAS.has(table.schemaName) ||
+        TENANT_CRUD_EXCLUDED_POLICY_SHAPES.has(
+          tableKey({ schemaName: table.schemaName, tableName: table.tableName }),
+        )
       ),
   );
 

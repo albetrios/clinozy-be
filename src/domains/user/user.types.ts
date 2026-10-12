@@ -32,6 +32,8 @@ export interface UserOutput {
   last_name: string | null;
   job_title: string | null;
   avatar_url: string | null;
+  /** The status dot the team sees — `online`, `busy` or `away` (`PUT /users/me/presence`). */
+  presence: string;
   status: string;
   /**
    * Whether the caller has finished the onboarding wizard. Drives the frontend's

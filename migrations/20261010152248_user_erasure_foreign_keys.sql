@@ -15,7 +15,7 @@
 -- organizations.owner_user_id stays NO ACTION: a user who owns a team organization cannot be
 -- deleted, and account deletion tombstones the personal organization, which is purged with it.
 -- Constraint names are kept; each is re-added NOT VALID and validated (no long lock).
-ALTER TABLE tenancy.member_invitations ALTER COLUMN "invited_by_user_id" DROP NOT NULL;
+ALTER TABLE tenancy.membership_invitations ALTER COLUMN "invited_by_user_id" DROP NOT NULL;
 --> statement-breakpoint
 ALTER TABLE upload.uploads ALTER COLUMN "user_id" DROP NOT NULL;
 --> statement-breakpoint
@@ -67,13 +67,13 @@ ALTER TABLE tenancy.api_keys DROP CONSTRAINT "api_keys_updated_by_user_id_users_
 --> statement-breakpoint
 ALTER TABLE tenancy.api_keys VALIDATE CONSTRAINT "api_keys_updated_by_user_id_users_id_fk";
 --> statement-breakpoint
-ALTER TABLE tenancy.member_invitations DROP CONSTRAINT "member_invitations_created_by_user_id_users_id_fk", ADD CONSTRAINT "member_invitations_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES auth.users ("id") ON DELETE SET NULL NOT VALID;
+ALTER TABLE tenancy.membership_invitations DROP CONSTRAINT "membership_invitations_created_by_user_id_users_id_fk", ADD CONSTRAINT "membership_invitations_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES auth.users ("id") ON DELETE SET NULL NOT VALID;
 --> statement-breakpoint
-ALTER TABLE tenancy.member_invitations VALIDATE CONSTRAINT "member_invitations_created_by_user_id_users_id_fk";
+ALTER TABLE tenancy.membership_invitations VALIDATE CONSTRAINT "membership_invitations_created_by_user_id_users_id_fk";
 --> statement-breakpoint
-ALTER TABLE tenancy.member_invitations DROP CONSTRAINT "member_invitations_invited_by_user_id_users_id_fk", ADD CONSTRAINT "member_invitations_invited_by_user_id_users_id_fk" FOREIGN KEY ("invited_by_user_id") REFERENCES auth.users ("id") ON DELETE SET NULL NOT VALID;
+ALTER TABLE tenancy.membership_invitations DROP CONSTRAINT "membership_invitations_invited_by_user_id_users_id_fk", ADD CONSTRAINT "membership_invitations_invited_by_user_id_users_id_fk" FOREIGN KEY ("invited_by_user_id") REFERENCES auth.users ("id") ON DELETE SET NULL NOT VALID;
 --> statement-breakpoint
-ALTER TABLE tenancy.member_invitations VALIDATE CONSTRAINT "member_invitations_invited_by_user_id_users_id_fk";
+ALTER TABLE tenancy.membership_invitations VALIDATE CONSTRAINT "membership_invitations_invited_by_user_id_users_id_fk";
 --> statement-breakpoint
 ALTER TABLE tenancy.memberships DROP CONSTRAINT "memberships_created_by_user_id_users_id_fk", ADD CONSTRAINT "memberships_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES auth.users ("id") ON DELETE SET NULL NOT VALID;
 --> statement-breakpoint

@@ -18,29 +18,11 @@ import { buildStripeWebhookTestSignatureHeader } from '@/tests/contract/helpers/
 import { env } from '@/shared/config/env.config.js';
 import type { FastifyInstance } from 'fastify';
 
-vi.mock('@/domains/billing/sub-domains/subscription/stripe-payment-provider.js', () => {
-  class FakeStripePaymentProvider {
-    isConfigured(): boolean {
-      return true;
-    }
-    getProviderPriceId(): string {
-      return 'price_test_fake';
-    }
-    async createSubscription(): Promise<{
-      providerSubscriptionId: string;
-      providerCustomerId: string;
-    }> {
-      return {
-        providerSubscriptionId: `sub_fake_${Date.now()}`,
-        providerCustomerId: `cus_fake_${Date.now()}`,
-      };
-    }
-    async cancelSubscriptionAtPeriodEnd(): Promise<void> {}
-    async cancelSubscriptionImmediately(): Promise<void> {}
-    async resumeSubscription(): Promise<void> {}
-    async updateSubscriptionPrice(): Promise<void> {}
-  }
-  return { StripePaymentProvider: FakeStripePaymentProvider };
+vi.mock('@/domains/billing/sub-domains/subscription/stripe-payment-provider.js', async () => {
+  const { FakePaymentProvider } = await import(
+    '@/domains/billing/__tests__/factories/fake-payment-provider.js'
+  );
+  return { StripePaymentProvider: FakePaymentProvider };
 });
 
 const SUBSCRIPTION_PERMISSIONS = ['subscription:read', 'subscription:manage'];
@@ -89,7 +71,7 @@ describe('Billing subscription — happy paths (mocked payment provider)', () =>
 
   it('POST /billing/subscriptions creates a subscription (200)', async () => {
     const { token } = await createAuthorizedBillingContext();
-    const plan = await createTestPlan();
+    const plan = await createTestPlan({ stripePriceMonthlyId: 'price_test_fake' });
 
     const response = await injectAuthenticated(app, {
       method: 'POST',
@@ -109,7 +91,7 @@ describe('Billing subscription — happy paths (mocked payment provider)', () =>
 
     const user = await createTestUser();
     const organization = await createTestOrganization({ ownerUserId: user.id });
-    const plan = await createTestPlan();
+    const plan = await createTestPlan({ stripePriceMonthlyId: 'price_test_fake' });
     const subscription = await createTestSubscription({
       organizationId: organization.id,
       planId: plan.id,

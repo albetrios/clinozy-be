@@ -11,13 +11,14 @@ import {
   seedPermissions,
   createRoleWithPermissions,
   createMembership,
+  ROLE_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import type { FastifyInstance } from 'fastify';
 
 const ROLE_FLOW_PERMISSIONS = [
   TENANCY_PERMISSIONS.ROLE_READ,
-  TENANCY_PERMISSIONS.ROLE_MANAGE,
+  ...ROLE_WRITE_PERMISSION_CODES,
   TENANCY_PERMISSIONS.MEMBERSHIP_READ,
   TENANCY_PERMISSIONS.ORGANIZATION_READ,
 ];

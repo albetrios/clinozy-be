@@ -31,6 +31,12 @@ const RESERVED_DOMAIN_ROOT_DIRS = new Set([
   'seed', // per-domain seed/ dir (DomainSeedModule: reference + bulk seeders)
 ]);
 
+/**
+ * Deepest allowed path under a domain, counted in segments: a nested sub-domain's event-handler
+ * test, `sub-domains/<sub-domain>/<nested-sub-domain>/__tests__/unit/events/<file>`.
+ */
+const MAX_DOMAIN_ENTRY_DEPTH = 7;
+
 /** Allowed subdirectories directly under `__tests__/`. */
 const ALLOWED_TESTS_SUBDIRS = new Set(['unit', 'integration', 'e2e', 'factories']);
 
@@ -178,9 +184,11 @@ function validateDomain(domainName: string): ValidationResult {
     const depth = String(entry).split('/').length;
     return Math.max(deepest, depth);
   }, 0);
-  if (maxDepth > 6) {
+  // 7 is the deepest a nested sub-domain's file legitimately sits:
+  // sub-domains/<sub-domain>/<nested-sub-domain>/__tests__/unit/events/<file>.
+  if (maxDepth > MAX_DOMAIN_ENTRY_DEPTH) {
     result.warnings.push(
-      `Folder depth under domain exceeds 6 (${maxDepth}); prefer depth ≤ 5 under sub-domains/ for new work`,
+      `Folder depth under domain exceeds ${MAX_DOMAIN_ENTRY_DEPTH} (${maxDepth}); a nested sub-domain sits directly in its parent sub-domain folder — flatten anything deeper`,
     );
   }
 

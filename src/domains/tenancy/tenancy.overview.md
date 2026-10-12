@@ -8,7 +8,7 @@ Multi-tenant primitives for the platform: organizations, memberships, member rol
 
 What it owns:
 
-- The `tenancy.organizations`, `tenancy.memberships`, `tenancy.roles`, `tenancy.permissions`, `tenancy.member_invitations`, and `tenancy.api_keys` tables (plus settings + notification policy children).
+- The `tenancy.organizations`, `tenancy.memberships`, `tenancy.roles`, `tenancy.permissions`, `tenancy.membership_invitations`, and `tenancy.api_keys` tables (plus settings + notification policy children).
 - Organization slug uniqueness, organization public-id format (URL-safe public ids).
 - The Redis-backed permission cache (`PERMISSION_CACHE_DEFAULT_TTL_SECONDS = 300`) and the `requireOrganizationPermission` Fastify preHandler.
 - The invitation token issuance (parallel construction to email verification-code tokens).
@@ -27,7 +27,7 @@ What it does not own: identity proof (lives in [auth](src/domains/auth/)), user 
 | Sub-domain | Purpose |
 | --- | --- |
 | [organization](src/domains/tenancy/sub-domains/organization/) | Organization lifecycle (create, slug change, delete) and child resources: `organization-settings`, `organization-notification-policy`, `organization-api-key`. |
-| [membership](src/domains/tenancy/sub-domains/membership/) | Member lifecycle: who is in which organization with which role. Includes nested `member-invitation` resource (token issuance + accept). |
+| [membership](src/domains/tenancy/sub-domains/membership/) | Member lifecycle: who is in which organization with which role. Includes nested `membership-invitation` resource (token issuance + accept). |
 | [member-roles](src/domains/tenancy/sub-domains/member-roles/) | Per-organization role definitions and the join table `member-role-permission`. |
 | [permission](src/domains/tenancy/sub-domains/permission/) | Permission resolution: `authorization.service.ts` (Redis-cached) + `permission-cache.service.ts`. The single resolver consulted by `requireOrganizationPermission`. |
 
@@ -75,7 +75,7 @@ stateDiagram-v2
 
 ## Events
 
-- Emits: `MEMBER_INVITATION_EVENT.CREATED`, `MEMBER_INVITATION_EVENT.RESENT` (each handler enqueues mail), `MEMBER_INVITATION_EVENT.ACCEPTED` (in-app notification), and the organization resource events `ORGANIZATION_EVENT.CREATED` / `UPDATED` and `MEMBERSHIP_EVENT.CREATED` / `UPDATED` / `DELETED` with the resource's public JSON — delivered to subscribed webhooks by notify (`organization-resource-webhook-flow` in [src/FLOWS.md](src/FLOWS.md)).
+- Emits: `MEMBERSHIP_INVITATION_EVENT.CREATED`, `MEMBERSHIP_INVITATION_EVENT.RESENT` (each handler enqueues mail), `MEMBERSHIP_INVITATION_EVENT.ACCEPTED` / `DECLINED` (in-app notification), and the organization resource events `ORGANIZATION_EVENT.CREATED` / `UPDATED` and `MEMBERSHIP_EVENT.CREATED` / `UPDATED` / `DELETED` with the resource's public JSON — delivered to subscribed webhooks by notify (`organization-resource-webhook-flow` in [src/FLOWS.md](src/FLOWS.md)).
 - Consumes: nothing — tenancy is the source of organization-scope events others react to.
 
 ## Failure modes

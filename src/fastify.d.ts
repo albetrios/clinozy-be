@@ -4,6 +4,7 @@ import type { AuditContainer } from '@/domains/audit/audit.container.js';
 import type { AuthContainer } from '@/domains/auth/auth.container.js';
 import type { BillingContainer } from '@/domains/billing/billing.container.js';
 import type { NotifyContainer } from '@/domains/notify/notify.container.js';
+import type { AppContainer } from '@/domains/app/app.container.js';
 import type { TenancyContainer } from '@/domains/tenancy/tenancy.container.js';
 import type { UploadContainer } from '@/domains/upload/upload.container.js';
 import type { UserContainer } from '@/domains/user/user.container.js';
@@ -59,5 +60,6 @@ declare module 'fastify' {
     billingDomain: BillingContainer;
     notifyDomain: NotifyContainer;
     uploadDomain: UploadContainer;
+    appDomain: AppContainer;
   }
 }

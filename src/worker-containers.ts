@@ -16,6 +16,7 @@ import type { UserContainer } from '@/domains/user/user.container.js';
 import { completeUserContainer, createUserContainerBase } from '@/domains/user/user.container.js';
 import { UserDataExportService } from '@/domains/user/sub-domains/user-data-export/user-data-export.service.js';
 import { UserDataExportRepository } from '@/domains/user/sub-domains/user-data-export/user-data-export.repository.js';
+import { createAppMembershipLeaveStep } from '@/domains/app/app-membership-leave.js';
 
 /**
  * Aggregate of every domain container the API and worker processes need.
@@ -106,8 +107,8 @@ export function createDomainContainers(
   // REQ-4: late-wire billing's subscription service into the membership service so seat enforcement
   // + Stripe seat reconciliation work in the worker process too (membership↔subscription cycle).
   tenancyDomain.membershipService.wireSeatEnforcement(billingDomain.subscriptionService);
-  // Same for invitation revoke, which frees the seat the invitation was holding.
-  tenancyDomain.memberInvitationService.wireSeatQuantitySync(billingDomain.subscriptionService);
+  // Launch K4: a re-driven account deletion ends memberships through the same leave step.
+  tenancyDomain.membershipService.wireLeaveStep(createAppMembershipLeaveStep());
 
   userDomain.userDataExportService.wireCrossDomainServices({
     authSessionService: authDomain.authSessionService,

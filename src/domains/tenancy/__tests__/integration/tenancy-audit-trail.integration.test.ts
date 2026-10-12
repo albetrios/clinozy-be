@@ -11,8 +11,8 @@ import {
   createRoleWithPermissions,
   seedAllPermissions,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
-import { MemberInvitationRepository } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.repository.js';
-import { hashInvitationToken } from '@/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.token.js';
+import { MembershipInvitationRepository } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.repository.js';
+import { hashInvitationToken } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.token.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import {
@@ -181,13 +181,18 @@ describe('tenancy audit trail — organization governance changes reach the audi
       path: '/tenancy/organization/memberships',
       payload: {
         email: `audit-invitee-${randomUUID()}@test.com`,
-        role_id: context.memberRole.public_id,
+        role_ids: [context.memberRole.public_id],
       },
     });
     expect(added.statusCode).toBe(200);
     const invited = (
       added.json() as {
-        data: { id: string; user_id: string; role_id: string; invitation: { id: string } | null };
+        data: {
+          id: string;
+          user_id: string;
+          role_ids: string[];
+          invitation: { id: string } | null;
+        };
       }
     ).data;
 
@@ -196,13 +201,13 @@ describe('tenancy audit trail — organization governance changes reach the audi
       token,
       method: 'PATCH',
       path: `/tenancy/organization/memberships/${membership.public_id}`,
-      payload: { status: 'SUSPENDED' },
+      payload: { status: 'suspended' },
     });
     expect(suspended.statusCode).toBe(200);
     const removed = await send({
       token,
       method: 'DELETE',
-      path: `/tenancy/organization/memberships/${membership.public_id}`,
+      path: `/tenancy/organization/memberships/${membership.public_id}?reason=not_needed`,
     });
     expect(removed.statusCode).toBe(204);
 
@@ -217,7 +222,7 @@ describe('tenancy audit trail — organization governance changes reach the audi
         target_user_public_id: invited.user_id,
         metadata: {
           membership_public_id: invited.id,
-          role_public_id: invited.role_id,
+          role_public_ids: invited.role_ids,
           invitation_public_id: invited.invitation?.id ?? null,
         },
       }),
@@ -228,7 +233,7 @@ describe('tenancy audit trail — organization governance changes reach the audi
         target_user_public_id: member.public_id,
         metadata: {
           membership_public_id: membership.public_id,
-          role_public_id: context.memberRole.public_id,
+          role_public_ids: [context.memberRole.public_id],
           changed_fields: ['status'],
         },
       }),
@@ -236,7 +241,7 @@ describe('tenancy audit trail — organization governance changes reach the audi
     expect(await stagedRows('tenancy.membership.delete')).toEqual([
       expect.objectContaining({
         ...base,
-        metadata: { membership_public_id: membership.public_id },
+        metadata: { membership_public_id: membership.public_id, delete_reason: 'not_needed' },
       }),
     ]);
     await expectEveryStagedRowToDrain();
@@ -252,18 +257,19 @@ describe('tenancy audit trail — organization governance changes reach the audi
       path: '/tenancy/organization/memberships',
       payload: {
         email: `audit-resend-${randomUUID()}@test.com`,
-        role_id: context.memberRole.public_id,
+        role_ids: [context.memberRole.public_id],
       },
     });
     expect(added.statusCode).toBe(200);
-    const invitationId = (added.json() as { data: { invitation: { id: string } } }).data.invitation
-      .id;
+    const invited = (added.json() as { data: { id: string; invitation: { id: string } } }).data;
+    const membershipId = invited.id;
+    const invitationId = invited.invitation.id;
     expect(
       (
         await send({
           token,
           method: 'POST',
-          path: `/tenancy/organization/invitations/${invitationId}/resend`,
+          path: `/tenancy/organization/memberships/${membershipId}/invitation/resend`,
           payload: {},
         })
       ).statusCode,
@@ -273,7 +279,7 @@ describe('tenancy audit trail — organization governance changes reach the audi
         await send({
           token,
           method: 'DELETE',
-          path: `/tenancy/organization/invitations/${invitationId}`,
+          path: `/tenancy/organization/memberships/${membershipId}/invitation`,
         })
       ).statusCode,
     ).toBe(204);
@@ -288,14 +294,14 @@ describe('tenancy audit trail — organization governance changes reach the audi
         user_id: invitee.id,
         organization_id: organization.id,
         role_id: context.memberRole.id,
-        status: 'INVITED',
+        status: 'invited',
       })
       .returning();
     const rawToken = `audit-accept-${randomUUID()}`;
     const pending = await withAppDatabaseContext({
       scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organization.public_id }),
       callback: () =>
-        new MemberInvitationRepository().create({
+        new MembershipInvitationRepository().create({
           membership_id: inviteeMembership!.id,
           email: invitee.email,
           token_hash: hashInvitationToken(rawToken),
@@ -307,7 +313,7 @@ describe('tenancy audit trail — organization governance changes reach the audi
     const accepted = await send({
       token: await generateTestToken({ userId: invitee.public_id }),
       method: 'POST',
-      path: `/tenancy/invitations/${pending.public_id}/accept`,
+      path: `/tenancy/membership-invitations/${pending.public_id}/accept`,
       payload: { token: rawToken },
     });
     expect(accepted.statusCode).toBe(200);
@@ -315,16 +321,18 @@ describe('tenancy audit trail — organization governance changes reach the audi
     const byOwner = {
       actor_user_public_id: owner.public_id,
       organization_public_id: organization.public_id,
-      metadata: { invitation_public_id: invitationId },
     };
-    expect(await stagedRows('tenancy.member_invitation.resend')).toEqual([
-      expect.objectContaining(byOwner),
+    expect(await stagedRows('tenancy.membership_invitation.resend')).toEqual([
+      expect.objectContaining({
+        ...byOwner,
+        metadata: { invitation_public_id: invitationId, membership_public_id: membershipId },
+      }),
     ]);
-    expect(await stagedRows('tenancy.member_invitation.revoke')).toEqual([
-      expect.objectContaining(byOwner),
+    expect(await stagedRows('tenancy.membership_invitation.revoke')).toEqual([
+      expect.objectContaining({ ...byOwner, metadata: { membership_public_id: membershipId } }),
     ]);
     // The invitee had no organization in their token; the row belongs to the organization joined.
-    expect(await stagedRows('tenancy.member_invitation.accept')).toEqual([
+    expect(await stagedRows('tenancy.membership_invitation.accept')).toEqual([
       expect.objectContaining({
         actor_user_public_id: invitee.public_id,
         organization_public_id: organization.public_id,

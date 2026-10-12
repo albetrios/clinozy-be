@@ -11,6 +11,7 @@ import {
   seedPermissions,
   createRoleWithPermissions,
   createMembership,
+  ROLE_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 
 /**
@@ -42,7 +43,7 @@ describe('Security: role-name uniqueness conflict', () => {
 
   beforeEach(async () => {
     await cleanupDatabase();
-    await seedPermissions(['role:manage', 'role:read']);
+    await seedPermissions([...ROLE_WRITE_PERMISSION_CODES, 'role:read']);
   });
 
   async function adminContext() {
@@ -50,7 +51,7 @@ describe('Security: role-name uniqueness conflict', () => {
     const organization = await createTestOrganization({ ownerUserId: user.id });
     const role = await createRoleWithPermissions({
       organizationId: organization.id,
-      permissionCodes: ['role:manage', 'role:read'],
+      permissionCodes: [...ROLE_WRITE_PERMISSION_CODES, 'role:read'],
     });
     await createMembership({ userId: user.id, organizationId: organization.id, roleId: role.id });
     // Flat role routes resolve the organization from the JWT `org` claim.

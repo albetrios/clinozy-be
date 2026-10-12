@@ -109,11 +109,11 @@ For a visual flow diagram (Service → EventBus → Handler → Queue → Redis 
 
 ## Canonical examples
 
-**Tenancy — member invitation**
+**Tenancy — membership invitation**
 
 ```text
-member-invitation.service.ts  →  eventBus.emit(tenancy.member_invitation.created|resent)
-tenancy/sub-domains/membership/member-invitation/events/*.ts  →  recordOutboxEmail() + onCommit(dispatchOutboxEmail)
+membership-invitation.service.ts  →  eventBus.emit(tenancy.membership_invitation.created|resent)
+tenancy/sub-domains/membership/membership-invitation/events/*.ts  →  recordOutboxEmail() + onCommit(dispatchOutboxEmail)
 tenancy/events/index.ts  →  registerTenancyEventHandlers()
 ```
 
@@ -125,17 +125,17 @@ auth/sub-domains/auth-method/events/*.ts  →  recordOutboxEmail() + onCommit(di
 auth/events/index.ts  →  registerAuthEventHandlers()
 ```
 
-**Notify — in-app notification** (invitation accepted)
+**Notify — in-app notification** (invitation accepted or declined)
 
 ```text
-member-invitation.service  →  eventBus.emit(tenancy.member_invitation.accepted)
-notify/sub-domains/notification/events/member-invitation-accepted.event-handlers.ts  →  notification row + enqueue
+membership-invitation.service  →  eventBus.emit(tenancy.membership_invitation.accepted | .declined)
+notify/sub-domains/notification/events/membership-invitation.event-handlers.ts  →  notification row + enqueue
 ```
 
 **Tenancy + billing → notify — organization resource events** (the webhook catalog)
 
 ```text
-organization / membership / member-invitation / subscription services (+ Stripe webhook dispatch)
+organization / membership / membership-invitation / subscription services (+ Stripe webhook dispatch)
   →  eventBus.emit(<ORGANIZATION|MEMBERSHIP|SUBSCRIPTION>_EVENT.*, { organization_public_id, data })
      inside the write's organization context
 notify/sub-domains/webhook/events/organization-resource.event-handlers.ts

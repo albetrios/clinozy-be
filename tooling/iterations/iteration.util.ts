@@ -135,11 +135,16 @@ const FORWARD_TRANSITIONS: ReadonlyMap<IterationStatus, IterationStatus> = new M
   ['done', 'frozen'],
 ]);
 
-/** Statuses that may move back to `planning` — only with a reason. */
+/**
+ * Statuses that may move back to `planning` — only with a reason. `done` is among them: work the
+ * user finds still open goes back into the same iteration until it is `frozen` (merged); a frozen
+ * iteration is never edited.
+ */
 const BACK_TO_PLANNING: ReadonlySet<IterationStatus> = new Set([
   'ready-for-approval',
   'approved',
   'implementing',
+  'done',
 ]);
 
 /** The values of an iteration's `README.md` field table, keyed for the template. */
@@ -1067,8 +1072,8 @@ export function parseStatusArguments(commandLine: readonly string[]): {
  *
  * @remarks
  * Allowed: one step forward along `planning → ready-for-approval → approved → implementing →
- * done → frozen`, and `ready-for-approval`, `approved` or `implementing` back to `planning` with a
- * reason.
+ * done → frozen`, and `ready-for-approval`, `approved`, `implementing` or `done` back to `planning`
+ * with a reason.
  *
  * Failure modes: throws with the allowed next statuses on any other move, and when a move back to
  * `planning` has no reason.

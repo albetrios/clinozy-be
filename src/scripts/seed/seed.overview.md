@@ -14,6 +14,8 @@ All three share the contract and the per-domain seeders:
 - **`pnpm db:seed:full`** (`full.ts`) — a small fixed demo set plus the cross-domain flows that exercise the API (add user to organization, send invite).
 - **`pnpm db:seed:bulk`** (`bulk.ts`) — scaled volume via profiles, for load/pagination testing and full demo tenants.
 
+Alongside them, **`pnpm db:seed:stripe-catalog`** (`stripe-catalog.ts`, the sync in `stripe-catalog-sync.ts`) prices the paid plans in a Stripe sandbox: their product and monthly and yearly prices, found again by lookup key on a re-run, with the ids recorded on the plans. Test-mode keys only; Free gets no price.
+
 ## Contract — `seed-contract.ts`
 
 - **`SeedContribution`** — `{ seedReference?(ctx), seedBulk?(ctx) }`; both hooks optional. Exported by every sub-domain / nested sub-domain `seed/index.ts`.
@@ -49,6 +51,8 @@ pnpm db:seed:full                         # fixed demo set
 pnpm db:seed:bulk                         # demo profile (default)
 BULK_PROFILE=load SCALE=5 pnpm db:seed:bulk
 BULK_PROFILE=edge BULK_ORGS=200 pnpm db:seed:bulk
+pnpm db:seed:stripe-catalog               # sandbox prices for the paid plans (after db:seed)
+pnpm db:seed:stripe-catalog --dry-run     # say what it would create; write nothing
 ```
 
 ## Failure modes

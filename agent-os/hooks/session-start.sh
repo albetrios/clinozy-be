@@ -3,8 +3,9 @@
 #
 # Two jobs:
 #   1. (web) Make the env usable: verify Node, switch to a new-enough Node when
-#      needed (pinned for the session via $CLAUDE_ENV_FILE), and install deps so
-#      `pnpm validate` / tests / linters work.
+#      needed (pinned for the session via $CLAUDE_ENV_FILE) — installing the .nvmrc
+#      version first when none is on disk — and install deps so `pnpm validate` /
+#      tests / linters work.
 #   2. Inject session context: the agent-os skill-trigger routing map plus a
 #      short env/commands summary, as SessionStart additionalContext.
 #
@@ -28,7 +29,7 @@ current_major="$(node -v 2>/dev/null | tr -dc '0-9.' | cut -d. -f1)"
 node_ok="yes"; [ "$current_major" -lt "$required_major" ] 2>/dev/null && node_ok="no"
 
 # --- If Node is too old, find a new-enough one and pin it for the session ----
-if [ "$node_ok" = "no" ]; then
+activate_required_node() {
   for candidate in \
     "/opt/node${required_major}/bin" \
     /opt/node"${required_major}"*/bin \
@@ -41,9 +42,22 @@ if [ "$node_ok" = "no" ]; then
       [ -n "${CLAUDE_ENV_FILE:-}" ] && printf 'export PATH=%s:$PATH\n' "$candidate" >> "$CLAUDE_ENV_FILE"
       current_major="$cand_major"; node_ok="yes"
       echo "session-start: switched to $(node -v) at ${candidate} (persisted for the session)." >&2
-      break
+      return 0
     fi
   done
+  return 1
+}
+[ "$node_ok" = "no" ] && activate_required_node
+
+# --- Self-heal (web): install the .nvmrc Node when none is on disk -----------
+# The image ships Node 20-22 only; the pinned Node comes from the environment's cached
+# Setup script. When that did not run (not configured, or a cache older than the pin),
+# install it here — one nodejs.org download — so the dependency install, the gates and
+# the live stack below all work in this session. Best-effort and fail-open.
+if [ "$node_ok" = "no" ] && [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] && [ -f tooling/setup/agent/install-node.sh ]; then
+  echo "session-start: no Node >=${required_major} on disk — installing the .nvmrc version (best-effort)…" >&2
+  bash tooling/setup/agent/install-node.sh >&2 && activate_required_node \
+    || echo "session-start: Node install failed — run: bash tooling/setup/agent/install-node.sh" >&2
 fi
 
 # --- Install deps on remote (web) sessions when Node is adequate -------------

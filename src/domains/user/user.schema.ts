@@ -12,6 +12,7 @@ import {
   pgPolicy,
 } from 'drizzle-orm/pg-core';
 import { authSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
+import { USER_PRESENCE, USER_PRESENCE_VALUES } from './user.constants.js';
 
 /**
  * `auth.users` — canonical platform identity table. Soft-deleted via `deleted_at` so audit and
@@ -46,6 +47,8 @@ export const users = authSchema
       onboarding_completed_at: timestamp('onboarding_completed_at', { withTimezone: true }),
       status: varchar('status', { length: 20 }).notNull().default('ACTIVE'),
       last_active_at: timestamp('last_active_at', { withTimezone: true }),
+      // The user-menu status (launch C8), one per user across organizations.
+      presence: varchar('presence', { length: 10 }).notNull().default(USER_PRESENCE.ONLINE),
       // Soft pointer to the organization the user last acted in; restored as the default
       // active organization at login. No hard FK (avoids a circular cross-schema FK); the
       // login selection re-validates membership, so a stale/dangling value falls back safely.
@@ -80,6 +83,13 @@ export const users = authSchema
       check('chk_users_status', sql`${table.status} IN ('ACTIVE', 'LOCKED', 'SUSPENDED')`),
       check('chk_users_failed_login', sql`${table.failed_login_count} >= 0`),
       check('chk_users_updated', sql`${table.updated_at} >= ${table.created_at}`),
+      check(
+        'chk_users_presence',
+        sql`${table.presence} IN (${sql.join(
+          USER_PRESENCE_VALUES.map((presence) => sql`${presence}`),
+          sql`, `,
+        )})`,
+      ),
       pgPolicy('users_self_or_admin_access', {
         as: 'permissive',
         for: 'all',

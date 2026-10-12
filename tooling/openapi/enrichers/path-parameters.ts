@@ -8,9 +8,10 @@ const ENTITY_LABELS: Record<PublicIdEntity, string> = {
   user: 'user',
   organization: 'organization',
   membership: 'membership',
-  memberInvitation: 'invitation',
+  membershipInvitation: 'invitation',
   memberRole: 'role',
   organizationApiKey: 'API key',
+  branch: 'branch',
   organizationNotificationPolicy: 'notification policy',
   authSession: 'session',
   authMethod: 'auth method',
@@ -24,13 +25,84 @@ const ENTITY_LABELS: Record<PublicIdEntity, string> = {
   webhookDeliveryAttempt: 'webhook delivery attempt',
   webhookEvent: 'webhook event',
   auditLog: 'audit log entry',
+  contactActivity: 'contact activity',
+  taskRuleSetting: 'task rule setting',
+  taskOwnerChange: 'task owner change',
+  task: 'task',
+  stockItemMovement: 'stock item movement',
+  stockCount: 'stock count',
+  stockPurchase: 'stock purchase',
+  stockItem: 'stock item',
+  stockVendor: 'stock vendor',
+  supplierCredit: 'supplier credit',
+  medicalSaleReturn: 'medical sale return',
+  medicalSale: 'medical sale',
+  medicalPurchaseOrderItem: 'purchase order line',
+  medicalPurchaseOrder: 'purchase order',
+  medicineBatch: 'medicine batch',
+  medicine: 'medicine',
+  medicalRepVisit: 'medical rep visit',
+  medicalRep: 'medical rep',
+  supplier: 'supplier',
+  manufacturer: 'manufacturer',
+  patientFeedbackAction: 'feedback action',
+  patientReview: 'patient review',
+  patientCheckIn: 'patient check-in',
+  patientTreatment: 'patient treatment',
+  dayCloseEvent: 'day close event',
+  dayClose: 'day close',
+  pendingCredit: 'pending credit',
+  invoiceCreditNote: 'credit note',
+  paymentEdit: 'payment edit',
+  payment: 'payment',
+  patientOfferingSuggestion: 'patient offering suggestion',
+  patientOffering: 'patient offering',
+  invoiceItem: 'invoice line',
+  invoice: 'invoice',
+  patientReport: 'patient report',
+  patientImage: 'patient image',
+  prescriptionKit: 'prescription kit',
+  patientPrescription: 'patient prescription',
+  patientClinicalNote: 'clinical note',
+  patientDiagnosis: 'patient diagnosis',
+  appointment: 'appointment',
+  contactMessageTemplate: 'message template',
+  leadRead: 'lead read',
+  lead: 'lead',
+  patient: 'patient',
+  membershipPreference: 'membership preference',
+  offer: 'offer',
+  offering: 'offering',
+  contact: 'contact',
+  branchHoliday: 'branch holiday',
+  machine: 'machine',
+  room: 'room',
+  offeringGroup: 'offering group',
+  membershipSavedView: 'membership saved view',
 };
 
 /** Stable, realistic 21-char example core (alphabet [a-z0-9]). */
 const EXAMPLE_CORE = 'a1b2c3d4e5f6g7h8i9j0k';
 
+/** A second core, so a list example names two different ids. */
+const SECOND_EXAMPLE_CORE = 'k0j9i8h7g6f5e4d3c2b1a';
+
 function entityFor(parameterName: string): PublicIdEntity | undefined {
   return PARAM_NAME_TO_ENTITY[parameterName as keyof typeof PARAM_NAME_TO_ENTITY];
+}
+
+/**
+ * Example public id for a body field or query parameter named after its entity (`branch_id` →
+ * `brn_a1b2c3d4e5f6g7h8i9j0k`); a comma-separated list (`branch_ids`, or `branch_id` taking
+ * several) names two. Undefined when the name maps to no entity (`ids`).
+ */
+export function getPublicIdExample(options: { name: string; isList: boolean }): string | undefined {
+  const entity = entityFor(options.name.replace(/_ids$/, '_id'));
+  if (!entity) return undefined;
+  const prefix = PUBLIC_ID_PREFIXES[entity];
+  return options.isList
+    ? `${prefix}_${EXAMPLE_CORE},${prefix}_${SECOND_EXAMPLE_CORE}`
+    : `${prefix}_${EXAMPLE_CORE}`;
 }
 
 /**

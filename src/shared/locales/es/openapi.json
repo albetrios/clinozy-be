@@ -37,7 +37,8 @@
     "Stripe Webhook": "Receptor de webhooks de facturación de Stripe (cuerpo sin procesar, firma verificada)",
     "Notification": "Feed de notificaciones del usuario",
     "Webhook": "Gestión de endpoints webhook e historial de envíos",
-    "Upload": "Generación de URL pre-firmadas para subida de archivos"
+    "Upload": "Generación de URL pre-firmadas para subida de archivos",
+    "Branch": "Sucursales de la clínica — ubicaciones, horarios y quién trabaja dónde"
   },
   "components": {
     "bearerAuthDescription": "Token de acceso JWT obtenido del endpoint de login o renovación de token."

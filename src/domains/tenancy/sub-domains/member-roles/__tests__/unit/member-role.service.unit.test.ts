@@ -12,12 +12,10 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
-        callback(),
+      async ({ callback }: { callback: () => Promise<unknown> }) => callback(),
     ),
-    withAppDatabaseContext: vi.fn(
-      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
-        callback(),
+    withAppDatabaseContext: vi.fn(async ({ callback }: { callback: () => Promise<unknown> }) =>
+      callback(),
     ),
   };
 });
@@ -58,6 +56,8 @@ const asScope = (organizationPublicId: string) =>
     organizationPublicId,
   }) as OrganizationPrincipalDatabaseScope;
 
+/** A valid removal reason — every delete carries one (the record-delete query). */
+const DELETE_QUERY = { reason: 'not_needed' };
 describe('MemberRoleService', () => {
   const organizationService = {
     requireOrganizationRecordByPublicId: vi.fn().mockResolvedValue(organization),
@@ -336,6 +336,8 @@ describe('MemberRoleService', () => {
     await service.delete({
       scope: asScope(organization.public_id),
       role_public_id: roleRow.public_id,
+      query: DELETE_QUERY,
+      deleted_by_user_public_id: undefined,
     });
     expect(memberRoleRepository.update).toHaveBeenCalled();
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).toHaveBeenCalled();
@@ -345,6 +347,8 @@ describe('MemberRoleService', () => {
     await service.delete({
       scope: asScope(organization.public_id),
       role_public_id: roleRow.public_id,
+      query: DELETE_QUERY,
+      deleted_by_user_public_id: undefined,
     });
     expect(invalidateOrganizationPermissions).toHaveBeenCalledWith(organization.public_id);
   });
@@ -424,7 +428,12 @@ describe('MemberRoleService', () => {
     // concurrent delete), which the service surfaces as the actionable roleHasActiveMembers conflict.
     vi.mocked(memberRoleRepository.softDeleteIfNoActiveMembers).mockResolvedValue(null);
     await expect(
-      service.delete({ scope: asScope(organization.public_id), role_public_id: roleRow.public_id }),
+      service.delete({
+        scope: asScope(organization.public_id),
+        role_public_id: roleRow.public_id,
+        query: DELETE_QUERY,
+        deleted_by_user_public_id: undefined,
+      }),
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
@@ -491,7 +500,12 @@ describe('MemberRoleService', () => {
       new NotFoundError('Organization'),
     );
     await expect(
-      service.delete({ scope: asScope(organization.public_id), role_public_id: roleRow.public_id }),
+      service.delete({
+        scope: asScope(organization.public_id),
+        role_public_id: roleRow.public_id,
+        query: DELETE_QUERY,
+        deleted_by_user_public_id: undefined,
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 });

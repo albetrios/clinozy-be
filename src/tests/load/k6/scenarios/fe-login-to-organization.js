@@ -500,9 +500,11 @@ export function handleSummary(data) {
       `  NOTE  ${throttled} response(s) were 429. /auth/refresh is capped at 30 req/min PER IP`,
     );
     L.push(
-      '        (REFRESH_RATE_LIMIT) and does NOT honour RATE_LIMIT_RELAXED_CAPS, so every VU on',
+      '        (REFRESH_RATE_LIMIT) unless the server runs with RATE_LIMIT_RELAXED_CAPS, so every',
     );
-    L.push('        this host shares one budget. The limiter working, not the endpoint failing.');
+    L.push(
+      '        VU on this host shares one budget. The limiter working, not the endpoint failing.',
+    );
     L.push('');
   }
 

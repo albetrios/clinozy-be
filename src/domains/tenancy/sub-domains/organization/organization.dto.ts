@@ -5,6 +5,12 @@ import {
   trimmedStringMinMax,
   isTraversalFreeStorageKey,
 } from '@/shared/utils/validation/validation.util.js';
+import { isKnownTimeZone } from '@/shared/utils/validation/record-fields.util.js';
+import {
+  ORGANIZATION_SPECIALTIES,
+  ORGANIZATION_SPECIALTIES_MAX_COUNT,
+  type OrganizationSpecialty,
+} from './organization.constants.js';
 
 /** Path params for `/organizations/by-slug/:slug` (URL-friendly organization slug). */
 export const organizationSlugParamsDto = z
@@ -52,6 +58,19 @@ export const updateOrganizationDto = z
     name: trimmedStringMinMax({ min: 1, max: 255 }).optional(),
     slug: trimmedSlug().optional(),
     status: z.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']).optional(),
+    specialties: z
+      .array(
+        z.enum(ORGANIZATION_SPECIALTIES as [OrganizationSpecialty, ...OrganizationSpecialty[]]),
+      )
+      .min(1)
+      .max(ORGANIZATION_SPECIALTIES_MAX_COUNT)
+      .refine((values) => new Set(values).size === values.length, {
+        message: 'errors:validation.eachSpecialtyOnce',
+      })
+      .optional(),
+    timezone: trimmedStringMinMax({ min: 1, max: 64 })
+      .refine(isKnownTimeZone, { message: 'errors:validation.notIanaTimeZone' })
+      .optional(),
   })
   .strict();
 

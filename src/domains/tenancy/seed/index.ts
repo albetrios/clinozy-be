@@ -5,7 +5,7 @@
  * the bulk orchestrator.
  */
 import { memberRolesSeedContribution } from '@/domains/tenancy/sub-domains/member-roles/seed/index.js';
-import { memberInvitationSeedContribution } from '@/domains/tenancy/sub-domains/membership/member-invitation/seed/index.js';
+import { membershipInvitationSeedContribution } from '@/domains/tenancy/sub-domains/membership/membership-invitation/seed/index.js';
 import { organizationApiKeySeedContribution } from '@/domains/tenancy/sub-domains/organization/organization-api-key/seed/index.js';
 import { organizationNotificationPolicySeedContribution } from '@/domains/tenancy/sub-domains/organization/organization-notification-policy/seed/index.js';
 import { organizationSettingsSeedContribution } from '@/domains/tenancy/sub-domains/organization/organization-settings/seed/index.js';
@@ -34,7 +34,7 @@ const bulkContribution = composeContributions(
   organizationNotificationPolicySeedContribution,
   organizationApiKeySeedContribution,
   memberRolesSeedContribution,
-  memberInvitationSeedContribution,
+  membershipInvitationSeedContribution,
 );
 
 /** The tenancy domain's seed module: permission reference data + organization/member/role bulk graph + extras. */

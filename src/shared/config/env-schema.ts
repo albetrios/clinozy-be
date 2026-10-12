@@ -253,6 +253,31 @@ const SERVER_VARS = {
   }),
 } satisfies Record<string, EnvVarSpec>;
 
+/**
+ * The services the clinic features will hand work to once they exist — reserved addresses, read by
+ * nothing yet. Messaging (WhatsApp and Instagram delivery) and the AI features (a patient's
+ * offering ideas) are separate services, kept out of this API: until they exist, a sent message
+ * waits `queued` in the outbox and the ideas come from the rules.
+ */
+const EXTERNAL_SERVICE_VARS = {
+  MESSAGING_SERVICE_URL: envVar({
+    schema: z.url().optional(),
+    meta: {
+      allowed: 'URL',
+      description:
+        'Reserved: the base URL of the messaging service that will deliver the outbox (the queued WhatsApp and Instagram messages). Nothing reads it yet.',
+    },
+  }),
+  AI_SERVICE_URL: envVar({
+    schema: z.url().optional(),
+    meta: {
+      allowed: 'URL',
+      description:
+        "Reserved: the base URL of the AI service that will suggest a patient's offering ideas. Nothing reads it yet; the ideas come from the rules.",
+    },
+  }),
+} satisfies Record<string, EnvVarSpec>;
+
 const envSchemaBase = z.object({
   // Server & process — declared in the SERVER_VARS registry above (allowed values + description).
   ...toSchemaShape(SERVER_VARS),
@@ -447,6 +472,23 @@ const envSchemaBase = z.object({
    */
   AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED: booleanString('true'),
   /**
+   * Category-B (security). Makes the add-member (`POST /tenancy/organization/memberships`) and
+   * resend-invitation answers carry the raw accept token as `debug_invitation_token` (on the
+   * invitation), so a test member accepts through the real
+   * `POST /tenancy/membership-invitations/{membership_invitation_id}/accept` (launch ROUTE #164, D82).
+   *
+   * Exists because the invitation email never arrives on a developer's machine, so its token —
+   * which the database stores only as a hash — is otherwise lost: local QA and the frontend's role
+   * journeys need real members. The echo mirrors the sign-in code's `debug_verification_code`.
+   *
+   * Defaults false, so the token leaves only through the email unless a developer opts in. A refine
+   * permits `true` ONLY on the `local` and `development` targets — an allowlist rather than a
+   * not-production test, so a target added to the enum later is refused by default instead of
+   * silently handing out accept tokens. It changes only the answer: the token, its hash, the email
+   * and the accept checks (the invitee's verified email must match) are untouched.
+   */
+  MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED: booleanString('false'),
+  /**
    * Category-B. ioredis ready-check on the cache / BullMQ connections. Defaults true (on); the test
    * harness sets `REDIS_READY_CHECK_ENABLED=false` (the per-worker singletons churn across
    * createTestApp instances and a reconnect ready-check rejects against a closing stream). Read via
@@ -454,10 +496,10 @@ const envSchemaBase = z.object({
    */
   REDIS_READY_CHECK_ENABLED: booleanString('true'),
   /**
-   * Category-B. Lift the strict public/authenticated rate-limit caps to 5000 so loopback E2E and
-   * dev UX are not throttled. Defaults false (hardened); development sets it true in `.env` and the
-   * test harness sets it true; a refine forbids `true` in production where credential-stuffing
-   * protection must stay on.
+   * Category-B. Lift the strict public/authenticated and token-refresh rate-limit caps to 5000 so
+   * loopback E2E and dev UX are not throttled. Defaults false (hardened); development sets it true
+   * in `.env` and the test harness sets it true; a refine forbids `true` in production where
+   * credential-stuffing protection must stay on.
    */
   RATE_LIMIT_RELAXED_CAPS: booleanString('false'),
   /**
@@ -592,7 +634,7 @@ const envSchemaBase = z.object({
     .max(1000)
     .default(100),
   /**
-   * Max number of live pending (not accepted, not revoked, not expired) member invitations allowed
+   * Max number of live pending (not accepted, not revoked, not expired) membership invitations allowed
    * per organization. Parity with `WEBHOOK_MAX_PER_ORG`. Invitations are otherwise only seat-bounded,
    * and a PERSONAL / free-tier organization has no seat ceiling (null), so without this cap an Admin could
    * enqueue an unbounded backlog of outstanding invites — each sending an email (amplification) and
@@ -661,6 +703,16 @@ const envSchemaBase = z.object({
    * revoke collaborators) while preventing indefinite premium headcount on an unpaid subscription.
    */
   BILLING_DUNNING_GRACE_DAYS: z.coerce.number().int().min(0).max(120).default(14),
+
+  /**
+   * Category-B. Removes a patient photo's location (its EXIF GPS block and XMP) from the stored
+   * file before the photo is filed (launch D79, WC-42). Defaults true (privacy); the refine keeps it
+   * true in production. The test harness sets false — its uploads have no stored object.
+   */
+  PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED: booleanString('true'),
+
+  // The future services' reserved addresses — the EXTERNAL_SERVICE_VARS registry.
+  ...toSchemaShape(EXTERNAL_SERVICE_VARS),
 
   // Sentry
   SENTRY_DSN: z.url().optional(),
@@ -979,6 +1031,7 @@ const envSchemaBase = z.object({
   USER_TOMBSTONE_RETENTION_CRON: z.string().min(1).optional(),
   ORGANIZATION_TOMBSTONE_RETENTION_CRON: z.string().min(1).optional(),
   MEMBERSHIP_TOMBSTONE_RETENTION_CRON: z.string().min(1).optional(),
+  APP_RECORD_PURGE_CRON: z.string().min(1).optional(),
   MEMBER_ROLE_TOMBSTONE_RETENTION_CRON: z.string().min(1).optional(),
   ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_CRON: z.string().min(1).optional(),
   UPLOAD_TOMBSTONE_RETENTION_CRON: z.string().min(1).optional(),
@@ -1650,6 +1703,15 @@ export const envSchema = envSchemaBase
       'WEBHOOK_ALLOWLIST_REQUIRED must be true in production (an empty webhook allowlist would open an SSRF hole).',
     path: ['WEBHOOK_ALLOWLIST_REQUIRED'],
   })
+  .refine(
+    (data) =>
+      data.NODE_ENV !== 'production' || data.PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED === true,
+    {
+      message:
+        'PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED must be true in production (a patient photo must never be filed with where it was taken).',
+      path: ['PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED'],
+    },
+  )
   .refine((data) => data.NODE_ENV !== 'production' || data.METRICS_AUTH_REQUIRED === true, {
     message:
       'METRICS_AUTH_REQUIRED must be true in production (the worker /metrics endpoint must require a bearer token).',
@@ -1720,6 +1782,17 @@ export const envSchema = envSchemaBase
       message:
         "AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED may only be false on the 'local' or 'development' targets (it is the anti-mail-bomb spacing on send-code, so a deployed runtime must keep it on). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
       path: ['AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED'],
+    },
+  )
+  .refine(
+    (data) =>
+      !data.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED ||
+      data.NODE_ENV === 'local' ||
+      data.NODE_ENV === 'development',
+    {
+      message:
+        "MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED may only be true on the 'local' or 'development' targets (it returns the raw invitation accept token in the add-member and resend answers, so a deployed runtime must deliver it only through the email). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
+      path: ['MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED'],
     },
   )
   .refine((data) => data.NODE_ENV !== 'production' || data.REDIS_READY_CHECK_ENABLED === true, {
@@ -2009,6 +2082,7 @@ export const envSchema = envSchemaBase
  */
 export const ENV_VAR_REGISTRY: Readonly<Record<string, EnvVarSpec>> = {
   ...SERVER_VARS,
+  ...EXTERNAL_SERVICE_VARS,
 };
 
 /** Ordered list of env var names from the schema (for .env.example sync and scripts). */

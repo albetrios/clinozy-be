@@ -2,7 +2,11 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { resolveUserOrganizationPermissions } from '@/domains/tenancy/sub-domains/permission/authorization.service.js';
 import { organizationRequiresMfa } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-mfa-policy.js';
 import type { GlobalRole } from '@/shared/constants/roles.constants.js';
-import { ForbiddenError, UnauthorizedError } from '@/shared/errors/index.js';
+import {
+  ForbiddenError,
+  MISSING_PERMISSION_REASON,
+  UnauthorizedError,
+} from '@/shared/errors/index.js';
 import {
   buildAuditActorFields,
   recordScopedAuditEvent,
@@ -101,6 +105,37 @@ function resolveOrganizationPermissionsForRequest({
 }
 
 /**
+ * Whether the authenticated caller holds `permissionCode` in its active organization — the
+ * non-throwing twin of {@link requireOrganizationPermission}, for a route whose result WIDENS
+ * with a permission rather than being gated by it (`GET /app/branches/my`: every branch for a
+ * branch reader, the assigned ones otherwise).
+ *
+ * @remarks
+ * - **Algorithm:** no auth or no organization claim → false; an API key → its scopes; a user →
+ *   the same per-request memoized permission set the preHandler resolves.
+ * - **Notes:** never use it to gate a write — a gate must throw (and audit the deny) through
+ *   {@link requireOrganizationPermission}.
+ */
+export async function hasOrganizationPermission({
+  request,
+  permissionCode,
+}: {
+  request: FastifyRequest;
+  permissionCode: string;
+}): Promise<boolean> {
+  const auth = request.auth;
+  const organizationPublicId = auth?.organizationPublicId;
+  if (!(auth && organizationPublicId)) return false;
+  if (auth.kind === 'apiKey') return auth.apiKeyScopes.includes(permissionCode);
+  const permissionCodes = await resolveOrganizationPermissionsForRequest({
+    request,
+    userPublicId: auth.userId,
+    organizationPublicId,
+  });
+  return permissionCodes.includes(permissionCode);
+}
+
+/**
  * Returns a Fastify preHandler that checks the authenticated user's global role.
  * Throws ForbiddenError if the user's role is not in the allowed list.
  *
@@ -136,10 +171,15 @@ export function requireRole(
  *
  * Looks up: user -> membership -> role -> role_permissions
  *
+ * A caller without the code (an API key without the scope) gets a 403 with `reason`
+ * `missing_permission` ({@link MISSING_PERMISSION_REASON}) — the same field the service-level
+ * checks set, so a client branches on one value (launch D83 (6)); an organization that requires MFA
+ * answers `mfa_required`.
+ *
  * @param permissionCode - The permission code to check (use domain constants, never bare strings)
  *
  * Usage:
- *   { preHandler: [app.authenticate, requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE)] }
+ *   { preHandler: [app.authenticate, requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE)] }
  */
 export function requireOrganizationPermission(
   permissionCode: string,
@@ -195,7 +235,9 @@ export async function assertOrganizationPermission({
           },
         }),
       });
-      throw new ForbiddenError('errors:insufficientOrganizationPermissions');
+      throw new ForbiddenError('errors:insufficientOrganizationPermissions').withReason(
+        MISSING_PERMISSION_REASON,
+      );
     }
     return;
   }
@@ -217,7 +259,9 @@ export async function assertOrganizationPermission({
         },
       }),
     });
-    throw new ForbiddenError('errors:insufficientOrganizationPermissions');
+    throw new ForbiddenError('errors:insufficientOrganizationPermissions').withReason(
+      MISSING_PERMISSION_REASON,
+    );
   }
   // An organization whose security policy requires MFA admits only a session that proved a
   // second factor (the token's `amr`). Checked per request — not only at login — so a session

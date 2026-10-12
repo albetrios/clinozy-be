@@ -43,6 +43,19 @@ This domain implements the contracts documented in [src/PATTERNS.md](src/PATTERN
 
 ## Cross-domain flows
 
+- **A patient photo or report file is shown (launch D86):** each read of a photo or report calls
+  `UploadService.createReadUrls` (the app port `fileReadUrls`) with the page's keys — one read of the
+  organization's live, confirmed uploads among them, then a presigned GET per upload, valid
+  `PRESIGNED_URL_EXPIRY_SECONDS` and served inline under its `file_name`
+  (`content-disposition.util.ts`). The record decides who gets the links; a key that is no confirmed
+  upload of the organization gets none.
+
+- **A patient photo loses its location (launch D79, WC-42):** the app's photo create calls
+  `UploadService.removeImageLocation` (the app port `removeImageLocation`) — the organization's
+  confirmed JPEG / PNG is read, its EXIF GPS block and XMP removed
+  (`src/shared/utils/security/image-location.util.ts`) and written back under the same key, before
+  the photo is filed.
+
 The upload domain is consumed by other domains rather than driving any flow itself. Notable consumers:
 
 - `user-data-export` (in [user/sub-domains/user-data-export/](src/domains/user/sub-domains/user-data-export/)) presigns the download URL for the GDPR export bundle.

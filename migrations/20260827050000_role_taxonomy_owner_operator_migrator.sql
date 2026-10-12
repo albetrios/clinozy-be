@@ -163,19 +163,19 @@ DECLARE
   entry RECORD;
 BEGIN
   FOR entry IN
-    SELECT nspname FROM pg_namespace WHERE nspname IN ('auth','tenancy','billing','notify','audit','upload')
+    SELECT nspname FROM pg_namespace WHERE nspname IN ('auth','tenancy','billing','notify','audit','upload','app')
   LOOP
     EXECUTE format('ALTER SCHEMA %I OWNER TO clinozy_be_owner', entry.nspname);
   END LOOP;
   FOR entry IN
     SELECT schemaname, tablename FROM pg_tables
-    WHERE schemaname IN ('auth','tenancy','billing','notify','audit','upload')
+    WHERE schemaname IN ('auth','tenancy','billing','notify','audit','upload','app')
   LOOP
     EXECUTE format('ALTER TABLE %I.%I OWNER TO clinozy_be_owner', entry.schemaname, entry.tablename);
   END LOOP;
   FOR entry IN
     SELECT schemaname, sequencename FROM pg_sequences
-    WHERE schemaname IN ('auth','tenancy','billing','notify','audit','upload')
+    WHERE schemaname IN ('auth','tenancy','billing','notify','audit','upload','app')
   LOOP
     EXECUTE format('ALTER SEQUENCE %I.%I OWNER TO clinozy_be_owner', entry.schemaname, entry.sequencename);
   END LOOP;

@@ -6,8 +6,13 @@ import {
   requireUserScope,
 } from '@/shared/utils/http/request.util.js';
 import { validatePublicIdParam } from '@/shared/utils/identity/public-id-param.util.js';
-import { recordScopedAuditEvent } from '@/shared/utils/infrastructure/audit-request-context.util.js';
+import {
+  listBodyFieldNames,
+  recordScopedAuditEvent,
+} from '@/shared/utils/infrastructure/audit-request-context.util.js';
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
+import type { MembershipInvitationService } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.service.js';
+import type { UserSettingsOutput } from '@/domains/user/sub-domains/user-settings/user-settings.types.js';
 import type { UserContainer } from './user.container.js';
 
 type AdminUserAuditAction =
@@ -44,6 +49,35 @@ async function recordAdminUserAudit({
       resource_type: 'user',
       ...(severity ? { severity } : {}),
       metadata: { target_user_public_id: targetUserPublicId },
+    },
+  });
+}
+
+/**
+ * Keeps an analytics consent decision as its own audit row — the decision, the policy version it
+ * answered and when: the proof of consent (launch D85). Nothing when the body carried no decision.
+ */
+async function recordAnalyticsConsentAudit({
+  request,
+  actorUserPublicId,
+  settings,
+}: {
+  request: FastifyRequest;
+  actorUserPublicId: string;
+  settings: UserSettingsOutput;
+}): Promise<void> {
+  if (!listBodyFieldNames(request.body).includes('analytics_consent')) return;
+  await recordScopedAuditEvent({
+    request,
+    input: {
+      actorUserPublicId,
+      action: 'user.settings.analytics_consent.update',
+      resource_type: 'user_settings',
+      metadata: {
+        analytics_consent: settings.analytics_consent,
+        analytics_consent_version: settings.analytics_consent_version,
+        analytics_consent_at: settings.analytics_consent_at,
+      },
     },
   });
 }
@@ -140,10 +174,14 @@ export function createUserController({
   userSettingsService,
   userNotificationPreferencesService,
   organizationService,
+  membershipInvitationService,
 }: Pick<
   UserContainer,
   'userService' | 'userSettingsService' | 'userNotificationPreferencesService'
-> & { organizationService?: OrganizationService }) {
+> & {
+  organizationService?: OrganizationService;
+  membershipInvitationService?: MembershipInvitationService;
+}) {
   return {
     // ── Self-service ──────────────────────────────────────────
 
@@ -172,6 +210,30 @@ export function createUserController({
       });
     },
 
+    /**
+     * `GET /users/me/membership-invitations` — the caller's pending invitations (launch D84 (1)):
+     * tenancy's data in the caller's scope, like `listMyOrganizations`. Never counts.
+     */
+    listMyMembershipInvitations: async (request: FastifyRequest, _reply: FastifyReply) => {
+      if (!membershipInvitationService) {
+        throw new Error('Membership invitation service not configured');
+      }
+      const auth = requireAuth(request);
+      const result = await membershipInvitationService.listMine({
+        query: request.query,
+        actingUserPublicId: auth.userId,
+      });
+      return paginatedResponse({
+        data: result.items,
+        request_id: getRequestIdentifier(request),
+        pagination: {
+          per_page: result.limit,
+          next: result.next_cursor,
+          has_more: result.has_more,
+        },
+      });
+    },
+
     getMe: async (request: FastifyRequest, _reply: FastifyReply) => {
       const _auth = requireAuth(request);
       const data = await userService.getMe(requireUserScope(request));
@@ -182,6 +244,15 @@ export function createUserController({
       const _auth = requireAuth(request);
       const scope = requireUserScope(request);
       const data = await userService.updateMe({ scope, body: request.body });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
+    },
+
+    // requireUserScope is the auth check here: it throws the same 401 requireAuth would.
+    putMyPresence: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const data = await userService.updateMyPresence({
+        scope: requireUserScope(request),
+        body: request.body,
+      });
       return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
 
@@ -224,6 +295,11 @@ export function createUserController({
           action: 'user.settings.update',
           resource_type: 'user_settings',
         },
+      });
+      await recordAnalyticsConsentAudit({
+        request,
+        actorUserPublicId: auth.userId,
+        settings: data,
       });
       return successResponse({ data, request_id: getRequestIdentifier(request) });
     },

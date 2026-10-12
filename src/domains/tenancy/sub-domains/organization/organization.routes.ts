@@ -242,7 +242,8 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Update organization settings',
-          description: 'Updates organization settings. Requires ORGANIZATION_UPDATE permission.',
+          description:
+            'Updates organization settings — notifications, locale, security policy and the operating settings. Requires ORGANIZATION_UPDATE permission.',
           tags: ['Organization Settings'],
           body: updateOrganizationSettingsDto,
         },

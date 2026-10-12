@@ -6,7 +6,7 @@
 -- every key the member had created ACTIVE. Key authentication checked only the key's own status,
 -- deletion state, hash and expiry, and key authorization uses the key's stored scopes — so a
 -- suspended member kept scoped access through a retained key, and a key holding
--- membership:manage could PATCH the member's own membership back to ACTIVE. Member deletion and
+-- membership:update could PATCH the member's own membership back to ACTIVE. Member deletion and
 -- leaving already revoke the creator's keys; suspension is reversible, so instead of revoking,
 -- the resolver refuses the key for as long as the creator is not an active member — covering
 -- the single PATCH, bulk suspension and a suspended or deleted user account alike, and letting
@@ -53,7 +53,7 @@ AS $$
           ON user_row.id = membership_row.user_id
         WHERE membership_row.user_id = api_key_row.created_by_user_id
           AND membership_row.organization_id = api_key_row.organization_id
-          AND membership_row.status = 'ACTIVE'
+          AND membership_row.status = 'active'
           AND membership_row.deleted_at IS NULL
           AND user_row.status = 'ACTIVE'
           AND user_row.deleted_at IS NULL

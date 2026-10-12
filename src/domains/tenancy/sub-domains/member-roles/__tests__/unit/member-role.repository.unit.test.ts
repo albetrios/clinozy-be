@@ -98,11 +98,17 @@ describe('MemberRoleRepository', () => {
     expect(result).toBeNull();
   });
 
-  it('update and softDelete return null when role is missing', async () => {
+  it('update and the guarded soft-delete return null when role is missing', async () => {
     mockReturning.mockResolvedValue([]);
 
     expect(await repository.update('missing', 1, { name: 'X' }, 9)).toBeNull();
-    expect(await repository.softDelete('missing', 1)).toBeNull();
+    expect(
+      await repository.softDeleteIfNoActiveMembers('missing', 1, {
+        delete_reason: 'not_needed',
+        delete_note: null,
+        updated_by_user_id: null,
+      }),
+    ).toBeNull();
   });
 
   it('create inserts role with explicit is_system false', async () => {

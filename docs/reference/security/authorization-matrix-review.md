@@ -105,7 +105,7 @@ Every protected by-id route (plus the two owner-tier routes) and the authorizati
 
 ## Build plan (after you approve the models above)
 
-1. **Factories** — add victim-object creators returning `public_id` for the resources not yet wired: `notification`, `auth-session`, `mfa_method`, `auth_method`, `data_export`, `api_key`, `notification_policy`, `member_invitation`. (`upload`, `subscription`, `webhook`, `role`, `membership` already reuse existing fixtures.)
+1. **Factories** — add victim-object creators returning `public_id` for the resources not yet wired: `notification`, `auth-session`, `mfa_method`, `auth_method`, `data_export`, `api_key`, `notification_policy`, `membership_invitation`. (`upload`, `subscription`, `webhook`, `role`, `membership` already reuse existing fixtures.)
 2. **Engine** — `authz-attack.helper.ts`: per-model attacker builder + path materialization + request/body/idempotency headers + assertion + `verifyNoMutation` read-back + positive baseline.
 3. **Tests** (`src/tests/security/authz/`) — iterate the model file: `object-ownership` (`user`/`email`/`organization`), `tier-and-grant` (`tier:owner`/`grant`), `admin-only` (`global-role`). No silent skips.
 4. **Phase 3 hardening** — extend the coverage gate to every mutation (models `self`/`public`/`function`), add the static `findByPublicId` ban.

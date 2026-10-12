@@ -10,7 +10,8 @@
 -- retained key. The resolver already refuses a key whose creator is no longer an active member
 -- (20261003120000); it now also narrows the scopes to the creator's current role permissions, so
 -- a demotion takes effect on the key's next request and a later promotion restores it. Keys with no
--- recorded creator (created_by_user_id IS NULL) keep their stored scopes.
+-- recorded creator (created_by_user_id IS NULL) keep their stored scopes. The creator's permissions
+-- are those of every live role they hold — the main role and the additional roles (launch D5).
 --
 -- Same signature and return columns as 20261003120000; only the `scopes` column changes.
 -- CREATE OR REPLACE keeps the function's grants (20261010135529).
@@ -45,13 +46,21 @@ AS $$
             SELECT role_permission_row.permission_code
             FROM tenancy.memberships AS creator_membership_row
             INNER JOIN tenancy.roles AS role_row
-              ON role_row.id = creator_membership_row.role_id
+              ON (
+                role_row.id = creator_membership_row.role_id
+                OR EXISTS (
+                  SELECT 1
+                  FROM tenancy.membership_additional_roles AS additional_role_row
+                  WHERE additional_role_row.membership_id = creator_membership_row.id
+                    AND additional_role_row.role_id = role_row.id
+                )
+              )
               AND role_row.deleted_at IS NULL
             INNER JOIN tenancy.role_permissions AS role_permission_row
               ON role_permission_row.role_id = role_row.id
             WHERE creator_membership_row.user_id = api_key_row.created_by_user_id
               AND creator_membership_row.organization_id = api_key_row.organization_id
-              AND creator_membership_row.status = 'ACTIVE'
+              AND creator_membership_row.status = 'active'
               AND creator_membership_row.deleted_at IS NULL
           )
         ),
@@ -76,7 +85,7 @@ AS $$
           ON user_row.id = membership_row.user_id
         WHERE membership_row.user_id = api_key_row.created_by_user_id
           AND membership_row.organization_id = api_key_row.organization_id
-          AND membership_row.status = 'ACTIVE'
+          AND membership_row.status = 'active'
           AND membership_row.deleted_at IS NULL
           AND user_row.status = 'ACTIVE'
           AND user_row.deleted_at IS NULL

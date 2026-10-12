@@ -64,6 +64,9 @@ function useFakeProviderKeys(): void {
   process.env.S3_REGION = 'us-east-1';
   process.env.S3_ACCESS_KEY_ID = 'test-s3-access-key-id';
   process.env.S3_SECRET_ACCESS_KEY = 'test-s3-secret-access-key';
+  // The harness's uploads have no stored object (S3 is out of reach): the photo's location removal
+  // (launch D79) is off unless a suite turns it on and answers the S3 calls.
+  process.env.PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED = 'false';
 
   for (const key of ['S3_ENDPOINT', 'SENTRY_DSN', 'POSTHOG_KEY', 'POSTHOG_HOST']) {
     delete process.env[key];

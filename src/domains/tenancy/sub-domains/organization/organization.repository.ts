@@ -1,3 +1,4 @@
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import {
   getTableColumns,
   and,
@@ -179,7 +180,7 @@ export class OrganizationRepository {
       .where(
         and(
           eq(memberships.user_id, userId),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           isNull(memberships.deleted_at),
         ),
       )
@@ -228,7 +229,7 @@ export class OrganizationRepository {
           isNull(organizations.deleted_at),
           or(
             and(eq(organizations.owner_user_id, authUsers.id), isNull(authUsers.deleted_at)),
-            sql`EXISTS (SELECT 1 FROM ${memberships} WHERE ${memberships.organization_id} = ${organizations.id} AND ${memberships.user_id} = ${authUsers.id} AND ${memberships.status} = 'ACTIVE' AND ${memberships.deleted_at} IS NULL)`,
+            sql`EXISTS (SELECT 1 FROM ${memberships} WHERE ${memberships.organization_id} = ${organizations.id} AND ${memberships.user_id} = ${authUsers.id} AND ${memberships.status} = ${MEMBERSHIP_STATUS.ACTIVE} AND ${memberships.deleted_at} IS NULL)`,
           ),
         ),
       )
@@ -268,7 +269,7 @@ export class OrganizationRepository {
         and(
           eq(authUsers.public_id, user_public_id),
           eq(organizations.public_id, organization_public_id),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           isNull(memberships.deleted_at),
           isNull(organizations.deleted_at),
         ),
@@ -294,7 +295,7 @@ export class OrganizationRepository {
       .where(
         and(
           eq(memberships.user_id, user_id),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           isNull(organizations.deleted_at),
           eq(organizations.status, 'ACTIVE'),
           includePersonalOrganizations ? undefined : sql`${organizations.type} <> 'PERSONAL'`,
@@ -321,7 +322,7 @@ export class OrganizationRepository {
       .where(
         and(
           eq(memberships.user_id, user_id),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           eq(organizations.public_id, organization_public_id),
           isNull(organizations.deleted_at),
           eq(organizations.status, 'ACTIVE'),
@@ -367,7 +368,7 @@ export class OrganizationRepository {
       .where(
         and(
           eq(memberships.user_id, user_id),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           eq(organizations.public_id, organization_public_id),
           isNull(organizations.deleted_at),
           eq(organizations.status, 'ACTIVE'),
@@ -393,7 +394,7 @@ export class OrganizationRepository {
       .where(
         and(
           eq(memberships.user_id, user_id),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           eq(organizations.id, organization_id),
           isNull(organizations.deleted_at),
           eq(organizations.status, 'ACTIVE'),
@@ -428,7 +429,14 @@ export class OrganizationRepository {
 
   async update(
     public_id: string,
-    data: { name?: string; slug?: string; status?: string; logo_url?: string | null },
+    data: {
+      name?: string;
+      slug?: string;
+      status?: string;
+      logo_url?: string | null;
+      specialties?: string[];
+      timezone?: string;
+    },
     updated_by_user_id: number | null,
   ): Promise<Organization | null> {
     const rows = await getRequestDatabase()
@@ -463,7 +471,7 @@ export class OrganizationRepository {
             SELECT 1 FROM ${memberships}
             WHERE ${memberships.user_id} = ${owner_user_id}
               AND ${memberships.organization_id} = ${organizations.id}
-              AND ${memberships.status} = 'ACTIVE'
+              AND ${memberships.status} = ${MEMBERSHIP_STATUS.ACTIVE}
               AND ${memberships.deleted_at} IS NULL
           )`,
         ),

@@ -1,3 +1,4 @@
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { and, desc, eq, isNull, lt, lte, notInArray, or, sql } from 'drizzle-orm';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -408,7 +409,7 @@ export class SubscriptionRepository {
             SELECT count(*) FROM ${memberships}
             WHERE ${memberships.organization_id} = ${subscriptions.organization_id}
               AND ${memberships.deleted_at} IS NULL
-              AND ${memberships.status} IN ('ACTIVE', 'INVITED')
+              AND ${memberships.status} IN (${MEMBERSHIP_STATUS.ACTIVE}, ${MEMBERSHIP_STATUS.INVITED})
           ))`,
         ),
       )
@@ -436,7 +437,7 @@ export class SubscriptionRepository {
             SELECT count(*) FROM ${memberships}
             WHERE ${memberships.organization_id} = ${organizations.id}
               AND ${memberships.deleted_at} IS NULL
-              AND ${memberships.status} = 'ACTIVE'
+              AND ${memberships.status} = ${MEMBERSHIP_STATUS.ACTIVE}
           ) > (
             SELECT ${plans.included_seats} FROM ${plans}
             WHERE ${plans.is_active} ORDER BY ${plans.price_monthly} ASC LIMIT 1

@@ -29,7 +29,16 @@ function rowsOf<T>(result: unknown): T[] {
  *    attribution FK indexes of `20260623000000` were in exactly that state).
  */
 
-const APPLICATION_SCHEMAS = ['auth', 'tenancy', 'billing', 'notify', 'audit', 'upload', 'public'];
+const APPLICATION_SCHEMAS = [
+  'auth',
+  'tenancy',
+  'billing',
+  'notify',
+  'audit',
+  'upload',
+  'app',
+  'public',
+];
 
 describe('Integration: index hygiene', () => {
   it('backs every foreign key with an index its ON DELETE / ON UPDATE action can use', async () => {
@@ -145,8 +154,9 @@ describe('Integration: index hygiene', () => {
   });
 
   it('declares in the Drizzle schema exactly the indexes the database has', async () => {
-    // Constraint-backed indexes (primary keys, `.unique()` constraints) are declared through the
-    // constraint, not as an index, so only standalone indexes are compared.
+    // Constraint-backed indexes (primary keys, `.unique()` constraints, exclusion constraints) are
+    // declared through the constraint, not as an index, so only standalone indexes are compared. A
+    // foreign key's `conindid` names the referenced side's unique index, which stays standalone.
     const catalogRows = rowsOf<{ key: string; is_unique: boolean; key_columns: string }>(
       await database.execute(sql`
       SELECT n.nspname || '.' || t.relname || '.' || i.relname AS key,
@@ -159,7 +169,7 @@ describe('Integration: index hygiene', () => {
         JOIN pg_class t ON t.oid = x.indrelid
         JOIN pg_namespace n ON n.oid = t.relnamespace
        WHERE n.nspname IN ${APPLICATION_SCHEMAS}
-         AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = x.indexrelid)
+         AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = x.indexrelid AND c.contype IN ('p', 'u', 'x'))
     `),
     );
     const catalog = new Map(catalogRows.map((row) => [row.key, describeIndex(row)]));

@@ -23,6 +23,20 @@ export type RouteStatusObserver = {
   flush: () => void;
 };
 
+/**
+ * A captured body as example material, or `undefined` when it cannot be written as JSON — a
+ * resource-exhaustion test's request nests deeper than `JSON.stringify` can recurse, and one such
+ * body must not fail the whole capture run's flush.
+ */
+export function exampleBodyOf(body: unknown): unknown {
+  try {
+    JSON.stringify(body);
+    return body;
+  } catch {
+    return undefined;
+  }
+}
+
 /** True when this run should also capture request/response example bodies. */
 export function isRouteExampleCaptureEnabled(): boolean {
   return process.env.ROUTE_EXAMPLE_CAPTURE === '1';
@@ -62,10 +76,10 @@ export function createRouteStatusObserver(): RouteStatusObserver {
             responseBody = undefined; // non-JSON payloads (HTML, metrics text) are not example material
           }
         }
+        const requestBody =
+          observation.requestBody === null ? undefined : exampleBodyOf(observation.requestBody);
         examples.set(key, {
-          ...(observation.requestBody !== undefined && observation.requestBody !== null
-            ? { request_body: observation.requestBody }
-            : {}),
+          ...(requestBody !== undefined ? { request_body: requestBody } : {}),
           ...(responseBody !== undefined ? { response_body: responseBody } : {}),
         });
       }

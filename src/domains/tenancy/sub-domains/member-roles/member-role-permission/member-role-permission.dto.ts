@@ -11,7 +11,11 @@ export const putMemberRolePermissionsDto = z
     permission_codes: z
       .array(trimmedStringMinMax({ min: 1, max: 100 }))
       .min(0)
-      .max(200),
+      .max(200)
+      // TC14: a repeated code is a 400 (it was a database error).
+      .refine((codes) => new Set(codes).size === codes.length, {
+        message: 'errors:validation.eachCodeOnce',
+      }),
   })
   .strict();
 

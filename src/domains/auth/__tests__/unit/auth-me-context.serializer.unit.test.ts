@@ -9,7 +9,11 @@ const organization = (id: string, type: 'PERSONAL' | 'TEAM'): OrganizationOutput
   slug: type === 'TEAM' ? `org-${id}` : null,
   type,
   status: 'ACTIVE',
+  owner_user_id: 'usr_1',
   logo_url: null,
+  specialties: ['skin'],
+  timezone: 'Asia/Kolkata',
+  currency: 'INR',
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-01-01T00:00:00.000Z',
 });
@@ -24,13 +28,17 @@ const baseData = (overrides: Partial<AuthMeContextData> = {}): AuthMeContextData
     last_name: 'B',
     job_title: null,
     avatar_url: null,
+    presence: 'online',
     status: 'ACTIVE',
     onboarding_completed: true,
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
   },
   activeOrganization: organization('org_active', 'TEAM'),
+  membershipId: 'mem_active',
   myPermissions: ['organization:read', 'membership:manage'],
+  myRoleIds: ['rol_admin'],
+  myRoles: [{ id: 'rol_admin', name: 'Admin', tone: 'slate', is_system: true }],
   globalRole: null,
   ...overrides,
 });
@@ -44,6 +52,15 @@ describe('serializeAuthMeContext', () => {
     expect(output.global_role).toBeNull();
   });
 
+  it("passes through the caller's membership id and named roles (launch ROUTE #156)", () => {
+    const output = serializeAuthMeContext(baseData());
+    expect(output.membership_id).toBe('mem_active');
+    expect(output.my_role_ids).toEqual(['rol_admin']);
+    expect(output.my_roles).toEqual([
+      { id: 'rol_admin', name: 'Admin', tone: 'slate', is_system: true },
+    ]);
+  });
+
   // The switcher list moved to `GET /users/me/organizations`, which pages.
   // Embedded here it was a flat array with no cursor, filled by a
   // default-paginated read — a caller in more than 25 organizations was
@@ -55,9 +72,17 @@ describe('serializeAuthMeContext', () => {
 
   it('serializes a caller with no active organization', () => {
     const output = serializeAuthMeContext(
-      baseData({ activeOrganization: null, myPermissions: [] }),
+      baseData({
+        activeOrganization: null,
+        membershipId: null,
+        myPermissions: [],
+        myRoleIds: [],
+        myRoles: [],
+      }),
     );
     expect(output.active_organization).toBeNull();
+    expect(output.membership_id).toBeNull();
     expect(output.my_permissions).toEqual([]);
+    expect(output.my_roles).toEqual([]);
   });
 });

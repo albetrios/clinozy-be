@@ -2,12 +2,14 @@ import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.uti
 import {
   createMembershipDto,
   updateMembershipDto,
+  deleteMembershipQueryDto,
   listMembershipsQueryDto,
   transferOwnershipDto,
 } from './membership.dto.js';
 import type {
   CreateMembershipInput,
   UpdateMembershipInput,
+  DeleteMembershipQueryInput,
   ListMembershipsQueryInput,
   TransferOwnershipInput,
 } from './membership.dto.js';
@@ -31,15 +33,21 @@ export function validateUpdateMembership(data: unknown): UpdateMembershipInput {
 }
 
 /**
+ * Validates a `DELETE /organization/memberships/:membership_id` query string against
+ * {@link deleteMembershipQueryDto}; throws `ValidationError('errors:invalidInput')` on failure.
+ */
+export function validateDeleteMembershipQuery(data: unknown): DeleteMembershipQueryInput {
+  return parseWithSchema({ schema: deleteMembershipQueryDto, data });
+}
+
+/**
  * Validates the `GET /organization/memberships` query string against the strict
- * {@link listMembershipsQueryDto} (cursor pagination only).
+ * {@link listMembershipsQueryDto} — the paging, the search, the sort and the filters — with the
+ * plain invalid-input copy (USERS-M5: a bad `status` is not a paging error), the field named in
+ * `errors[]`.
  */
 export function validateListMembershipsQuery(data: unknown): ListMembershipsQueryInput {
-  return parseWithSchema({
-    schema: listMembershipsQueryDto,
-    data,
-    errorKey: 'errors:validation.invalidPagination',
-  });
+  return parseWithSchema({ schema: listMembershipsQueryDto, data });
 }
 
 /**

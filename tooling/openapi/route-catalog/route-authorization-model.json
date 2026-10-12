@@ -61,7 +61,7 @@
   "POST /api/v1/notify/webhooks/:webhook_id/test": {
     "model": "organization"
   },
-  "POST /api/v1/tenancy/invitations/:invitation_id/accept": {
+  "POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/accept": {
     "model": "email",
     "verifyNoMutation": true
   },
@@ -87,11 +87,11 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "DELETE /api/v1/tenancy/organization/invitations/:invitation_id": {
+  "DELETE /api/v1/tenancy/organization/memberships/:membership_id/invitation": {
     "model": "organization",
     "verifyNoMutation": true
   },
-  "POST /api/v1/tenancy/organization/invitations/:invitation_id/resend": {
+  "POST /api/v1/tenancy/organization/memberships/:membership_id/invitation/resend": {
     "model": "organization"
   },
   "GET /api/v1/tenancy/organization/memberships/:membership_id": {
@@ -107,6 +107,10 @@
   },
   "GET /api/v1/tenancy/organization/memberships/:membership_id/permissions": {
     "model": "organization"
+  },
+  "POST /api/v1/tenancy/organization/memberships/:membership_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
   },
   "GET /api/v1/tenancy/organization/notification-policies/:notification_policy_id": {
     "model": "organization"
@@ -172,5 +176,819 @@
   },
   "GET /api/v1/users/me/data-export/:data_export_id": {
     "model": "user"
+  },
+  "GET /api/v1/app/branches/:branch_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/branches/:branch_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/branches/:branch_id/members": {
+    "model": "organization"
+  },
+  "PUT /api/v1/app/branches/:branch_id/members": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/memberships/me/saved-views/:membership_saved_view_id": {
+    "model": "user"
+  },
+  "PATCH /api/v1/app/memberships/me/saved-views/:membership_saved_view_id": {
+    "model": "user",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/memberships/me/saved-views/:membership_saved_view_id": {
+    "model": "user",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/offering-groups/:offering_group_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/offering-groups/:offering_group_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/offering-groups/:offering_group_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/offering-groups/:offering_group_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/branches/:branch_id/rooms": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/branches/:branch_id/rooms": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/branches/:branch_id/rooms/:branch_room_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/branches/:branch_id/rooms/:branch_room_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/branches/:branch_id/rooms/:branch_room_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/branches/:branch_id/rooms/:branch_room_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/branches/:branch_id/machines": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/branches/:branch_id/machines": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/branches/:branch_id/machines/:branch_machine_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/branches/:branch_id/machines/:branch_machine_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/branches/:branch_id/machines/:branch_machine_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/branches/:branch_id/machines/:branch_machine_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/branches/:branch_id/holidays/:branch_holiday_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/offerings/:offering_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/offerings/:offering_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/offerings/:offering_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/offerings/:offering_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/offers/:offer_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/offers/:offer_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/offers/:offer_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/offers/:offer_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/branches/:branch_id/holidays": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/branches/:branch_id/holidays": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patients/:patient_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/patients/:patient_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/leads/:lead_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/leads/:lead_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/leads/:lead_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/leads/:lead_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/appointments/:appointment_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/appointments/:appointment_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/cancel": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/reinstate": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/undo-check-in": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/appointments/:appointment_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/clinical-notes": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/patients/:patient_id/clinical-notes": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/prescriptions": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/patients/:patient_id/prescriptions": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/prescription-kits/:prescription_kit_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/prescription-kits/:prescription_kit_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/prescription-kits/:prescription_kit_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/prescription-kits/:prescription_kit_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/images": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/patients/:patient_id/images": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/reports": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/patients/:patient_id/reports": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/invoices/:invoice_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/invoices/:invoice_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/invoices/:invoice_id/preview": {
+    "model": "organization"
+  },
+  "DELETE /api/v1/app/invoices/:invoice_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/invoices/:invoice_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/offering-ideas": {
+    "model": "organization"
+  },
+  "GET /api/v1/app/patients/:patient_id/offering-suggestions": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/patients/:patient_id/offering-suggestions": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/payments/:payment_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/payments/:payment_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/payments/:payment_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/payments/:payment_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/pending-credits/:pending_credit_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/pending-credits/:pending_credit_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/pending-credits/:pending_credit_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/pending-credits/:pending_credit_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/day-closes/:day_close_id": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/day-closes/:day_close_id/close": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/day-closes/:day_close_id/reopen": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/treatments": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/patients/:patient_id/treatments": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/check-ins": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/patients/:patient_id/check-ins": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/reviews": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/patients/:patient_id/reviews": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/manufacturers/:manufacturer_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/manufacturers/:manufacturer_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/manufacturers/:manufacturer_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/manufacturers/:manufacturer_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/suppliers/:supplier_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/suppliers/:supplier_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/suppliers/:supplier_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/suppliers/:supplier_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/medical-reps/:medical_rep_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/medical-reps/:medical_rep_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/medical-reps/:medical_rep_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/medical-reps/:medical_rep_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/medical-reps/:medical_rep_id/visits": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/medical-reps/:medical_rep_id/visits": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/medicines/:medicine_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/medicines/:medicine_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/medicines/:medicine_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/medicines/:medicine_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/medical-purchase-orders/:medical_purchase_order_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/medical-purchase-orders/:medical_purchase_order_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/receive": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/medical-purchase-orders/:medical_purchase_order_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/medical-purchase-orders/:medical_purchase_order_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/medical-sales/:medical_sale_id": {
+    "model": "organization"
+  },
+  "DELETE /api/v1/app/medical-sales/:medical_sale_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/medical-sales/:medical_sale_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/supplier-credits/:supplier_credit_id": {
+    "model": "organization"
+  },
+  "GET /api/v1/app/stock-vendors/:stock_vendor_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/stock-vendors/:stock_vendor_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/stock-vendors/:stock_vendor_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/stock-vendors/:stock_vendor_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/stock-items/:stock_item_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/stock-items/:stock_item_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/stock-items/:stock_item_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/stock-items/:stock_item_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/stock-purchases/:stock_purchase_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/stock-purchases/:stock_purchase_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/stock-purchases/:stock_purchase_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/stock-purchases/:stock_purchase_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/stock-counts/:stock_count_id": {
+    "model": "organization"
+  },
+  "GET /api/v1/app/tasks/:task_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/tasks/:task_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/tasks/:task_id/resolve": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/tasks/:task_id/snooze": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/tasks/:task_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/tasks/:task_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/leads/:lead_id/claim": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/leads/:lead_id/release": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/copy": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/tenancy/organization/roles/:role_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/contact-message-templates/:contact_message_template_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/contact-message-templates/:contact_message_template_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/contact-message-templates/:contact_message_template_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/contact-message-templates/:contact_message_template_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/contacts/:contact_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/contacts/:contact_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/contacts/:contact_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/contacts/:contact_id/activities": {
+    "model": "organization"
+  },
+  "GET /api/v1/app/contacts/:contact_id/activities/:contact_activity_id": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/contacts/:contact_id/activities/:contact_activity_id/resend": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/contacts/:contact_id/activities/add-note": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/contacts/:contact_id/activities/log-call": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/contacts/:contact_id/activities/send-message": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/contacts/:contact_id/members": {
+    "model": "organization"
+  },
+  "PUT /api/v1/app/contacts/:contact_id/members": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/contacts/:contact_id/preview": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/contacts/:contact_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/check-in": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/complete": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/confirm": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/no-show": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/pause": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/resume": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/appointments/:appointment_id/stage": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patient-diagnoses/:patient_diagnosis_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patient-diagnoses/:patient_diagnosis_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/patient-diagnoses/:patient_diagnosis_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patient-diagnoses/:patient_diagnosis_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id": {
+    "model": "organization"
+  },
+  "DELETE /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/images/:patient_image_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patients/:patient_id/images/:patient_image_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/patients/:patient_id/images/:patient_image_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/images/:patient_image_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id/approve": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/prescriptions/:patient_prescription_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/reports/:patient_report_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patients/:patient_id/reports/:patient_report_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/patients/:patient_id/reports/:patient_report_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/reports/:patient_report_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id/actions": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/check-ins/:patient_check_in_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/reviews/:patient_review_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patients/:patient_id/reviews/:patient_review_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/patients/:patient_id/reviews/:patient_review_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/reviews/:patient_review_id/actions": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/reviews/:patient_review_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/treatments/:patient_treatment_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patients/:patient_id/treatments/:patient_treatment_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/treatments/:patient_treatment_id/reverse": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "DELETE /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/patients/:patient_id/offering-suggestions/:patient_offering_suggestion_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/patients/:patient_id/offerings": {
+    "model": "organization"
+  },
+  "GET /api/v1/app/patients/:patient_id/offerings/:patient_offering_id": {
+    "model": "organization"
+  },
+  "PATCH /api/v1/app/patients/:patient_id/offerings/:patient_offering_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/invoices/:invoice_id/credit-notes": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/invoices/:invoice_id/credit-notes": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/invoices/:invoice_id/credit-notes/:invoice_credit_note_id": {
+    "model": "organization"
+  },
+  "GET /api/v1/app/payments/:payment_id/edits": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/payments/:payment_id/reverse": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/pending-credits/:pending_credit_id/settle": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/stock-items/:stock_item_id/movements": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/stock-items/:stock_item_id/movements": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id": {
+    "model": "organization"
+  },
+  "POST /api/v1/app/stock-items/:stock_item_id/movements/:stock_item_movement_id/revert": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/tasks/:task_id/reassign": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id": {
+    "model": "organization"
+  },
+  "DELETE /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/medical-reps/:medical_rep_id/visits/:medical_rep_visit_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/medical-sales/:medical_sale_id/returns": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/suppliers/:supplier_id/payments": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/decline": {
+    "model": "email",
+    "verifyNoMutation": true
   }
 }

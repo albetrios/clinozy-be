@@ -58,6 +58,19 @@ describe('generate-route-catalog', () => {
     ).toBe('PERM: organization:update');
   });
 
+  it('classifyAccess names every code a route stacks, in order (launch D83 (6))', () => {
+    const permissionMap = new Map([
+      ['APP_PERMISSIONS.PATIENT_UPDATE', 'patient:update'],
+      ['APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ', 'patient:clinical_record:read'],
+    ]);
+    expect(
+      classifyAccess(
+        "zodApplication.post('/patients/:patient_id/clinical-notes', { onRequest: [app.authenticate], preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE), requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ)] }, controller.create)",
+        permissionMap,
+      ),
+    ).toBe('PERM: patient:update + patient:clinical_record:read');
+  });
+
   it('classifyAccess treats logout as manually bearer-token guarded', () => {
     expect(
       classifyAccess(

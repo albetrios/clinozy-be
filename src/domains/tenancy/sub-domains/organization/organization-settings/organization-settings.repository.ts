@@ -9,6 +9,29 @@ import { organization_settings } from '@/domains/tenancy/sub-domains/organizatio
 
 /** BCP 47 locale tag persisted in `organization_settings.default_locale` (constrained to translated locales). */
 
+/** The operating settings a write names (launch #1), money as the `numeric` string Drizzle writes. */
+function operatingSettings(data: {
+  default_day_float?: number;
+  lead_hold_days?: number;
+  reminder_hour?: number;
+  retarget_after_days?: number;
+  deleted_record_purge_days?: number;
+}) {
+  return {
+    ...(data.default_day_float !== undefined && {
+      default_day_float: data.default_day_float.toFixed(2),
+    }),
+    ...(data.lead_hold_days !== undefined && { lead_hold_days: data.lead_hold_days }),
+    ...(data.reminder_hour !== undefined && { reminder_hour: data.reminder_hour }),
+    ...(data.retarget_after_days !== undefined && {
+      retarget_after_days: data.retarget_after_days,
+    }),
+    ...(data.deleted_record_purge_days !== undefined && {
+      deleted_record_purge_days: data.deleted_record_purge_days,
+    }),
+  };
+}
+
 /**
  * Drizzle data-access for `tenancy.organization_settings`. The `upsert`
  * primary path is keyed on `organization_id` (1:1 with the organization row). Two
@@ -61,6 +84,11 @@ export class OrganizationSettingsRepository {
       is_email_notifications_enabled?: boolean;
       default_locale?: OrganizationDefaultLocale;
       security_policy?: object;
+      default_day_float?: number;
+      lead_hold_days?: number;
+      reminder_hour?: number;
+      retarget_after_days?: number;
+      deleted_record_purge_days?: number;
       updated_by_user_id?: number | null;
     },
   ) {
@@ -69,6 +97,7 @@ export class OrganizationSettingsRepository {
       is_email_notifications_enabled: data.is_email_notifications_enabled ?? true,
       default_locale: data.default_locale ?? 'en',
       security_policy: data.security_policy ?? {},
+      ...operatingSettings(data),
       updated_by_user_id: data.updated_by_user_id ?? undefined,
     };
     const rows = await getRequestDatabase()
@@ -89,6 +118,7 @@ export class OrganizationSettingsRepository {
             security_policy: sql`coalesce(${organization_settings.security_policy}, '{}'::jsonb) || excluded.security_policy`,
           }),
           ...(data.default_locale !== undefined && { default_locale: data.default_locale }),
+          ...operatingSettings(data),
           updated_at: databaseNowTimestamp,
           updated_by_user_id: data.updated_by_user_id ?? undefined,
         },

@@ -32,6 +32,15 @@ const EXEMPT_KEYS_BY_FILE: Record<string, ReadonlySet<string>> = {
   'src/domains/auth/sub-domains/auth-session/auth-session.serializer.ts': new Set([
     'currentSessionPublicId',
   ]),
+  // The options key of the shared end-after-start refinement (`addEndAfterStartIssue`); its value
+  // names the snake_case body field the issue is reported on — never a body key itself.
+  'src/domains/app/sub-domains/branches/branches.dto.ts': new Set(['endField']),
+  'src/domains/tenancy/sub-domains/membership/membership.dto.ts': new Set(['endField']),
+  // Serializer parameters on their own line (the public ids resolved before shaping) — the
+  // response carries them under the snake_case `patient_treatment_ids` / `branch_ids`.
+  'src/domains/app/sub-domains/billing/invoices/invoices.serializer.ts': new Set(['treatmentIds']),
+  'src/domains/app/sub-domains/memberships/membership-preferences/membership-preferences.serializer.ts':
+    new Set(['branchPublicIds']),
 };
 
 /** A line-leading `<identifier>:` declares an object/schema property or a type field. */

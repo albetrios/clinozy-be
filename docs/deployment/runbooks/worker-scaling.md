@@ -39,7 +39,7 @@ Workers are grouped into six families in the [worker registry](../../reference/r
 
 | When to split                                              | Why                                                                                                                     |
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Monolithic worker exceeds `DATABASE_POOL_MAX`              | Default demand is 48 Postgres slots; splitting reduces per-process demand and avoids contention.                       |
+| Monolithic worker exceeds `DATABASE_POOL_MAX`              | Default demand is 54 Postgres slots; splitting reduces per-process demand and avoids contention.                       |
 | Retention crons compete with throughput jobs at peak hours | Isolate `retention` to its own service so audit/tombstone runs do not steal connections from `mail`/`webhook`/`stripe`. |
 | Need to size memory or replicas differently per workload   | Throughput families benefit from more replicas; retention typically needs only one replica.                             |
 

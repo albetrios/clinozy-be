@@ -11,6 +11,953 @@ src/
     │   └── register-event-handlers.ts
     └── core.overview.md
 ├── domains/
+    ├── app/
+    │   ├── __tests__/
+    │   │   ├── e2e/
+    │   │   │   ├── flow-day-in-the-clinic.e2e.test.ts
+    │   │   │   ├── flow-enquiry-to-patient.e2e.test.ts
+    │   │   │   ├── flow-plan-and-feedback.e2e.test.ts
+    │   │   │   ├── flow-refund-and-credit.e2e.test.ts
+    │   │   │   ├── flow-unhappy-paths.e2e.test.ts
+    │   │   │   └── flow-visit-to-payment.e2e.test.ts
+    │   │   ├── factories/
+    │   │   │   ├── app-fixture.factory.ts
+    │   │   │   ├── app-flow.factory.ts
+    │   │   │   ├── app-records.factory.ts
+    │   │   │   └── app-route-references.factory.ts
+    │   │   ├── integration/
+    │   │   │   ├── app-automation.integration.test.ts
+    │   │   │   ├── app-branch-access.integration.test.ts
+    │   │   │   ├── app-races.integration.test.ts
+    │   │   │   ├── app-record-lifecycle.integration.test.ts
+    │   │   │   ├── app-record-purge.integration.test.ts
+    │   │   │   ├── app-route-smoke.integration.test.ts
+    │   │   │   ├── app-team-access.integration.test.ts
+    │   │   │   └── clinozy-messages.integration.test.ts
+    │   │   └── unit/
+    │   │   │   ├── app-record-purge.worker.unit.test.ts
+    │   │   │   └── app-role-presets.policy.unit.test.ts
+    │   ├── seed/
+    │   │   └── index.ts
+    │   ├── sub-domains/
+    │   │   ├── appointments/
+    │   │   │   ├── __tests__/
+    │   │   │   │   ├── integration/
+    │   │   │   │   │   ├── appointments-lifecycle.integration.test.ts
+    │   │   │   │   │   ├── appointments-places.integration.test.ts
+    │   │   │   │   │   └── appointments.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── appointments.service.unit.test.ts
+    │   │   │   ├── appointments.constants.ts
+    │   │   │   ├── appointments.controller.ts
+    │   │   │   ├── appointments.dto.ts
+    │   │   │   ├── appointments.overview.md
+    │   │   │   ├── appointments.repository.ts
+    │   │   │   ├── appointments.routes.ts
+    │   │   │   ├── appointments.rules.ts
+    │   │   │   ├── appointments.schema.ts
+    │   │   │   ├── appointments.serializer.ts
+    │   │   │   ├── appointments.service.ts
+    │   │   │   ├── appointments.types.ts
+    │   │   │   └── appointments.validator.ts
+    │   │   ├── billing/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   ├── billing-desk.integration.test.ts
+    │   │   │   │   │   ├── billing-races.integration.test.ts
+    │   │   │   │   │   ├── billing.integration.test.ts
+    │   │   │   │   │   └── invoice-numbering.integration.test.ts
+    │   │   │   ├── day-closes/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   ├── day-close-auto-close-sweep.processor.unit.test.ts
+    │   │   │   │   │   │   ├── day-close-auto-close.processor.unit.test.ts
+    │   │   │   │   │   │   ├── day-close-auto-close.worker.unit.test.ts
+    │   │   │   │   │   │   ├── day-closes.expected-cash.unit.test.ts
+    │   │   │   │   │   │   └── day-closes.service.unit.test.ts
+    │   │   │   │   ├── queues/
+    │   │   │   │   │   ├── day-close-auto-close.job.schema.ts
+    │   │   │   │   │   └── day-close-auto-close.queue.ts
+    │   │   │   │   ├── workers/
+    │   │   │   │   │   ├── day-close-auto-close-sweep.processor.ts
+    │   │   │   │   │   ├── day-close-auto-close-sweep.worker.ts
+    │   │   │   │   │   ├── day-close-auto-close.constants.ts
+    │   │   │   │   │   ├── day-close-auto-close.processor.ts
+    │   │   │   │   │   └── day-close-auto-close.worker.ts
+    │   │   │   │   ├── day-close-auto-close.repository.ts
+    │   │   │   │   ├── day-closes.constants.ts
+    │   │   │   │   ├── day-closes.controller.ts
+    │   │   │   │   ├── day-closes.dto.ts
+    │   │   │   │   ├── day-closes.overview.md
+    │   │   │   │   ├── day-closes.repository.ts
+    │   │   │   │   ├── day-closes.routes.ts
+    │   │   │   │   ├── day-closes.rules.ts
+    │   │   │   │   ├── day-closes.schema.ts
+    │   │   │   │   ├── day-closes.serializer.ts
+    │   │   │   │   ├── day-closes.service.ts
+    │   │   │   │   ├── day-closes.types.ts
+    │   │   │   │   └── day-closes.validator.ts
+    │   │   │   ├── invoice-credit-notes/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── invoice-credit-notes.service.unit.test.ts
+    │   │   │   │   ├── invoice-credit-notes.constants.ts
+    │   │   │   │   ├── invoice-credit-notes.controller.ts
+    │   │   │   │   ├── invoice-credit-notes.dto.ts
+    │   │   │   │   ├── invoice-credit-notes.overview.md
+    │   │   │   │   ├── invoice-credit-notes.repository.ts
+    │   │   │   │   ├── invoice-credit-notes.routes.ts
+    │   │   │   │   ├── invoice-credit-notes.rules.ts
+    │   │   │   │   ├── invoice-credit-notes.schema.ts
+    │   │   │   │   ├── invoice-credit-notes.serializer.ts
+    │   │   │   │   ├── invoice-credit-notes.service.ts
+    │   │   │   │   ├── invoice-credit-notes.types.ts
+    │   │   │   │   └── invoice-credit-notes.validator.ts
+    │   │   │   ├── invoices/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   ├── invoices.amounts.property.unit.test.ts
+    │   │   │   │   │   │   ├── invoices.amounts.unit.test.ts
+    │   │   │   │   │   │   ├── invoices.pricing.unit.test.ts
+    │   │   │   │   │   │   └── invoices.service.unit.test.ts
+    │   │   │   │   ├── invoices.amounts.ts
+    │   │   │   │   ├── invoices.constants.ts
+    │   │   │   │   ├── invoices.controller.ts
+    │   │   │   │   ├── invoices.dto.ts
+    │   │   │   │   ├── invoices.lines.ts
+    │   │   │   │   ├── invoices.overview.md
+    │   │   │   │   ├── invoices.pricing.ts
+    │   │   │   │   ├── invoices.repository.ts
+    │   │   │   │   ├── invoices.routes.ts
+    │   │   │   │   ├── invoices.rules.ts
+    │   │   │   │   ├── invoices.schema.ts
+    │   │   │   │   ├── invoices.serializer.ts
+    │   │   │   │   ├── invoices.service.ts
+    │   │   │   │   ├── invoices.types.ts
+    │   │   │   │   └── invoices.validator.ts
+    │   │   │   ├── payments/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   ├── payments.ledger.unit.test.ts
+    │   │   │   │   │   │   └── payments.service.unit.test.ts
+    │   │   │   │   ├── payments.constants.ts
+    │   │   │   │   ├── payments.controller.ts
+    │   │   │   │   ├── payments.dto.ts
+    │   │   │   │   ├── payments.ledger.ts
+    │   │   │   │   ├── payments.overview.md
+    │   │   │   │   ├── payments.repository.ts
+    │   │   │   │   ├── payments.routes.ts
+    │   │   │   │   ├── payments.rules.ts
+    │   │   │   │   ├── payments.schema.ts
+    │   │   │   │   ├── payments.serializer.ts
+    │   │   │   │   ├── payments.service.ts
+    │   │   │   │   ├── payments.types.ts
+    │   │   │   │   └── payments.validator.ts
+    │   │   │   ├── pending-credits/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── pending-credits.service.unit.test.ts
+    │   │   │   │   ├── pending-credits.constants.ts
+    │   │   │   │   ├── pending-credits.controller.ts
+    │   │   │   │   ├── pending-credits.dto.ts
+    │   │   │   │   ├── pending-credits.overview.md
+    │   │   │   │   ├── pending-credits.repository.ts
+    │   │   │   │   ├── pending-credits.routes.ts
+    │   │   │   │   ├── pending-credits.rules.ts
+    │   │   │   │   ├── pending-credits.schema.ts
+    │   │   │   │   ├── pending-credits.serializer.ts
+    │   │   │   │   ├── pending-credits.service.ts
+    │   │   │   │   ├── pending-credits.types.ts
+    │   │   │   │   └── pending-credits.validator.ts
+    │   │   │   ├── billing.container.ts
+    │   │   │   ├── billing.overview.md
+    │   │   │   └── billing.routes.ts
+    │   │   ├── branches/
+    │   │   │   ├── __tests__/
+    │   │   │   │   ├── integration/
+    │   │   │   │   │   ├── branches-schema.integration.test.ts
+    │   │   │   │   │   └── branches.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── branches.service.unit.test.ts
+    │   │   │   ├── branch-holidays/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── branch-holidays.service.unit.test.ts
+    │   │   │   │   ├── branch-holidays.controller.ts
+    │   │   │   │   ├── branch-holidays.dto.ts
+    │   │   │   │   ├── branch-holidays.overview.md
+    │   │   │   │   ├── branch-holidays.repository.ts
+    │   │   │   │   ├── branch-holidays.routes.ts
+    │   │   │   │   ├── branch-holidays.schema.ts
+    │   │   │   │   ├── branch-holidays.serializer.ts
+    │   │   │   │   ├── branch-holidays.service.ts
+    │   │   │   │   ├── branch-holidays.types.ts
+    │   │   │   │   └── branch-holidays.validator.ts
+    │   │   │   ├── branch-machines/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── branch-machines.service.unit.test.ts
+    │   │   │   │   ├── branch-machines.controller.ts
+    │   │   │   │   ├── branch-machines.dto.ts
+    │   │   │   │   ├── branch-machines.overview.md
+    │   │   │   │   ├── branch-machines.repository.ts
+    │   │   │   │   ├── branch-machines.routes.ts
+    │   │   │   │   ├── branch-machines.schema.ts
+    │   │   │   │   ├── branch-machines.serializer.ts
+    │   │   │   │   ├── branch-machines.service.ts
+    │   │   │   │   ├── branch-machines.types.ts
+    │   │   │   │   └── branch-machines.validator.ts
+    │   │   │   ├── branch-members/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── branch-members.service.unit.test.ts
+    │   │   │   │   ├── branch-members.controller.ts
+    │   │   │   │   ├── branch-members.dto.ts
+    │   │   │   │   ├── branch-members.repository.ts
+    │   │   │   │   ├── branch-members.routes.ts
+    │   │   │   │   ├── branch-members.schema.ts
+    │   │   │   │   ├── branch-members.serializer.ts
+    │   │   │   │   ├── branch-members.service.ts
+    │   │   │   │   └── branch-members.validator.ts
+    │   │   │   ├── branch-rooms/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── branch-rooms.service.unit.test.ts
+    │   │   │   │   ├── branch-rooms.controller.ts
+    │   │   │   │   ├── branch-rooms.dto.ts
+    │   │   │   │   ├── branch-rooms.overview.md
+    │   │   │   │   ├── branch-rooms.repository.ts
+    │   │   │   │   ├── branch-rooms.routes.ts
+    │   │   │   │   ├── branch-rooms.schema.ts
+    │   │   │   │   ├── branch-rooms.serializer.ts
+    │   │   │   │   ├── branch-rooms.service.ts
+    │   │   │   │   ├── branch-rooms.types.ts
+    │   │   │   │   └── branch-rooms.validator.ts
+    │   │   │   ├── seed/
+    │   │   │   │   ├── branches.bulk.seed.ts
+    │   │   │   │   ├── branches.seed.ts
+    │   │   │   │   └── index.ts
+    │   │   │   ├── branches.constants.ts
+    │   │   │   ├── branches.controller.ts
+    │   │   │   ├── branches.dto.ts
+    │   │   │   ├── branches.overview.md
+    │   │   │   ├── branches.repository.ts
+    │   │   │   ├── branches.routes.ts
+    │   │   │   ├── branches.schema.ts
+    │   │   │   ├── branches.serializer.ts
+    │   │   │   ├── branches.service.ts
+    │   │   │   ├── branches.types.ts
+    │   │   │   └── branches.validator.ts
+    │   │   ├── contacts/
+    │   │   │   ├── __tests__/
+    │   │   │   │   ├── integration/
+    │   │   │   │   │   ├── contact-activities.integration.test.ts
+    │   │   │   │   │   ├── contacts-household.integration.test.ts
+    │   │   │   │   │   └── contacts.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   ├── contacts.service.unit.test.ts
+    │   │   │   │   │   └── contacts.validator.unit.test.ts
+    │   │   │   ├── contact-activities/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── contact-activities.service.unit.test.ts
+    │   │   │   │   ├── contact-activities.constants.ts
+    │   │   │   │   ├── contact-activities.controller.ts
+    │   │   │   │   ├── contact-activities.dto.ts
+    │   │   │   │   ├── contact-activities.overview.md
+    │   │   │   │   ├── contact-activities.repository.ts
+    │   │   │   │   ├── contact-activities.routes.ts
+    │   │   │   │   ├── contact-activities.rules.ts
+    │   │   │   │   ├── contact-activities.schema.ts
+    │   │   │   │   ├── contact-activities.serializer.ts
+    │   │   │   │   ├── contact-activities.service.ts
+    │   │   │   │   ├── contact-activities.types.ts
+    │   │   │   │   └── contact-activities.validator.ts
+    │   │   │   ├── contact-members/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── contact-members.service.unit.test.ts
+    │   │   │   │   ├── contact-members.controller.ts
+    │   │   │   │   ├── contact-members.dto.ts
+    │   │   │   │   ├── contact-members.repository.ts
+    │   │   │   │   ├── contact-members.routes.ts
+    │   │   │   │   ├── contact-members.schema.ts
+    │   │   │   │   ├── contact-members.serializer.ts
+    │   │   │   │   ├── contact-members.service.ts
+    │   │   │   │   ├── contact-members.types.ts
+    │   │   │   │   └── contact-members.validator.ts
+    │   │   │   ├── contact-message-templates/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── contact-message-templates.service.unit.test.ts
+    │   │   │   │   ├── contact-message-templates.constants.ts
+    │   │   │   │   ├── contact-message-templates.controller.ts
+    │   │   │   │   ├── contact-message-templates.dto.ts
+    │   │   │   │   ├── contact-message-templates.overview.md
+    │   │   │   │   ├── contact-message-templates.repository.ts
+    │   │   │   │   ├── contact-message-templates.routes.ts
+    │   │   │   │   ├── contact-message-templates.schema.ts
+    │   │   │   │   ├── contact-message-templates.serializer.ts
+    │   │   │   │   ├── contact-message-templates.service.ts
+    │   │   │   │   ├── contact-message-templates.types.ts
+    │   │   │   │   └── contact-message-templates.validator.ts
+    │   │   │   ├── seed/
+    │   │   │   │   ├── contacts.bulk.seed.ts
+    │   │   │   │   ├── contacts.seed.ts
+    │   │   │   │   └── index.ts
+    │   │   │   ├── contacts.constants.ts
+    │   │   │   ├── contacts.controller.ts
+    │   │   │   ├── contacts.dto.ts
+    │   │   │   ├── contacts.overview.md
+    │   │   │   ├── contacts.repository.ts
+    │   │   │   ├── contacts.routes.ts
+    │   │   │   ├── contacts.rules.ts
+    │   │   │   ├── contacts.schema.ts
+    │   │   │   ├── contacts.serializer.ts
+    │   │   │   ├── contacts.service.ts
+    │   │   │   ├── contacts.types.ts
+    │   │   │   └── contacts.validator.ts
+    │   │   ├── leads/
+    │   │   │   ├── __tests__/
+    │   │   │   │   ├── integration/
+    │   │   │   │   │   └── leads.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── leads.service.unit.test.ts
+    │   │   │   ├── seed/
+    │   │   │   │   ├── index.ts
+    │   │   │   │   ├── leads.bulk.seed.ts
+    │   │   │   │   └── leads.seed.ts
+    │   │   │   ├── leads.constants.ts
+    │   │   │   ├── leads.controller.ts
+    │   │   │   ├── leads.dto.ts
+    │   │   │   ├── leads.overview.md
+    │   │   │   ├── leads.repository.ts
+    │   │   │   ├── leads.routes.ts
+    │   │   │   ├── leads.rules.ts
+    │   │   │   ├── leads.schema.ts
+    │   │   │   ├── leads.serializer.ts
+    │   │   │   ├── leads.service.ts
+    │   │   │   ├── leads.types.ts
+    │   │   │   └── leads.validator.ts
+    │   │   ├── medical/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   ├── medical-batches.integration.test.ts
+    │   │   │   │   │   └── medical.integration.test.ts
+    │   │   │   ├── manufacturers/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── manufacturers.service.unit.test.ts
+    │   │   │   │   ├── manufacturers.constants.ts
+    │   │   │   │   ├── manufacturers.controller.ts
+    │   │   │   │   ├── manufacturers.dto.ts
+    │   │   │   │   ├── manufacturers.overview.md
+    │   │   │   │   ├── manufacturers.repository.ts
+    │   │   │   │   ├── manufacturers.routes.ts
+    │   │   │   │   ├── manufacturers.rules.ts
+    │   │   │   │   ├── manufacturers.schema.ts
+    │   │   │   │   ├── manufacturers.serializer.ts
+    │   │   │   │   ├── manufacturers.service.ts
+    │   │   │   │   ├── manufacturers.types.ts
+    │   │   │   │   └── manufacturers.validator.ts
+    │   │   │   ├── medical-purchase-orders/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── medical-purchase-orders.service.unit.test.ts
+    │   │   │   │   ├── medical-purchase-orders.constants.ts
+    │   │   │   │   ├── medical-purchase-orders.controller.ts
+    │   │   │   │   ├── medical-purchase-orders.dto.ts
+    │   │   │   │   ├── medical-purchase-orders.overview.md
+    │   │   │   │   ├── medical-purchase-orders.repository.ts
+    │   │   │   │   ├── medical-purchase-orders.routes.ts
+    │   │   │   │   ├── medical-purchase-orders.rules.ts
+    │   │   │   │   ├── medical-purchase-orders.schema.ts
+    │   │   │   │   ├── medical-purchase-orders.serializer.ts
+    │   │   │   │   ├── medical-purchase-orders.service.ts
+    │   │   │   │   ├── medical-purchase-orders.types.ts
+    │   │   │   │   └── medical-purchase-orders.validator.ts
+    │   │   │   ├── medical-reps/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── medical-reps.service.unit.test.ts
+    │   │   │   │   ├── medical-rep-visits/
+    │   │   │   │   │   ├── __tests__/
+    │   │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   │   └── medical-rep-visits.service.unit.test.ts
+    │   │   │   │   │   ├── medical-rep-visits.constants.ts
+    │   │   │   │   │   ├── medical-rep-visits.controller.ts
+    │   │   │   │   │   ├── medical-rep-visits.dto.ts
+    │   │   │   │   │   ├── medical-rep-visits.overview.md
+    │   │   │   │   │   ├── medical-rep-visits.repository.ts
+    │   │   │   │   │   ├── medical-rep-visits.routes.ts
+    │   │   │   │   │   ├── medical-rep-visits.rules.ts
+    │   │   │   │   │   ├── medical-rep-visits.schema.ts
+    │   │   │   │   │   ├── medical-rep-visits.serializer.ts
+    │   │   │   │   │   ├── medical-rep-visits.service.ts
+    │   │   │   │   │   ├── medical-rep-visits.types.ts
+    │   │   │   │   │   └── medical-rep-visits.validator.ts
+    │   │   │   │   ├── medical-reps.constants.ts
+    │   │   │   │   ├── medical-reps.controller.ts
+    │   │   │   │   ├── medical-reps.dto.ts
+    │   │   │   │   ├── medical-reps.overview.md
+    │   │   │   │   ├── medical-reps.repository.ts
+    │   │   │   │   ├── medical-reps.routes.ts
+    │   │   │   │   ├── medical-reps.rules.ts
+    │   │   │   │   ├── medical-reps.schema.ts
+    │   │   │   │   ├── medical-reps.serializer.ts
+    │   │   │   │   ├── medical-reps.service.ts
+    │   │   │   │   ├── medical-reps.types.ts
+    │   │   │   │   └── medical-reps.validator.ts
+    │   │   │   ├── medical-sales/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── medical-sales.service.unit.test.ts
+    │   │   │   │   ├── medical-sales.constants.ts
+    │   │   │   │   ├── medical-sales.controller.ts
+    │   │   │   │   ├── medical-sales.dto.ts
+    │   │   │   │   ├── medical-sales.overview.md
+    │   │   │   │   ├── medical-sales.repository.ts
+    │   │   │   │   ├── medical-sales.routes.ts
+    │   │   │   │   ├── medical-sales.rules.ts
+    │   │   │   │   ├── medical-sales.schema.ts
+    │   │   │   │   ├── medical-sales.serializer.ts
+    │   │   │   │   ├── medical-sales.service.ts
+    │   │   │   │   ├── medical-sales.types.ts
+    │   │   │   │   └── medical-sales.validator.ts
+    │   │   │   ├── medicines/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   ├── medicines.service.unit.test.ts
+    │   │   │   │   │   │   └── medicines.stock.unit.test.ts
+    │   │   │   │   ├── medicines.constants.ts
+    │   │   │   │   ├── medicines.controller.ts
+    │   │   │   │   ├── medicines.dto.ts
+    │   │   │   │   ├── medicines.overview.md
+    │   │   │   │   ├── medicines.repository.ts
+    │   │   │   │   ├── medicines.routes.ts
+    │   │   │   │   ├── medicines.rules.ts
+    │   │   │   │   ├── medicines.schema.ts
+    │   │   │   │   ├── medicines.serializer.ts
+    │   │   │   │   ├── medicines.service.ts
+    │   │   │   │   ├── medicines.stock.ts
+    │   │   │   │   ├── medicines.types.ts
+    │   │   │   │   └── medicines.validator.ts
+    │   │   │   ├── suppliers/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── suppliers.service.unit.test.ts
+    │   │   │   │   ├── supplier-credits/
+    │   │   │   │   │   ├── __tests__/
+    │   │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   │   └── supplier-credits.service.unit.test.ts
+    │   │   │   │   │   ├── supplier-credits.constants.ts
+    │   │   │   │   │   ├── supplier-credits.controller.ts
+    │   │   │   │   │   ├── supplier-credits.dto.ts
+    │   │   │   │   │   ├── supplier-credits.ledger.ts
+    │   │   │   │   │   ├── supplier-credits.overview.md
+    │   │   │   │   │   ├── supplier-credits.repository.ts
+    │   │   │   │   │   ├── supplier-credits.routes.ts
+    │   │   │   │   │   ├── supplier-credits.rules.ts
+    │   │   │   │   │   ├── supplier-credits.schema.ts
+    │   │   │   │   │   ├── supplier-credits.serializer.ts
+    │   │   │   │   │   ├── supplier-credits.service.ts
+    │   │   │   │   │   ├── supplier-credits.types.ts
+    │   │   │   │   │   └── supplier-credits.validator.ts
+    │   │   │   │   ├── suppliers.constants.ts
+    │   │   │   │   ├── suppliers.controller.ts
+    │   │   │   │   ├── suppliers.dto.ts
+    │   │   │   │   ├── suppliers.overview.md
+    │   │   │   │   ├── suppliers.repository.ts
+    │   │   │   │   ├── suppliers.routes.ts
+    │   │   │   │   ├── suppliers.rules.ts
+    │   │   │   │   ├── suppliers.schema.ts
+    │   │   │   │   ├── suppliers.serializer.ts
+    │   │   │   │   ├── suppliers.service.ts
+    │   │   │   │   ├── suppliers.types.ts
+    │   │   │   │   └── suppliers.validator.ts
+    │   │   │   ├── medical.container.ts
+    │   │   │   ├── medical.overview.md
+    │   │   │   └── medical.routes.ts
+    │   │   ├── memberships/
+    │   │   │   ├── __tests__/
+    │   │   │   │   ├── integration/
+    │   │   │   │   │   └── memberships.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── memberships.service.unit.test.ts
+    │   │   │   ├── membership-preferences/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── membership-preferences.service.unit.test.ts
+    │   │   │   │   ├── membership-preferences.constants.ts
+    │   │   │   │   ├── membership-preferences.controller.ts
+    │   │   │   │   ├── membership-preferences.dto.ts
+    │   │   │   │   ├── membership-preferences.overview.md
+    │   │   │   │   ├── membership-preferences.repository.ts
+    │   │   │   │   ├── membership-preferences.routes.ts
+    │   │   │   │   ├── membership-preferences.schema.ts
+    │   │   │   │   ├── membership-preferences.serializer.ts
+    │   │   │   │   ├── membership-preferences.service.ts
+    │   │   │   │   ├── membership-preferences.types.ts
+    │   │   │   │   └── membership-preferences.validator.ts
+    │   │   │   ├── membership-saved-views/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── membership-saved-views.service.unit.test.ts
+    │   │   │   │   ├── membership-saved-views.constants.ts
+    │   │   │   │   ├── membership-saved-views.controller.ts
+    │   │   │   │   ├── membership-saved-views.dto.ts
+    │   │   │   │   ├── membership-saved-views.lists.ts
+    │   │   │   │   ├── membership-saved-views.overview.md
+    │   │   │   │   ├── membership-saved-views.repository.ts
+    │   │   │   │   ├── membership-saved-views.routes.ts
+    │   │   │   │   ├── membership-saved-views.schema.ts
+    │   │   │   │   ├── membership-saved-views.serializer.ts
+    │   │   │   │   ├── membership-saved-views.service.ts
+    │   │   │   │   ├── membership-saved-views.types.ts
+    │   │   │   │   └── membership-saved-views.validator.ts
+    │   │   │   ├── memberships.controller.ts
+    │   │   │   ├── memberships.dto.ts
+    │   │   │   ├── memberships.overview.md
+    │   │   │   ├── memberships.routes.ts
+    │   │   │   ├── memberships.rules.ts
+    │   │   │   ├── memberships.serializer.ts
+    │   │   │   ├── memberships.service.ts
+    │   │   │   ├── memberships.types.ts
+    │   │   │   └── memberships.validator.ts
+    │   │   ├── offerings/
+    │   │   │   ├── __tests__/
+    │   │   │   │   ├── integration/
+    │   │   │   │   │   ├── offerings.integration.test.ts
+    │   │   │   │   │   └── offers-edges.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── offerings.service.unit.test.ts
+    │   │   │   ├── offering-groups/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── offering-groups.service.unit.test.ts
+    │   │   │   │   ├── offering-groups.controller.ts
+    │   │   │   │   ├── offering-groups.dto.ts
+    │   │   │   │   ├── offering-groups.overview.md
+    │   │   │   │   ├── offering-groups.repository.ts
+    │   │   │   │   ├── offering-groups.routes.ts
+    │   │   │   │   ├── offering-groups.rules.ts
+    │   │   │   │   ├── offering-groups.schema.ts
+    │   │   │   │   ├── offering-groups.serializer.ts
+    │   │   │   │   ├── offering-groups.service.ts
+    │   │   │   │   ├── offering-groups.types.ts
+    │   │   │   │   └── offering-groups.validator.ts
+    │   │   │   ├── offers/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── offers.service.unit.test.ts
+    │   │   │   │   ├── offers.constants.ts
+    │   │   │   │   ├── offers.controller.ts
+    │   │   │   │   ├── offers.dto.ts
+    │   │   │   │   ├── offers.overview.md
+    │   │   │   │   ├── offers.repository.ts
+    │   │   │   │   ├── offers.routes.ts
+    │   │   │   │   ├── offers.rules.ts
+    │   │   │   │   ├── offers.schema.ts
+    │   │   │   │   ├── offers.serializer.ts
+    │   │   │   │   ├── offers.service.ts
+    │   │   │   │   ├── offers.types.ts
+    │   │   │   │   └── offers.validator.ts
+    │   │   │   ├── offerings.constants.ts
+    │   │   │   ├── offerings.controller.ts
+    │   │   │   ├── offerings.dto.ts
+    │   │   │   ├── offerings.overview.md
+    │   │   │   ├── offerings.repository.ts
+    │   │   │   ├── offerings.routes.ts
+    │   │   │   ├── offerings.rules.ts
+    │   │   │   ├── offerings.schema.ts
+    │   │   │   ├── offerings.serializer.ts
+    │   │   │   ├── offerings.service.ts
+    │   │   │   ├── offerings.types.ts
+    │   │   │   └── offerings.validator.ts
+    │   │   ├── patients/
+    │   │   │   ├── __tests__/
+    │   │   │   │   ├── integration/
+    │   │   │   │   │   └── patients.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── patients.service.unit.test.ts
+    │   │   │   ├── patient-check-ins/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-check-ins.service.unit.test.ts
+    │   │   │   │   ├── patient-check-ins.constants.ts
+    │   │   │   │   ├── patient-check-ins.controller.ts
+    │   │   │   │   ├── patient-check-ins.dto.ts
+    │   │   │   │   ├── patient-check-ins.overview.md
+    │   │   │   │   ├── patient-check-ins.repository.ts
+    │   │   │   │   ├── patient-check-ins.routes.ts
+    │   │   │   │   ├── patient-check-ins.rules.ts
+    │   │   │   │   ├── patient-check-ins.schema.ts
+    │   │   │   │   ├── patient-check-ins.serializer.ts
+    │   │   │   │   ├── patient-check-ins.service.ts
+    │   │   │   │   ├── patient-check-ins.types.ts
+    │   │   │   │   └── patient-check-ins.validator.ts
+    │   │   │   ├── patient-clinical-notes/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-clinical-notes.service.unit.test.ts
+    │   │   │   │   ├── patient-clinical-notes.constants.ts
+    │   │   │   │   ├── patient-clinical-notes.controller.ts
+    │   │   │   │   ├── patient-clinical-notes.dto.ts
+    │   │   │   │   ├── patient-clinical-notes.overview.md
+    │   │   │   │   ├── patient-clinical-notes.repository.ts
+    │   │   │   │   ├── patient-clinical-notes.routes.ts
+    │   │   │   │   ├── patient-clinical-notes.rules.ts
+    │   │   │   │   ├── patient-clinical-notes.schema.ts
+    │   │   │   │   ├── patient-clinical-notes.serializer.ts
+    │   │   │   │   ├── patient-clinical-notes.service.ts
+    │   │   │   │   ├── patient-clinical-notes.types.ts
+    │   │   │   │   └── patient-clinical-notes.validator.ts
+    │   │   │   ├── patient-diagnoses/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-diagnoses.service.unit.test.ts
+    │   │   │   │   ├── patient-diagnoses.constants.ts
+    │   │   │   │   ├── patient-diagnoses.controller.ts
+    │   │   │   │   ├── patient-diagnoses.dto.ts
+    │   │   │   │   ├── patient-diagnoses.overview.md
+    │   │   │   │   ├── patient-diagnoses.repository.ts
+    │   │   │   │   ├── patient-diagnoses.routes.ts
+    │   │   │   │   ├── patient-diagnoses.schema.ts
+    │   │   │   │   ├── patient-diagnoses.serializer.ts
+    │   │   │   │   ├── patient-diagnoses.service.ts
+    │   │   │   │   ├── patient-diagnoses.types.ts
+    │   │   │   │   └── patient-diagnoses.validator.ts
+    │   │   │   ├── patient-feedback-actions/
+    │   │   │   │   ├── patient-feedback-actions.constants.ts
+    │   │   │   │   ├── patient-feedback-actions.dto.ts
+    │   │   │   │   ├── patient-feedback-actions.overview.md
+    │   │   │   │   ├── patient-feedback-actions.repository.ts
+    │   │   │   │   ├── patient-feedback-actions.rules.ts
+    │   │   │   │   ├── patient-feedback-actions.schema.ts
+    │   │   │   │   ├── patient-feedback-actions.serializer.ts
+    │   │   │   │   ├── patient-feedback-actions.types.ts
+    │   │   │   │   └── patient-feedback-actions.validator.ts
+    │   │   │   ├── patient-ideas/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   ├── integration/
+    │   │   │   │   │   │   └── patient-ideas.integration.test.ts
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   ├── patient-ideas.rules.unit.test.ts
+    │   │   │   │   │   │   └── patient-ideas.service.unit.test.ts
+    │   │   │   │   ├── patient-ideas.constants.ts
+    │   │   │   │   ├── patient-ideas.controller.ts
+    │   │   │   │   ├── patient-ideas.dto.ts
+    │   │   │   │   ├── patient-ideas.overview.md
+    │   │   │   │   ├── patient-ideas.repository.ts
+    │   │   │   │   ├── patient-ideas.routes.ts
+    │   │   │   │   ├── patient-ideas.rules.ts
+    │   │   │   │   ├── patient-ideas.serializer.ts
+    │   │   │   │   ├── patient-ideas.service.ts
+    │   │   │   │   ├── patient-ideas.types.ts
+    │   │   │   │   └── patient-ideas.validator.ts
+    │   │   │   ├── patient-images/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-images.service.unit.test.ts
+    │   │   │   │   ├── patient-images.constants.ts
+    │   │   │   │   ├── patient-images.controller.ts
+    │   │   │   │   ├── patient-images.dto.ts
+    │   │   │   │   ├── patient-images.overview.md
+    │   │   │   │   ├── patient-images.repository.ts
+    │   │   │   │   ├── patient-images.routes.ts
+    │   │   │   │   ├── patient-images.rules.ts
+    │   │   │   │   ├── patient-images.schema.ts
+    │   │   │   │   ├── patient-images.serializer.ts
+    │   │   │   │   ├── patient-images.service.ts
+    │   │   │   │   ├── patient-images.types.ts
+    │   │   │   │   └── patient-images.validator.ts
+    │   │   │   ├── patient-offering-suggestions/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-offering-suggestions.service.unit.test.ts
+    │   │   │   │   ├── patient-offering-suggestions.constants.ts
+    │   │   │   │   ├── patient-offering-suggestions.controller.ts
+    │   │   │   │   ├── patient-offering-suggestions.dto.ts
+    │   │   │   │   ├── patient-offering-suggestions.overview.md
+    │   │   │   │   ├── patient-offering-suggestions.repository.ts
+    │   │   │   │   ├── patient-offering-suggestions.routes.ts
+    │   │   │   │   ├── patient-offering-suggestions.rules.ts
+    │   │   │   │   ├── patient-offering-suggestions.schema.ts
+    │   │   │   │   ├── patient-offering-suggestions.serializer.ts
+    │   │   │   │   ├── patient-offering-suggestions.service.ts
+    │   │   │   │   ├── patient-offering-suggestions.types.ts
+    │   │   │   │   └── patient-offering-suggestions.validator.ts
+    │   │   │   ├── patient-offerings/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-offerings.service.unit.test.ts
+    │   │   │   │   ├── patient-offerings.constants.ts
+    │   │   │   │   ├── patient-offerings.controller.ts
+    │   │   │   │   ├── patient-offerings.dto.ts
+    │   │   │   │   ├── patient-offerings.overview.md
+    │   │   │   │   ├── patient-offerings.repository.ts
+    │   │   │   │   ├── patient-offerings.routes.ts
+    │   │   │   │   ├── patient-offerings.rules.ts
+    │   │   │   │   ├── patient-offerings.schema.ts
+    │   │   │   │   ├── patient-offerings.serializer.ts
+    │   │   │   │   ├── patient-offerings.service.ts
+    │   │   │   │   ├── patient-offerings.types.ts
+    │   │   │   │   └── patient-offerings.validator.ts
+    │   │   │   ├── patient-prescriptions/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-prescriptions.service.unit.test.ts
+    │   │   │   │   ├── patient-prescriptions.constants.ts
+    │   │   │   │   ├── patient-prescriptions.controller.ts
+    │   │   │   │   ├── patient-prescriptions.dto.ts
+    │   │   │   │   ├── patient-prescriptions.overview.md
+    │   │   │   │   ├── patient-prescriptions.repository.ts
+    │   │   │   │   ├── patient-prescriptions.routes.ts
+    │   │   │   │   ├── patient-prescriptions.rules.ts
+    │   │   │   │   ├── patient-prescriptions.schema.ts
+    │   │   │   │   ├── patient-prescriptions.serializer.ts
+    │   │   │   │   ├── patient-prescriptions.service.ts
+    │   │   │   │   ├── patient-prescriptions.types.ts
+    │   │   │   │   └── patient-prescriptions.validator.ts
+    │   │   │   ├── patient-reports/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-reports.service.unit.test.ts
+    │   │   │   │   ├── patient-reports.constants.ts
+    │   │   │   │   ├── patient-reports.controller.ts
+    │   │   │   │   ├── patient-reports.dto.ts
+    │   │   │   │   ├── patient-reports.overview.md
+    │   │   │   │   ├── patient-reports.repository.ts
+    │   │   │   │   ├── patient-reports.routes.ts
+    │   │   │   │   ├── patient-reports.rules.ts
+    │   │   │   │   ├── patient-reports.schema.ts
+    │   │   │   │   ├── patient-reports.serializer.ts
+    │   │   │   │   ├── patient-reports.service.ts
+    │   │   │   │   ├── patient-reports.types.ts
+    │   │   │   │   └── patient-reports.validator.ts
+    │   │   │   ├── patient-reviews/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-reviews.service.unit.test.ts
+    │   │   │   │   ├── patient-reviews.constants.ts
+    │   │   │   │   ├── patient-reviews.controller.ts
+    │   │   │   │   ├── patient-reviews.dto.ts
+    │   │   │   │   ├── patient-reviews.overview.md
+    │   │   │   │   ├── patient-reviews.repository.ts
+    │   │   │   │   ├── patient-reviews.routes.ts
+    │   │   │   │   ├── patient-reviews.rules.ts
+    │   │   │   │   ├── patient-reviews.schema.ts
+    │   │   │   │   ├── patient-reviews.serializer.ts
+    │   │   │   │   ├── patient-reviews.service.ts
+    │   │   │   │   ├── patient-reviews.types.ts
+    │   │   │   │   └── patient-reviews.validator.ts
+    │   │   │   ├── patient-treatments/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── patient-treatments.service.unit.test.ts
+    │   │   │   │   ├── patient-treatments.constants.ts
+    │   │   │   │   ├── patient-treatments.controller.ts
+    │   │   │   │   ├── patient-treatments.dto.ts
+    │   │   │   │   ├── patient-treatments.overview.md
+    │   │   │   │   ├── patient-treatments.repository.ts
+    │   │   │   │   ├── patient-treatments.routes.ts
+    │   │   │   │   ├── patient-treatments.rules.ts
+    │   │   │   │   ├── patient-treatments.schema.ts
+    │   │   │   │   ├── patient-treatments.serializer.ts
+    │   │   │   │   ├── patient-treatments.service.ts
+    │   │   │   │   ├── patient-treatments.types.ts
+    │   │   │   │   └── patient-treatments.validator.ts
+    │   │   │   ├── prescription-kits/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── prescription-kits.service.unit.test.ts
+    │   │   │   │   ├── prescription-kits.constants.ts
+    │   │   │   │   ├── prescription-kits.controller.ts
+    │   │   │   │   ├── prescription-kits.dto.ts
+    │   │   │   │   ├── prescription-kits.overview.md
+    │   │   │   │   ├── prescription-kits.repository.ts
+    │   │   │   │   ├── prescription-kits.routes.ts
+    │   │   │   │   ├── prescription-kits.schema.ts
+    │   │   │   │   ├── prescription-kits.serializer.ts
+    │   │   │   │   ├── prescription-kits.service.ts
+    │   │   │   │   ├── prescription-kits.types.ts
+    │   │   │   │   └── prescription-kits.validator.ts
+    │   │   │   ├── patients.constants.ts
+    │   │   │   ├── patients.controller.ts
+    │   │   │   ├── patients.dto.ts
+    │   │   │   ├── patients.overview.md
+    │   │   │   ├── patients.repository.ts
+    │   │   │   ├── patients.routes.ts
+    │   │   │   ├── patients.rules.ts
+    │   │   │   ├── patients.schema.ts
+    │   │   │   ├── patients.serializer.ts
+    │   │   │   ├── patients.service.ts
+    │   │   │   ├── patients.types.ts
+    │   │   │   └── patients.validator.ts
+    │   │   ├── record-counters/
+    │   │   │   ├── record-counters.overview.md
+    │   │   │   └── record-counters.schema.ts
+    │   │   ├── stock/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   └── stock.integration.test.ts
+    │   │   │   ├── stock-counts/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── stock-counts.service.unit.test.ts
+    │   │   │   │   ├── stock-counts.constants.ts
+    │   │   │   │   ├── stock-counts.controller.ts
+    │   │   │   │   ├── stock-counts.dto.ts
+    │   │   │   │   ├── stock-counts.overview.md
+    │   │   │   │   ├── stock-counts.repository.ts
+    │   │   │   │   ├── stock-counts.routes.ts
+    │   │   │   │   ├── stock-counts.rules.ts
+    │   │   │   │   ├── stock-counts.schema.ts
+    │   │   │   │   ├── stock-counts.serializer.ts
+    │   │   │   │   ├── stock-counts.service.ts
+    │   │   │   │   ├── stock-counts.types.ts
+    │   │   │   │   └── stock-counts.validator.ts
+    │   │   │   ├── stock-item-movements/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── stock-item-movements.service.unit.test.ts
+    │   │   │   │   ├── stock-item-movements.constants.ts
+    │   │   │   │   ├── stock-item-movements.controller.ts
+    │   │   │   │   ├── stock-item-movements.dto.ts
+    │   │   │   │   ├── stock-item-movements.ledger.ts
+    │   │   │   │   ├── stock-item-movements.overview.md
+    │   │   │   │   ├── stock-item-movements.repository.ts
+    │   │   │   │   ├── stock-item-movements.routes.ts
+    │   │   │   │   ├── stock-item-movements.rules.ts
+    │   │   │   │   ├── stock-item-movements.schema.ts
+    │   │   │   │   ├── stock-item-movements.serializer.ts
+    │   │   │   │   ├── stock-item-movements.service.ts
+    │   │   │   │   ├── stock-item-movements.types.ts
+    │   │   │   │   └── stock-item-movements.validator.ts
+    │   │   │   ├── stock-items/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── stock-items.service.unit.test.ts
+    │   │   │   │   ├── stock-items.constants.ts
+    │   │   │   │   ├── stock-items.controller.ts
+    │   │   │   │   ├── stock-items.dto.ts
+    │   │   │   │   ├── stock-items.overview.md
+    │   │   │   │   ├── stock-items.repository.ts
+    │   │   │   │   ├── stock-items.routes.ts
+    │   │   │   │   ├── stock-items.rules.ts
+    │   │   │   │   ├── stock-items.schema.ts
+    │   │   │   │   ├── stock-items.serializer.ts
+    │   │   │   │   ├── stock-items.service.ts
+    │   │   │   │   ├── stock-items.types.ts
+    │   │   │   │   └── stock-items.validator.ts
+    │   │   │   ├── stock-purchases/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── stock-purchases.service.unit.test.ts
+    │   │   │   │   ├── stock-purchases.constants.ts
+    │   │   │   │   ├── stock-purchases.controller.ts
+    │   │   │   │   ├── stock-purchases.dto.ts
+    │   │   │   │   ├── stock-purchases.overview.md
+    │   │   │   │   ├── stock-purchases.repository.ts
+    │   │   │   │   ├── stock-purchases.routes.ts
+    │   │   │   │   ├── stock-purchases.rules.ts
+    │   │   │   │   ├── stock-purchases.schema.ts
+    │   │   │   │   ├── stock-purchases.serializer.ts
+    │   │   │   │   ├── stock-purchases.service.ts
+    │   │   │   │   ├── stock-purchases.types.ts
+    │   │   │   │   └── stock-purchases.validator.ts
+    │   │   │   ├── stock-vendors/
+    │   │   │   │   ├── __tests__/
+    │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   └── stock-vendors.service.unit.test.ts
+    │   │   │   │   ├── stock-vendors.controller.ts
+    │   │   │   │   ├── stock-vendors.dto.ts
+    │   │   │   │   ├── stock-vendors.overview.md
+    │   │   │   │   ├── stock-vendors.repository.ts
+    │   │   │   │   ├── stock-vendors.routes.ts
+    │   │   │   │   ├── stock-vendors.rules.ts
+    │   │   │   │   ├── stock-vendors.schema.ts
+    │   │   │   │   ├── stock-vendors.serializer.ts
+    │   │   │   │   ├── stock-vendors.service.ts
+    │   │   │   │   ├── stock-vendors.types.ts
+    │   │   │   │   └── stock-vendors.validator.ts
+    │   │   │   ├── stock.container.ts
+    │   │   │   ├── stock.overview.md
+    │   │   │   └── stock.routes.ts
+    │   │   └── tasks/
+    │   │   │   ├── __tests__/
+    │   │   │       ├── integration/
+    │   │   │       │   ├── task-rules-clock.integration.test.ts
+    │   │   │       │   ├── task-rules-requested.integration.test.ts
+    │   │   │       │   ├── task-rules.worker.integration.test.ts
+    │   │   │       │   └── tasks.integration.test.ts
+    │   │   │       └── unit/
+    │   │   │       │   ├── task-rules-messages.unit.test.ts
+    │   │   │       │   ├── task-rules-sweep.processor.unit.test.ts
+    │   │   │       │   ├── task-rules.processor.unit.test.ts
+    │   │   │       │   ├── task-rules.queue.unit.test.ts
+    │   │   │       │   ├── task-rules.worker.unit.test.ts
+    │   │   │       │   ├── tasks.organization-clock.unit.test.ts
+    │   │   │       │   ├── tasks.service.unit.test.ts
+    │   │   │       │   └── tasks.validator.unit.test.ts
+    │   │   │   ├── queues/
+    │   │   │       ├── task-rules.job.schema.ts
+    │   │   │       └── task-rules.queue.ts
+    │   │   │   ├── task-rule-settings/
+    │   │   │       ├── __tests__/
+    │   │   │       │   └── unit/
+    │   │   │       │   │   └── task-rule-settings.service.unit.test.ts
+    │   │   │       ├── task-rule-settings.controller.ts
+    │   │   │       ├── task-rule-settings.dto.ts
+    │   │   │       ├── task-rule-settings.overview.md
+    │   │   │       ├── task-rule-settings.repository.ts
+    │   │   │       ├── task-rule-settings.routes.ts
+    │   │   │       ├── task-rule-settings.schema.ts
+    │   │   │       ├── task-rule-settings.service.ts
+    │   │   │       ├── task-rule-settings.types.ts
+    │   │   │       └── task-rule-settings.validator.ts
+    │   │   │   ├── workers/
+    │   │   │       ├── task-rules-messages.processor.ts
+    │   │   │       ├── task-rules-sweep.processor.ts
+    │   │   │       ├── task-rules-sweep.worker.ts
+    │   │   │       ├── task-rules.constants.ts
+    │   │   │       ├── task-rules.processor.ts
+    │   │   │       └── task-rules.worker.ts
+    │   │   │   ├── task-rule-conditions.repository.ts
+    │   │   │   ├── task-rule-messages.repository.ts
+    │   │   │   ├── task-rules.repository.ts
+    │   │   │   ├── tasks.constants.ts
+    │   │   │   ├── tasks.controller.ts
+    │   │   │   ├── tasks.dto.ts
+    │   │   │   ├── tasks.overview.md
+    │   │   │   ├── tasks.repository.ts
+    │   │   │   ├── tasks.routes.ts
+    │   │   │   ├── tasks.rule-tasks.ts
+    │   │   │   ├── tasks.rules.ts
+    │   │   │   ├── tasks.schema.ts
+    │   │   │   ├── tasks.serializer.ts
+    │   │   │   ├── tasks.service.ts
+    │   │   │   ├── tasks.types.ts
+    │   │   │   └── tasks.validator.ts
+    │   ├── workers/
+    │   │   ├── app-record-purge.constants.ts
+    │   │   ├── app-record-purge.processor.ts
+    │   │   └── app-record-purge.worker.ts
+    │   ├── app-access-sections.ts
+    │   ├── app-member-reference.ts
+    │   ├── app-membership-leave.ts
+    │   ├── app-record-tables.ts
+    │   ├── app-records.container.ts
+    │   ├── app-records.plugin.ts
+    │   ├── app-role-presets.ts
+    │   ├── app.container.ts
+    │   ├── app.overview.md
+    │   ├── app.permissions.ts
+    │   ├── app.routes.ts
+    │   ├── base-record.controller.ts
+    │   ├── base-record.repository.ts
+    │   ├── base-record.service.ts
+    │   └── base-record.types.ts
     ├── audit/
     │   ├── __tests__/
     │   │   ├── integration/
@@ -302,6 +1249,7 @@ src/
     │   │   │   ├── billing-payment-methods.e2e.test.ts
     │   │   │   └── subscription-lifecycle.e2e.test.ts
     │   │   ├── factories/
+    │   │   │   ├── fake-payment-provider.ts
     │   │   │   └── subscription.factory.ts
     │   │   ├── integration/
     │   │   │   ├── billing-account-reads.integration.test.ts
@@ -407,6 +1355,9 @@ src/
     │   │   │   ├── __tests__/
     │   │   │       ├── integration/
     │   │   │       │   ├── subscription-happy.integration.test.ts
+    │   │   │       │   ├── subscription-lifecycle.integration.test.ts
+    │   │   │       │   ├── subscription-refusals.integration.test.ts
+    │   │   │       │   ├── subscription-seat-ceiling.integration.test.ts
     │   │   │       │   ├── subscription-seat-entitlement.integration.test.ts
     │   │   │       │   └── subscription.integration.test.ts
     │   │   │       └── unit/
@@ -491,7 +1442,7 @@ src/
     │   │   │   │   │   ├── events/
     │   │   │   │   │       ├── worker/
     │   │   │   │   │       │   └── notification-retention.worker.unit.test.ts
-    │   │   │   │   │       └── member-invitation-accepted.event-handlers.unit.test.ts
+    │   │   │   │   │       └── membership-invitation.event-handlers.unit.test.ts
     │   │   │   │   │   ├── notification-dispatch.service.unit.test.ts
     │   │   │   │   │   ├── notification-email-content.unit.test.ts
     │   │   │   │   │   ├── notification-email-idempotency.unit.test.ts
@@ -508,7 +1459,7 @@ src/
     │   │   │   │   │   ├── notification.validator.unit.test.ts
     │   │   │   │   │   └── notification.worker.unit.test.ts
     │   │   │   ├── events/
-    │   │   │   │   └── member-invitation-accepted.event-handlers.ts
+    │   │   │   │   └── membership-invitation.event-handlers.ts
     │   │   │   ├── queues/
     │   │   │   │   ├── notification.job.schema.ts
     │   │   │   │   └── notification.queue.ts
@@ -649,6 +1600,7 @@ src/
     │   │   │   ├── member-role-permission.e2e.test.ts
     │   │   │   └── organization-onboarding.e2e.test.ts
     │   │   ├── factories/
+    │   │   │   ├── membership-row.factory.ts
     │   │   │   └── permission.factory.ts
     │   │   ├── integration/
     │   │   │   ├── tenancy-audit-trail.integration.test.ts
@@ -711,6 +1663,7 @@ src/
     │   │   │   │   ├── member-role-tombstone-retention.constants.ts
     │   │   │   │   ├── member-role-tombstone-retention.processor.ts
     │   │   │   │   └── member-role-tombstone-retention.worker.ts
+    │   │   │   ├── member-role.constants.ts
     │   │   │   ├── member-role.controller.ts
     │   │   │   ├── member-role.dto.ts
     │   │   │   ├── member-role.repository.ts
@@ -741,38 +1694,51 @@ src/
     │   │   │   │   │   └── membership.validator.unit.test.ts
     │   │   │   ├── events/
     │   │   │   │   └── membership.events.ts
-    │   │   │   ├── member-invitation/
+    │   │   │   ├── membership-additional-roles/
+    │   │   │   │   ├── membership-additional-roles.overview.md
+    │   │   │   │   ├── membership-additional-roles.repository.ts
+    │   │   │   │   └── membership-additional-roles.schema.ts
+    │   │   │   ├── membership-invitation/
     │   │   │   │   ├── __tests__/
+    │   │   │   │   │   ├── integration/
+    │   │   │   │   │   │   ├── membership-invitation-invitee.integration.test.ts
+    │   │   │   │   │   │   └── membership-invitation-token-echo.integration.test.ts
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   ├── events/
-    │   │   │   │   │   │       └── member-invitation.event-handlers.unit.test.ts
-    │   │   │   │   │   │   ├── member-invitation.controller.unit.test.ts
-    │   │   │   │   │   │   ├── member-invitation.repository.db.unit.test.ts
-    │   │   │   │   │   │   ├── member-invitation.serializer.unit.test.ts
-    │   │   │   │   │   │   ├── member-invitation.service.unit.test.ts
-    │   │   │   │   │   │   └── member-invitation.validator.unit.test.ts
+    │   │   │   │   │   │       └── membership-invitation.event-handlers.unit.test.ts
+    │   │   │   │   │   │   ├── membership-invitation-expiry.processor.unit.test.ts
+    │   │   │   │   │   │   ├── membership-invitation.controller.unit.test.ts
+    │   │   │   │   │   │   ├── membership-invitation.repository.db.unit.test.ts
+    │   │   │   │   │   │   ├── membership-invitation.serializer.unit.test.ts
+    │   │   │   │   │   │   ├── membership-invitation.service.unit.test.ts
+    │   │   │   │   │   │   └── membership-invitation.validator.unit.test.ts
     │   │   │   │   ├── events/
     │   │   │   │   │   ├── index.ts
-    │   │   │   │   │   ├── member-invitation.event-handlers.ts
-    │   │   │   │   │   └── member-invitation.events.ts
+    │   │   │   │   │   ├── membership-invitation.event-handlers.ts
+    │   │   │   │   │   └── membership-invitation.events.ts
     │   │   │   │   ├── seed/
     │   │   │   │   │   ├── index.ts
-    │   │   │   │   │   ├── member-invitation.bulk.seed.ts
-    │   │   │   │   │   └── member-invitation.faker.ts
-    │   │   │   │   ├── member-invitation.controller.ts
-    │   │   │   │   ├── member-invitation.dto.ts
-    │   │   │   │   ├── member-invitation.overview.md
-    │   │   │   │   ├── member-invitation.repository.ts
-    │   │   │   │   ├── member-invitation.schema.ts
-    │   │   │   │   ├── member-invitation.serializer.ts
-    │   │   │   │   ├── member-invitation.service.ts
-    │   │   │   │   ├── member-invitation.token.ts
-    │   │   │   │   ├── member-invitation.types.ts
-    │   │   │   │   └── member-invitation.validator.ts
+    │   │   │   │   │   ├── membership-invitation.bulk.seed.ts
+    │   │   │   │   │   └── membership-invitation.faker.ts
+    │   │   │   │   ├── workers/
+    │   │   │   │   │   ├── membership-invitation-expiry.constants.ts
+    │   │   │   │   │   ├── membership-invitation-expiry.processor.ts
+    │   │   │   │   │   └── membership-invitation-expiry.worker.ts
+    │   │   │   │   ├── membership-invitation.controller.ts
+    │   │   │   │   ├── membership-invitation.dto.ts
+    │   │   │   │   ├── membership-invitation.overview.md
+    │   │   │   │   ├── membership-invitation.repository.ts
+    │   │   │   │   ├── membership-invitation.schema.ts
+    │   │   │   │   ├── membership-invitation.serializer.ts
+    │   │   │   │   ├── membership-invitation.service.ts
+    │   │   │   │   ├── membership-invitation.token.ts
+    │   │   │   │   ├── membership-invitation.types.ts
+    │   │   │   │   └── membership-invitation.validator.ts
     │   │   │   ├── workers/
     │   │   │   │   ├── membership-tombstone-retention.constants.ts
     │   │   │   │   ├── membership-tombstone-retention.processor.ts
     │   │   │   │   └── membership-tombstone-retention.worker.ts
+    │   │   │   ├── membership.constants.ts
     │   │   │   ├── membership.controller.ts
     │   │   │   ├── membership.dto.ts
     │   │   │   ├── membership.overview.md
@@ -787,6 +1753,7 @@ src/
     │   │   │   ├── __tests__/
     │   │   │   │   ├── integration/
     │   │   │   │   │   ├── organization-audit-logs.integration.test.ts
+    │   │   │   │   │   ├── organization-profile-fields.integration.test.ts
     │   │   │   │   │   └── organization.integration.test.ts
     │   │   │   │   └── unit/
     │   │   │   │   │   ├── organization-capability.unit.test.ts
@@ -879,6 +1846,7 @@ src/
     │   │   │   │   │   └── organization-settings.faker.ts
     │   │   │   │   ├── i18n-locale.cache.ts
     │   │   │   │   ├── organization-mfa-policy.ts
+    │   │   │   │   ├── organization-settings.constants.ts
     │   │   │   │   ├── organization-settings.controller.ts
     │   │   │   │   ├── organization-settings.dto.ts
     │   │   │   │   ├── organization-settings.overview.md
@@ -897,6 +1865,7 @@ src/
     │   │   │   │   └── organization-tombstone-retention.worker.ts
     │   │   │   ├── organization-capability.ts
     │   │   │   ├── organization-provisioning.ts
+    │   │   │   ├── organization.constants.ts
     │   │   │   ├── organization.controller.ts
     │   │   │   ├── organization.dto.ts
     │   │   │   ├── organization.overview.md
@@ -918,6 +1887,7 @@ src/
     │   │   │       │   ├── permission-cache-lock-order.policy.unit.test.ts
     │   │   │       │   ├── permission-cache-no-scan.policy.unit.test.ts
     │   │   │       │   ├── permission-cache.service.invalidation.unit.test.ts
+    │   │   │       │   ├── permission-catalog.policy.unit.test.ts
     │   │   │       │   ├── permission.controller.unit.test.ts
     │   │   │       │   ├── permission.repository.cross-organization.db.unit.test.ts
     │   │   │       │   ├── permission.repository.db.unit.test.ts
@@ -966,6 +1936,7 @@ src/
     │   │   │   ├── upload.service.assert-key-confirmed.unit.test.ts
     │   │   │   ├── upload.service.organization-quota-concurrency.db.unit.test.ts
     │   │   │   ├── upload.service.quota-concurrency.db.unit.test.ts
+    │   │   │   ├── upload.service.remove-image-location.unit.test.ts
     │   │   │   ├── upload.service.unit.test.ts
     │   │   │   ├── upload.validator.mime-and-size.unit.test.ts
     │   │   │   └── upload.validator.unit.test.ts
@@ -1115,6 +2086,7 @@ src/
     │   │   │       ├── user-settings.bulk.seed.ts
     │   │   │       └── user-settings.faker.ts
     │   │   │   ├── user-settings-locale-defaults.util.ts
+    │   │   │   ├── user-settings.constants.ts
     │   │   │   ├── user-settings.dto.ts
     │   │   │   ├── user-settings.overview.md
     │   │   │   ├── user-settings.repository.ts
@@ -1130,6 +2102,7 @@ src/
     │   │   ├── user-tombstone-retention.constants.ts
     │   │   ├── user-tombstone-retention.processor.ts
     │   │   └── user-tombstone-retention.worker.ts
+    │   ├── user.constants.ts
     │   ├── user.container.ts
     │   ├── user.controller.ts
     │   ├── user.dto.ts
@@ -1201,7 +2174,8 @@ src/
     │   │   ├── capped-count.util.ts
     │   │   ├── connection-url.util.ts
     │   │   ├── database-handle.types.ts
-    │   │   └── force-rls-tables.constants.ts
+    │   │   ├── force-rls-tables.constants.ts
+    │   │   └── sql-literal.util.ts
     │   ├── connection.ts
     │   ├── database.overview.md
     │   ├── pg-schemas.ts
@@ -1393,10 +2367,12 @@ src/
     └── storage/
     │   ├── __tests__/
     │       └── unit/
+    │       │   ├── content-disposition.util.unit.test.ts
     │       │   ├── s3-adapter.unit.test.ts
     │       │   ├── s3-client-config.unit.test.ts
     │       │   ├── s3-error.util.unit.test.ts
     │       │   └── stored-object-purge.util.unit.test.ts
+    │   ├── content-disposition.util.ts
     │   ├── object-storage.port.ts
     │   ├── s3-adapter.ts
     │   ├── s3-client-config.util.ts
@@ -1461,6 +2437,8 @@ src/
     │   ├── seed-registry.ts
     │   ├── seed-runtime-url.ts
     │   ├── seed.overview.md
+    │   ├── stripe-catalog-sync.ts
+    │   ├── stripe-catalog.ts
     │   └── sync-demo-permissions.ts
     ├── tooling/
     │   ├── codemod-import-paths.ts
@@ -1528,6 +2506,7 @@ src/
     │   ├── pagination.constants.ts
     │   ├── project-identity.constants.ts
     │   ├── query-limits.constants.ts
+    │   ├── record-fields.constants.ts
     │   ├── roles.constants.ts
     │   ├── security.constants.ts
     │   └── ttl.constants.ts
@@ -1653,6 +2632,7 @@ src/
     │   │   ├── bearer-token.util.ts
     │   │   ├── encryption.util.ts
     │   │   ├── field-secret-encryption.util.ts
+    │   │   ├── image-location.util.ts
     │   │   ├── jwt.util.ts
     │   │   ├── password.util.ts
     │   │   ├── response-encryption-keyring.util.ts
@@ -1664,6 +2644,7 @@ src/
     │   │   ├── webhook-signature.util.ts
     │   │   └── webhook-url.util.ts
     │   ├── text/
+    │   │   ├── csv.util.ts
     │   │   ├── email.util.ts
     │   │   └── html-escape.util.ts
     │   └── validation/
@@ -1671,6 +2652,7 @@ src/
     │   │   ├── file-magic.util.ts
     │   │   ├── omit-undefined.util.ts
     │   │   ├── parse-with-schema.util.ts
+    │   │   ├── record-fields.util.ts
     │   │   ├── validation.util.ts
     │   │   └── zod-issue-messages.util.ts
     └── shared.overview.md
@@ -1775,6 +2757,7 @@ src/
     │   ├── signup-flow.e2e.test.ts
     │   └── tenancy-billing-organization.e2e.test.ts
     ├── factories/
+    │   ├── branches.factory.ts
     │   ├── mfa-method.factory.ts
     │   ├── notification.factory.ts
     │   ├── organization-api-key.factory.ts
@@ -1844,12 +2827,15 @@ src/
     │   │   └── unit/
     │   │   │   ├── test-api-prefix.helper.unit.test.ts
     │   │   │   └── test-http-inject.helper.unit.test.ts
+    │   ├── app-record-service-contract.helper.ts
+    │   ├── app-route-requests.ts
     │   ├── audit-log-partition.helper.ts
     │   ├── database-context-mock.helper.ts
     │   ├── fast-check-property.util.ts
     │   ├── harness-provider-env.ts
     │   ├── idempotency-entry.helper.ts
     │   ├── iteration-repository.helper.ts
+    │   ├── json-query.helper.ts
     │   ├── local-test-database.ts
     │   ├── object-storage-mock.helper.ts
     │   ├── operator-database.ts
@@ -1955,6 +2941,7 @@ src/
     │   │   ├── scenarios/
     │   │   │   ├── admin.js
     │   │   │   ├── api-stress.js
+    │   │   │   ├── app-clinic-day.js
     │   │   │   ├── audit-list.js
     │   │   │   ├── auth-onboarding.js
     │   │   │   ├── auth-security-lifecycle.js
@@ -1998,9 +2985,11 @@ src/
     │   │   └── setup-loadtest.sh
     │   └── load.overview.md
     ├── performance/
+    │   ├── app-list-indexes.performance.test.ts
     │   ├── auth-session-list.performance.test.ts
     │   ├── billing-list.performance.test.ts
     │   ├── concurrent-requests.performance.test.ts
+    │   ├── contact-activities-volume.performance.test.ts
     │   ├── explain-analyze.performance.test.ts
     │   ├── membership-list.performance.test.ts
     │   ├── n-plus-one.performance.test.ts
@@ -2008,6 +2997,7 @@ src/
     │   ├── performance.overview.md
     │   ├── permission-cache.performance.test.ts
     │   ├── queue-throughput.performance.test.ts
+    │   ├── task-rules-sweep-scale.performance.test.ts
     │   └── worker-bulkheads.performance.test.ts
     ├── security/
     │   ├── auth/
@@ -2027,6 +3017,8 @@ src/
     │   │   └── session-invalidation.security.test.ts
     │   ├── authz/
     │   │   ├── admin-only.security.test.ts
+    │   │   ├── app-cross-organization-references.security.test.ts
+    │   │   ├── app-cross-organization.security.test.ts
     │   │   ├── auth-token-flow.security.test.ts
     │   │   ├── billing-privilege.security.test.ts
     │   │   ├── cross-organization-mutation.security.test.ts
@@ -2078,6 +3070,7 @@ src/
     │   │   ├── rate-limit-burst.security.test.ts
     │   │   └── rate-limiting.security.test.ts
     │   ├── rls/
+    │   │   ├── app-tables-rls-matrix.security.test.ts
     │   │   ├── audit-append-only.security.test.ts
     │   │   ├── audit-insert-rls-privilege-bypass.security.test.ts
     │   │   ├── audit-outbox-insert-rls.security.test.ts
@@ -2087,7 +3080,7 @@ src/
     │   │   ├── bypass-arm-role-binding.security.test.ts
     │   │   ├── clinozy-be-app-role-privileges.security.test.ts
     │   │   ├── force-rls-policies-restrict.security.test.ts
-    │   │   ├── membership-name-sort-resolver.security.test.ts
+    │   │   ├── membership-name-sort.security.test.ts
     │   │   ├── membership-search-resolver.security.test.ts
     │   │   ├── organization-provisioning-rls.security.test.ts
     │   │   ├── organization-repository-user-resolvers.security.test.ts
@@ -2095,6 +3088,7 @@ src/
     │   │   ├── organization-settings-resolvers.security.test.ts
     │   │   ├── organization-user-discovery.security.test.ts
     │   │   ├── organizations-rls-deleted.security.test.ts
+    │   │   ├── patients-no-retention-arm.security.test.ts
     │   │   ├── retention-cleanup-rls.security.test.ts
     │   │   ├── rls-matrix.security.test.ts
     │   │   ├── savepoint-guc-totality.security.test.ts
@@ -2191,6 +3185,9 @@ src/
     │   │   ├── app.error.unit.test.ts
     │   │   ├── auth.error.unit.test.ts
     │   │   └── validation.error.unit.test.ts
+    │   ├── helpers/
+    │   │   ├── json-query.helper.unit.test.ts
+    │   │   └── route-status-observer.unit.test.ts
     │   ├── infrastructure/
     │   │   ├── cache/
     │   │   │   ├── redis-client.lifecycle.unit.test.ts
@@ -2220,6 +3217,7 @@ src/
     │   │   │   ├── scope-observability.unit.test.ts
     │   │   │   ├── scope-shape-contract.policy.unit.test.ts
     │   │   │   ├── session-context-confinement.policy.unit.test.ts
+    │   │   │   ├── sql-literal.util.unit.test.ts
     │   │   │   ├── transaction-savepoint.db.unit.test.ts
     │   │   │   ├── transaction.util.db.unit.test.ts
     │   │   │   ├── unscoped-query-counter.unit.test.ts
@@ -2309,7 +3307,8 @@ src/
     │   │   │   ├── bulk-config.unit.test.ts
     │   │   │   ├── modules.unit.test.ts
     │   │   │   ├── production-guard.unit.test.ts
-    │   │   │   └── seed-contract.unit.test.ts
+    │   │   │   ├── seed-contract.unit.test.ts
+    │   │   │   └── stripe-catalog-sync.unit.test.ts
     │   │   ├── db-sequences-advance.db.unit.test.ts
     │   │   ├── generate-project-structure-tree.unit.test.ts
     │   │   ├── generate-route-catalog.unit.test.ts
@@ -2340,11 +3339,14 @@ src/
     │   │   │   ├── locale-loader.unit.test.ts
     │   │   │   ├── mcp-openapi.unit.test.ts
     │   │   │   ├── operation-helpers.unit.test.ts
+    │   │   │   ├── query-schema-map.unit.test.ts
+    │   │   │   ├── request-body-map.unit.test.ts
     │   │   │   ├── response-map.unit.test.ts
     │   │   │   ├── responses-builder.unit.test.ts
     │   │   │   ├── route-examples.unit.test.ts
     │   │   │   ├── route-extractor.unit.test.ts
     │   │   │   ├── route-response-map-statuses.unit.test.ts
+    │   │   │   ├── route-schema-metadata.unit.test.ts
     │   │   │   └── schema-enricher.unit.test.ts
     │   │   ├── agent-docker-daemon-script.unit.test.ts
     │   │   ├── agent-live-stack.policy.unit.test.ts
@@ -2357,6 +3359,7 @@ src/
     │   │   ├── env-file.unit.test.ts
     │   │   ├── external-credentials.unit.test.ts
     │   │   ├── iteration-diff.unit.test.ts
+    │   │   ├── iteration-frontend-map.unit.test.ts
     │   │   ├── iteration-intake.unit.test.ts
     │   │   ├── iteration.unit.test.ts
     │   │   ├── load-test-monitor.unit.test.ts
@@ -2407,6 +3410,7 @@ src/
     │   │   │   ├── bearer-token.util.unit.test.ts
     │   │   │   ├── encryption.util.unit.test.ts
     │   │   │   ├── field-secret-encryption.unit.test.ts
+    │   │   │   ├── image-location.util.unit.test.ts
     │   │   │   ├── jwt-key-material.unit.test.ts
     │   │   │   ├── jwt.util.unit.test.ts
     │   │   │   ├── password.util.unit.test.ts
@@ -2422,6 +3426,10 @@ src/
     │   │   │   ├── bullmq-job-validation.unit.test.ts
     │   │   │   ├── file-magic.util.unit.test.ts
     │   │   │   ├── parse-with-schema.util.unit.test.ts
+    │   │   │   ├── record-fields.money.unit.test.ts
+    │   │   │   ├── record-fields.rupees.unit.test.ts
+    │   │   │   ├── record-fields.time-zone.unit.test.ts
+    │   │   │   ├── record-fields.to-text.unit.test.ts
     │   │   │   ├── validation.util.unit.test.ts
     │   │   │   └── zod-issue-messages.util.unit.test.ts
     │   ├── validators/

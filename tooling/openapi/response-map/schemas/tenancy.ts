@@ -21,7 +21,21 @@ export const organizationSchema = {
       description: 'Possible values: ACTIVE | SUSPENDED | ARCHIVED',
       example: 'ACTIVE',
     },
+    owner_user_id: {
+      type: 'string',
+      nullable: true,
+      description:
+        "The owner's user id (`usr_…`) — compare with your own user id to know whether you own it; null only when the owner's login is gone.",
+      example: 'usr_a1b2c3d4e5f6g7h8i9j0k',
+    },
     logo_url: { type: 'string', nullable: true },
+    specialties: {
+      type: 'array',
+      items: { type: 'string', enum: ['skin', 'hair', 'dental', 'gynac', 'physio', 'general'] },
+      example: ['skin'],
+    },
+    timezone: { type: 'string', example: 'Asia/Kolkata' },
+    currency: { type: 'string', example: 'INR' },
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
   },
@@ -33,7 +47,11 @@ export const organizationExample = {
   slug: 'acme-corporation',
   type: 'TEAM',
   status: 'ACTIVE',
+  owner_user_id: 'usr_a1b2c3d4e5f6g7h8i9j0k',
   logo_url: 'https://cdn.example.com/logos/acme-corp.png',
+  specialties: ['skin'],
+  timezone: 'Asia/Kolkata',
+  currency: 'INR',
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-02-10T12:00:00.000Z',
 };
@@ -45,6 +63,11 @@ export const organizationSettingsSchema = {
     organization_id: { type: 'string' },
     is_email_notifications_enabled: { type: 'boolean' },
     security_policy: { type: 'object' },
+    default_day_float: { type: 'number', example: 2000, description: 'Rupees' },
+    lead_hold_days: { type: 'integer', example: 3 },
+    reminder_hour: { type: 'integer', example: 16, description: '0–23, organization time zone' },
+    retarget_after_days: { type: 'integer', example: 90 },
+    deleted_record_purge_days: { type: 'integer', example: 7 },
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
   },
@@ -54,6 +77,11 @@ export const organizationSettingsExample = {
   organization_id: 'org_k7x9m2pqr4w8n1v3a1b2c',
   is_email_notifications_enabled: true,
   security_policy: { mfa_required: true, session_timeout_minutes: 30 },
+  default_day_float: 2000,
+  lead_hold_days: 3,
+  reminder_hour: 16,
+  retarget_after_days: 90,
+  deleted_record_purge_days: 7,
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-02-10T12:00:00.000Z',
 };
@@ -142,12 +170,16 @@ export const membershipSchema = {
     id: { type: 'string' },
     user_id: { type: 'string' },
     organization_id: { type: 'string' },
-    role_id: { type: 'string' },
     status: {
       type: 'string',
-      enum: ['INVITED', 'ACTIVE', 'SUSPENDED'],
-      description: 'Possible values: INVITED | ACTIVE | SUSPENDED',
-      example: 'INVITED',
+      enum: ['invited', 'active', 'suspended'],
+      description: 'Possible values: invited | active | suspended',
+      example: 'invited',
+    },
+    is_owner: {
+      type: 'boolean',
+      description:
+        "The organization's owner — their status and main role are fixed and they cannot be removed (403 reason owner_membership_fixed); they may hold extra roles after the main one.",
     },
     joined_at: { type: 'string', format: 'date-time', nullable: true },
     created_at: { type: 'string', format: 'date-time' },
@@ -167,15 +199,35 @@ export const membershipSchema = {
         },
       },
     },
-    role: {
-      type: 'object',
-      properties: {
-        id: { type: 'string' },
-        name: { type: 'string' },
-      },
+    display_name: {
+      type: 'string',
+      description:
+        'The name the organization keeps — the profile name while live, frozen when the membership ends.',
     },
-    // Live (pending) invitation reference — present only on INVITED rows so the frontend can
-    // Resend/Revoke from the members table; null for ACTIVE/SUSPENDED rows.
+    ended_at: {
+      type: 'string',
+      format: 'date-time',
+      nullable: true,
+      description: 'When the membership ended; null while live.',
+    },
+    end_reason: {
+      type: 'string',
+      nullable: true,
+      enum: [
+        'mistake',
+        'duplicate',
+        'not_needed',
+        'other',
+        'left',
+        'account_deleted',
+        'declined',
+        'invitation_expired',
+        null,
+      ],
+      description: 'Why the membership ended; null while live.',
+    },
+    // Live (pending) invitation reference — present only on invited rows so the frontend can
+    // Resend/Revoke from the members table; null for active/suspended rows.
     invitation: {
       type: 'object',
       nullable: true,
@@ -184,15 +236,35 @@ export const membershipSchema = {
         expires_at: { type: 'string', format: 'date-time' },
       },
     },
+    // Staff profile (launch ROUTE #4).
+    staff_number: {
+      type: 'integer',
+      description: 'The "#12" of the team table — per organization, never reused.',
+    },
+    phone: { type: 'string', nullable: true, example: '+919825044120' },
+    tone: { type: 'string', example: 'sky' },
+    role_ids: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Every role held, the main role first.',
+    },
+    branch_ids: { type: 'array', items: { type: 'string' } },
+    working_days: {
+      type: 'array',
+      items: { type: 'string', enum: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] },
+    },
+    work_starts_at: { type: 'string', example: '10:00' },
+    work_ends_at: { type: 'string', example: '19:00' },
+    commission_percent: { type: 'number', example: 10 },
   },
 };
 
 export const membershipExample = {
-  id: 'mbr_q8w3n7p2m5k1r4t6',
+  id: 'mem_q8w3n7p2m5k1r4t6a1b2c',
   user_id: 'usr_k7x9m2pqr4w8n1v3a1b2c',
   organization_id: 'org_k7x9m2pqr4w8n1v3a1b2c',
-  role_id: 'rol_m3n7p2q8w5k1r4t6a1b2c',
-  status: 'ACTIVE',
+  status: 'active',
+  is_owner: false,
   joined_at: '2026-01-15T10:30:00.000Z',
   created_at: '2026-01-15T10:30:00.000Z',
   updated_at: '2026-02-10T14:20:00.000Z',
@@ -203,14 +275,22 @@ export const membershipExample = {
     last_name: 'Doe',
     avatar_url: 'https://cdn.example.com/avatars/john-doe.jpg',
   },
-  role: {
-    id: 'rol_m3n7p2q8w5k1r4t6a1b2c',
-    name: 'Admin',
-  },
+  display_name: 'John Doe',
+  ended_at: null,
+  end_reason: null,
   invitation: null,
+  staff_number: 12,
+  phone: '+919825044120',
+  tone: 'sky',
+  role_ids: ['rol_m3n7p2q8w5k1r4t6a1b2c'],
+  branch_ids: ['brn_k7x9m2pqr4w8n1v3a1b2c'],
+  working_days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
+  work_starts_at: '10:00',
+  work_ends_at: '19:00',
+  commission_percent: 10,
 };
 
-// ── Member Invitation ──
+// ── Membership Invitation ──
 export const invitationSchema = {
   type: 'object',
   properties: {
@@ -224,13 +304,71 @@ export const invitationSchema = {
   },
 };
 
+/**
+ * The dev-only invitation accept-token echo (launch ROUTE #164, D82) — on the add-member answer's
+ * `invitation` and on the resend answer, never in production.
+ */
+export const debugInvitationTokenProperty = {
+  type: 'string',
+  description:
+    'The raw invitation accept token — present only in non-production, when MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED is on (the env schema refuses it in production; there the token travels only in the invitation email). Pass it as `token` to POST /tenancy/membership-invitations/{membership_invitation_id}/accept.',
+};
+
 export const invitationExample = {
   id: 'inv_r4t6m3n7p2q8w5k1a1b2c',
-  membership_id: 'mbr_q8w3n7p2m5k1r4t6',
+  membership_id: 'mem_q8w3n7p2m5k1r4t6a1b2c',
   email: 'jane.smith@example.com',
   expires_at: '2026-02-21T10:30:00.000Z',
   accepted_at: null,
   revoked_at: null,
+  created_at: '2026-02-14T10:30:00.000Z',
+};
+
+/** `GET /users/me/membership-invitations` item — one of the caller's pending invitations (launch D84). */
+export const myInvitationSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', description: 'The invitation — accept or decline it by this id.' },
+    organization: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        slug: { type: 'string', nullable: true },
+        logo_url: {
+          type: 'string',
+          nullable: true,
+          description: 'A short-lived read URL of the organization logo; null without one.',
+        },
+      },
+    },
+    role_names: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'The roles the invited membership holds — the main role first.',
+    },
+    inviter_name: {
+      type: 'string',
+      nullable: true,
+      description:
+        'Who invited the caller — their name in that organization, else their profile name; null when neither is known.',
+    },
+    expires_at: { type: 'string', format: 'date-time' },
+    created_at: { type: 'string', format: 'date-time' },
+  },
+};
+
+export const myInvitationExample = {
+  id: 'inv_r4t6m3n7p2q8w5k1a1b2c',
+  organization: {
+    id: 'org_k7x9m2pqr4w8n1v3a1b2c',
+    name: 'Skin Studio Adajan',
+    slug: 'skin-studio-adajan',
+    logo_url: null,
+  },
+  role_names: ['Doctor', 'Counsellor'],
+  inviter_name: 'Nikunj Mavani',
+  expires_at: '2026-02-21T10:30:00.000Z',
   created_at: '2026-02-14T10:30:00.000Z',
 };
 
@@ -242,6 +380,12 @@ export const memberRoleSchema = {
     name: { type: 'string' },
     description: { type: 'string', nullable: true },
     is_system: { type: 'boolean' },
+    tone: { type: 'string', example: 'sky' },
+    is_locked: {
+      type: 'boolean',
+      description:
+        "Its codes never change (`PUT /tenancy/organization/roles/{role_id}/permissions` is a 403 `role_locked`) — Owner and Admin as a clinic is provisioned. Not the only fixed role: the role the organization's owner holds as their main role is a 403 `owner_role_fixed` whatever this says — it is the first of `role_ids` on the `is_owner` membership (USERS-M3)",
+    },
     member_count: {
       type: 'integer',
       minimum: 0,
@@ -258,6 +402,8 @@ export const memberRoleExample = {
   name: 'Admin',
   description: 'Full access to all organization resources',
   is_system: true,
+  tone: 'lav',
+  is_locked: true,
   member_count: 3,
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-01-01T00:00:00.000Z',
@@ -267,28 +413,15 @@ export const memberRoleExample = {
 export const memberRolePermissionSchema = {
   type: 'object',
   properties: {
-    role_id: { type: 'string' },
     permission_code: { type: 'string' },
     created_at: { type: 'string', format: 'date-time' },
   },
 };
 
 export const memberRolePermissionExamples = [
-  {
-    role_id: 'rol_m3n7p2q8w5k1r4t6a1b2c',
-    permission_code: 'ORGANIZATION_READ',
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    role_id: 'rol_m3n7p2q8w5k1r4t6a1b2c',
-    permission_code: 'MEMBERSHIP_READ',
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    role_id: 'rol_m3n7p2q8w5k1r4t6a1b2c',
-    permission_code: 'ROLE_READ',
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
+  { permission_code: 'organization:read', created_at: '2026-01-01T00:00:00.000Z' },
+  { permission_code: 'membership:read', created_at: '2026-01-01T00:00:00.000Z' },
+  { permission_code: 'role:read', created_at: '2026-01-01T00:00:00.000Z' },
 ];
 
 // ── Permission ──

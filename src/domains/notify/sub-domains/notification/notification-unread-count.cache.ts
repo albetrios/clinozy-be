@@ -119,7 +119,7 @@ export async function invalidateCachedUnreadNotificationCount(userPublicId: stri
  *
  * @remarks
  * - **Algorithm:** one tombstone per recipient, issued concurrently. Bounded by the notification
- *   fan-out itself (an organization's `membership:manage` holders), so no chunking is needed.
+ *   fan-out itself (an organization's `membership:create` holders), so no chunking is needed.
  * - **Failure modes:** individually swallowed; one unreachable key does not stop the rest.
  * - **Side effects:** one short-lived Redis key per recipient.
  */

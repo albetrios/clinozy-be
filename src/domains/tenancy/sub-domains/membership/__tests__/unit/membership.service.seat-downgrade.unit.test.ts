@@ -25,6 +25,11 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
 });
 
 import { MembershipService } from '@/domains/tenancy/sub-domains/membership/membership.service.js';
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
+import {
+  emptyMembershipAdditionalRolesRepository,
+  membershipRowFixture,
+} from '@/domains/tenancy/__tests__/factories/membership-row.factory.js';
 import { eventBus } from '@/core/events/event-bus.js';
 import {
   PRINCIPAL_SCOPE,
@@ -51,16 +56,17 @@ describe('MembershipService.suspendExcessActiveMembersToFitCeiling (F2 downgrade
   );
   const countActiveByOrganization = vi.fn();
   const suspendExcessActiveMembers = vi.fn();
-  const suspendedRow = (id: number, userId: number) => ({
-    id,
-    public_id: `mem_${id}`,
-    user_id: userId,
-    role_id: 5,
-    status: 'SUSPENDED',
-    joined_at: new Date('2026-01-01T00:00:00Z'),
-    created_at: new Date('2026-01-01T00:00:00Z'),
-    updated_at: new Date('2026-02-01T00:00:00Z'),
-  });
+  const suspendedRow = (id: number, userId: number) =>
+    membershipRowFixture({
+      id,
+      public_id: `mem_${id}`,
+      user_id: userId,
+      role_id: 5,
+      status: MEMBERSHIP_STATUS.SUSPENDED,
+      joined_at: new Date('2026-01-01T00:00:00Z'),
+      created_at: new Date('2026-01-01T00:00:00Z'),
+      updated_at: new Date('2026-02-01T00:00:00Z'),
+    });
 
   const organizationService = {
     requireOrganizationRecordByPublicId,
@@ -83,6 +89,13 @@ describe('MembershipService.suspendExcessActiveMembersToFitCeiling (F2 downgrade
     membershipRepository,
     {} as never,
     {} as never,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    emptyMembershipAdditionalRolesRepository(),
   );
 
   const emitSpy = vi.spyOn(eventBus, 'emit');
@@ -142,7 +155,7 @@ describe('MembershipService.suspendExcessActiveMembersToFitCeiling (F2 downgrade
           type: 'membership.updated',
           payload: {
             organization_public_id: 'org_public',
-            data: expect.objectContaining({ id: membershipPublicId, status: 'SUSPENDED' }),
+            data: expect.objectContaining({ id: membershipPublicId, status: 'suspended' }),
           },
         }),
       );

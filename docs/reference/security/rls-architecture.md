@@ -446,7 +446,7 @@ auth-session.service.ts (only consumer)
 ### 9.5 Verified flow (example: invitation accept)
 
 ```text
-member-invitation.service.ts (ledgered): invitation token matched (the caller's own proof)
+membership-invitation.service.ts (ledgered): invitation token matched (the caller's own proof)
   → PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: invitation.organization_public_id })
   → withAppDatabaseContext → normal organization GUC → normal policies
 ```

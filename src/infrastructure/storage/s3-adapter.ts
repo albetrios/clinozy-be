@@ -19,6 +19,7 @@ import {
   isS3PreconditionFailedError,
 } from '@/infrastructure/storage/s3-error.util.js';
 import { buildSharedS3ClientConfig } from '@/infrastructure/storage/s3-client-config.util.js';
+import { inlineContentDisposition } from '@/infrastructure/storage/content-disposition.util.js';
 import type {
   ObjectCopyResult,
   ObjectDeleteResult,
@@ -170,11 +171,15 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
   async createPresignedDownloadUrl(options: {
     key: string;
     expiresInSeconds: number;
+    fileName?: string;
   }): Promise<string> {
     const bucket = requireBucket();
     const command = new GetObjectCommand({
       Bucket: bucket,
       Key: options.key,
+      ...(options.fileName === undefined
+        ? {}
+        : { ResponseContentDisposition: inlineContentDisposition(options.fileName) }),
     });
     return getSignedUrl(getS3Client(), command, { expiresIn: options.expiresInSeconds });
   }

@@ -134,17 +134,27 @@ is issued — the same `session_id` keeps working, and a later refresh re-mints 
   "data": {
     "user": { "id": "usr_…", "email": "…", "is_mfa_enabled": false, "onboarding_completed": true },
     "active_organization": { "id": "org_…", "type": "TEAM" },
-    "my_permissions": ["organization:read", "membership:manage"],
+    "membership_id": "mem_…",
+    "my_permissions": ["organization:read", "membership:create"],
+    "my_role_ids": ["rol_…"],
+    "my_roles": [{ "id": "rol_…", "name": "Front desk", "tone": "sky", "is_system": true }],
     "global_role": null
   }
 }
 ```
 
+- **Who am I in this organization.** `membership_id` is the caller's own membership (the `id` of
+  their `GET /app/memberships` row — no list scan to find it); `my_role_ids` / `my_roles` are the
+  roles they hold, the main role first, `my_roles` naming each (`name`, `tone`, `is_system`) so a
+  member without `role:read` can show their own role. A system role's name never changes. Without an
+  active organization or a live membership, `membership_id` is `null` and both lists are empty.
+
 - **`type` vs `my_permissions` — render on the intersection.** The organization `type` says what the organization **kind** allows (only a `TEAM` organization can invite members); `my_permissions` is what **this caller** may do in the active organization (resolved permission codes). Show a team-only action only when `type === 'TEAM'` **and** the caller holds the permission.
 - **The organization-switcher list is NOT here.** It lives at `GET /users/me/organizations`, which is **paginated** — follow the cursor to the end before rendering, or a user in more than one page of organizations silently loses the rest from their switcher. It was embedded in this response once, as a flat array with no cursor filled by a default-limit read, which is exactly the truncation this split fixes. Derive each row's "is this the active one?" by comparing its `id` to `active_organization.id`.
 - **Switch flow (one call):** `POST /auth/switch-to-organization` (or `…-personal`) re-mints the token **and returns the active-organization delta** — `{ access_token, active_organization, my_permissions, global_role }`. Swap your in-memory Bearer for the new `access_token` and repaint from `active_organization` + `my_permissions`. The `user` is stable across a switch, so **no follow-up `GET /auth/me/context` is needed** — re-fetch the full context only on a cold reload. Your cached organization list is stable too: switching changes which organization is active, not which ones you belong to, so re-derive the active row from the new `active_organization.id` rather than re-fetching the list.
-- **Join flow:** `POST /tenancy/invitations/{invitation_id}/accept` returns the joined `organization_id`; pass it straight to `POST /auth/switch-to-organization` (above) to land on the new team's dashboard — no lookup in between If the team requires MFA and the session hasn't proved it, the switch answers `403` `mfa_required` — see [Organizations that require MFA](#organizations-that-require-mfa).
+- **Join flow:** `POST /tenancy/membership-invitations/{membership_invitation_id}/accept` returns the joined `organization_id`; pass it straight to `POST /auth/switch-to-organization` (above) to land on the new team's dashboard — no lookup in between If the team requires MFA and the session hasn't proved it, the switch answers `403` `mfa_required` — see [Organizations that require MFA](#organizations-that-require-mfa).
   - **Invited user with no account (first time):** the invite already created a passwordless, unverified **placeholder** for that email, and `accept` requires a **verified** email (else `403 errors:invitationRequiresVerifiedEmail` — a forwarded invite must not be claimable by the wrong person). So the new user first authenticates in a way that proves email control: **email verification-code** (`/auth/email/send-code` → `/auth/email/login`) or **OAuth** both claim the placeholder, verify the email, and provision their personal organization in one step. After that, the same `accept` → (`organization_id`) → `switch-to-organization` tail applies. Don't hard-block the UI when `is_email_verified` is false — route the user through the email-code login, then call `accept`.
+  - **Invitations found after sign-in (launch D84):** `GET /users/me/membership-invitations` lists the signed-in person's pending invitations on their **verified** email — the clinic (`id`, `name`, `slug`, `logo_url`), `role_names`, `inviter_name`, `expires_at` (none for an unverified email). Ask it after every sign-in, before onboarding or the organization picker: someone with no clinic yet who has invitations should see them, not "create an organization". `accept` takes **no token** for that signed-in owner of the email (send `{}`; a token from the link must still match), then the same `switch-to-organization` tail. `POST /tenancy/membership-invitations/{membership_invitation_id}/decline` turns one down (expired or not): the invited membership ends (`end_reason` `declined`, its seat freed) and the inviter is told in the app. An invite left 7 days past its expiry is ended by a daily sweep (`end_reason` `invitation_expired`).
 
 This works **identically for personal and team organizations** — there is one route surface, and the organization `type` (not different URLs) tells the UI what to show. See [route-consistency-and-organization-model.md](route-consistency-and-organization-model.md).
 
@@ -155,16 +165,16 @@ This works **identically for personal and team organizations** — there is one 
 > `/api/v1/billing/subscriptions`, `/api/v1/notify/webhooks`. Account-level routes that aren't tied
 > to one active organization stay plural: `POST /api/v1/tenancy/organizations`,
 > `GET /api/v1/tenancy/organizations/by-slug/{slug}`, and the cross-organization invitation-accept action
-> `POST /api/v1/tenancy/invitations/{invitation_id}/accept`.
+> `POST /api/v1/tenancy/membership-invitations/{membership_invitation_id}/accept`.
 >
 > **Inviting is not a separate resource.** There is **no** `POST` or `GET /tenancy/organization/invitations`.
 > To invite a teammate, `POST /api/v1/tenancy/organization/memberships` with `{ email, role_id }` — this
-> creates an **`INVITED` membership** and emails a token. Invited people appear in the **members list**
-> (`GET /api/v1/tenancy/organization/memberships`) with `status: "INVITED"` and an embedded `invitation`
+> creates an **`invited` membership** and emails a token. Invited people appear in the **members list**
+> (`GET /api/v1/tenancy/organization/memberships`) with `status: "invited"` and an embedded `invitation`
 > object; there is no separate pending-invitations list to fetch. Revoke with
-> `DELETE /api/v1/tenancy/organization/invitations/{invitation_id}` and resend with
-> `POST /api/v1/tenancy/organization/invitations/{invitation_id}/resend`. The invitee becomes `ACTIVE`
-> by calling `POST /api/v1/tenancy/invitations/{invitation_id}/accept`.
+> `DELETE /api/v1/tenancy/organization/memberships/{membership_id}/invitation` and resend with
+> `POST /api/v1/tenancy/organization/memberships/{membership_id}/invitation/resend`. The invitee becomes `active`
+> by calling `POST /api/v1/tenancy/membership-invitations/{membership_invitation_id}/accept`.
 
 ### Organizations that require MFA
 
@@ -239,7 +249,7 @@ sequenceDiagram
   API-->>FE: 200 { access_token, session_id }  + Set-Cookie session_id
   Note over FE: keep access_token in memory
   FE->>API: GET /auth/me/context   [Authorization: Bearer]
-  API-->>FE: 200 { user, active_organization, my_permissions, global_role }
+  API-->>FE: 200 { user, active_organization, membership_id, my_permissions, my_roles, global_role }
   Note over FE: dashboard painted
 ```
 
@@ -257,7 +267,7 @@ The first-factor entry points (`login`, `email/send-code`, `email/login`, `oauth
 | **WebAuthn / passkey** | `POST /auth/webauthn/authenticate/options` → `POST /auth/webauthn/authenticate/verify` → `GET /auth/me/context` | `{ access_token, session_id }` | **3** (+1 if MFA) |
 | **Silent resume (app boot / reload)** | `POST /auth/refresh` → `GET /auth/me/context` | `{ access_token }` — no `session_id`; restores the previously-active `org` | **2** |
 | **Forgot / reset password** | `POST /auth/password/forgot` → `POST /auth/password/reset` → `GET /auth/me/context` | `{ access_token, session_id }` — logs straight in | **3** (+1 if MFA) |
-| **Invited teammate → land in the team** | *onboard via email verification-code / OAuth (2–3)* → `POST /tenancy/invitations/{invitation_id}/accept` → `POST /auth/switch-to-organization` | `{ access_token, active_organization, my_permissions, global_role }` — switch delta, no `/auth/me/context` needed | onboarding **+ 2** |
+| **Invited teammate → land in the team** | *onboard via email verification-code / OAuth (2–3)* → `POST /tenancy/membership-invitations/{membership_invitation_id}/accept` → `POST /auth/switch-to-organization` | `{ access_token, active_organization, my_permissions, global_role }` — switch delta, no `/auth/me/context` needed | onboarding **+ 2** |
 
 Notes:
 
@@ -455,6 +465,7 @@ export interface Organization {
   slug: string | null;          // null for a PERSONAL organization
   type: 'PERSONAL' | 'TEAM';
   status: string;
+  owner_user_id: string | null; // usr_… — the owner; compare with user.id (null only if the login is gone)
   logo_url: string | null;
   capabilities: OrganizationCapabilities;
   created_at: string;           // ISO-8601
@@ -484,7 +495,10 @@ export interface MeUser {
 export interface MeContext {
   user: MeUser;
   active_organization: Organization | null;             // the active organization (may be an auto-provisioned personal organization)
-  my_permissions: string[];                              // e.g. ["organization:read", "membership:manage"]
+  membership_id: string | null;                          // the caller's own membership ("mem_…"); null without one
+  my_permissions: string[];                              // e.g. ["organization:read", "membership:create"]
+  my_role_ids: string[];                                 // "rol_…", the main role first
+  my_roles: { id: string; name: string; tone: string; is_system: boolean }[]; // the same roles, named
   global_role: GlobalRole | null;                        // null for a standard user
   // NOTE: no `organizations` — the switcher list is paginated and lives at
   // GET /users/me/organizations.
@@ -564,7 +578,7 @@ export const requestPasswordReset = (email: string, captcha?: string) =>
 export const resetPassword = (token: string, password: string, captcha?: string) =>
   postPublic<FirstFactorResponse>('/auth/password/reset', { token, password }, captcha);
 export const acceptInvitation = (invitationId: string, token: string) =>   // authenticated write → apiFetch
-  apiFetch(`/tenancy/invitations/${invitationId}/accept`, { method: 'POST', body: JSON.stringify({ token }) })
+  apiFetch(`/tenancy/membership-invitations/${invitationId}/accept`, { method: 'POST', body: JSON.stringify({ token }) })
     .then(async (r) => {
       if (!r.ok) throw new Error('accept_failed');
       return (await r.json() as Envelope<{ organization_id: string }>).data;

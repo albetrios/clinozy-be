@@ -1,5 +1,10 @@
 import { env } from '@/shared/config/env.config.js';
-import { ConflictError, ForbiddenError, NotFoundError } from '@/shared/errors/index.js';
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '@/shared/errors/index.js';
 import { isPostgresUniqueViolation } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import {
   withAppDatabaseContext,
@@ -12,6 +17,7 @@ import type { MemberRolePermissionRepository } from './member-role-permission/me
 import type { MemberRoleOutput, MemberRoleRow } from './member-role.types.js';
 import {
   validateCreateMemberRole,
+  validateDeleteMemberRoleQuery,
   validateUpdateMemberRole,
   validateListMemberRolesQuery,
 } from './member-role.validator.js';
@@ -21,6 +27,7 @@ import type { AuthorizationService } from '@/domains/tenancy/sub-domains/permiss
 import type { PermissionRepository } from '@/domains/tenancy/sub-domains/permission/permission.repository.js';
 import { assertCallerCanGrantPermissionCodes } from '@/domains/tenancy/sub-domains/permission/assert-grantable-permissions.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
+import { assertRecordNotChangedSince } from '@/shared/utils/validation/record-fields.util.js';
 import type { ListMemberRolesQueryInput } from './member-role.dto.js';
 
 /**
@@ -97,6 +104,49 @@ export class MemberRoleService {
           has_more: result.has_more,
           next_cursor: result.next_cursor,
         };
+      },
+    });
+  }
+
+  /**
+   * One page of the organization's live roles in the order they were made — Owner, Admin, the
+   * clinic presets, then the custom roles — for the role directory every member reads
+   * (`GET /app/roles`, launch D81 (4)), as the member directory is `GET /app/memberships`.
+   *
+   * @remarks
+   * - **Algorithm:** the roles keyset list sorted by `created_at` then `id` ascending (the
+   *   provisioned roles share one transaction's time, so the id keeps their order); no member
+   *   counts — the directory names roles, it does not manage them.
+   * - **Failure modes:** `NotFoundError('Organization')`.
+   * - **Side effects:** none (read-only).
+   */
+  async listDirectory({
+    scope,
+    pagination,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    pagination: { limit: number; after?: string | undefined };
+  }): Promise<{
+    items: MemberRoleRow[];
+    limit: number;
+    has_more: boolean;
+    next_cursor: string | null;
+  }> {
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization = await this.organizationService.requireOrganizationRecordByPublicId(
+          scope.organizationPublicId,
+        );
+        return this.memberRoleRepository.findByOrganizationId(
+          organization.id,
+          omitUndefined({
+            after: pagination.after,
+            limit: pagination.limit,
+            sort: 'created_at' as const,
+            order: 'asc' as const,
+          }),
+        );
       },
     });
   }
@@ -247,7 +297,14 @@ export class MemberRoleService {
         // unknown code throws here, and the whole `withAppDatabaseContext` transaction
         // rolls back — no half-made role. A brand-new role has no current permissions and is never
         // the owner role, so the owner-protection / removed-codes checks the PUT path runs do not apply.
-        const permissionCodes = parsed.permission_codes ?? [];
+        // RC-142: "copy access from" another role — its codes join any listed ones.
+        const copiedCodes = parsed.copy_from_role_id
+          ? await this.listCodesOfRoleToCopy({
+              organizationId: organization.id,
+              rolePublicId: parsed.copy_from_role_id,
+            })
+          : [];
+        const permissionCodes = [...new Set([...(parsed.permission_codes ?? []), ...copiedCodes])];
         if (permissionCodes.length > 0) {
           await assertCallerCanGrantPermissionCodes({
             authorizationService: this.authorizationService,
@@ -268,6 +325,7 @@ export class MemberRoleService {
               organization_id: organization.id,
               name: parsed.name,
               description: parsed.description,
+              tone: parsed.tone,
               created_by_user_id: userId ?? null,
             }),
           );
@@ -291,6 +349,33 @@ export class MemberRoleService {
         return serializeMemberRole({ row: created, member_count: 0 });
       },
     });
+  }
+
+  /**
+   * The permission codes of the role a new role copies its access from (RC-142).
+   *
+   * @remarks
+   * - **Failure modes:** an id that is no live role of the organization is a `ValidationError` on
+   *   `copy_from_role_id` (400) — it is a body field, not the path.
+   */
+  private async listCodesOfRoleToCopy({
+    organizationId,
+    rolePublicId,
+  }: {
+    organizationId: number;
+    rolePublicId: string;
+  }): Promise<string[]> {
+    const source = await this.memberRoleRepository.findByPublicId(rolePublicId, organizationId);
+    if (!source) {
+      throw new ValidationError(
+        'errors:validation.roleToCopyNotFound',
+        { role_id: rolePublicId },
+        undefined,
+        [{ field: 'copy_from_role_id', messageKey: 'errors:validation.roleToCopyNotFound' }],
+      );
+    }
+    const rows = await this.memberRolePermissionRepository.findByRoleId(source.id);
+    return rows.map((row) => row.permission_code);
   }
 
   async update({
@@ -318,18 +403,27 @@ export class MemberRoleService {
           organization.id,
         );
         if (!role) throw new NotFoundError('Role');
-        // sec-T3: system roles (Admin/Member) are immutable from the API — same guard as delete.
-        if (role.is_system) {
-          throw new ForbiddenError('errors:cannotModifySystemRole');
+        // T14 / D43: a save based on an older version is refused with who and when.
+        await assertRecordNotChangedSince({
+          row: role,
+          expected: parsed.expected_updated_at,
+          resolveUserPublicId: (userInternalId) =>
+            this.organizationService.resolveUserPublicIdByInternalId(userInternalId),
+        });
+        // sec-T3: a system role's name is immutable from the API — same guard as delete. Its tone and
+        // description (the role's purpose, launch RC-141) stay editable.
+        if (role.is_system && parsed.name !== undefined && parsed.name !== role.name) {
+          throw new ForbiddenError('errors:cannotModifySystemRole').withReason('system_role_fixed');
         }
         const userId =
           await this.organizationService.resolveUserInternalIdByPublicId(updated_by_user_public_id);
         let updated: MemberRoleRow | null;
         try {
+          const { expected_updated_at: _expectedUpdatedAt, ...changes } = parsed;
           updated = await this.memberRoleRepository.update(
             role_public_id,
             organization.id,
-            omitUndefined(parsed),
+            omitUndefined(changes),
             userId ?? null,
           );
         } catch (error) {
@@ -346,30 +440,34 @@ export class MemberRoleService {
   }
 
   /**
-   * Soft-deletes a custom role.
+   * Soft-deletes a custom role with why (launch T12).
    *
    * @remarks
    * sec-T3 guards:
-   *   1. **`is_system` guard** — Admin/Member seed roles cannot be deleted from the API.
-   *      Surfaces as `ForbiddenError('errors:cannotDeleteSystemRole')`.
-   *   2. **Active-membership guard** — refuses to delete a role currently assigned to one
-   *      or more active memberships, because the permission-resolution join filters
-   *      `isNull(roles.deleted_at)` and would silently strip every member's permission
-   *      set. Surfaces as `ConflictError('errors:roleHasActiveMembers')` — clients
-   *      must reassign members before deleting.
+   *   1. **`is_system` guard** — the seeded roles cannot be deleted from the API.
+   *      Surfaces as `ForbiddenError('errors:cannotDeleteSystemRole')`, `reason: system_role_fixed`
+   *      (launch D81 (4)).
+   *   2. **Member guard** — refuses to delete a role any live member holds (main or extra, any
+   *      status), because the permission-resolution join filters `isNull(roles.deleted_at)` and
+   *      would silently strip every member's permission set. Surfaces as
+   *      `ConflictError('errors:roleHasActiveMembers')` — clients must reassign members first.
    *
-   * Both checks fire BEFORE the repository `softDelete` so a refused attempt leaves no
-   * partial state. The is_system guard runs first so operators get the more actionable
-   * "system role" message in the seeded-Admin case (which is the most common attempt).
+   * Both checks fire BEFORE the write so a refused attempt leaves no partial state. The deleted
+   * role is purged after the role tombstone window — the restore window.
    */
   async delete({
     scope,
     role_public_id,
+    query,
+    deleted_by_user_public_id,
   }: {
     scope: OrganizationPrincipalDatabaseScope;
     role_public_id: string;
+    query: unknown;
+    deleted_by_user_public_id: string | undefined;
   }): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
+    const removal = validateDeleteMemberRoleQuery(query);
     await withAppDatabaseContext({
       scope,
       callback: async () => {
@@ -383,17 +481,24 @@ export class MemberRoleService {
         );
         if (!role) throw new NotFoundError('Role');
         if (role.is_system) {
-          throw new ForbiddenError('errors:cannotDeleteSystemRole');
+          throw new ForbiddenError('errors:cannotDeleteSystemRole').withReason('system_role_fixed');
         }
-        // Atomic guarded delete: the "no active members?" check and the soft-delete run in ONE
+        const userId =
+          await this.organizationService.resolveUserInternalIdByPublicId(deleted_by_user_public_id);
+        // Atomic guarded delete: the "no live members?" check and the soft-delete run in ONE
         // statement (a NOT EXISTS over memberships), so a concurrent member-assignment to this role
         // cannot interleave a separate count and the delete and leave a member on a deleted role —
         // which permission resolution would then silently strip of all permissions (route-audit C2).
-        // `role` was found above, so a zero-row result means active members remain (or a concurrent
+        // `role` was found above, so a zero-row result means members remain (or a concurrent
         // delete) → surface the actionable conflict rather than NotFound.
         const deleted = await this.memberRoleRepository.softDeleteIfNoActiveMembers(
           role_public_id,
           organization.id,
+          {
+            delete_reason: removal.reason,
+            delete_note: removal.note ?? null,
+            updated_by_user_id: userId ?? null,
+          },
         );
         if (!deleted) {
           throw new ConflictError('errors:roleHasActiveMembers');
@@ -403,5 +508,73 @@ export class MemberRoleService {
     // sec-R11: invalidate AFTER the write transaction commits so a concurrent permission recompute
     // cannot re-cache the stale (pre-delete) set for members holding the deleted role.
     await invalidateOrganizationPermissions(organization_public_id);
+  }
+
+  /**
+   * Undoes a role's delete (launch §2.D route 17, T12) while it is not yet purged.
+   *
+   * @remarks
+   * - **Algorithm:** inside the organization context — the deleted role (409 when live, 404 when
+   *   unknown), then the restore; a live role that took the name meanwhile is a 409.
+   * - **Failure modes:** `NotFoundError('Role')`; `ConflictError` `record_not_deleted` /
+   *   `record_restore_conflict`.
+   */
+  async restore({
+    scope,
+    role_public_id,
+    restored_by_user_public_id,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    role_public_id: string;
+    restored_by_user_public_id: string | undefined;
+  }): Promise<MemberRoleOutput> {
+    const organization_public_id = scope.organizationPublicId;
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organization =
+          await this.organizationService.requireOrganizationRecordByPublicId(
+            organization_public_id,
+          );
+        const deleted = await this.memberRoleRepository.findDeletedByPublicId(
+          role_public_id,
+          organization.id,
+        );
+        if (!deleted) {
+          const live = await this.memberRoleRepository.findByPublicId(
+            role_public_id,
+            organization.id,
+          );
+          if (live) {
+            throw new ConflictError('errors:recordNotDeleted').withReason('record_not_deleted');
+          }
+          throw new NotFoundError('Role');
+        }
+        const userId = await this.organizationService.resolveUserInternalIdByPublicId(
+          restored_by_user_public_id,
+        );
+        let restored: MemberRoleRow | null;
+        try {
+          restored = await this.memberRoleRepository.restore(
+            role_public_id,
+            organization.id,
+            userId ?? null,
+          );
+        } catch (error) {
+          if (isPostgresUniqueViolation(error)) {
+            throw new ConflictError('errors:recordRestoreConflict').withReason(
+              'record_restore_conflict',
+            );
+          }
+          throw error;
+        }
+        if (!restored) throw new NotFoundError('Role');
+        const memberCount = await this.memberRoleRepository.countMembersForRole(
+          restored.id,
+          organization.id,
+        );
+        return serializeMemberRole({ row: restored, member_count: memberCount });
+      },
+    });
   }
 }

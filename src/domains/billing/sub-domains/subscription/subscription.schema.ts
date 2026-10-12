@@ -38,9 +38,10 @@ export const subscriptions = billingSchema
       provider_subscription_id: varchar('provider_subscription_id', { length: 255 }),
       provider_customer_id: varchar('provider_customer_id', { length: 255 }),
       billing_cycle: varchar('billing_cycle', { length: 20 }).notNull(),
-      // REQ-4: purchased seat quantity synced FROM Stripe (the subscription item
-      // quantity). NULL = not yet synced — seats_total then falls back to the
-      // plan's included_seats.
+      // REQ-4: the billed seat quantity — the Stripe subscription item quantity,
+      // which the seat sync sets to the member count. NULL = not yet synced. The
+      // seat ceiling is the plan's included_seats, raised only by a quantity above
+      // it (never this column alone — launch ROUTE #165).
       seats: integer('seats'),
       status: varchar('status', { length: 20 }).notNull().default('TRIALING'),
       current_period_start: timestamp('current_period_start', { withTimezone: true }).notNull(),

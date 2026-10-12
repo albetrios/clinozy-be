@@ -44,15 +44,16 @@ describe('membership routes rate-limit policy (sec-r4-I3)', () => {
     );
   });
 
-  it('DELETE /organization/invitations/:invitation_id has ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT', () => {
-    expect(findRouteBlock('delete', '/organization/invitations/:invitation_id')).toContain(
-      '...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT',
-    );
+  it('DELETE /organization/memberships/:membership_id/invitation has ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT', () => {
+    expect(
+      findRouteBlock('delete', '/organization/memberships/:membership_id/invitation'),
+    ).toContain('...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT');
   });
 
-  it('POST /organization/invitations/:invitation_id/resend has STRICT_AUTHED_RATE_LIMIT applied', () => {
-    expect(findRouteBlock('post', '/organization/invitations/:invitation_id/resend')).toContain(
-      '...STRICT_AUTHED_RATE_LIMIT',
-    );
+  it('POST /organization/memberships/:membership_id/invitation/resend has STRICT_AUTHED_RATE_LIMIT applied', () => {
+    // Merged into a single config object to keep idempotencyRequired (T13).
+    expect(
+      findRouteBlock('post', '/organization/memberships/:membership_id/invitation/resend'),
+    ).toContain('STRICT_AUTHED_RATE_LIMIT.config');
   });
 });

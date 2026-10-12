@@ -26,12 +26,22 @@ function renderWithCatalog({
 }
 
 /**
+ * The interpolation values a schema set beside its message key — a custom issue's
+ * `params.messageParams` (`refine(…, { message, params: { messageParams } })` or `addIssue`).
+ */
+function messageParamsOf(issue: z.core.$ZodIssue): Record<string, unknown> {
+  const values = issue.code === 'custom' ? issue.params?.messageParams : undefined;
+  return typeof values === 'object' && values !== null ? (values as Record<string, unknown>) : {};
+}
+
+/**
  * Renders one Zod issue in every response language.
  *
  * @remarks
  * - **Algorithm:** a message Zod wrote itself (it equals the English catalog's) is rendered from
  *   each language's catalog; a message the schema set is a translation key (`errors:…`, translated
- *   with the i18next singleton) or, when not a key, kept as written.
+ *   with the i18next singleton — a custom issue's `params.messageParams` fill its `{{…}}`) or, when
+ *   not a key, kept as written.
  * - **Why:** `errors[].message` used to be Zod's English for every caller — the one part of an
  *   error response that ignored `Accept-Language`.
  * - **Notes:** the catalogs name the received type from the issue's `input`, so the parse must run
@@ -46,7 +56,7 @@ export function renderZodIssueMessages(issue: z.core.$ZodIssue): LocalizedMessag
       rendered[language] =
         renderWithCatalog({ catalog: ZOD_MESSAGE_CATALOGS[language], issue }) ?? issue.message;
     } else if (issue.message.startsWith('errors:') && i18next.isInitialized) {
-      rendered[language] = i18next.t(issue.message, { lng: language });
+      rendered[language] = i18next.t(issue.message, { lng: language, ...messageParamsOf(issue) });
     } else {
       rendered[language] = issue.message;
     }

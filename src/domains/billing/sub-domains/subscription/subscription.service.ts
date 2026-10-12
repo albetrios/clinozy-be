@@ -47,7 +47,6 @@ const DUNNING_STATUSES = new Set<string>(['PAST_DUE', 'UNPAID']);
 // (trial ended without a payment method). Both hold the Free ceiling until payment lands.
 const UNPAID_ENTITLEMENT_STATUSES = new Set<string>(['INCOMPLETE', 'PAUSED']);
 
-const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import { assertTeamOrganization } from '@/domains/tenancy/sub-domains/organization/organization-capability.js';
 import {
@@ -63,6 +62,7 @@ import type {
 } from './subscription.types.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
+import { MILLISECONDS_PER_DAY } from '@/shared/constants/ttl.constants.js';
 import { BillingAccountSerializer } from './billing-account.serializer.js';
 import { SubscriptionSerializer } from './subscription.serializer.js';
 import { buildDomainEvent, eventBus, runEnqueueAfterCommit } from '@/core/events/event-bus.js';

@@ -48,8 +48,13 @@ describe('worker-registration.registry', () => {
     const definitions = getWorkerQueueRegistrationDefinitions();
 
     // REQ-4: +1 for the subscription-seat-sync worker (Stripe family, throughput, Postgres-backed);
-    // +1 for the webhook-delivery-reclaim sweep (webhook family, cron, Postgres-backed).
-    expect(definitions).toHaveLength(33);
+    // +1 for the webhook-delivery-reclaim sweep (webhook family, cron, Postgres-backed); +1 for the
+    // app record purge (WC-46); +2 for the day auto-close sweep and its per-organization jobs (WC-39);
+    // +2 for the task rules sweep and its per-organization runs (TK4); +4 for messaging (D77): the
+    // delivery and callback-processing workers, the one-minute sweep and the callbacks' purge; +2 for
+    // the AI ideas sweep and its per-organization refreshes (D80, WC-47); +1 for the membership
+    // invitation expiry sweep (launch D84).
+    expect(definitions).toHaveLength(39);
     for (const definition of definitions) {
       expect(definition.queueName).toBeTruthy();
       expect(definition.logLabel).toBeTruthy();
@@ -73,15 +78,19 @@ describe('worker-registration.registry', () => {
 
     // REQ-4: subscription-seat-sync adds one Postgres-backed throughput worker (event-driven, plus the
     // hourly seat reconcile on its queue); the webhook-delivery-reclaim sweep one Postgres-backed,
-    // scheduled, maintenance worker. user-data-export also runs its lost-enqueue sweep.
-    expect(definitions.filter((definition) => definition.usesPostgres)).toHaveLength(30);
-    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(29);
+    // scheduled, maintenance worker; user-data-export also runs its lost-enqueue sweep. The app
+    // record purge and the day auto-close sweep add two more, and the auto-close jobs one
+    // Postgres-backed, event-driven (the sweep adds them), throughput worker; the task rules sweep and
+    // its runs the same pair again; the membership invitation expiry sweep (D84) one Postgres-backed,
+    // scheduled, maintenance worker.
+    expect(definitions.filter((definition) => definition.usesPostgres)).toHaveLength(36);
+    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(33);
     expect(
       definitions.filter((definition) => definition.criticality === 'throughput'),
-    ).toHaveLength(6);
+    ).toHaveLength(8);
     expect(
       definitions.filter((definition) => definition.criticality === 'maintenance'),
-    ).toHaveLength(25);
+    ).toHaveLength(29);
     expect(
       definitions.filter((definition) => definition.criticality === 'observability'),
     ).toHaveLength(2);

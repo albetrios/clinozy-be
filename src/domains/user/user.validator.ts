@@ -4,15 +4,22 @@ import {
   ListUsersDto,
   AdminUpdateUserDto,
   UploadAvatarDto,
+  UpdateMyPresenceDto,
   type UpdateMeInput,
   type ListUsersInput,
   type AdminUpdateUserInput,
   type UploadAvatarInput,
+  type UpdateMyPresenceInput,
 } from './user.dto.js';
 
 /** Validate the `PATCH /api/v1/users/me` body against {@link UpdateMeDto}; throws `ValidationError` on failure. */
 export function validateUpdateMe(body: unknown): UpdateMeInput {
   return parseWithSchema({ schema: UpdateMeDto, data: body });
+}
+
+/** Validate the `PUT /api/v1/users/me/presence` body against {@link UpdateMyPresenceDto}; throws `ValidationError` on failure. */
+export function validateUpdateMyPresence(body: unknown): UpdateMyPresenceInput {
+  return parseWithSchema({ schema: UpdateMyPresenceDto, data: body });
 }
 
 /**

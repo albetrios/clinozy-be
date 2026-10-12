@@ -13,12 +13,10 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     // cross-domain imports) may enter maintenance contexts (tombstoning, admin reads) —
     // the real wrapper opens a database.transaction() and CI's unit lane has no Postgres.
     withMaintenanceDatabaseContext: vi.fn(
-      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
-        callback(),
+      async ({ callback }: { callback: () => Promise<unknown> }) => callback(),
     ),
-    withAppDatabaseContext: vi.fn(
-      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
-        callback(),
+    withAppDatabaseContext: vi.fn(async ({ callback }: { callback: () => Promise<unknown> }) =>
+      callback(),
     ),
   };
 });
@@ -62,6 +60,8 @@ const asScope = (organizationPublicId: string) =>
     organizationPublicId,
   }) as OrganizationPrincipalDatabaseScope;
 
+/** A valid removal reason — every delete carries one (the record-delete query). */
+const DELETE_QUERY = { reason: 'not_needed' };
 describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', () => {
   const organization = { id: 1, public_id: 'org_public', owner_user_id: 99 };
 
@@ -94,6 +94,7 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
 
   const organizationService = {
     requireOrganizationRecordByPublicId: vi.fn().mockResolvedValue(organization),
+    resolveUserInternalIdByPublicId: vi.fn().mockResolvedValue(undefined),
   } as unknown as OrganizationService;
 
   const memberRoleRepository = {
@@ -124,7 +125,12 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(systemRole as never);
 
     await expect(
-      service.delete({ scope: asScope('org_public'), role_public_id: systemRole.public_id }),
+      service.delete({
+        scope: asScope('org_public'),
+        role_public_id: systemRole.public_id,
+        query: DELETE_QUERY,
+        deleted_by_user_public_id: undefined,
+      }),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).not.toHaveBeenCalled();
@@ -140,6 +146,8 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
       service.delete({
         scope: asScope('org_public'),
         role_public_id: customRoleAssigned.public_id,
+        query: DELETE_QUERY,
+        deleted_by_user_public_id: undefined,
       }),
     ).rejects.toBeInstanceOf(ConflictError);
 
@@ -150,12 +158,18 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(customRoleEmpty as never);
 
     await expect(
-      service.delete({ scope: asScope('org_public'), role_public_id: customRoleEmpty.public_id }),
+      service.delete({
+        scope: asScope('org_public'),
+        role_public_id: customRoleEmpty.public_id,
+        query: DELETE_QUERY,
+        deleted_by_user_public_id: undefined,
+      }),
     ).resolves.toBeUndefined();
 
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).toHaveBeenCalledWith(
       customRoleEmpty.public_id,
       organization.id,
+      { delete_reason: 'not_needed', delete_note: null, updated_by_user_id: null },
     );
     expect(invalidateOrganizationPermissions).toHaveBeenCalledWith('org_public');
   });
@@ -164,7 +178,12 @@ describe('MemberRoleService.delete — sec-T3 guards (route-audit C2 atomic)', (
     vi.mocked(memberRoleRepository.findByPublicId).mockResolvedValue(null);
 
     await expect(
-      service.delete({ scope: asScope('org_public'), role_public_id: 'role_missing' }),
+      service.delete({
+        scope: asScope('org_public'),
+        role_public_id: 'role_missing',
+        query: DELETE_QUERY,
+        deleted_by_user_public_id: undefined,
+      }),
     ).rejects.toBeInstanceOf(NotFoundError);
 
     expect(memberRoleRepository.softDeleteIfNoActiveMembers).not.toHaveBeenCalled();

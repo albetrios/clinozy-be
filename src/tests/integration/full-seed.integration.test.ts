@@ -65,7 +65,7 @@ describe.runIf(runAsApplicationBehaviour)('Full seed — integration', () => {
         ),
       )
       .limit(1);
-    expect(membershipRow?.status).toBe('ACTIVE');
+    expect(membershipRow?.status).toBe('active');
   });
 
   it('is idempotent — re-running upserts instead of duplicating demo rows', async () => {

@@ -98,7 +98,7 @@ ALTER POLICY "api_keys_tenant_isolation" ON "tenancy"."api_keys"
    FROM tenancy.organizations
   WHERE ((organizations.public_id)::text = ( SELECT current_setting('app.current_organization_public_id'::text, true) AS current_setting)))) OR ((( SELECT current_setting('app.global_retention_cleanup'::text, true) AS current_setting) = 'true'::text) AND (( SELECT CURRENT_USER AS "current_user") = 'clinozy_be_maintenance'::name))));
 --> statement-breakpoint
-ALTER POLICY "member_invitations_tenant_isolation" ON "tenancy"."member_invitations"
+ALTER POLICY "membership_invitations_tenant_isolation" ON "tenancy"."membership_invitations"
   USING (((membership_id IN ( SELECT memberships.id
    FROM tenancy.memberships
   WHERE (memberships.organization_id = ( SELECT organizations.id

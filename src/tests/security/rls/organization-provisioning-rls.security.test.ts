@@ -88,7 +88,7 @@ describe('Security: personal-organization provisioning under RLS (clinozy_be_app
           await transaction.execute(drizzleSql`
           INSERT INTO tenancy.memberships
             (public_id, user_id, organization_id, role_id, status, joined_at)
-          VALUES (${generatePublicId('membership')}, ${ownerUserId}, ${organizationId}, ${roleId}, 'ACTIVE', now())
+          VALUES (${generatePublicId('membership')}, ${ownerUserId}, ${organizationId}, ${roleId}, 'active', now())
           RETURNING id
         `),
         );

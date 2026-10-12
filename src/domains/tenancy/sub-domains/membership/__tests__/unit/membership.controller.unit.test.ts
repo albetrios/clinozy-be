@@ -55,6 +55,7 @@ describe('createMembershipController', () => {
     create: vi.fn().mockResolvedValue(membership),
     update: vi.fn().mockResolvedValue(membership),
     delete: vi.fn().mockResolvedValue(undefined),
+    revokeInvitation: vi.fn().mockResolvedValue(undefined),
     getPermissions: vi.fn().mockResolvedValue({ permissions: ['organization:read'] }),
     leaveOrganization: vi.fn().mockResolvedValue(undefined),
     transferOwnership: vi.fn().mockResolvedValue(membership),
@@ -90,7 +91,7 @@ describe('createMembershipController', () => {
     await controller.createMembership(
       mockRequest({
         params: {},
-        body: { email: 'invitee@example.com', role_id: generatePublicId('memberRole') },
+        body: { email: 'invitee@example.com', role_ids: [generatePublicId('memberRole')] },
       }),
       reply as unknown as FastifyReply,
     );
@@ -103,7 +104,7 @@ describe('createMembershipController', () => {
     await controller.updateMembership(
       mockRequest({
         params: { membership_id: membershipPublicId },
-        body: { status: 'ACTIVE' },
+        body: { status: 'active' },
       }),
       {} as FastifyReply,
     );
@@ -266,7 +267,7 @@ describe('createMembershipController', () => {
         mockRequest({
           auth: NO_ACTIVE_ORGANIZATION_AUTH,
           params: { membership_id: membershipPublicId },
-          body: { status: 'ACTIVE' },
+          body: { status: 'active' },
         }),
         mockReply(),
       ),
@@ -311,7 +312,7 @@ describe('createMembershipController', () => {
         mockRequest({
           auth: NO_ACTIVE_ORGANIZATION_AUTH,
           params: undefined,
-          body: { status: 'ACTIVE' },
+          body: { status: 'active' },
         }),
         {} as FastifyReply,
       ),
@@ -351,5 +352,27 @@ describe('createMembershipController', () => {
       ),
     ).rejects.toBeInstanceOf(ValidationError);
     expect(service.getPermissions).not.toHaveBeenCalled();
+  });
+
+  it('revokeInvitation ends the invited membership (204) and rejects a malformed membership_id', async () => {
+    const reply = { code: vi.fn().mockReturnThis(), send: vi.fn() };
+    await controller.revokeInvitation(
+      mockRequest({ params: { membership_id: membershipPublicId } }),
+      reply as unknown as FastifyReply,
+    );
+    expect(service.revokeInvitation).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ organizationPublicId }),
+      membership_public_id: membershipPublicId,
+    });
+    expect(reply.code).toHaveBeenCalledWith(204);
+
+    vi.mocked(service.revokeInvitation).mockClear();
+    await expect(
+      controller.revokeInvitation(
+        mockRequest({ params: { membership_id: '../../etc/passwd' } }),
+        reply as unknown as FastifyReply,
+      ),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(service.revokeInvitation).not.toHaveBeenCalled();
   });
 });

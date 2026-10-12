@@ -4,7 +4,8 @@ description: >
   Plan an iteration under iterations/<iteration>/ — NO CODE: confirm the iteration and its Baseline,
   pass the intake gate (iteration:intake --check — stop on failure), take the delta by Intake mode
   (iteration:diff + notes, or BRIEF.md) and the Baseline's Standing deviations, reconcile
-  PRD ↔ schema-routes, ask the blocking questions, then write KICKOFF.md (the plan + ordered ROUTE
+  PRD ↔ schema-routes, ask the blocking questions, review the routes sub-domain by sub-domain
+  (plans/routes-final.md, each sub-domain confirmed by the user), then write KICKOFF.md (the plan + ordered ROUTE
   ledger) and plans/ (decisions, coverage, db-changes.md, route-changes.md and worker-changes.md —
   the data diagrams, the proposed routes and the background work, each one file kept current at every
   step, with before → after for anything changed — requirements, feature stories, acceptance) —
@@ -14,7 +15,7 @@ description: >
   approval: be-kickoff-iteration.
 indexNote: plan an iteration — no code; KICKOFF.md (plan + ROUTE ledger) + plans/ (requirements, decisions); stops after each step
 trigger: iterations/*/plans/**
-triggerNote: Iteration plans — requirements and decisions only, never technical design; KICKOFF.md is written at Step 5
+triggerNote: Iteration plans — requirements and decisions, plus the route review in routes-final.md (Step 5); KICKOFF.md is written at Step 6
 ---
 
 # Iteration planning (KICKOFF.md + plans/ from `iterations/<iteration>/intake-files/`)
@@ -40,8 +41,14 @@ The iteration rules: [`iterations/README.md`](../../../iterations/README.md).
   chosen them (Step 4)
 - queue, job, event or worker names
 
-Each ROUTE row is a work item (one per table, background piece, flow); its technical design is
-decided during implementation and recorded in `AS-BUILT.md`, not here.
+**The one place for technical design is the route review**, `plans/routes-final.md` (Step 5): the
+agreed design per sub-domain — tables and columns, indexes, routes, permission codes, folders — shaped by
+[`routes-final-template.md`](../../../docs/design-workflow/process/routes-final-template.md) and
+confirmed by the user one sub-domain at a time. It is still a proposal (below).
+
+Each ROUTE row is a work item (one per sub-domain of the route review, or per table, background piece,
+flow); any detail the route review leaves open is decided during implementation and recorded in
+`AS-BUILT.md`.
 
 ## The plan proposes; agent-os decides
 
@@ -52,8 +59,9 @@ design and may change any detail on the way — table and field names, types, in
 idempotency, job names (`be-schema-generator`, `be-sql-design-guard`, `be-db-migration-maintainer`,
 `be-rls-tenant-isolation-guard`, `be-api-contract-guard`, `be-workers-events`, and the rest of each
 row's chain). The plan never overrides them. Every such change is recorded in `AS-BUILT.md` and
-synced back into `db-changes.md`, `route-changes.md` and `worker-changes.md`, so the plan ends as the
-true record; only a **scope** change (a row added or removed, an acceptance changed) stops for the
+synced back into `routes-final.md`, `db-changes.md`, `route-changes.md` and `worker-changes.md`, so the
+plan ends as the true record. The route review is the exception: built **ditto**, and a disagreement stops
+for the user before anything differs (`be-kickoff-iteration`); only a **scope** change (a row added or removed, an acceptance changed) stops for the
 user (`be-kickoff-iteration` › Each ROUTE row).
 
 ## Inputs and mode
@@ -97,6 +105,7 @@ iterations/<iteration>/
     ├── db-changes.md                  the Mermaid data diagrams — one file, kept current at every step
     ├── route-changes.md               the proposed routes — one file, kept current at every step
     ├── worker-changes.md              the background work — one file, kept current at every step
+    ├── routes-final.md                the route review — the design per sub-domain, confirmed one sub-domain at a time (Step 5)
     ├── requirements/
     │   ├── data.md                    links to db-changes.md for its diagrams
     │   ├── access.md
@@ -186,13 +195,13 @@ The iteration's database changes live in **one file**, `plans/db-changes.md`, an
 `requirements/data.md` links to it instead of repeating the diagrams. It is written **on the go** —
 created at Step 1 with the overview **and one section per table, stage by stage** (the intake already
 carries every entity's fields), then updated in the same step as anything that changes the data model
-(a Step 3 verdict, each Step 4 answer, the Step 5 detail) — so it always shows the plan as it stands. It freezes with `KICKOFF.md` at approval; implementation records what was actually
+(a Step 3 verdict, each Step 4 answer, each sub-domain of the Step 5 route review, the Step 6 detail) — so it always shows the plan as it stands. It freezes with `KICKOFF.md` at approval; implementation records what was actually
 built in `AS-BUILT.md`. `pnpm db:viewer` draws it in plan mode — the iteration as a dashed future
 version after Latest, diffed against the live schema — while the iteration is not `frozen`.
 
 - **One overview** `erDiagram`: entities and relationships, no fields.
 - **Stage-wise, one section per table.** After the overview, the tables are grouped into **build
-  stages** in dependency order — the order the ROUTE ledger builds them (Step 5). Each table has its
+  stages** in dependency order — the order the ROUTE ledger builds them (Step 6). Each table has its
   own section: **Holds** (what it stores and why) · **Table** (the `domain.table` proposal; `app.<plural>`
   until the user chooses) · **Sources** (`file:line`) · **Added** / **Replaced** (what decisions or
   requests changed against the drop) · **Open** (the questions still open for it) · and its own
@@ -260,7 +269,7 @@ erDiagram
 
 The iteration's API changes live in **one file**, `plans/route-changes.md`, written on the go the same
 way as `db-changes.md`: drafted at Step 1 from the operations, updated in the same step as any verdict
-or answer that changes a route, completed at Step 5, frozen at approval. It is the one place a plan
+or answer that changes a route, matched to the route review at Step 5, completed at Step 6, frozen at approval. It is the one place a plan
 names paths — as **proposals**: kickoff confirms each route when it builds it, records any change in
 `AS-BUILT.md`, and the built truth is `docs/routes.txt`.
 
@@ -311,6 +320,37 @@ words, no queue, job, event or worker names (kickoff names them and records them
 - **Before → after** — one row per `CHANGED` piece, like routes:
   `| # | Background work | What changes | Before | After | Why |`.
 
+## Route review — `plans/routes-final.md`
+
+The route review turns the plan into the design the user agrees to, **one sub-domain at a time**, before
+`KICKOFF.md` is written. Its shape is
+[`routes-final-template.md`](../../../docs/design-workflow/process/routes-final-template.md) — copy
+it, then replace its two invented sub-domains with the iteration's own.
+
+- **One folder per sub-domain** (`src/domains/app/sub-domains/<sub-domain>/`); each nested sub-domain
+  is a folder directly inside it (`<sub-domain>/<nested-sub-domain>/`, as `CLAUDE.md` lays them out).
+  The plan uses the code's words — domain → sub-domain → nested sub-domain, never "module". Grouped by
+  connection: what a record owns is a nested sub-domain of it (its table carries the parent's prefix, its
+  routes nest under the parent), and a sub-domain comes after every sub-domain it points at.
+- **Twelve sections per sub-domain, eleven per nested sub-domain** — decisions, open questions, tables and
+  relations, permissions, common to every route, objects returned, routes, request details, errors,
+  rules worth knowing, code changes (+ nested sub-domains for a sub-domain).
+- **Read the code first.** Every decision says what the code does today, so each reads before →
+  after, and offers the recommended option plus any real alternative. RED questions go to the user
+  (AskUserQuestion); the user's standing answer "go with your recommendation" takes the recommended
+  options and says so.
+- **Agent-os up front.** Each sub-domain follows `be-api-contract-guard`, `be-sql-design-guard`,
+  `be-rls-tenant-isolation-guard`, `be-workers-events` and the naming rules while it is written, so
+  kickoff confirms the design instead of redesigning it.
+- **Status per sub-domain**: `rev n — awaiting your OK` → `final (rev n, confirmed <date>)` only after
+  the user confirms that sub-domain in chat; reopening a final sub-domain bumps its rev. A sub-domain's
+  confirmation is one `plans/decisions.md` row (Kind `RED`).
+- **One file, current at every stop**: the file's header keeps the sub-domains table (folder, paths,
+  route count, builds on, status), the app total, the code layout, the tables without routes, the
+  rules that hold across sub-domains and the connections overview in step with the sub-domains below it.
+- The three change files say the same as the confirmed sub-domains — `db-changes.md` (tables),
+  `route-changes.md` (routes) and `worker-changes.md` (background work) are updated in the same stop.
+
 ## The three change files
 
 `db-changes.md`, `route-changes.md` and `worker-changes.md` are what the user reviews; each is one file
@@ -331,6 +371,8 @@ change before the next step:
    - **Routes:** a link to `plans/route-changes.md` and the NEW / CHANGED / REMOVED counts that
      moved in this step.
    - **Background work:** a link to `plans/worker-changes.md` and the counts that moved.
+   - **Route review:** a link to the sub-domain's section in `plans/routes-final.md`, its route count
+     and its status.
 3. **What needs you** — the open questions and findings, or "nothing".
 4. **Continue or change** — ask with **AskUserQuestion**: continue to the next step (recommended
    when nothing is open), or change something. A requested change is made in the files — a changed
@@ -429,7 +471,21 @@ Every answer goes in `plans/decisions.md`; every answer that changes the data mo
 `plans/db-changes.md`, every answer that changes a route updates `plans/route-changes.md`, and every
 answer that changes background work updates `plans/worker-changes.md`, in the same step.
 
-### Step 5 — Write KICKOFF.md and plans/, then stop
+### Step 5 — Route review, sub-domain by sub-domain, then stop after each sub-domain
+
+Write `plans/routes-final.md` from the template (Route review above), in the sub-domains' build order:
+
+1. Draft the file header — the sub-domains table with every sub-domain `draft`, the code layout, the
+   tables without routes, the connections overview.
+2. For each sub-domain: read its code today, write its twelve sections and each nested sub-domain's eleven,
+   run the template's hand-over checks, update the three change files, and stop with the step
+   review. Ask the sub-domain's RED questions with **AskUserQuestion**.
+3. On the user's OK, mark the sub-domain `final (rev n, confirmed <date>)`, add its `plans/decisions.md`
+   row, and move to the next. A change asked for reopens the sub-domain (`rev n+1`).
+
+Continue to Step 6 only when every sub-domain in scope is final. **Stop after each sub-domain.**
+
+### Step 6 — Write KICKOFF.md and plans/, then stop
 
 Write every `plans/requirements/*.md` (dotted identifiers; `data.md` links to the per-table
 sections in `plans/db-changes.md`),
@@ -448,7 +504,10 @@ absent:
    | # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
    | --- | --- | --- | --- | --- | --- | --- | --- |
 
-   Kind is `table`, `feature`, `background` or `flow`. Status starts `open`. The order follows the
+   Kind is `sub-domain`, `table`, `feature`, `background` or `flow`. With a route review, the schema
+   and feature rows follow its sub-domains in order — one `sub-domain` row per sub-domain (or one per
+   nested sub-domain when a sub-domain is large), citing its section (`routes-final.md` § 5.A) as the spec and
+   its code changes as the checklist. Status starts `open`. The order follows the
    route shape in `be-kickoff-iteration`: schema first (tables in dependency order — the stages of
    `db-changes.md`, one table row per table section) → features →
    background work → flows → acceptance; incremental — schema changes first, then changed features,
@@ -468,7 +527,7 @@ absent:
 
 **Stop.**
 
-### Step 6 — Self-check, then stop
+### Step 7 — Self-check, then stop
 
 Fix before presenting, never after:
 
@@ -484,6 +543,7 @@ Fix before presenting, never after:
 - [ ] `plans/db-changes.md` is stage-wise: every table has its section (holds, table, sources, added / replaced, open, diagram), and the stages follow the ROUTE order
 - [ ] `plans/route-changes.md` serves every operation in scope, each route has access and a source line, every path follows the API contract, and every `CHANGED` route has its before → after row
 - [ ] `plans/worker-changes.md` lists every piece of background work in scope with when, on failure and who is told, no queue / job / worker names, and before → after for every `CHANGED` piece
+- [ ] `plans/routes-final.md` follows the template: every sub-domain in scope `final`, sections 1–12 per sub-domain and 1–11 per nested sub-domain, no repeated or dangling ids, route counts matching its sub-domains table, and the three change files saying the same
 - [ ] Every step ended with its step review (what changed, review links, what needs you, continue or change)
 - [ ] Every `KICKOFF.md` section is present; every ROUTE row has a driver and acceptance
 - [ ] No technical design anywhere (see the Principle)
@@ -506,8 +566,9 @@ markers change, and `intake-files/` is locked.
 | A change in the drop the designer didn't mention | Step 2 diff vs notes → findings |
 | PRD and schema-routes disagree and the build picks one | Step 3 reconciliation with evidence |
 | Guessed ownership, scope, access or timing → rework | Step 4 RED gate |
-| A plan that decides implementation before the code is read | the Principle; Step 6 check |
-| A ROUTE that misses a requirement | Step 6 — every identifier reached by a row |
+| A plan that decides implementation before the code is read | the Principle; Step 7 check |
+| The design argued again row by row during the build | Step 5 route review — every sub-domain confirmed before `KICKOFF.md` |
+| A ROUTE that misses a requirement | Step 7 — every identifier reached by a row |
 | The data model, API or background work only readable in a PR diff | `db-changes.md`, `route-changes.md`, `worker-changes.md` — kept current, before → after for changes, with the step review at every stop |
 
 ## Related
@@ -515,4 +576,5 @@ markers change, and `intake-files/` is locked.
 - **`be-kickoff-iteration`** — implements the approved `KICKOFF.md`, one ROUTE row at a time
 - [`iteration-planning-prompt.md`](../../../docs/design-workflow/prompts/iteration-planning-prompt.md) — the paste prompt
 - [`iteration-guide.md`](../../../docs/design-workflow/process/iteration-guide.md) — every step with its questions
+- [`routes-final-template.md`](../../../docs/design-workflow/process/routes-final-template.md) — the route review's shape, with two invented sub-domains
 - [`iterations/README.md`](../../../iterations/README.md) — the iteration rules and commands

@@ -11,6 +11,8 @@ import {
   seedPermissions,
   createRoleWithPermissions,
   createMembership,
+  MEMBERSHIP_WRITE_PERMISSION_CODES,
+  ROLE_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import type { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
@@ -20,7 +22,12 @@ function rowsOf<T>(result: unknown): T[] {
   return Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
 }
 
-const CALLER_PERMISSIONS = ['role:read', 'role:manage', 'membership:read', 'membership:manage'];
+const CALLER_PERMISSIONS = [
+  'role:read',
+  ...ROLE_WRITE_PERMISSION_CODES,
+  'membership:read',
+  ...MEMBERSHIP_WRITE_PERMISSION_CODES,
+];
 
 /**
  * Happy paths for the tenancy role / membership detail routes — the declared
@@ -112,7 +119,7 @@ describe('Tenancy role and membership detail — happy paths', () => {
 
     const remove = await injectAuthenticated(app, {
       method: 'DELETE',
-      url: testApiPath(basePath),
+      url: testApiPath(`${basePath}?reason=not_needed`),
       token,
     });
     expect(remove.statusCode, remove.body).toBe(204);
@@ -155,14 +162,14 @@ describe('Tenancy role and membership detail — happy paths', () => {
     expect(get.statusCode, get.body).toBe(200);
     expect((get.json() as { data: Record<string, unknown> }).data).toMatchObject({
       id: membership.public_id,
-      status: 'ACTIVE',
+      status: 'active',
     });
 
     const patch = await injectAuthenticated(app, {
       method: 'PATCH',
       url: testApiPath(basePath),
       token,
-      payload: { status: 'SUSPENDED' },
+      payload: { status: 'suspended' },
     });
     expect(patch.statusCode, patch.body).toBe(200);
     const reread = await injectAuthenticated(app, {
@@ -173,18 +180,18 @@ describe('Tenancy role and membership detail — happy paths', () => {
     expect(reread.statusCode, reread.body).toBe(200);
     expect((reread.json() as { data: Record<string, unknown> }).data).toMatchObject({
       id: membership.public_id,
-      status: 'SUSPENDED',
+      status: 'suspended',
     });
     const [persistedMembership] = rowsOf<Record<string, unknown>>(
       await getOperatorDatabase().execute(
         sql`SELECT status FROM tenancy.memberships WHERE id = ${membership.id}`,
       ),
     );
-    expect(persistedMembership?.status).toBe('SUSPENDED');
+    expect(persistedMembership?.status).toBe('suspended');
 
     const remove = await injectAuthenticated(app, {
       method: 'DELETE',
-      url: testApiPath(basePath),
+      url: testApiPath(`${basePath}?reason=not_needed`),
       token,
     });
     expect(remove.statusCode, remove.body).toBe(204);
@@ -193,7 +200,13 @@ describe('Tenancy role and membership detail — happy paths', () => {
       url: testApiPath(basePath),
       token,
     });
-    expect(removed.statusCode, removed.body).toBe(404);
+    // An ended member stays readable, with why and when (launch K6, D58).
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect((removed.json() as { data: Record<string, unknown> }).data).toMatchObject({
+      id: membership.public_id,
+      ended_at: expect.any(String),
+      end_reason: 'not_needed',
+    });
     const [membershipTombstone] = rowsOf<Record<string, unknown>>(
       await getOperatorDatabase().execute(
         sql`SELECT deleted_at FROM tenancy.memberships WHERE id = ${membership.id}`,

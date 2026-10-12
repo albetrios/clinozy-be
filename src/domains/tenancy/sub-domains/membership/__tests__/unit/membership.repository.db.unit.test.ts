@@ -35,7 +35,7 @@ describe('MembershipRepository (database)', () => {
       roleId: role.id,
     });
 
-    const page = await repository.findByOrganizationId(organization.id, { limit: 20 });
+    const page = await repository.list(organization.id, { limit: 20 });
     expect(page.items.some((row) => row.public_id === membership.public_id)).toBe(true);
 
     const byPublicId = await repository.findByPublicId(membership.public_id, organization.id);
@@ -50,10 +50,10 @@ describe('MembershipRepository (database)', () => {
     const updated = await repository.update(
       membership.public_id,
       organization.id,
-      { status: 'ACTIVE' },
+      { status: 'active' },
       owner.id,
     );
-    expect(updated?.status).toBe('ACTIVE');
+    expect(updated?.status).toBe('active');
     expect(updated?.joined_at).not.toBeNull();
 
     const deleted = await repository.softDelete(membership.public_id, organization.id);
@@ -88,7 +88,7 @@ describe('MembershipRepository (database)', () => {
     await createMembership({ userId: bob.id, organizationId: organization.id, roleId: role.id });
 
     // Match by email fragment.
-    const byEmail = await repository.findByOrganizationId(organization.id, {
+    const byEmail = await repository.list(organization.id, {
       limit: 20,
       q: 'alice.smith',
     });
@@ -96,28 +96,28 @@ describe('MembershipRepository (database)', () => {
     expect(byEmail.items[0]!.public_id).toBe(aliceMembership.public_id);
 
     // Match by last name (case-insensitive).
-    const byLastName = await repository.findByOrganizationId(organization.id, {
+    const byLastName = await repository.list(organization.id, {
       limit: 20,
       q: 'smith',
     });
     expect(byLastName.items.map((row) => row.public_id)).toEqual([aliceMembership.public_id]);
 
     // Match by full "first last".
-    const byFullName = await repository.findByOrganizationId(organization.id, {
+    const byFullName = await repository.list(organization.id, {
       limit: 20,
       q: 'alice sm',
     });
     expect(byFullName.items).toHaveLength(1);
 
     // A wildcard character in the term is escaped (matched literally), so it finds nothing.
-    const escaped = await repository.findByOrganizationId(organization.id, {
+    const escaped = await repository.list(organization.id, {
       limit: 20,
       q: 'alice%',
     });
     expect(escaped.items).toHaveLength(0);
 
     // No match → empty page, no cursor.
-    const none = await repository.findByOrganizationId(organization.id, { limit: 20, q: 'zzzzz' });
+    const none = await repository.list(organization.id, { limit: 20, q: 'zzzzz' });
     expect(none.items).toHaveLength(0);
     expect(none.has_more).toBe(false);
     expect(none.next_cursor).toBeNull();
@@ -136,7 +136,7 @@ describe('MembershipRepository (database)', () => {
       await createMembership({ userId: user.id, organizationId: organization.id, roleId: role.id });
     }
 
-    const first = await repository.findByOrganizationId(organization.id, {
+    const first = await repository.list(organization.id, {
       limit: 2,
       q: 'shared-',
     });
@@ -144,7 +144,7 @@ describe('MembershipRepository (database)', () => {
     expect(first.has_more).toBe(true);
     expect(first.next_cursor).not.toBeNull();
 
-    const second = await repository.findByOrganizationId(organization.id, {
+    const second = await repository.list(organization.id, {
       limit: 2,
       q: 'shared-',
       after: first.next_cursor!,
@@ -182,7 +182,7 @@ describe('MembershipRepository (database)', () => {
       roleId: roleB.id,
     });
 
-    const resultA = await repository.findByOrganizationId(organizationA.id, {
+    const resultA = await repository.list(organizationA.id, {
       limit: 20,
       q: 'crossorg',
     });
@@ -203,7 +203,7 @@ describe('MembershipRepository (database)', () => {
       userId: owner.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'INVITED',
+      status: 'invited',
     });
 
     expect(await repository.findById(99_999)).toBeNull();
@@ -215,33 +215,30 @@ describe('MembershipRepository (database)', () => {
       user_id: invitee.id,
       role_id: role.id,
     });
-    expect(invited.status).toBe('INVITED');
+    expect(invited.status).toBe('invited');
 
     const suspended = await repository.update(
       membership.public_id,
       organization.id,
-      { status: 'SUSPENDED' },
+      { status: 'suspended' },
       owner.id,
     );
-    expect(suspended?.status).toBe('SUSPENDED');
+    expect(suspended?.status).toBe('suspended');
 
-    const activated = await repository.update(
-      invited.public_id,
-      organization.id,
-      { status: 'ACTIVE' },
-      owner.id,
-    );
-    expect(activated?.status).toBe('ACTIVE');
-    expect(activated?.joined_at).not.toBeNull();
+    // T10: an invited member becomes active only by accepting the invite (which stamps
+    // `joined_at`) — a plain status update is refused by chk_memberships_joined.
+    await expect(
+      repository.update(invited.public_id, organization.id, { status: 'active' }, owner.id),
+    ).rejects.toThrow();
 
     const withoutStatus = await repository.update(invited.public_id, organization.id, {}, null);
-    expect(withoutStatus?.status).toBe('ACTIVE');
+    expect(withoutStatus?.status).toBe('invited');
 
     expect(
       await repository.update(
         'missing_membership',
         organization.id,
-        { status: 'ACTIVE' },
+        { status: 'active' },
         owner.id,
       ),
     ).toBeNull();
@@ -266,13 +263,13 @@ describe('MembershipRepository (database)', () => {
     await repository.update(
       membership.public_id,
       organization.id,
-      { status: 'SUSPENDED' },
+      { status: 'suspended' },
       owner.id,
     );
     const reactivated = await repository.update(
       membership.public_id,
       organization.id,
-      { status: 'ACTIVE' },
+      { status: 'active' },
       owner.id,
     );
 
@@ -295,10 +292,10 @@ describe('MembershipRepository (database)', () => {
       userId: invitee.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'INVITED',
+      status: 'invited',
     });
     const activated = await repository.activateForInvitationAccept(invited.id, organization.id);
-    expect(activated?.status).toBe('ACTIVE');
+    expect(activated?.status).toBe('active');
     expect(activated?.joined_at).not.toBeNull();
 
     // The exploit: a SUSPENDED member (per-organization ban) must NOT be able to self-restore to ACTIVE
@@ -308,12 +305,12 @@ describe('MembershipRepository (database)', () => {
       userId: banned.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'SUSPENDED',
+      status: 'suspended',
     });
     const rejected = await repository.activateForInvitationAccept(suspended.id, organization.id);
     expect(rejected).toBeNull();
     const stillSuspended = await repository.findById(suspended.id);
-    expect(stillSuspended?.status).toBe('SUSPENDED');
+    expect(stillSuspended?.status).toBe('suspended');
   });
 
   it('softDelete refuses to remove the organization owner (atomic owner-guard)', async () => {

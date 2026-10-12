@@ -54,6 +54,13 @@ export class ForbiddenError extends AppError {
   }
 }
 
+/**
+ * The `error.reason` of a 403 for a permission code the caller does not hold — the route-level gate
+ * (`requireOrganizationPermission`) and the service-level checks alike, so a client branches on one
+ * field (launch D83 (6), QA B4).
+ */
+export const MISSING_PERMISSION_REASON = 'missing_permission';
+
 /** 409 Conflict — request conflicts with current state (e.g. duplicate slug, version mismatch). */
 export class ConflictError extends AppError {
   constructor(

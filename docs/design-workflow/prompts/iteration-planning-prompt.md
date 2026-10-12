@@ -13,10 +13,11 @@ comes from the iteration's README (Baseline `none` = initial, otherwise incremen
 At the start of every iteration, before any code. The skill confirms the iteration and its Baseline
 with you, checks the intake, takes the delta from `pnpm iteration:diff` when the iteration is
 incremental, reconciles the PRD with `schema-routes.md`, asks the blocking questions only you can
-answer, and writes `KICKOFF.md` — the plan with its ordered ROUTE ledger — plus `plans/`
+answer, reviews the routes sub-domain by sub-domain in `plans/routes-final.md` (each sub-domain final only after
+your OK — [template](../process/routes-final-template.md)), and writes `KICKOFF.md` — the plan with its ordered ROUTE ledger — plus `plans/`
 (decisions, coverage, `db-changes.md`, `route-changes.md`, `worker-changes.md`, requirements,
-feature stories, acceptance). It writes no code and no technical design — except the proposed routes in
-`route-changes.md` — and ends at `Status: ready-for-approval`. Your go-ahead sets
+feature stories, acceptance). It writes no code, and no technical design outside the route review and the proposed routes in
+`route-changes.md`, and ends at `Status: ready-for-approval`. Your go-ahead sets
 `Status: approved`; then use the [kickoff iteration prompt](kickoff-iteration-prompt.md).
 
 ## Reviewing while it plans — no PR diff
@@ -43,7 +44,7 @@ feature stories, acceptance). It writes no code and no technical design — exce
 ## The prompt
 
 ```text
-Plan iteration <ITERATION> with the be-iteration-planning skill. Scope: <everything in the drop | the named features>. Requirements only — no code. Keep plans/db-changes.md, plans/route-changes.md and plans/worker-changes.md current at every step, with before → after for anything that changes, and end every step with its step review (what changed, the DB Viewer URL and the change files, what needs me, continue or change).
+Plan iteration <ITERATION> with the be-iteration-planning skill. Scope: <everything in the drop | the named features>. Requirements only — no code. Review the routes sub-domain by sub-domain in plans/routes-final.md (from docs/design-workflow/process/routes-final-template.md) and stop for my OK on each sub-domain. Keep plans/db-changes.md, plans/route-changes.md and plans/worker-changes.md current at every step, with before → after for anything that changes, and end every step with its step review (what changed, the DB Viewer URL and the change files, what needs me, continue or change).
 ```
 
 `<ITERATION>` is the folder name, e.g. `launch-2026-09-30-jxmr` or

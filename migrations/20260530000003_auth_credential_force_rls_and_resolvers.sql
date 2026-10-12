@@ -9,7 +9,7 @@
 --     tenancy.api_keys is FORCE RLS, so a plain SELECT resolves the policy predicate to NULL and
 --     returns zero rows — every valid key is rejected in production (CI passes only because tests
 --     connect as a superuser, which is RLS-exempt). A narrow SECURITY DEFINER resolver mirrors the
---     existing tenancy.resolve_member_invitation_lookup_by_public_id /
+--     existing tenancy.resolve_membership_invitation_lookup_by_public_id /
 --     billing.resolve_organization_public_id_for_stripe_subscription pattern and returns the
 --     candidate row(s) plus the owning organization public id (so the auth phase never has to read
 --     tenancy.organizations, which is also FORCE RLS).

@@ -24,6 +24,8 @@ const ALLOWED_IMPORTERS = [
   'src/domains/audit/audit.service.ts',
   // Stripe-webhook–driven billing mutations (organization resolved from the Stripe event).
   'src/domains/billing/sub-domains/subscription/subscription.service.ts',
+  // Messaging-webhook ingress (launch D77): the organization resolved from the signed Meta
+  // callback's WhatsApp number / Instagram account (SECURITY DEFINER resolver).
   // Notification inbox reads keyed on resolved ids. (The dispatch worker left this ledger: the
   // recipient's public id now travels in its job, so it mints PRINCIPAL_SCOPE.JOB.)
   'src/domains/notify/sub-domains/notification/notification.service.ts',
@@ -33,7 +35,7 @@ const ALLOWED_IMPORTERS = [
   // service already resolved and wrote under (the event is emitted inside that write).
   'src/domains/notify/sub-domains/webhook/webhook.service.ts',
   // Invite flow: inviter's request acts on the invited user / target organization.
-  'src/domains/tenancy/sub-domains/membership/member-invitation/member-invitation.service.ts',
+  'src/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.service.ts',
   'src/domains/tenancy/sub-domains/membership/membership.service.ts',
   // API-key authentication resolves the organization from the verified key itself.
   'src/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.service.ts',

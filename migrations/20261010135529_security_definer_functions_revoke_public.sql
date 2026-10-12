@@ -50,13 +50,9 @@ REVOKE EXECUTE ON FUNCTION billing.resolve_organization_public_id_for_stripe_sub
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION billing.resolve_organization_public_id_for_stripe_subscription(text) TO clinozy_be_app, clinozy_be_maintenance;
 --> statement-breakpoint
-REVOKE EXECUTE ON FUNCTION tenancy.list_organization_membership_ids_by_name(bigint,text,boolean,text,bigint,integer) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION tenancy.list_pending_membership_invitations_for_email(text,integer,timestamp with time zone,bigint) FROM PUBLIC;
 --> statement-breakpoint
-GRANT EXECUTE ON FUNCTION tenancy.list_organization_membership_ids_by_name(bigint,text,boolean,text,bigint,integer) TO clinozy_be_app, clinozy_be_maintenance;
---> statement-breakpoint
-REVOKE EXECUTE ON FUNCTION tenancy.list_pending_member_invitations_for_email(text,integer,timestamp with time zone,bigint) FROM PUBLIC;
---> statement-breakpoint
-GRANT EXECUTE ON FUNCTION tenancy.list_pending_member_invitations_for_email(text,integer,timestamp with time zone,bigint) TO clinozy_be_app, clinozy_be_maintenance;
+GRANT EXECUTE ON FUNCTION tenancy.list_pending_membership_invitations_for_email(text,integer,timestamp with time zone,bigint) TO clinozy_be_app, clinozy_be_maintenance;
 --> statement-breakpoint
 REVOKE EXECUTE ON FUNCTION tenancy.organization_requires_mfa(text) FROM PUBLIC;
 --> statement-breakpoint
@@ -66,9 +62,9 @@ REVOKE EXECUTE ON FUNCTION tenancy.resolve_api_key_for_authentication(text) FROM
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION tenancy.resolve_api_key_for_authentication(text) TO clinozy_be_app, clinozy_be_maintenance;
 --> statement-breakpoint
-REVOKE EXECUTE ON FUNCTION tenancy.resolve_member_invitation_lookup_by_public_id(text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION tenancy.resolve_membership_invitation_lookup_by_public_id(text) FROM PUBLIC;
 --> statement-breakpoint
-GRANT EXECUTE ON FUNCTION tenancy.resolve_member_invitation_lookup_by_public_id(text) TO clinozy_be_app, clinozy_be_maintenance;
+GRANT EXECUTE ON FUNCTION tenancy.resolve_membership_invitation_lookup_by_public_id(text) TO clinozy_be_app, clinozy_be_maintenance;
 --> statement-breakpoint
 REVOKE EXECUTE ON FUNCTION tenancy.resolve_organization_default_locale(text) FROM PUBLIC;
 --> statement-breakpoint
@@ -85,5 +81,13 @@ GRANT EXECUTE ON FUNCTION tenancy.user_has_active_membership_for_organization(bi
 REVOKE EXECUTE ON FUNCTION tenancy.user_has_organization_requiring_mfa(bigint) FROM PUBLIC;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION tenancy.user_has_organization_requiring_mfa(bigint) TO clinozy_be_app, clinozy_be_maintenance;
+--> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION tenancy.fn_set_membership_display_name() FROM PUBLIC;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION tenancy.fn_set_membership_display_name() TO clinozy_be_app, clinozy_be_maintenance;
+--> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION tenancy.fn_sync_membership_display_names() FROM PUBLIC;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION tenancy.fn_sync_membership_display_names() TO clinozy_be_app, clinozy_be_maintenance;
 --> statement-breakpoint
 ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;

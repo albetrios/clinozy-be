@@ -35,6 +35,18 @@ import { createOrganizationTombstoneRetentionWorker } from '@/domains/tenancy/su
 import { ORGANIZATION_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/organization/workers/organization-tombstone-retention.constants.js';
 import { createMembershipTombstoneRetentionWorker } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.worker.js';
 import { MEMBERSHIP_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/workers/membership-tombstone-retention.constants.js';
+import { MEMBERSHIP_INVITATION_EXPIRY_QUEUE_NAME } from '@/domains/tenancy/sub-domains/membership/membership-invitation/workers/membership-invitation-expiry.constants.js';
+import { createMembershipInvitationExpiryWorker } from '@/domains/tenancy/sub-domains/membership/membership-invitation/workers/membership-invitation-expiry.worker.js';
+import { createAppRecordPurgeWorker } from '@/domains/app/workers/app-record-purge.worker.js';
+import { createDayCloseAutoCloseSweepWorker } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close-sweep.worker.js';
+import { createDayCloseAutoCloseWorker } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close.worker.js';
+import { DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/workers/day-close-auto-close.constants.js';
+import { DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME } from '@/domains/app/sub-domains/billing/day-closes/queues/day-close-auto-close.queue.js';
+import { createTaskRulesSweepWorker } from '@/domains/app/sub-domains/tasks/workers/task-rules-sweep.worker.js';
+import { createTaskRulesWorker } from '@/domains/app/sub-domains/tasks/workers/task-rules.worker.js';
+import { TASK_RULES_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/workers/task-rules.constants.js';
+import { TASK_RULES_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/queues/task-rules.queue.js';
+import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
 import { createMemberRoleTombstoneRetentionWorker } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.worker.js';
 import { MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.constants.js';
 import { createOrganizationApiKeyTombstoneRetentionWorker } from '@/domains/tenancy/sub-domains/organization/organization-api-key/workers/organization-api-key-tombstone-retention.worker.js';
@@ -367,6 +379,57 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     logLabel: 'membership tombstone retention worker',
     create: () => createMembershipTombstoneRetentionWorker(),
   }),
+  retentionDefinition({
+    queueName: MEMBERSHIP_INVITATION_EXPIRY_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'membership invitation expiry worker',
+    create: (workerContainers) =>
+      createMembershipInvitationExpiryWorker(workerContainers.tenancyDomain.membershipService),
+  }),
+  retentionDefinition({
+    queueName: APP_RECORD_PURGE_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'app record purge worker',
+    create: () => createAppRecordPurgeWorker(),
+  }),
+  // WC-39: the hourly sweep adds one job per organization with a past day to close; each job
+  // closes that organization's days in its own context (B26).
+  retentionDefinition({
+    queueName: DAY_CLOSE_AUTO_CLOSE_SWEEP_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'day close auto-close sweep worker',
+    create: () => createDayCloseAutoCloseSweepWorker(),
+  }),
+  {
+    queueName: DAY_CLOSE_AUTO_CLOSE_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'day close auto-close worker',
+    usesPostgres: true,
+    scheduled: false,
+    criticality: 'throughput',
+    holdsConnectionDuringExternalIo: false,
+    resolvePostgresConcurrency: () => RETENTION_WORKER_CONCURRENCY,
+    create: () => createDayCloseAutoCloseWorker(),
+  },
+  // TK4: the five-minute sweep adds one job per active team organization; each job runs that
+  // organization's task rules in its own context (opens, closes, wakes, the app's steps).
+  retentionDefinition({
+    queueName: TASK_RULES_SWEEP_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'task rules sweep worker',
+    create: () => createTaskRulesSweepWorker(),
+  }),
+  {
+    queueName: TASK_RULES_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'task rules worker',
+    usesPostgres: true,
+    scheduled: false,
+    criticality: 'throughput',
+    holdsConnectionDuringExternalIo: false,
+    resolvePostgresConcurrency: () => RETENTION_WORKER_CONCURRENCY,
+    create: () => createTaskRulesWorker(),
+  },
   retentionDefinition({
     queueName: MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME,
     family: 'retention',

@@ -20,6 +20,7 @@
  *
  * Usage: pnpm db:seed:demo-admin   (or DEMO_EMAIL=… DEMO_PASSWORD=… pnpm db:seed:demo-admin)
  */
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import '@/shared/config/load-env-files.js';
 import '@/scripts/seed/seed-runtime-url.js';
 import { closeDatabase } from './helpers.js';
@@ -75,7 +76,7 @@ export async function ensureDemoAdmin(): Promise<void> {
     user_id: demoUser.id,
     organization_id: demoOrganization.id,
     role_id: adminRole.id,
-    status: 'ACTIVE',
+    status: MEMBERSHIP_STATUS.ACTIVE,
     created_by_user_id: demoUser.id,
   });
 

@@ -30,6 +30,14 @@ export default defineConfig({
         'src/domains/**/*.service.ts',
         'src/domains/**/*.repository.ts',
         'src/domains/**/*.controller.ts',
+        // The app's own logic lives beside its services: the record rules, the money ledgers and
+        // the invoice arithmetic, and the app's workers.
+        'src/domains/app/**/*.rules.ts',
+        'src/domains/app/**/*.ledger.ts',
+        'src/domains/app/**/*.amounts.ts',
+        'src/domains/app/**/*.pricing.ts',
+        'src/domains/app/**/*.lines.ts',
+        'src/domains/app/**/workers/*.ts',
         'src/shared/**/*.ts',
       ],
       exclude: [

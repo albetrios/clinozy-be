@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { lookup } from 'node:dns/promises';
 import { Queue } from 'bullmq';
 import { asc, eq } from 'drizzle-orm';
 import type Stripe from 'stripe';
@@ -38,6 +39,12 @@ import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 
+// The webhook URL check resolves the host (SSRF guard); the harness has no network beyond
+// loopback, so the lookup answers with a public address instead of real DNS.
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
+
 const fanOutFault = vi.hoisted(() => ({ enabled: false }));
 // When enabled, the attempt insert first runs a statement Postgres rejects (division by zero): a
 // real database failure inside the producer's transaction, not a JavaScript throw.
@@ -66,26 +73,11 @@ vi.mock(
   },
 );
 
-vi.mock('@/domains/billing/sub-domains/subscription/stripe-payment-provider.js', () => {
-  class FakeStripePaymentProvider {
-    isConfigured(): boolean {
-      return true;
-    }
-    getProviderPriceId(): string {
-      return 'price_test_fake';
-    }
-    async createSubscription() {
-      return {
-        providerSubscriptionId: `sub_fake_${randomUUID()}`,
-        providerCustomerId: `cus_fake_${randomUUID()}`,
-      };
-    }
-    async cancelSubscriptionAtPeriodEnd(): Promise<void> {}
-    async cancelSubscriptionImmediately(): Promise<void> {}
-    async resumeSubscription(): Promise<void> {}
-    async updateSubscriptionPrice(): Promise<void> {}
-  }
-  return { StripePaymentProvider: FakeStripePaymentProvider };
+vi.mock('@/domains/billing/sub-domains/subscription/stripe-payment-provider.js', async () => {
+  const { FakePaymentProvider } = await import(
+    '@/domains/billing/__tests__/factories/fake-payment-provider.js'
+  );
+  return { StripePaymentProvider: FakePaymentProvider };
 });
 
 const PERMISSIONS = [
@@ -93,8 +85,9 @@ const PERMISSIONS = [
   'webhook:manage',
   'organization:update',
   'membership:read',
-  'membership:manage',
-  'invitation:manage',
+  'membership:create',
+  'membership:update',
+  'membership:delete',
   'subscription:read',
   'subscription:manage',
 ];
@@ -127,6 +120,9 @@ describe('Integration: organization resource events reach subscribed webhooks', 
   beforeEach(async () => {
     await cleanupDatabase();
     await seedPermissions(PERMISSIONS);
+    vi.mocked(lookup).mockResolvedValue([
+      { address: '93.184.216.34', family: 4 },
+    ] as unknown as Awaited<ReturnType<typeof lookup>>);
   });
 
   async function createSubscribedOrganization(
@@ -233,13 +229,13 @@ describe('Integration: organization resource events reach subscribed webhooks', 
       url: testApiPath('/tenancy/organization/memberships'),
       token,
       headers: { 'x-idempotency-key': `membership-${randomUUID()}` },
-      payload: { email: `invitee-${randomUUID()}@example.com`, role_id: role.public_id },
+      payload: { email: `invitee-${randomUUID()}@example.com`, role_ids: [role.public_id] },
     });
     expect(added.statusCode, added.body).toBe(200);
     const invited = (added.json() as { data: { id: string; status: string } }).data;
     const [createdEnvelope] = await envelopes(webhook.id, 'membership.created');
     expectEnvelope(createdEnvelope, 'membership.created', invited.id);
-    expect(createdEnvelope?.data).toMatchObject({ status: 'INVITED' });
+    expect(createdEnvelope?.data).toMatchObject({ status: 'invited' });
 
     const member = await createTestUser();
     const membership = await createMembership({
@@ -251,16 +247,18 @@ describe('Integration: organization resource events reach subscribed webhooks', 
       method: 'PATCH',
       url: testApiPath(`/tenancy/organization/memberships/${membership.public_id}`),
       token,
-      payload: { status: 'SUSPENDED' },
+      payload: { status: 'suspended' },
     });
     expect(suspended.statusCode, suspended.body).toBe(200);
     const [updatedEnvelope] = await envelopes(webhook.id, 'membership.updated');
     expectEnvelope(updatedEnvelope, 'membership.updated', membership.public_id);
-    expect(updatedEnvelope?.data).toMatchObject({ status: 'SUSPENDED' });
+    expect(updatedEnvelope?.data).toMatchObject({ status: 'suspended' });
 
     const removed = await injectAuthenticated(app, {
       method: 'DELETE',
-      url: testApiPath(`/tenancy/organization/memberships/${membership.public_id}`),
+      url: testApiPath(
+        `/tenancy/organization/memberships/${membership.public_id}?reason=not_needed`,
+      ),
       token,
     });
     expect(removed.statusCode, removed.body).toBe(204);
@@ -275,14 +273,14 @@ describe('Integration: organization resource events reach subscribed webhooks', 
       url: testApiPath('/tenancy/organization/memberships'),
       token,
       headers: { 'x-idempotency-key': `membership-${randomUUID()}` },
-      payload: { email: `revoked-${randomUUID()}@example.com`, role_id: role.public_id },
+      payload: { email: `revoked-${randomUUID()}@example.com`, role_ids: [role.public_id] },
     });
     expect(added.statusCode, added.body).toBe(200);
-    const invited = (added.json() as { data: { id: string; invitation: { id: string } } }).data;
+    const invited = (added.json() as { data: { id: string } }).data;
 
     const revoked = await injectAuthenticated(app, {
       method: 'DELETE',
-      url: testApiPath(`/tenancy/organization/invitations/${invited.invitation.id}`),
+      url: testApiPath(`/tenancy/organization/memberships/${invited.id}/invitation`),
       token,
     });
     expect(revoked.statusCode, revoked.body).toBe(204);
@@ -292,7 +290,7 @@ describe('Integration: organization resource events reach subscribed webhooks', 
 
   it('subscription.created and .updated follow create, cancel at period end and resume', async () => {
     const { webhook, token } = await createSubscribedOrganization();
-    const plan = await createTestPlan();
+    const plan = await createTestPlan({ stripePriceMonthlyId: 'price_test_fake' });
 
     const created = await injectAuthenticated(app, {
       method: 'POST',
@@ -325,7 +323,7 @@ describe('Integration: organization resource events reach subscribed webhooks', 
 
   it('subscription.cancelled fires from the Stripe deletion, with its job queued after the commit', async () => {
     const { organization, webhook } = await createSubscribedOrganization();
-    const plan = await createTestPlan();
+    const plan = await createTestPlan({ stripePriceMonthlyId: 'price_test_fake' });
     const providerSubscriptionId = `sub_deleted_${randomUUID()}`;
     const subscription = await createTestSubscription({
       organizationId: organization.id,
@@ -524,7 +522,7 @@ describe('Integration: organization resource events reach subscribed webhooks', 
 
   it('a Stripe sync that changes no customer-visible field emits nothing', async () => {
     const { organization, webhook } = await createSubscribedOrganization();
-    const plan = await createTestPlan();
+    const plan = await createTestPlan({ stripePriceMonthlyId: 'price_test_fake' });
     const providerSubscriptionId = `sub_unchanged_${randomUUID()}`;
     const subscription = await createTestSubscription({
       organizationId: organization.id,
@@ -574,7 +572,7 @@ describe('Integration: organization resource events reach subscribed webhooks', 
 
   it('cancelling for organization offboarding emits no event (nothing could deliver it)', async () => {
     const { organization, webhook } = await createSubscribedOrganization();
-    const plan = await createTestPlan();
+    const plan = await createTestPlan({ stripePriceMonthlyId: 'price_test_fake' });
     await createTestSubscription({ organizationId: organization.id, planId: plan.id });
 
     await app.billingDomain.subscriptionService.cancelActiveForOrganizationOffboarding(

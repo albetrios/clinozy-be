@@ -95,6 +95,25 @@ export class UploadRepository {
     return rows[0] ?? null;
   }
 
+  /** The organization's confirmed, live uploads among `file_keys` (any order; a key that is none is absent). */
+  async findConfirmedByFileKeys(
+    organization_id: number,
+    file_keys: readonly string[],
+  ): Promise<Pick<UploadRow, 'file_key' | 'file_name'>[]> {
+    if (file_keys.length === 0) return [];
+    return getRequestDatabase()
+      .select({ file_key: uploads.file_key, file_name: uploads.file_name })
+      .from(uploads)
+      .where(
+        and(
+          inArray(uploads.file_key, [...file_keys]),
+          eq(uploads.organization_id, organization_id),
+          eq(uploads.status, UPLOAD_STATUS.UPLOADED),
+          isNull(uploads.deleted_at),
+        ),
+      );
+  }
+
   async findByPublicIdForUser(public_id: string, user_id: number): Promise<UploadRow | null> {
     const rows = await getRequestDatabase()
       .select()

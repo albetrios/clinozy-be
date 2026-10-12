@@ -13,6 +13,7 @@ import {
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { createTestSubscription } from '@/domains/billing/__tests__/factories/subscription.factory.js';
 import { createDomainContainers, type DomainContainers } from '@/worker-containers.js';
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { subscriptions } from '@/domains/billing/sub-domains/subscription/subscription.schema.js';
 import { runSubscriptionSeatReconcileJob } from '@/domains/billing/sub-domains/subscription/workers/subscription-seat-reconcile.processor.js';
@@ -94,7 +95,10 @@ describe('Subscription seats follow the paid entitlement', () => {
       .select({ id: memberships.id })
       .from(memberships)
       .where(
-        and(eq(memberships.organization_id, organizationId), eq(memberships.status, 'SUSPENDED')),
+        and(
+          eq(memberships.organization_id, organizationId),
+          eq(memberships.status, MEMBERSHIP_STATUS.SUSPENDED),
+        ),
       );
     return rows.map((row) => row.id).sort((left, right) => left - right);
   }

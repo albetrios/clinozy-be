@@ -12,6 +12,7 @@ import {
   seedPermissions,
   createRoleWithPermissions,
   createMembership,
+  MEMBERSHIP_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
@@ -220,7 +221,7 @@ describe('Security: Organization API key authentication', () => {
         permissionCodes: [
           TENANCY_PERMISSIONS.API_KEY_MANAGE,
           TENANCY_PERMISSIONS.API_KEY_READ,
-          TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+          ...MEMBERSHIP_WRITE_PERMISSION_CODES,
           TENANCY_PERMISSIONS.MEMBERSHIP_READ,
         ],
       });
@@ -238,7 +239,7 @@ describe('Security: Organization API key authentication', () => {
       const memberScopes = [
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
         TENANCY_PERMISSIONS.API_KEY_READ,
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        ...MEMBERSHIP_WRITE_PERMISSION_CODES,
         TENANCY_PERMISSIONS.MEMBERSHIP_READ,
       ];
       const memberRole = await createRoleWithPermissions({
@@ -260,7 +261,7 @@ describe('Security: Organization API key authentication', () => {
         token: memberToken,
         payload: {
           name: 'member automation key',
-          scopes: [TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE, TENANCY_PERMISSIONS.MEMBERSHIP_READ],
+          scopes: [TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE, TENANCY_PERMISSIONS.MEMBERSHIP_READ],
         },
       });
       expect(created.statusCode).toBe(200);
@@ -302,7 +303,7 @@ describe('Security: Organization API key authentication', () => {
       const suspended = await setMembershipStatus({
         token: context.adminToken,
         membershipPublicId: context.membershipPublicId,
-        status: 'SUSPENDED',
+        status: 'suspended',
       });
       expect(suspended.statusCode).toBe(200);
 
@@ -311,7 +312,7 @@ describe('Security: Organization API key authentication', () => {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${context.membershipPublicId}`),
         headers: { authorization: `ApiKey ${context.rawKey}` },
-        payload: { status: 'ACTIVE' },
+        payload: { status: 'active' },
       });
       expect(selfReactivation.statusCode).toBe(401);
 
@@ -319,7 +320,7 @@ describe('Security: Organization API key authentication', () => {
       const reactivated = await setMembershipStatus({
         token: context.adminToken,
         membershipPublicId: context.membershipPublicId,
-        status: 'ACTIVE',
+        status: 'active',
       });
       expect(reactivated.statusCode).toBe(200);
       expect((await listMembersWithKey(context.rawKey)).statusCode).toBe(200);
@@ -345,9 +346,9 @@ describe('Security: Organization API key authentication', () => {
           headers: { authorization: `ApiKey ${context.rawKey}` },
           payload: { status },
         });
-      expect((await suspendTargetWithKey('SUSPENDED')).statusCode).toBe(200);
+      expect((await suspendTargetWithKey('suspended')).statusCode).toBe(200);
 
-      // Demote the creator to read-only: the key keeps `membership:read` but loses `membership:manage`.
+      // Demote the creator to read-only: the key keeps `membership:read` but loses `membership:update`.
       const readOnlyRole = await createRoleWithPermissions({
         organizationId: context.organization.id,
         permissionCodes: [TENANCY_PERMISSIONS.MEMBERSHIP_READ],
@@ -356,20 +357,20 @@ describe('Security: Organization API key authentication', () => {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${context.membershipPublicId}`),
         token: context.adminToken,
-        payload: { role_id: readOnlyRole.public_id },
+        payload: { role_ids: [readOnlyRole.public_id] },
       });
       expect(demoted.statusCode, demoted.body).toBe(200);
       expect((await listMembersWithKey(context.rawKey)).statusCode).toBe(200);
-      expect((await suspendTargetWithKey('ACTIVE')).statusCode).toBe(403);
+      expect((await suspendTargetWithKey('active')).statusCode).toBe(403);
 
       const promoted = await injectAuthenticated(app, {
         method: 'PATCH',
         url: testApiPath(`/tenancy/organization/memberships/${context.membershipPublicId}`),
         token: context.adminToken,
-        payload: { role_id: context.memberRole.public_id },
+        payload: { role_ids: [context.memberRole.public_id] },
       });
       expect(promoted.statusCode, promoted.body).toBe(200);
-      expect((await suspendTargetWithKey('ACTIVE')).statusCode).toBe(200);
+      expect((await suspendTargetWithKey('active')).statusCode).toBe(200);
     });
 
     it('refuses the key once the creator account itself is no longer active', async () => {

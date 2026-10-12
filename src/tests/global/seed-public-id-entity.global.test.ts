@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest';
  *
  * Public ids are Paddle-style `<prefix>_<21>` minted by `generatePublicId(entity)`,
  * where the entity selects the prefix (`memberRole`→`rol_`, `membership`→`mem_`,
- * `memberInvitation`→`inv_`, `organization`→`org_`). A copy-paste bug had the
- * tenancy seed helpers `seedRole` / `seedMembership` / `seedMemberInvitation` all
+ * `membershipInvitation`→`inv_`, `organization`→`org_`). A copy-paste bug had the
+ * tenancy seed helpers `seedRole` / `seedMembership` / `seedMembershipInvitation` all
  * pass `'organization'`, so seeded rows carried `org_`-prefixed ids. That silently
  * broke the frontend's typed-id contract (`role_id: publicId('rol')`), dropping
  * seeded members from the members list.
@@ -27,7 +27,7 @@ describe('Global: tenancy seed public-id entities', () => {
     { helper: 'seedOrganization', entity: 'organization' },
     { helper: 'seedRole', entity: 'memberRole' },
     { helper: 'seedMembership', entity: 'membership' },
-    { helper: 'seedMemberInvitation', entity: 'memberInvitation' },
+    { helper: 'seedMembershipInvitation', entity: 'membershipInvitation' },
   ] as const;
 
   /** The slice of source from a helper's declaration up to the next top-level function. */

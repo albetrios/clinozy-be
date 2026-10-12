@@ -8,7 +8,7 @@ const createdAt = new Date('2026-01-01T00:00:00.000Z');
 const updatedAt = new Date('2026-01-02T00:00:00.000Z');
 
 describe('organization serializers', () => {
-  it('serializeOrganization maps public_id to id and ISO dates', () => {
+  it('serializeOrganization maps public_id to id, names the owner and ISO dates', () => {
     expect(
       serializeOrganization({
         public_id: 'org-public',
@@ -16,7 +16,11 @@ describe('organization serializers', () => {
         slug: 'demo-org',
         type: 'TEAM',
         status: 'ACTIVE',
+        owner_user_public_id: 'usr_owner',
         logo_url: null,
+        specialties: ['skin'],
+        timezone: 'Asia/Kolkata',
+        currency: 'INR',
         created_at: createdAt,
         updated_at: updatedAt,
       }),
@@ -26,7 +30,11 @@ describe('organization serializers', () => {
       slug: 'demo-org',
       type: 'TEAM',
       status: 'ACTIVE',
+      owner_user_id: 'usr_owner',
       logo_url: null,
+      specialties: ['skin'],
+      timezone: 'Asia/Kolkata',
+      currency: 'INR',
       created_at: createdAt.toISOString(),
       updated_at: updatedAt.toISOString(),
     });
@@ -40,7 +48,11 @@ describe('organization serializers', () => {
         slug: null,
         type: 'PERSONAL',
         status: 'ACTIVE',
+        owner_user_public_id: 'usr_owner',
         logo_url: null,
+        specialties: ['skin'],
+        timezone: 'Asia/Kolkata',
+        currency: 'INR',
         created_at: createdAt,
         updated_at: updatedAt,
       }).slug,
@@ -54,6 +66,11 @@ describe('organization serializers', () => {
         row: {
           is_email_notifications_enabled: true,
           security_policy: { mfa_required: true },
+          default_day_float: '2000.00',
+          lead_hold_days: 3,
+          reminder_hour: 16,
+          retarget_after_days: 90,
+          deleted_record_purge_days: 7,
           created_at: createdAt,
           updated_at: updatedAt,
         },
@@ -63,6 +80,11 @@ describe('organization serializers', () => {
       is_email_notifications_enabled: true,
       default_locale: 'en',
       security_policy: { mfa_required: true },
+      default_day_float: 2000,
+      lead_hold_days: 3,
+      reminder_hour: 16,
+      retarget_after_days: 90,
+      deleted_record_purge_days: 7,
       created_at: createdAt.toISOString(),
       updated_at: updatedAt.toISOString(),
     });

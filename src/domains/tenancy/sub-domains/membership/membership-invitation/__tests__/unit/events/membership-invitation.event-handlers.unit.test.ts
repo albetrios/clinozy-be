@@ -1,0 +1,155 @@
+import { beforeEach, describe, expect, it, vi, beforeAll } from 'vitest';
+import { initializeI18nextForBackgroundWork } from '@/shared/middlewares/core/i18n.middleware.js';
+import { enterOnCommitScope, eventBus } from '@/core/events/event-bus.js';
+import { MEMBERSHIP_INVITATION_EVENT } from '@/domains/tenancy/sub-domains/membership/membership-invitation/events/membership-invitation.events.js';
+import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { registerMembershipInvitationEventHandlers } from '@/domains/tenancy/sub-domains/membership/membership-invitation/events/membership-invitation.event-handlers.js';
+
+const recordOutboxEmailMock = vi.fn();
+const dispatchOutboxEmailMock = vi.fn();
+
+vi.mock('@/infrastructure/mail/queues/mail.queue.js', () => ({
+  recordOutboxEmail: (...arguments_: unknown[]) => recordOutboxEmailMock(...arguments_),
+  dispatchOutboxEmail: (...arguments_: unknown[]) => dispatchOutboxEmailMock(...arguments_),
+}));
+
+vi.mock('@/infrastructure/mail/mail.service.js', () => ({
+  isMailConfigured: () => true,
+}));
+
+// Email copy comes from the locale files, as in the API and the worker.
+beforeAll(async () => {
+  await initializeI18nextForBackgroundWork();
+});
+
+describe('tenancy membership-invitation event handlers', () => {
+  beforeEach(() => {
+    recordOutboxEmailMock.mockReset();
+    dispatchOutboxEmailMock.mockReset();
+    recordOutboxEmailMock.mockResolvedValue(99);
+    dispatchOutboxEmailMock.mockResolvedValue(undefined);
+    registerMembershipInvitationEventHandlers();
+  });
+
+  async function emitAndFlushOnCommit(event: Parameters<typeof eventBus.emit>[0]): Promise<void> {
+    enterOnCommitScope();
+    await eventBus.emit(event);
+    await eventBus.flushOnCommit();
+  }
+
+  it('records outbox and dispatches after commit on tenancy.membership_invitation.created', async () => {
+    enterOnCommitScope();
+    await eventBus.emit({
+      type: MEMBERSHIP_INVITATION_EVENT.CREATED,
+      payload: {
+        email: 'invitee@example.com',
+        organization_name: 'Acme Corp',
+        inviter_name: 'usr_inviter',
+        token: 'secret-token',
+        invitation_public_id: 'inv_01test',
+        expires_in_days: 7,
+      },
+      timestamp: new Date(),
+    });
+
+    expect(recordOutboxEmailMock).toHaveBeenCalledOnce();
+    expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
+    await eventBus.flushOnCommit();
+    expect(recordOutboxEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'invitee@example.com',
+        subject: "You've been invited to join Acme Corp",
+        tags: [{ name: 'category', value: 'invitation' }],
+      }),
+    );
+    expect(dispatchOutboxEmailMock).toHaveBeenCalledOnce();
+    expect(dispatchOutboxEmailMock).toHaveBeenCalledWith({ mailOutboxToken: 99 });
+  });
+
+  it('links the invitation to the frontend accept page, not the API route', async () => {
+    await emitAndFlushOnCommit({
+      type: MEMBERSHIP_INVITATION_EVENT.CREATED,
+      payload: {
+        email: 'invitee@example.com',
+        organization_name: 'Acme Corp',
+        inviter_name: 'usr_inviter',
+        token: 'secret-token',
+        invitation_public_id: 'inv_01test',
+        expires_in_days: 7,
+      },
+      timestamp: new Date(),
+    });
+
+    const emailArg = recordOutboxEmailMock.mock.calls[0]?.[0] as { html?: string } | undefined;
+    // The CTA must point at the clinozy-fe accept page (/accept-invite/:id?token=), which forwards the
+    // token to POST /invitations/:id/accept — NOT the API path (a browser GET 404s there).
+    expect(emailArg?.html).toContain('/accept-invite/inv_01test?token=secret-token');
+    expect(emailArg?.html).not.toContain('/invitations/inv_01test/accept');
+  });
+
+  it('records outbox and dispatches after commit on tenancy.membership_invitation.resent', async () => {
+    enterOnCommitScope();
+    await eventBus.emit({
+      type: MEMBERSHIP_INVITATION_EVENT.RESENT,
+      payload: {
+        email: 'invitee@example.com',
+        organization_name: 'Acme Corp',
+        inviter_name: 'Team member',
+        token: 'secret-token',
+        invitation_public_id: 'inv_01test',
+        expires_in_days: 14,
+      },
+      timestamp: new Date(),
+    });
+
+    expect(recordOutboxEmailMock).toHaveBeenCalledOnce();
+    expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
+    await eventBus.flushOnCommit();
+    expect(dispatchOutboxEmailMock).toHaveBeenCalledOnce();
+  });
+
+  it('re-throws so the event bus surfaces failure when recordOutboxEmail rejects', async () => {
+    const recordError = new Error('outbox write failed');
+    recordOutboxEmailMock.mockReset();
+    recordOutboxEmailMock.mockRejectedValue(recordError);
+
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    try {
+      await expect(
+        emitAndFlushOnCommit({
+          type: MEMBERSHIP_INVITATION_EVENT.CREATED,
+          payload: {
+            email: 'invitee@example.com',
+            organization_name: 'Acme Corp',
+            inviter_name: 'usr_inviter',
+            token: 'secret-token',
+            invitation_public_id: 'inv_01test',
+            expires_in_days: 7,
+          },
+          timestamp: new Date(),
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: recordError,
+          eventType: MEMBERSHIP_INVITATION_EVENT.CREATED,
+        }),
+        'membership-invitation.email.enqueue.failed',
+      );
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: recordError,
+          eventType: MEMBERSHIP_INVITATION_EVENT.CREATED,
+        }),
+        'Domain event handler failed',
+      );
+      expect(dispatchOutboxEmailMock).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+});

@@ -12,7 +12,16 @@ describe('SEED_MODULES registry', () => {
     const names = SEED_MODULES.map((module) => module.name);
     expect(new Set(names).size).toBe(names.length);
     expect(names).toEqual(
-      expect.arrayContaining(['user', 'auth', 'tenancy', 'billing', 'notify', 'upload', 'audit']),
+      expect.arrayContaining([
+        'user',
+        'auth',
+        'tenancy',
+        'billing',
+        'notify',
+        'upload',
+        'audit',
+        'app',
+      ]),
     );
   });
 

@@ -5,13 +5,15 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**14 / 238** variables migrated to an explicit `{ allowed, description }` entry.
+**16 / 243** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
+| `AI_SERVICE_URL` | URL | — *(optional)* | ✓ | Reserved: the base URL of the AI service that will suggest a patient's offering ideas. Nothing reads it yet; the ideas come from the rules. |
 | `ALLOWED_ORIGINS` | — | — *(required)* |  | — |
 | `API_DOCS_BASE_URL` | — | — *(optional)* |  | — |
 | `API_REFERENCE_ALLOW_PRODUCTION` | — | `false` |  | — |
+| `APP_RECORD_PURGE_CRON` | — | — *(optional)* |  | — |
 | `AUDIT_EXPORT_BATCH_SIZE` | — | `5000` |  | — |
 | `AUDIT_EXPORT_CRON` | — | — *(optional)* |  | — |
 | `AUDIT_EXPORT_ENABLED` | — | `false` |  | — |
@@ -114,7 +116,9 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `MCP_CALL_API_ALLOWED_PATH_PREFIXES` | — | `` |  | — |
 | `MEMBER_ROLE_MAX_PER_ORG` | — | `50` |  | — |
 | `MEMBER_ROLE_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
+| `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` | — | `false` |  | — |
 | `MEMBERSHIP_TOMBSTONE_RETENTION_CRON` | — | — *(optional)* |  | — |
+| `MESSAGING_SERVICE_URL` | URL | — *(optional)* | ✓ | Reserved: the base URL of the messaging service that will deliver the outbox (the queued WhatsApp and Instagram messages). Nothing reads it yet. |
 | `METRICS_AUTH_REQUIRED` | — | `true` |  | — |
 | `METRICS_ENABLED` | — | `true` |  | — |
 | `METRICS_SCRAPE_TOKEN` | — | — *(optional)* |  | — |
@@ -138,6 +142,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS` | integer 0–60000 (ms; 0 disables) | `2000` | ✓ | Overload-guard shed threshold: how long the oldest unit of work may wait for a pooled connection before new requests get a 503. |
 | `OVERLOAD_DB_POOL_SHED_RATIO` | number 0–10 | `10` | ✓ | Multiple of DATABASE_POOL_MAX in-flight units of work (running plus waiting for a connection) at which the overload guard sheds requests; above 1 lets a bounded queue form. |
 | `OVERLOAD_MAX_EVENT_LOOP_DELAY_MS` | integer 1–60000 | `250` | ✓ | Overload-guard shed threshold: p99 event-loop delay (ms) above which requests get a 503. |
+| `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` | — | `true` |  | — |
 | `PERSONAL_ORGANIZATION_ENABLED` | — | `true` |  | — |
 | `PORT` | integer 1–65535 | `3000` | ✓ | HTTP port the API server binds to. |
 | `POSTGRES_MAX_CONNECTIONS` | — | — *(optional)* |  | — |

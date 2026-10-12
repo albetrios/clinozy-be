@@ -137,6 +137,49 @@ describe('AuthMeContextService.getContext', () => {
     expect(data.myPermissions).toEqual(['organization:read']);
   });
 
+  it("carries the caller's membership id and roles, main role first, as ids and named (launch ROUTE #156)", async () => {
+    const userService = { getMe: vi.fn().mockResolvedValue({ id: 'usr_1' }) };
+    const organizationService = { getByPublicId: vi.fn().mockResolvedValue({ id: 'org_active' }) };
+    const authorizationService = {
+      resolveUserOrganizationPermissions: vi.fn().mockResolvedValue(['organization:read']),
+    };
+    const roles = [
+      { id: 'rol_front', name: 'Front desk', tone: 'sky', is_system: true },
+      { id: 'rol_extra', name: 'Billing help', tone: 'lav', is_system: false },
+    ];
+    const membershipService = {
+      getCallerMembershipContext: vi.fn().mockResolvedValue({ membership_id: 'mem_1', roles }),
+    };
+    const service = new AuthMeContextService(
+      userService as never,
+      organizationService as never,
+      authorizationService as never,
+      membershipService,
+    );
+
+    const data = await service.getContext({ scope: meScope, globalRole: undefined });
+
+    expect(membershipService.getCallerMembershipContext).toHaveBeenCalledWith(meScope);
+    expect(data.membershipId).toBe('mem_1');
+    expect(data.myRoleIds).toEqual(['rol_front', 'rol_extra']);
+    expect(data.myRoles).toEqual(roles);
+  });
+
+  it('reads no membership as a null membership id and no roles', async () => {
+    const service = new AuthMeContextService(
+      { getMe: vi.fn().mockResolvedValue({ id: 'usr_1' }) } as never,
+      { getByPublicId: vi.fn().mockResolvedValue({ id: 'org_active' }) } as never,
+      { resolveUserOrganizationPermissions: vi.fn().mockResolvedValue([]) } as never,
+      { getCallerMembershipContext: vi.fn().mockResolvedValue(null) },
+    );
+
+    const data = await service.getContext({ scope: meScope, globalRole: undefined });
+
+    expect(data.membershipId).toBeNull();
+    expect(data.myRoleIds).toEqual([]);
+    expect(data.myRoles).toEqual([]);
+  });
+
   it('returns a null active organization and no permissions when no active organization is in scope', async () => {
     const userService = { getMe: vi.fn().mockResolvedValue({ id: 'usr_1' }) };
     const organizationService = {
@@ -162,6 +205,9 @@ describe('AuthMeContextService.getContext', () => {
 
     expect(data.activeOrganization).toBeNull();
     expect(data.myPermissions).toEqual([]);
+    // No membership service in this harness: no membership, no roles.
+    expect(data.membershipId).toBeNull();
+    expect(data.myRoles).toEqual([]);
     expect(organizationService.getByPublicId).not.toHaveBeenCalled();
     expect(authorizationService.resolveUserOrganizationPermissions).not.toHaveBeenCalled();
   });

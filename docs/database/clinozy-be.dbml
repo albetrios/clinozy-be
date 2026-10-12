@@ -7,6 +7,79 @@ Project clinozy_be {
   database_type: 'PostgreSQL'
 }
 
+TableGroup app {
+  app.appointments
+  app.branch_holidays
+  app.branch_machines
+  app.branch_members
+  app.branch_rooms
+  app.branches
+  app.contact_activities
+  app.contact_members
+  app.contact_message_templates
+  app.contact_phones
+  app.contacts
+  app.day_close_events
+  app.day_closes
+  app.invoice_credit_notes
+  app.invoice_items
+  app.invoice_members
+  app.invoices
+  app.lead_involved_memberships
+  app.leads
+  app.manufacturers
+  app.medical_purchase_order_items
+  app.medical_purchase_orders
+  app.medical_rep_manufacturers
+  app.medical_rep_visits
+  app.medical_reps
+  app.medical_sale_return_items
+  app.medical_sale_returns
+  app.medical_sales
+  app.medicine_batches
+  app.medicine_supplier_prices
+  app.medicines
+  app.membership_preference_branches
+  app.membership_preferences
+  app.membership_saved_views
+  app.offer_branches
+  app.offer_offerings
+  app.offering_branches
+  app.offering_groups
+  app.offerings
+  app.offers
+  app.patient_check_ins
+  app.patient_clinical_notes
+  app.patient_diagnoses
+  app.patient_feedback_actions
+  app.patient_images
+  app.patient_offering_suggestions
+  app.patient_offerings
+  app.patient_prescriptions
+  app.patient_reports
+  app.patient_reviews
+  app.patient_treatments
+  app.patients
+  app.payment_edits
+  app.payments
+  app.pending_credits
+  app.prescription_kits
+  app.record_counters
+  app.stock_count_lines
+  app.stock_counts
+  app.stock_item_movements
+  app.stock_items
+  app.stock_purchase_items
+  app.stock_purchases
+  app.stock_vendors
+  app.supplier_credits
+  app.supplier_manufacturers
+  app.suppliers
+  app.task_owner_changes
+  app.task_rule_settings
+  app.tasks
+}
+
 TableGroup audit {
   audit.dead_letter_jobs
   audit.logs
@@ -42,7 +115,8 @@ TableGroup notify {
 
 TableGroup tenancy {
   tenancy.api_keys
-  tenancy.member_invitations
+  tenancy.membership_additional_roles
+  tenancy.membership_invitations
   tenancy.memberships
   tenancy.organization_notification_policies
   tenancy.organization_settings
@@ -54,6 +128,1601 @@ TableGroup tenancy {
 
 TableGroup upload {
   upload.uploads
+}
+
+Table app.appointments {
+  appointment_date date [not null]
+  appointment_number int [not null]
+  branch_id bigint [not null]
+  branch_machine_id bigint
+  branch_room_id bigint
+  contact_id bigint [not null]
+  doctor_membership_id bigint [not null]
+  duration_minutes smallint [not null]
+  id bigint [pk, increment, not null]
+  offering_id bigint
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  service_label varchar(120) [not null]
+  start_time time [not null]
+  therapist_membership_id bigint
+  time_range tsrange
+  type varchar(15) [not null]
+}
+
+Note app.appointments {
+  'RLS: enabled\nPolicies: appointments_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.branch_holidays {
+  branch_id bigint [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  holiday_date date [not null]
+  id bigint [pk, increment, not null]
+  label varchar(60) [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.branch_holidays {
+  'RLS: enabled\nPolicies: branch_holidays_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.branch_machines {
+  branch_id bigint [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  is_active boolean [not null]
+  name varchar(60) [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.branch_machines {
+  'RLS: enabled\nPolicies: branch_machines_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.branch_members {
+  branch_id bigint [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  membership_id bigint [not null]
+  organization_id bigint [not null]
+  indexes {
+    (branch_id, membership_id) [pk]
+  }
+}
+
+Note app.branch_members {
+  'RLS: enabled\nPolicies: branch_members_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.branch_rooms {
+  branch_id bigint [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  is_active boolean [not null]
+  name varchar(60) [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.branch_rooms {
+  'RLS: enabled\nPolicies: branch_rooms_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.branches {
+  address_line_one varchar(120) [not null]
+  address_line_two varchar(120)
+  area varchar(60) [not null]
+  city varchar(60) [not null]
+  closes_at time [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  default_doctor_membership_id bigint
+  default_front_desk_membership_id bigint
+  default_pharmacist_membership_id bigint
+  default_therapist_membership_id bigint
+  email varchar(120) [not null]
+  gst_number varchar(15)
+  id bigint [pk, increment, not null]
+  is_active boolean [not null]
+  is_main boolean [not null]
+  maps_link varchar(512)
+  name varchar(60) [not null]
+  opens_at time [not null]
+  organization_id bigint [not null]
+  phone varchar(16) [not null]
+  postal_code varchar(6) [not null]
+  public_id varchar(28) [not null]
+  review_link varchar(512)
+  state varchar(60) [not null]
+  tone varchar(10) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+  working_days text [not null]
+}
+
+Note app.branches {
+  'RLS: enabled\nPolicies: branches_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.contact_activities {
+  appointment_id bigint
+  attachment_keys text [not null]
+  author_membership_id bigint
+  automation_kind varchar(16)
+  body varchar(1000) [not null]
+  contact_id bigint [not null]
+  contact_message_template_id bigint
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delivered_at timestamptz
+  delivery_status varchar(9)
+  direction varchar(8)
+  failed_at timestamptz
+  failure_reason varchar(280)
+  id bigint [pk, increment, not null]
+  invoice_id bigint
+  is_private_photo boolean [not null]
+  occurred_at timestamptz [not null]
+  organization_id bigint [not null]
+  patient_check_in_id bigint
+  patient_clinical_note_id bigint
+  patient_image_id bigint
+  patient_offering_id bigint
+  patient_prescription_id bigint
+  patient_report_id bigint
+  patient_review_id bigint
+  patient_treatment_id bigint
+  payment_id bigint
+  public_id varchar(28) [not null]
+  read_at timestamptz
+  reply_to_contact_activity_id bigint
+  task_id bigint
+  type varchar(9) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.contact_activities {
+  'RLS: enabled\nPolicies: contact_activities_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.contact_members {
+  contact_id bigint [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  membership_id bigint [not null]
+  organization_id bigint [not null]
+  indexes {
+    (contact_id, membership_id) [pk]
+  }
+}
+
+Note app.contact_members {
+  'RLS: enabled\nPolicies: contact_members_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.contact_message_templates {
+  body varchar(1000) [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  name varchar(60) [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  type varchar(9) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.contact_message_templates {
+  'RLS: enabled\nPolicies: contact_message_templates_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.contact_phones {
+  contact_id bigint [not null]
+  deleted_at timestamptz
+  household_contact_id bigint [not null]
+  is_on_whatsapp boolean [not null]
+  is_primary boolean [not null]
+  organization_id bigint [not null]
+  phone varchar(13) [not null]
+  indexes {
+    (contact_id, phone) [pk]
+  }
+}
+
+Note app.contact_phones {
+  'RLS: enabled\nPolicies: contact_phones_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.contacts {
+  address varchar(240)
+  contact_number int [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  date_of_birth date
+  default_channel varchar(9) [not null]
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  email varchar(120)
+  first_name varchar(60) [not null]
+  gender varchar(6)
+  has_marketing_consent boolean [not null]
+  household_contact_id bigint [not null]
+  id bigint [pk, increment, not null]
+  instagram_handles text [not null]
+  last_activity_at timestamptz
+  last_name varchar(60)
+  last_received_at timestamptz
+  last_sent_at timestamptz
+  organization_id bigint [not null]
+  preference_tags text [not null]
+  primary_phone varchar(13) [not null]
+  public_id varchar(28) [not null]
+  referral_source varchar(9)
+  referred_by_contact_id bigint
+  referred_by_name varchar(120)
+  search_text text [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.contacts {
+  'RLS: enabled\nPolicies: contacts_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.day_close_events {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  day_close_id bigint [not null]
+  id bigint [pk, increment, not null]
+  kind varchar(11) [not null]
+  membership_id bigint
+  occurred_at timestamptz [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  text varchar(280)
+}
+
+Note app.day_close_events {
+  'RLS: enabled\nPolicies: day_close_events_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.day_closes {
+  branch_id bigint [not null]
+  close_date date [not null]
+  close_kind varchar(6)
+  closed_at timestamptz
+  closed_by_membership_id bigint
+  counted_cash numeric(12, 2)
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  difference numeric(12, 2)
+  difference_reason varchar(280)
+  expected_cash numeric(12, 2)
+  id bigint [pk, increment, not null]
+  opening_accepted_at timestamptz [not null]
+  opening_accepted_by_membership_id bigint
+  opening_cash numeric(12, 2) [not null]
+  opening_source varchar(9) [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  status varchar(6) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.day_closes {
+  'RLS: enabled\nPolicies: day_closes_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.invoice_credit_notes {
+  amount numeric(12, 2) [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  credit_note_number int [not null]
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  invoice_id bigint [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  reason varchar(280) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.invoice_credit_notes {
+  'RLS: enabled\nPolicies: invoice_credit_notes_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.invoice_items {
+  amount numeric(12, 2) [not null]
+  batch_number varchar(20)
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  discount_amount numeric(12, 2) [not null]
+  discount_percent numeric(5, 2) [not null]
+  gst_amount numeric(12, 2) [not null]
+  gst_percent smallint [not null]
+  id bigint [pk, increment, not null]
+  invoice_id bigint [not null]
+  is_gst_inclusive boolean [not null]
+  line_number smallint [not null]
+  medicine_batch_id bigint
+  medicine_id bigint
+  name varchar(120) [not null]
+  offering_id bigint
+  organization_id bigint [not null]
+  pack_size varchar(30)
+  patient_offering_suggestion_id bigint
+  public_id varchar(28) [not null]
+  quantity smallint [not null]
+  rate numeric(12, 2) [not null]
+  taxable_amount numeric(12, 2) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.invoice_items {
+  'RLS: enabled\nPolicies: invoice_items_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.invoice_members {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  invoice_id bigint [not null]
+  membership_id bigint [not null]
+  organization_id bigint [not null]
+  indexes {
+    (invoice_id, membership_id) [pk]
+  }
+}
+
+Note app.invoice_members {
+  'RLS: enabled\nPolicies: invoice_members_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.invoices {
+  branch_id bigint [not null]
+  contact_id bigint
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  discount_total numeric(12, 2) [not null]
+  due_amount numeric(12, 2)
+  financial_year varchar(9) [not null]
+  gst_total numeric(12, 2) [not null]
+  id bigint [pk, increment, not null]
+  invoice_date date [not null]
+  invoice_number varchar(30) [not null]
+  invoice_sequence int [not null]
+  organization_id bigint [not null]
+  overall_discount numeric(12, 2) [not null]
+  paid_amount numeric(12, 2) [not null]
+  patient_prescription_id bigint
+  payment_status varchar(7)
+  public_id varchar(28) [not null]
+  remark varchar(500)
+  subtotal numeric(12, 2) [not null]
+  taxable_total numeric(12, 2) [not null]
+  total numeric(12, 2) [not null]
+  type varchar(12) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.invoices {
+  'RLS: enabled\nPolicies: invoices_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.lead_involved_memberships {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  lead_id bigint [not null]
+  membership_id bigint [not null]
+  organization_id bigint [not null]
+  indexes {
+    (lead_id, membership_id) [pk]
+  }
+}
+
+Note app.lead_involved_memberships {
+  'RLS: enabled\nPolicies: lead_involved_memberships_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.leads {
+  branch_id bigint
+  contact_id bigint [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  follow_up_at timestamptz
+  held_until timestamptz
+  id bigint [pk, increment, not null]
+  interests text [not null]
+  kind varchar(8) [not null]
+  lead_number int [not null]
+  notes text
+  organization_id bigint [not null]
+  owner_membership_id bigint
+  public_id varchar(28) [not null]
+  retarget_reason varchar(160)
+  source varchar(9)
+  status varchar(14) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.leads {
+  'RLS: enabled\nPolicies: leads_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.manufacturers {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  is_quick boolean [not null]
+  name varchar(80) [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  tone varchar(6) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.manufacturers {
+  'RLS: enabled\nPolicies: manufacturers_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.medical_purchase_order_items {
+  amount numeric(12, 2) [not null]
+  batch_number varchar(20)
+  created_at timestamptz [not null]
+  expiry_month date
+  free_quantity int [not null]
+  id bigint [pk, increment, not null]
+  is_received boolean
+  line_number smallint [not null]
+  medical_purchase_order_id bigint [not null]
+  medicine_batch_id bigint
+  medicine_id bigint [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  quantity int [not null]
+  rate numeric(12, 2) [not null]
+  updated_at timestamptz [not null]
+}
+
+Note app.medical_purchase_order_items {
+  'RLS: enabled\nPolicies: medical_purchase_order_items_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.medical_purchase_orders {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  credited_amount numeric(12, 2) [not null]
+  delete_note varchar(280)
+  delete_reason varchar(21)
+  deleted_at timestamptz
+  due_amount numeric(12, 2)
+  id bigint [pk, increment, not null]
+  order_date date [not null]
+  organization_id bigint [not null]
+  paid_amount numeric(12, 2) [not null]
+  payment_status varchar(7)
+  public_id varchar(28) [not null]
+  purchase_order_number int [not null]
+  received_at timestamptz
+  stage varchar(8) [not null]
+  supplier_bill_number varchar(30)
+  supplier_id bigint [not null]
+  total numeric(12, 2) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.medical_purchase_orders {
+  'RLS: enabled\nPolicies: medical_purchase_orders_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.medical_rep_manufacturers {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  manufacturer_id bigint [not null]
+  medical_rep_id bigint [not null]
+  organization_id bigint [not null]
+  indexes {
+    (medical_rep_id, manufacturer_id) [pk]
+  }
+}
+
+Note app.medical_rep_manufacturers {
+  'RLS: enabled\nPolicies: medical_rep_manufacturers_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.medical_rep_visits {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  logged_by_membership_id bigint
+  medical_rep_id bigint [not null]
+  next_visit_on date
+  notes varchar(500)
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  samples varchar(120)
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+  visit_date date [not null]
+}
+
+Note app.medical_rep_visits {
+  'RLS: enabled\nPolicies: medical_rep_visits_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.medical_reps {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  name varchar(120) [not null]
+  next_visit_on date
+  organization_id bigint [not null]
+  phone varchar(13)
+  public_id varchar(28) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.medical_reps {
+  'RLS: enabled\nPolicies: medical_reps_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.medical_sale_return_items {
+  amount numeric(12, 2) [not null]
+  invoice_item_id bigint [not null]
+  is_restocked boolean [not null]
+  medical_sale_return_id bigint [not null]
+  organization_id bigint [not null]
+  quantity int [not null]
+  indexes {
+    (medical_sale_return_id, invoice_item_id) [pk]
+  }
+}
+
+Note app.medical_sale_return_items {
+  'RLS: enabled\nPolicies: medical_sale_return_items_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.medical_sale_returns {
+  amount numeric(12, 2) [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  id bigint [pk, increment, not null]
+  invoice_credit_note_id bigint [not null]
+  medical_sale_id bigint [not null]
+  note varchar(280)
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  reason varchar(14) [not null]
+  refund_mode varchar(4) [not null]
+  returned_by_membership_id bigint
+}
+
+Note app.medical_sale_returns {
+  'RLS: enabled\nPolicies: medical_sale_returns_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.medical_sales {
+  branch_id bigint [not null]
+  contact_id bigint [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(21)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  invoice_id bigint [not null]
+  organization_id bigint [not null]
+  patient_prescription_id bigint
+  public_id varchar(28) [not null]
+  sale_number int [not null]
+  sold_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.medical_sales {
+  'RLS: enabled\nPolicies: medical_sales_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.medicine_batches {
+  batch_number varchar(20) [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  expiry_month date [not null]
+  id bigint [pk, increment, not null]
+  medical_purchase_order_id bigint
+  medicine_id bigint [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  purchase_rate numeric(12, 2)
+  quantity int [not null]
+  supplier_id bigint
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.medicine_batches {
+  'RLS: enabled\nPolicies: medicine_batches_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.medicine_supplier_prices {
+  created_at timestamptz [not null]
+  free_quantity int [not null]
+  lead_days int [not null]
+  medicine_id bigint [not null]
+  organization_id bigint [not null]
+  rate numeric(12, 2) [not null]
+  supplier_id bigint [not null]
+  updated_at timestamptz [not null]
+  indexes {
+    (medicine_id, supplier_id) [pk]
+  }
+}
+
+Note app.medicine_supplier_prices {
+  'RLS: enabled\nPolicies: medicine_supplier_prices_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.medicines {
+  composition varchar(160)
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  gst_percent smallint [not null]
+  id bigint [pk, increment, not null]
+  is_prescription_only boolean [not null]
+  is_quick boolean [not null]
+  manufacturer_id bigint
+  max_stock int [not null]
+  medicine_number int [not null]
+  min_stock int [not null]
+  mrp numeric(12, 2) [not null]
+  name varchar(120) [not null]
+  near_expiry_discount_percent numeric(5, 2)
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  quantity int [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.medicines {
+  'RLS: enabled\nPolicies: medicines_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.membership_preference_branches {
+  branch_id bigint [not null]
+  created_at timestamptz [not null]
+  membership_preference_id bigint [not null]
+  organization_id bigint [not null]
+  indexes {
+    (membership_preference_id, branch_id) [pk]
+  }
+}
+
+Note app.membership_preference_branches {
+  'RLS: enabled\nPolicies: membership_preference_branches_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.membership_preferences {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  id bigint [pk, increment, not null]
+  membership_id bigint [not null]
+  organization_id bigint [not null]
+  patient_file_pins text [not null]
+  pinned_sections text [not null]
+  public_id varchar(28) [not null]
+  recent_picks text [not null]
+  theme varchar(6) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.membership_preferences {
+  'RLS: enabled\nPolicies: membership_preferences_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.membership_saved_views {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  filters jsonb [not null]
+  hidden_columns text [not null]
+  id bigint [pk, increment, not null]
+  label varchar(60) [not null]
+  list_key varchar(40) [not null]
+  membership_id bigint [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.membership_saved_views {
+  'RLS: enabled\nPolicies: membership_saved_views_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.offer_branches {
+  branch_id bigint [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  offer_id bigint [not null]
+  organization_id bigint [not null]
+  indexes {
+    (offer_id, branch_id) [pk]
+  }
+}
+
+Note app.offer_branches {
+  'RLS: enabled\nPolicies: offer_branches_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.offer_offerings {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  offer_id bigint [not null]
+  offering_id bigint [not null]
+  organization_id bigint [not null]
+  indexes {
+    (offer_id, offering_id) [pk]
+  }
+}
+
+Note app.offer_offerings {
+  'RLS: enabled\nPolicies: offer_offerings_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.offering_branches {
+  branch_id bigint [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  offering_id bigint [not null]
+  organization_id bigint [not null]
+  indexes {
+    (offering_id, branch_id) [pk]
+  }
+}
+
+Note app.offering_branches {
+  'RLS: enabled\nPolicies: offering_branches_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.offering_groups {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  name varchar(60) [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  sort_order int [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.offering_groups {
+  'RLS: enabled\nPolicies: offering_groups_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.offerings {
+  category varchar(12) [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  description text
+  duration_minutes int [not null]
+  gst_percent int [not null]
+  id bigint [pk, increment, not null]
+  is_active boolean [not null]
+  is_gst_inclusive boolean [not null]
+  min_price numeric(12, 2) [not null]
+  name varchar(120) [not null]
+  offer_price numeric(12, 2)
+  offering_group_id bigint
+  offering_number int [not null]
+  organization_id bigint [not null]
+  price numeric(12, 2) [not null]
+  public_id varchar(28) [not null]
+  search_terms text [not null]
+  sessions int [not null]
+  specialty varchar(7) [not null]
+  tone varchar(10) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+  validity_days int [not null]
+}
+
+Note app.offerings {
+  'RLS: enabled\nPolicies: offerings_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.offers {
+  code varchar(16)
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  ends_on date
+  id bigint [pk, increment, not null]
+  is_active boolean [not null]
+  kind varchar(7) [not null]
+  name varchar(80) [not null]
+  note text
+  OR 
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  starts_on date
+  tone varchar(10) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+  value numeric(12, 2) [not null]
+}
+
+Note app.offers {
+  'RLS: enabled\nPolicies: offers_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.patient_check_ins {
+  appointment_id bigint
+  check_in_date date [not null]
+  context varchar(80) [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  current_state varchar(500)
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  feel varchar(11) [not null]
+  followed varchar(10)
+  followed_note varchar(280)
+  id bigint [pk, increment, not null]
+  next_plan varchar(500)
+  organization_id bigint [not null]
+  patient_id bigint [not null]
+  patient_treatment_id bigint
+  public_id varchar(28) [not null]
+  score smallint [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.patient_check_ins {
+  'RLS: enabled\nPolicies: patient_check_ins_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.patient_clinical_notes {
+  added_at timestamptz [not null]
+  appointment_id bigint
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  kind varchar(20) [not null]
+  organization_id bigint [not null]
+  patient_diagnosis_id bigint
+  patient_id bigint [not null]
+  public_id varchar(28) [not null]
+  text varchar(500) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.patient_clinical_notes {
+  'RLS: enabled\nPolicies: patient_clinical_notes_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.patient_diagnoses {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  name varchar(120) [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.patient_diagnoses {
+  'RLS: enabled\nPolicies: patient_diagnoses_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.patient_feedback_actions {
+  action varchar(18) [not null]
+  author_membership_id bigint
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  id bigint [pk, increment, not null]
+  note varchar(280)
+  organization_id bigint [not null]
+  patient_check_in_id bigint
+  patient_review_id bigint
+  public_id varchar(28) [not null]
+}
+
+Note app.patient_feedback_actions {
+  'RLS: enabled\nPolicies: patient_feedback_actions_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.patient_images {
+  album varchar(7) [not null]
+  appointment_id bigint
+  body_part varchar(9)
+  caption varchar(200)
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  display_name varchar(60)
+  file_key varchar(512) [not null]
+  file_name varchar(120) [not null]
+  id bigint [pk, increment, not null]
+  organization_id bigint [not null]
+  patient_id bigint [not null]
+  patient_treatment_id bigint
+  public_id varchar(28) [not null]
+  stage varchar(6)
+  taken_on date [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.patient_images {
+  'RLS: enabled\nPolicies: patient_images_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.patient_offering_suggestions {
+  appointment_id bigint
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  offering_id bigint [not null]
+  organization_id bigint [not null]
+  patient_check_in_id bigint
+  patient_id bigint [not null]
+  price numeric(12, 2)
+  public_id varchar(28) [not null]
+  quantity smallint [not null]
+  reason varchar(200)
+  status varchar(9) [not null]
+  suggested_by_membership_id bigint
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.patient_offering_suggestions {
+  'RLS: enabled\nPolicies: patient_offering_suggestions_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.patient_offerings {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  invoice_item_id bigint [not null]
+  offering_id bigint [not null]
+  organization_id bigint [not null]
+  patient_id bigint [not null]
+  public_id varchar(28) [not null]
+  sessions_total smallint [not null]
+  sessions_used smallint [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+  valid_until date
+}
+
+Note app.patient_offerings {
+  'RLS: enabled\nPolicies: patient_offerings_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.patient_prescriptions {
+  advice text
+  appointment_id bigint
+  approved_at timestamptz
+  approved_by_membership_id bigint
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  doctor_membership_id bigint [not null]
+  follow_up_date date
+  id bigint [pk, increment, not null]
+  items jsonb [not null]
+  lab_report text
+  organization_id bigint [not null]
+  patient_id bigint [not null]
+  prescription_date date [not null]
+  prescription_number int [not null]
+  print_language varchar(8) [not null]
+  procedure_today text
+  public_id varchar(28) [not null]
+  status varchar(8) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.patient_prescriptions {
+  'RLS: enabled\nPolicies: patient_prescriptions_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.patient_reports {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  file_keys text [not null]
+  id bigint [pk, increment, not null]
+  name varchar(120) [not null]
+  notes text
+  organization_id bigint [not null]
+  patient_id bigint [not null]
+  public_id varchar(28) [not null]
+  report_date date [not null]
+  type varchar(7) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.patient_reports {
+  'RLS: enabled\nPolicies: patient_reports_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.patient_reviews {
+  appointment_id bigint
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  file_keys text [not null]
+  id bigint [pk, increment, not null]
+  link varchar(500)
+  organization_id bigint [not null]
+  patient_id bigint [not null]
+  public_id varchar(28) [not null]
+  rating smallint
+  review_date date [not null]
+  source varchar(13) [not null]
+  text varchar(2000)
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.patient_reviews {
+  'RLS: enabled\nPolicies: patient_reviews_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.patient_treatments {
+  aftercare_call varchar(11) [not null]
+  appointment_id bigint
+  body_parts text [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  doctor_membership_id bigint
+  id bigint [pk, increment, not null]
+  name varchar(120) [not null]
+  offering_id bigint
+  organization_id bigint [not null]
+  parameters jsonb [not null]
+  patient_id bigint [not null]
+  patient_offering_id bigint
+  performed_at timestamptz [not null]
+  public_id varchar(28) [not null]
+  remark varchar(2000)
+  reversed_at timestamptz
+  reversed_reason varchar(280)
+  session_number smallint [not null]
+  status varchar(8) [not null]
+  template varchar(7) [not null]
+  therapist_membership_id bigint
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.patient_treatments {
+  'RLS: enabled\nPolicies: patient_treatments_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.patients {
+  allergies text [not null]
+  contact_id bigint [not null]
+  contraindications text [not null]
+  conversion varchar(13) [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  doctor_membership_id bigint
+  follow_up_at timestamptz
+  has_data_consent boolean [not null]
+  has_photo_consent boolean [not null]
+  home_branch_id bigint [not null]
+  id bigint [pk, increment, not null]
+  lead_id bigint
+  notes text
+  organization_id bigint [not null]
+  patient_number int [not null]
+  public_id varchar(28) [not null]
+  status varchar(8) [not null]
+  types text [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.patients {
+  'RLS: enabled\nPolicies: patients_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.payment_edits {
+  author_membership_id bigint
+  changes jsonb [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  id bigint [pk, increment, not null]
+  organization_id bigint [not null]
+  payment_id bigint [not null]
+  public_id varchar(28) [not null]
+}
+
+Note app.payment_edits {
+  'RLS: enabled\nPolicies: payment_edits_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.payments {
+  amount numeric(12, 2) [not null]
+  attachment_keys text [not null]
+  branch_id bigint [not null]
+  card_amount numeric(12, 2) [not null]
+  cash_amount numeric(12, 2) [not null]
+  contact_id bigint
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  credit_amount numeric(12, 2) [not null]
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  direction varchar(8) [not null]
+  expense_category varchar(11)
+  id bigint [pk, increment, not null]
+  invoice_credit_note_id bigint
+  invoice_id bigint
+  kind varchar(13) [not null]
+  medical_purchase_order_id bigint
+  note varchar(280)
+  organization_id bigint [not null]
+  paid_at timestamptz [not null]
+  payee_name varchar(120)
+  payment_number int [not null]
+  pending_credit_id bigint
+  public_id varchar(28) [not null]
+  reference varchar(60)
+  reverses_payment_id bigint
+  stock_purchase_id bigint
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+  upi_amount numeric(12, 2) [not null]
+}
+
+Note app.payments {
+  'RLS: enabled\nPolicies: payments_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.pending_credits {
+  amount numeric(12, 2) [not null]
+  contact_id bigint
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  direction varchar(4) [not null]
+  id bigint [pk, increment, not null]
+  invoice_id bigint
+  note varchar(300)
+  organization_id bigint [not null]
+  party_name varchar(120)
+  pending_credit_number int [not null]
+  public_id varchar(28) [not null]
+  reason varchar(280) [not null]
+  settle_by date
+  settled_amount numeric(12, 2) [not null]
+  source_payment_id bigint
+  status varchar(10) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.pending_credits {
+  'RLS: enabled\nPolicies: pending_credits_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.prescription_kits {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  items jsonb [not null]
+  name varchar(80) [not null]
+  organization_id bigint [not null]
+  owner_membership_id bigint [not null]
+  public_id varchar(28) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.prescription_kits {
+  'RLS: enabled\nPolicies: prescription_kits_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.record_counters {
+  counter_key varchar(80) [not null]
+  last_value int [not null]
+  organization_id bigint [not null]
+  indexes {
+    (organization_id, counter_key) [pk]
+  }
+}
+
+Note app.record_counters {
+  'RLS: enabled\nPolicies: record_counters_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.stock_count_lines {
+  counted_quantity numeric(12, 3) [not null]
+  organization_id bigint [not null]
+  stock_count_id bigint [not null]
+  stock_item_id bigint [not null]
+  system_quantity numeric(12, 3) [not null]
+  indexes {
+    (stock_count_id, stock_item_id) [pk]
+  }
+}
+
+Note app.stock_count_lines {
+  'RLS: enabled\nPolicies: stock_count_lines_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.stock_counts {
+  author_membership_id bigint
+  counted_at timestamptz [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  id bigint [pk, increment, not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+}
+
+Note app.stock_counts {
+  'RLS: enabled\nPolicies: stock_counts_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.stock_item_movements {
+  AND  [not null]
+  author_membership_id bigint
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  id bigint [pk, increment, not null]
+  note varchar(280)
+  organization_id bigint [not null]
+  patient_treatment_id bigint
+  public_id varchar(28) [not null]
+  quantity_after numeric(12, 3) [not null]
+  quantity_change numeric(12, 3) [not null]
+  revert_reason varchar(14)
+  reverts_stock_item_movement_id bigint
+  stock_count_id bigint
+  stock_item_id bigint [not null]
+  stock_purchase_id bigint
+  type varchar(8) [not null]
+  used_for varchar(80)
+}
+
+Note app.stock_item_movements {
+  'RLS: enabled\nPolicies: stock_item_movements_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.stock_items {
+  category varchar(13) [not null]
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  last_rate numeric(12, 2)
+  max_quantity numeric(12, 3) [not null]
+  measure_unit varchar(5)
+  min_quantity numeric(12, 3) [not null]
+  name varchar(120) [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  quantity numeric(12, 3) [not null]
+  size_per_unit numeric(12, 3)
+  stock_item_number int [not null]
+  stock_vendor_id bigint
+  unit varchar(7) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+  usage_per_week numeric(12, 3) [not null]
+}
+
+Note app.stock_items {
+  'RLS: enabled\nPolicies: stock_items_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.stock_purchase_items {
+  amount numeric(12, 2) [not null]
+  line_number smallint [not null]
+  organization_id bigint [not null]
+  quantity numeric(12, 3) [not null]
+  rate numeric(12, 2) [not null]
+  stock_item_id bigint [not null]
+  stock_purchase_id bigint [not null]
+  indexes {
+    (stock_purchase_id, line_number) [pk]
+  }
+}
+
+Note app.stock_purchase_items {
+  'RLS: enabled\nPolicies: stock_purchase_items_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.stock_purchases {
+  bill_amount numeric(12, 2) [not null]
+  bill_number varchar(30)
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  due_amount numeric(12, 2)
+  id bigint [pk, increment, not null]
+  organization_id bigint [not null]
+  paid_amount numeric(12, 2) [not null]
+  payment_status varchar(7)
+  public_id varchar(28) [not null]
+  purchase_date date [not null]
+  stock_purchase_number int [not null]
+  stock_vendor_id bigint [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.stock_purchases {
+  'RLS: enabled\nPolicies: stock_purchases_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.stock_vendors {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  id bigint [pk, increment, not null]
+  is_quick boolean [not null]
+  name varchar(120) [not null]
+  organization_id bigint [not null]
+  phone varchar(13)
+  public_id varchar(28) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.stock_vendors {
+  'RLS: enabled\nPolicies: stock_vendors_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.supplier_credits {
+  amount numeric(12, 2) [not null]
+  applied_amount numeric(12, 2) [not null]
+  created_at timestamptz [not null]
+  created_by_membership_id bigint
+  created_by_user_id bigint
+  id bigint [pk, increment, not null]
+  medicine_batch_id bigint [not null]
+  medicine_id bigint [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  quantity int [not null]
+  rate numeric(12, 2) [not null]
+  supplier_id bigint [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.supplier_credits {
+  'RLS: enabled\nPolicies: supplier_credits_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.supplier_manufacturers {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  manufacturer_id bigint [not null]
+  organization_id bigint [not null]
+  supplier_id bigint [not null]
+  indexes {
+    (supplier_id, manufacturer_id) [pk]
+  }
+}
+
+Note app.supplier_manufacturers {
+  'RLS: enabled\nPolicies: supplier_manufacturers_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.suppliers {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  gst_number varchar(15)
+  id bigint [pk, increment, not null]
+  is_quick boolean [not null]
+  name varchar(120) [not null]
+  organization_id bigint [not null]
+  phone varchar(13)
+  public_id varchar(28) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.suppliers {
+  'RLS: enabled\nPolicies: suppliers_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.task_owner_changes {
+  changed_by_membership_id bigint
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  from_membership_id bigint
+  from_role varchar(10)
+  id bigint [pk, increment, not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  task_id bigint [not null]
+  to_membership_id bigint
+  to_role varchar(10)
+}
+
+Note app.task_owner_changes {
+  'RLS: enabled\nPolicies: task_owner_changes_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.task_rule_settings {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  id bigint [pk, increment, not null]
+  is_automatic boolean [not null]
+  is_on boolean [not null]
+  organization_id bigint [not null]
+  public_id varchar(28) [not null]
+  rule_key varchar(17) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+}
+
+Note app.task_rule_settings {
+  'RLS: enabled\nPolicies: task_rule_settings_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table app.tasks {
+  appointment_id bigint
+  branch_id bigint
+  contact_id bigint
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
+  deleted_at timestamptz
+  due_at timestamptz [not null]
+  id bigint [pk, increment, not null]
+  invoice_id bigint
+  is_handled_by_clinozy boolean [not null]
+  is_resolved_automatically boolean [not null]
+  kind varchar(9) [not null]
+  lead_id bigint
+  medical_rep_id bigint
+  note varchar(280)
+  organization_id bigint [not null]
+  outcome varchar(12)
+  owner_membership_id bigint
+  owner_role varchar(10)
+  patient_check_in_id bigint
+  patient_review_id bigint
+  patient_treatment_id bigint
+  pending_credit_id bigint
+  priority varchar(6) [not null]
+  public_id varchar(28) [not null]
+  resolved_at timestamptz
+  resolved_by_membership_id bigint
+  result_text varchar(200)
+  rule_key varchar(17)
+  snooze_label varchar(40)
+  snoozed_until timestamptz
+  source_key text
+  status varchar(7) [not null]
+  title varchar(120) [not null]
+  updated_at timestamptz [not null]
+  updated_by_user_id bigint
+  WHEN contact [not null]
+  why varchar(280)
+}
+
+Note app.tasks {
+  'RLS: enabled\nPolicies: tasks_tenant_isolation\nFORCE ROW LEVEL SECURITY'
 }
 
 Table audit.dead_letter_jobs {
@@ -258,6 +1927,7 @@ Note auth.user_notification_preferences {
 }
 
 Table auth.user_settings {
+  analytics_consent varchar(10)
   created_at timestamptz [not null]
   is_dark_mode_enabled boolean [not null]
   is_notifications_enabled boolean [not null]
@@ -291,6 +1961,7 @@ Table auth.users {
   last_password_change_at timestamptz
   onboarding_completed_at timestamptz
   password_hash varchar(255)
+  presence varchar(10) [not null]
   public_id varchar(28) [not null]
   status varchar(20) [not null]
   updated_at timestamptz [not null]
@@ -496,7 +2167,23 @@ Note tenancy.api_keys {
   'RLS: enabled\nPolicies: api_keys_tenant_isolation\nFORCE ROW LEVEL SECURITY'
 }
 
-Table tenancy.member_invitations {
+Table tenancy.membership_additional_roles {
+  created_at timestamptz [not null]
+  created_by_user_id bigint
+  membership_id bigint [not null]
+  organization_id bigint [not null]
+  position smallint [not null]
+  role_id bigint [not null]
+  indexes {
+    (membership_id, role_id) [pk]
+  }
+}
+
+Note tenancy.membership_additional_roles {
+  'RLS: enabled\nPolicies: membership_additional_roles_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+}
+
+Table tenancy.membership_invitations {
   accepted_at timestamptz
   created_at timestamptz [not null]
   created_by_user_id bigint
@@ -510,24 +2197,34 @@ Table tenancy.member_invitations {
   token_hash varchar(64) [not null]
 }
 
-Note tenancy.member_invitations {
-  'RLS: enabled\nPolicies: member_invitations_tenant_isolation\nFORCE ROW LEVEL SECURITY'
+Note tenancy.membership_invitations {
+  'RLS: enabled\nPolicies: membership_invitations_tenant_isolation\nFORCE ROW LEVEL SECURITY'
 }
 
 Table tenancy.memberships {
+  commission_percent numeric(5, 2) [not null]
   created_at timestamptz [not null]
   created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
   deleted_at timestamptz
+  display_name varchar(120) [not null]
   id bigint [pk, increment, not null]
   invited_by_user_id bigint
   joined_at timestamptz
   organization_id bigint [not null]
+  phone varchar(16)
   public_id varchar(28) [not null]
   role_id bigint [not null]
+  staff_number int [not null]
   status varchar(20) [not null]
+  tone varchar(10) [not null]
   updated_at timestamptz [not null]
   updated_by_user_id bigint
   user_id bigint [not null]
+  work_ends_at time [not null]
+  work_starts_at time [not null]
+  working_days text [not null]
 }
 
 Note tenancy.memberships {
@@ -557,9 +2254,14 @@ Note tenancy.organization_notification_policies {
 Table tenancy.organization_settings {
   created_at timestamptz [not null]
   created_by_user_id bigint
+  default_day_float numeric(12, 2) [not null]
   default_locale varchar(5) [not null]
+  deleted_record_purge_days int [not null]
   is_email_notifications_enabled boolean [not null]
+  lead_hold_days int [not null]
   organization_id bigint [pk, not null]
+  reminder_hour smallint [not null]
+  retarget_after_days int [not null]
   security_policy jsonb [not null]
   updated_at timestamptz [not null]
   updated_by_user_id bigint
@@ -572,6 +2274,7 @@ Note tenancy.organization_settings {
 Table tenancy.organizations {
   created_at timestamptz [not null]
   created_by_user_id bigint
+  currency varchar(3) [not null]
   deleted_at timestamptz
   deletion_started_at timestamptz
   id bigint [pk, increment, not null]
@@ -580,8 +2283,10 @@ Table tenancy.organizations {
   owner_user_id bigint [not null]
   public_id varchar(28) [not null]
   slug varchar(100)
+  specialties text [not null]
   status varchar(20) [not null]
   stripe_customer_id varchar(255)
+  timezone varchar(64) [not null]
   type varchar(20) [not null]
   updated_at timestamptz [not null]
   updated_by_user_id bigint
@@ -620,13 +2325,17 @@ Note tenancy.role_permissions {
 Table tenancy.roles {
   created_at timestamptz [not null]
   created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(20)
   deleted_at timestamptz
   description text
   id bigint [pk, increment, not null]
+  is_locked boolean [not null]
   is_system boolean [not null]
   name varchar(100) [not null]
   organization_id bigint [not null]
   public_id varchar(28) [not null]
+  tone varchar(10) [not null]
   updated_at timestamptz [not null]
   updated_by_user_id bigint
 }
@@ -659,6 +2368,326 @@ Note upload.uploads {
   'RLS: enabled\nPolicies: uploads_tenant_isolation, uploads_owner_access\nFORCE ROW LEVEL SECURITY'
 }
 
+Ref: app.appointments.branch_id > app.branches.id [delete: restrict]
+Ref: app.appointments.branch_machine_id > app.branch_machines.id [delete: set null]
+Ref: app.appointments.branch_room_id > app.branch_rooms.id [delete: set null]
+Ref: app.appointments.contact_id > app.contacts.id [delete: restrict]
+Ref: app.appointments.copied_from_appointment_id > app.appointments.id [delete: set null]
+Ref: app.appointments.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.appointments.offering_id > app.offerings.id [delete: set null]
+Ref: app.appointments.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.appointments.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.branch_holidays.branch_id > app.branches.id [delete: cascade]
+Ref: app.branch_holidays.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.branch_holidays.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.branch_holidays.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.branch_machines.branch_id > app.branches.id [delete: cascade]
+Ref: app.branch_machines.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.branch_machines.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.branch_machines.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.branch_members.branch_id > app.branches.id [delete: cascade]
+Ref: app.branch_members.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.branch_members.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.branch_rooms.branch_id > app.branches.id [delete: cascade]
+Ref: app.branch_rooms.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.branch_rooms.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.branch_rooms.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.branches.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.branches.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.branches.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.contact_activities.appointment_id > app.appointments.id [delete: set null]
+Ref: app.contact_activities.contact_id > app.contacts.id [delete: cascade]
+Ref: app.contact_activities.contact_message_template_id > app.contact_message_templates.id [delete: set null]
+Ref: app.contact_activities.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.contact_activities.invoice_id > app.invoices.id [delete: set null]
+Ref: app.contact_activities.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.contact_activities.patient_check_in_id > app.patient_check_ins.id [delete: set null]
+Ref: app.contact_activities.patient_clinical_note_id > app.patient_clinical_notes.id [delete: set null]
+Ref: app.contact_activities.patient_image_id > app.patient_images.id [delete: set null]
+Ref: app.contact_activities.patient_offering_id > app.patient_offerings.id [delete: set null]
+Ref: app.contact_activities.patient_prescription_id > app.patient_prescriptions.id [delete: set null]
+Ref: app.contact_activities.patient_report_id > app.patient_reports.id [delete: set null]
+Ref: app.contact_activities.patient_review_id > app.patient_reviews.id [delete: set null]
+Ref: app.contact_activities.patient_treatment_id > app.patient_treatments.id [delete: set null]
+Ref: app.contact_activities.payment_id > app.payments.id [delete: set null]
+Ref: app.contact_activities.reply_to_contact_activity_id > app.contact_activities.id [delete: set null]
+Ref: app.contact_activities.task_id > app.tasks.id [delete: set null]
+Ref: app.contact_activities.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.contact_members.contact_id > app.contacts.id [delete: cascade]
+Ref: app.contact_members.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.contact_members.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.contact_message_templates.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.contact_message_templates.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.contact_message_templates.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.contact_phones.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.contacts.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.contacts.household_contact_id > app.contacts.id [delete: restrict]
+Ref: app.contacts.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.contacts.referred_by_contact_id > app.contacts.id [delete: set null]
+Ref: app.contacts.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.day_close_events.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.day_close_events.day_close_id > app.day_closes.id [delete: cascade]
+Ref: app.day_close_events.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.day_closes.branch_id > app.branches.id [delete: restrict]
+Ref: app.day_closes.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.day_closes.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.day_closes.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.invoice_credit_notes.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.invoice_credit_notes.invoice_id > app.invoices.id [delete: restrict]
+Ref: app.invoice_credit_notes.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.invoice_credit_notes.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.invoice_items.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.invoice_items.invoice_id > app.invoices.id [delete: cascade]
+Ref: app.invoice_items.medicine_batch_id > app.medicine_batches.id [delete: restrict]
+Ref: app.invoice_items.medicine_id > app.medicines.id [delete: restrict]
+Ref: app.invoice_items.offering_id > app.offerings.id [delete: restrict]
+Ref: app.invoice_items.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.invoice_items.patient_offering_suggestion_id > app.patient_offering_suggestions.id [delete: set null]
+Ref: app.invoice_items.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.invoice_members.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.invoice_members.invoice_id > app.invoices.id [delete: cascade]
+Ref: app.invoice_members.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.invoices.branch_id > app.branches.id [delete: restrict]
+Ref: app.invoices.contact_id > app.contacts.id [delete: restrict]
+Ref: app.invoices.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.invoices.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.invoices.patient_prescription_id > app.patient_prescriptions.id [delete: set null]
+Ref: app.invoices.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.lead_involved_memberships.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.lead_involved_memberships.lead_id > app.leads.id [delete: cascade]
+Ref: app.lead_involved_memberships.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.leads.branch_id > app.branches.id [delete: set null]
+Ref: app.leads.contact_id > app.contacts.id [delete: restrict]
+Ref: app.leads.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.leads.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.leads.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.manufacturers.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.manufacturers.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.manufacturers.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.medical_purchase_order_items.medical_purchase_order_id > app.medical_purchase_orders.id [delete: cascade]
+Ref: app.medical_purchase_order_items.medicine_batch_id > app.medicine_batches.id [delete: restrict]
+Ref: app.medical_purchase_order_items.medicine_id > app.medicines.id [delete: restrict]
+Ref: app.medical_purchase_order_items.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.medical_purchase_orders.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.medical_purchase_orders.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.medical_purchase_orders.supplier_id > app.suppliers.id [delete: restrict]
+Ref: app.medical_purchase_orders.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.medical_rep_manufacturers.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.medical_rep_manufacturers.manufacturer_id > app.manufacturers.id [delete: cascade]
+Ref: app.medical_rep_manufacturers.medical_rep_id > app.medical_reps.id [delete: cascade]
+Ref: app.medical_rep_manufacturers.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.medical_rep_visits.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.medical_rep_visits.medical_rep_id > app.medical_reps.id [delete: cascade]
+Ref: app.medical_rep_visits.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.medical_rep_visits.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.medical_reps.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.medical_reps.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.medical_reps.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.medical_sale_return_items.invoice_item_id > app.invoice_items.id [delete: restrict]
+Ref: app.medical_sale_return_items.medical_sale_return_id > app.medical_sale_returns.id [delete: cascade]
+Ref: app.medical_sale_return_items.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.medical_sale_returns.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.medical_sale_returns.invoice_credit_note_id > app.invoice_credit_notes.id [delete: restrict]
+Ref: app.medical_sale_returns.medical_sale_id > app.medical_sales.id [delete: restrict]
+Ref: app.medical_sale_returns.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.medical_sales.branch_id > app.branches.id [delete: restrict]
+Ref: app.medical_sales.contact_id > app.contacts.id [delete: restrict]
+Ref: app.medical_sales.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.medical_sales.invoice_id > app.invoices.id [delete: restrict]
+Ref: app.medical_sales.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.medical_sales.patient_prescription_id > app.patient_prescriptions.id [delete: set null]
+Ref: app.medical_sales.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.medicine_batches.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.medicine_batches.medical_purchase_order_id > app.medical_purchase_orders.id [delete: set null]
+Ref: app.medicine_batches.medicine_id > app.medicines.id [delete: cascade]
+Ref: app.medicine_batches.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.medicine_batches.supplier_id > app.suppliers.id [delete: set null]
+Ref: app.medicine_batches.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.medicine_supplier_prices.medicine_id > app.medicines.id [delete: cascade]
+Ref: app.medicine_supplier_prices.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.medicine_supplier_prices.supplier_id > app.suppliers.id [delete: cascade]
+Ref: app.medicines.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.medicines.manufacturer_id > app.manufacturers.id [delete: restrict]
+Ref: app.medicines.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.medicines.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.membership_preference_branches.branch_id > app.branches.id [delete: cascade]
+Ref: app.membership_preference_branches.membership_preference_id > app.membership_preferences.id [delete: cascade]
+Ref: app.membership_preference_branches.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.membership_preferences.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.membership_preferences.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.membership_preferences.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.membership_saved_views.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.membership_saved_views.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.membership_saved_views.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.offer_branches.branch_id > app.branches.id [delete: cascade]
+Ref: app.offer_branches.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.offer_branches.offer_id > app.offers.id [delete: cascade]
+Ref: app.offer_branches.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.offer_offerings.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.offer_offerings.offer_id > app.offers.id [delete: cascade]
+Ref: app.offer_offerings.offering_id > app.offerings.id [delete: cascade]
+Ref: app.offer_offerings.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.offering_branches.branch_id > app.branches.id [delete: cascade]
+Ref: app.offering_branches.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.offering_branches.offering_id > app.offerings.id [delete: cascade]
+Ref: app.offering_branches.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.offering_groups.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.offering_groups.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.offering_groups.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.offerings.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.offerings.offering_group_id > app.offering_groups.id [delete: set null]
+Ref: app.offerings.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.offerings.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.offers.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.offers.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.offers.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_check_ins.appointment_id > app.appointments.id [delete: set null]
+Ref: app.patient_check_ins.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_check_ins.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.patient_check_ins.patient_id > app.patients.id [delete: restrict]
+Ref: app.patient_check_ins.patient_treatment_id > app.patient_treatments.id [delete: set null]
+Ref: app.patient_check_ins.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_clinical_notes.appointment_id > app.appointments.id [delete: set null]
+Ref: app.patient_clinical_notes.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_clinical_notes.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.patient_clinical_notes.patient_diagnosis_id > app.patient_diagnoses.id [delete: set null]
+Ref: app.patient_clinical_notes.patient_id > app.patients.id [delete: restrict]
+Ref: app.patient_clinical_notes.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_diagnoses.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_diagnoses.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.patient_diagnoses.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_feedback_actions.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_feedback_actions.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.patient_feedback_actions.patient_check_in_id > app.patient_check_ins.id [delete: cascade]
+Ref: app.patient_feedback_actions.patient_review_id > app.patient_reviews.id [delete: cascade]
+Ref: app.patient_images.appointment_id > app.appointments.id [delete: set null]
+Ref: app.patient_images.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_images.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.patient_images.patient_id > app.patients.id [delete: restrict]
+Ref: app.patient_images.patient_treatment_id > app.patient_treatments.id [delete: set null]
+Ref: app.patient_images.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_offering_suggestions.appointment_id > app.appointments.id [delete: set null]
+Ref: app.patient_offering_suggestions.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_offering_suggestions.offering_id > app.offerings.id [delete: restrict]
+Ref: app.patient_offering_suggestions.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.patient_offering_suggestions.patient_check_in_id > app.patient_check_ins.id [delete: set null]
+Ref: app.patient_offering_suggestions.patient_id > app.patients.id [delete: restrict]
+Ref: app.patient_offering_suggestions.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_offerings.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_offerings.invoice_item_id > app.invoice_items.id [delete: cascade]
+Ref: app.patient_offerings.offering_id > app.offerings.id [delete: restrict]
+Ref: app.patient_offerings.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.patient_offerings.patient_id > app.patients.id [delete: restrict]
+Ref: app.patient_offerings.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_prescriptions.appointment_id > app.appointments.id [delete: set null]
+Ref: app.patient_prescriptions.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_prescriptions.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.patient_prescriptions.patient_id > app.patients.id [delete: restrict]
+Ref: app.patient_prescriptions.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_reports.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_reports.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.patient_reports.patient_id > app.patients.id [delete: restrict]
+Ref: app.patient_reports.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_reviews.appointment_id > app.appointments.id [delete: set null]
+Ref: app.patient_reviews.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_reviews.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.patient_reviews.patient_id > app.patients.id [delete: restrict]
+Ref: app.patient_reviews.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_treatments.appointment_id > app.appointments.id [delete: set null]
+Ref: app.patient_treatments.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.patient_treatments.offering_id > app.offerings.id [delete: set null]
+Ref: app.patient_treatments.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.patient_treatments.patient_id > app.patients.id [delete: restrict]
+Ref: app.patient_treatments.patient_offering_id > app.patient_offerings.id [delete: restrict]
+Ref: app.patient_treatments.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.patients.contact_id > app.contacts.id [delete: restrict]
+Ref: app.patients.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.patients.home_branch_id > app.branches.id [delete: restrict]
+Ref: app.patients.lead_id > app.leads.id [delete: set null]
+Ref: app.patients.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.patients.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.payment_edits.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.payment_edits.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.payment_edits.payment_id > app.payments.id [delete: cascade]
+Ref: app.payments.branch_id > app.branches.id [delete: restrict]
+Ref: app.payments.contact_id > app.contacts.id [delete: restrict]
+Ref: app.payments.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.payments.invoice_credit_note_id > app.invoice_credit_notes.id [delete: restrict]
+Ref: app.payments.invoice_id > app.invoices.id [delete: restrict]
+Ref: app.payments.medical_purchase_order_id > app.medical_purchase_orders.id [delete: restrict]
+Ref: app.payments.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.payments.pending_credit_id > app.pending_credits.id [delete: restrict]
+Ref: app.payments.reverses_payment_id > app.payments.id [delete: restrict]
+Ref: app.payments.stock_purchase_id > app.stock_purchases.id [delete: restrict]
+Ref: app.payments.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.pending_credits.contact_id > app.contacts.id [delete: restrict]
+Ref: app.pending_credits.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.pending_credits.invoice_id > app.invoices.id [delete: set null]
+Ref: app.pending_credits.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.pending_credits.source_payment_id > app.payments.id [delete: set null]
+Ref: app.pending_credits.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.prescription_kits.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.prescription_kits.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.prescription_kits.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.record_counters.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.stock_count_lines.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.stock_count_lines.stock_count_id > app.stock_counts.id [delete: cascade]
+Ref: app.stock_count_lines.stock_item_id > app.stock_items.id [delete: restrict]
+Ref: app.stock_counts.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.stock_counts.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.stock_item_movements.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.stock_item_movements.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.stock_item_movements.patient_treatment_id > app.patient_treatments.id [delete: restrict]
+Ref: app.stock_item_movements.reverts_stock_item_movement_id > app.stock_item_movements.id [delete: restrict]
+Ref: app.stock_item_movements.stock_count_id > app.stock_counts.id [delete: restrict]
+Ref: app.stock_item_movements.stock_item_id > app.stock_items.id [delete: restrict]
+Ref: app.stock_item_movements.stock_purchase_id > app.stock_purchases.id [delete: restrict]
+Ref: app.stock_items.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.stock_items.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.stock_items.stock_vendor_id > app.stock_vendors.id [delete: set null]
+Ref: app.stock_items.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.stock_purchase_items.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.stock_purchase_items.stock_item_id > app.stock_items.id [delete: restrict]
+Ref: app.stock_purchase_items.stock_purchase_id > app.stock_purchases.id [delete: cascade]
+Ref: app.stock_purchases.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.stock_purchases.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.stock_purchases.stock_vendor_id > app.stock_vendors.id [delete: restrict]
+Ref: app.stock_purchases.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.stock_vendors.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.stock_vendors.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.stock_vendors.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.supplier_credits.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.supplier_credits.medicine_batch_id > app.medicine_batches.id [delete: restrict]
+Ref: app.supplier_credits.medicine_id > app.medicines.id [delete: restrict]
+Ref: app.supplier_credits.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.supplier_credits.supplier_id > app.suppliers.id [delete: restrict]
+Ref: app.supplier_credits.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.supplier_manufacturers.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.supplier_manufacturers.manufacturer_id > app.manufacturers.id [delete: cascade]
+Ref: app.supplier_manufacturers.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.supplier_manufacturers.supplier_id > app.suppliers.id [delete: cascade]
+Ref: app.suppliers.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.suppliers.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.suppliers.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.task_owner_changes.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.task_owner_changes.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.task_owner_changes.task_id > app.tasks.id [delete: cascade]
+Ref: app.task_rule_settings.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.task_rule_settings.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.task_rule_settings.updated_by_user_id > auth.users.id [delete: no action]
+Ref: app.tasks.appointment_id > app.appointments.id [delete: cascade]
+Ref: app.tasks.branch_id > app.branches.id [delete: set null]
+Ref: app.tasks.contact_id > app.contacts.id [delete: cascade]
+Ref: app.tasks.created_by_user_id > auth.users.id [delete: no action]
+Ref: app.tasks.invoice_id > app.invoices.id [delete: cascade]
+Ref: app.tasks.lead_id > app.leads.id [delete: cascade]
+Ref: app.tasks.medical_rep_id > app.medical_reps.id [delete: cascade]
+Ref: app.tasks.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.tasks.patient_check_in_id > app.patient_check_ins.id [delete: cascade]
+Ref: app.tasks.patient_review_id > app.patient_reviews.id [delete: cascade]
+Ref: app.tasks.patient_treatment_id > app.patient_treatments.id [delete: cascade]
+Ref: app.tasks.pending_credit_id > app.pending_credits.id [delete: cascade]
+Ref: app.tasks.updated_by_user_id > auth.users.id [delete: no action]
 Ref: audit.logs.actor_api_key_id > tenancy.api_keys.id [delete: set null]
 Ref: audit.logs.actor_user_id > auth.users.id [delete: set null]
 Ref: audit.logs.organization_id > tenancy.organizations.id [delete: set null]
@@ -692,9 +2721,13 @@ Ref: notify.webhooks.updated_by_user_id > auth.users.id [delete: no action]
 Ref: tenancy.api_keys.created_by_user_id > auth.users.id [delete: no action]
 Ref: tenancy.api_keys.organization_id > tenancy.organizations.id [delete: cascade]
 Ref: tenancy.api_keys.updated_by_user_id > auth.users.id [delete: no action]
-Ref: tenancy.member_invitations.created_by_user_id > auth.users.id [delete: no action]
-Ref: tenancy.member_invitations.invited_by_user_id > auth.users.id [delete: no action]
-Ref: tenancy.member_invitations.membership_id > tenancy.memberships.id [delete: cascade]
+Ref: tenancy.membership_additional_roles.created_by_user_id > auth.users.id [delete: no action]
+Ref: tenancy.membership_additional_roles.membership_id > tenancy.memberships.id [delete: cascade]
+Ref: tenancy.membership_additional_roles.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: tenancy.membership_additional_roles.role_id > tenancy.roles.id [delete: cascade]
+Ref: tenancy.membership_invitations.created_by_user_id > auth.users.id [delete: no action]
+Ref: tenancy.membership_invitations.invited_by_user_id > auth.users.id [delete: no action]
+Ref: tenancy.membership_invitations.membership_id > tenancy.memberships.id [delete: cascade]
 Ref: tenancy.memberships.created_by_user_id > auth.users.id [delete: no action]
 Ref: tenancy.memberships.invited_by_user_id > auth.users.id [delete: no action]
 Ref: tenancy.memberships.organization_id > tenancy.organizations.id [delete: cascade]

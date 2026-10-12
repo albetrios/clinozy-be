@@ -70,6 +70,7 @@ describe('AuthSessionService', () => {
     rotateTokenHash: vi.fn().mockResolvedValue(undefined),
     rotateTokenHashAndOrganization: vi.fn().mockResolvedValue(undefined),
     rotateSessionCredentials: vi.fn().mockResolvedValue({ public_id: 'session_public' }),
+    replaceTokenHashIfCurrent: vi.fn().mockResolvedValue(true),
   } as unknown as AuthSessionRepository;
 
   const service = new AuthSessionService(userService, sessionRepository);
@@ -343,6 +344,50 @@ describe('AuthSessionService', () => {
 
     expect(result.refresh_secret).toMatch(/.+/);
     expect(sessionRepository.revokeAllByUserId).not.toHaveBeenCalled();
+  });
+
+  it('refreshSessionCredentials reports the organization the rotated session names', async () => {
+    vi.mocked(sessionRepository.findByPublicId).mockResolvedValue({
+      public_id: 'session_public',
+      user_id: user.id,
+      token_hash: 'old-token-hash',
+      refresh_token_hash: 'stored-refresh-hash',
+      organization_id: 5,
+    } as never);
+    // A switch committed after the read: the row the rotation updated names organization 9.
+    vi.mocked(sessionRepository.rotateSessionCredentials).mockResolvedValueOnce({
+      public_id: 'session_public',
+      organization_id: 9,
+    } as never);
+
+    const result = await service.refreshSessionCredentials({
+      sessionPublicId: 'session_public',
+      userPublicId: user.public_id,
+      refreshSecret: 'presented-secret',
+      nextAccessToken: 'next-access-token',
+    });
+
+    expect(result.organization_id).toBe(9);
+  });
+
+  it('replaceRefreshedAccessToken swaps the token only while the refreshed one is still live', async () => {
+    vi.mocked(sessionRepository.replaceTokenHashIfCurrent).mockResolvedValueOnce(false);
+
+    const replaced = await service.replaceRefreshedAccessToken({
+      sessionPublicId: 'session_public',
+      refreshedAccessToken: 'refreshed-access-token',
+      nextAccessToken: 'moved-access-token',
+    });
+
+    expect(replaced).toBe(false);
+    const [publicId, expectedHash, nextHash] = vi.mocked(
+      sessionRepository.replaceTokenHashIfCurrent,
+    ).mock.calls[0]!;
+    expect(publicId).toBe('session_public');
+    // Hashes, never the raw tokens, reach the database.
+    expect(expectedHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(nextHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(expectedHash).not.toBe(nextHash);
   });
 
   it('refreshSessionCredentials revokes the entire session family when an issued, retired refresh secret is replayed (reuse detection)', async () => {

@@ -136,6 +136,7 @@ describe('AuthService', () => {
     }),
     rotateSessionTokenHash: vi.fn().mockResolvedValue(undefined),
     refreshSessionCredentials: vi.fn().mockResolvedValue({ refresh_secret: 'new-refresh-secret' }),
+    replaceRefreshedAccessToken: vi.fn().mockResolvedValue(true),
     rebindAccessToken: vi.fn().mockResolvedValue(undefined),
   } as unknown as AuthSessionService;
 
@@ -497,6 +498,75 @@ describe('AuthService', () => {
     });
 
     expect(resolve.resolveDefaultActiveOrganizationPublicId).toHaveBeenCalledWith(1);
+  });
+
+  it('refreshToken re-mints for the organization a switch moved the session to while it rotated', async () => {
+    const resolve = await import(
+      '@/domains/tenancy/sub-domains/organization/resolve-active-organization.js'
+    );
+    const jwt = await import('@/shared/utils/security/jwt.util.js');
+    vi.mocked(authSessionService.findSessionByPublicIdIncludingRevoked).mockResolvedValue({
+      public_id: 'session_public',
+      user_id: 1,
+      organization_id: 42,
+      expires_at: new Date(Date.now() + 86_400_000),
+      is_revoked: false,
+    } as never);
+    // The rotated row names organization 77: a switch committed after the session was read.
+    vi.mocked(authSessionService.refreshSessionCredentials).mockResolvedValueOnce({
+      refresh_secret: 'new-refresh-secret',
+      organization_id: 77,
+    });
+    vi.mocked(resolve.findUserActiveOrganizationPublicIdByInternalId)
+      .mockResolvedValueOnce('org_left')
+      .mockResolvedValueOnce('org_switched');
+    vi.mocked(jwt.signAccessToken)
+      .mockResolvedValueOnce('jwt-for-org-left')
+      .mockResolvedValueOnce('jwt-for-org-switched');
+
+    const result = await service.refreshToken({
+      sessionPublicId: 'session_public',
+      refreshSecret: 'refresh-secret',
+    });
+
+    expect(resolve.findUserActiveOrganizationPublicIdByInternalId).toHaveBeenLastCalledWith({
+      userInternalId: 1,
+      organizationInternalId: 77,
+    });
+    expect(jwt.signAccessToken).toHaveBeenLastCalledWith(
+      expect.objectContaining({ organizationPublicId: 'org_switched' }),
+    );
+    expect(authSessionService.replaceRefreshedAccessToken).toHaveBeenCalledWith({
+      sessionPublicId: 'session_public',
+      refreshedAccessToken: 'jwt-for-org-left',
+      nextAccessToken: 'jwt-for-org-switched',
+    });
+    expect(result).toEqual({
+      access_token: 'jwt-for-org-switched',
+      refresh_secret: 'new-refresh-secret',
+    });
+  });
+
+  it('refreshToken keeps its token when the rotated session still names the organization it signed for', async () => {
+    vi.mocked(authSessionService.findSessionByPublicIdIncludingRevoked).mockResolvedValue({
+      public_id: 'session_public',
+      user_id: 1,
+      organization_id: 42,
+      expires_at: new Date(Date.now() + 86_400_000),
+      is_revoked: false,
+    } as never);
+    vi.mocked(authSessionService.refreshSessionCredentials).mockResolvedValueOnce({
+      refresh_secret: 'new-refresh-secret',
+      organization_id: 42,
+    });
+
+    const result = await service.refreshToken({
+      sessionPublicId: 'session_public',
+      refreshSecret: 'refresh-secret',
+    });
+
+    expect(result.access_token).toBe('jwt-access-token');
+    expect(authSessionService.replaceRefreshedAccessToken).not.toHaveBeenCalled();
   });
 
   it('AUTH-15: switchToOrganization persists the selected organization on the session for refresh to preserve', async () => {

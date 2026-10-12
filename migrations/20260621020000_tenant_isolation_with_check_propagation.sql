@@ -75,9 +75,9 @@ ALTER POLICY role_permissions_tenant_isolation ON tenancy.role_permissions
     )
   );
 --> statement-breakpoint
-ALTER POLICY member_invitations_tenant_isolation ON tenancy.member_invitations
+ALTER POLICY membership_invitations_tenant_isolation ON tenancy.membership_invitations
   WITH CHECK (
-    tenancy.member_invitations.membership_id IN (
+    tenancy.membership_invitations.membership_id IN (
       SELECT id FROM tenancy.memberships
       WHERE organization_id = (
         SELECT id FROM tenancy.organizations

@@ -225,7 +225,7 @@ from noise.
 | Login returns `401` for every pool user | Seed data is missing, not a broken feature — the anti-enumeration path returns an **identical** 401 for an unknown email as for a wrong code. Check `auth.users` before debugging the auth code. |
 | Login returns `200` but the VU stops right after | The body is an `mfa_required` envelope with `mfa_session_token`, not an `access_token`. See the MFA note under [Obtaining credentials](#obtaining-credentials). |
 | Every route inflates by a similar factor | Queueing on the single Node event loop, not a slow endpoint. Uniform inflation is the signature. |
-| Only `/auth/refresh` fails, with 429 | `REFRESH_RATE_LIMIT` is a hardcoded 30/min **per IP** and does not honour `RATE_LIMIT_RELAXED_CAPS`, so every VU on one host shares one budget. The limiter working, not the endpoint failing. |
+| Only `/auth/refresh` fails, with 429 | `REFRESH_RATE_LIMIT` is 30/min **per IP** unless the server runs with `RATE_LIMIT_RELAXED_CAPS=true` (then 5000), so every VU on one host shares one budget. The limiter working, not the endpoint failing — run the target with relaxed caps, or keep the refresh count under the cap. |
 
 **Report the whole picture.** A journey-level "success rate" counts only VUs that completed *every*
 step, so one rate-limited step at the end can read as a 6% success rate while all business routes were

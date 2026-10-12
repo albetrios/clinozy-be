@@ -8,14 +8,23 @@ import {
   uniqueIndex,
   check,
   pgPolicy,
+  text,
 } from 'drizzle-orm/pg-core';
 import { maintenanceBypassArm, tenancySchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
+import {
+  ORGANIZATION_CURRENCY,
+  ORGANIZATION_DEFAULT_SPECIALTIES,
+  ORGANIZATION_DEFAULT_TIMEZONE,
+  ORGANIZATION_SPECIALTIES,
+  ORGANIZATION_SPECIALTIES_MAX_COUNT,
+} from './organization.constants.js';
 
 /**
  * Drizzle table for `tenancy.organizations` — the per-tenant root entity.
  * Holds slug-based identity, ownership, lifecycle status, optional Stripe
- * customer linkage, and soft-delete via `deleted_at`. The `pgPolicy`
+ * customer linkage, the organization profile (specialties, timezone, the fixed
+ * INR currency), and soft-delete via `deleted_at`. The `pgPolicy`
  * `organizations_tenant_isolation` enforces RLS by matching `public_id` to
  * `app.current_organization_public_id`, with a global retention-cleanup escape
  * hatch for tombstone workers.
@@ -39,6 +48,17 @@ export const organizations = tenancySchema
       status: varchar('status', { length: 20 }).notNull().default('ACTIVE'),
       logo_url: varchar('logo_url', { length: 512 }),
       stripe_customer_id: varchar('stripe_customer_id', { length: 255 }),
+      // The organization profile (launch D7): what the organization practises, the timezone its timed work runs
+      // in, and its one currency (server-set). Defaults cover personal organizations, which never
+      // show them.
+      specialties: text('specialties')
+        .array()
+        .notNull()
+        .default([...ORGANIZATION_DEFAULT_SPECIALTIES]),
+      timezone: varchar('timezone', { length: 64 })
+        .notNull()
+        .default(ORGANIZATION_DEFAULT_TIMEZONE),
+      currency: varchar('currency', { length: 3 }).notNull().default(ORGANIZATION_CURRENCY),
       deleted_at: timestamp('deleted_at', { withTimezone: true }),
       deletion_started_at: timestamp('deletion_started_at', { withTimezone: true }),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -98,6 +118,18 @@ export const organizations = tenancySchema
       // are allowed; team slugs must match the kebab pattern.
       check('chk_organizations_slug', sql`${table.slug} ~ '^[a-z0-9-]+$'`),
       check('chk_organizations_updated', sql`${table.updated_at} >= ${table.created_at}`),
+      check(
+        'chk_organizations_specialties_allowed',
+        sql`${table.specialties} <@ ARRAY[${sql.join(
+          ORGANIZATION_SPECIALTIES.map((specialty) => sql`${specialty}`),
+          sql`, `,
+        )}]::text[]`,
+      ),
+      check(
+        'chk_organizations_specialties_count',
+        sql`cardinality(${table.specialties}) BETWEEN 1 AND ${sql.raw(String(ORGANIZATION_SPECIALTIES_MAX_COUNT))}`,
+      ),
+      check('chk_organizations_currency', sql`${table.currency} = ${ORGANIZATION_CURRENCY}`),
       // sec-new-D3 keeps `deleted_at IS NULL` on the tenant SELECT arm (a stale organization claim
       // must never read a soft-deleted organization). Because Postgres requires an UPDATE's NEW row
       // to stay SELECT-visible, the tombstoning soft-delete cannot run under the plain organization

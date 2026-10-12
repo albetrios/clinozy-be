@@ -25,6 +25,8 @@ That makes `pnpm install` → `pnpm validate` / `pnpm test:unit` / `pnpm agent-o
 
 The cloud image ships **Node 20, 21, and 22**; clinozy-be's `engines` require **Node 24+** (pinned in [`.nvmrc`](../../.nvmrc)). Node 24 is **not** pre-installed, so a setup script must install it. [`tooling/setup/agent/install-node.sh`](../../tooling/setup/agent/install-node.sh) installs the `.nvmrc` version into `/opt/node24` — the same layout the image uses and exactly where the [`session-start.sh`](../../agent-os/hooks/session-start.sh) hook looks — so the hook switches `PATH` to it and runs `pnpm install` automatically. The repo's Node version is unchanged.
 
+When no Node 24 is on disk at session start (the Setup script is not configured, or its cache predates the pin), the hook runs `install-node.sh` itself before the dependency install — one `nodejs.org` download per fresh container — so the session still comes up on the pinned Node. The cached Setup script stays the faster path: it does the download once per environment instead of once per session.
+
 ---
 
 ## The four levers
@@ -213,6 +215,7 @@ session starts → session-start hook (returns at once) → bootstrap.sh, detach
 | Know where it is | `pnpm dev:stack:status` — the running step (or `live`), API + worker `/livez` · `/readyz`, containers, logs |
 | Stop the API + worker | `pnpm dev:stack:stop` (Postgres + Redis stay; `pnpm compose:down` stops them) |
 | Bring it back | `bash tooling/setup/agent/bootstrap.sh` |
+| A scratch database again | `pnpm dev:stack:reset-db` — drops and recreates the local Compose database, then migrate, logins, seed, API and worker (the installs are skipped) |
 | A known demo password | set `DEMO_PASSWORD` in the environment's variables (`demo@example.com`) |
 | No auto-start for an environment | set `AGENT_AUTO_STACK=0` in its variables |
 

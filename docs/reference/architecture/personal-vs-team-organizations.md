@@ -86,6 +86,13 @@ PERSONAL_ORGANIZATION_ENABLED=false
 TEAM_ORGANIZATION_ENABLED=true
 ```
 
+**Clinozy runs B2B** (clinics, not personal workspaces) in every environment: set
+`PERSONAL_ORGANIZATION_ENABLED=false` and `TEAM_ORGANIZATION_ENABLED=true` in `.env.local`,
+`.env.development` and `.env.production`, and push the hosted two with `pnpm github:sync`. The
+frontend's `VITE_PERSONAL_ORGANIZATIONS=false` / `VITE_TEAM_ORGANIZATIONS=true` must match in the
+same environment — the backend does not advertise the mode, and a frontend build without them
+assumes hybrid (clinozy-fe ships them from its GitHub Environment variables).
+
 `MAX_TEAM_ORGANIZATIONS_PER_OWNER` (default 20) caps how many TEAM organizations one user may
 create; personal organizations are exempt.
 
@@ -181,7 +188,7 @@ leave, transfer-ownership). Other domains hang directly off the claim: `/api/v1/
 Account-level routes stay **plural** because they are not scoped to one active organization:
 `POST /api/v1/tenancy/organizations` (create a team organization),
 `GET /api/v1/tenancy/organizations/by-slug/{slug}`, and the cross-organization invitation accept action
-`POST /api/v1/tenancy/invitations/{invitation_id}/accept`.
+`POST /api/v1/tenancy/membership-invitations/{membership_invitation_id}/accept`.
 
 ## Implementation status
 

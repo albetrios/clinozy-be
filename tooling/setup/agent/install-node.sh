@@ -8,8 +8,11 @@
 # where agent-os/hooks/session-start.sh looks — so the SessionStart hook switches
 # PATH to it and runs `pnpm install` automatically. No repo changes required.
 #
-# Usage: paste into the environment's *Setup script* field
-#   (Claude Code web -> environment settings; runs as root before the session):
+# Runs from three places: the environment's cached *Setup script* (via
+# `bootstrap.sh --install-only`, as root), `bootstrap.sh` step 1, and the
+# SessionStart hook, which installs it on a web session that has no new-enough Node
+# on disk (a Setup script not configured, or a cache older than the pin). As a
+# non-root user it re-runs itself through passwordless sudo.
 #
 #     bash tooling/setup/agent/install-node.sh
 #
@@ -65,6 +68,18 @@ case "$(uname -m)" in
     ;;
 esac
 
+# <prefix> (default /opt) needs root. As another user, re-run through passwordless sudo
+# and hand the directory back, so corepack/pnpm can write their shims without sudo.
+if ! { mkdir -p "${target_dir}" 2>/dev/null && [ -w "${target_dir}" ]; }; then
+  if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    sudo -n env NODE_INSTALL_PREFIX="${INSTALL_PREFIX}" bash "${BASH_SOURCE[0]}"
+    sudo -n chown -R "$(id -u):$(id -g)" "${target_dir}"
+    exit 0
+  fi
+  echo "install-node: cannot write ${target_dir} — run as root or with passwordless sudo." >&2
+  exit 1
+fi
+
 readonly tarball="node-v${version}-linux-${arch}.tar.xz"
 readonly url="https://nodejs.org/dist/v${version}/${tarball}"
 
@@ -72,7 +87,6 @@ echo "install-node: downloading ${url}"
 temporary_directory="$(mktemp -d)"
 curl -fsSL "${url}" -o "${temporary_directory}/${tarball}"
 
-mkdir -p "${target_dir}"
 tar -xJf "${temporary_directory}/${tarball}" -C "${target_dir}" --strip-components=1
 rm -r "${temporary_directory}"
 

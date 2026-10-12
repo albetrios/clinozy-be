@@ -105,7 +105,7 @@ describe('team organization provisioning (database)', () => {
     expect(granted).not.toContain(NOTIFY_PERMISSIONS.WEBHOOK_MANAGE);
   });
 
-  it('provisions the default Admin/Member/Viewer system roles for a TEAM org', async () => {
+  it('provisions the clinic preset roles as system roles for a TEAM org (launch D5, D40)', async () => {
     const user = await createTestUser();
 
     const result = await provisionOrganizationWithOwner({
@@ -126,15 +126,17 @@ describe('team organization provisioning (database)', () => {
       .where(eq(roles.organization_id, result.organization.id));
 
     // Owner + every default role, all immutable and correctly prefixed.
-    expect(roleRows.map((row) => row.name).sort()).toEqual(['Admin', 'Member', 'Owner', 'Viewer']);
+    expect(roleRows.map((row) => row.name).sort()).toEqual(
+      ['Owner', ...DEFAULT_TEAM_ROLES.map((role) => role.name)].sort(),
+    );
     for (const row of roleRows) {
       expect(row.is_system).toBe(true);
       expect(row.public_id.startsWith('rol_')).toBe(true);
     }
 
-    // Member and Viewer must carry organization:read so an assigned member can load the dashboard.
-    for (const roleName of ['Member', 'Viewer']) {
-      const row = roleRows.find((candidate) => candidate.name === roleName)!;
+    // Every preset carries organization:read so an assigned member can load the dashboard.
+    for (const defaultRole of DEFAULT_TEAM_ROLES) {
+      const row = roleRows.find((candidate) => candidate.name === defaultRole.name)!;
       const grants = await database
         .select({ code: role_permissions.permission_code })
         .from(role_permissions)
@@ -153,6 +155,33 @@ describe('team organization provisioning (database)', () => {
         [...defaultRole.permissionCodes].sort(),
       );
     }
+  });
+
+  it("locks the Owner role and gives every role the design's tone (D81 (4))", async () => {
+    const user = await createTestUser();
+
+    const result = await provisionOrganizationWithOwner({
+      name: 'Acme Tones',
+      slug: 'acme-team-role-tones',
+      type: 'TEAM',
+      ownerUserId: user.id,
+    });
+
+    const roleRows = await database
+      .select({ name: roles.name, tone: roles.tone, is_locked: roles.is_locked })
+      .from(roles)
+      .where(eq(roles.organization_id, result.organization.id));
+
+    expect(Object.fromEntries(roleRows.map((row) => [row.name, row.tone]))).toEqual({
+      Owner: 'slate',
+      ...Object.fromEntries(DEFAULT_TEAM_ROLES.map((role) => [role.name, role.tone])),
+    });
+    expect(
+      roleRows
+        .filter((row) => row.is_locked)
+        .map((row) => row.name)
+        .sort(),
+    ).toEqual(['Admin', 'Owner']);
   });
 
   it('provisions only the Owner role for a PERSONAL organization (no default team roles)', async () => {

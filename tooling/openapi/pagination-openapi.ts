@@ -16,6 +16,7 @@ export const CURSOR_PAGINATED_LIST_ROUTE_KEYS = [
   'GET /api/v1/audit/logs',
   'GET /api/v1/users',
   'GET /api/v1/users/me/organizations',
+  'GET /api/v1/users/me/membership-invitations',
   'GET /api/v1/tenancy/organization/audit-logs',
   'GET /api/v1/tenancy/organization/api-keys',
   'GET /api/v1/tenancy/organization/memberships',

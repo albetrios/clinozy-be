@@ -15,10 +15,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_webhook_attempts_webhook_created_id
   ON notify.webhook_delivery_attempts (webhook_id, created_at, id);
 --> statement-breakpoint
 
--- Member invitation lists, oldest first by stable tuple.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_member_invitations_membership_created_id
-  ON tenancy.member_invitations (membership_id, created_at, id);
+-- Membership invitation lists, oldest first by stable tuple.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_membership_invitations_membership_created_id
+  ON tenancy.membership_invitations (membership_id, created_at, id);
 --> statement-breakpoint
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_member_invitations_created_id
-  ON tenancy.member_invitations (created_at, id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_membership_invitations_created_id
+  ON tenancy.membership_invitations (created_at, id);

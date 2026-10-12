@@ -9,45 +9,48 @@ import {
   STRICT_PUBLIC_RATE_LIMIT,
 } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import type { MembershipService } from './membership.service.js';
-import type { MemberInvitationService } from './member-invitation/member-invitation.service.js';
+import type { MembershipInvitationService } from './membership-invitation/membership-invitation.service.js';
 import {
-  acceptMemberInvitationDto,
-  invitationIdParamsDto,
-  resendMemberInvitationDto,
-} from './member-invitation/member-invitation.dto.js';
+  acceptMembershipInvitationDto,
+  membershipInvitationIdParamsDto,
+  resendMembershipInvitationDto,
+} from './membership-invitation/membership-invitation.dto.js';
 import {
   createMembershipDto,
+  deleteMembershipQueryDto,
   membershipIdParamsDto,
   transferOwnershipDto,
   updateMembershipDto,
 } from './membership.dto.js';
 import { createMembershipController } from './membership.controller.js';
-import { createMemberInvitationController } from './member-invitation/member-invitation.controller.js';
+import { createMembershipInvitationController } from './membership-invitation/membership-invitation.controller.js';
 import { requireOrganizationPermission } from '@/shared/utils/auth/authorization.util.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 
-/** Services required to wire the membership and member-invitation routes. */
+/** Services required to wire the membership and membership-invitation routes. */
 export interface MembershipRoutesDeps {
   membershipService: MembershipService;
-  memberInvitationService: MemberInvitationService;
+  membershipInvitationService: MembershipInvitationService;
 }
 
 /**
- * Fastify plugin that registers active-organization membership routes (list,
- * get, create, update, delete, plus self-service leave / transfer-ownership)
- * and the member-invitation routes (organization-scoped create/list/cancel/resend plus
- * the cross-organization `/invitations/:invitation_id/accept` user-facing endpoint).
- * Permission-gated routes are protected with
- * `requireOrganizationPermission(MEMBERSHIP_*|INVITATION_MANAGE)`; public
- * accept has only a strict rate limit.
+ * Fastify plugin that registers the team's routes (launch §2.B, §2.C): the active organization's
+ * memberships (list, get, add, change, remove, restore, effective codes), the invited member's
+ * invite (revoke, resend — nested under the membership, T9), self-service leave /
+ * transfer-ownership, and the invitee-facing `/membership-invitations/:membership_invitation_id/accept`
+ * and `…/decline` (launch D84). One code set gates them (T8): `membership:read|create|update|delete`;
+ * accepting and declining need only the signed-in owner of the invited, verified email; every
+ * `POST` takes `X-Idempotency-Key` (T13).
  */
 export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync {
   const membershipController = createMembershipController(deps.membershipService);
-  const invitationController = createMemberInvitationController(deps.memberInvitationService);
+  const invitationController = createMembershipInvitationController({
+    service: deps.membershipInvitationService,
+    membershipService: deps.membershipService,
+  });
 
   return async (app) => {
     const zodApplication = app.withTypeProvider<ZodTypeProvider>();
-    // Membership CRUD
     zodApplication.get(
       '/organization/memberships',
       {
@@ -56,7 +59,7 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         schema: {
           summary: 'List memberships',
           description:
-            'Returns all memberships in the organization with their roles. Requires MEMBERSHIP_READ permission.',
+            'The team list — every status, with roles, branches and the pending invite. Filters: q (name or email), status, role_id (main or extra role), branch_id; include_ended=true adds ended members. Sort by created_at (default) or name. Requires membership:read.',
           tags: ['Membership'],
         },
       },
@@ -70,7 +73,7 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         schema: {
           summary: 'Get membership',
           description:
-            'Returns a single membership including user details and role. Requires MEMBERSHIP_READ permission.',
+            'One member — live or ended — with the login summary, roles, branches and staff profile. Requires membership:read.',
           tags: ['Membership'],
           params: membershipIdParamsDto,
         },
@@ -85,7 +88,7 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         schema: {
           summary: 'Get membership permissions',
           description:
-            'Returns all effective permissions for a membership (from role). Requires MEMBERSHIP_READ permission.',
+            "A live member's effective codes — every code of every role they hold, main and extra — as permission_codes. Requires membership:read.",
           tags: ['Membership'],
           params: membershipIdParamsDto,
         },
@@ -96,14 +99,14 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
       '/organization/memberships',
       {
         // R4: organization-scoped admin mutation — cap per (organization, actor) alongside the
-        // required idempotency key. Mirrors the invitation-create pattern.
+        // required idempotency key.
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE)],
+        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_CREATE)],
         schema: {
           summary: 'Add member by email',
           description:
-            'Adds a member by email: provisions or resolves the user, creates an INVITED membership with the given role, and emails an invitation token. The invitee becomes ACTIVE on accept. Requires MEMBERSHIP_MANAGE permission.',
+            'Adds a member by email: provisions or resolves the login, creates an invited membership with the given roles (role_ids, main first) and staff profile (phone, tone, branch_ids, working days and hours, commission), and emails an invitation token. The same login added again gets its ended membership back. The invitee becomes active on accept. Outside production, with MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED on, invitation.debug_invitation_token carries the raw accept token (for local QA — the email never arrives). Requires membership:create.',
           tags: ['Membership'],
           body: createMembershipDto,
         },
@@ -116,11 +119,11 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         // R4: organization-scoped admin mutation — cap per (organization, actor).
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE)],
+        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE)],
         schema: {
           summary: 'Update membership',
           description:
-            "Updates a membership's status and/or role (suspend, reactivate, or change role). Requires MEMBERSHIP_MANAGE permission.",
+            "Changes a live member's status (active or suspended), roles (role_ids, main first — replaces the list) and staff profile; an ended member takes display_name only. The owner's status and roles cannot change. expected_updated_at refuses a stale save. Requires membership:update.",
           tags: ['Membership'],
           params: membershipIdParamsDto,
           body: updateMembershipDto,
@@ -134,16 +137,69 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
         // R4: organization-scoped admin mutation — cap per (organization, actor).
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE)],
+        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_DELETE)],
         schema: {
           summary: 'Remove membership',
           description:
-            'Removes a member from the organization. Requires MEMBERSHIP_MANAGE permission.',
+            'Removes a member from the organization, with why: reason (mistake, duplicate, not_needed, other) and a note, required for other. Undo with POST …/restore. Requires membership:delete.',
+          tags: ['Membership'],
+          params: membershipIdParamsDto,
+          querystring: deleteMembershipQueryDto,
+        },
+      },
+      membershipController.deleteMembership,
+    );
+    zodApplication.post<{ Params: { membership_id: string } }>(
+      '/organization/memberships/:membership_id/restore',
+      {
+        // R4: organization-scoped admin mutation — cap per (organization, actor); T13: idempotent.
+        config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_DELETE)],
+        schema: {
+          summary: 'Restore membership',
+          description:
+            "Undoes a member's removal — the membership is live again with its status, roles, branches and profile, and its name follows the profile again; its API keys stay revoked. A live membership is a 409, as is a person who rejoined since, or no free seat. Requires membership:delete.",
           tags: ['Membership'],
           params: membershipIdParamsDto,
         },
       },
-      membershipController.deleteMembership,
+      membershipController.restoreMembership,
+    );
+    zodApplication.delete<{ Params: { membership_id: string } }>(
+      '/organization/memberships/:membership_id/invitation',
+      {
+        // sec-r4-I3: invitation revocation is an organization-scoped admin mutation.
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_DELETE)],
+        schema: {
+          summary: 'Revoke invitation',
+          description:
+            "Revokes an invited member's pending invite and removes the invited membership. Requires membership:delete.",
+          tags: ['Invitation'],
+          params: membershipIdParamsDto,
+        },
+      },
+      membershipController.revokeInvitation,
+    );
+    zodApplication.post<{ Params: { membership_id: string } }>(
+      '/organization/memberships/:membership_id/invitation/resend',
+      {
+        // T13: idempotent; strict cap — every resend sends an email.
+        config: { ...STRICT_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE)],
+        schema: {
+          summary: 'Resend invitation',
+          description:
+            "Resends an invited member's invite with a new token and expiry — an expired invite too. Returns the invitation; outside production, with MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED on, debug_invitation_token carries the new raw accept token. Requires membership:update.",
+          tags: ['Invitation'],
+          params: membershipIdParamsDto,
+          body: resendMembershipInvitationDto,
+        },
+      },
+      invitationController.resendInvitation,
     );
     zodApplication.post(
       '/organization/leave',
@@ -186,65 +242,41 @@ export function membershipRoutes(deps: MembershipRoutesDeps): FastifyPluginAsync
       membershipController.transferOwnership,
     );
 
-    // ── Org-admin invitations (active organization, INVITATION_MANAGE) ──
-    // Adding a member (which issues the invitation) is `POST /organization/memberships` (REQ-1);
-    // these routes manage an already-issued invitation.
-    zodApplication.delete<{ Params: { invitation_id: string } }>(
-      '/organization/invitations/:invitation_id',
+    // ── The invitee (cross-organization, signed in) ──
+    zodApplication.post<{ Params: { membership_invitation_id: string } }>(
+      '/membership-invitations/:membership_invitation_id/accept',
       {
-        // sec-r4-I3: invitation revocation is an organization-scoped admin mutation.
-        // Cap per (organization, actor) so a single admin cannot churn invitations and
-        // a cross-tenant probe cannot exhaust a victim org's bucket.
-        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        // sec-T4: accept requires authentication and (in the service) an invitee-email match —
+        // anyone holding the invitation URL must not flip the victim's pending membership to active.
+        // T13: idempotent.
+        config: { ...STRICT_PUBLIC_RATE_LIMIT.config, idempotencyRequired: true },
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.INVITATION_MANAGE)],
-        schema: {
-          summary: 'Revoke invitation',
-          description: 'Revokes a pending invitation. Requires INVITATION_MANAGE permission.',
-          tags: ['Invitation'],
-          params: invitationIdParamsDto,
-        },
-      },
-      invitationController.revokeMemberInvitation,
-    );
-    zodApplication.post<{ Params: { invitation_id: string } }>(
-      '/organization/invitations/:invitation_id/resend',
-      {
-        onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.INVITATION_MANAGE)],
-        ...STRICT_AUTHED_RATE_LIMIT,
-        schema: {
-          summary: 'Resend invitation',
-          description:
-            'Resends the invitation email with a new expiry. Requires INVITATION_MANAGE permission.',
-          tags: ['Invitation'],
-          params: invitationIdParamsDto,
-          body: resendMemberInvitationDto,
-        },
-      },
-      invitationController.resendInvitation,
-    );
-
-    // ── Recipient invitations (the invited user, cross-organization, auth-only) ──
-    zodApplication.post<{ Params: { invitation_id: string } }>(
-      '/invitations/:invitation_id/accept',
-      {
-        // sec-T4: accept now requires authentication and (in the service)
-        // an invitee-email match. The previous unauthenticated route let
-        // anyone who got hold of the invitation URL flip the victim's
-        // pending membership to ACTIVE without the victim's interaction.
-        onRequest: [app.authenticate],
-        ...STRICT_PUBLIC_RATE_LIMIT,
         schema: {
           summary: 'Accept invitation',
           description:
-            "Accepts a pending invitation using the invitation token. Requires authentication; the authenticated user's email must match the invitee email on the invitation. Activates the invitee's pre-existing membership (sets it ACTIVE).",
+            'Accepts a pending invitation. Requires sign-in with the invited, verified email. The token from the invitation email is optional — without it the signed-in owner of that email accepts in the app (the invitation listed by GET /users/me/membership-invitations); a token that is sent must match. Activates the invited membership and returns the invitation with the organization_id just joined.',
           tags: ['Invitation'],
-          params: invitationIdParamsDto,
-          body: acceptMemberInvitationDto,
+          params: membershipInvitationIdParamsDto,
+          body: acceptMembershipInvitationDto,
         },
       },
-      invitationController.acceptMemberInvitation,
+      invitationController.acceptMembershipInvitation,
+    );
+    zodApplication.post<{ Params: { membership_invitation_id: string } }>(
+      '/membership-invitations/:membership_invitation_id/decline',
+      {
+        // Launch D84 (3): bound to the invitee's verified email like accept; idempotent (T13).
+        config: { ...STRICT_PUBLIC_RATE_LIMIT.config, idempotencyRequired: true },
+        onRequest: [app.authenticate],
+        schema: {
+          summary: 'Decline invitation',
+          description:
+            'Turns down a pending invitation, expired or not. Requires sign-in with the invited, verified email. Revokes the invitation, ends the invited membership (end_reason declined), which frees its seat, and tells the inviter in the app. Returns the revoked invitation with the organization_id it was for.',
+          tags: ['Invitation'],
+          params: membershipInvitationIdParamsDto,
+        },
+      },
+      invitationController.declineMembershipInvitation,
     );
   };
 }

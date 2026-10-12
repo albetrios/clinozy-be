@@ -37,6 +37,6 @@ Constants and helpers live in **`src/shared/utils/http/api-versioning.util.ts`**
 | ------- | ------- | --------- |
 | All `/api/v1/*` responses | `API-Version: 1` | `api-versioning.middleware` (`onSend`) via `applyPublicApiVersionHeader` |
 
-**Cursor list pagination:** All paginated list endpoints (organizations, memberships, member roles, member invitations, organization API keys, audit logs, webhooks, webhook delivery attempts, notifications, users) use cursor pagination only. Pass `limit` and optional `after` (opaque cursor from `meta.pagination.next`). The cursor is encrypted server-side (it carries the keyset position, never readable): pass it back unchanged — an edited or foreign cursor reads as the first page.
+**Cursor list pagination:** All paginated list endpoints (organizations, memberships, member roles, membership invitations, organization API keys, audit logs, webhooks, webhook delivery attempts, notifications, users) use cursor pagination only. Pass `limit` and optional `after` (opaque cursor from `meta.pagination.next`). The cursor is encrypted server-side (it carries the keyset position, never readable): pass it back unchanged — an edited or foreign cursor reads as the first page.
 
 There is no `page` parameter: list query schemas are strict, so `page` (like any unknown parameter) is a **400** `validation_error` naming it — `errors: [{ "field": "querystring.page", … }]`.

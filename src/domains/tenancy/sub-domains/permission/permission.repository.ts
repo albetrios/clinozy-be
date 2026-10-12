@@ -1,5 +1,7 @@
+import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { permissions } from '@/domains/tenancy/sub-domains/permission/permission.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
+import { membershipHoldsRole } from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import { role_permissions } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
@@ -69,16 +71,18 @@ export class PermissionRepository {
     const internalUserId = drizzleSql<number>`auth.resolve_user_id_by_public_id(${userPublicId})`;
 
     const rows = await database
-      .select({ permission_code: role_permissions.permission_code })
+      // Distinct: a code granted by more than one of the person's roles comes back once.
+      .selectDistinct({ permission_code: role_permissions.permission_code })
       .from(role_permissions)
       .innerJoin(roles, eq(role_permissions.role_id, roles.id))
-      .innerJoin(memberships, eq(memberships.role_id, roles.id))
+      // The main role or an additional one (D5) — access is the union of every role held.
+      .innerJoin(memberships, membershipHoldsRole(roles.id))
       .innerJoin(organizations, eq(memberships.organization_id, organizations.id))
       .where(
         and(
           eq(memberships.user_id, internalUserId),
           eq(organizations.public_id, organizationPublicId),
-          eq(memberships.status, 'ACTIVE'),
+          eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
           isNull(memberships.deleted_at),
           isNull(roles.deleted_at),
           isNull(organizations.deleted_at),

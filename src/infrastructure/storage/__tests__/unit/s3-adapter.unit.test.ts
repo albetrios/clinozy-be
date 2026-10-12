@@ -100,6 +100,37 @@ describe('S3ObjectStorageAdapter', () => {
     expect(getSignedUrlMock).toHaveBeenCalled();
   });
 
+  it('createPresignedDownloadUrl serves the object inline under its file name when given one', async () => {
+    getSignedUrlMock.mockResolvedValueOnce('https://signed.example/get');
+    await adapter.createPresignedDownloadUrl({
+      key: 'uploads/org/3f1c2b7e.pdf',
+      expiresInSeconds: 900,
+      fileName: 'CBC report.pdf',
+    });
+    const [, command, signingOptions] = getSignedUrlMock.mock.calls.at(-1) as [
+      unknown,
+      { input: { ResponseContentDisposition?: string } },
+      { expiresIn?: number },
+    ];
+    expect(command.input.ResponseContentDisposition).toBe(
+      `inline; filename="CBC report.pdf"; filename*=UTF-8''CBC%20report.pdf`,
+    );
+    expect(signingOptions.expiresIn).toBe(900);
+  });
+
+  it('createPresignedDownloadUrl leaves the disposition to the store without a file name', async () => {
+    getSignedUrlMock.mockResolvedValueOnce('https://signed.example/get');
+    await adapter.createPresignedDownloadUrl({
+      key: 'user-data-export/u/e.json.gz',
+      expiresInSeconds: 60,
+    });
+    const [, command] = getSignedUrlMock.mock.calls.at(-1) as [
+      unknown,
+      { input: { ResponseContentDisposition?: string } },
+    ];
+    expect(command.input.ResponseContentDisposition).toBeUndefined();
+  });
+
   it('createPresignedUploadUrl returns a signed PUT URL bound to an exact Content-Length', async () => {
     const url = await adapter.createPresignedUploadUrl({
       key: 'uploads/file.png',

@@ -22,6 +22,25 @@ const TENANT_SCOPING_EXEMPT_QUEUE_NAME_PATTERNS = [
   /audit-outbox-drain/i,
   /user-data-export/i,
   /pending-sweep/i,
+  // The deleted-record purge erases every organization's expired rows in one global-retention
+  // context (WC-46) — no per-job tenant payload.
+  /app-record-purge/i,
+  // The day auto-close sweep reads every organization's due days in the global-retention context
+  // (WC-39); the per-organization jobs it adds carry organizationPublicId.
+  /day-close-auto-close-sweep/i,
+  // The task rules sweep pages through the organizations in the global-retention context (TK4);
+  // the per-organization jobs it adds carry organizationPublicId.
+  /task-rules-sweep/i,
+  // D80: the ideas sweep reads every organization's stale patients, then adds one job each
+  /patient-ideas-sweep/i,
+  // The messaging sweep pages through the organizations with unsent messages or pending callbacks
+  // in the global-retention context (launch D77); the per-organization jobs it adds carry
+  // organizationPublicId.
+  /contact-messaging-sweep/i,
+  // Launch D84: the invitation expiry sweep reads every organization's long-expired invites in the
+  // global-retention context, then ends each in that organization's own context — no per-job
+  // tenant payload.
+  /membership-invitation-expiry/i,
 ] as const;
 
 function collectWorkerFiles(directory: string, collected: string[] = []): string[] {

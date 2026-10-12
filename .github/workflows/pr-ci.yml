@@ -316,13 +316,21 @@ jobs:
           pnpm exec vitest run --project security src/tests/security/rls
 
   rls-application-role:
-    name: RLS application role (whole connection)
+    name: RLS application role (whole connection) ${{ matrix.shard }}/4
     needs: [changes]
     if: |
       needs.changes.outputs.docs-only-md != 'true' &&
       (needs.changes.outputs.src-code == 'true' || needs.changes.outputs.ci-config == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # The whole e2e + integration suite no longer fits one runner's budget, so it runs in four
+    # even by-file-count shards (vitest `--shard`, as the cross-cutting integration shards do).
+    # Every shard migrates its own database and runs as the application role; the aggregate
+    # result is red if any shard is.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     # The job above proves the POLICIES are right. This one proves the APPLICATION obeys them.
     # The pool under test is opened as `clinozy_be_app` via libpq's `options=-c role=...`, so the
     # role applies to every statement — including ones inside the app's own transactions —
@@ -387,7 +395,7 @@ jobs:
       - name: Run e2e + integration as the RLS-subject application role
         run: |
           set -euo pipefail
-          pnpm test:rls-role
+          pnpm test:rls-role --project e2e --project integration --shard=${{ matrix.shard }}/4
 
   build-verify:
     name: Build verify

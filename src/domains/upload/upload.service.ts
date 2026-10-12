@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { removeImageLocation } from '@/shared/utils/security/image-location.util.js';
 import { getEnv } from '@/shared/config/env.config.js';
 import {
   ConfigurationError,
@@ -41,6 +42,7 @@ import { serializeUploadCreate, serializeUploadDetail } from './upload.serialize
 import { validateUploadPublicIdParam } from './upload.validator.js';
 import {
   MAINTENANCE_SCOPE,
+  type OrganizationPrincipalDatabaseScope,
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
   withMaintenanceDatabaseContext,
@@ -373,7 +375,7 @@ export class UploadService {
     fileKey: string;
     userInternalId?: number;
     organizationInternalId?: number;
-  }): Promise<{ mimeType: string }> {
+  }): Promise<{ mimeType: string; fileName: string; fileSize: number }> {
     const { fileKey, userInternalId, organizationInternalId } = options;
     if (userInternalId === undefined && organizationInternalId === undefined) {
       throw new ValidationError('errors:validation.uploadNotConfirmed', undefined, undefined, [
@@ -392,7 +394,101 @@ export class UploadService {
     if (organizationInternalId !== undefined && row.organization_id !== organizationInternalId) {
       throw notConfirmed();
     }
-    return { mimeType: row.mime_type };
+    return { mimeType: row.mime_type, fileName: row.file_name, fileSize: row.file_size };
+  }
+
+  /**
+   * A short-lived view link for each of the organization's confirmed uploads among `fileKeys` —
+   * a patient photo, a report's files (launch D86) — with the name the person uploaded it under.
+   *
+   * @remarks
+   * - **Algorithm:** one read of the keys' live, confirmed upload rows of the organization (in
+   *   the caller's organization context); for each, a presigned GET valid
+   *   {@link PRESIGNED_URL_EXPIRY_SECONDS} that serves the object inline under its `file_name`.
+   *   A key that is missing, pending, deleted or another organization's gets no link.
+   * - **Failure modes:** a storage presign error propagates (signing is local — no request).
+   * - **Side effects:** none; the caller decides who may hold the links (the record's own gate).
+   */
+  async createReadUrls(options: {
+    organizationInternalId: number;
+    fileKeys: readonly string[];
+  }): Promise<Map<string, { url: string; fileName: string }>> {
+    const keys = [...new Set(options.fileKeys)];
+    const rows = await this.repository.findConfirmedByFileKeys(
+      options.organizationInternalId,
+      keys,
+    );
+    const links = new Map<string, { url: string; fileName: string }>();
+    for (const row of rows) {
+      links.set(row.file_key, {
+        url: await this.objectStorage.createPresignedDownloadUrl({
+          key: row.file_key,
+          expiresInSeconds: PRESIGNED_URL_EXPIRY_SECONDS,
+          fileName: row.file_name,
+        }),
+        fileName: row.file_name,
+      });
+    }
+    return links;
+  }
+
+  /**
+   * Rewrites an organization's confirmed photo without where it was taken (launch D79, WC-42) — the
+   * app files patient photos only after this.
+   *
+   * @remarks
+   * - **Algorithm:** checks the key is the organization's confirmed upload (in the caller's
+   *   organization context); for a JPEG or PNG reads the stored object, removes its GPS block and
+   *   XMP ({@link removeImageLocation}) and writes it back under the same key and type when
+   *   anything was removed. Any other type is left alone.
+   * - **Failure modes:** `ValidationError` (`uploadNotConfirmed`) for a key that is not the
+   *   organization's confirmed upload; a stored file that is gone has no location to remove (a
+   *   warning, no error); any other storage error propagates — the caller files nothing.
+   * - **Side effects:** one GET and at most one PUT on the object store; the upload row is not
+   *   changed (its `file_size` keeps the size the client sent).
+   */
+  async removeImageLocation(options: {
+    scope: OrganizationPrincipalDatabaseScope;
+    fileKey: string;
+    organizationInternalId: number;
+  }): Promise<void> {
+    const upload = await withAppDatabaseContext({
+      scope: options.scope,
+      callback: () =>
+        this.assertKeyConfirmedForOwner({
+          fileKey: options.fileKey,
+          organizationInternalId: options.organizationInternalId,
+        }),
+    });
+    if (upload.mimeType !== 'image/jpeg' && upload.mimeType !== 'image/png') return;
+    const stored = await this.readStoredObject(options.fileKey);
+    if (stored === null) {
+      // No stored file, no location to remove: the photo is filed as any attach files an upload
+      logger.warn({ fileKey: options.fileKey }, 'upload.image_location_object_missing');
+      return;
+    }
+    const cleaned = removeImageLocation({ image: stored.body, mimeType: upload.mimeType });
+    if (!cleaned.changed) return;
+    await this.objectStorage.putObject({
+      key: options.fileKey,
+      body: cleaned.body,
+      contentType: upload.mimeType,
+    });
+    logger.info({ fileKey: options.fileKey }, 'upload.image_location_removed');
+  }
+
+  /**
+   * The stored object, or `null` when it is gone — a failed read is told apart from a missing
+   * object by a HEAD, only on the failure path; any other failure (an outage, a denial) throws.
+   */
+  private async readStoredObject(key: string): Promise<{ body: Buffer } | null> {
+    try {
+      return await this.objectStorage.getObject(key);
+    } catch (error) {
+      const head = await this.objectStorage.headObject(key).catch(() => undefined);
+      if (head === null) return null;
+      throw error;
+    }
   }
 
   private async assertUserCanAccessOrgScopedUpload({

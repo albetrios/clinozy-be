@@ -128,5 +128,14 @@ export interface ObjectStoragePort {
     byteCount: number;
   }): Promise<{ body: Buffer; contentType: string | undefined; eTag: string } | null>;
 
-  createPresignedDownloadUrl(options: { key: string; expiresInSeconds: number }): Promise<string>;
+  /**
+   * A presigned GET for `key`, valid `expiresInSeconds`. With `fileName` the object is served
+   * `inline` under that name (`Content-Disposition`), so a browser shows it and saves it as the
+   * file the person uploaded rather than the storage key's random name.
+   */
+  createPresignedDownloadUrl(options: {
+    key: string;
+    expiresInSeconds: number;
+    fileName?: string;
+  }): Promise<string>;
 }

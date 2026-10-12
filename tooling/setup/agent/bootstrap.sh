@@ -13,6 +13,11 @@
 #   bash tooling/setup/agent/bootstrap.sh                 # the session: setup → live stack
 #   bash tooling/setup/agent/bootstrap.sh --install-only  # environment Setup script:
 #                                                         # steps 1-8 only, cached
+#   bash tooling/setup/agent/bootstrap.sh --reset-database
+#                                     # pnpm dev:stack:reset-db — a scratch database again:
+#                                     # skips the installs (2-8), stops the API + worker,
+#                                     # drops and recreates the Compose database, then
+#                                     # migrate → logins → seed → API → worker (9-13)
 #
 # The session-start hook launches the default mode (detached) in every web session unless
 # AGENT_AUTO_STACK=0, so the stack is live before the work starts. Each step is written to
@@ -28,12 +33,18 @@
 set -uo pipefail
 
 install_only=0
+reset_database=0
 for argument in "$@"; do
   case "${argument}" in
     --install-only) install_only=1 ;;
-    *) echo "✗ unknown option: ${argument} (only --install-only)" >&2; exit 2 ;;
+    --reset-database) reset_database=1 ;;
+    *) echo "✗ unknown option: ${argument} (only --install-only or --reset-database)" >&2; exit 2 ;;
   esac
 done
+if [ "${install_only}" = 1 ] && [ "${reset_database}" = 1 ]; then
+  echo "✗ --install-only and --reset-database exclude each other" >&2
+  exit 2
+fi
 # Every run but the cached Setup script brings the stack live.
 live=1
 [ "${install_only}" = 1 ] && live=0
@@ -98,20 +109,12 @@ step "[1/${TOTAL}] Node runtime"
 required_major="24"
 [ -f .nvmrc ] && required_major="$(tr -dc '0-9.' < .nvmrc | cut -d. -f1)"
 node_prefix="${NODE_INSTALL_PREFIX:-/opt}"
-# The pinned Node goes to <prefix>/node<major>, which needs root: run as root, else via
-# passwordless sudo and then hand the directory to this user (so corepack/pnpm can write
-# shims without sudo), else best-effort on the session Node. Off Linux, install-node.sh
-# exits early — a developer machine's Node comes from nvm.
-if [ "$(id -u)" -eq 0 ] || [ "$(uname -s)" != "Linux" ]; then
-  NODE_INSTALL_PREFIX="${node_prefix}" bash "${AGENT_DIR}/install-node.sh" >&2 \
-    || skip "install-node best-effort (using session Node)"
-elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-  sudo -n env NODE_INSTALL_PREFIX="${node_prefix}" bash "${AGENT_DIR}/install-node.sh" >&2 \
-    && sudo -n chown -R "$(id -u):$(id -g)" "${node_prefix}/node${required_major}" 2>/dev/null \
-    || skip "install-node best-effort (using session Node)"
-else
-  skip "install-node: ${node_prefix} needs root and passwordless sudo is unavailable — using session Node"
-fi
+# The pinned Node goes to <prefix>/node<major>, which needs root — install-node.sh runs
+# itself through passwordless sudo when this user cannot write there; else best-effort on
+# the session Node. Off Linux, install-node.sh exits early — a developer machine's Node
+# comes from nvm.
+NODE_INSTALL_PREFIX="${node_prefix}" bash "${AGENT_DIR}/install-node.sh" >&2 \
+  || skip "install-node best-effort (using session Node)"
 
 # install-node.sh drops the pinned Node into <prefix>/node<major>, but it runs
 # in a child process and so cannot change THIS shell's PATH. Activate it here so
@@ -142,66 +145,72 @@ else
   ok "[1/${TOTAL}] Node $(node -v)"
 fi
 
-# 2) Dependencies ------------------------------------------------------------
-step "[2/${TOTAL}] Dependencies (pnpm install)"
-# A fresh image may have Node without pnpm: corepack provides the version package.json pins.
-command -v pnpm >/dev/null 2>&1 \
-  || corepack enable --install-directory "$(dirname "$(command -v node)")" 2>/dev/null \
-  || corepack enable 2>/dev/null || true
-pnpm install --frozen-lockfile >&2 || die "pnpm install failed"
-ok "[2/${TOTAL}] dependencies installed"
+# 2-8) The installs — skipped by --reset-database, which only brings the stack up again on a
+# fresh database (the tools, the dependencies and the local env file are already in place).
+if [ "${reset_database}" = 0 ]; then
+  # 2) Dependencies ------------------------------------------------------------
+  step "[2/${TOTAL}] Dependencies (pnpm install)"
+  # A fresh image may have Node without pnpm: corepack provides the version package.json pins.
+  command -v pnpm >/dev/null 2>&1 \
+    || corepack enable --install-directory "$(dirname "$(command -v node)")" 2>/dev/null \
+    || corepack enable 2>/dev/null || true
+  pnpm install --frozen-lockfile >&2 || die "pnpm install failed"
+  ok "[2/${TOTAL}] dependencies installed"
 
-# 3) GitHub CLI --------------------------------------------------------------
-step "[3/${TOTAL}] GitHub CLI (gh)"
-bash "${AGENT_DIR}/install-gh.sh" || true
-if command -v gh >/dev/null 2>&1; then ok "[3/${TOTAL}] $(gh --version | head -1)"; else skip "[3/${TOTAL}] gh unavailable (non-fatal)"; fi
+  # 3) GitHub CLI --------------------------------------------------------------
+  step "[3/${TOTAL}] GitHub CLI (gh)"
+  bash "${AGENT_DIR}/install-gh.sh" || true
+  if command -v gh >/dev/null 2>&1; then ok "[3/${TOTAL}] $(gh --version | head -1)"; else skip "[3/${TOTAL}] gh unavailable (non-fatal)"; fi
 
-# 4) Docker + images via registry mirror ------------------------------------
-step "[4/${TOTAL}] Docker CLI/Compose + images (mirror + pull)"
-bash "${AGENT_DIR}/install-docker.sh" || true
-bash "${AGENT_DIR}/install-docker-images.sh" || true
-if docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -qE '^postgres:|^redis:'; then
-  ok "[4/${TOTAL}] compose images present: $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^postgres:|^redis:' | paste -sd' ' -)"
+  # 4) Docker + images via registry mirror ------------------------------------
+  step "[4/${TOTAL}] Docker CLI/Compose + images (mirror + pull)"
+  bash "${AGENT_DIR}/install-docker.sh" || true
+  bash "${AGENT_DIR}/install-docker-images.sh" || true
+  if docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -qE '^postgres:|^redis:'; then
+    ok "[4/${TOTAL}] compose images present: $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^postgres:|^redis:' | paste -sd' ' -)"
+  else
+    skip "[4/${TOTAL}] images not pre-pulled (compose will pull via mirror)"
+  fi
+
+  # 5) CodeGraph CLI + index ---------------------------------------------------
+  step "[5/${TOTAL}] CodeGraph CLI + index"
+  bash "${AGENT_DIR}/install-codegraph.sh" || true
+  if command -v codegraph >/dev/null 2>&1; then ok "[5/${TOTAL}] codegraph $(codegraph --version 2>/dev/null)"; else skip "[5/${TOTAL}] codegraph unavailable (non-fatal)"; fi
+
+  # 6) Headroom CLI + the default MCP pair (context compression) --------------
+  step "[6/${TOTAL}] Headroom CLI + default MCP pair"
+  bash "${AGENT_DIR}/install-headroom.sh" || true
+  pnpm mcp:setup:default >&2 || skip "mcp:setup:default failed (non-fatal)"
+  if command -v headroom >/dev/null 2>&1; then ok "[6/${TOTAL}] headroom $(headroom --version 2>/dev/null)"; else skip "[6/${TOTAL}] headroom unavailable (non-fatal)"; fi
+
+  # 7) gitleaks (pre-commit secret scan) + semgrep (security:sast) + k6 (load:*) --
+  step "[7/${TOTAL}] gitleaks + semgrep + k6 (secret scan, SAST, load tests)"
+  bash "${AGENT_DIR}/install-gitleaks.sh" || true
+  bash "${AGENT_DIR}/install-semgrep.sh" || true
+  bash "${AGENT_DIR}/install-k6.sh" || true
+  if command -v gitleaks >/dev/null 2>&1; then ok "[7/${TOTAL}] gitleaks $(gitleaks version 2>/dev/null)"; else skip "[7/${TOTAL}] gitleaks unavailable — pre-commit secret scan will fail (non-fatal)"; fi
+  if command -v semgrep >/dev/null 2>&1; then ok "[7/${TOTAL}] semgrep $(semgrep --version 2>/dev/null)"; else skip "[7/${TOTAL}] semgrep unavailable — pnpm security:sast will fail (non-fatal)"; fi
+  if command -v k6 >/dev/null 2>&1; then ok "[7/${TOTAL}] $(k6 version 2>/dev/null | head -1)"; else skip "[7/${TOTAL}] k6 unavailable — pnpm load:* will fail (non-fatal)"; fi
+  # Every tool against its pin in tool-versions.sh, the default MCP servers started for real
+  # (initialize + tools/list), and the newer releases waiting — report only: a bump is a PR.
+  if pnpm tool:agent-tools --smoke --outdated >&2; then
+    ok "[7/${TOTAL}] agent tools at their pins; MCP servers answer"
+  else
+    skip "[7/${TOTAL}] agent tools: one is off its pin or failed its MCP smoke test — see the report above (non-fatal)"
+  fi
+
+  # 8) Environment files (.env.local) -----------------------------------------
+  step "[8/${TOTAL}] Environment (.env.local)"
+  pnpm setup:local --only-env >&2 || die "env scaffold failed (pnpm setup:local --only-env)"
+  ok "[8/${TOTAL}] .env.local ready"
+
+  if [ "${install_only}" = 1 ]; then
+    echo ""
+    echo "✓ install complete in $(( $(date +%s) - start_ts ))s — in the session, run \`bash tooling/setup/agent/bootstrap.sh\` to bring up Postgres + Redis and the app."
+    exit 0
+  fi
 else
-  skip "[4/${TOTAL}] images not pre-pulled (compose will pull via mirror)"
-fi
-
-# 5) CodeGraph CLI + index ---------------------------------------------------
-step "[5/${TOTAL}] CodeGraph CLI + index"
-bash "${AGENT_DIR}/install-codegraph.sh" || true
-if command -v codegraph >/dev/null 2>&1; then ok "[5/${TOTAL}] codegraph $(codegraph --version 2>/dev/null)"; else skip "[5/${TOTAL}] codegraph unavailable (non-fatal)"; fi
-
-# 6) Headroom CLI + the default MCP pair (context compression) --------------
-step "[6/${TOTAL}] Headroom CLI + default MCP pair"
-bash "${AGENT_DIR}/install-headroom.sh" || true
-pnpm mcp:setup:default >&2 || skip "mcp:setup:default failed (non-fatal)"
-if command -v headroom >/dev/null 2>&1; then ok "[6/${TOTAL}] headroom $(headroom --version 2>/dev/null)"; else skip "[6/${TOTAL}] headroom unavailable (non-fatal)"; fi
-
-# 7) gitleaks (pre-commit secret scan) + semgrep (security:sast) + k6 (load:*) --
-step "[7/${TOTAL}] gitleaks + semgrep + k6 (secret scan, SAST, load tests)"
-bash "${AGENT_DIR}/install-gitleaks.sh" || true
-bash "${AGENT_DIR}/install-semgrep.sh" || true
-bash "${AGENT_DIR}/install-k6.sh" || true
-if command -v gitleaks >/dev/null 2>&1; then ok "[7/${TOTAL}] gitleaks $(gitleaks version 2>/dev/null)"; else skip "[7/${TOTAL}] gitleaks unavailable — pre-commit secret scan will fail (non-fatal)"; fi
-if command -v semgrep >/dev/null 2>&1; then ok "[7/${TOTAL}] semgrep $(semgrep --version 2>/dev/null)"; else skip "[7/${TOTAL}] semgrep unavailable — pnpm security:sast will fail (non-fatal)"; fi
-if command -v k6 >/dev/null 2>&1; then ok "[7/${TOTAL}] $(k6 version 2>/dev/null | head -1)"; else skip "[7/${TOTAL}] k6 unavailable — pnpm load:* will fail (non-fatal)"; fi
-# Every tool against its pin in tool-versions.sh, the default MCP servers started for real
-# (initialize + tools/list), and the newer releases waiting — report only: a bump is a PR.
-if pnpm tool:agent-tools --smoke --outdated >&2; then
-  ok "[7/${TOTAL}] agent tools at their pins; MCP servers answer"
-else
-  skip "[7/${TOTAL}] agent tools: one is off its pin or failed its MCP smoke test — see the report above (non-fatal)"
-fi
-
-# 8) Environment files (.env.local) -----------------------------------------
-step "[8/${TOTAL}] Environment (.env.local)"
-pnpm setup:local --only-env >&2 || die "env scaffold failed (pnpm setup:local --only-env)"
-ok "[8/${TOTAL}] .env.local ready"
-
-if [ "${install_only}" = 1 ]; then
-  echo ""
-  echo "✓ install complete in $(( $(date +%s) - start_ts ))s — in the session, run \`bash tooling/setup/agent/bootstrap.sh\` to bring up Postgres + Redis and the app."
-  exit 0
+  skip "[2-8/${TOTAL}] installs skipped (--reset-database)"
 fi
 
 # 9) Postgres + Redis (docker compose) --------------------------------------
@@ -233,6 +242,18 @@ fi
 
 pnpm compose:wait >&2 || die "Postgres did not become ready"
 ok "[9/${TOTAL}] Postgres + Redis healthy"
+
+# --reset-database: the API and worker hold connections, so they stop first. The database's
+# name and owner come from the Postgres container's own POSTGRES_DB / POSTGRES_USER, so only the
+# local Compose database can be dropped — never one a DATABASE_URL points at.
+if [ "${reset_database}" = 1 ]; then
+  step "[9/${TOTAL}] Reset the Compose database (--reset-database)"
+  bash "${AGENT_DIR}/stack.sh" stop >&2
+  # shellcheck disable=SC2016 # expanded by the container's shell, from its own environment
+  docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE IF EXISTS \"$POSTGRES_DB\" WITH (FORCE)" -c "CREATE DATABASE \"$POSTGRES_DB\" OWNER \"$POSTGRES_USER\""' >&2 \
+    || die "database reset failed (docker compose exec postgres)"
+  ok "[9/${TOTAL}] Compose database dropped and recreated"
+fi
 
 # 10) Migrations + database logins --------------------------------------------
 step "[10/${TOTAL}] Database migrations + logins"

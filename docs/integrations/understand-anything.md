@@ -122,7 +122,7 @@ Pick a file you will touch soon, for example:
 ```
 
 ```text
-/understand-chat What is the route flow for member invitations?
+/understand-chat What is the route flow for membership invitations?
 ```
 
 ### 3.5 Business domain map (optional)

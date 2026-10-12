@@ -11,6 +11,7 @@ export function paginatedResponse<T>({
   data,
   request_id,
   pagination,
+  extraMeta = {},
 }: {
   data: T[];
   request_id: string;
@@ -20,10 +21,13 @@ export function paginatedResponse<T>({
     has_more: boolean;
     estimated_total?: number;
   };
+  /** Extra `meta` fields a list carries beside its page (e.g. a count the room shows). */
+  extraMeta?: Readonly<Record<string, unknown>> | undefined;
 }) {
   return {
     data,
     meta: {
+      ...extraMeta,
       request_id,
       pagination,
     },

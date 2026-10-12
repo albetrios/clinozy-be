@@ -9,6 +9,8 @@ import {
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { MemberRoleRepository } from '@/domains/tenancy/sub-domains/member-roles/member-role.repository.js';
 
+/** Why the role goes — every soft delete carries a reason (the record-delete query). */
+const ROLE_REMOVAL = { delete_reason: 'not_needed', delete_note: null, updated_by_user_id: null };
 describe('MemberRoleRepository (database)', () => {
   const repository = new MemberRoleRepository();
 
@@ -91,9 +93,19 @@ describe('MemberRoleRepository (database)', () => {
     );
     expect(updatedWithNullUpdater?.description).toBe('No updater');
 
-    const deleted = await repository.softDelete(created.public_id, organization.id);
+    const deleted = await repository.softDeleteIfNoActiveMembers(
+      created.public_id,
+      organization.id,
+      ROLE_REMOVAL,
+    );
     expect(deleted?.deleted_at).not.toBeNull();
-    expect(await repository.softDelete(created.public_id, organization.id)).toBeNull();
+    expect(
+      await repository.softDeleteIfNoActiveMembers(
+        created.public_id,
+        organization.id,
+        ROLE_REMOVAL,
+      ),
+    ).toBeNull();
     expect(await repository.findByPublicId(created.public_id, organization.id)).toBeNull();
     expect(await repository.findByPublicId('missing_role', organization.id)).toBeNull();
     expect(
@@ -119,18 +131,26 @@ describe('MemberRoleRepository (database)', () => {
       userId: member.id,
       organizationId: organization.id,
       roleId: assignedRole.id,
-      status: 'ACTIVE',
+      status: 'active',
     });
 
     // Role WITH an active member → the atomic guard matches zero rows (null); the role stays.
     expect(
-      await repository.softDeleteIfNoActiveMembers(assignedRole.public_id, organization.id),
+      await repository.softDeleteIfNoActiveMembers(
+        assignedRole.public_id,
+        organization.id,
+        ROLE_REMOVAL,
+      ),
     ).toBeNull();
     expect(await repository.findByPublicId(assignedRole.public_id, organization.id)).not.toBeNull();
 
     // Role with NO members → soft-deleted.
     expect(
-      await repository.softDeleteIfNoActiveMembers(emptyRole.public_id, organization.id),
+      await repository.softDeleteIfNoActiveMembers(
+        emptyRole.public_id,
+        organization.id,
+        ROLE_REMOVAL,
+      ),
     ).not.toBeNull();
     expect(await repository.findByPublicId(emptyRole.public_id, organization.id)).toBeNull();
   });
@@ -161,19 +181,19 @@ describe('MemberRoleRepository (database)', () => {
       userId: active.id,
       organizationId: organization.id,
       roleId: roleA.id,
-      status: 'ACTIVE',
+      status: 'active',
     });
     await createMembership({
       userId: invited.id,
       organizationId: organization.id,
       roleId: roleA.id,
-      status: 'INVITED',
+      status: 'invited',
     });
     await createMembership({
       userId: suspended.id,
       organizationId: organization.id,
       roleId: roleA.id,
-      status: 'SUSPENDED',
+      status: 'suspended',
     });
     // roleB: a single ACTIVE member.
     const soloActive = await createTestUser({ email: 'mc-solo@test.com' });
@@ -181,7 +201,7 @@ describe('MemberRoleRepository (database)', () => {
       userId: soloActive.id,
       organizationId: organization.id,
       roleId: roleB.id,
-      status: 'ACTIVE',
+      status: 'active',
     });
 
     const counts = await repository.countMembersByRoleForOrganization(organization.id);

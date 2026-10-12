@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
+import type { PostgresDatabaseHandle } from '@/infrastructure/database/utils/database-handle.types.js';
 
 /**
  * Postgres advisory-lock namespaces (`classid`) for per-scope resource-creation quotas (audit-#8).
@@ -28,8 +29,38 @@ export const RESOURCE_QUOTA_LOCK_NAMESPACE = {
   WEBAUTHN_CREDENTIAL: 0x57_42_41_4e,
   /** Per-user concurrent active-session cap, keyed by user id. ASCII `SESN`. */
   AUTH_SESSION: 0x53_45_53_4e,
-  /** Per-organization pending member-invitation cap, keyed by organization id. ASCII `INVT`. */
-  MEMBER_INVITATION: 0x49_4e_56_54,
+  /** Per-organization pending membership-invitation cap, keyed by organization id. ASCII `INVT`. */
+  MEMBERSHIP_INVITATION: 0x49_4e_56_54,
+  /**
+   * Per-organization staff-number assignment, keyed by organization id. ASCII `STAF`. Taken by the
+   * `tenancy.fn_assign_membership_staff_number()` trigger, not from TypeScript — listed here so no
+   * other resource reuses the lock space.
+   */
+  MEMBERSHIP_STAFF_NUMBER: 0x53_54_41_46,
+  /**
+   * Per-(table, organization) record numbers of the app records (`#12` of a patient, an offering…),
+   * keyed by table and organization. ASCII `RNUM`. Taken by the `app.fn_assign_record_number()`
+   * trigger — listed here so no other resource reuses the lock space.
+   */
+  APP_RECORD_NUMBER: 0x52_4e_55_4d,
+  /**
+   * Per-(organization, date) appointment booking, keyed by `<organization id>:<date>`. ASCII
+   * `SLOT`. Serializes the free-slot check and the write of every booking on one day, so two
+   * concurrent bookings can never both take a doctor's, room's or machine's slot.
+   */
+  APPOINTMENT_SLOT: 0x53_4c_4f_54,
+  /**
+   * Per-(membership, list) saved-view cap, keyed by `<membership id>:<list_key>`. ASCII `SVWS`.
+   * Serializes the count and the insert, so two saves at once never pass the 20-view cap (launch U5).
+   */
+  MEMBERSHIP_SAVED_VIEW: 0x53_56_57_53,
+  /**
+   * Per-organization task rules run, keyed by organization id. ASCII `TRUN`. Serializes two runs of
+   * one organization's rules (a retried or stalled job beside a fresh one), so each of the app's
+   * steps and notices is taken once (TK10, D78). Taken on the worker's pinned handle by
+   * `TaskRulesRepository.lockRun`.
+   */
+  TASK_RULES_RUN: 0x54_52_55_4e,
 } as const;
 
 /**
@@ -41,22 +72,25 @@ export const RESOURCE_QUOTA_LOCK_NAMESPACE = {
  *   lock auto-releases at COMMIT/ROLLBACK. MUST be acquired inside the same transaction as the
  *   subsequent `count(...) >= cap` check and the insert (e.g. within `withAppDatabaseContext`).
  *   The `objid` is `hashtextextended(key) & 0x7fffffff` — a stable positive int4 hash of the scope
- *   id, so `bigserial` keys beyond int4's 2.1B max can never overflow the int4 `objid` (B-1). A hash
+ *   id (or a composite text key such as `<organization id>:<date>`), so `bigserial` keys beyond int4's 2.1B max can never overflow the int4 `objid` (B-1). A hash
  *   collision only causes harmless extra contention; the count is still independently scope-filtered.
  * - **Failure modes:** blocks until the lock is granted; no application-level timeout (the
  *   surrounding statement timeout bounds it).
  * - **Side effects:** holds a Postgres advisory lock for the remainder of the transaction.
- * - **Notes:** closes the count-then-insert race where concurrent create requests each pass the
+ * - **Notes:** a worker passes its pinned `databaseHandle` (it has no request database). Closes the count-then-insert race where concurrent create requests each pass the
  *   same pre-check before any row is inserted and overshoot the configured cap.
  */
 export async function acquireResourceQuotaLock({
   namespace,
   key,
+  databaseHandle,
 }: {
   namespace: number;
-  key: number;
+  key: number | string;
+  /** A worker's pinned handle; the request's database otherwise. */
+  databaseHandle?: PostgresDatabaseHandle;
 }): Promise<void> {
-  await getRequestDatabase().execute(
+  await (databaseHandle ?? getRequestDatabase()).execute(
     sql`SELECT pg_advisory_xact_lock(${namespace}::int, (hashtextextended(${key}::text, 0) & 2147483647::bigint)::int)`,
   );
 }

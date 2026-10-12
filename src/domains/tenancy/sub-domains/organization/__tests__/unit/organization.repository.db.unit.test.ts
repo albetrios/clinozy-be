@@ -30,7 +30,7 @@ describe('OrganizationRepository (database)', () => {
       permissionCodes: [],
     });
     const actors = [{ user: owner, allowed: true }];
-    for (const status of ['ACTIVE', 'INVITED', 'SUSPENDED'] as const) {
+    for (const status of ['active', 'invited', 'suspended'] as const) {
       const user = await createTestUser();
       await createMembership({
         userId: user.id,
@@ -38,7 +38,7 @@ describe('OrganizationRepository (database)', () => {
         roleId: role.id,
         status,
       });
-      actors.push({ user, allowed: status === 'ACTIVE' });
+      actors.push({ user, allowed: status === 'active' });
     }
     actors.push({ user: await createTestUser(), allowed: false });
     for (const { user, allowed } of actors) {
@@ -95,9 +95,9 @@ describe('OrganizationRepository (database)', () => {
     const suspended = await createTestOrganization({ ownerUserId: other.id, name: 'Suspended' });
     const notMine = await createTestOrganization({ ownerUserId: other.id, name: 'Not mine' });
     for (const [organization, status] of [
-      [ownedAndMember, 'ACTIVE'],
-      [memberOnly, 'ACTIVE'],
-      [suspended, 'SUSPENDED'],
+      [ownedAndMember, 'active'],
+      [memberOnly, 'active'],
+      [suspended, 'suspended'],
     ] as const) {
       const role = await createRoleWithPermissions({
         organizationId: organization.id,
@@ -228,7 +228,7 @@ describe('OrganizationRepository (database)', () => {
       userId: activeMember.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'ACTIVE',
+      status: 'active',
     });
     const transferred = await repository.updateOwner(organization.public_id, activeMember.id);
     expect(transferred?.owner_user_id).toBe(activeMember.id);
@@ -240,7 +240,7 @@ describe('OrganizationRepository (database)', () => {
       userId: suspendedMember.id,
       organizationId: organization.id,
       roleId: role.id,
-      status: 'SUSPENDED',
+      status: 'suspended',
     });
     expect(await repository.updateOwner(organization.public_id, suspendedMember.id)).toBeNull();
 

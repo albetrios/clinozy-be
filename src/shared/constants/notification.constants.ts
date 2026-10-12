@@ -29,6 +29,7 @@ export const NOTIFICATION_TYPES = [
   'billing.payment_succeeded',
   'billing.payment_failed',
   'membership.invite_accepted',
+  'membership.invite_declined',
   'subscription.updated',
   'webhook.delivery_failed',
 ] as const;

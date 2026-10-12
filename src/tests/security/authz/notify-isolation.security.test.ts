@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { lookup } from 'node:dns/promises';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { database } from '@/infrastructure/database/connection.js';
@@ -19,6 +20,12 @@ import { NOTIFY_PERMISSIONS } from '@/domains/notify/notify.permissions.js';
 import { notifications } from '@/domains/notify/sub-domains/notification/notification.schema.js';
 import { webhooks } from '@/domains/notify/sub-domains/webhook/webhook.schema.js';
 import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
+
+// The webhook URL check resolves the host (SSRF guard); the harness has no network beyond
+// loopback, so the lookup answers with a public address instead of real DNS.
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
 
 const WEBHOOK_PERMISSIONS = [NOTIFY_PERMISSIONS.WEBHOOK_READ, NOTIFY_PERMISSIONS.WEBHOOK_MANAGE];
 
@@ -49,6 +56,9 @@ describe('Security: notify tenant and owner isolation', () => {
   });
 
   beforeEach(async () => {
+    vi.mocked(lookup).mockResolvedValue([
+      { address: '93.184.216.34', family: 4 },
+    ] as unknown as Awaited<ReturnType<typeof lookup>>);
     await cleanupDatabase();
     await seedPermissions(WEBHOOK_PERMISSIONS);
   });

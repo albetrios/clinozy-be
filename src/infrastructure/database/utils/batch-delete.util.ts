@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, inArray, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn, AnyPgTable } from 'drizzle-orm/pg-core';
 import type { PostgresDatabaseHandle } from '@/infrastructure/database/utils/database-handle.types.js';
-import { isPostgresForeignKeyViolation } from '@/shared/utils/infrastructure/postgres-error.util.js';
+import { isPostgresDeleteBlockedByReferences } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 const DEFAULT_BATCH_SIZE = 5_000;
@@ -44,7 +44,7 @@ async function deleteRowsIndividually(options: {
       );
       deletedCount += 1;
     } catch (rowError) {
-      if (!isPostgresForeignKeyViolation(rowError)) {
+      if (!isPostgresDeleteBlockedByReferences(rowError)) {
         throw rowError;
       }
       blockedCount += 1;
@@ -132,7 +132,7 @@ export async function deleteInBatchesByCondition(options: {
       );
       deletedCount += identifiers.length;
     } catch (error) {
-      if (!isPostgresForeignKeyViolation(error)) {
+      if (!isPostgresDeleteBlockedByReferences(error)) {
         throw error;
       }
       const perRow = await deleteRowsIndividually({

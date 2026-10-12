@@ -15,6 +15,7 @@ import {
 import { invalidatePermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { loadOrganizationPermissionRoutesFromCatalog } from '@/tests/helpers/route-catalog-registry.js';
 import type { FastifyInstance } from 'fastify';
+import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { eq } from 'drizzle-orm';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { plans } from '@/domains/billing/sub-domains/plan/plan.schema.js';
@@ -33,30 +34,81 @@ vi.mock('@/infrastructure/payment/stripe.client.js', async (importOriginal) => {
     })),
   };
 });
-
-const organizationPermissionRoutes = loadOrganizationPermissionRoutesFromCatalog();
 import {
   PARAM_NAME_TO_ENTITY,
   publicIdPlaceholderFor,
 } from '@/shared/utils/identity/public-id.util.js';
+import {
+  appRouteBody,
+  appRouteDeleteQuery,
+  appRouteGetQuery,
+  placeholderAppRouteReferences,
+} from '@/tests/helpers/app-route-requests.js';
+
+const organizationPermissionRoutes = loadOrganizationPermissionRoutesFromCatalog();
+
+/** The public API prefix the catalog paths carry; the shared route table keys drop it. */
+const API_PREFIX = '/api/v1';
+
+/** Placeholder ids for the shared table's bodies — the permission check answers before any lookup. */
+const PLACEHOLDER_REFERENCES = placeholderAppRouteReferences();
+
+/**
+ * The codes a route checks: every code its catalog line names (a patient's clinical notes, images
+ * and reports writes stack `patient:update` and `patient:clinical_record:read` — the catalogue
+ * names both, launch D83 (6)), and an app export also reads the list — the base controller's
+ * `readPermission`, `<resource>:read` or the member-wide `organization:read` (offerings).
+ * Deduplicated, so a route whose catalog code is the companion grants it once.
+ */
+function grantedPermissionCodes(route: (typeof organizationPermissionRoutes)[number]): string[] {
+  const codes = [...route.permissionCodes];
+  if (route.permissionCode.endsWith(':export')) {
+    codes.push(
+      route.permissionCode.replace(/:export$/, ':read'),
+      TENANCY_PERMISSIONS.ORGANIZATION_READ,
+    );
+  }
+  return [...new Set(codes)];
+}
+
+/** A catalog path without the API prefix (`/app/…`, `/tenancy/…`). */
+function routeKeyPath(path: string): string {
+  return path.startsWith(API_PREFIX) ? path.slice(API_PREFIX.length) : path;
+}
 
 function placeholderForParamName(paramName: string): string {
   const entity = PARAM_NAME_TO_ENTITY[paramName as keyof typeof PARAM_NAME_TO_ENTITY];
   return entity ? publicIdPlaceholderFor(entity) : 'placeholder';
 }
 
-function materializeOrganizationScopedPath(path: string, organizationPublicId: string): string {
-  return path
+function materializeOrganizationScopedPath(
+  route: (typeof organizationPermissionRoutes)[number],
+  organizationPublicId: string,
+): string {
+  const path = route.path
     .replace(':organization_id', organizationPublicId)
     .replace(/:([a-zA-Z_]+)/g, (_, name: string) => placeholderForParamName(name));
+  // A DELETE's reason and a GET's required filters are query schema: without them the request
+  // answers 400 before the permission check this matrix asserts on.
+  if (route.method === 'DELETE') return `${path}${appRouteDeleteQuery(routeKeyPath(route.path))}`;
+  if (route.method === 'GET') {
+    return `${path}${appRouteGetQuery({ path: routeKeyPath(route.path), references: PLACEHOLDER_REFERENCES })}`;
+  }
+  return path;
 }
 
 function payloadForPermissionRoute(
   route: (typeof organizationPermissionRoutes)[number],
   planPublicId: string = publicIdPlaceholderFor('plan'),
-  rolePublicId: string = publicIdPlaceholderFor('memberRole'),
 ): Record<string, unknown> | undefined {
   if (route.method === 'GET' || route.method === 'DELETE') return undefined;
+  // The app's writes and the tenancy team writes: the shared table's smallest valid body.
+  const sharedBody = appRouteBody({
+    method: route.method,
+    path: routeKeyPath(route.path),
+    references: PLACEHOLDER_REFERENCES,
+  });
+  if (sharedBody !== undefined) return sharedBody as Record<string, unknown>;
   if (route.path.includes('/subscriptions/:subscription_id/change-plan')) {
     return { plan_id: planPublicId };
   }
@@ -91,21 +143,6 @@ function payloadForPermissionRoute(
   }
   if (route.path.includes('/webhooks/:webhook_id')) {
     return { is_enabled: false };
-  }
-  if (route.path.includes('/invitations/:invitation_id/resend')) {
-    return { expires_in_days: 7 };
-  }
-  if (route.path.endsWith('/memberships')) {
-    // REQ-1: "Add member" is invite-by-email — a valid `{ email, role_id }` body so validation
-    // passes and the request reaches the permission preHandler this matrix asserts on (the route
-    // always creates an INVITED membership; status is no longer an input).
-    return {
-      email: 'matrix-member@example.test',
-      role_id: rolePublicId,
-    };
-  }
-  if (route.path.includes('/memberships/:membership_id')) {
-    return { status: 'ACTIVE' };
   }
   if (route.path.endsWith('/roles')) {
     return { name: 'Matrix role' };
@@ -152,21 +189,6 @@ function idempotencyHeadersForPermissionRoute(
   return { 'x-idempotency-key': `permission-matrix-${randomUUID()}` };
 }
 
-/** The positive half proves permission dispatch, not success of missing resource fixtures. */
-function expectedAuthorizedStatus(route: (typeof organizationPermissionRoutes)[number]): number {
-  // Every resource path parameter is a deliberately absent but valid public id.
-  if (/:[a-zA-Z_]+/.test(route.path.replace(':organization_id', ''))) return 404;
-  if (route.method === 'PUT' && route.path.endsWith('/logo')) {
-    // Placeholder logo key fails ownership validation after permission dispatch.
-    return 400;
-  }
-  if (route.method === 'POST' && route.path.endsWith('/payment-methods/setup')) {
-    // Fresh organizations have no Stripe customer/subscription to set up payment against.
-    return 422;
-  }
-  return route.method === 'DELETE' ? 204 : 200;
-}
-
 /**
  * Authorization matrix — every organization-permission route from docs/routes.txt returns 403 without permission.
  */
@@ -188,8 +210,8 @@ describe('Security: Permission route matrix', () => {
   });
 
   for (const route of organizationPermissionRoutes) {
-    it(`${route.method} ${route.path} returns 403 without ${route.permissionCode}`, async () => {
-      await seedPermissions([route.permissionCode]);
+    it(`${route.method} ${route.path} returns 403 without ${route.permissionCodes.join(' + ')}`, async () => {
+      await seedPermissions(route.permissionCodes);
 
       const user = await createTestUser();
       const organization = await createTestOrganization({ ownerUserId: user.id });
@@ -207,13 +229,10 @@ describe('Security: Permission route matrix', () => {
         userId: user.public_id,
         organizationPublicId: organization.public_id,
       });
-      const materializedPath = materializeOrganizationScopedPath(
-        route.path,
-        organization.public_id,
-      );
+      const materializedPath = materializeOrganizationScopedPath(route, organization.public_id);
       const plan = routeNeedsExistingPlan(route) ? await createPermissionMatrixPlan() : undefined;
       const headers = idempotencyHeadersForPermissionRoute(route);
-      const payload = payloadForPermissionRoute(route, plan?.public_id, role.public_id);
+      const payload = payloadForPermissionRoute(route, plan?.public_id);
 
       const response = await injectAuthenticated(app, {
         method: route.method,
@@ -224,16 +243,21 @@ describe('Security: Permission route matrix', () => {
       });
 
       expect(response.statusCode, response.body).toBe(403);
+      // Launch D83 (6): the route gate names the cause like the service-level checks do.
+      expect((response.json() as { error: { reason?: string } }).error.reason, response.body).toBe(
+        'missing_permission',
+      );
     });
 
-    it(`${route.method} ${route.path} reaches its documented authorized outcome with ${route.permissionCode}`, async () => {
-      await seedPermissions([route.permissionCode]);
+    it(`${route.method} ${route.path} reaches its documented authorized outcome with ${route.permissionCodes.join(' + ')}`, async () => {
+      const grantedCodes = grantedPermissionCodes(route);
+      await seedPermissions(grantedCodes);
 
       const user = await createTestUser();
       const organization = await createTestOrganization({ ownerUserId: user.id });
       const role = await createRoleWithPermissions({
         organizationId: organization.id,
-        permissionCodes: [route.permissionCode],
+        permissionCodes: grantedCodes,
         createdByUserId: user.id,
       });
       await createMembership({
@@ -252,13 +276,10 @@ describe('Security: Permission route matrix', () => {
         organizationPublicId: organization.public_id,
         stepUp: true,
       });
-      const materializedPath = materializeOrganizationScopedPath(
-        route.path,
-        organization.public_id,
-      );
+      const materializedPath = materializeOrganizationScopedPath(route, organization.public_id);
       const plan = routeNeedsExistingPlan(route) ? await createPermissionMatrixPlan() : undefined;
       const headers = idempotencyHeadersForPermissionRoute(route);
-      const payload = payloadForPermissionRoute(route, plan?.public_id, role.public_id);
+      const payload = payloadForPermissionRoute(route, plan?.public_id);
 
       const response = await injectAuthenticated(app, {
         method: route.method,
@@ -268,19 +289,7 @@ describe('Security: Permission route matrix', () => {
         ...(payload !== undefined ? { payload } : {}),
       });
 
-      const expectedStatus = expectedAuthorizedStatus(route);
-      expect(response.statusCode, `${route.method} ${route.path}: ${response.body}`).toBe(
-        expectedStatus,
-      );
-      if (expectedStatus >= 400) {
-        const body = response.json() as {
-          error?: { type?: string; code?: string; reason?: string };
-        };
-        expect(body.error).toBeDefined();
-        if (expectedStatus === 404) expect(body.error?.code).toBe('not_found');
-        if (expectedStatus === 400) expect(body.error?.type).toBe('validation_error');
-        if (expectedStatus === 422) expect(body.error?.code).toBe('unprocessable_entity');
-      }
+      expect(response.statusCode, response.body).not.toBe(403);
     });
   }
 });

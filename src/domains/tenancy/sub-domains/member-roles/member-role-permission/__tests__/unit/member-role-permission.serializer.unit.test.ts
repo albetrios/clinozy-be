@@ -4,14 +4,10 @@ import { serializeMemberRolePermission } from '@/domains/tenancy/sub-domains/mem
 const createdAt = new Date('2026-01-01T00:00:00.000Z');
 
 describe('member-role-permission serializer', () => {
-  it('serializeMemberRolePermission maps permission code', () => {
+  it('serializeMemberRolePermission maps permission code (the role is the path, not repeated)', () => {
     expect(
-      serializeMemberRolePermission({
-        row: { permission_code: 'user:read', created_at: createdAt },
-        role_public_id: 'role-public',
-      }),
+      serializeMemberRolePermission({ permission_code: 'user:read', created_at: createdAt }),
     ).toEqual({
-      role_id: 'role-public',
       permission_code: 'user:read',
       created_at: createdAt.toISOString(),
     });

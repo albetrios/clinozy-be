@@ -21,6 +21,20 @@ describe('responses-builder', () => {
     expect(responses['409']).toBeDefined();
   });
 
+  it('documents the 403 with its reason — missing_permission (launch D83 (6))', () => {
+    const responses = buildResponses('GET', 'GET /api/v1/app/patients', {});
+    const json = (responses['403'] as { content: Record<string, Record<string, unknown>> }).content[
+      'application/json'
+    ] as {
+      schema: { properties: { error: { properties: Record<string, unknown> } } };
+      example?: { error: { reason?: string } };
+      examples?: { generated?: { value: { error: { reason?: string } } } };
+    };
+    expect(json.schema.properties.error.properties).toHaveProperty('reason');
+    const example = json.example ?? json.examples?.generated?.value;
+    expect(example?.error.reason).toBe('missing_permission');
+  });
+
   it('buildResponses uses route response map when defined', () => {
     const responses = buildResponses('GET', 'GET /readyz', { success: 'OK' });
     expect(responses['200']).toMatchObject({ description: 'OK' });

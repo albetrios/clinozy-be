@@ -340,6 +340,8 @@ instead of running insecure — you cannot ship the dev value:
 | `UPLOAD_USE_PRESIGNED_POST`           | may be `false`            | `true` (presigned PUT has no min-size enforcement)                                 |
 | `METRICS_SCRAPE_TOKEN`                | optional                  | **required (≥32 chars)** when `METRICS_ENABLED=true`                               |
 | `EMAIL_FROM_ADDRESS`                  | optional                  | **required** when `RESEND_API_KEY` or `STRIPE_SECRET_KEY` is set                   |
+| `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` | `true` (tests: `false`) | `true` — a patient photo is never filed with where it was taken (launch D79)      |
+| `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` | `true` on `local`     | refused outside `local` / `development` — the accept token leaves only by email    |
 
 **Verify before deploy:** `NODE_ENV=production pnpm dev` with `.env.production`
 filled — boot fails loudly on any violation. The deploy workflow's `validate:github-env-runtime`
@@ -388,6 +390,25 @@ This section is specifically the **dev / load-test → production delta**.
 > The exact load-test overrides are tabulated in
 > [src/tests/load/k6/COMPREHENSIVE-JOURNEY.md §1](../../../src/tests/load/k6/COMPREHENSIVE-JOURNEY.md) —
 > none of those values belong in a deployed environment.
+
+### 11.4 The clinic launch's keys, environment by environment
+
+The launch (`app` domain) added these keys. Each schema default is the production-safe value, so a
+deployed environment that leaves a key out gets it; the `local` column is what `.env.example` ships
+active, and the test harness (`src/tests/setup.ts`) sets its own. Secrets go in each GitHub
+Environment through `.env.<environment>` + `pnpm github:sync`.
+
+| Key | Schema default | `local` | `development` | `production` |
+| --- | --- | --- | --- | --- |
+| `MESSAGING_SERVICE_URL` / `AI_SERVICE_URL` | unset | unset (placeholders in `.env.example`) | unset | unset — reserved for the future messaging and AI services; nothing reads them yet |
+| `APP_RECORD_PURGE_CRON` | `56 5 * * *` (scheduler default) | `56 5 * * *` | default | default |
+| `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` | `true` | `true` | `true` | `true` — enforced |
+| `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` | `false` | `true` (local QA accepts invitations without the email) | `false` unless QA needs it | `false` — enforced (refused outside `local` / `development`) |
+
+The allowed values and a description of each key are in [reference/env-catalog.md](../../reference/env-catalog.md)
+(`EXTERNAL_SERVICE_VARS` in `env-schema.ts`). Messaging delivery (WhatsApp, Instagram) and the AI
+ideas are separate services, kept out of this API: a sent message waits `queued` in the outbox and
+a patient's ideas come from the rules.
 
 ## 12. Reference
 

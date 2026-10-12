@@ -15,7 +15,7 @@ Hand-written guides live in **topic subfolders**; generated API artifacts stay a
 | [reference/reliability/observability-log-events.md](reference/reliability/observability-log-events.md)     | Structured log event names / dashboard migrations                                          |
 | [deployment/docker-images.md](deployment/docker-images.md)                                                 | API vs worker images, MCP docs in container                                                |
 | [reviews/](reviews/)                                                                                       | Point-in-time review snapshots (add new dated files; do not rewrite history)               |
-| [design-workflow/](design-workflow/process/README.md)                                                      | Design iterations → backend: the [process](design-workflow/process/README.md) (plan → kick off → build), the [step-by-step guide](design-workflow/process/iteration-guide.md) and the paste prompts |
+| [design-workflow/](design-workflow/process/README.md)                                                      | Design iterations → backend: the [process](design-workflow/process/README.md) (plan → kick off → build), the [step-by-step guide](design-workflow/process/iteration-guide.md), the [route review template](design-workflow/process/routes-final-template.md) and the paste prompts |
 
 **Generated (do not edit by hand):** [routes.txt](routes.txt), [openapi/](openapi/) (`openapi*.json`), [postman-collection.json](postman-collection.json).
 
@@ -195,6 +195,9 @@ Grouped index: **[deployment/README.md](deployment/README.md)** (`setup/`, `ci-c
 | Doc                                                                                                        | Description                                                    |
 | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | [reviews/codebase-audit-loop.md](reviews/codebase-audit-loop.md)                                           | Repeatable `/loop`-driven audit procedure (rotating perspectives; append-only living log). |
+| [reviews/launch-confidence-tasks-2026-10-09.md](reviews/launch-confidence-tasks-2026-10-09.md)           | Module-wise confidence after the launch iteration, and the tasks that raise each score. |
+| [reviews/launch-confidence-plan-2026-10-09.md](reviews/launch-confidence-plan-2026-10-09.md)             | The plan and status of the code tasks from the confidence review, batch by batch. |
+| [reviews/gst-worked-examples-2026-10-09.md](reviews/gst-worked-examples-2026-10-09.md)                     | Five bills as the API computes them, for the accountant to check D20, D21 and D23. |
 | [reviews/production-readiness-2026-09-24.md](reviews/production-readiness-2026-09-24.md)                   | Pending items from the 2026-09-24 readiness pass (security findings tracked privately). |
 | [reviews/production-readiness-audit-2026-05-29.md](reviews/production-readiness-audit-2026-05-29.md)       | Principal-staff production-readiness audit for scale risks.    |
 | [reviews/production-readiness-remediation-2026-05-30.md](reviews/production-readiness-remediation-2026-05-30.md) | Remediation status tracker (findings 1–16 + extended bugs 31–64). |

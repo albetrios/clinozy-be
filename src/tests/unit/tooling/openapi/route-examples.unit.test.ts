@@ -38,6 +38,8 @@ describe('captured route examples fixture', () => {
       ['JWT', /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./],
       ['Stripe-style secret', /"(sk|whsec|rk)_[A-Za-z0-9_]{8,}"/],
       [
+        // A prefixed opaque value that is not a public id of a registered entity (the sanitizer's
+        // `<prefix>_example000…` placeholders included).
         'prefixed opaque credential',
         new RegExp(`"(?!(?:${publicIdPrefixes})_)[a-z]{2,8}_[A-Za-z0-9]{16,}"`),
       ],

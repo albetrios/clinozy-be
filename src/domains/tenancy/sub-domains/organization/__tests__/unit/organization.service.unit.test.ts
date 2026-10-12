@@ -90,6 +90,10 @@ describe('OrganizationService', () => {
       has_more: false,
       next_cursor: null,
     }),
+    // D81 (4): the owner named by their user public id, in one batch per response.
+    resolveUserPublicIdsByInternalIds: vi.fn(
+      async (ids: readonly number[]) => new Map(ids.map((id) => [id, `usr_owner_${id}`])),
+    ),
   } as unknown as OrganizationRepository;
 
   const objectStorage = createObjectStoragePortMock();
@@ -157,12 +161,22 @@ describe('OrganizationService', () => {
     expect(result.name).toBe('Acme');
   });
 
-  it('getByPublicId returns organization', async () => {
+  it('getByPublicId returns organization, naming its owner (D81 (4))', async () => {
     const result = await service.getByPublicId({
       public_id: organizationRow.public_id,
       user_public_id: 'user_public',
     });
     expect(result.id).toBe(organizationRow.public_id);
+    expect(result.owner_user_id).toBe('usr_owner_10');
+  });
+
+  it("serializes owner_user_id null when the owner's login is gone", async () => {
+    vi.mocked(repository.resolveUserPublicIdsByInternalIds).mockResolvedValueOnce(new Map());
+    const result = await service.getByPublicId({
+      public_id: organizationRow.public_id,
+      user_public_id: 'user_public',
+    });
+    expect(result.owner_user_id).toBeNull();
   });
 
   it('create throws when owner user missing', async () => {

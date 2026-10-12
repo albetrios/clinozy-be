@@ -69,7 +69,7 @@ ALTER POLICY "webhooks_tenant_isolation" ON "notify"."webhooks"
 ALTER POLICY "api_keys_tenant_isolation" ON "tenancy"."api_keys"
   USING (((organization_id = ( SELECT organizations.id    FROM tenancy.organizations   WHERE ((organizations.public_id)::text = ( SELECT current_setting('app.current_organization_id'::text, true))))) OR (( SELECT current_setting('app.global_retention_cleanup'::text, true)) = 'true'::text)))
   WITH CHECK ((organization_id = ( SELECT organizations.id    FROM tenancy.organizations   WHERE ((organizations.public_id)::text = ( SELECT current_setting('app.current_organization_id'::text, true))))));--> statement-breakpoint
-ALTER POLICY "member_invitations_tenant_isolation" ON "tenancy"."member_invitations"
+ALTER POLICY "membership_invitations_tenant_isolation" ON "tenancy"."membership_invitations"
   USING (((membership_id IN ( SELECT memberships.id    FROM tenancy.memberships   WHERE (memberships.organization_id = ( SELECT organizations.id            FROM tenancy.organizations           WHERE ((organizations.public_id)::text = ( SELECT current_setting('app.current_organization_id'::text, true))))))) OR (( SELECT current_setting('app.global_retention_cleanup'::text, true)) = 'true'::text)))
   WITH CHECK ((membership_id IN ( SELECT memberships.id    FROM tenancy.memberships   WHERE (memberships.organization_id = ( SELECT organizations.id            FROM tenancy.organizations           WHERE ((organizations.public_id)::text = ( SELECT current_setting('app.current_organization_id'::text, true))))))));--> statement-breakpoint
 ALTER POLICY "memberships_tenant_isolation" ON "tenancy"."memberships"

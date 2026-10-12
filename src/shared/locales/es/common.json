@@ -1,6 +1,22 @@
 {
+  "contactPreferenceTags": {
+    "no_calls": "Sin llamadas",
+    "text_before_calling": "Escribir antes de llamar",
+    "mornings": "Mañanas",
+    "evenings": "Tardes",
+    "after_six_pm": "Después de las 6 p. m.",
+    "weekdays_only": "Solo entre semana",
+    "weekends_only": "Solo fines de semana",
+    "sundays_only": "Solo domingos",
+    "gujarati": "Guyaratí",
+    "hindi": "Hindi",
+    "english": "Inglés",
+    "female_doctor": "Doctora"
+  },
   "notifications": {
     "invitationAcceptedTitle": "Invitación aceptada",
-    "invitationAcceptedMessage": "{{inviteeName}} aceptó tu invitación para unirse a {{organizationName}}."
+    "invitationAcceptedMessage": "{{inviteeName}} aceptó tu invitación para unirse a {{organizationName}}.",
+    "invitationDeclinedTitle": "Invitación rechazada",
+    "invitationDeclinedMessage": "{{inviteeName}} rechazó tu invitación para unirse a {{organizationName}}."
   }
 }

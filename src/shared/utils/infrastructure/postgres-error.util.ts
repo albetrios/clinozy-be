@@ -4,8 +4,11 @@
 import { DEFAULT_TRANSIENT_RETRY_ATTEMPTS } from '@/shared/constants/limits.constants.js';
 
 const POSTGRES_UNIQUE_VIOLATION = '23505';
+const POSTGRES_EXCLUSION_VIOLATION = '23P01';
 const POSTGRES_LOCK_NOT_AVAILABLE = '55P03';
 const POSTGRES_FOREIGN_KEY_VIOLATION = '23503';
+const POSTGRES_CHECK_VIOLATION = '23514';
+const POSTGRES_NOT_NULL_VIOLATION = '23502';
 const MAX_CAUSE_DEPTH = 5;
 
 /**
@@ -85,6 +88,14 @@ export function isPostgresUniqueViolation(error: unknown): boolean {
 }
 
 /**
+ * Returns true when `error` is a Postgres `exclusion_violation` (SQLSTATE 23P01) — an `EXCLUDE`
+ * constraint refused the row (a phone number already in another household).
+ */
+export function isPostgresExclusionViolation(error: unknown): boolean {
+  return hasPostgresErrorCode({ error, code: POSTGRES_EXCLUSION_VIOLATION });
+}
+
+/**
  * Returns true when `error` is a Postgres `lock_not_available` (SQLSTATE 55P03) — the statement
  * was cancelled because it waited longer than `lock_timeout` for a lock.
  *
@@ -105,7 +116,20 @@ export function isPostgresForeignKeyViolation(error: unknown): boolean {
 }
 
 /**
- * Returns the violated unique-constraint / index name from a Postgres error (or
+ * Whether a delete was refused because of the rows that point at it — a foreign key with no
+ * action (23503), or a cascaded `SET NULL` that a CHECK (23514) or NOT NULL (23502) refuses.
+ * Retention jobs count such a row as blocked and keep going (schema review H1).
+ */
+export function isPostgresDeleteBlockedByReferences(error: unknown): boolean {
+  return (
+    hasPostgresErrorCode({ error, code: POSTGRES_FOREIGN_KEY_VIOLATION }) ||
+    hasPostgresErrorCode({ error, code: POSTGRES_CHECK_VIOLATION }) ||
+    hasPostgresErrorCode({ error, code: POSTGRES_NOT_NULL_VIOLATION })
+  );
+}
+
+/**
+ * Returns the violated unique, exclusion or check constraint (or index) name from a Postgres error (or
  * any error in its `cause` chain), if present.
  */
 export function getPostgresConstraintName(error: unknown): string | undefined {

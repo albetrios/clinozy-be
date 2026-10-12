@@ -42,7 +42,7 @@ AS $$
     FROM tenancy.memberships AS member_row
     INNER JOIN auth.users AS user_row ON user_row.id = member_row.user_id
     WHERE member_row.organization_id = organization_id_param
-      AND member_row.status = 'ACTIVE'
+      AND member_row.status = 'active'
       AND member_row.deleted_at IS NULL
       AND user_row.public_id = user_public_id_param
       AND user_row.deleted_at IS NULL
@@ -94,7 +94,7 @@ CREATE POLICY memberships_user_self_discovery ON tenancy.memberships
     )
   );
 
-CREATE OR REPLACE FUNCTION tenancy.resolve_member_invitation_lookup_by_public_id (
+CREATE OR REPLACE FUNCTION tenancy.resolve_membership_invitation_lookup_by_public_id (
   invitation_public_id_param TEXT
 ) RETURNS TABLE (
   organization_public_id TEXT,
@@ -111,14 +111,14 @@ AS $$
     organization_row.id AS organization_id,
     membership_row.public_id::text AS membership_public_id,
     membership_row.id AS membership_id
-  FROM tenancy.member_invitations AS invitation_row
+  FROM tenancy.membership_invitations AS invitation_row
   INNER JOIN tenancy.memberships AS membership_row ON membership_row.id = invitation_row.membership_id
   INNER JOIN tenancy.organizations AS organization_row ON organization_row.id = membership_row.organization_id
   WHERE invitation_row.public_id = invitation_public_id_param
   LIMIT 1;
 $$;
 
-CREATE OR REPLACE FUNCTION tenancy.list_pending_member_invitations_for_email (
+CREATE OR REPLACE FUNCTION tenancy.list_pending_membership_invitations_for_email (
   email_param TEXT,
   limit_param INTEGER DEFAULT 100
 ) RETURNS TABLE (
@@ -144,7 +144,7 @@ AS $$
     invitation_row.email AS invitation_email,
     invitation_row.expires_at AS invitation_expires_at,
     invitation_row.created_at AS invitation_created_at
-  FROM tenancy.member_invitations AS invitation_row
+  FROM tenancy.membership_invitations AS invitation_row
   INNER JOIN tenancy.memberships AS membership_row ON membership_row.id = invitation_row.membership_id
   INNER JOIN tenancy.organizations AS organization_row ON organization_row.id = membership_row.organization_id
   WHERE invitation_row.email = email_param
@@ -156,5 +156,5 @@ AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION tenancy.user_has_active_membership_for_organization (BIGINT, TEXT) TO clinozy_be_app;
-GRANT EXECUTE ON FUNCTION tenancy.resolve_member_invitation_lookup_by_public_id (TEXT) TO clinozy_be_app;
-GRANT EXECUTE ON FUNCTION tenancy.list_pending_member_invitations_for_email (TEXT, INTEGER) TO clinozy_be_app;
+GRANT EXECUTE ON FUNCTION tenancy.resolve_membership_invitation_lookup_by_public_id (TEXT) TO clinozy_be_app;
+GRANT EXECUTE ON FUNCTION tenancy.list_pending_membership_invitations_for_email (TEXT, INTEGER) TO clinozy_be_app;

@@ -12,8 +12,8 @@ export interface InvitationTemplateData {
 }
 
 /**
- * Renders the member-invitation HTML email (wrapped in `baseTemplate`). Emitted
- * from `member-invitation.events` handlers; the `acceptUrl` must already include
+ * Renders the membership-invitation HTML email (wrapped in `baseTemplate`). Emitted
+ * from `membership-invitation.events` handlers; the `acceptUrl` must already include
  * the signed invitation token so the recipient can complete acceptance.
  *
  * @remarks

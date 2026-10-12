@@ -15,7 +15,10 @@ export function serializeAuthMeContext(data: AuthMeContextData): AuthMeContextOu
   return {
     user: data.user,
     active_organization: data.activeOrganization,
+    membership_id: data.membershipId,
     my_permissions: data.myPermissions,
+    my_role_ids: data.myRoleIds,
+    my_roles: data.myRoles,
     global_role: data.globalRole,
   };
 }

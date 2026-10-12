@@ -8,7 +8,7 @@ import { OrganizationSettingsRepository } from './sub-domains/organization/organ
 import { OrganizationNotificationPolicyRepository } from './sub-domains/organization/organization-notification-policy/organization-notification-policy.repository.js';
 import { OrganizationApiKeyRepository } from './sub-domains/organization/organization-api-key/organization-api-key.repository.js';
 import { MembershipRepository } from './sub-domains/membership/membership.repository.js';
-import { MemberInvitationRepository } from './sub-domains/membership/member-invitation/member-invitation.repository.js';
+import { MembershipInvitationRepository } from './sub-domains/membership/membership-invitation/membership-invitation.repository.js';
 import { MemberRoleRepository } from './sub-domains/member-roles/member-role.repository.js';
 import { MemberRolePermissionRepository } from './sub-domains/member-roles/member-role-permission/member-role-permission.repository.js';
 import { PermissionRepository } from './sub-domains/permission/permission.repository.js';
@@ -17,7 +17,7 @@ import { OrganizationSettingsService } from './sub-domains/organization/organiza
 import { OrganizationNotificationPolicyService } from './sub-domains/organization/organization-notification-policy/organization-notification-policy.service.js';
 import { OrganizationApiKeyService } from './sub-domains/organization/organization-api-key/organization-api-key.service.js';
 import { MembershipService } from './sub-domains/membership/membership.service.js';
-import { MemberInvitationService } from './sub-domains/membership/member-invitation/member-invitation.service.js';
+import { MembershipInvitationService } from './sub-domains/membership/membership-invitation/membership-invitation.service.js';
 import { MemberRoleService } from './sub-domains/member-roles/member-role.service.js';
 import { MemberRolePermissionService } from './sub-domains/member-roles/member-role-permission/member-role-permission.service.js';
 import { PermissionService } from './sub-domains/permission/permission.service.js';
@@ -36,14 +36,14 @@ export type TenancyContainer = {
   memberRoleService: MemberRoleService;
   memberRolePermissionService: MemberRolePermissionService;
   membershipService: MembershipService;
-  memberInvitationService: MemberInvitationService;
+  membershipInvitationService: MembershipInvitationService;
   permissionService: PermissionService;
   authorizationService: AuthorizationService;
 };
 
 /**
  * Wires every tenancy repository and service together (organizations, settings,
- * notification policies, API keys, memberships, member invitations, member
+ * notification policies, API keys, memberships, membership invitations, member
  * roles, role permissions, permissions, and the Redis-cached
  * `AuthorizationService`). Cross-domain dependencies — `UserService`, the S3
  * `ObjectStoragePort`, and the optional `UserSettingsService` — are passed in
@@ -66,7 +66,7 @@ export function createTenancyContainer({
   const organizationNotificationPolicyRepository = new OrganizationNotificationPolicyRepository();
   const organizationApiKeyRepository = new OrganizationApiKeyRepository();
   const membershipRepository = new MembershipRepository();
-  const memberInvitationRepository = new MemberInvitationRepository();
+  const membershipInvitationRepository = new MembershipInvitationRepository();
   const memberRoleRepository = new MemberRoleRepository();
   const memberRolePermissionRepository = new MemberRolePermissionRepository();
   const permissionRepository = new PermissionRepository();
@@ -104,11 +104,13 @@ export function createTenancyContainer({
     membershipRepository,
   );
   // REQ-1: created before MembershipService so the add-member-by-email flow can issue invitations.
-  const memberInvitationService = new MemberInvitationService(
+  const membershipInvitationService = new MembershipInvitationService(
     organizationRepository,
     membershipRepository,
-    memberInvitationRepository,
+    membershipInvitationRepository,
     userService,
+    // D84: presign the clinic logo on the invitee's own invitation list.
+    objectStorage,
     // An invitee has no language yet: invitations are written in the organization's.
     organizationSettingsService,
   );
@@ -127,10 +129,10 @@ export function createTenancyContainer({
     objectStorage,
     // REQ-1: add-member-by-email provisions/finds the invitee and issues the invitation.
     userService,
-    memberInvitationService,
+    membershipInvitationService,
   );
-  // Accept and revoke change memberships too; they emit through MembershipService's serializer.
-  memberInvitationService.wireMembershipEvents(membershipService);
+  // Accept changes a membership too; it emits through MembershipService's serializer.
+  membershipInvitationService.wireMembershipEvents(membershipService);
 
   return {
     organizationService,
@@ -140,7 +142,7 @@ export function createTenancyContainer({
     memberRoleService,
     memberRolePermissionService,
     membershipService,
-    memberInvitationService,
+    membershipInvitationService,
     permissionService,
     authorizationService,
   };

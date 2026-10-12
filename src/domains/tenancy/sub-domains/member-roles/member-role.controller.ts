@@ -106,7 +106,12 @@ export function createMemberRoleController(service: MemberRoleService) {
       const scope = requireOrganizationScope(request);
       const organizationId = scope.organizationPublicId;
       const roleId = validatePublicIdParam({ value: rawDeleteRoleId ?? '', fieldName: 'role_id' });
-      await service.delete({ scope, role_public_id: roleId });
+      await service.delete({
+        scope,
+        role_public_id: roleId,
+        query: request.query,
+        deleted_by_user_public_id: getActingUserPublicId(auth),
+      });
       await recordScopedAuditEvent({
         request,
         input: {
@@ -118,6 +123,28 @@ export function createMemberRoleController(service: MemberRoleService) {
         },
       });
       return reply.code(204).send();
+    },
+    restoreRole: async (request: FastifyRequest, _reply: FastifyReply) => {
+      const auth = requirePrincipal(request);
+      const { role_id: rawRestoreRoleId } = (request.params as { role_id?: string }) ?? {};
+      const scope = requireOrganizationScope(request);
+      const roleId = validatePublicIdParam({ value: rawRestoreRoleId ?? '', fieldName: 'role_id' });
+      const data = await service.restore({
+        scope,
+        role_public_id: roleId,
+        restored_by_user_public_id: getActingUserPublicId(auth),
+      });
+      await recordScopedAuditEvent({
+        request,
+        input: {
+          ...buildAuditActorFields(auth),
+          action: 'tenancy.role.restore',
+          resource_type: 'role',
+          organizationPublicId: scope.organizationPublicId,
+          metadata: { role_public_id: roleId },
+        },
+      });
+      return successResponse({ data, request_id: getRequestIdentifier(request) });
     },
   };
 }

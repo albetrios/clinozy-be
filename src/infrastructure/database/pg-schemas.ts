@@ -20,6 +20,8 @@ export const notifySchema = pgSchema('notify');
 export const auditSchema = pgSchema('audit');
 /** Drizzle handle for the Postgres `upload` schema — S3 upload metadata + tombstone retention. */
 export const uploadSchema = pgSchema('upload');
+/** Drizzle handle for the Postgres `app` schema — the app's own record tables (branches, and the launch's records). */
+export const appSchema = pgSchema('app');
 
 /** The `app.*` GUC each GUC-backed maintenance kind arms — the selector of one RLS bypass arm. */
 export type MaintenanceBypassGuc =
@@ -31,7 +33,8 @@ export type MaintenanceBypassGuc =
 
 /**
  * An RLS bypass arm for a `pgPolicy` predicate: open only while `guc` is `'true'` AND the
- * connection acts as the maintenance role ({@link DATABASE_MAINTENANCE_ROLE}).
+ * connection acts as the maintenance role ({@link DATABASE_MAINTENANCE_ROLE}). Both reads are
+ * `SELECT`-wrapped so each is an initplan, evaluated once per statement.
  *
  * @remarks
  * The role condition makes bypass authority a property of the maintenance CONNECTION
@@ -41,6 +44,6 @@ export type MaintenanceBypassGuc =
  */
 export function maintenanceBypassArm(guc: MaintenanceBypassGuc): SQL {
   return sql.raw(
-    `(current_setting('${guc}', true) = 'true' AND current_user = '${DATABASE_MAINTENANCE_ROLE}')`,
+    `((SELECT current_setting('${guc}', true)) = 'true' AND (SELECT current_user) = '${DATABASE_MAINTENANCE_ROLE}')`,
   );
 }

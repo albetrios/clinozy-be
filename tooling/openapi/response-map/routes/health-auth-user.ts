@@ -1,6 +1,9 @@
 /** OpenAPI success responses — health, auth, and current user. */
 import type { ResponseDefinition } from '@tooling/openapi/response-map/building-blocks.js';
-import { wrapPaginated, wrapSuccess } from '@tooling/openapi/response-map/building-blocks.js';
+import {
+  wrapSuccess,
+  wrapUncountedPaginated,
+} from '@tooling/openapi/response-map/building-blocks.js';
 import * as schemas from '@tooling/openapi/response-map/resource-schemas.js';
 
 export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = {
@@ -188,7 +191,7 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
       {
         access_token: schemas.accessTokenExample.access_token,
         active_organization: schemas.organizationExample,
-        my_permissions: ['organization:read', 'membership:manage'],
+        my_permissions: ['organization:read', 'membership:create'],
         global_role: null,
       },
     ),
@@ -225,7 +228,33 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
         properties: {
           user: schemas.userSchema,
           active_organization: { ...schemas.organizationSchema, nullable: true },
+          membership_id: {
+            type: 'string',
+            nullable: true,
+            description:
+              "The caller's own membership in the active organization (the `id` of their `GET /app/memberships` row); null with no active organization or no live membership.",
+          },
           my_permissions: { type: 'array', items: { type: 'string' } },
+          my_role_ids: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Every live role the caller holds, the main role first.',
+          },
+          my_roles: {
+            type: 'array',
+            description:
+              'The same roles in the same order, named — so a member without role:read can name their own role. A system role keeps its name.',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                tone: { type: 'string', example: 'sky' },
+                is_system: { type: 'boolean' },
+              },
+              required: ['id', 'name', 'tone', 'is_system'],
+            },
+          },
           global_role: { type: 'string', nullable: true },
           // The organization LIST is not here: it lives at
           // `GET /users/me/organizations`, which pages. Embedded it was a flat
@@ -236,9 +265,13 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
       {
         user: schemas.userExample,
         active_organization: schemas.organizationExample,
+        membership_id: 'mem_q8w3n7p2m5k1r4t6a1b2c',
         my_permissions: ['organization:read', 'membership:read'],
+        my_role_ids: ['rol_m3n7p2q8w5k1r4t6a1b2c'],
+        my_roles: [
+          { id: 'rol_m3n7p2q8w5k1r4t6a1b2c', name: 'Admin', tone: 'slate', is_system: true },
+        ],
         global_role: null,
-        organizations: [{ ...schemas.organizationExample, is_active: true }],
       },
     ),
     example: null,
@@ -346,13 +379,25 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
     schema: wrapSuccess(schemas.userSchema, schemas.userExample),
     example: null,
   },
-  // Tenancy data, user scope — the route lives under /users/me because the caller scopes it.
+  // Tenancy data, user scope — the route lives under /users/me because the caller scopes it. It
+  // never counts: no `meta.pagination.estimated_total` (SHELL-M2).
   'GET /api/v1/users/me/organizations': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.organizationSchema, [schemas.organizationExample]),
+    schema: wrapUncountedPaginated(schemas.organizationSchema, [schemas.organizationExample]),
+    example: null,
+  },
+  // The caller's pending invitations (launch D84) — tenancy data in the caller's scope, uncounted.
+  'GET /api/v1/users/me/membership-invitations': {
+    statusCode: 200,
+    schema: wrapUncountedPaginated(schemas.myInvitationSchema, [schemas.myInvitationExample]),
     example: null,
   },
   'PATCH /api/v1/users/me': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.userSchema, schemas.userExample),
+    example: null,
+  },
+  'PUT /api/v1/users/me/presence': {
     statusCode: 200,
     schema: wrapSuccess(schemas.userSchema, schemas.userExample),
     example: null,

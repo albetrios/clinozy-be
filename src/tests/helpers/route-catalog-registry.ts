@@ -107,7 +107,13 @@ export function getRouteCount(catalogPath?: string): number {
 }
 
 export type OrganizationPermissionRoute = RouteEntry & {
+  /** The first code the route requires — its own gate. */
   permissionCode: string;
+  /**
+   * Every code the route requires, in the catalogue's order (`patient:update +
+   * patient:clinical_record:read` — launch D83 (6)).
+   */
+  permissionCodes: string[];
 };
 
 /**
@@ -134,14 +140,19 @@ export function loadOrganizationPermissionRoutesFromCatalog(
     const routeMatch = parseRouteCatalogLine(line);
     if (!routeMatch?.accessToken.startsWith('PERM:')) continue;
 
-    const permissionCode = routeMatch.accessToken.replace(/^PERM:\s*/, '').trim();
+    const permissionCodes = routeMatch.accessToken
+      .replace(/^PERM:\s*/, '')
+      .split('+')
+      .map((code) => code.trim())
+      .filter((code) => code !== '');
     routes.push({
       method: routeMatch.method,
       path: routeMatch.path,
       domain: currentDomain,
       access: 'organization-permission',
       description: `${routeMatch.method} ${routeMatch.path}`,
-      permissionCode,
+      permissionCode: permissionCodes[0] ?? '',
+      permissionCodes,
     });
   }
 

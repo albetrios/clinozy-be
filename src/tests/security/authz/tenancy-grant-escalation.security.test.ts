@@ -11,6 +11,7 @@ import {
   seedAllPermissions,
   createRoleWithPermissions,
   createMembership,
+  MEMBERSHIP_WRITE_PERMISSION_CODES,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
 import { generateTestToken } from '@/tests/helpers/test-auth.js';
@@ -119,7 +120,7 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
         token,
         payload: {
           name: 'partial-escalation',
-          scopes: [TENANCY_PERMISSIONS.ORGANIZATION_READ, TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE],
+          scopes: [TENANCY_PERMISSIONS.ORGANIZATION_READ, TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE],
         },
       });
 
@@ -194,14 +195,14 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
       const broad = await createMemberHolding([
         TENANCY_PERMISSIONS.API_KEY_MANAGE,
         TENANCY_PERMISSIONS.API_KEY_READ,
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        ...MEMBERSHIP_WRITE_PERMISSION_CODES,
         TENANCY_PERMISSIONS.MEMBERSHIP_READ,
       ]);
       const created = await injectAuthenticated(app, {
         method: 'POST',
         url: testApiPath('/tenancy/organization/api-keys'),
         token: broad.token,
-        payload: { name: 'broad-key', scopes: [TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE] },
+        payload: { name: 'broad-key', scopes: [TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE] },
       });
       expect(created.statusCode).toBe(200);
       const broadKeyId = (created.json() as { data: { api_key: { id: string } } }).data.api_key.id;
@@ -287,7 +288,7 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
       // above your own — otherwise any member-manager can create an accomplice with more power
       // than themselves, then act through that account.
       const context = await createMemberHolding([
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        ...MEMBERSHIP_WRITE_PERMISSION_CODES,
         TENANCY_PERMISSIONS.MEMBERSHIP_READ,
         TENANCY_PERMISSIONS.ROLE_READ,
       ]);
@@ -303,7 +304,7 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: {
           email: `accomplice-${randomUUID()}@example.com`,
-          role_id: privilegedRole.public_id,
+          role_ids: [privilegedRole.public_id],
         },
       });
 
@@ -312,7 +313,7 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
 
     it('permits inviting into a role whose permissions the caller holds', async () => {
       const context = await createMemberHolding([
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        ...MEMBERSHIP_WRITE_PERMISSION_CODES,
         TENANCY_PERMISSIONS.MEMBERSHIP_READ,
         TENANCY_PERMISSIONS.ORGANIZATION_READ,
       ]);
@@ -328,7 +329,7 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
         headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
         payload: {
           email: `peer-${randomUUID()}@example.com`,
-          role_id: peerRole.public_id,
+          role_ids: [peerRole.public_id],
         },
       });
 
@@ -349,10 +350,11 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
     }
 
     it('cannot suspend, re-role or remove a member holding a permission the manager lacks', async () => {
-      // `membership:manage` must not let a manager lock out the people above them (an Admin
+      // `membership:update` / `membership:delete` must not let a manager lock out the people above them (an Admin
       // holding `organization:delete`, say), even though it may manage its peers.
       const context = await createMemberHolding([
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE,
+        TENANCY_PERMISSIONS.MEMBERSHIP_DELETE,
         TENANCY_PERMISSIONS.MEMBERSHIP_READ,
       ]);
       const above = await memberInRole(context.organization.id, [
@@ -365,7 +367,7 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
       });
       const url = testApiPath(`/tenancy/organization/memberships/${above.membership.public_id}`);
 
-      for (const payload of [{ status: 'SUSPENDED' }, { role_id: peerRole.public_id }]) {
+      for (const payload of [{ status: 'suspended' }, { role_ids: [peerRole.public_id] }]) {
         const refused = await injectAuthenticated(app, {
           method: 'PATCH',
           url,
@@ -376,7 +378,7 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
       }
       const removal = await injectAuthenticated(app, {
         method: 'DELETE',
-        url,
+        url: `${url}?reason=not_needed`,
         token: context.token,
       });
       expect(removal.statusCode, removal.body).toBe(403);
@@ -384,7 +386,8 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
 
     it('may suspend and remove a member whose permissions it holds (the guard is not a blanket deny)', async () => {
       const context = await createMemberHolding([
-        TENANCY_PERMISSIONS.MEMBERSHIP_MANAGE,
+        TENANCY_PERMISSIONS.MEMBERSHIP_UPDATE,
+        TENANCY_PERMISSIONS.MEMBERSHIP_DELETE,
         TENANCY_PERMISSIONS.MEMBERSHIP_READ,
       ]);
       const peer = await memberInRole(context.organization.id, [
@@ -396,12 +399,12 @@ describe('Security: tenancy grant escalation (API-key scopes, role assignment, o
         method: 'PATCH',
         url,
         token: context.token,
-        payload: { status: 'SUSPENDED' },
+        payload: { status: 'suspended' },
       });
       expect(suspended.statusCode, suspended.body).toBe(200);
       const removed = await injectAuthenticated(app, {
         method: 'DELETE',
-        url,
+        url: `${url}?reason=not_needed`,
         token: context.token,
       });
       expect(removed.statusCode, removed.body).toBe(204);

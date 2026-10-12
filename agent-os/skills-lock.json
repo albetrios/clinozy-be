@@ -65,7 +65,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-db-migration-maintainer/SKILL.md",
-      "computedHash": "d901df32da58f17fe34ca67503f6cc89abf7a7e148497374713973585f3e23a0"
+      "computedHash": "b00d412e9adda317de0790c74c8406bab29e934b5ff1a25acdc05e09f3b6913b"
     },
     "be-delegate-search": {
       "source": "local",
@@ -95,7 +95,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-domain-generator/SKILL.md",
-      "computedHash": "40d46065a82a33fd531d31c12059594e6304bffe02230dbb6c0903238af0a8ee"
+      "computedHash": "ea757adbbc12567e0fcf5101104fb56e8aa6c869f3c0da65f75338a3eab5bc80"
     },
     "be-env-schema-add": {
       "source": "local",
@@ -125,19 +125,19 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-idempotency-guard/SKILL.md",
-      "computedHash": "a3d2c140d564c9ce203a5ea09370f88c8f724347b8e6b70bd2b3f279df2f4e2e"
+      "computedHash": "aeab589cdcfd3344ac3d465061e2313723aa2f44920e69efa0d074a775dca84b"
     },
     "be-iteration-planning": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-iteration-planning/SKILL.md",
-      "computedHash": "d8bc258ee1986099162aa701edaaea8282c710f7d36502cad6c464849bbc245a"
+      "computedHash": "8b106b73ff5eb52c728bc3e0bae5a71765abd2f59748a2eda3b8a8efa479e126"
     },
     "be-kickoff-iteration": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-kickoff-iteration/SKILL.md",
-      "computedHash": "e68846e406a0329d1a7a2fb2ade234dafbcb89cc7777cf5c30f972e34f70b022"
+      "computedHash": "8a35cb2807c77c2200d62b248ea96bfbf43f5f7a4844ea22b2c3f9d9e5dcf465"
     },
     "be-lint-warnings-handler": {
       "source": "local",
@@ -191,19 +191,19 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-route-catalog/SKILL.md",
-      "computedHash": "ba93f9e5186d8da7219a93facf0f14ca35f39f068ae730c87d2897e1582b5f8e"
+      "computedHash": "67afd69c0fccff26baf0cfaafa5242ebfd716aecece70c4a2248fb4e6805c0b7"
     },
     "be-route-schema-doc-guard": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-route-schema-doc-guard/SKILL.md",
-      "computedHash": "5bc72b537e36ee1626721b39c90959d16032aebf3b97ea4688393ffb32d41d05"
+      "computedHash": "3b8ad615c9802523202b8e9dd6b81c730262a6d61c8cf7e65e3bdfb9a7933755"
     },
     "be-schema-generator": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-schema-generator/SKILL.md",
-      "computedHash": "ed480d796ed2c1cace97ed009a9bdf59056d8f768b65afe90011dab2381b8cc2"
+      "computedHash": "5883d869ba3abf751eae94de1d2115c6737ef0f46ccc69389292232d0c81ffff"
     },
     "be-seed-maintainer": {
       "source": "local",
@@ -263,7 +263,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-workers-events/SKILL.md",
-      "computedHash": "d2ee886d9725da5b1987cbe33bb9faa42f5559927a264349c244b73ec179abc8"
+      "computedHash": "fdfbade4de2d72bd8d41f462f1086d729b944e43e116f9df0e0e7a9349574e46"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",

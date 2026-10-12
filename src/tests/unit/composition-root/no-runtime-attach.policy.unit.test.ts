@@ -40,12 +40,13 @@ const DOMAIN_CONTAINER_KEYS = [
   'billingDomain',
   'notifyDomain',
   'uploadDomain',
+  'appDomain',
 ] as const;
 
 const COMPOSITION_ROOT_RELATIVE_PATH = 'src/domains/domain-containers.plugin.ts';
 
 const REGISTER_CONTAINER_PATTERN =
-  /\bexport\s+function\s+register(?:User|Tenancy|Auth|Audit|Billing|Notify|Upload)Container\b/;
+  /\bexport\s+function\s+register(?:User|Tenancy|Auth|Audit|Billing|Notify|Upload|App)Container\b/;
 
 function isDomainContainerModule(relativePath: string): boolean {
   return relativePath.endsWith('.container.ts');
@@ -102,6 +103,7 @@ describe('Policy: composition root is the only place that decorates domain conta
       'registerBillingContainer(application)',
       'registerNotifyContainer(application)',
       'registerUploadContainer(application)',
+      'registerAppContainer(application)',
     ];
     for (const registerCall of registerCalls) {
       expect(contents).toContain(registerCall);

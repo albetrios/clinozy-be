@@ -16,7 +16,7 @@ describe('subdomain integration policy', () => {
     expect(resources).toContain('tenancy/organization');
     expect(resources).toContain('notify/webhook');
     /**
-     * Nested resources (e.g. member-invitation, organization-api-key, webhook-event) are HTTP-served
+     * Nested resources (e.g. membership-invitation, organization-api-key, webhook-event) are HTTP-served
      * by their parent sub-domain's routes file and are tracked in
      * SUBDOMAIN_HTTP_INTEGRATION_WITHOUT_ROUTES instead.
      */
@@ -37,8 +37,8 @@ describe('subdomain integration policy', () => {
       'auth/mfa',
       'auth/webauthn',
       'notify/webhook-event',
-      'tenancy/member-invitation',
       'tenancy/member-role-permission',
+      'tenancy/membership-invitation',
       'tenancy/organization-api-key',
       'tenancy/organization-notification-policy',
       'tenancy/organization-settings',

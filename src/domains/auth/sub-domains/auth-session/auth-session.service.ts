@@ -341,7 +341,7 @@ export class AuthSessionService {
     userPublicId: string;
     refreshSecret: string;
     nextAccessToken: string;
-  }): Promise<{ refresh_secret: string }> {
+  }): Promise<{ refresh_secret: string; organization_id: number | null }> {
     const currentRefreshHash = hashRefreshSecret(refreshSecret);
     const nextTokenHash = hashAccessToken(nextAccessToken);
 
@@ -367,11 +367,16 @@ export class AuthSessionService {
         if (existing.token_hash) {
           await invalidateCachedSessionToken(existing.token_hash);
         }
-        return minted;
+        // The organization the rotated row names — a switch that committed after the caller read
+        // the session has moved it (see `AuthService.refreshToken`).
+        return { minted, organizationId: rotated.organization_id };
       },
     });
     if (nextRefreshSecret !== null) {
-      return { refresh_secret: nextRefreshSecret };
+      return {
+        refresh_secret: nextRefreshSecret.minted,
+        organization_id: nextRefreshSecret.organizationId,
+      };
     }
 
     // Reuse detection (OAuth refresh-token rotation reuse-detection per RFC 9700): a secret this
@@ -431,6 +436,39 @@ export class AuthSessionService {
       });
     }
     throw new UnauthorizedError('errors:invalidOrExpiredSession');
+  }
+
+  /**
+   * Make `nextAccessToken` the session's live token in place of `refreshedAccessToken`, the one a
+   * refresh has just rotated in — only while that one is still live.
+   *
+   * @remarks
+   * - **Why:** the server keeps one live access token per session. A refresh signs for the
+   *   organization it read, then rotates; a switch committing in between moves the session, so
+   *   the refresh re-mints for the session's organization and swaps it in here.
+   * - **Failure modes:** none thrown. Returns `false` when another rotation (a switch or a
+   *   refresh) replaced the token first — that rotation's token stays live.
+   * - **Side effects:** at most one conditional UPDATE on `auth.sessions`. No cache entry to drop:
+   *   the refreshed token was never handed out, so it was never cached.
+   */
+  async replaceRefreshedAccessToken({
+    sessionPublicId,
+    refreshedAccessToken,
+    nextAccessToken,
+  }: {
+    sessionPublicId: string;
+    refreshedAccessToken: string;
+    nextAccessToken: string;
+  }): Promise<boolean> {
+    return withAppDatabaseContext({
+      scope: SESSION_SCOPE.ARTIFACT({ sessionPublicId: sessionPublicId }),
+      callback: (_databaseHandle) =>
+        this.sessionRepository.replaceTokenHashIfCurrent(
+          sessionPublicId,
+          hashAccessToken(refreshedAccessToken),
+          hashAccessToken(nextAccessToken),
+        ),
+    });
   }
 
   /**

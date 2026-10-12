@@ -30,8 +30,8 @@ Use its id (`org_…`, in the seed log) with `POST /auth/switch-to-organization`
 
 - **Second organization** — a generated organization owned by the demo user, with a `Member` role and
   one generated member.
-- **Pending invitation** — an `INVITED` membership in the demo organization for a generated invitee,
-  with a member invitation that expires in 7 days.
+- **Pending invitation** — an `invited` membership in the demo organization for a generated invitee,
+  with a membership invitation that expires in 7 days.
 
 ## Plans
 
