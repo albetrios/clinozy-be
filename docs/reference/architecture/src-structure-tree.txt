@@ -2437,6 +2437,8 @@ src/
     │   ├── seed-registry.ts
     │   ├── seed-runtime-url.ts
     │   ├── seed.overview.md
+    │   ├── stripe-catalog-sync.ts
+    │   ├── stripe-catalog.ts
     │   └── sync-demo-permissions.ts
     ├── tooling/
     │   ├── codemod-import-paths.ts
@@ -3305,7 +3307,8 @@ src/
     │   │   │   ├── bulk-config.unit.test.ts
     │   │   │   ├── modules.unit.test.ts
     │   │   │   ├── production-guard.unit.test.ts
-    │   │   │   └── seed-contract.unit.test.ts
+    │   │   │   ├── seed-contract.unit.test.ts
+    │   │   │   └── stripe-catalog-sync.unit.test.ts
     │   │   ├── db-sequences-advance.db.unit.test.ts
     │   │   ├── generate-project-structure-tree.unit.test.ts
     │   │   ├── generate-route-catalog.unit.test.ts

@@ -211,6 +211,13 @@ Implementation lives under `src/domains/auth/sub-domains/auth-method/oauth/` —
 1. Sign up at [stripe.com](https://stripe.com) → **Developers** → **API keys**.
 2. Copy **Secret key** (test) → `STRIPE_SECRET_KEY=sk_test_xxxx`.
 
+**Price the plans (sandbox):** `pnpm db:seed` installs the plan catalog without Stripe prices, and
+`POST /billing/subscriptions` refuses a plan with no price for its cycle (`422
+planNotAvailableForBillingCycle`). With a test-mode key set, `pnpm db:seed:stripe-catalog` gives
+every paid plan its Stripe product and monthly and yearly prices, and records their ids on the plans
+(`--dry-run` says what it would do). It refuses a live key, and a re-run creates nothing. Free gets
+no price: an organization with no subscription is on Free, it never subscribes to it.
+
 **Webhook secret (for local / tests):**
 
 - **Option A — Stripe CLI (recommended for local):**

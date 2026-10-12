@@ -141,6 +141,7 @@
     "db:seed:bulk": "tsx src/scripts/seed/bulk.ts",
     "db:seed:loadtest": "BULK_PROFILE=demo BULK_ORGS=12 BULK_USERS_PER_ORG=10 pnpm db:seed:bulk && pnpm tool:load-test-credential-pool",
     "db:seed:sync-demo": "tsx src/scripts/seed/sync-demo-permissions.ts",
+    "db:seed:stripe-catalog": "tsx src/scripts/seed/stripe-catalog.ts",
     "db:studio": "drizzle-kit studio",
     "db:viewer": "node ./tooling/db-viewer/cli.mjs",
     "docs:generate": "tsx src/scripts/codegen/generate-openapi.ts",

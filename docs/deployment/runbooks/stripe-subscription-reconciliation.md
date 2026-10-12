@@ -17,7 +17,7 @@ How **API-initiated** subscription changes relate to **Stripe webhooks** and loc
 
 **Compensation:** If local DB update fails after Stripe was updated, `changePlan` attempts to revert the Stripe price to the previous plan price (see `subscription.service.ts`).
 
-**Stripe failures:** If the Stripe update throws or no price id exists, the service logs and still attempts the local update (documented in unit tests).
+**Stripe failures:** `changePlan` fails closed — nothing local is written when Stripe cannot follow. A Stripe-backed subscription moving to a plan with no Stripe price for its cycle is refused before any call (`422 planNotAvailableForBillingCycle`), and a Stripe outage on the price update throws (`503`) before the local write. Only a local-only subscription (no `provider_subscription_id`) changes plan without Stripe. Price the sandbox plans with `pnpm db:seed:stripe-catalog`.
 
 ---
 
