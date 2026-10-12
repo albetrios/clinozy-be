@@ -420,6 +420,102 @@ describe('Membership Sub-Domain — Integration', () => {
       expect((await inviteMember(adminToken, memberRole.public_id)).statusCode).toBe(200);
     });
 
+    // Undoing a removal puts the member back in a seat, so it passes the same seat check as an add.
+    async function removeThenRestore({
+      organizationId,
+      adminToken,
+      memberRoleId,
+      fillTheFreedSeat,
+      memberRolePublicId,
+    }: {
+      organizationId: number;
+      adminToken: string;
+      memberRoleId: number;
+      fillTheFreedSeat: boolean;
+      memberRolePublicId: string;
+    }) {
+      const member = await createTestUser();
+      const membership = await createMembership({
+        userId: member.id,
+        organizationId,
+        roleId: memberRoleId,
+      });
+      const removed = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: testApiPath(
+          `/tenancy/organization/memberships/${membership.public_id}?reason=not_needed`,
+        ),
+        token: adminToken,
+      });
+      expect(removed.statusCode, removed.body).toBe(204);
+      if (fillTheFreedSeat) {
+        expect((await inviteMember(adminToken, memberRolePublicId)).statusCode).toBe(200);
+      }
+      return injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/tenancy/organization/memberships/${membership.public_id}/restore`),
+        token: adminToken,
+        headers: { 'x-idempotency-key': `idem-${randomUUID()}` },
+        payload: {},
+      });
+    }
+
+    it('returns 409 seat_limit_reached when restoring a removed member onto a full plan', async () => {
+      // Plan grants 2 seats: the owner and a member. The member is removed, the freed seat is taken
+      // by an invite, and undoing the removal would make three on a two-seat plan.
+      const { organization, adminToken, memberRole } = await createSeatLimitedContext(2, true);
+      const response = await removeThenRestore({
+        organizationId: organization.id,
+        adminToken,
+        memberRoleId: memberRole.id,
+        memberRolePublicId: memberRole.public_id,
+        fillTheFreedSeat: true,
+      });
+      expect(response.statusCode, response.body).toBe(409);
+      expect((response.json() as { error: { reason?: string } }).error.reason).toBe(
+        'seat_limit_reached',
+      );
+    });
+
+    it('restores a removed member while the plan still has the seat', async () => {
+      const { organization, adminToken, memberRole } = await createSeatLimitedContext(2, true);
+      const response = await removeThenRestore({
+        organizationId: organization.id,
+        adminToken,
+        memberRoleId: memberRole.id,
+        memberRolePublicId: memberRole.public_id,
+        fillTheFreedSeat: false,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    });
+
+    it.each(['INCOMPLETE', 'PAUSED'] as const)(
+      'holds an organization whose subscription is %s to the Free ceiling, not its plan',
+      async (status) => {
+        // A 25-seat plan whose first payment never landed (INCOMPLETE) or that is paused has not
+        // earned its seats: the cheapest active plan — a one-seat Free plan — is the ceiling, and the
+        // owner already fills it.
+        const { organization, adminToken, memberRole } = await createSeatLimitedContext(
+          null,
+          false,
+        );
+        await createTestPlan({ includedSeats: 1, priceMonthly: '0.00', priceYearly: '0.00' });
+        const paidPlan = await createTestPlan({ includedSeats: 25 });
+        await createTestSubscription({
+          organizationId: organization.id,
+          planId: paidPlan.id,
+          status,
+          provider: null,
+          providerSubscriptionId: null,
+        });
+        const response = await inviteMember(adminToken, memberRole.public_id);
+        expect(response.statusCode, response.body).toBe(409);
+        expect((response.json() as { error: { reason?: string } }).error.reason).toBe(
+          'seat_limit_reached',
+        );
+      },
+    );
+
     it('returns 409 seat_limit_reached when the plan seat limit is already filled', async () => {
       // Plan grants 1 seat; the owner already occupies it, so the next add must be rejected.
       const { adminToken, memberRole } = await createSeatLimitedContext(1, true);
