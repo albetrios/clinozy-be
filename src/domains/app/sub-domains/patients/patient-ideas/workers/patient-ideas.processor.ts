@@ -1,7 +1,10 @@
 import { runOrganizationScopedWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { ProviderOutageError } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
 import { createAnthropicMessage } from '@/infrastructure/ai/anthropic-messages.client.js';
-import { findAnthropicApiError } from '@/infrastructure/ai/anthropic-error.util.js';
+import {
+  AnthropicIncompleteAnswerError,
+  findAnthropicApiError,
+} from '@/infrastructure/ai/anthropic-error.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { recordPatientIdeasResults } from '@/infrastructure/observability/metrics/prometheus-metrics.js';
 import { reserveIdeasCall } from '@/domains/app/sub-domains/patients/patient-ideas/patient-ideas.call-budget.js';
@@ -82,7 +85,8 @@ async function readRefreshBatch(organizationPublicId: string): Promise<{
 
 /**
  * Claude's ideas for one consenting patient — outside any database context. `null` when the answer
- * is unreadable or Anthropic refused this one request; a throttle pauses the queue
+ * is unreadable or incomplete (Claude stopped on `max_tokens` or `refusal`) or Anthropic refused
+ * this one request; a throttle pauses the queue
  * (`ProviderOutageError`); any other failure propagates.
  */
 async function askForIdeas(options: {
@@ -110,6 +114,10 @@ async function askForIdeas(options: {
         cause: error,
         retryAfterMs: apiError.retryAfterMs,
       });
+    }
+    if (error instanceof AnthropicIncompleteAnswerError) {
+      logger.warn({ stopReason: error.stopReason }, 'patient-ideas.answer_incomplete');
+      return null;
     }
     if (apiError?.isRequestRejection) {
       logger.warn(

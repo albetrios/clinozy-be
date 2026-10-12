@@ -16,7 +16,10 @@ vi.mock('@/shared/config/env.config.js', async () => {
 });
 
 import { createAnthropicMessage } from '@/infrastructure/ai/anthropic-messages.client.js';
-import { findAnthropicApiError } from '@/infrastructure/ai/anthropic-error.util.js';
+import {
+  AnthropicIncompleteAnswerError,
+  findAnthropicApiError,
+} from '@/infrastructure/ai/anthropic-error.util.js';
 import { registerThirdPartyContractTestIsolationHooks } from './helpers/register-contract-test-hooks.js';
 
 registerThirdPartyContractTestIsolationHooks();
@@ -75,6 +78,31 @@ describe('Anthropic Messages API contract', () => {
       messages: [{ role: 'user', content: '{"patient":{}}' }],
     });
   });
+
+  test.each(['max_tokens', 'refusal'] as const)(
+    'never hands back the partial text of an answer that stopped on %s',
+    async (stopReason) => {
+      nock(ANTHROPIC_ORIGIN)
+        .post(MESSAGES_PATH)
+        .reply(200, {
+          id: 'msg_incomplete',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: '{"ideas":[{"offering_id":"ofr_' }],
+          stop_reason: stopReason,
+        });
+
+      const error = await createAnthropicMessage({ system: 's', prompt: 'p', maxTokens: 8 }).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(AnthropicIncompleteAnswerError);
+      expect((error as AnthropicIncompleteAnswerError).stopReason).toBe(stopReason);
+      // Anthropic answered: nothing here says it is down.
+      expect(findAnthropicApiError(error)).toBeNull();
+    },
+  );
 
   test('reads a 429 as a throttle that waits as Anthropic asks', async () => {
     nock(ANTHROPIC_ORIGIN)

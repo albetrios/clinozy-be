@@ -47,7 +47,10 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
 }));
 
 import { runPatientIdeasJob } from '@/domains/app/sub-domains/patients/patient-ideas/workers/patient-ideas.processor.js';
-import { AnthropicApiError } from '@/infrastructure/ai/anthropic-error.util.js';
+import {
+  AnthropicApiError,
+  AnthropicIncompleteAnswerError,
+} from '@/infrastructure/ai/anthropic-error.util.js';
 import { ProviderOutageError } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
 import { ExternalServiceError } from '@/infrastructure/outbound/outbound-error.js';
 import type { IdeaOffering } from '@/domains/app/sub-domains/patients/patient-ideas/patient-ideas.types.js';
@@ -201,6 +204,24 @@ describe('runPatientIdeasJob', () => {
       cappedCount: 0,
     });
   });
+
+  it.each(['max_tokens', 'refusal'] as const)(
+    'counts an answer that stopped on %s as unread and carries on with the next patient',
+    async (stopReason) => {
+      mocks.repository.findStalePatients.mockResolvedValue([stalePatient(4), stalePatient(5)]);
+      mocks.createAnthropicMessage
+        .mockRejectedValueOnce(new AnthropicIncompleteAnswerError(stopReason))
+        .mockResolvedValueOnce('{"ideas":[]}');
+
+      expect(await runPatientIdeasJob(ORGANIZATION_PUBLIC_ID)).toEqual({
+        refreshedCount: 1,
+        removedCount: 0,
+        unreadCount: 1,
+        supersededCount: 0,
+        cappedCount: 0,
+      });
+    },
+  );
 
   it('leaves a patient written to meanwhile for the next run', async () => {
     mocks.repository.findStalePatients.mockResolvedValue([stalePatient(6)]);

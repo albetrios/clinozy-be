@@ -66,6 +66,31 @@ export class AnthropicApiError extends Error {
   }
 }
 
+/** The stop reasons that mean Claude did not finish its answer. */
+export const ANTHROPIC_INCOMPLETE_STOP_REASONS = ['max_tokens', 'refusal'] as const;
+
+/** A stop reason in {@link ANTHROPIC_INCOMPLETE_STOP_REASONS}. */
+export type AnthropicIncompleteStopReason = (typeof ANTHROPIC_INCOMPLETE_STOP_REASONS)[number];
+
+/**
+ * Claude answered (HTTP 200) without finishing: it ran out of `max_tokens`, or declined to go on
+ * (`stop_reason: "refusal"`). The text it did send is not an answer to read.
+ *
+ * @remarks
+ * - **Notes:** thrown after the request has returned, so the `anthropic` circuit never counts it —
+ *   Anthropic is up, this one answer is incomplete.
+ */
+export class AnthropicIncompleteAnswerError extends Error {
+  /** Why Claude stopped. */
+  readonly stopReason: AnthropicIncompleteStopReason;
+
+  constructor(stopReason: AnthropicIncompleteStopReason) {
+    super(`anthropic_answer_incomplete:${stopReason}`);
+    this.name = 'AnthropicIncompleteAnswerError';
+    this.stopReason = stopReason;
+  }
+}
+
 /** The `error` object of an answer body, or `null` when it is not JSON or has none. */
 function readApiError(body: string): AnthropicErrorBody | null {
   try {

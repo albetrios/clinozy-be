@@ -15,6 +15,10 @@ vi.mock('@/shared/config/env.config.js', async () => {
 });
 
 import {
+  fetchInstagramUsername,
+  sendInstagramAttachmentMessage,
+  sendInstagramTextMessage,
+  sendWhatsAppMediaMessage,
   sendWhatsAppTemplateMessage,
   sendWhatsAppTextMessage,
 } from '@/infrastructure/messaging/meta-graph.client.js';
@@ -176,5 +180,141 @@ describe('Meta Graph API (WhatsApp) contract', () => {
       false,
       131047,
     ]);
+  });
+});
+
+/** The clinic's Instagram account's messages edge. */
+const INSTAGRAM_MESSAGES_PATH = '/v21.0/17841400000000001/messages';
+
+/**
+ * The rest of the Graph surface the launch sends through (D77, D78, WC-11): the visit's files as
+ * WhatsApp media, Instagram direct messages and attachments, and the username lookup that matches
+ * an unknown Instagram sender to a contact.
+ */
+describe('Meta Graph API (media, Instagram) contract', () => {
+  test('a WhatsApp image: its link and caption, no file name', async () => {
+    let captured: Record<string, unknown> | undefined;
+    nock(GRAPH_ORIGIN)
+      .post(MESSAGES_PATH, (body) => {
+        captured = body as Record<string, unknown>;
+        return true;
+      })
+      .matchHeader('authorization', 'Bearer test-meta-graph-token')
+      .reply(200, { messaging_product: 'whatsapp', messages: [{ id: 'wamid.image' }] });
+
+    const sent = await sendWhatsAppMediaMessage({
+      phoneNumberId: '1012345678',
+      to: '+919800000001',
+      attachment: { kind: 'image', url: 'https://files.test/photo.jpg', fileName: 'photo.jpg' },
+      caption: 'Before',
+    });
+
+    expect(sent.providerMessageId).toBe('wamid.image');
+    expect(captured).toEqual({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '919800000001',
+      type: 'image',
+      image: { link: 'https://files.test/photo.jpg', caption: 'Before' },
+    });
+  });
+
+  test('a WhatsApp document carries its file name; no caption when none is given', async () => {
+    let captured: Record<string, unknown> | undefined;
+    nock(GRAPH_ORIGIN)
+      .post(MESSAGES_PATH, (body) => {
+        captured = body as Record<string, unknown>;
+        return true;
+      })
+      .reply(200, { messaging_product: 'whatsapp', messages: [{ id: 'wamid.document' }] });
+
+    await sendWhatsAppMediaMessage({
+      phoneNumberId: '1012345678',
+      to: '+919800000001',
+      attachment: { kind: 'document', url: 'https://files.test/rx.pdf', fileName: 'Rx.pdf' },
+    });
+
+    expect(captured?.type).toBe('document');
+    expect(captured?.document).toEqual({ link: 'https://files.test/rx.pdf', filename: 'Rx.pdf' });
+  });
+
+  test('an Instagram text goes to the scoped id and reads message_id', async () => {
+    let captured: Record<string, unknown> | undefined;
+    nock(GRAPH_ORIGIN)
+      .post(INSTAGRAM_MESSAGES_PATH, (body) => {
+        captured = body as Record<string, unknown>;
+        return true;
+      })
+      .matchHeader('authorization', 'Bearer test-meta-graph-token')
+      .reply(200, { recipient_id: '6543210', message_id: 'mid.instagram' });
+
+    const sent = await sendInstagramTextMessage({
+      accountId: '17841400000000001',
+      recipientId: '6543210',
+      body: 'See you at 4',
+    });
+
+    expect(sent.providerMessageId).toBe('mid.instagram');
+    expect(captured).toEqual({ recipient: { id: '6543210' }, message: { text: 'See you at 4' } });
+  });
+
+  test.each([
+    ['image', 'image'],
+    ['document', 'file'],
+  ] as const)(
+    'an Instagram %s attachment goes as type %s with its payload url',
+    async (kind, type) => {
+      let captured: Record<string, unknown> | undefined;
+      nock(GRAPH_ORIGIN)
+        .post(INSTAGRAM_MESSAGES_PATH, (body) => {
+          captured = body as Record<string, unknown>;
+          return true;
+        })
+        .reply(200, { recipient_id: '6543210', message_id: `mid.${type}` });
+
+      await sendInstagramAttachmentMessage({
+        accountId: '17841400000000001',
+        recipientId: '6543210',
+        attachment: { kind, url: 'https://files.test/file', fileName: 'file' },
+      });
+
+      expect(captured).toEqual({
+        recipient: { id: '6543210' },
+        message: { attachment: { type, payload: { url: 'https://files.test/file' } } },
+      });
+    },
+  );
+
+  test('a send Meta answers without a message id is a failure, not a sent message', async () => {
+    nock(GRAPH_ORIGIN).post(INSTAGRAM_MESSAGES_PATH).reply(200, { recipient_id: '6543210' });
+
+    const error = await failure(
+      sendInstagramTextMessage({
+        accountId: '17841400000000001',
+        recipientId: '6543210',
+        body: 'Hi',
+      }),
+    );
+
+    expect(error?.statusCode).toBe(502);
+  });
+
+  test('the username lookup asks for the username field; lower-cased, without @', async () => {
+    nock(GRAPH_ORIGIN)
+      .get('/v21.0/6543210')
+      .query({ fields: 'username' })
+      .matchHeader('authorization', 'Bearer test-meta-graph-token')
+      .reply(200, { username: '@Asha.Skin', id: '6543210' });
+
+    expect(await fetchInstagramUsername('6543210')).toBe('asha.skin');
+  });
+
+  test('the username lookup answers null when Meta returns none', async () => {
+    nock(GRAPH_ORIGIN)
+      .get('/v21.0/6543210')
+      .query({ fields: 'username' })
+      .reply(200, { id: '6543210' });
+
+    expect(await fetchInstagramUsername('6543210')).toBeNull();
   });
 });

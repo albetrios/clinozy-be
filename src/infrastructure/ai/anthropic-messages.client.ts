@@ -1,6 +1,11 @@
 import { env } from '@/shared/config/env.config.js';
 import { buildOutboundFetchOptions, outboundFetchJson } from '@/infrastructure/outbound/index.js';
-import { AnthropicApiError } from '@/infrastructure/ai/anthropic-error.util.js';
+import {
+  ANTHROPIC_INCOMPLETE_STOP_REASONS,
+  AnthropicApiError,
+  AnthropicIncompleteAnswerError,
+  type AnthropicIncompleteStopReason,
+} from '@/infrastructure/ai/anthropic-error.util.js';
 
 /** The Messages API version every request names. */
 const ANTHROPIC_API_VERSION = '2023-06-01';
@@ -8,6 +13,12 @@ const ANTHROPIC_API_VERSION = '2023-06-01';
 /** A Messages API answer — only what the caller reads. */
 interface MessagesAnswer {
   content?: { type?: unknown; text?: unknown }[];
+  stop_reason?: unknown;
+}
+
+/** Whether a stop reason means Claude did not finish its answer. */
+function isIncompleteStopReason(stopReason: unknown): stopReason is AnthropicIncompleteStopReason {
+  return (ANTHROPIC_INCOMPLETE_STOP_REASONS as readonly unknown[]).includes(stopReason);
 }
 
 /**
@@ -18,6 +29,8 @@ interface MessagesAnswer {
  * - **Algorithm:** `POST {ANTHROPIC_API_BASE_URL}/v1/messages` with the API key, the API version,
  *   `PATIENT_IDEAS_AI_MODEL`, `max_tokens` and the two prompts; joins the answer's text blocks.
  * - **Failure modes:** `Error('anthropic_api_key_missing')` without a key;
+ *   {@link AnthropicIncompleteAnswerError} when Claude stopped on `max_tokens` or `refusal` — the
+ *   partial text is never handed back as if it were the answer;
  *   {@link AnthropicApiError} for an error answer (inside an `ExternalServiceError` from
  *   `outboundCall`); `ExternalServiceError` for a timeout, a network failure or the `anthropic`
  *   circuit open.
@@ -57,6 +70,9 @@ export async function createAnthropicMessage(options: {
         }),
     }),
   );
+  if (isIncompleteStopReason(answer.stop_reason)) {
+    throw new AnthropicIncompleteAnswerError(answer.stop_reason);
+  }
   return (answer.content ?? [])
     .filter((block) => block.type === 'text' && typeof block.text === 'string')
     .map((block) => block.text as string)
