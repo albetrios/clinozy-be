@@ -388,6 +388,38 @@ describe('env-schema', () => {
     });
   });
 
+  describe('PATIENT_IDEAS_AI_ENABLED (launch D80)', () => {
+    it('is off by default and needs no Anthropic key', () => {
+      const parsed = envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) expect(parsed.data.PATIENT_IDEAS_AI_ENABLED).toBe(false);
+    });
+
+    it('rejects the AI ideas on without ANTHROPIC_API_KEY', () => {
+      const parsed = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+        PATIENT_IDEAS_AI_ENABLED: 'true',
+      });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(
+          parsed.error.issues.some((issue) => issue.path.includes('PATIENT_IDEAS_AI_ENABLED')),
+        ).toBe(true);
+      }
+    });
+
+    it('accepts the AI ideas on with ANTHROPIC_API_KEY', () => {
+      const parsed = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+        PATIENT_IDEAS_AI_ENABLED: 'true',
+        ANTHROPIC_API_KEY: 'sk-ant-test',
+      });
+      expect(parsed.success).toBe(true);
+    });
+  });
+
   describe('PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED (launch D79)', () => {
     it('is on by default', () => {
       const parsed = envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' });

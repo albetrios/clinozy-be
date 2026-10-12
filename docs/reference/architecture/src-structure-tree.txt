@@ -1301,6 +1301,7 @@ src/
     │   │   │   ├── billing-payment-methods.e2e.test.ts
     │   │   │   └── subscription-lifecycle.e2e.test.ts
     │   │   ├── factories/
+    │   │   │   ├── fake-payment-provider.ts
     │   │   │   └── subscription.factory.ts
     │   │   ├── integration/
     │   │   │   ├── billing-account-reads.integration.test.ts
@@ -1404,6 +1405,8 @@ src/
     │   │   │   ├── __tests__/
     │   │   │       ├── integration/
     │   │   │       │   ├── subscription-happy.integration.test.ts
+    │   │   │       │   ├── subscription-lifecycle.integration.test.ts
+    │   │   │       │   ├── subscription-refusals.integration.test.ts
     │   │   │       │   ├── subscription-seat-ceiling.integration.test.ts
     │   │   │       │   ├── subscription-seat-entitlement.integration.test.ts
     │   │   │       │   └── subscription.integration.test.ts

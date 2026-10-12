@@ -340,6 +340,10 @@ instead of running insecure — you cannot ship the dev value:
 | `UPLOAD_USE_PRESIGNED_POST`           | may be `false`            | `true` (presigned PUT has no min-size enforcement)                                 |
 | `METRICS_SCRAPE_TOKEN`                | optional                  | **required (≥32 chars)** when `METRICS_ENABLED=true`                               |
 | `EMAIL_FROM_ADDRESS`                  | optional                  | **required** when `RESEND_API_KEY` or `STRIPE_SECRET_KEY` is set                   |
+| `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` | `true` (tests: `false`) | `true` — a patient photo is never filed with where it was taken (launch D79)      |
+| `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` | `true` on `local`     | refused outside `local` / `development` — the accept token leaves only by email    |
+| `MESSAGING_DELIVERY_ENABLED`          | `false`                   | `true` only with `META_GRAPH_ACCESS_TOKEN`, `META_APP_SECRET` and `META_WEBHOOK_VERIFY_TOKEN` (any environment) |
+| `PATIENT_IDEAS_AI_ENABLED`            | `false`                   | `true` only with `ANTHROPIC_API_KEY` (any environment)                              |
 
 **Verify before deploy:** `NODE_ENV=production pnpm dev` with `.env.production`
 filled — boot fails loudly on any violation. The deploy workflow's `validate:github-env-runtime`
@@ -388,6 +392,30 @@ This section is specifically the **dev / load-test → production delta**.
 > The exact load-test overrides are tabulated in
 > [src/tests/load/k6/COMPREHENSIVE-JOURNEY.md §1](../../../src/tests/load/k6/COMPREHENSIVE-JOURNEY.md) —
 > none of those values belong in a deployed environment.
+
+### 11.4 The clinic launch's keys, environment by environment
+
+The launch (`app` domain) added these keys. Each schema default is the production-safe value, so a
+deployed environment that leaves a key out gets it; the `local` column is what `.env.example` ships
+active, and the test harness (`src/tests/setup.ts`) sets its own. Secrets go in each GitHub
+Environment through `.env.<environment>` + `pnpm github:sync`.
+
+| Key | Schema default | `local` | `development` | `production` |
+| --- | --- | --- | --- | --- |
+| `MESSAGING_DELIVERY_ENABLED` | `false` | `false` | `true` once the Meta app's three secrets are set | `true` once the Meta app is live (needs the three secrets) |
+| `WHATSAPP_TEMPLATES_ENABLED` | `false` | `false` | `true` once the templates are approved in Meta Business Manager | same |
+| `META_GRAPH_ACCESS_TOKEN` / `META_APP_SECRET` / `META_WEBHOOK_VERIFY_TOKEN` (Secrets) | unset | unset | the development Meta app's | the production Meta app's |
+| `META_GRAPH_API_BASE_URL` / `META_HTTP_TIMEOUT_MS` | `https://graph.facebook.com/v21.0` / `10000` | default | default | default |
+| `PATIENT_IDEAS_AI_ENABLED` | `false` | `false` | `true` to try it (needs the key) | the operator's decision (needs the key) |
+| `ANTHROPIC_API_KEY` (Secret) | unset | unset | set when the ideas are on | set when the ideas are on |
+| `PATIENT_IDEAS_AI_MODEL` / `PATIENT_IDEAS_DAILY_CALL_LIMIT` | `claude-opus-5-5` / `500` | default | default | default (lower the limit to cap spend) |
+| `ANTHROPIC_API_BASE_URL` / `ANTHROPIC_HTTP_TIMEOUT_MS` | `https://api.anthropic.com` / `60000` | default | default | default |
+| `APP_RECORD_PURGE_CRON` | `56 5 * * *` (scheduler default) | `56 5 * * *` | default | default |
+| `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` | `true` | `true` | `true` | `true` — enforced |
+| `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` | `false` | `true` (local QA accepts invitations without the email) | `false` unless QA needs it | `false` — enforced (refused outside `local` / `development`) |
+
+The allowed values and a description of each key are in [reference/env-catalog.md](../../reference/env-catalog.md)
+(`MESSAGING_VARS` and `PATIENT_IDEAS_VARS` in `env-schema.ts`).
 
 ## 12. Reference
 
