@@ -394,32 +394,35 @@ export class AuthService {
     // revalidate it (the user could have lost membership, or the organization could have been
     // deleted/suspended) and only fall back to the default when it is no longer valid —
     // never silently move the caller to a different tenant while the UI still shows A.
-    const persistedOrganizationPublicId =
-      session.organization_id != null
-        ? await findUserActiveOrganizationPublicIdByInternalId({
-            userInternalId: user.id,
-            organizationInternalId: session.organization_id,
-          })
-        : undefined;
     const sessionMfaVerified = session.mfa_verified_at != null;
-    const organizationPublicId = await this.withoutUnmetOrganizationMfa({
-      userId: user.id,
-      organizationPublicId:
-        persistedOrganizationPublicId ?? (await resolveDefaultActiveOrganizationPublicId(user.id)),
-      sessionMfaVerified,
-    });
+    const signForSessionOrganization = async (organizationInternalId: number | null) => {
+      const persistedOrganizationPublicId =
+        organizationInternalId != null
+          ? await findUserActiveOrganizationPublicIdByInternalId({
+              userInternalId: user.id,
+              organizationInternalId,
+            })
+          : undefined;
+      const organizationPublicId = await this.withoutUnmetOrganizationMfa({
+        userId: user.id,
+        organizationPublicId:
+          persistedOrganizationPublicId ??
+          (await resolveDefaultActiveOrganizationPublicId(user.id)),
+        sessionMfaVerified,
+      });
+      return signAccessToken({
+        userId: user.public_id,
+        role: resolveAccessTokenRoleForUser({
+          email: user.email,
+          status: user.status,
+          isEmailVerified: user.is_email_verified,
+        }),
+        organizationPublicId,
+        authenticationMethods: sessionMfaVerified ? [MFA_AUTHENTICATION_METHOD] : undefined,
+      });
+    };
 
-    const jsonWebToken = await signAccessToken({
-      userId: user.public_id,
-      role: resolveAccessTokenRoleForUser({
-        email: user.email,
-        status: user.status,
-        isEmailVerified: user.is_email_verified,
-      }),
-      organizationPublicId,
-      authenticationMethods: sessionMfaVerified ? [MFA_AUTHENTICATION_METHOD] : undefined,
-    });
-
+    const jsonWebToken = await signForSessionOrganization(session.organization_id);
     const rotated = await this.authSessionService.refreshSessionCredentials({
       sessionPublicId,
       userPublicId: user.public_id,
@@ -427,10 +430,20 @@ export class AuthService {
       nextAccessToken: jsonWebToken,
     });
 
-    return {
-      access_token: jsonWebToken,
-      refresh_secret: rotated.refresh_secret,
-    };
+    // One live access token per session: a switch that committed between the read above and the
+    // rotation moved the session to another organization, and the token just made live names the
+    // one the caller left. Mint for the organization the session now names and swap it in. A
+    // switch always names an organization, so a null here is never a move.
+    if (rotated.organization_id == null || rotated.organization_id === session.organization_id) {
+      return { access_token: jsonWebToken, refresh_secret: rotated.refresh_secret };
+    }
+    const movedAccessToken = await signForSessionOrganization(rotated.organization_id);
+    await this.authSessionService.replaceRefreshedAccessToken({
+      sessionPublicId,
+      refreshedAccessToken: jsonWebToken,
+      nextAccessToken: movedAccessToken,
+    });
+    return { access_token: movedAccessToken, refresh_secret: rotated.refresh_secret };
   }
 
   /**

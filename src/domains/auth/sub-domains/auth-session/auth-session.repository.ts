@@ -110,6 +110,31 @@ export class AuthSessionRepository {
   }
 
   /**
+   * Replace the session's access-token hash only while it still holds `expectedTokenHash`, and
+   * report whether it did. A refresh that finds a switch moved the session under it re-mints for
+   * the new organization through this; a rotation that landed since (another switch, another
+   * refresh) keeps its own token rather than being overwritten.
+   */
+  async replaceTokenHashIfCurrent(
+    publicId: string,
+    expectedTokenHash: string,
+    nextTokenHash: string,
+  ): Promise<boolean> {
+    const rows = await getRequestDatabase()
+      .update(sessions)
+      .set({ token_hash: nextTokenHash, last_active_at: databaseNowTimestamp })
+      .where(
+        and(
+          eq(sessions.public_id, publicId),
+          eq(sessions.token_hash, expectedTokenHash),
+          eq(sessions.is_revoked, false),
+        ),
+      )
+      .returning({ public_id: sessions.public_id });
+    return rows.length > 0;
+  }
+
+  /**
    * Rotate the session's access-token hash AND persist the active organization
    * (audit-#3) so `/auth/refresh` can preserve the organization the caller switched to
    * instead of recomputing the default. Used by the organization-switch path.

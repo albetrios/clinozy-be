@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { and, eq } from 'drizzle-orm';
+import { AuthSessionService } from '@/domains/auth/sub-domains/auth-session/auth-session.service.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -101,6 +102,81 @@ describe('refresh preserves the switched active organization (audit-#3)', () => 
 
     // The crux of audit-#3: refresh must NOT silently revert to the personal/default organization.
     expect(decodeOrgClaim(refreshedToken)).toBe(organizationB.organization.public_id);
+  });
+
+  /*
+   * The server keeps one live access token per session. A refresh reads the session, signs a
+   * token for the organization it found, then rotates; a switch that commits in between moves
+   * the session to another organization. The refresh used to hand back (and make live) a token
+   * for the organization the caller had just left, while the session row named the new one.
+   */
+  it('a switch that commits while a refresh is running leaves the refresh on the switched organization', async () => {
+    const { user, password } = await createTestUserWithPassword();
+    const personal = await provisionPersonalOrganization({ ownerUserId: user.id });
+    const organizationB = await provisionOrganizationWithOwner({
+      name: 'Racing Switch Team',
+      slug: `racing-switch-team-${generatePublicId('organization').slice(4, 14)}`,
+      type: 'TEAM',
+      ownerUserId: user.id,
+    });
+
+    const loginResponse = await injectUnauthenticated(app, {
+      method: 'POST',
+      url: testApiPath('/auth/login'),
+      payload: { email: user.email, password },
+    });
+    expect(loginResponse.statusCode).toBe(200);
+    const loginToken = (loginResponse.json() as { data: { access_token: string } }).data
+      .access_token;
+    expect(decodeOrgClaim(loginToken)).toBe(personal.organization.public_id);
+    const cookie = sessionCookie(loginResponse.headers);
+
+    // The switch lands after the refresh has read the session (and signed for the personal
+    // organization) and before its rotation runs.
+    const rotate = AuthSessionService.prototype.refreshSessionCredentials;
+    let switchedMidRefresh = false;
+    const interleave = vi
+      .spyOn(AuthSessionService.prototype, 'refreshSessionCredentials')
+      .mockImplementationOnce(async function (this: AuthSessionService, options) {
+        const switched = await app.inject({
+          method: 'POST',
+          url: testApiPath('/auth/switch-to-organization'),
+          headers: { authorization: `Bearer ${loginToken}` },
+          payload: { organization_id: organizationB.organization.public_id },
+        });
+        expect(switched.statusCode, switched.body).toBe(200);
+        switchedMidRefresh = true;
+        return rotate.call(this, options);
+      });
+
+    let refreshResponse: Awaited<ReturnType<FastifyInstance['inject']>>;
+    try {
+      refreshResponse = await app.inject({
+        method: 'POST',
+        url: testApiPath('/auth/refresh'),
+        headers: { cookie, origin: 'http://localhost:3000' },
+        payload: {},
+      });
+    } finally {
+      interleave.mockRestore();
+    }
+    expect(refreshResponse.statusCode, refreshResponse.body).toBe(200);
+    expect(switchedMidRefresh).toBe(true);
+    const refreshedToken = (refreshResponse.json() as { data: { access_token: string } }).data
+      .access_token;
+    expect(decodeOrgClaim(refreshedToken)).toBe(organizationB.organization.public_id);
+
+    // The token the refresh answered with is the session's live one, on the switched organization.
+    const context = await app.inject({
+      method: 'GET',
+      url: testApiPath('/auth/me/context'),
+      headers: { authorization: `Bearer ${refreshedToken}` },
+    });
+    expect(context.statusCode, context.body).toBe(200);
+    expect(
+      (context.json() as { data: { active_organization: { id: string } | null } }).data
+        .active_organization?.id,
+    ).toBe(organizationB.organization.public_id);
   });
 
   it('refresh falls back to the default organization when the persisted membership is no longer valid', async () => {
