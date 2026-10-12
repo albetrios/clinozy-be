@@ -91,8 +91,10 @@ describe('Stripe sandbox catalog sync', () => {
   });
 
   it('names a price by the project, the plan and the cycle', () => {
-    expect(catalogLookupKey('Starter', 'monthly')).toBe(`${PROJECT_SLUG}:plan:starter:monthly`);
-    expect(catalogLookupKey('Growth Plus!', 'yearly')).toBe(
+    expect(catalogLookupKey({ planName: 'Starter', cycle: 'monthly' })).toBe(
+      `${PROJECT_SLUG}:plan:starter:monthly`,
+    );
+    expect(catalogLookupKey({ planName: 'Growth Plus!', cycle: 'yearly' })).toBe(
       `${PROJECT_SLUG}:plan:growth-plus:yearly`,
     );
   });

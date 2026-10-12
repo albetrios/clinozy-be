@@ -71,7 +71,13 @@ export function assertStripeSandboxKey(secretKey: string | undefined): void {
  * The lookup key of a plan's price on a cycle (`<project slug>:plan:starter:monthly`): how a
  * re-run finds the price it made instead of making another.
  */
-export function catalogLookupKey(planName: string, cycle: CatalogBillingCycle): string {
+export function catalogLookupKey({
+  planName,
+  cycle,
+}: {
+  planName: string;
+  cycle: CatalogBillingCycle;
+}): string {
   const slug = planName
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/g, '-')
@@ -80,13 +86,21 @@ export function catalogLookupKey(planName: string, cycle: CatalogBillingCycle): 
 }
 
 /** A plan's amount on a cycle in the currency's minor unit (cents): `'10.00'` → `1000`. */
-export function catalogMinorAmount(plan: CatalogPlan, cycle: CatalogBillingCycle): number {
+export function catalogMinorAmount({
+  plan,
+  cycle,
+}: {
+  plan: CatalogPlan;
+  cycle: CatalogBillingCycle;
+}): number {
   return Math.round(Number(cycle === 'monthly' ? plan.priceMonthly : plan.priceYearly) * 100);
 }
 
 /** The cycles a plan is charged on — those with an amount above zero (Free has none). */
 export function catalogBilledCycles(plan: CatalogPlan): CatalogBillingCycle[] {
-  return (['monthly', 'yearly'] as const).filter((cycle) => catalogMinorAmount(plan, cycle) > 0);
+  return (['monthly', 'yearly'] as const).filter(
+    (cycle) => catalogMinorAmount({ plan, cycle }) > 0,
+  );
 }
 
 /** Whether a Stripe price charges what the plan asks on that cycle. */
@@ -100,7 +114,7 @@ function priceMatches({
   cycle: CatalogBillingCycle;
 }): boolean {
   return (
-    price.unit_amount === catalogMinorAmount(plan, cycle) &&
+    price.unit_amount === catalogMinorAmount({ plan, cycle }) &&
     price.currency === plan.currency.toLowerCase() &&
     price.recurring?.interval === CYCLE_INTERVAL[cycle]
   );
@@ -125,7 +139,7 @@ async function syncPlan({
   dryRun: boolean;
 }): Promise<{ update: CatalogPlanUpdate; outcomes: CatalogPriceOutcome[] }> {
   const cycles = catalogBilledCycles(plan);
-  const lookupKeys = cycles.map((cycle) => catalogLookupKey(plan.name, cycle));
+  const lookupKeys = cycles.map((cycle) => catalogLookupKey({ planName: plan.name, cycle }));
   const found = new Map<string, Stripe.Price>();
   if (lookupKeys.length > 0) {
     const listed = await stripe.prices.list({
@@ -144,7 +158,7 @@ async function syncPlan({
   const outcomes: CatalogPriceOutcome[] = [];
 
   for (const cycle of cycles) {
-    const lookupKey = catalogLookupKey(plan.name, cycle);
+    const lookupKey = catalogLookupKey({ planName: plan.name, cycle });
     const existing = found.get(lookupKey);
     if (existing && priceMatches({ price: existing, plan, cycle })) {
       priceIds[cycle] = existing.id;
@@ -171,7 +185,7 @@ async function syncPlan({
     const created = await stripe.prices.create({
       product: productId,
       currency: plan.currency.toLowerCase(),
-      unit_amount: catalogMinorAmount(plan, cycle),
+      unit_amount: catalogMinorAmount({ plan, cycle }),
       recurring: { interval: CYCLE_INTERVAL[cycle] },
       lookup_key: lookupKey,
       // A changed amount gets a new price; the key moves to it, so the next run keeps it.
