@@ -207,8 +207,11 @@ describe('Patient ideas — integration (routes-final 7.N, ROUTE #152)', () => {
     expect(sent.patient.complaints).toEqual(['hair fall']);
     const raw = JSON.stringify(captured.body);
     expect(raw).toContain(peel);
-    // PI6: never the note's text, a name, a number or an id of the patient
-    for (const identifying of ['since June', 'Ideaa', lastName, digits, patient]) {
+    // PI6: never the note's text, a name, a number or an id of the patient. The number is its whole
+    // national part: `digits` alone is `S`'s last eight digits whenever `S`'s eighth-from-last is a 7,
+    // and `S` is in every offering name the clinic rightly sends.
+    const nationalNumber = `${digits}61`;
+    for (const identifying of ['since June', 'Ideaa', lastName, nationalNumber, patient]) {
       expect(raw).not.toContain(identifying);
     }
 
