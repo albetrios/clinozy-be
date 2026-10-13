@@ -22,7 +22,7 @@ Every paginated list also takes `limit` (1–100) and `after` (cursor), plus `cr
 | 8 | Billing | `billing/` (your call) | `invoices` (+ `exports`, `credit-notes`), `invoice-credit-notes`, `payments` (+ `exports`, `edits`, `reverse`), `pending-credits` (+ `settle`), `day-closes` (+ `close`, `reopen`) | 32 | 1, 3, 4, 7 | **final (rev 2, confirmed 2026-10-08)** · old 10 |
 | 9 | Stock | `stock/` | `stock-items` (+ `exports`, `movements`, `revert`), `stock-item-movements`, `stock-counts`, `stock-purchases` (+ `exports`), `stock-vendors` | 28 | 1, 7, 8 | **final (rev 2, confirmed 2026-10-08)** · old 12 |
 | 10 | Tasks & rules | `tasks/` | `tasks` (+ `exports`, `snooze`, `resolve`, `reassign`), `task-rule-settings` | 12 | 2, 4, 5, 6, 7, 8 | **final (rev 1, confirmed 2026-10-08)** · old 13 |
-| 11 | Medical store | `medical/` | `manufacturers`, `suppliers` (+ `payments`, `credits`), `supplier-credits`, `medicines` (+ `exports`, `near-expiry-discount`), `medical-purchase-orders` (+ `exports`, `receive`), `medical-reps` (+ `visits`), `medical-sales` (+ `exports`, `dues`, `returns`), `medical-payments` (+ `exports`), `medical-pending-credits` | 57 | 4, 7, 8, 10 | **rev 2 — awaiting your OK** (D88–D91, 2026-10-13; rev 1 by recommendation — D75, 2026-10-08) · old 11 |
+| 11 | Medical store | `medical/` | `manufacturers`, `suppliers` (+ `payments`, `credits`), `supplier-credits`, `medicines` (+ `exports`, `near-expiry-discount`), `medical-purchase-orders` (+ `exports`, `receive`), `medical-reps` (+ `visits`), `medical-sales` (+ `exports`, `dues`, `returns`), `medical-payments` (+ `exports`), `medical-pending-credits` | 57 | 4, 7, 8, 10 | **final (rev 2, confirmed 2026-10-13 — D92)** (D88–D91; rev 1 by recommendation — D75, 2026-10-08) · old 11 |
 | — | Platform (outside `/app`, already shipped) | `src/domains/<platform>/` | auth 33 · users/me 20 · tenancy 41 · billing 13 · notify 14 · uploads 4 · audit 1 · mcp 2 | 128 | — | review last |
 
 **Restructured 2026-10-08 (your call): one folder per sub-domain, grouped by connection** — what a record owns is
@@ -6691,7 +6691,7 @@ None beyond 10.10.
 
 ---
 
-## 11. Medical store — rev 2, awaiting your OK (2026-10-13, D88–D91; rev 1 by recommendation 2026-10-08, D75) — nested sub-domains 11.A–11.I
+## 11. Medical store — final (rev 2, confirmed 2026-10-13 — D92; D88–D91; rev 1 by recommendation 2026-10-08, D75) — nested sub-domains 11.A–11.I
 
 *Back in the build (D75 — user 2026-10-08: "continue with medical plan for final-routes … go ahead with your
 recommendings"); D49's pause ends. Decided by recommendation — every decision below says what the code does today.*
