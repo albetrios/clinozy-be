@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.1](https://github.com/albetrios/clinozy-be/compare/v9.0.0...v9.0.1) (2026-10-13)
+
+
+### Fixed
+
+* **ci:** let the restore drills run — set up Node and migrate on a direct URL ([#54](https://github.com/albetrios/clinozy-be/issues/54)) ([75495bf](https://github.com/albetrios/clinozy-be/commit/75495bfc0f8b9a1a5dd1ce45431a11e7072666ce))
+* **load:** bring the k6 scenarios back to the launch contract ([#60](https://github.com/albetrios/clinozy-be/issues/60)) ([2d3ea6a](https://github.com/albetrios/clinozy-be/commit/2d3ea6a2f29412376a3106a2b6f9cb9ff6623064))
+* restore drills reach the smoke and keep production out of public logs ([#55](https://github.com/albetrios/clinozy-be/issues/55)) ([c3822a0](https://github.com/albetrios/clinozy-be/commit/c3822a0da854cc2ce64f15b6e1260964d35438be))
+* restore drills use the environment's own Neon project ([#52](https://github.com/albetrios/clinozy-be/issues/52)) ([dd43bdb](https://github.com/albetrios/clinozy-be/commit/dd43bdbdfded3b890a440fb9e4ea4c24c679c697))
+
+
+### Documentation
+
+* **iterations:** freeze change-cookie-consent through a fix iteration ([#61](https://github.com/albetrios/clinozy-be/issues/61)) ([f2cc59c](https://github.com/albetrios/clinozy-be/commit/f2cc59c0568dab9d0e2943ea7b4844c127ad647f))
+* **user-settings:** keep analytics consent as a receipt; pin that sign-out keeps it ([#58](https://github.com/albetrios/clinozy-be/issues/58)) ([7e89402](https://github.com/albetrios/clinozy-be/commit/7e89402708f59ba6a1b1524d33ac60f0bd261b88))
+
 ## [9.0.0](https://github.com/albetrios/clinozy-be/compare/v8.0.0...v9.0.0) (2026-10-12)
 
 
