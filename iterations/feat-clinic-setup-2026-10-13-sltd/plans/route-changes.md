@@ -24,9 +24,9 @@ Intake hash `790d068ffc3b`. What exists is the launch's route review (`launch-20
 
 | # | Change | Method | Path | Access | Operation | Source | Built |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-1 | NEW | GET | `/api/v1/app/onboarding-setup` | `organization:update` — managers only (D19) | the setup: answered steps, skips, live or not, the 3 guide items with their ticks read from the records | BRIEF.md:50, 104–112, 169–171 | — |
-| RC-2 | NEW | PATCH | `/api/v1/app/onboarding-setup` | `organization:update` | answer a step, skip or un-skip a guide item, "Explore first", hide or reopen the guide | BRIEF.md:51–52, 104–112, 229–230 | — |
-| RC-3 | NEW | POST | `/api/v1/app/onboarding-setup/complete` | `organization:update` | go live — refused while the clinic type, the main branch or a service is missing | BRIEF.md:69–76, 222–224, 276 | — |
+| RC-1 | NEW | GET | `/api/v1/app/onboarding-setup` | `organization:update` — managers only (D19) | the setup: answered steps, skips, live or not, the 3 guide items with their ticks read from the records | BRIEF.md:50, 104–112, 169–171 | `GET /api/v1/app/onboarding-setup` as planned — AS-BUILT #4 |
+| RC-2 | NEW | PATCH | `/api/v1/app/onboarding-setup` | `organization:update` | answer a step, skip or un-skip a guide item, "Explore first", hide or reopen the guide | BRIEF.md:51–52, 104–112, 229–230 | `PATCH /api/v1/app/onboarding-setup` as planned — AS-BUILT #4 |
+| RC-3 | NEW | POST | `/api/v1/app/onboarding-setup/complete` | `organization:update` | go live — refused while the clinic type, the main branch or a service is missing | BRIEF.md:69–76, 222–224, 276 | `POST /api/v1/app/onboarding-setup/complete` as planned — AS-BUILT #4 |
 
 ## Branches & places (launch routes-final §1)
 

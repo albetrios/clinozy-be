@@ -39,6 +39,7 @@
     "Webhook": "Webhook endpoint management and delivery history",
     "Upload": "Pre-signed URL generation for file uploads",
     "Branch": "Branches — locations, hours and who works where",
+    "Onboarding setup": "The clinic setup — the 3-tap drawer, the short guide behind the profile icon and going live",
     "Saved view": "Saved list views — each person's named filters and hidden columns",
     "Offering": "Offerings, offering groups and offers — what the organization sells and at what price",
     "Contact": "Contacts — one record per person, shared by their lead, patient file, appointments and activity",

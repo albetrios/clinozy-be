@@ -19,6 +19,7 @@ const NO_BODY_ROUTE_PATH_ALLOWLIST = [
   '/me/sessions',
   '/me/data-export',
   '/me/onboarding/complete',
+  '/onboarding-setup/complete',
   '/suspend',
   '/unsuspend',
   '/confirm',

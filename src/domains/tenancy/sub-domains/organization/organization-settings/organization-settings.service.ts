@@ -10,6 +10,8 @@ import type { OrganizationSettingsRepository } from './organization-settings.rep
 import type {
   OrganizationDefaultLocale,
   OrganizationSettingsOutput,
+  OrganizationSetupProgress,
+  OrganizationSetupProgressChange,
 } from './organization-settings.types.js';
 import { validateUpdateOrganizationSettings } from './organization-settings.validator.js';
 import { serializeOrganizationSettings } from './organization-settings.serializer.js';
@@ -118,6 +120,125 @@ export class OrganizationSettingsService {
       await invalidateOrganizationMfaPolicy(scope.organizationPublicId);
     }
     return result;
+  }
+
+  /**
+   * The clinic's setup progress (feat-clinic-setup) — written only through this service, read by
+   * the app's onboarding-setup sub-domain; never part of `GET`/`PATCH /tenancy/organization/settings`.
+   *
+   * @remarks
+   * - **Algorithm:** in the organization's context, reads the settings row's `setup_*` fields with
+   *   the completer's public id; creates the row (all defaults) when the clinic has none, as `get`.
+   * - **Failure modes:** `NotFoundError('Organization')` for a missing organization.
+   * - **Side effects:** may insert the clinic's settings row on first read.
+   */
+  async getSetupProgress(
+    scope: OrganizationPrincipalDatabaseScope,
+  ): Promise<OrganizationSetupProgress> {
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.requireOrganizationId(scope);
+        return this.readSetupProgress(organizationId);
+      },
+    });
+  }
+
+  /**
+   * Merges one change into the setup progress (feat-clinic-setup OS5) and returns the result.
+   *
+   * @remarks
+   * - **Algorithm:** one `INSERT … ON CONFLICT DO UPDATE` — single values added to or removed from
+   *   the stored lists, "Explore first" set once, the guide hidden or reopened — then a read back.
+   * - **Failure modes:** `NotFoundError('Organization')`; a value outside the allowed lists is
+   *   refused by the column checks (the caller validates first).
+   * - **Side effects:** writes the settings row (created when missing) and its `updated_at`.
+   */
+  async changeSetupProgress(options: {
+    scope: OrganizationPrincipalDatabaseScope;
+    change: OrganizationSetupProgressChange;
+    actingUserPublicId: string | undefined;
+  }): Promise<OrganizationSetupProgress> {
+    return withAppDatabaseContext({
+      scope: options.scope,
+      callback: async () => {
+        const organizationId = await this.requireOrganizationId(options.scope);
+        const userId = options.actingUserPublicId
+          ? await this.organizationRepository.resolveUserIdByPublicId(options.actingUserPublicId)
+          : null;
+        await this.settingsRepository.mergeSetupProgress(organizationId, {
+          ...options.change,
+          updated_by_user_id: userId,
+        });
+        return this.readSetupProgress(organizationId);
+      },
+    });
+  }
+
+  /**
+   * Takes the clinic live (feat-clinic-setup OS6) — once; a second call keeps the first time and
+   * completer — and returns the progress.
+   *
+   * @remarks
+   * - **Algorithm:** ensures the settings row, then a conditional update on
+   *   `setup_completed_at IS NULL`; reads the progress back.
+   * - **Failure modes:** `NotFoundError('Organization')`. The caller checks the live conditions.
+   * - **Side effects:** sets `setup_completed_at` and `setup_completed_by_membership_id` once.
+   */
+  async completeSetup(options: {
+    scope: OrganizationPrincipalDatabaseScope;
+    membershipId: number | null;
+  }): Promise<OrganizationSetupProgress> {
+    return withAppDatabaseContext({
+      scope: options.scope,
+      callback: async () => {
+        const organizationId = await this.requireOrganizationId(options.scope);
+        await this.readSetupProgress(organizationId);
+        await this.settingsRepository.completeSetup(organizationId, options.membershipId);
+        return this.readSetupProgress(organizationId);
+      },
+    });
+  }
+
+  /**
+   * Records the first time every guide item was done or skipped (feat-clinic-setup OS7) and returns
+   * the progress; a later call never moves the time.
+   *
+   * @remarks
+   * - **Algorithm:** a conditional update on `setup_guide_done_at IS NULL`, then a read back.
+   * - **Failure modes:** `NotFoundError('Organization')`.
+   * - **Side effects:** sets `setup_guide_done_at` once.
+   */
+  async markSetupGuideDone(
+    scope: OrganizationPrincipalDatabaseScope,
+  ): Promise<OrganizationSetupProgress> {
+    return withAppDatabaseContext({
+      scope,
+      callback: async () => {
+        const organizationId = await this.requireOrganizationId(scope);
+        await this.settingsRepository.markSetupGuideDone(organizationId);
+        return this.readSetupProgress(organizationId);
+      },
+    });
+  }
+
+  /** The active organization's internal id; `NotFoundError('Organization')` when it is missing. */
+  private async requireOrganizationId(scope: OrganizationPrincipalDatabaseScope): Promise<number> {
+    const organization = await this.organizationRepository.findByPublicId(
+      scope.organizationPublicId,
+    );
+    if (!organization) throw new NotFoundError('Organization');
+    return organization.id;
+  }
+
+  /** The setup progress, creating the clinic's settings row first when it has none. */
+  private async readSetupProgress(organizationId: number): Promise<OrganizationSetupProgress> {
+    const progress = await this.settingsRepository.findSetupProgress(organizationId);
+    if (progress) return progress;
+    await this.settingsRepository.ensureRow(organizationId);
+    const created = await this.settingsRepository.findSetupProgress(organizationId);
+    if (!created) throw new NotFoundError('Organization');
+    return created;
   }
 
   async resolveDefaultLocaleForOrganization(

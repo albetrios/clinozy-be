@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { branchesRoutes } from './sub-domains/branches/branches.routes.js';
+import { onboardingSetupRoutes } from './sub-domains/onboarding-setup/onboarding-setup.routes.js';
 import { branchMembersRoutes } from './sub-domains/branches/branch-members/branch-members.routes.js';
 import { registerAppRecordRoutes } from './app-records.plugin.js';
 import { membershipPreferencesRoutes } from './sub-domains/memberships/membership-preferences/membership-preferences.routes.js';
@@ -13,6 +14,7 @@ import { contactMembersRoutes } from './sub-domains/contacts/contact-members/con
 export const appRoutesPlugin: FastifyPluginAsync = async (app) => {
   const { appDomain } = app;
   await app.register(branchesRoutes(appDomain.branchesService));
+  await app.register(onboardingSetupRoutes(appDomain.onboardingSetupService));
   await app.register(branchMembersRoutes(appDomain.branchMembersService));
   await app.register(taskRuleSettingsRoutes(appDomain.taskRuleSettingsService));
   await app.register(patientIdeasRoutes(appDomain.patientIdeasService));

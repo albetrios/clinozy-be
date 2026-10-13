@@ -1,4 +1,4 @@
-import { inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import {
@@ -45,6 +45,25 @@ export class OfferingsRepository extends BaseRecordRepository {
    * The name and prices of offerings by public id — deleted and inactive ones too, since a record
    * keeps naming what it pointed at (a patient offering, a plan row).
    */
+  /**
+   * How many active offerings the organization has, counted up to `cap` (feat-clinic-setup: one
+   * service to go live, two for the guide's "Add your treatments").
+   */
+  async countActive(organization_id: number, cap: number): Promise<number> {
+    const rows = await getRequestDatabase()
+      .select({ id: offerings.id })
+      .from(offerings)
+      .where(
+        and(
+          eq(offerings.organization_id, organization_id),
+          eq(offerings.is_active, true),
+          isNull(offerings.deleted_at),
+        ),
+      )
+      .limit(cap);
+    return rows.length;
+  }
+
   async findSummaries(publicIds: readonly string[]): Promise<Map<string, OfferingSummary>> {
     const unique = [...new Set(publicIds)];
     if (unique.length === 0) return new Map();

@@ -35,6 +35,7 @@ as the launch's ROUTE builds them.
 | [stock](sub-domains/stock/stock.overview.md) | nested `app.stock_items`, `app.stock_item_movements`, `app.stock_counts`, `app.stock_count_lines`, `app.stock_purchases`, `app.stock_purchase_items`, `app.stock_vendors` | `/app/stock-items…`, `/app/stock-items/{stock_item_id}/movements…`, `/app/stock-item-movements`, `/app/stock-counts…`, `/app/stock-purchases…`, `/app/stock-vendors…` |
 | [medical](sub-domains/medical/medical.overview.md) | nested `app.manufacturers`, `app.suppliers`, `app.supplier_manufacturers`, `app.supplier_credits`, `app.medicines`, `app.medicine_batches`, `app.medicine_supplier_prices`, `app.medical_purchase_orders`, `app.medical_purchase_order_items`, `app.medical_reps`, `app.medical_rep_manufacturers`, `app.medical_rep_visits`, `app.medical_sales`, `app.medical_sale_returns`, `app.medical_sale_return_items` | `/app/manufacturers…`, `/app/suppliers…`, `/app/supplier-credits…`, `/app/medicines…`, `/app/medical-purchase-orders…`, `/app/medical-reps…`, `/app/medical-reps/{medical_rep_id}/visits…`, `/app/medical-sales…`, `/app/medical-payments` |
 | [tasks](sub-domains/tasks/tasks.overview.md) | `app.tasks`, `app.task_owner_changes`; nested `app.task_rule_settings`; the rules worker (`task-rules-sweep` → `task-rules`) | `/app/tasks…`, `/app/task-rule-settings` |
+| [onboarding-setup](sub-domains/onboarding-setup/onboarding-setup.overview.md) | none of its own — reads `app.branches`, `app.offerings`, `app.appointments` and the team through `MembershipService`; stores progress in `tenancy.organization_settings` through `OrganizationSettingsService` | `/app/onboarding-setup`, `/app/onboarding-setup/complete` |
 
 ## Patterns used
 
@@ -47,6 +48,9 @@ as the launch's ROUTE builds them.
 
 - [organization-switch-and-capability-discovery-flow](../../FLOWS.md#organization-switch-and-capability-discovery-flow) — the active organization (the `org` claim) scopes every app route.
 - Reads tenancy through `OrganizationService`, `MembershipService` and `MemberRoleService` only (never their repositories).
+- [clinic-setup-flow](../../FLOWS.md#clinic-setup-flow) — a new clinic's setup drawer, its first branch
+  (made the main branch) and going live (feat-clinic-setup); end to end in
+  `__tests__/e2e/flow-clinic-goes-live`.
 - The launch's three key flows (PRD 3.2) run end to end in `__tests__/e2e/`: an enquiry becomes a
   patient (`flow-enquiry-to-patient`), visit → prescription → sale → payment
   (`flow-visit-to-payment`), treatment plan and feedback (`flow-plan-and-feedback`); the daily

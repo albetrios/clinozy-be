@@ -247,7 +247,7 @@ BRIEF.md:36–181, 215–247; decisions D5, D7, D19–D22, D26–D28. Route numb
 | OS1 | **Folder and paths** (D22): `app/sub-domains/onboarding-setup/`; one resource, singular per clinic — `GET` and `PATCH /onboarding-setup`, the action `POST /onboarding-setup/complete` ("Go live"). No path id: the clinic is the token's organization. Today nothing serves a clinic's setup. |
 | OS2 | **No table of its own** (D5): progress lives in seven `setup_*` fields of `tenancy.organization_settings` (2.A.3), written only through new methods of the organization-settings service — the app reads tenancy through its service, tenancy never reads app records. `GET`/`PATCH /tenancy/organization/settings` do **not** show or take the setup fields. |
 | OS3 | **Ticks are read, not stored**: going live needs 3 checks and the guide has 3 items (D26, D28), each worked out on every read from the records (2.A.10); only two answers are stored (`clinic_type`, `you` — step 2 is read back from the main branch), the guide's skips, and the times. |
-| OS4 | **Managers only, team clinics only**: every route needs `organization:update` (D19); a personal workspace is refused with `422` (`team_organization_required`, catalog scope `team`) — it has no branches (launch D44), and its owner holds `organization:update`, so the code alone would let it in. |
+| OS4 | **Managers only, team clinics only**: every route needs `organization:update` (D19); a personal workspace is refused (`team_organization_required`, catalog scope `team`) — `422` on the writes, `404` on the read (D35: the response-code policy keeps `422` for writes) — it has no branches (launch D44), and its owner holds `organization:update`, so the code alone would let it in. |
 | OS5 | **Changes merge, never overwrite**: `PATCH` adds or removes single values (`answered_steps_add`, `skipped_items_add`, `skipped_items_remove`) in one SQL statement, so two admins answering at once never lose each other's answers; `deferred` and `guide_hidden` set or clear a time. |
 | OS6 | **Going live is checked by the server** (BRIEF.md:222–224): `POST …/complete` sets `setup_completed_at` and `setup_completed_by_membership_id` only when the clinic type is answered, an active main branch exists and at least one service is active; otherwise `409 onboarding_setup_incomplete` naming the missing ones in `errors[]`. "Someone to book" is **not** required (D26). Completing again is a no-op that returns the same object (the first completer stays). The Consultations are created by the client through the built offerings route before it calls this one (BRIEF.md:69–76) — the server knows no starter list. |
 | OS7 | **"All three done" is stored once** (D20): the read that first finds the 3 guide items done or skipped writes `setup_guide_done_at` (a conditional `UPDATE … WHERE setup_guide_done_at IS NULL`) — the same first-read write the settings row already does (it is created on first read, as built). It never clears, so the ring does not come back. |
@@ -290,7 +290,7 @@ No new permission code. Each record a setup step creates keeps its own gate on i
 | --- | --- |
 | Base | `/api/v1/app` |
 | Auth | `Authorization: Bearer <access token>`; the active organization comes from the token |
-| Organization scope | `team` — a personal workspace gets `422 team_organization_required` (OS4) |
+| Organization scope | `team` — a personal workspace gets `team_organization_required` (OS4): `404` on route 1, `422` on routes 2–3 (D35) |
 | Writes | `POST` needs `X-Idempotency-Key`; `PATCH` takes an optional `expected_updated_at` (a stale save → `409 record_changed`) |
 | Success | `200` with `{ data, meta }` |
 | Errors | `{ error: { type, code, reason?, detail, errors[] } }` — `400 invalid_field`, `401`, `403`, `409`, `422` |
@@ -431,7 +431,8 @@ As 2.5.
 | 2 | `409` · `record_changed` | `expected_updated_at` is older than the settings row |
 | 3 | `409` · `onboarding_setup_incomplete` | a live check fails — `errors[]` names each (`field` = `clinic_type` · `main_branch` · `services`) |
 | 1–3 | `403` | without `organization:update` |
-| 1–3 | `422` · `team_organization_required` | a personal workspace (OS4) |
+| 1 | `404` · `team_organization_required` | a personal workspace (OS4) — it has no clinic setup; a read is never a `422` (D35) |
+| 2–3 | `422` · `team_organization_required` | a personal workspace (OS4) |
 
 #### 2.A.10 Rules worth knowing
 

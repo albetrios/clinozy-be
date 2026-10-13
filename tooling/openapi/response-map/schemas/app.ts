@@ -530,3 +530,75 @@ export const contactMessageTemplateExample = {
   created_at: '2026-10-08T10:30:00.000Z',
   updated_at: '2026-10-08T10:30:00.000Z',
 };
+
+// ── Onboarding setup (feat-clinic-setup routes-final §2.A.6) ──
+const nullableDateTime = { type: ['string', 'null'], format: 'date-time' };
+
+export const onboardingSetupSchema = {
+  type: 'object',
+  properties: {
+    answered_steps: { type: 'array', items: { type: 'string', enum: ['clinic_type', 'you'] } },
+    skipped_items: {
+      type: 'array',
+      items: { type: 'string', enum: ['treatments', 'invite_team'] },
+    },
+    main_branch_id: nullableString,
+    next_step: {
+      type: ['string', 'null'],
+      enum: ['clinic_type', 'location', 'you', 'go_live', null],
+    },
+    live_checks: {
+      type: 'object',
+      properties: {
+        clinic_type: { type: 'boolean' },
+        main_branch: { type: 'boolean' },
+        services: { type: 'boolean' },
+      },
+    },
+    is_live: { type: 'boolean' },
+    has_someone_to_book: { type: 'boolean' },
+    guide_items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          key: { type: 'string', enum: ['treatments', 'invite_team', 'first_appointment'] },
+          is_done: { type: 'boolean' },
+          is_skipped: { type: 'boolean' },
+          can_skip: { type: 'boolean' },
+        },
+      },
+    },
+    guide_done_count: { type: 'integer' },
+    guide_total_count: { type: 'integer' },
+    deferred_at: nullableDateTime,
+    completed_at: nullableDateTime,
+    guide_hidden_at: nullableDateTime,
+    guide_done_at: nullableDateTime,
+    completed_by_membership_id: nullableString,
+    updated_at: { type: 'string', format: 'date-time' },
+  },
+};
+
+export const onboardingSetupExample = {
+  answered_steps: ['clinic_type'],
+  skipped_items: [],
+  main_branch_id: 'brn_q4w8e2r6t1y5u9i3o7p0a',
+  next_step: 'you',
+  live_checks: { clinic_type: true, main_branch: true, services: false },
+  is_live: false,
+  has_someone_to_book: false,
+  guide_items: [
+    { key: 'treatments', is_done: false, is_skipped: false, can_skip: true },
+    { key: 'invite_team', is_done: false, is_skipped: false, can_skip: true },
+    { key: 'first_appointment', is_done: false, is_skipped: false, can_skip: false },
+  ],
+  guide_done_count: 0,
+  guide_total_count: 3,
+  deferred_at: null,
+  completed_at: null,
+  guide_hidden_at: null,
+  guide_done_at: null,
+  completed_by_membership_id: null,
+  updated_at: '2026-10-13T09:00:00.000Z',
+};

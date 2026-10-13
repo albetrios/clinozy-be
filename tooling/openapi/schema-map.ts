@@ -268,6 +268,7 @@ import {
   CreateBranchDto,
   UpdateBranchDto,
 } from '@/domains/app/sub-domains/branches/branches.dto.js';
+import { ChangeOnboardingSetupDto } from '@/domains/app/sub-domains/onboarding-setup/onboarding-setup.dto.js';
 import { ReplaceBranchMembersDto } from '@/domains/app/sub-domains/branches/branch-members/branch-members.dto.js';
 
 // ─── Notify ────────────────────────────────────────────────────────────
@@ -471,6 +472,7 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'PATCH /api/v1/app/memberships/me/preferences': updateMembershipPreferencesDto,
   'PUT /api/v1/app/task-rule-settings': ReplaceTaskRulesDto,
   'PATCH /api/v1/app/branches/{branch_id}': UpdateBranchDto,
+  'PATCH /api/v1/app/onboarding-setup': ChangeOnboardingSetupDto,
   'PUT /api/v1/app/branches/{branch_id}/members': ReplaceBranchMembersDto,
 
   // ── User: Avatar & export ──

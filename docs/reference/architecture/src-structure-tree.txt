@@ -14,6 +14,7 @@ src/
     ├── app/
     │   ├── __tests__/
     │   │   ├── e2e/
+    │   │   │   ├── flow-clinic-goes-live.e2e.test.ts
     │   │   │   ├── flow-day-in-the-clinic.e2e.test.ts
     │   │   │   ├── flow-enquiry-to-patient.e2e.test.ts
     │   │   │   ├── flow-plan-and-feedback.e2e.test.ts
@@ -574,6 +575,19 @@ src/
     │   │   │   ├── offerings.service.ts
     │   │   │   ├── offerings.types.ts
     │   │   │   └── offerings.validator.ts
+    │   │   ├── onboarding-setup/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── integration/
+    │   │   │   │   │   └── onboarding-setup.integration.test.ts
+    │   │   │   ├── onboarding-setup.constants.ts
+    │   │   │   ├── onboarding-setup.controller.ts
+    │   │   │   ├── onboarding-setup.dto.ts
+    │   │   │   ├── onboarding-setup.overview.md
+    │   │   │   ├── onboarding-setup.routes.ts
+    │   │   │   ├── onboarding-setup.serializer.ts
+    │   │   │   ├── onboarding-setup.service.ts
+    │   │   │   ├── onboarding-setup.types.ts
+    │   │   │   └── onboarding-setup.validator.ts
     │   │   ├── patients/
     │   │   │   ├── __tests__/
     │   │   │   │   ├── integration/

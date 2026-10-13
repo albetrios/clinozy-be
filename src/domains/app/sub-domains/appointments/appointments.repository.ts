@@ -111,6 +111,18 @@ export class AppointmentsRepository extends BaseRecordRepository {
   }
 
   /** Whether any live appointment points at the contact (CT7 — the contact cannot be removed). */
+  /** Whether the organization has any live appointment, of any status (feat-clinic-setup: the guide's first booking). */
+  async hasAnyLive(organization_id: number): Promise<boolean> {
+    const rows = await getRequestDatabase()
+      .select({ id: appointments.id })
+      .from(appointments)
+      .where(
+        and(eq(appointments.organization_id, organization_id), isNull(appointments.deleted_at)),
+      )
+      .limit(1);
+    return rows.length > 0;
+  }
+
   async hasLiveAppointmentForContact(contactId: number): Promise<boolean> {
     const rows = await getRequestDatabase()
       .select({ id: appointments.id })

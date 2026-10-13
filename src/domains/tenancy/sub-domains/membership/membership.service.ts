@@ -1955,6 +1955,56 @@ export class MembershipService {
    *   calls to compute `seats_used` — billing never reaches the membership repository/schema
    *   directly (cross-domain reads go service→service).
    */
+  /**
+   * The team facts a clinic's setup reads (feat-clinic-setup, routes-final §2.A.10), and the caller's
+   * own membership — who takes the clinic live.
+   *
+   * @remarks
+   * - **Algorithm:** in the organization's context, resolves the organization and its owner, then
+   *   one read for "someone besides the owner, invited or active" and one for "an active member
+   *   holds one of `bookableRoleNames` (system roles, main or extra)"; resolves the acting user's
+   *   membership in the organization.
+   * - **Failure modes:** `NotFoundError('Organization')` for a missing organization.
+   * - **Side effects:** none (reads only).
+   * - **Notes:** the role names come from the app (its Doctor and Therapist presets) — tenancy
+   *   never reads the app's code.
+   */
+  async summarizeTeamForSetup(options: {
+    scope: OrganizationPrincipalDatabaseScope;
+    bookableRoleNames: readonly string[];
+    actingUserPublicId: string | undefined;
+  }): Promise<{
+    hasTeammate: boolean;
+    hasBookableMember: boolean;
+    actingMembershipId: number | null;
+  }> {
+    return withAppDatabaseContext({
+      scope: options.scope,
+      callback: async () => {
+        const organization = await this.organizationService.requireOrganizationRecordByPublicId(
+          options.scope.organizationPublicId,
+        );
+        const team = await this.membershipRepository.summarizeTeamForSetup({
+          organization_id: organization.id,
+          owner_user_id: organization.owner_user_id,
+          bookable_role_names: options.bookableRoleNames,
+        });
+        const userId = await this.organizationService.resolveUserInternalIdByPublicId(
+          options.actingUserPublicId,
+        );
+        const membership =
+          userId === null
+            ? null
+            : await this.membershipRepository.findByUserAndOrganization(userId, organization.id);
+        return {
+          hasTeammate: team.has_teammate,
+          hasBookableMember: team.has_bookable_member,
+          actingMembershipId: membership?.id ?? null,
+        };
+      },
+    });
+  }
+
   async countActiveMembers(options: { organizationPublicId: string }): Promise<number> {
     return withAppDatabaseContext({
       scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: options.organizationPublicId }),

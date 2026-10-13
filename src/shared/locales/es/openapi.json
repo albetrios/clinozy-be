@@ -38,7 +38,8 @@
     "Notification": "Feed de notificaciones del usuario",
     "Webhook": "Gestión de endpoints webhook e historial de envíos",
     "Upload": "Generación de URL pre-firmadas para subida de archivos",
-    "Branch": "Sucursales de la clínica — ubicaciones, horarios y quién trabaja dónde"
+    "Branch": "Sucursales de la clínica — ubicaciones, horarios y quién trabaja dónde",
+    "Onboarding setup": "La configuración de la clínica — el panel de 3 pasos, la guía breve del perfil y empezar"
   },
   "components": {
     "bearerAuthDescription": "Token de acceso JWT obtenido del endpoint de login o renovación de token."

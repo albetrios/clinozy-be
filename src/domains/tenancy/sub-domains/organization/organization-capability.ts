@@ -9,8 +9,9 @@ import { UnprocessableEntityError } from '@/shared/errors/index.js';
  * - `ROLES` — create or manage custom member roles.
  * - `MUTATION` — owner-level structural change (delete or transfer ownership).
  * - `BILLING` — manage the organization subscription (create / change plan / cancel / resume).
+ * - `SETUP` — the clinic setup (feat-clinic-setup): a personal workspace has no clinic to set up.
  */
-export type OrganizationCapability = 'MEMBERS' | 'ROLES' | 'MUTATION' | 'BILLING';
+export type OrganizationCapability = 'MEMBERS' | 'ROLES' | 'MUTATION' | 'BILLING' | 'SETUP';
 
 /** Organization `type` for a single-owner account workspace (no collaboration). */
 const PERSONAL_ORGANIZATION_TYPE = 'PERSONAL';
@@ -21,7 +22,25 @@ const CAPABILITY_REJECTION_KEY: Record<OrganizationCapability, string> = {
   ROLES: 'errors:personalOrganizationNoRoles',
   MUTATION: 'errors:personalOrganizationImmutable',
   BILLING: 'errors:personalOrganizationNoBilling',
+  SETUP: 'errors:personalOrganizationNoSetup',
 };
+
+/**
+ * The machine-readable `reason` a rejection carries, where a route's contract names one
+ * (feat-clinic-setup routes-final §2.A.9: `team_organization_required`).
+ */
+const CAPABILITY_REJECTION_REASON: Partial<Record<OrganizationCapability, string>> = {
+  SETUP: 'team_organization_required',
+};
+
+/**
+ * Whether `organization` is a single-owner PERSONAL workspace (no collaboration, no clinic) — the
+ * test {@link assertTeamOrganization} applies, for a read that refuses a personal workspace with a
+ * status of its own (a GET is never a 422 — the response-code policy keeps 422 for writes).
+ */
+export function isPersonalOrganization(organization: { type: string }): boolean {
+  return organization.type === PERSONAL_ORGANIZATION_TYPE;
+}
 
 /**
  * Guards a team-only capability: rejects with 422 when `organization` is a
@@ -35,13 +54,14 @@ const CAPABILITY_REJECTION_KEY: Record<OrganizationCapability, string> = {
  *
  * @remarks
  * - **Algorithm:** if `type === 'PERSONAL'`, throw `UnprocessableEntityError`
- *   keyed by {@link CAPABILITY_REJECTION_KEY}; otherwise no-op.
+ *   keyed by {@link CAPABILITY_REJECTION_KEY} (with its {@link CAPABILITY_REJECTION_REASON}, when
+ *   the capability has one); otherwise no-op.
  * - **Failure modes:** PERSONAL organization ⇒ 422 `unprocessable_entity`.
  * - **Side effects:** none (pure guard; throws or returns).
  * - **Notes:** single point of enforcement for the personal-vs-team rule, shared by
  *   membership-invitation, membership (add member / transfer ownership), member-role,
- *   organization delete, and subscription billing (create / change-plan / cancel /
- *   resume). Team-only affordances are NOT advertised on the API response; a client
+ *   organization delete, subscription billing (create / change-plan / cancel /
+ *   resume), and the app's clinic setup. Team-only affordances are NOT advertised on the API response; a client
  *   derives them from the organization `type` and gates the action itself on the
  *   caller's permissions (e.g. `subscription:manage`).
  */
@@ -52,7 +72,9 @@ export function assertTeamOrganization({
   organization: { type: string };
   capability: OrganizationCapability;
 }): void {
-  if (organization.type === PERSONAL_ORGANIZATION_TYPE) {
-    throw new UnprocessableEntityError(CAPABILITY_REJECTION_KEY[capability]);
+  if (isPersonalOrganization(organization)) {
+    const error = new UnprocessableEntityError(CAPABILITY_REJECTION_KEY[capability]);
+    const reason = CAPABILITY_REJECTION_REASON[capability];
+    throw reason === undefined ? error : error.withReason(reason);
   }
 }
