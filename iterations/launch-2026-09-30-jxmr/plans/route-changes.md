@@ -450,7 +450,7 @@ Proposed 2026-10-10 from the frontend's per-room research; built and confirmed r
 | I33 | GET, POST, PATCH, restore | `/app/patients/{patient_id}/images` (and `…/{patient_image_id}`) | CHANGED | each photo gains `file_url` — a 15-minute presigned GET of its upload, made on every read, served inline under the uploaded name; `null` when its upload is gone; a private photo stays unread without the album code (D86, ROUTE #179) |
 | I34 | GET, POST, PATCH, restore | `/app/patients/{patient_id}/reports` (and `…/{patient_report_id}`) | CHANGED | each report gains `files` — every one of `file_keys`, in order, with `file_name` (the upload's) and `file_url` (as I33); both `null` when the upload is gone (D86, ROUTE #179) |
 
-## 13. Medical store rev 2 (D88, D89, ROUTE #181–#191)
+## 13. Medical store rev 2 (D88, D89, D90, ROUTE #181–#191)
 
 Proposed 2026-10-13 from the medical room's findings (routes-final §11 rev 2, MD23–MD30) and your note on the plan (D89 — the store's payments and credits, MD31–MD33); awaiting the plan's approval.
 
@@ -469,7 +469,7 @@ Proposed 2026-10-13 from the medical room's findings (routes-final §11 rev 2, M
 | I45 | GET        | `/app/medical-payments`                                  | CHANGED | moved to the new nested sub-domain 11.I `medical/medical-payments/`; the path, gate and answer stay (MD31, ROUTE #188)                     |
 | I46 | GET        | `/app/medical-payments/exports`                          | NEW     | the store's payments CSV — `medicine:export` (MD31, ROUTE #188)                                                                            |
 | I47 | DELETE, POST | `/app/supplier-credits/{supplier_credit_id}`, `…/restore` | NEW   | void a supplier credit (why: `mistake` · `wrong_quantity` · `supplier_refused` · `other`) — packs back, dues again — and undo it; `medicine:delete` (MD32, ROUTE #189) |
-| I48 | GET        | `/app/pending-credits`                                   | CHANGED | `is_medical_store=true` — the credits naming a `medical` invoice, the store's customer credits (MD32, ROUTE #190)                          |
+| I48 | GET        | `/app/medical-pending-credits`                           | NEW     | the store's customer credits — 8.D's list limited to credits naming a `medical` invoice; `medicine:read`; the frontend's Credits tab (MD32, D90, ROUTE #190) |
 | I49 | POST       | `/app/medical-sales/{medical_sale_id}/returns`           | CHANGED | `refund_mode` adds `credit`: no money leaves — the refund is paid by credit and a `give` pending credit names the sale's invoice (MD33, ROUTE #190) |
 
 
