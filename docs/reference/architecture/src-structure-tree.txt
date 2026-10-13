@@ -1971,6 +1971,7 @@ src/
     ├── user/
     │   ├── __tests__/
     │   │   ├── integration/
+    │   │   │   ├── consent-receipt-survives-logout.integration.test.ts
     │   │   │   ├── user-admin.integration.test.ts
     │   │   │   ├── user-route-smoke.integration.test.ts
     │   │   │   └── user.integration.test.ts

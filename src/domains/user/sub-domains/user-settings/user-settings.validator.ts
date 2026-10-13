@@ -8,8 +8,8 @@ import { UpdateUserSettingsDto, type UpdateUserSettingsInput } from './user-sett
  *
  * @remarks
  * - **Notes:** `analytics_consent` and `analytics_consent_version` come together or not at all — a
- *   decision is proof of consent only with the policy version it answered (launch D85); either one
- *   alone is a 400 on `analytics_consent_version`.
+ *   receipt is proof of consent only with the policy version it answered (launch D85,
+ *   change-cookie-consent CC2); either one alone is a 400 on `analytics_consent_version`.
  */
 export function validateUpdateUserSettings(body: unknown): UpdateUserSettingsInput {
   const parsed = parseWithSchema({ schema: UpdateUserSettingsDto, data: body });

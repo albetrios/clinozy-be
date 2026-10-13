@@ -6,10 +6,13 @@ export interface UserSettingsOutput {
   is_notifications_enabled: boolean;
   language: string;
   preferred_locales: string[];
-  /** The person's analytics consent; `null` until they first answer (launch D85). */
+  /**
+   * The receipt of the last analytics answer given while signed in; `null` until one is given
+   * (launch D85, change-cookie-consent CC2). The browser's cookie decides what runs.
+   */
   analytics_consent: AnalyticsConsent | null;
-  /** The consent policy version they answered; `null` with `analytics_consent`. */
+  /** The consent policy version that answer was given to; `null` with `analytics_consent`. */
   analytics_consent_version: number | null;
-  /** When they answered (ISO 8601); `null` with `analytics_consent`. */
+  /** When it was given (ISO 8601, the server's time); `null` with `analytics_consent`. */
   analytics_consent_at: string | null;
 }

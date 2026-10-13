@@ -6,9 +6,11 @@
  * @remarks
  * - **Algorithm:** the object literal is the authority; {@link ANALYTICS_CONSENT_VALUES} derives the
  *   list the DTO enum is built from.
- * - **Notes:** launch D85. The decision is the person's, not the browser's: the frontend applies the
- *   saved one at sign-in and asks again when it is six months old or the policy version moves. Not
- *   answered yet is `null` on the wire, never a third value here.
+ * - **Notes:** launch D85, re-scoped by iteration `change-cookie-consent-2026-10-13-fmal` (CC1–CC2):
+ *   the stored decision is a **receipt** of the last answer given while signed in. The browser's
+ *   own cookie (claude.com's model, owned by the frontend) decides what runs; signing in never
+ *   reads this back and signing out never clears it. Not answered yet is `null` on the wire, never
+ *   a third value here.
  */
 export const ANALYTICS_CONSENT = {
   GRANTED: 'granted',
