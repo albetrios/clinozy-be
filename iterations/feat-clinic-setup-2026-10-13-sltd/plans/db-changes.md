@@ -7,7 +7,7 @@ is unclear) decides each table's physical design (types, indexes, constraints, t
 differences go into `AS-BUILT.md` and this file is synced with the final table and field names. See it drawn in the DB
 Viewer's plan mode: `pnpm db:viewer`, then click this iteration under ◇ Plans.
 
-Status: **Step 4, 2026-10-13** — every RED answered (D1–D23). Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
+Status: **Step 6, 2026-10-13** — every RED answered (D1–D30); both sub-domains final in the route review. Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
 Intake hash `790d068ffc3b`. What exists is the launch as built — its route review
 (`launch-2026-09-30-jxmr/plans/routes-final.md`, D9) and `AS-BUILT.md` — not the drop's wording.
 

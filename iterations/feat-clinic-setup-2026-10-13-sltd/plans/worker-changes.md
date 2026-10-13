@@ -4,7 +4,7 @@ The iteration's background work — everything that happens without a user — i
 at every planning step (`be-iteration-planning` › Worker changes). Plain words only: no queue, job,
 event or worker names; kickoff names them and records them in `AS-BUILT.md`.
 
-Status: **Step 4, 2026-10-13** — none (D21). Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
+Status: **Step 6, 2026-10-13** — none (D21). Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
 Intake hash `790d068ffc3b`.
 
 ## Counts

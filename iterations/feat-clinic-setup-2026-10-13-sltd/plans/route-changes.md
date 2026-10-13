@@ -4,7 +4,7 @@ The iteration's proposed routes, in one file (`be-iteration-planning` › Route 
 kickoff confirms each route when it builds it and records any change in `AS-BUILT.md`; the built truth is
 `docs/routes.txt`.
 
-Status: **Step 5, 2026-10-13** — the quick setup (D26–D28); paths follow D22 (`onboarding-setup`); access D19; confirmed per sub-domain at Step 5. Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
+Status: **Step 6, 2026-10-13** — the quick setup (D26–D28), both sub-domains final (D24, D30); paths follow D22 (`onboarding-setup`); access D19; confirmed per sub-domain at Step 5. Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
 Intake hash `790d068ffc3b`. What exists is the launch's route review (`launch-2026-09-30-jxmr/plans/routes-final.md`,
 §1–§12 — D9), not the drop's `schema-routes.md` wording. **Change** is against that: `NEW` · `CHANGED` · `REUSED`
 (the same route as built, called by setup — no change).
