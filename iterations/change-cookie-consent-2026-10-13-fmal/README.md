@@ -8,7 +8,7 @@
 | Opened | 2026-10-13 |
 | Branch | feat/cookie-consent |
 | Baseline | launch-2026-09-30-jxmr |
-| Status | done |
+| Status | frozen |
 | Summary | Cookie consent the claude.com way — a "Cookie settings" card (Customize · Reject · Accept, category toggles), kept per browser so signing out never asks again, Global Privacy Control honored; the account keeps a receipt of answers given while signed in |
 | Drop placed | 2026-10-13 |
 | Drop source | /tmp/claude-0/-home-user/6e9a345e-e062-51d6-a6bd-b4485ed42599/scratchpad/brief |
@@ -23,3 +23,4 @@
 - 2026-10-13 · ready-for-approval → approved · — · Claude
 - 2026-10-13 · approved → implementing · — · Claude
 - 2026-10-13 · implementing → done · — · Claude
+- 2026-10-13 · done → frozen · — · Claude
