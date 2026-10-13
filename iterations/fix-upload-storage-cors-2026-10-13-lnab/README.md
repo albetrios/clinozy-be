@@ -8,7 +8,7 @@
 | Opened | 2026-10-13 |
 | Branch | fix/upload-storage-cors |
 | Baseline | none |
-| Status | done |
+| Status | frozen |
 | Summary | Avatar and organization-logo uploads fail in the browser because the storage bucket's CORS refuses the web app — ship the bucket CORS policy as code (check / apply), say upload failures in words, send the signed headers on the PUT fallback |
 | Drop placed | — |
 | Drop source | — |
@@ -24,3 +24,4 @@
 - 2026-10-13 · ready-for-approval → approved · — · Claude
 - 2026-10-13 · approved → implementing · — · Claude
 - 2026-10-13 · implementing → done · — · Claude
+- 2026-10-13 · done → frozen · — · Claude
