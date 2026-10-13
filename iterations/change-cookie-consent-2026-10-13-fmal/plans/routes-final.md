@@ -1,6 +1,6 @@
 # Clinozy API — final routes, sub-domain by sub-domain (change-cookie-consent-2026-10-13-fmal)
 
-Started from `claude/inspiring-heisenberg-4v5ttl` at `c3822a0` (= `main`). Shaped by
+Started from `c3822a0` (= `main`) on branch `feat/cookie-consent` (first pushed as `claude/inspiring-heisenberg-4v5ttl`, CC10). Shaped by
 [`routes-final-template.md`](../../../docs/design-workflow/process/routes-final-template.md); this
 iteration touches one sub-domain outside `app`, so paths are under `/api/v1` (not `/api/v1/app`).
 

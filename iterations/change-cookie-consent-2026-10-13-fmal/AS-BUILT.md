@@ -22,11 +22,15 @@ binaries (the image's own Postgres is 16; migrations require 17+) with the Compo
 
 - Planned, not built (deferred — user OK): none.
 - Built, not planned: none.
+- After done (CC10, CC11): the branch is renamed `feat/cookie-consent`; `intake-files/` is trimmed to
+  `BRIEF.md`, `PRD.md` and `schema-routes.md`, and the route map's § 3 to the three routes this fix
+  touches — so this iteration's intake gate and route-map check no longer pass by design.
 - Follow-ups for the next iteration:
   - Run `pnpm sonar:scan` (and `pnpm ci:local`) on a machine with Docker before merging — the
     one gate this session could not run.
   - The launch iteration is still `implementing` although merged; closing it (`done` → `frozen`)
-    makes it an eligible Baseline by the book ([CC7](plans/decisions.md)).
+    makes it an eligible Baseline by the book ([CC7](plans/decisions.md)). Use the launch, not this
+    iteration, as the next Baseline: this snapshot is trimmed ([CC11](plans/decisions.md)).
 
 ## Standing deviations
 

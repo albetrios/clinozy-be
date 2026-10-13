@@ -6,7 +6,7 @@
 | Topic | cookie-consent |
 | Owner | Claude |
 | Opened | 2026-10-13 |
-| Branch | claude/inspiring-heisenberg-4v5ttl |
+| Branch | feat/cookie-consent |
 | Baseline | launch-2026-09-30-jxmr |
 | Status | done |
 | Summary | Cookie consent the claude.com way — a "Cookie settings" card (Customize · Reject · Accept, category toggles), kept per browser so signing out never asks again, Global Privacy Control honored; the account keeps a receipt of answers given while signed in |
