@@ -387,6 +387,20 @@ export function scopeEntries<T extends { name: string }>(
 }
 
 /**
+ * Whether the value sync may create a missing GitHub Environment before pushing to it.
+ *
+ * @remarks
+ * The value sync creates an environment with an empty body — no protection. A scoped
+ * environment's branch policy is its only guard (it has no reviewers by design), so creating one
+ * here and pushing its key — `--only` and the direct entry point skip the protection step — would
+ * hand the key to every branch. It must already exist, created by `pnpm github:sync`'s
+ * protection step from its committed JSON.
+ */
+export function mayCreateMissingEnvironment(scope: EnvironmentKeyScope): boolean {
+  return scope.includeKeys === null;
+}
+
+/**
  * Classifies an env key as a GitHub Secret or Variable purely by name.
  *
  * @remarks
@@ -887,7 +901,15 @@ export async function syncEnvironmentToGitHub(
   }
 
   const token = getGitHubToken();
-  if (!skipCreate) {
+  if (!mayCreateMissingEnvironment(scope)) {
+    if (!(await githubEnvironmentExists(token, repositoryFullName, environment))) {
+      throw new Error(
+        `GitHub Environment "${environment}" does not exist yet, and a scoped environment is never ` +
+          'created unprotected. Run `pnpm github:sync` without --only first: it creates the ' +
+          `environment with the protection in .github/environments/${environment}.json, then pushes its keys.`,
+      );
+    }
+  } else if (!skipCreate) {
     await ensureGitHubEnvironment(token, repositoryFullName, environment);
   }
   const publicKey = await getEnvironmentPublicKey(token, repositoryFullName, environment);

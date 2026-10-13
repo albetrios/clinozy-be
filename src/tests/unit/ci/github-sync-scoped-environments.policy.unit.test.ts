@@ -13,7 +13,10 @@ import {
   validateGithubSyncConsistency,
   validateScopedEnvironments,
 } from '@tooling/setup/github/sync-config.js';
-import { scopeEntries } from '@tooling/setup/github/sync-github-environments.js';
+import {
+  mayCreateMissingEnvironment,
+  scopeEntries,
+} from '@tooling/setup/github/sync-github-environments.js';
 
 const ROOT = process.cwd();
 const DRILL_KEY = 'MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY';
@@ -118,6 +121,20 @@ describe('github:sync scoped environments', () => {
       );
       expect(details).toContain(
         `${DRILL_KEY} from "production" is taken by both "first-scope" and "second-scope".`,
+      );
+    });
+  });
+
+  describe('never fails open', () => {
+    it('refuses to create a missing scoped environment from the value sync', () => {
+      // The value sync creates environments with no protection; `--only` and the direct entry
+      // point skip the protection step. Created there, the drill environment would hand the Neon
+      // key to every branch — so it must already exist, protected from its committed JSON.
+      expect(
+        mayCreateMissingEnvironment(resolveEnvironmentKeyScope(config, DRILL_ENVIRONMENT)),
+      ).toBe(false);
+      expect(mayCreateMissingEnvironment(resolveEnvironmentKeyScope(config, 'production'))).toBe(
+        true,
       );
     });
   });
