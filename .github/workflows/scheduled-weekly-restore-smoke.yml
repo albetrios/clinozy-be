@@ -58,17 +58,20 @@ jobs:
           --health-timeout=5s
           --health-retries=20
     env:
-      MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY: ${{ secrets.MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY }}
       # Each GitHub Environment has its own Neon project; the script derives the project, branch,
       # database and owner names from it (the infrastructure repository's naming rule).
       RESTORE_DRILL_ENVIRONMENT: ${{ needs.resolve-environment.outputs.environment }}
       NODE_ENV: development
       REDIS_URL: redis://localhost:6379
+    # The Neon API key is set only on the steps that call Neon — never job-wide, where every
+    # dependency's install script and the test code could read it.
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Require restore drill secrets
+        env:
+          MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY: ${{ secrets.MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY}" ]; then
@@ -76,37 +79,47 @@ jobs:
             exit 1
           fi
 
-      - name: Provision Neon PITR restore branch
-        id: neon_drill
-        run: bash tooling/ci/restore-drill-neon.sh create
-
+      # Before the branch exists, so the production copy lives only as long as the restore steps.
       - name: Setup Node and pnpm
-        if: env.NEON_DRILL_DATABASE_URL != ''
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Export shared CI test env
-        if: env.NEON_DRILL_DATABASE_URL != ''
         uses: ./.github/actions/test-env
 
+      - name: Provision Neon PITR restore branch
+        id: neon_drill
+        env:
+          MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY: ${{ secrets.MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY }}
+        run: bash tooling/ci/restore-drill-neon.sh create
+
+      # Migrations take the direct endpoint (their advisory lock needs one backend); the app pools
+      # take the pooled one, as in production.
       - name: Run migrations on restored branch
         env:
-          DATABASE_URL: ${{ steps.neon_drill.outputs.database_url }}
-          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.database_url }}
+          DATABASE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
+          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
+          DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.direct_database_url }}
         run: pnpm db:migrate
 
       # The DR runbook's step after migrating (docs/process/dr-runbook.md): move every id sequence
       # past what the lost window issued. The smoke below then writes rows with the jumped ids.
+      # The script prints each sequence's value — production's row counts — and this repository's
+      # Actions logs are public, so only its last line (how many sequences moved) is shown.
       - name: Advance id sequences on restored branch
         env:
-          DATABASE_URL: ${{ steps.neon_drill.outputs.database_url }}
-          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.database_url }}
-        run: pnpm db:sequences:advance
+          DATABASE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
+          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
+          DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.direct_database_url }}
+        run: |
+          set -euo pipefail
+          pnpm --silent db:sequences:advance | tail -n 1
 
       - name: Auth integration smoke on restored database
         env:
-          DATABASE_URL: ${{ steps.neon_drill.outputs.database_url }}
-          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.database_url }}
-        run: pnpm test:integration -- --run src/domains/auth/__tests__/integration/auth.integration.test.ts
+          DATABASE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
+          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
+          DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.direct_database_url }}
+        run: pnpm test:integration src/domains/auth/__tests__/integration/auth.integration.test.ts
 
       - name: Delete Neon restore drill branch
         if: always() && steps.neon_drill.outputs.branch_id != ''

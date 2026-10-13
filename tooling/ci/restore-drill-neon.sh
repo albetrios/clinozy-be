@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Neon PITR branch helpers for the monthly restore drill workflow.
+# Neon PITR branch helpers for the restore drill workflows (monthly RTO drill, weekly restore smoke).
 # Requires: MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY (an organization or personal Neon API key),
 #           RESTORE_DRILL_ENVIRONMENT (the GitHub Environment, e.g. production), jq, curl.
+# `create` outputs branch_id (written first, so the delete step always finds the copy), then
+# direct_database_url (migrations) and pooled_database_url (app + smoke) — both masked, since this
+# repository's Actions logs are public — plus the RTO fields.
 # Every Neon name derives from PROJECT_SLUG (setup manifest) and the environment — the infrastructure
 # repository's rule, one Neon project per environment:
 #   project   <slug>-<environment>                e.g. clinozy-be-production
@@ -27,11 +30,14 @@ NEON_PARENT_BRANCH_NAME="${RESTORE_DRILL_ENVIRONMENT}"
 NEON_DATABASE_NAME="${NEON_PROJECT_NAME//-/_}"
 NEON_OWNER_ROLE_NAME="${NEON_DATABASE_NAME}_owner"
 PITR_LOOKBACK_MINUTES="${PITR_LOOKBACK_MINUTES:-15}"
-BRANCH_TTL_HOURS="${BRANCH_TTL_HOURS:-2}"
+# The drill branch is a full copy of production, patient rows included: it expires an hour after
+# creation even if the delete step never runs (a drill takes minutes).
+BRANCH_TTL_HOURS="${BRANCH_TTL_HOURS:-1}"
 OPERATION_POLL_INTERVAL_SECONDS="${OPERATION_POLL_INTERVAL_SECONDS:-2}"
 OPERATION_POLL_TIMEOUT_SECONDS="${OPERATION_POLL_TIMEOUT_SECONDS:-300}"
 
 _CACHED_NEON_PROJECT_ID=""
+NEON_CONNECTION_URI=""
 
 neon_api_key() {
   printf '%s' "${MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY:?MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY is required}"
@@ -151,6 +157,30 @@ resolve_parent_branch_id() {
   printf '%s' "$parent_branch_id"
 }
 
+# Sets NEON_CONNECTION_URI to the drill branch's URL for the project's own database and owner —
+# never Neon's default database and role — and masks the URL and its password first, so no later
+# step can print either: this repository's Actions logs are public. Call it directly, not in a
+# command substitution — the masks are workflow commands, read from this shell's stdout.
+neon_connection_uri() {
+  local project_id="$1"
+  local branch_id="$2"
+  local pooled="$3"
+  local database_url password
+  database_url="$(neon_request GET "/projects/${project_id}/connection_uri?branch_id=${branch_id}&database_name=${NEON_DATABASE_NAME}&role_name=${NEON_OWNER_ROLE_NAME}&pooled=${pooled}" | jq -r '.uri')"
+  if [ -z "$database_url" ] || [ "$database_url" = "null" ]; then
+    echo "::error::Neon did not return a connection URI for branch ${branch_id} (pooled=${pooled})" >&2
+    exit 1
+  fi
+  password="${database_url#*://}"
+  password="${password%%@*}"
+  password="${password#*:}"
+  echo "::add-mask::${database_url}"
+  if [ -n "$password" ]; then
+    echo "::add-mask::${password}"
+  fi
+  NEON_CONNECTION_URI="$database_url"
+}
+
 create_restore_drill_branch() {
   : "${GITHUB_OUTPUT:?GITHUB_OUTPUT is required}"
 
@@ -182,20 +212,29 @@ create_restore_drill_branch() {
 
   echo "Creating Neon restore drill branch ${branch_name} from parent ${parent_branch_name} at ${parent_timestamp}"
   create_json="$(neon_request POST "/projects/${project_id}/branches" "$create_body")"
+
+  local branch_id endpoint_id
+  branch_id="$(printf '%s' "$create_json" | jq -r '.branch.id')"
+  endpoint_id="$(printf '%s' "$create_json" | jq -r '.endpoints[0].id // empty')"
+  # Hand the branch to the delete step before anything else can fail: the copy holds patient rows.
+  echo "branch_id=${branch_id}" >> "$GITHUB_OUTPUT"
+  # This repository's Actions logs are public — keep the copy's endpoint out of them.
+  if [ -n "$endpoint_id" ]; then
+    echo "::add-mask::${endpoint_id}"
+  fi
   wait_for_neon_operations
 
-  local branch_id database_url
-  branch_id="$(printf '%s' "$create_json" | jq -r '.branch.id')"
-  # Ask for the project's own database and owner by name — never Neon's default database and role.
-  database_url="$(neon_request GET "/projects/${project_id}/connection_uri?branch_id=${branch_id}&database_name=${NEON_DATABASE_NAME}&role_name=${NEON_OWNER_ROLE_NAME}&pooled=true" | jq -r '.uri')"
-  if [ -z "$database_url" ] || [ "$database_url" = "null" ]; then
-    echo "::error::Neon did not return a connection URI for branch ${branch_id}"
-    exit 1
-  fi
+  local direct_database_url pooled_database_url
+  # Migrations need the direct endpoint (their advisory lock does not survive the pooler); the app
+  # and the smoke use the pooled one, as in production.
+  neon_connection_uri "$project_id" "$branch_id" false
+  direct_database_url="$NEON_CONNECTION_URI"
+  neon_connection_uri "$project_id" "$branch_id" true
+  pooled_database_url="$NEON_CONNECTION_URI"
 
   {
-    echo "database_url=${database_url}"
-    echo "branch_id=${branch_id}"
+    echo "direct_database_url=${direct_database_url}"
+    echo "pooled_database_url=${pooled_database_url}"
     echo "restore_start_epoch=${restore_start_epoch}"
     echo "restore_source=neon_pitr_branch"
     echo "parent_branch_name=${parent_branch_name}"

@@ -89,12 +89,108 @@ describe('restore drill automation policy', () => {
     ]) {
       const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
       const migrateIndex = workflow.indexOf('run: pnpm db:migrate');
-      const advanceIndex = workflow.indexOf('run: pnpm db:sequences:advance');
+      const advanceIndex = workflow.indexOf('pnpm --silent db:sequences:advance');
       const smokeIndex = workflow.indexOf('run: pnpm test:integration');
 
       expect(migrateIndex, workflowFileName).toBeGreaterThan(-1);
       expect(advanceIndex, workflowFileName).toBeGreaterThan(migrateIndex);
       expect(smokeIndex, workflowFileName).toBeGreaterThan(advanceIndex);
     }
+  });
+
+  describe('runs end to end on a public repository without leaking production', () => {
+    const drillWorkflowFileNames = [
+      'scheduled-monthly-restore-rto.yml',
+      'scheduled-weekly-restore-smoke.yml',
+    ];
+    const script = readFileSync(join(ROOT, 'tooling/ci/restore-drill-neon.sh'), 'utf8');
+
+    it('installs dependencies before the branch exists, with no skip condition', () => {
+      // The skip condition read an env var nothing set, so pnpm was never installed and every
+      // drill died on `pnpm: command not found`.
+      for (const workflowFileName of drillWorkflowFileNames) {
+        const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
+        expect(workflow, workflowFileName).not.toContain('NEON_DRILL_DATABASE_URL');
+        expect(
+          workflow.indexOf('uses: ./.github/actions/setup-node-pnpm'),
+          workflowFileName,
+        ).toBeGreaterThan(-1);
+        expect(
+          workflow.indexOf('uses: ./.github/actions/setup-node-pnpm'),
+          workflowFileName,
+        ).toBeLessThan(workflow.indexOf('tooling/ci/restore-drill-neon.sh create'));
+      }
+    });
+
+    it('hands the Neon API key only to the steps that call Neon', () => {
+      for (const workflowFileName of drillWorkflowFileNames) {
+        const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
+        // Job-level env (six spaces) reaches every step: the install scripts and the test code.
+        expect(workflow, workflowFileName).not.toMatch(
+          /^ {6}MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY:/m,
+        );
+        // Step-level env (ten spaces): the secret check, create and delete — nothing else.
+        expect(
+          workflow.match(/^ {10}MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY:/gm),
+          workflowFileName,
+        ).toHaveLength(3);
+      }
+    });
+
+    it('migrates over the direct endpoint and runs the app over the pooled one', () => {
+      for (const workflowFileName of drillWorkflowFileNames) {
+        const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
+        expect(workflow, workflowFileName).toContain(
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression in the workflow YAML — not a TS template.
+          'DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.direct_database_url }}',
+        );
+        expect(workflow, workflowFileName).toContain(
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression in the workflow YAML — not a TS template.
+          'DATABASE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}',
+        );
+        expect(workflow, workflowFileName).not.toContain('outputs.database_url');
+      }
+      expect(script).toContain('neon_connection_uri "$project_id" "$branch_id" false');
+      expect(script).toContain('neon_connection_uri "$project_id" "$branch_id" true');
+    });
+
+    it('shows only the count of advanced sequences — their values are production row counts', () => {
+      for (const workflowFileName of drillWorkflowFileNames) {
+        const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
+        expect(workflow, workflowFileName).toContain(
+          'pnpm --silent db:sequences:advance | tail -n 1',
+        );
+        expect(workflow, workflowFileName).not.toContain('run: pnpm db:sequences:advance');
+      }
+    });
+
+    it('smokes the one auth suite, not the whole integration project', () => {
+      // pnpm forwards a literal `--`, after which Vitest drops the file filter and runs all of
+      // the integration project against the production copy.
+      for (const workflowFileName of drillWorkflowFileNames) {
+        const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
+        expect(workflow, workflowFileName).toContain(
+          'run: pnpm test:integration src/domains/auth/__tests__/integration/auth.integration.test.ts',
+        );
+        expect(workflow, workflowFileName).not.toMatch(/pnpm test:integration -- /);
+      }
+    });
+
+    it('masks the drill branch URLs and endpoint, and records the branch before anything can fail', () => {
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
+      expect(script).toContain('echo "::add-mask::${database_url}"');
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
+      expect(script).toContain('echo "::add-mask::${password}"');
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
+      expect(script).toContain('echo "::add-mask::${endpoint_id}"');
+      // The delete step finds the branch by this output; written last, a failure in between left
+      // a copy of production up until its expiry.
+      expect(script.indexOf('echo "branch_id=')).toBeGreaterThan(-1);
+      expect(script.indexOf('echo "branch_id=')).toBeLessThan(
+        script.lastIndexOf('wait_for_neon_operations'),
+      );
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
+      expect(script).toContain('BRANCH_TTL_HOURS="${BRANCH_TTL_HOURS:-1}"');
+    });
   });
 });
