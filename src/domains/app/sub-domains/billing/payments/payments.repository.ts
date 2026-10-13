@@ -257,27 +257,32 @@ export class PaymentsRepository extends BaseRecordRepository {
   }
 
   /**
-   * Moves an invoice's paid amount by `delta` in one guarded statement (B5, B21) — never below 0
-   * nor above its total; null when the guard refuses.
+   * Moves an invoice's paid and refunded amounts in one guarded statement (B5, B16, B21) — neither
+   * below 0, and together never above its total (a refund moves money from one to the other);
+   * null when the guard refuses.
    */
   async adjustInvoicePaid(options: {
     invoiceId: number;
-    delta: number;
+    paidDelta: number;
+    refundedDelta: number;
     userId: number | null;
   }): Promise<BaseRecordRow | null> {
-    const moved = sql`${invoices.paid_amount} + ${options.delta}`;
+    const paid = sql`${invoices.paid_amount} + ${options.paidDelta}`;
+    const refunded = sql`${invoices.refunded_amount} + ${options.refundedDelta}`;
     const rows = (await getRequestDatabase()
       .update(invoices)
       .set({
-        paid_amount: moved,
+        paid_amount: paid,
+        refunded_amount: refunded,
         updated_at: sql`greatest(${invoices.created_at}, now())`,
         updated_by_user_id: options.userId,
       } as never)
       .where(
         and(
           eq(invoices.id, options.invoiceId),
-          sql`${moved} >= 0`,
-          sql`${moved} <= ${invoices.total}`,
+          sql`${paid} >= 0`,
+          sql`${refunded} >= 0`,
+          sql`${paid} + ${refunded} <= ${invoices.total}`,
         ),
       )
       .returning()) as BaseRecordRow[];

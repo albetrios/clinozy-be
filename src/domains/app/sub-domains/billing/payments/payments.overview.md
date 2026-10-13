@@ -39,8 +39,9 @@ Tables `app.payments` (splits as columns) and `app.payment_edits` (what each cha
 - **Kind fixes direction (B17); splits add up (B18)** — both held by `CHECK`s.
 - **A closed day locks its money (B6):** every write reads the day close `FOR SHARE`; a settled
   payment is undone only by a reversal (once).
-- **The invoice's paid amount moves in the same transaction (B21):** receipts add, refunds take
-  away, reversals undo — in one guarded statement, never under 0 nor over the total.
+- **The invoice's money moves in the same transaction (B21):** receipts add to `paid_amount`,
+  refunds move theirs from `paid_amount` to `refunded_amount`, reversals undo either — in one
+  guarded statement, neither under 0 nor the two together over the total (launch D93).
 - **Changes are recorded (B20):** each `PATCH` writes the changed fields to `app.payment_edits` —
   `changes` is `{ field: { from, to } }`, each value shaped as its field (`splits` a list of
   `{ mode, amount }`, `paid_at` an instant, the links public ids, the texts strings; D81 PAY-M5).

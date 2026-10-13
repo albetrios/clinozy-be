@@ -101,9 +101,9 @@ describe('Flow — refund and credit carried to the next bill', () => {
     flow.expectValue('its refund payment', '(.data.payment_id | startswith("pay_"))', true);
     await flow.expect(200, 'the bill', 'GET', `/app/invoices/${packageBill}`);
     flow.expectValue(
-      '5,000 paid, 1,000 due',
-      '[.data.paid_amount, .data.due_amount, .data.payment_status] | map(tostring) | join(",")',
-      '5000,1000,partial',
+      '5,000 paid, 1,000 refunded, nothing due (D93)',
+      '[.data.paid_amount, .data.refunded_amount, .data.due_amount, .data.payment_status] | map(tostring) | join(",")',
+      '5000,1000,0,paid',
     );
   });
 
@@ -190,7 +190,11 @@ describe('Flow — refund and credit carried to the next bill', () => {
       '500,1000',
     );
     await flow.expect(200, 'the package bill', 'GET', `/app/invoices/${packageBill}`);
-    flow.expectValue('4,500 kept', '.data.paid_amount', 4500);
+    flow.expectValue(
+      '4,500 kept, 1,500 refunded, still nothing due',
+      '[.data.paid_amount, .data.refunded_amount, .data.due_amount] | map(tostring) | join(",")',
+      '4500,1500,0',
+    );
     await flow.expect(200, 'her payments', 'GET', `/app/payments?contact_id=${contact}`);
     flow.expectValue(
       'UPI in, two cash refunds out, the credit used',

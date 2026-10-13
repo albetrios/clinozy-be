@@ -778,6 +778,8 @@ describe('Billing — integration (routes-final §8)', () => {
   it('8.B credit notes (routes 8–11)', async () => {
     flow.as('owner');
     const creditNotes = `/app/invoices/${invoiceBina}/credit-notes`;
+    await flow.expect(200, 'the bill before the refund', 'GET', `/app/invoices/${invoiceBina}`);
+    const dueBefore = Number(flow.last('.data.due_amount'));
     await flow.expect(200, 'refund Bina 200 (B16)', 'POST', creditNotes, {
       amount: 200,
       reason: 'Unhappy with the result',
@@ -792,6 +794,9 @@ describe('Billing — integration (routes-final §8)', () => {
     );
     await flow.expect(200, "the bill's paid amount fell", 'GET', `/app/invoices/${invoiceBina}`);
     flow.expectValue('paid 300', '.data.paid_amount', 300);
+    // The refund moved its money to refunded: the bill owes what it owed before it (B16).
+    flow.expectValue('refunded 200', '.data.refunded_amount', 200);
+    flow.expectValue('owes as before', '.data.due_amount', dueBefore);
     await flow.expect(200, 'the refund payment', 'GET', `/app/payments/${creditNotePayment}`);
     flow.expectValue(
       'refund: paid, the credit note, the contact',
@@ -866,6 +871,7 @@ describe('Billing — integration (routes-final §8)', () => {
     await flow.expect(404, 'its credit note goes too (B16)', 'GET', `${creditNotes}/${creditNote}`);
     await flow.expect(200, 'the money is back on the bill', 'GET', `/app/invoices/${invoiceBina}`);
     flow.expectValue('paid 500', '.data.paid_amount', 500);
+    flow.expectValue('nothing refunded', '.data.refunded_amount', 0);
     await flow.expect(
       200,
       'restore the refund',
@@ -926,6 +932,62 @@ describe('Billing — integration (routes-final §8)', () => {
       'GET',
       `/app/payments/${branchReceipt?.public_id}`,
     );
+  });
+
+  it('B16: a refunded bill owes no more than before it', async () => {
+    flow.as('owner');
+    const kiran = await person('Kiran', '29');
+    await flow.expect(200, "Kiran's file", 'POST', '/app/patients', {
+      contact_id: kiran,
+      home_branch_id: vesu,
+    });
+    await flow.expect(
+      200,
+      'bill Kiran 1180, paid in full now',
+      'POST',
+      '/app/invoices',
+      invoiceBody(vesu, kiran, facial, {
+        payment: { splits: [{ mode: 'cash', amount: 1180 }] },
+      }),
+    );
+    const bill = flow.last('.data.id');
+    const MONEY =
+      '[.data.paid_amount, .data.refunded_amount, .data.due_amount, .data.payment_status] | map(tostring) | join(",")';
+    flow.expectValue('paid in full', MONEY, '1180,0,0,paid');
+    const creditNotes = `/app/invoices/${bill}/credit-notes`;
+    await flow.expect(200, 'refund 300 of it', 'POST', creditNotes, {
+      amount: 300,
+      reason: 'One session missed',
+      splits: [{ mode: 'cash', amount: 300 }],
+    });
+    const refund = flow.last('.data.payment_id');
+    await flow.expect(200, 'the bill after the refund', 'GET', `/app/invoices/${bill}`);
+    flow.expectValue('still owes nothing', MONEY, '880,300,0,paid');
+    await flow.expect(409, 'nothing more to collect', 'POST', '/app/payments', {
+      ...payment('receipt', vesu, [{ mode: 'cash', amount: 10 }]),
+      contact_id: kiran,
+      invoice_id: bill,
+    });
+    flow.expectValue('more than due: why', REASON, 'more_than_due');
+    await flow.expect(204, 'delete the refund', 'DELETE', `/app/payments/${refund}?reason=mistake`);
+    await flow.expect(200, 'the bill without it', 'GET', `/app/invoices/${bill}`);
+    flow.expectValue('paid in full again', MONEY, '1180,0,0,paid');
+    await flow.expect(200, 'restore the refund', 'POST', `/app/payments/${refund}/restore`);
+    await flow.expect(200, 'the bill with it again', 'GET', `/app/invoices/${bill}`);
+    flow.expectValue('refunded again', MONEY, '880,300,0,paid');
+    await flow.expect(200, 'refund the rest', 'POST', creditNotes, {
+      amount: 880,
+      reason: 'Treatment stopped',
+      splits: [{ mode: 'upi', amount: 880 }],
+    });
+    await flow.expect(200, 'the bill refunded in full', 'GET', `/app/invoices/${bill}`);
+    flow.expectValue('all of it back', MONEY, '0,1180,0,paid');
+    await flow.expect(409, 'nothing left to refund', 'POST', creditNotes, {
+      amount: 1,
+      reason: 'One more',
+      splits: [{ mode: 'cash', amount: 1 }],
+    });
+    flow.expectValue('more than paid: why', REASON, 'more_than_paid');
   });
 
   it('8.D pending credits (routes 21–27)', async () => {

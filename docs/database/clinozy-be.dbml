@@ -531,6 +531,7 @@ Table app.invoices {
   patient_prescription_id bigint
   payment_status varchar(7)
   public_id varchar(28) [not null]
+  refunded_amount numeric(12, 2) [not null]
   remark varchar(500)
   subtotal numeric(12, 2) [not null]
   taxable_total numeric(12, 2) [not null]

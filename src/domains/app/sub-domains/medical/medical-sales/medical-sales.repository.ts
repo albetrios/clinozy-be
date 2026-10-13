@@ -323,8 +323,7 @@ export class MedicalSalesRepository extends BaseRecordRepository {
     const dueTotal = sql`sum(${invoices.due_amount})`;
     const conditions = [
       eq(medical_sales.organization_id, options.organizationId),
-      // The Sales tab's Unpaid: live, never returned, money still due (a refund lowers the paid
-      // amount, so a returned sale's invoice reads due again — it owes nothing).
+      // The Sales tab's Unpaid: live, never returned, money still due.
       statusSql(MEDICAL_SALE_STATUS.UNPAID),
       this.searchCondition(options.q),
       options.createdFrom === undefined
@@ -362,20 +361,6 @@ export class MedicalSalesRepository extends BaseRecordRepository {
       .where(eq(medical_sale_returns.medical_sale_id, saleId))
       .limit(1);
     return rows.length > 0;
-  }
-
-  /** MD21: what live credit notes have given back on an invoice, rupees. */
-  async findCreditedAmount(invoiceId: number): Promise<number> {
-    const rows = await getRequestDatabase()
-      .select({ total: sql<string>`coalesce(sum(${invoice_credit_notes.amount}), 0)` })
-      .from(invoice_credit_notes)
-      .where(
-        and(
-          eq(invoice_credit_notes.invoice_id, invoiceId),
-          sql`${invoice_credit_notes.deleted_at} is null`,
-        ),
-      );
-    return Number(rows[0]?.total ?? 0);
   }
 
   /** MD21: writes a return and its lines. */

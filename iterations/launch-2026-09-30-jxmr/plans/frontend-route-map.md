@@ -168,7 +168,7 @@ frontend shows Payments and Credits as two tabs (`/medical/payments`, `/medical/
 | `receivePayment` | `POST /app/payments` (`kind=receipt`) | `splits` across cash, UPI, card and credit |
 | `payExpense` | `POST /app/payments` (`kind=expense` or `supplier_bill`) | |
 | `updatePayment` | `PATCH /app/payments/:payment_id` | only on an open day; a settled payment is undone by `POST …/reverse` |
-| `refundPayment` | `POST /app/invoices/:invoice_id/credit-notes` | writes the credit note and its refund together |
+| `refundPayment` | `POST /app/invoices/:invoice_id/credit-notes` | writes the credit note and its refund together; up to what is paid less the invoice's store-credit notes (`409 more_than_paid`); the refund moves its money from the invoice's `paid_amount` to `refunded_amount`, so `due_amount` (total − paid − refunded) does not rise — show paid and refunded apart, never "due" for a refunded bill (D93) |
 | create / update PendingCredit | `POST` / `PATCH /app/pending-credits[/:pending_credit_id]` | |
 | `settleCredit` | `POST /app/pending-credits/:pending_credit_id/settle` | |
 | `acceptOpeningCash` | `POST /app/day-closes` | opens the branch's day: carried from the last close, or recounted |

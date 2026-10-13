@@ -1177,7 +1177,11 @@ export const invoicesRecordSchema = {
     gst_total: { type: 'number' },
     total: { type: 'number' },
     paid_amount: { type: 'number' },
-    due_amount: { type: 'number' },
+    refunded_amount: {
+      type: 'number',
+      description: 'What its credit notes refunded — a refund moves its money here from paid (B16)',
+    },
+    due_amount: { type: 'number', description: 'total − paid − refunded' },
     payment_status: { type: 'string', enum: ['paid', 'partial', 'unpaid'] },
     is_settled: { type: 'boolean', description: 'A payment on a closed day (B12)' },
     invoice_date: { type: 'string', format: 'date' },
@@ -1234,6 +1238,7 @@ export const invoicesRecordExample = {
   gst_total: 180,
   total: 1180,
   paid_amount: 500,
+  refunded_amount: 0,
   due_amount: 680,
   payment_status: 'partial',
   is_settled: false,
@@ -1304,7 +1309,11 @@ export const invoicePreviewSchema = {
     gst_total: { type: 'number' },
     total: { type: 'number' },
     paid_amount: { type: 'number', description: 'Already paid — 0 for a new bill' },
-    due_amount: { type: 'number' },
+    refunded_amount: {
+      type: 'number',
+      description: 'What its credit notes refunded — 0 for a new bill',
+    },
+    due_amount: { type: 'number', description: 'total − paid − refunded' },
   },
 };
 
@@ -1342,6 +1351,7 @@ export const invoicePreviewExample = {
   gst_total: 162,
   total: 1062,
   paid_amount: 0,
+  refunded_amount: 0,
   due_amount: 1062,
 };
 

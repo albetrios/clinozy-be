@@ -1794,6 +1794,14 @@ describe('Medical store — integration (routes-final §11)', () => {
       '1,369,null',
     );
     await flow.expect(
+      409,
+      'the credit holds the money: no cash refund of it too (B16)',
+      'POST',
+      `/app/invoices/${invoice}/credit-notes`,
+      { amount: 369, reason: 'Refund again', splits: [{ mode: 'cash', amount: 369 }] },
+    );
+    flow.expectValue('more than paid: why', '.error.reason', 'more_than_paid');
+    await flow.expect(
       200,
       "the store's customer credits (route 56)",
       'GET',

@@ -10,6 +10,7 @@ import { attachBilledContacts } from '@/domains/app/sub-domains/billing/invoices
 import { InvoicesRepository } from '@/domains/app/sub-domains/billing/invoices/invoices.repository.js';
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { InvoiceCreditNotesRepository } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.repository.js';
+import { assertCreditNoteRefundable } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.rules.js';
 import {
   PAYMENT_DIRECTION,
   PAYMENT_KIND,
@@ -110,9 +111,7 @@ async function settleByRefund(options: {
       : null;
   let creditNoteId: number | null = null;
   if (invoice) {
-    if (paiseOf(body.amount) > paiseOf(invoice.paid_amount)) {
-      throw new ConflictError('errors:paymentMoreThanPaid').withReason('more_than_paid');
-    }
+    await assertCreditNoteRefundable({ invoice, amount: body.amount });
     const creditNote = await creditNotesRepository.insert({
       organization_id: context.organizationId,
       invoice_id: invoice.id,

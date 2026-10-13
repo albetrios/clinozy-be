@@ -39,7 +39,7 @@ export function invoicesRoutes(service: InvoicesService): FastifyPluginAsync {
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'List invoices',
-          description: `Returns one page of the organization's invoices, each with its lines, the billed \`contact\` and \`patient_id\`, the server's amounts, \`paid_amount\`, \`due_amount\`, \`payment_status\`, \`is_settled\` (a payment on a closed day) and \`created_by_membership_id\` (who billed it). \`meta.due_total\` and \`meta.paid_total\` sum what is due and paid over every invoice the filters match (every page). ${LIST_FILTERS} Requires payment:read.`,
+          description: `Returns one page of the organization's invoices, each with its lines, the billed \`contact\` and \`patient_id\`, the server's amounts, \`paid_amount\`, \`refunded_amount\` (what its credit notes refunded — a refund moves its money there from paid), \`due_amount\` (total − paid − refunded), \`payment_status\`, \`is_settled\` (a payment on a closed day) and \`created_by_membership_id\` (who billed it). \`meta.due_total\` and \`meta.paid_total\` sum what is due and paid over every invoice the filters match (every page). ${LIST_FILTERS} Requires payment:read.`,
           tags: ['Invoice'],
           querystring: listInvoicesQueryDto,
         },

@@ -275,8 +275,8 @@ async function returnSale(input: BaseRecordActionInput): Promise<BaseRecordRow> 
   const repository = input.repository as MedicalSalesRepository;
   const body = parseWithSchema({ schema: ReturnMedicalSaleDto, data: input.input });
   const invoice = await invoicesRepository.findById(sale.invoice_id as number);
-  const credited = await repository.findCreditedAmount(sale.invoice_id as number);
-  if (!invoice || paiseOf(invoice.paid_amount) + paiseOf(credited) < paiseOf(invoice.total)) {
+  // Paid in full: nothing due — what an earlier return refunded no longer counts as owed (B16).
+  if (!invoice || paiseOf(invoice.due_amount) > 0) {
     throw new ConflictError('errors:medicalSaleNotPaid').withReason('sale_not_paid');
   }
   const lines = new Map(

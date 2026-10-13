@@ -4527,6 +4527,7 @@
             "gst_total": 0,
             "total": 1500,
             "paid_amount": 0,
+            "refunded_amount": 0,
             "due_amount": 1500,
             "payment_status": "unpaid",
             "is_settled": false,
@@ -4621,6 +4622,7 @@
           "gst_total": 162,
           "total": 1062,
           "paid_amount": 1000,
+          "refunded_amount": 0,
           "due_amount": 62,
           "payment_status": "partial",
           "is_settled": false,
@@ -13504,6 +13506,7 @@
           "gst_total": 900,
           "total": 5900,
           "paid_amount": 0,
+          "refunded_amount": 0,
           "due_amount": 5900,
           "payment_status": "unpaid",
           "is_settled": false,
@@ -20238,6 +20241,7 @@
           "gst_total": 0,
           "total": 500,
           "paid_amount": 0,
+          "refunded_amount": 0,
           "due_amount": 500,
           "payment_status": "unpaid",
           "is_settled": false,
@@ -20438,6 +20442,7 @@
           "gst_total": 162,
           "total": 1062,
           "paid_amount": 1000,
+          "refunded_amount": 0,
           "due_amount": 62
         },
         "meta": {
@@ -20556,6 +20561,7 @@
           "gst_total": 0,
           "total": 500,
           "paid_amount": 0,
+          "refunded_amount": 0,
           "due_amount": 500,
           "payment_status": "unpaid",
           "is_settled": false,
@@ -20687,6 +20693,7 @@
           "gst_total": 1077.25,
           "total": 7062,
           "paid_amount": 0,
+          "refunded_amount": 0,
           "due_amount": 7062
         },
         "meta": {

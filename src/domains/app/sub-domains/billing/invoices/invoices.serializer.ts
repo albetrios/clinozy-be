@@ -82,6 +82,7 @@ export function serializeInvoice({
     gst_total: money(row.gst_total),
     total: money(row.total),
     paid_amount: money(row.paid_amount),
+    refunded_amount: money(row.refunded_amount),
     due_amount: money(row.due_amount),
     payment_status: row.payment_status as string,
     is_settled: false,
@@ -149,7 +150,8 @@ function serializeInvoicePreviewItem({
 
 /**
  * Shapes a save's plan as `POST /app/invoices/preview` and `…/{invoice_id}/preview` return it
- * (D81, Q2): the lines and the totals the save would write; `paid_amount` what is already paid.
+ * (D81, Q2): the lines and the totals the save would write; `paid_amount` what is already paid,
+ * `refunded_amount` what its credit notes refunded, and `due_amount` the rest.
  */
 export function serializeInvoicePreview(options: {
   plan: InvoiceLinePlan;
@@ -157,6 +159,7 @@ export function serializeInvoicePreview(options: {
   invoice_date: string;
   overall_discount: number;
   paid_amount: number;
+  refunded_amount: number;
   public_ids: InvoicePreviewPublicIds;
 }): InvoicePreviewOutput {
   const { totals } = options.plan;
@@ -174,6 +177,7 @@ export function serializeInvoicePreview(options: {
     gst_total: totals.gst_total ?? 0,
     total,
     paid_amount: options.paid_amount,
-    due_amount: roundToPaise(total - options.paid_amount),
+    refunded_amount: options.refunded_amount,
+    due_amount: roundToPaise(total - options.paid_amount - options.refunded_amount),
   };
 }

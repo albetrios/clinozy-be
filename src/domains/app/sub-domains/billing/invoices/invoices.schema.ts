@@ -49,8 +49,9 @@ import {
  * - **Notes:** two numbers from triggers, never reused (B11) — `invoice_sequence` ("#1042",
  *   organization-wide) and the statutory `invoice_number` per branch and financial year
  *   ("2026-27/0412", `trg_invoices_invoice_number`); the amounts are computed and stored by the
- *   server (B5, B9), `paid_amount` kept by the payment writes, `due_amount` and `payment_status`
- *   generated. The billed person is a contact — required but for a `medical` invoice (B3); the
+ *   server (B5, B9), `paid_amount` and `refunded_amount` kept by the payment writes (a refund
+ *   moves its money from one to the other), `due_amount` (total − paid − refunded) and
+ *   `payment_status` generated. The billed person is a contact — required but for a `medical` invoice (B3); the
  *   branch is fixed (B4). Its lines are `app.invoice_items`, its credited team
  *   `app.invoice_members`. RLS on the organization GUC with the retention-cleanup arm for the purge;
  *   the branch is an application filter.
@@ -91,12 +92,16 @@ export const invoices = appSchema
       total: numeric('total', { precision: 12, scale: 2 }).notNull().default('0.00'),
       // Kept by every payment write in its transaction (B5, B21)
       paid_amount: numeric('paid_amount', { precision: 12, scale: 2 }).notNull().default('0.00'),
+      // What its credit notes refunded — a refund moves its money here from `paid_amount` (B16)
+      refunded_amount: numeric('refunded_amount', { precision: 12, scale: 2 })
+        .notNull()
+        .default('0.00'),
       due_amount: numeric('due_amount', { precision: 12, scale: 2 }).generatedAlwaysAs(
-        (): SQL => sql`total - paid_amount`,
+        (): SQL => sql`total - paid_amount - refunded_amount`,
       ),
       payment_status: varchar('payment_status', { length: 7 }).generatedAlwaysAs(
         (): SQL =>
-          sql`CASE WHEN total - paid_amount <= 0 THEN 'paid' WHEN paid_amount > 0 THEN 'partial' ELSE 'unpaid' END`,
+          sql`CASE WHEN total - paid_amount - refunded_amount <= 0 THEN 'paid' WHEN paid_amount + refunded_amount > 0 THEN 'partial' ELSE 'unpaid' END`,
       ),
       remark: varchar('remark', { length: 500 }),
       patient_prescription_id: bigint('patient_prescription_id', { mode: 'number' }).references(
@@ -168,7 +173,7 @@ export const invoices = appSchema
       ),
       check(
         'chk_invoices_paid_amount',
-        sql`${table.paid_amount} >= 0 AND ${table.paid_amount} <= ${table.total}`,
+        sql`${table.paid_amount} >= 0 AND ${table.refunded_amount} >= 0 AND ${table.paid_amount} + ${table.refunded_amount} <= ${table.total}`,
       ),
       check('chk_invoices_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(

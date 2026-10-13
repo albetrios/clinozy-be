@@ -244,8 +244,10 @@ async function replanChangedLines(options: {
     items: (values.items as InvoiceItemInput[] | undefined) ?? stored.map(keptLine),
     existing: stored,
   });
-  const paid = toAmount(existing.paid_amount) ?? 0;
-  if (paiseOf(plan.totals.total) < paiseOf(paid)) {
+  // What came in — kept or refunded against a credit note — the total can't drop below (B16).
+  const received =
+    (toAmount(existing.paid_amount) ?? 0) + (toAmount(existing.refunded_amount) ?? 0);
+  if (paiseOf(plan.totals.total) < paiseOf(received)) {
     throw new ConflictError('errors:invoiceBelowPaid').withReason('below_paid');
   }
   return plan;
@@ -420,6 +422,7 @@ async function previewOf(options: {
   invoiceDate: string;
   overallDiscount: number;
   paidAmount: number;
+  refundedAmount: number;
 }): Promise<InvoicePreviewOutput> {
   const idsOf = (field: string) =>
     options.plan.lines.flatMap((line) => {
@@ -432,6 +435,7 @@ async function previewOf(options: {
     invoice_date: options.invoiceDate,
     overall_discount: options.overallDiscount,
     paid_amount: options.paidAmount,
+    refunded_amount: options.refundedAmount,
     public_ids: {
       offerings: await resolveRecordPublicIds({ table: offerings, ids: idsOf('offering_id') }),
       medicines: await resolveRecordPublicIds({ table: medicines, ids: idsOf('medicine_id') }),
@@ -467,6 +471,7 @@ async function previewInvoice(input: BaseRecordCollectionInput): Promise<Invoice
     invoiceDate: String(values.invoice_date),
     overallDiscount: Number(values.overall_discount ?? 0),
     paidAmount: 0,
+    refundedAmount: 0,
   });
 }
 
@@ -514,6 +519,7 @@ async function previewInvoiceChange({
     invoiceDate: String(values.invoice_date ?? existing.invoice_date),
     overallDiscount: Number(values.overall_discount ?? toAmount(existing.overall_discount) ?? 0),
     paidAmount: toAmount(existing.paid_amount) ?? 0,
+    refundedAmount: toAmount(existing.refunded_amount) ?? 0,
   });
 }
 

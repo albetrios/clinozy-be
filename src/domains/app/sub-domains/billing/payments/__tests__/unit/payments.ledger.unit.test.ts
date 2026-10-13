@@ -5,6 +5,7 @@ import {
   paymentActivityBody,
   pendingCreditEffect,
   purchaseEffect,
+  scaleInvoiceMove,
   splitsToColumns,
 } from '@/domains/app/sub-domains/billing/payments/payments.ledger.js';
 import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
@@ -77,24 +78,53 @@ describe('columnsToSplits (B18)', () => {
   });
 });
 
-describe('invoiceEffect (8.10, B5, B21)', () => {
-  it('a receipt adds to the paid amount and a refund takes away', () => {
-    expect(invoiceEffect({ row: payment({ kind: 'receipt', amount: '500.00' }) })).toBe(500);
-    expect(invoiceEffect({ row: payment({ kind: 'refund', amount: '200.00' }) })).toBe(-200);
+describe('invoiceEffect (8.10, B5, B16, B21)', () => {
+  it('a receipt adds to what is paid; a refund moves its money from paid to refunded', () => {
+    expect(invoiceEffect({ row: payment({ kind: 'receipt', amount: '500.00' }) })).toEqual({
+      paid: 500,
+      refunded: 0,
+    });
+    expect(invoiceEffect({ row: payment({ kind: 'refund', amount: '200.00' }) })).toEqual({
+      paid: -200,
+      refunded: 200,
+    });
   });
 
   it('a reversal undoes exactly what it reverses', () => {
     const receipt = payment({ kind: 'receipt', amount: '500.00' });
     const refund = payment({ kind: 'refund', amount: '200.00' });
-    expect(invoiceEffect({ row: payment({ kind: 'reversal' }), reversed: receipt })).toBe(-500);
-    expect(invoiceEffect({ row: payment({ kind: 'reversal' }), reversed: refund })).toBe(200);
+    expect(invoiceEffect({ row: payment({ kind: 'reversal' }), reversed: receipt })).toEqual({
+      paid: -500,
+      refunded: -0,
+    });
+    expect(invoiceEffect({ row: payment({ kind: 'reversal' }), reversed: refund })).toEqual({
+      paid: 200,
+      refunded: -200,
+    });
   });
 
   it('nothing else touches the invoice', () => {
     for (const kind of ['expense', 'supplier_bill', 'money_back']) {
-      expect(invoiceEffect({ row: payment({ kind, amount: '10.00' }) })).toBe(0);
+      expect(invoiceEffect({ row: payment({ kind, amount: '10.00' }) })).toEqual({
+        paid: 0,
+        refunded: 0,
+      });
     }
-    expect(invoiceEffect({ row: payment({ kind: 'reversal', amount: '10.00' }) })).toBe(0);
+    expect(invoiceEffect({ row: payment({ kind: 'reversal', amount: '10.00' }) })).toEqual({
+      paid: 0,
+      refunded: 0,
+    });
+  });
+});
+
+describe('scaleInvoiceMove', () => {
+  it('scales a move, or takes one from another', () => {
+    const refund = { paid: -200, refunded: 200 };
+    expect(scaleInvoiceMove({ move: refund, factor: -1 })).toEqual({ paid: 200, refunded: -200 });
+    expect(scaleInvoiceMove({ move: { paid: -250, refunded: 250 }, minus: refund })).toEqual({
+      paid: -50,
+      refunded: 50,
+    });
   });
 });
 

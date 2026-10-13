@@ -5102,7 +5102,7 @@ Every route can answer the errors in 8.5; each route's own errors are in its nes
 
 ### 8.10 Rules worth knowing
 
-- Paid = receipts against the invoice − refunds against it (reversals cancel either); due = total − paid; status `paid` · `partial` · `unpaid`. Nobody pays more than the due (`409 more_than_due`).
+- Paid = receipts against the invoice; a refund moves its money from paid to refunded (reversals cancel either); due = total − paid − refunded (**D93**: a refunded invoice owes no more than before it); status `paid` · `partial` · `unpaid`. Nobody pays more than the due (`409 more_than_due`), and nobody refunds more than is paid less the store-credit notes on the invoice (`409 more_than_paid`).
 - A refund to a patient is always a credit note on the invoice plus its refund payment (8.B); money given back without an invoice goes through a pending credit (8.D).
 - Selling an offering or a plan row is invoicing it (7): a `treatment`, `package` or `lhr` line creates the patient offering, links the plan row and marks it accepted, and links the treatments it bills (B28).
 - Today's checkout "Previous due" and "Advance paid" are separate entries: a receipt against the older invoice, and an advance (a receipt with no invoice) moved onto the bill by changing its invoice on an open day.
@@ -5165,8 +5165,9 @@ None.
 | `invoice_date` | `date` | no | | stays in its financial year |
 | `overall_discount` | `numeric(12,2)` | no | `0` | `≥ 0` |
 | `subtotal`, `discount_total`, `taxable_total`, `gst_total`, `total` | `numeric(12,2)` | no | `0` | computed (B9); each `≥ 0`; `total = taxable_total + gst_total` |
-| `paid_amount` | `numeric(12,2)` | no | `0` | `0 ≤ paid_amount ≤ total`; kept by the payment writes |
-| `due_amount` | `numeric(12,2)` | | generated | `total − paid_amount`, stored |
+| `paid_amount` | `numeric(12,2)` | no | `0` | `≥ 0`; kept by the payment writes |
+| `refunded_amount` | `numeric(12,2)` | no | `0` | `≥ 0`; `paid_amount + refunded_amount ≤ total`; a refund moves its money here from `paid_amount`, its reversal or delete back (**D93**) |
+| `due_amount` | `numeric(12,2)` | | generated | `total − paid_amount − refunded_amount`, stored (**D93**) |
 | `payment_status` | `varchar(7)` | | generated | `paid` (nothing due) · `partial` · `unpaid`, stored |
 | `remark` | `varchar(500)` | yes | | printed |
 | `patient_prescription_id` | `bigint` | yes | | → patient_prescriptions `ON DELETE SET NULL` |
@@ -5216,7 +5217,7 @@ As 8.5.
 
 #### 8.A.6 Objects returned
 
-**Invoice**: `id` (`invc_…`), `invoice_sequence`, `invoice_number`, `financial_year`, `type`, `branch_id`, `contact` (`{ id, name, primary_phone }` or null), `patient_id` (the contact's patient file, or null), `member_ids`, `items` (Invoice item[]), `overall_discount`, `subtotal`, `discount_total`, `taxable_total`, `gst_total`, `total`, `paid_amount`, `due_amount`, `payment_status`, `is_settled`, `invoice_date`, `remark`, `patient_prescription_id`, `created_at`, `updated_at`.
+**Invoice**: `id` (`invc_…`), `invoice_sequence`, `invoice_number`, `financial_year`, `type`, `branch_id`, `contact` (`{ id, name, primary_phone }` or null), `patient_id` (the contact's patient file, or null), `member_ids`, `items` (Invoice item[]), `overall_discount`, `subtotal`, `discount_total`, `taxable_total`, `gst_total`, `total`, `paid_amount`, `refunded_amount` (**D93**), `due_amount`, `payment_status`, `is_settled`, `invoice_date`, `remark`, `patient_prescription_id`, `created_at`, `updated_at`.
 
 **Invoice item**: `id` (`iitm_…`, new prefix), `line_number`, `offering_id`, `medicine_id`, `name`, `pack_size`, `quantity`, `rate`, `discount_percent`, `discount_amount`, `gst_percent`, `is_gst_inclusive`, `taxable_amount`, `gst_amount`, `amount`, `patient_offering_suggestion_id`, `patient_offering_id` (the patient offering it created, or null), `patient_treatment_ids` (the treatments it bills), `batch_number`.
 
@@ -5288,7 +5289,7 @@ None beyond 8.10.
 
 | # | Decision |
 | --- | --- |
-| B16 | **A credit note is an invoice's refund**: `POST /invoices/{invoice_id}/credit-notes` with the amount, the reason and how the money goes back (cash, UPI, card) writes the credit note ("CN-001") and its refund payment together, on the invoice's branch and an open day; the amount can't exceed what is paid (`409 more_than_paid`) and lowers it. Never edited (`schema-routes.md`); deleting its refund payment on an open day removes the credit note too, and a settled refund is reversed (8.C). Today credit notes are read-only and nothing creates them. A refund of unused sessions also lowers the patient offering (7, PK6). |
+| B16 | **A credit note is an invoice's refund**: `POST /invoices/{invoice_id}/credit-notes` with the amount, the reason and how the money goes back (cash, UPI, card) writes the credit note ("CN-001") and its refund payment together, on the invoice's branch and an open day; the amount can't exceed what is paid less the store-credit notes on the invoice (`409 more_than_paid`) and moves from paid to refunded, so the invoice owes no more than before it (**D93**). Never edited (`schema-routes.md`); deleting its refund payment on an open day removes the credit note too, and a settled refund is reversed (8.C). Today credit notes are read-only and nothing creates them. A refund of unused sessions also lowers the patient offering (7, PK6). |
 
 #### 8.B.2 Open questions
 

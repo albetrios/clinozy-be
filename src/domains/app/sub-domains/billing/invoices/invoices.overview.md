@@ -44,8 +44,9 @@ previews answer what a bill or a change would come to and write nothing (D81, Q2
 ## Key invariants
 
 - **Money from the server (B5, B9):** every line's and the invoice's amounts are computed and
-  stored by the save; `paid_amount` moves only with payment writes; `due_amount` and
-  `payment_status` are generated.
+  stored by the save; `paid_amount` and `refunded_amount` move only with payment writes (a refund
+  moves its money from one to the other); `due_amount` (total − paid − refunded) and
+  `payment_status` are generated, so a refunded invoice owes no more than before it (launch D93).
 - **Billed at the live offer (M26):** a new or changed offering line's rate is the lowest of its
   live percent, amount-off and fixed-price offers on the offer price (else the list price) at the
   invoice's branch on its date, raised to the lowest price; a session line adds the most free

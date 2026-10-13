@@ -31,7 +31,9 @@ ROUTE #136 — routes-final 8.B, B16). Table `app.invoice_credit_notes` (was
 
 ## Key invariants
 
-- **A refund is a credit note plus its payment (B16):** up to what the invoice has paid
-  (`409 more_than_paid`), on the invoice's branch and an open day.
+- **A refund is a credit note plus its payment (B16):** up to what the invoice has paid less its
+  store-credit notes (`409 more_than_paid` — a return kept as store credit, MD33, writes a note
+  with no payment), on the invoice's branch and an open day. The refund moves its money from the
+  invoice's `paid_amount` to `refunded_amount`, so the invoice reads no more due (launch D93).
 - **Branch through the invoice (B4):** another branch's invoice is a 404 without `branch:read`;
   the organization-wide list keeps to the caller's branches.

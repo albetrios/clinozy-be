@@ -41,5 +41,7 @@ ROUTE #186–#187). The store's Payments tab moved to [`medical-payments/`](../m
   restore it (`409 invoice_of_sale`).
 - **Void** only with nothing paid and nothing returned; it puts the stock back and deletes the
   invoice; the undo takes the stock again from the same batches.
-- **Return** only on a sale paid in full; the refund is a credit note with its refund payment;
+- **Return** only on a sale paid in full — its invoice's `due_amount` is 0 (`409 sale_not_paid`;
+  a refund or a store-credit return never raises it, launch D93); the refund is a credit note with
+  its refund payment;
   `unused`, `doctor_changed` and `wrong_item` packs go back into their batch.
