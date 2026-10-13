@@ -60,10 +60,7 @@ export class UserBugReportService {
         return this.bugReportRepository.create({
           public_id: generatePublicId('userBugReport'),
           user_id: account.id,
-          reporter_name: buildReporterName({
-            firstName: account.first_name,
-            lastName: account.last_name,
-          }),
+          reporter_name: buildReporterName(account),
           reporter_email: account.email,
           organization_public_id: scope.organizationPublicId ?? null,
           description: input.description,
@@ -78,6 +75,6 @@ export class UserBugReportService {
       { userPublicId: scope.userPublicId, bugReportPublicId: row.public_id },
       'user-bug-report.created',
     );
-    return serializeUserBugReport({ row, userPublicId: scope.userPublicId });
+    return serializeUserBugReport({ row, user_public_id: scope.userPublicId });
   }
 }

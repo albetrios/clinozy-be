@@ -62,10 +62,7 @@ export async function seedUserBugReportsBulk(context: SeedContext): Promise<void
       .values({
         public_id: generatePublicId('userBugReport'),
         user_id: reporter.id,
-        reporter_name: buildReporterName({
-          firstName: reporter.first_name,
-          lastName: reporter.last_name,
-        }),
+        reporter_name: buildReporterName(reporter),
         reporter_email: reporter.email,
         description: profile.description,
         input_method: profile.input_method,

@@ -11,10 +11,10 @@ import type {
  */
 export function serializeUserBugReport({
   row,
-  userPublicId,
+  user_public_id,
 }: {
   row: UserBugReportRow;
-  userPublicId: string;
+  user_public_id: string;
 }): UserBugReportOutput {
   return {
     id: row.public_id,
@@ -22,7 +22,7 @@ export function serializeUserBugReport({
     input_method: row.input_method as UserBugReportInputMethod,
     page_path: row.page_path,
     app_version: row.app_version,
-    user_id: userPublicId,
+    user_id: user_public_id,
     reporter_name: row.reporter_name,
     organization_id: row.organization_public_id,
     created_at: row.created_at.toISOString(),
@@ -41,17 +41,17 @@ export function serializeUserBugReportForExport(row: UserBugReportRow): UserBugR
 }
 
 /**
- * The reporter's display name from their account: first and last name joined, `null` when both
- * are empty (feat-bug-report BR5) — the same rule the data export uses for `full_name`.
+ * The reporter's display name from their account row (`first_name`, `last_name`): joined, `null`
+ * when both are empty (feat-bug-report BR5) — the same rule the data export uses for `full_name`.
  */
 export function buildReporterName({
-  firstName,
-  lastName,
+  first_name,
+  last_name,
 }: {
-  firstName: string | null;
-  lastName: string | null;
+  first_name: string | null;
+  last_name: string | null;
 }): string | null {
-  const name = [firstName, lastName]
+  const name = [first_name, last_name]
     .map((part) => part?.trim() ?? '')
     .filter((part) => part.length > 0)
     .join(' ');

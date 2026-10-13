@@ -29,7 +29,7 @@ function row(overrides: Partial<UserBugReportRow> = {}): UserBugReportRow {
 describe('user-bug-report.serializer', () => {
   it('shapes the reply with the public ids and leaves the email and user agent out', () => {
     expect(
-      serializeUserBugReport({ row: row(), userPublicId: 'usr_ccccccccccccccccccccc' }),
+      serializeUserBugReport({ row: row(), user_public_id: 'usr_ccccccccccccccccccccc' }),
     ).toEqual({
       id: 'bug_aaaaaaaaaaaaaaaaaaaaa',
       description: 'The invoice total does not update',
@@ -54,10 +54,10 @@ describe('user-bug-report.serializer', () => {
   });
 
   it('joins the names, drops a missing half, and is null when there is none (BR5)', () => {
-    expect(buildReporterName({ firstName: 'Asha', lastName: 'Rao' })).toBe('Asha Rao');
-    expect(buildReporterName({ firstName: ' Asha ', lastName: null })).toBe('Asha');
-    expect(buildReporterName({ firstName: null, lastName: 'Rao' })).toBe('Rao');
-    expect(buildReporterName({ firstName: '  ', lastName: null })).toBeNull();
-    expect(buildReporterName({ firstName: null, lastName: null })).toBeNull();
+    expect(buildReporterName({ first_name: 'Asha', last_name: 'Rao' })).toBe('Asha Rao');
+    expect(buildReporterName({ first_name: ' Asha ', last_name: null })).toBe('Asha');
+    expect(buildReporterName({ first_name: null, last_name: 'Rao' })).toBe('Rao');
+    expect(buildReporterName({ first_name: '  ', last_name: null })).toBeNull();
+    expect(buildReporterName({ first_name: null, last_name: null })).toBeNull();
   });
 });
