@@ -445,6 +445,15 @@ export function daysBetweenCalendarDates(options: { from: string; to: string }):
   );
 }
 
+/** `2026-10-08` → `8 Oct` — a date as a label names it (patient file TR9, PK8; the demo seed's task notes). */
+export function shortCalendarDate(date: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  }).format(new Date(`${date}T00:00:00Z`));
+}
+
 /** The calendar date `days` after `date` (negative for before). */
 export function addDaysToCalendarDate(options: { date: string; days: number }): string {
   const at = new Date(`${options.date}T00:00:00Z`);

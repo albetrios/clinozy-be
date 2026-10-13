@@ -15,6 +15,8 @@ export interface SeedContactPayload {
   /** The household's first contact; absent = their own household. */
   household_contact_id?: number;
   created_by_user_id?: number;
+  /** When the clinic first met them; absent = now. */
+  created_at?: Date;
 }
 
 /**
@@ -51,6 +53,9 @@ export async function seedContact(payload: SeedContactPayload): Promise<number> 
         : { household_contact_id: payload.household_contact_id }),
       created_by_user_id: payload.created_by_user_id,
       updated_by_user_id: payload.created_by_user_id,
+      ...(payload.created_at
+        ? { created_at: payload.created_at, updated_at: payload.created_at }
+        : {}),
       // Absent = the contact's own household — the database's `trg_contacts_household` fills it.
     } as typeof contacts.$inferInsert)
     .returning({ id: contacts.id, household_contact_id: contacts.household_contact_id });
