@@ -10,7 +10,7 @@ GDPR data export pipeline. A user requests an export; a BullMQ worker bundles ev
 
 ## Key invariants
 
-- **Cross-domain reads via services only**: {@link UserDataExportService} calls `list*ForUserDataExport` on auth-session, membership, notification, and audit services (wired in `domain-containers.plugin.ts` / `worker-containers.ts`). It uses its own `UserDataExportRepository` for export job rows only.
+- **Cross-domain reads via services only**: {@link UserDataExportService} calls `list*ForUserDataExport` on auth-session, membership, notification, and audit services (wired in `domain-containers.plugin.ts` / `worker-containers.ts`). It uses its own `UserDataExportRepository` for export job rows, and — same domain — the `UserBugReportRepository` for the person's bug reports (`bug_reports`, read under their own context; iteration feat-bug-report-2026-10-13-dgnx BR11).
 - **Per-table row cap**: `GDPR_EXPORT_MAX_ROWS_PER_TABLE = 1 000`. Exceeding the cap truncates with a metadata note rather than failing the export.
 - **15-minute download URL TTL** (`USER_DATA_EXPORT_PRESIGNED_DOWNLOAD_EXPIRY_SECONDS = 900`): shortened from 24 h to 15 min in sec-U6 to collapse the stolen-token replay window. Every mint is audited as `user.data_export.url_minted` so post-hoc forensics retain the trail even when the URL has expired. AWS SigV4 caps presigned URLs at 7 days; the prior 24 h ceiling reflected legacy posture and has been superseded.
 - **One open export per user**: a request while the user's previous export is still `pending` or `processing` returns that export instead of creating another (a partial unique index settles a concurrent race the same way).

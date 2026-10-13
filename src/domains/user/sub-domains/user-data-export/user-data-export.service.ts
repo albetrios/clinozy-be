@@ -8,6 +8,8 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { UserDataExportRepository } from '@/domains/user/sub-domains/user-data-export/user-data-export.repository.js';
+import type { UserBugReportRepository } from '@/domains/user/sub-domains/user-bug-report/user-bug-report.repository.js';
+import { serializeUserBugReportForExport } from '@/domains/user/sub-domains/user-bug-report/user-bug-report.serializer.js';
 import { serializeUserDataExport } from '@/domains/user/sub-domains/user-data-export/user-data-export.serializer.js';
 import {
   USER_DATA_EXPORT_ARTIFACT_TTL_DAYS,
@@ -125,6 +127,7 @@ export class UserDataExportService {
     private readonly userService: UserService,
     private readonly exportRepository: UserDataExportRepository,
     private readonly objectStorage: ObjectStoragePort,
+    private readonly bugReportRepository: UserBugReportRepository,
   ) {}
 
   /** Wire auth, tenancy, notify, and audit services after the composition root finishes. */
@@ -584,6 +587,7 @@ export class UserDataExportService {
       sessions: userSessionsRaw,
       notifications: userNotificationsRaw,
       auditLogs: userAuditLogsRaw,
+      bugReports: userBugReportsRaw,
     } = await this.fetchExportCategoryRows({
       userPublicId,
       userInternalId: user.id,
@@ -610,6 +614,11 @@ export class UserDataExportService {
     const userAuditLogs = capExportCategory({
       rows: userAuditLogsRaw,
       category: 'audit_activity',
+      truncatedCategories,
+    });
+    const userBugReports = capExportCategory({
+      rows: userBugReportsRaw,
+      category: 'bug_reports',
       truncatedCategories,
     });
 
@@ -653,6 +662,7 @@ export class UserDataExportService {
         resource_type: log.resource_type,
         created_at: log.created_at.toISOString(),
       })),
+      bug_reports: userBugReports.map(serializeUserBugReportForExport),
       truncation: {
         row_cap: GDPR_EXPORT_MAX_ROWS_PER_TABLE,
         truncated_categories: truncatedCategories,
@@ -691,12 +701,20 @@ export class UserDataExportService {
       userPublicId: options.userPublicId,
       limit: options.fetchLimit,
     });
+    // Same domain: the export reads the reports through the user-bug-report repository, under
+    // the person's own context (the table's owner policy).
+    const bugReports_ = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: options.userPublicId }),
+      callback: () =>
+        this.bugReportRepository.listForUserDataExport(options.userInternalId, options.fetchLimit),
+    });
 
     return {
       memberships: memberships_,
       sessions: sessions_,
       notifications: notifications_,
       auditLogs: auditLogs_,
+      bugReports: bugReports_,
     };
   }
 }

@@ -50,6 +50,7 @@ export const SUBDOMAIN_HTTP_INTEGRATION_WITHOUT_ROUTES: ReadonlyArray<{
   { domain: 'user', resource: 'user-settings' },
   { domain: 'user', resource: 'user-notification-preferences' },
   { domain: 'user', resource: 'user-data-export' },
+  { domain: 'user', resource: 'user-bug-report' },
   { domain: 'tenancy', resource: 'organization-settings' },
   { domain: 'tenancy', resource: 'organization-notification-policy' },
   { domain: 'tenancy', resource: 'organization-api-key' },

@@ -93,10 +93,12 @@ describe('UserDataExportService — payload shape and download URL', () => {
     auditService: { listActivityForUserDataExport: vi.fn() },
   };
   const objectStorage = createObjectStoragePortMock();
+  const bugReportRepository = { listForUserDataExport: vi.fn().mockResolvedValue([]) };
   const service = new UserDataExportService(
     userService as never,
     exportRepository as never,
     objectStorage,
+    bugReportRepository as never,
   );
 
   beforeEach(() => {
@@ -108,6 +110,7 @@ describe('UserDataExportService — payload shape and download URL', () => {
     crossDomainServices.membershipService.listOrganizationsForUserDataExport.mockResolvedValue([]);
     crossDomainServices.notificationService.listForUserDataExport.mockResolvedValue([]);
     crossDomainServices.auditService.listActivityForUserDataExport.mockResolvedValue([]);
+    bugReportRepository.listForUserDataExport.mockResolvedValue([]);
   });
 
   // ─── full_name assembly ───────────────────────────────────────
@@ -224,6 +227,66 @@ describe('UserDataExportService — payload shape and download URL', () => {
     expect(payload.audit_activity).toEqual([
       { action: 'user.login', resource_type: 'user', created_at: CREATED_AT.toISOString() },
     ]);
+  });
+
+  it("maps the person's bug reports onto the documented export fields (feat-bug-report BR11)", async () => {
+    bugReportRepository.listForUserDataExport.mockResolvedValue([
+      {
+        id: 7,
+        public_id: 'bug_aaaaaaaaaaaaaaaaaaaaa',
+        user_id: 1,
+        reporter_name: 'Ada Lovelace',
+        reporter_email: 'user@example.com',
+        organization_public_id: null,
+        description: 'The invoice total does not update',
+        input_method: 'voice',
+        page_path: '/organization/acme/billing',
+        app_version: '1.13.0',
+        user_agent: 'Mozilla/5.0',
+        created_at: CREATED_AT,
+      },
+    ]);
+
+    const payload = await service.buildExportPayload('user_public');
+
+    // Exact equality: the triage-only columns (email, user agent, workspace) stay out.
+    expect(payload.bug_reports).toEqual([
+      {
+        description: 'The invoice total does not update',
+        input_method: 'voice',
+        page_path: '/organization/acme/billing',
+        app_version: '1.13.0',
+        created_at: CREATED_AT.toISOString(),
+      },
+    ]);
+    expect(bugReportRepository.listForUserDataExport).toHaveBeenCalledWith(
+      expect.any(Number),
+      GDPR_EXPORT_MAX_ROWS_PER_TABLE + 1,
+    );
+  });
+
+  it('caps the bug reports like every other category', async () => {
+    bugReportRepository.listForUserDataExport.mockResolvedValue(
+      Array.from({ length: GDPR_EXPORT_MAX_ROWS_PER_TABLE + 1 }, (_value, index) => ({
+        id: index,
+        public_id: `bug_${String(index).padStart(21, '0')}`,
+        user_id: 1,
+        reporter_name: null,
+        reporter_email: 'user@example.com',
+        organization_public_id: null,
+        description: 'Again',
+        input_method: 'typed',
+        page_path: null,
+        app_version: null,
+        user_agent: null,
+        created_at: CREATED_AT,
+      })),
+    );
+
+    const payload = await service.buildExportPayload('user_public');
+
+    expect(payload.bug_reports).toHaveLength(GDPR_EXPORT_MAX_ROWS_PER_TABLE);
+    expect(payload.truncation.truncated_categories).toEqual(['bug_reports']);
   });
 
   // ─── truncation reporting ─────────────────────────────────────

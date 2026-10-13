@@ -89,10 +89,12 @@ describe('UserDataExportService', () => {
     auditService: { listActivityForUserDataExport: vi.fn().mockResolvedValue([]) },
   };
   const objectStorage = createObjectStoragePortMock();
+  const bugReportRepository = { listForUserDataExport: vi.fn().mockResolvedValue([]) };
   const service = new UserDataExportService(
     userService as never,
     exportRepository as never,
     objectStorage,
+    bugReportRepository as never,
   );
 
   beforeEach(() => {

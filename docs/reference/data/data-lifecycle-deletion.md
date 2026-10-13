@@ -117,6 +117,7 @@ Batch deletes use `deleteInBatchesByCondition` with per-row FK fallback (`blocke
 | `users`                              | auth    | Tombstone + offboarding | `deleted_at`, `status`                    | Offboarding: sessions, auth methods, avatar S3, upload S3+tombstone, GDPR export S3+rows; purge last |
 | `user_data_exports`                  | auth    | Compliance export       | `expires_at`, `status`                    | Presigned URL ≤24h; S3 lifecycle + retention worker; offboarding deletes immediately |
 | `user_settings`                      | auth    | Tombstone chain         | FK to user                                | Inherits visibility from user                                                   |
+| `user_bug_reports`                   | auth    | Tombstone chain         | FK to user (`ON DELETE CASCADE`)          | Append-only bug reports (feat-bug-report-2026-10-13-dgnx); go with the account when its row is purged; in the data export|
 | `user_notification_preferences`      | auth    | Tombstone chain         | FK to user                                | Same                                                                            |
 | `sessions`                           | auth    | Ephemeral               | `expires_at`, `is_revoked`                | Cleanup worker hard-deletes                                                     |
 | `auth_methods`                       | auth    | Revocation              | `revoked_at`                              | Not `deleted_at` by design                                                      |
