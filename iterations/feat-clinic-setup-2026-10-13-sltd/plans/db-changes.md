@@ -70,8 +70,9 @@ erDiagram
 - **Sources:** BRIEF.md:49–52 (saved as you go, Explore first) · BRIEF.md:117–129 (the launcher, Hide, ticks from records) ·
   BRIEF.md:187–203 (states) · BRIEF.md:260–262 (scope: the clinic, not a person) · BRIEF.md:282–283 (existing clinics)
 - **Added:**
-  - `setup_answered_steps` — the answers that have no record of their own to read back: `clinic_type`, `hours`,
-    `you` (setup steps 1, 4, 5); the rest are read from records (main branch, services, someone to book, team).
+  - `setup_answered_steps` — the answers that have no record of their own to read back: `clinic_type`,
+    `opening_hours`, `you`, `team` (setup steps 1, 4, 5, 7 — `team` also when step 7 is skipped); the rest are read from
+    records (main branch, services, someone to book). Names synced with the route review §2.A.3.
   - `setup_skipped_items` — guide items marked Skip: `invite_team`, `rooms`, `machines`, `holidays`, `gst`, `logo`,
     `review_links` (D17: no `day_float`).
   - `setup_deferred_at` — "Explore first" (or the drawer closed); the drawer stops opening by itself.
@@ -128,7 +129,7 @@ erDiagram
 | --- | --- | --- |
 | Clinic type | `setup_answered_steps` ∋ `clinic_type`; `organization.specialties` | launch §12 |
 | Main branch | an active `branch` with `is_main` | routes-final §1.A |
-| Opening hours | `setup_answered_steps` ∋ `hours` | — |
+| Opening hours | `setup_answered_steps` ∋ `opening_hours` | — |
 | Services | ≥ 1 active `offering` | routes-final §3.B |
 | Someone to book (D15) | ≥ 1 active `membership` holding the Doctor or Therapist role (main or extra) | routes-final §2.B, §12 (D81 (4)) |
 | Invite your team | ≥ 1 `membership` other than the owner's (invited or active) | routes-final §2.B |
