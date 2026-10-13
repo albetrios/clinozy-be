@@ -1,15 +1,11 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
+import { queryInstantRange } from '@/shared/utils/validation/record-fields.util.js';
 import {
   CreateSupplierCreditDto,
   type CreateSupplierCreditInput,
   listSupplierCreditsQueryDto,
 } from './supplier-credits.dto.js';
-
-/** An ISO instant of the query as a `Date`, or undefined when absent. */
-function readInstant(value: string | undefined): Date | undefined {
-  return value === undefined ? undefined : new Date(value);
-}
 
 /** Parses a "Return expiring stock" body; throws `ValidationError` naming each bad field. */
 export function validateCreateSupplierCredit(data: unknown): CreateSupplierCreditInput {
@@ -31,7 +27,7 @@ export function validateListSupplierCreditsQuery(data: unknown): BaseRecordListI
     order: query.order,
     referenceEquals: { supplier_id: query.supplier_id, medicine_id: query.medicine_id },
     ranges: {
-      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+      created_at: queryInstantRange({ from: query.created_from, to: query.created_to }),
     },
     derived: { status: query.status },
   };

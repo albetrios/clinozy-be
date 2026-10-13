@@ -3432,6 +3432,7 @@ src/
     │   │   │   ├── file-magic.util.unit.test.ts
     │   │   │   ├── parse-with-schema.util.unit.test.ts
     │   │   │   ├── record-fields.money.unit.test.ts
+    │   │   │   ├── record-fields.query-instant-range.unit.test.ts
     │   │   │   ├── record-fields.rupees.unit.test.ts
     │   │   │   ├── record-fields.time-zone.unit.test.ts
     │   │   │   ├── record-fields.to-text.unit.test.ts

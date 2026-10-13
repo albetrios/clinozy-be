@@ -1,7 +1,11 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { readContactLinkedSearch } from '@/domains/app/sub-domains/contacts/contacts.validator.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { splitRecordIds, withInstants } from '@/shared/utils/validation/record-fields.util.js';
+import {
+  queryInstantRange,
+  splitRecordIds,
+  withInstants,
+} from '@/shared/utils/validation/record-fields.util.js';
 import {
   CreateLeadDto,
   type CreateLeadInput,
@@ -13,11 +17,6 @@ import {
 /** The `true` / `false` of a query flag (undefined when absent). */
 function readFlag(value: 'true' | 'false' | undefined): boolean | undefined {
   return value === undefined ? undefined : value === 'true';
-}
-
-/** A query instant as a `Date` (undefined when absent). */
-function readInstant(value: string | undefined): Date | undefined {
-  return value === undefined ? undefined : new Date(value);
 }
 
 /** Parses a lead create body; throws `ValidationError` naming each bad field. */
@@ -67,11 +66,11 @@ export function validateListLeadsQuery(data: unknown): BaseRecordListInput {
       ownership: query.ownership,
     },
     ranges: {
-      follow_up_at: {
-        from: readInstant(query.follow_up_at_from),
-        to: readInstant(query.follow_up_at_to),
-      },
-      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+      follow_up_at: queryInstantRange({
+        from: query.follow_up_at_from,
+        to: query.follow_up_at_to,
+      }),
+      created_at: queryInstantRange({ from: query.created_from, to: query.created_to }),
     },
   };
 }

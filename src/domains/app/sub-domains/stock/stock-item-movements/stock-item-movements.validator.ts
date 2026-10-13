@@ -1,15 +1,11 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
+import { queryInstantRange } from '@/shared/utils/validation/record-fields.util.js';
 import {
   CreateStockItemMovementDto,
   type CreateStockItemMovementInput,
   listStockItemMovementsQueryDto,
 } from './stock-item-movements.dto.js';
-
-/** A query instant as a `Date` (undefined when absent). */
-function readInstant(value: string | undefined): Date | undefined {
-  return value === undefined ? undefined : new Date(value);
-}
 
 /** Parses a movement by hand; throws `ValidationError` naming each bad field. */
 export function validateCreateStockItemMovement(data: unknown): CreateStockItemMovementInput {
@@ -36,7 +32,7 @@ export function validateListStockItemMovementsQuery(data: unknown): BaseRecordLi
       author_membership_id: query.author_membership_id,
     },
     ranges: {
-      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+      created_at: queryInstantRange({ from: query.created_from, to: query.created_to }),
     },
   };
 }

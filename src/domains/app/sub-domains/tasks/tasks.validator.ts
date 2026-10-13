@@ -1,6 +1,10 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { splitRecordIds, withInstants } from '@/shared/utils/validation/record-fields.util.js';
+import {
+  queryInstantRange,
+  splitRecordIds,
+  withInstants,
+} from '@/shared/utils/validation/record-fields.util.js';
 import { TASK_STATUS, TASK_TAB } from './tasks.constants.js';
 import {
   CreateTaskDto,
@@ -11,11 +15,6 @@ import {
   type UpdateTaskInput,
 } from './tasks.dto.js';
 import type { TaskTypeFilter } from './tasks.types.js';
-
-/** A query instant as a `Date` (undefined when absent). */
-function readInstant(value: string | undefined): Date | undefined {
-  return value === undefined ? undefined : new Date(value);
-}
 
 /** D81 T6: `rule_key` and `kind` as one type filter — undefined when neither is sent. */
 function readTypeFilter(query: {
@@ -85,9 +84,9 @@ export function validateListTasksQuery(data: unknown): BaseRecordListInput {
       resolved_today: doneToday ? true : undefined,
     },
     ranges: {
-      due_at: { from: readInstant(query.due_from), to: readInstant(query.due_to) },
-      resolved_at: { from: readInstant(query.resolved_from), to: readInstant(query.resolved_to) },
-      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+      due_at: queryInstantRange({ from: query.due_from, to: query.due_to }),
+      resolved_at: queryInstantRange({ from: query.resolved_from, to: query.resolved_to }),
+      created_at: queryInstantRange({ from: query.created_from, to: query.created_to }),
     },
   };
 }

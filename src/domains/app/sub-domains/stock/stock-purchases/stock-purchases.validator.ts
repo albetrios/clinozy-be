@@ -1,6 +1,9 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { addDaysToCalendarDate } from '@/shared/utils/validation/record-fields.util.js';
+import {
+  addDaysToCalendarDate,
+  queryInstantRange,
+} from '@/shared/utils/validation/record-fields.util.js';
 import {
   CreateStockPurchaseDto,
   type CreateStockPurchaseInput,
@@ -8,11 +11,6 @@ import {
   UpdateStockPurchaseDto,
   type UpdateStockPurchaseInput,
 } from './stock-purchases.dto.js';
-
-/** A query instant as a `Date` (undefined when absent). */
-function readInstant(value: string | undefined): Date | undefined {
-  return value === undefined ? undefined : new Date(value);
-}
 
 /** Parses a purchase; throws `ValidationError` naming each bad field. */
 export function validateCreateStockPurchase(data: unknown): CreateStockPurchaseInput {
@@ -43,7 +41,7 @@ export function validateListStockPurchasesQuery(data: unknown): BaseRecordListIn
             ? undefined
             : addDaysToCalendarDate({ date: query.purchase_date_to, days: 1 }),
       },
-      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+      created_at: queryInstantRange({ from: query.created_from, to: query.created_to }),
     },
   };
 }

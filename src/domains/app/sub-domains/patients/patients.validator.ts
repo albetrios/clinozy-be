@@ -1,7 +1,7 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { readContactLinkedSearch } from '@/domains/app/sub-domains/contacts/contacts.validator.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { withInstants } from '@/shared/utils/validation/record-fields.util.js';
+import { queryInstantRange, withInstants } from '@/shared/utils/validation/record-fields.util.js';
 import {
   CreatePatientDto,
   type CreatePatientInput,
@@ -10,11 +10,6 @@ import {
   type UpdatePatientInput,
 } from './patients.dto.js';
 import { PATIENT_NUMBER_PREFIX } from './patients.constants.js';
-
-/** A query instant as a `Date` (undefined when absent). */
-function readInstant(value: string | undefined): Date | undefined {
-  return value === undefined ? undefined : new Date(value);
-}
 
 /** Parses a patient create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePatient(data: unknown): CreatePatientInput {
@@ -61,11 +56,11 @@ export function validateListPatientsQuery(data: unknown): BaseRecordListInput {
       types: query.types?.split(','),
     },
     ranges: {
-      follow_up_at: {
-        from: readInstant(query.follow_up_at_from),
-        to: readInstant(query.follow_up_at_to),
-      },
-      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+      follow_up_at: queryInstantRange({
+        from: query.follow_up_at_from,
+        to: query.follow_up_at_to,
+      }),
+      created_at: queryInstantRange({ from: query.created_from, to: query.created_to }),
     },
   };
 }

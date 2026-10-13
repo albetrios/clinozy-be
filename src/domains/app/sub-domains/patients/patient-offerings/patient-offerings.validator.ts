@@ -1,15 +1,11 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
+import { queryInstantRange } from '@/shared/utils/validation/record-fields.util.js';
 import {
   listPatientOfferingsQueryDto,
   UpdatePatientOfferingDto,
   type UpdatePatientOfferingInput,
 } from './patient-offerings.dto.js';
-
-/** A query instant as a `Date` (undefined when absent). */
-function readInstant(value: string | undefined): Date | undefined {
-  return value === undefined ? undefined : new Date(value);
-}
 
 /** Parses a patient offering update body; throws `ValidationError` naming each bad field. */
 export function validateUpdatePatientOffering(data: unknown): UpdatePatientOfferingInput {
@@ -37,7 +33,7 @@ export function validateListPatientOfferingsQuery(data: unknown): BaseRecordList
       is_package: query.is_package === undefined ? undefined : query.is_package === 'true',
     },
     ranges: {
-      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+      created_at: queryInstantRange({ from: query.created_from, to: query.created_to }),
     },
   };
 }
