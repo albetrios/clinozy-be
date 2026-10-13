@@ -14,16 +14,16 @@ are documented to mean ([CC1](decisions.md), [CC2](decisions.md)).
 
 ## Users — my settings
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| RC-1 | CHANGED — documentation of `analytics_consent*` | GET | `/api/v1/users/me/settings` | the signed-in person, their own settings | read my settings (the receipt is part of it) | `BRIEF.md:61–62` |
-| RC-2 | CHANGED — documentation of `analytics_consent*` | PATCH | `/api/v1/users/me/settings` | the signed-in person, their own settings | record a consent receipt (decision + policy version) | `BRIEF.md:42–44`, `:78` |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RC-1 | CHANGED — documentation of `analytics_consent*` | GET | `/api/v1/users/me/settings` | the signed-in person, their own settings | read my settings (the receipt is part of it) | `BRIEF.md:61–62` | as proposed — `987a588` ([AS-BUILT #1](../AS-BUILT.md)) |
+| RC-2 | CHANGED — documentation of `analytics_consent*` | PATCH | `/api/v1/users/me/settings` | the signed-in person, their own settings | record a consent receipt (decision + policy version) | `BRIEF.md:42–44`, `:78` | as proposed — `987a588` ([AS-BUILT #1](../AS-BUILT.md)) |
 
 ## Auth — sign-out
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| RC-3 | UNCHANGED — pinned | POST | `/api/v1/auth/logout` | the session's bearer | sign out: revokes the session, leaves the consent receipt and sends no consent cookie or `Clear-Site-Data` | `BRIEF.md:31–32`, `:100` |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RC-3 | UNCHANGED — pinned | POST | `/api/v1/auth/logout` | the session's bearer | sign out: revokes the session, leaves the consent receipt and sends no consent cookie or `Clear-Site-Data` | `BRIEF.md:31–32`, `:100` | pinned — `987a588` ([AS-BUILT #2](../AS-BUILT.md)) |
 
 ## Before → after
 

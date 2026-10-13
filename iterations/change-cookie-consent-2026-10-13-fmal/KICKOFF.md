@@ -48,9 +48,9 @@ or database change (`BRIEF.md:102–108`, [CC2](plans/decisions.md)).
 
 | # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | User settings — the consent receipt, documented as such: [`routes-final.md` § 1](plans/routes-final.md#1-user-settings--the-consent-receipt--final-rev-1-confirmed-2026-10-13), code change USC1 | sub-domain | — | `/be-build-requirement` (CHANGE, docs only: `be-tsdoc-export-guard`, `be-openapi-multilingual`, `be-overview-doc-maintainer`, `be-docs-maintainer`) | A-3 | Claude | open |
-| 2 | Sign-out keeps the receipt: USC2 | flow | 1 | `/be-build-requirement` (`be-test-generator`) | A-1, A-2 | Claude | open |
-| 3 | Acceptance, the frontend route map and the gates | flow | 1, 2 | `be-kickoff-iteration` › Close | A-1 – A-3 | Claude | open |
+| 1 | User settings — the consent receipt, documented as such: [`routes-final.md` § 1](plans/routes-final.md#1-user-settings--the-consent-receipt--final-rev-1-confirmed-2026-10-13), code change USC1 | sub-domain | — | `/be-build-requirement` (CHANGE, docs only: `be-tsdoc-export-guard`, `be-openapi-multilingual`, `be-overview-doc-maintainer`, `be-docs-maintainer`) | A-3 | Claude | done |
+| 2 | Sign-out keeps the receipt: USC2 | flow | 1 | `/be-build-requirement` (`be-test-generator`) | A-1, A-2 | Claude | done |
+| 3 | Acceptance, the frontend route map and the gates | flow | 1, 2 | `be-kickoff-iteration` › Close | A-1 – A-3 | Claude | done |
 
 ## 6. Requirements index
 
