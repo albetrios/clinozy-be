@@ -31,12 +31,19 @@ flowchart LR
 | Step | Automated action |
 | ---- | ---------------- |
 | **Parent branch** | The only branch of the resolved **GitHub Environment**'s Neon project (`main` → **`production`** → project `clinozy-be-production`, branch `production`; the drill runs from `main` only) |
-| **Branch create** | Child branch from that parent at **15-minute** PITR lookback |
-| **Recovery** | `pnpm db:migrate`, then `pnpm db:sequences:advance` (the [DR runbook](dr-runbook.md#advance-the-id-sequences-after-a-restore) step), then auth integration smoke against the new branch — the weekly restore smoke runs the same three |
+| **Install** | Node, pnpm and dependencies — before the branch exists, so the copy of production lives only as long as the restore steps |
+| **Branch create** | Child branch from that parent at **15-minute** PITR lookback; its id is recorded first, so the delete step finds it even if a later step fails |
+| **Recovery** | `pnpm db:migrate` over the branch's **direct** endpoint (the migration advisory lock needs one backend), then `pnpm db:sequences:advance` (the [DR runbook](dr-runbook.md#advance-the-id-sequences-after-a-restore) step), then the auth integration smoke (`auth.integration.test.ts` only) over the **pooled** endpoint, as in production — the weekly restore smoke runs the same three |
 | **RTO clock** | Starts at branch creation; ends after smoke passes |
-| **Cleanup** | Ephemeral branch deleted (also has `expires_at` TTL) |
+| **Cleanup** | Ephemeral branch deleted; it also expires **1 hour** after creation |
 
 Each GitHub Environment has its own Neon project, and every name derives from it: project `clinozy-be-<environment>`, branch `<environment>`, database `clinozy_be_<environment>`, owner `clinozy_be_<environment>_owner` (the drill branch's login). Nothing is named after a git branch or Neon's defaults.
+
+**Public logs.** This repository is public, and so are its Actions logs. The drill branch is a full copy of production, so the drill keeps it out of them:
+
+- The branch's URLs, password and endpoint are masked (`::add-mask::`) before any step can print them.
+- `db:sequences:advance` prints every sequence's value — production's row counts — so the drill shows only its last line, how many sequences moved.
+- The Neon API key is set only on the steps that call Neon (the secret check, create, delete), never job-wide where dependency install scripts and test code could read it.
 
 ---
 
