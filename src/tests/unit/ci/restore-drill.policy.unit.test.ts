@@ -107,10 +107,13 @@ describe('restore drill automation policy', () => {
 
     it('installs dependencies before the branch exists, with no skip condition', () => {
       // The skip condition read an env var nothing set, so pnpm was never installed and every
-      // drill died on `pnpm: command not found`.
+      // drill died on `pnpm: command not found`. Installed before the branch, setup needs no gate.
       for (const workflowFileName of drillWorkflowFileNames) {
         const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
         expect(workflow, workflowFileName).not.toContain('NEON_DRILL_DATABASE_URL');
+        expect(workflow, workflowFileName).not.toMatch(
+          /- name: (Setup Node and pnpm|Export shared CI test env)\n\s+if:/,
+        );
         expect(
           workflow.indexOf('uses: ./.github/actions/setup-node-pnpm'),
           workflowFileName,
