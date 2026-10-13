@@ -15,7 +15,7 @@
 | Intake mode | brief |
 | Intake note | 1 received (BRIEF.md) · 22 carried forward from launch-2026-09-30-jxmr |
 | Schema-routes | 5f90325208e1 |
-| Intake hash | d5f100464051 |
+| Intake hash | 790d068ffc3b |
 ## History
 
 - 2026-10-13 · Baseline — → launch-2026-09-30-jxmr · — · Claude

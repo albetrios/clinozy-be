@@ -3,7 +3,7 @@
 Status: **Step 4, 2026-10-13** (every question answered, D13–D23). Every row is `open` until Steps 4–6 give it a requirement, a feature and an
 acceptance, or put it out of scope with the decision that did.
 
-Mode: incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` · Intake hash `d5f100464051` ·
+Mode: incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` · Intake hash `790d068ffc3b` ·
 Schema-routes `5f90325208e1` (unchanged from the Baseline).
 
 ## Intake read (Step 1)
@@ -26,49 +26,42 @@ coverage is the launch's `plans/coverage.md`, 517 rows, every one covered or out
 
 ## Coverage
 
-Line numbers are `BRIEF.md` as re-placed on 2026-10-13 (Intake hash `d5f100464051` — setup moved from Today into
-the app shell, D11; the guide's launcher, D12).
+Line numbers are `BRIEF.md` as re-placed on 2026-10-13 for the quick setup (Intake hash `790d068ffc3b` — D26–D29).
 
 | # | Source (file:line) | Item | Requirement | Feature | Acceptance | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| C1 | BRIEF.md:37–39 | the drawer opens by itself — Owner / Admin, the first landing in the clinic on whichever room it opens on, essentials missing, nobody deferred | | | BRIEF.md:296 | open |
-| C2 | BRIEF.md:40–41, 271–272 | not tied to a room — the shell owns the drawer, the launcher and the notice; the default room (role home) may change | | | BRIEF.md:298 | open |
-| C3 | BRIEF.md:42–47 | the design's right drawer, a full-screen sheet on a phone, step cards, its own address riding on any room | | | BRIEF.md:300 | open |
-| C4 | BRIEF.md:48 | header "Set up <clinic>", "About 3 minutes · Step n of 7", progress bar | | | BRIEF.md:301 | open |
-| C5 | BRIEF.md:49–50 | saved as you go; answers never asked twice; resumes on any device | | | BRIEF.md:301 | open |
-| C6 | BRIEF.md:51–52, 273–274 | closing = "Explore first"; never opens by itself again | | | BRIEF.md:313 | open |
-| C7 | BRIEF.md:57–58 | step 0 — welcome | | | BRIEF.md:296 | open |
-| C8 | BRIEF.md:59–60 | step 1 — specialties (1–6) | | | — | open |
-| C9 | BRIEF.md:61–64 | steps 2–3 — main branch address and contact; creates the main branch with the owner on its team | | | BRIEF.md:303 | open |
-| C10 | BRIEF.md:65–67 | step 4 — hours; the owner's hours too; timezone | | | BRIEF.md:305 | open |
-| C11 | BRIEF.md:68–69, 269–270 | step 5 — the owner as doctor / therapist (extra role, branch default) | | | BRIEF.md:307 | open |
-| C12 | BRIEF.md:70–72, 86–91 | step 6 — starter services per specialty, at least one | | | BRIEF.md:308 | open |
-| C13 | BRIEF.md:73–74, 279–281 | step 7 — invitations with a real role to the main branch; failures listed | | | BRIEF.md:310 | open |
-| C14 | BRIEF.md:75–82 | Ready — tiles, "How did you hear about us?", "Book your first appointment" over the room, "Done" | | | BRIEF.md:312 | open |
-| C15 | BRIEF.md:83–85 | each step says why it is asked | | | BRIEF.md:301 | open |
-| C16 | BRIEF.md:93–116 | the guide follows current practice: one drawer holds the steps and the checklist | | | BRIEF.md:317 | open |
-| C17 | BRIEF.md:117–120 | the header's "Setup" launcher — progress ring and count, every room, Owner / Admin; the ring alone on a phone | | | BRIEF.md:313 | open |
-| C18 | BRIEF.md:121 | the account menu ("Setup guide") and the command menu ("Continue setup") | | | BRIEF.md:319 | open |
-| C19 | BRIEF.md:122–123 | create actions that need a branch open setup at the branch step, on any room | | | BRIEF.md:315 | open |
-| C20 | BRIEF.md:124–127 | recommended items, Skip; when all done a ✓ "Set up" for 7 days, "Your clinic is ready" | | | BRIEF.md:317 | open |
-| C21 | BRIEF.md:128 | "Hide setup guide"; the menus still open it | | | BRIEF.md:319 | open |
-| C22 | BRIEF.md:129–150 | 14 guide items, each ticked from real records | | | BRIEF.md:317 | open |
-| C23 | BRIEF.md:152–156 | the members' notice in the shell, every room, while there is no open branch | | | BRIEF.md:320 | open |
-| C24 | BRIEF.md:162–163 | branch drawer "Places & days" — rooms, machines, holidays | | | BRIEF.md:325 | open |
-| C25 | BRIEF.md:164–167 | Settings › Clinic — specialties, timezone, day float, reminder hour, lead hold, retarget | | | BRIEF.md:327 | open |
-| C26 | BRIEF.md:169–179 | /onboarding shortened; invite and questions out | | | BRIEF.md:329 | open |
-| C27 | BRIEF.md:181–185 | a clinic's first branch becomes main | | | BRIEF.md:324 | open |
-| C28 | BRIEF.md:187–203 | setup states | | | — | open |
-| C29 | BRIEF.md:205–219 | when each step writes | | | — | open |
-| C30 | BRIEF.md:257–259 | who: `organization:update`; each write its own code; never in View-as | | | BRIEF.md:320 | open |
-| C31 | BRIEF.md:260–262 | scope: the clinic, not a person | | | — | open |
-| C32 | BRIEF.md:263–268 | essentials; completion refused while one is missing | | | BRIEF.md:323 | open |
-| C33 | BRIEF.md:277–278 | safe to repeat; a second main is read back | | | BRIEF.md:303 | open |
-| C34 | BRIEF.md:282–283 | clinics already ready count as set up | | | BRIEF.md:322 | open |
-| C35 | BRIEF.md:284 | a personal workspace never shows setup | | | — | open |
-| C36 | BRIEF.md:285–290 | accessible: focus, announcements, keys, phone, en + es | | | BRIEF.md:330 | open |
-| C37 | BRIEF.md:291–292 | measured: analytics events, never patient data | | | — | open |
-| C38 | BRIEF.md:332–342 | out of scope | | | — | open |
+| C1 | BRIEF.md:38–40 | the drawer opens by itself — Owner / Admin, the first landing on whichever room, setup not complete, nobody deferred | | | BRIEF.md:251 | open |
+| C2 | BRIEF.md:41–42, 227–228 | not tied to a room — the shell owns the drawer, the ring and the notice; the default room may change | | | BRIEF.md:253 | open |
+| C3 | BRIEF.md:43–48 | the design's right drawer, 560px, a full-screen sheet on a phone, step cards unlocking in order, its own address on any room | | | BRIEF.md:255–256 | open |
+| C4 | BRIEF.md:49 | header "Set up <clinic>", "About a minute · Step n of 3", progress bar | | | BRIEF.md:256 | open |
+| C5 | BRIEF.md:50 | saved as you go; never asked twice; resumes on any device | | | BRIEF.md:256 | open |
+| C6 | BRIEF.md:51–52, 229–230 | closing = "Explore first"; never opens by itself again; "Finish setup" reopens it | | | BRIEF.md:265 | open |
+| C7 | BRIEF.md:57–58 | step 1 — specialties (1–6) | | | BRIEF.md:256 | open |
+| C8 | BRIEF.md:59–64, 235–236 | step 2 — PIN autofill (bundled), address, phone, email, branch name, the hours line; creates the main branch | | | BRIEF.md:258–260 | open |
+| C9 | BRIEF.md:65–68 | step 3 — the owner as doctor / therapist: extra role, the branch's hours, the branch default | | | BRIEF.md:261 | open |
+| C10 | BRIEF.md:69–76 | "Go live" — one Consultation per specialty from the starter list, setup completed, "You're live" | | | BRIEF.md:263 | open |
+| C11 | BRIEF.md:77–79 | "Book your first appointment" · why each step is asked · what setup does not ask | | | BRIEF.md:263 | open |
+| C12 | BRIEF.md:82–103 | the short guide behind the profile icon: the avatar's ring, "Finish setup · n of 3", "Clinic settings" | | | BRIEF.md:269 | open |
+| C13 | BRIEF.md:104–110 | the 3 items — treatments (≥ 2 services, the starter list), team ("Invite your doctor" while nobody can be booked; invitations with real roles and the branch's hours), first appointment | | | BRIEF.md:269 | open |
+| C14 | BRIEF.md:111–112 | the ring and row go when the 3 are done or skipped, or the guide is hidden; "Clinic settings" stays | | | BRIEF.md:271 | open |
+| C15 | BRIEF.md:113–114 | create actions that need a branch open setup at step 2, on any room | | | BRIEF.md:267 | open |
+| C16 | BRIEF.md:115 | the command menu's "Finish setup" | | | BRIEF.md:265 | open |
+| C17 | BRIEF.md:117–121 | the members' notice in the shell, every room, while no branch is open | | | BRIEF.md:273 | open |
+| C18 | BRIEF.md:127–130 | Settings › Clinic — specialties, timezone, reminder hour, lead hold, retarget; links to branches and the logo | | | BRIEF.md:279 | open |
+| C19 | BRIEF.md:131–133 | branch drawer "Places & days"; no cash-drawer float anywhere | | | BRIEF.md:278 | open |
+| C20 | BRIEF.md:135–144 | /onboarding shortened; invite and questions out; "How did you hear" on "You're live" | | | BRIEF.md:280 | open |
+| C21 | BRIEF.md:146–150 | a clinic's first branch becomes main | | | BRIEF.md:277 | open |
+| C22 | BRIEF.md:152–167 | setup states | | | — | open |
+| C23 | BRIEF.md:169–181 | when each step writes | | | — | open |
+| C24 | BRIEF.md:217–219 | who: `organization:update`; each write its own code; never in View-as | | | BRIEF.md:273 | open |
+| C25 | BRIEF.md:220–221 | scope: the clinic, not a person | | | — | open |
+| C26 | BRIEF.md:222–226 | live = clinic type + main branch + a service; completion refused otherwise; someone to book not required | | | BRIEF.md:276 | open |
+| C27 | BRIEF.md:231–234 | never asked twice; safe to repeat; a second main read back; no duplicate Consultation | | | BRIEF.md:259, 263 | open |
+| C28 | BRIEF.md:237–238 | clinics already ready count as live | | | BRIEF.md:275 | open |
+| C29 | BRIEF.md:239 | a personal workspace never shows setup | | | — | open |
+| C30 | BRIEF.md:240–245 | accessible: focus, announcements, keys, phone, en + es | | | BRIEF.md:281 | open |
+| C31 | BRIEF.md:246–247 | measured: analytics events, never patient data | | | — | open |
+| C32 | BRIEF.md:283–end | out of scope, and the ideas for later (D29) | | | — | open |
 
 ## Delta
 
@@ -153,6 +146,11 @@ rests on it is marked *pending your answer*.
 | F22 | Setup tied to a room | the first brief put the drawer and the card on Today | the route map's role home decides the room (schema-routes.md:114) and can change | **settled — D11** | setup belongs to the shell; the brief was re-placed (Intake hash `d5f100464051`) |
 | F23 | The launcher's place in the header | right cluster, before the branch picker (BRIEF.md:96–99, 117–120) | — (the header's slots, shell.md:14–27, have none for it) | **D12 decides the pattern; its exact slot is screen-only** | between the search and the branch picker; on a phone the ring alone → **AMBER group (Q11)** |
 | F24 | Create actions with no open branch | they open setup at the branch step (BRIEF.md:122–123) | today they fail in the form ("No open branch to book at"); the server refuses a booking, patient or bill without a branch (routes-final §6, §7.A, §8) | **settled — brief** | a frontend guard in the shell; the server keeps refusing (no backend change) |
+
+**Later, the same day (D26–D29):** the quick setup supersedes parts of the rows above — F7 (now 560px, D26), F11 / F12
+(the starter list moves to the guide; the Consultation is created by "Go live"), F13 (someone to book no longer
+required to go live), F15 (no float anywhere), F20 (Places & days unchanged), F23 (no header launcher, D28). The
+verdicts stand where not superseded; the brief's line numbers above are from the earlier placement.
 
 ### Step 4 — the questions, answered (2026-10-13)
 
