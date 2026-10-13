@@ -89,6 +89,9 @@ erDiagram
   gets `setup_completed_at` = the time of the change (its settings row created if it has none).
 - **Open:** none — written by the `onboarding-setup` sub-domain of the app domain through the tenancy settings service
   (D22).
+- **Built (ROUTE #1, AS-BUILT #1):** `tenancy.organization_settings` with exactly these seven field names; the member
+  pointer keyed inside the organization (`organization_settings_setup_completed_by_membership_fk`, `RESTRICT`); the fill
+  in migration `20261013112241_organization_settings_setup_progress.sql`.
 
 ```mermaid
 erDiagram

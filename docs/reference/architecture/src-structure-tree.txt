@@ -1603,6 +1603,7 @@ src/
     │   │   │   ├── membership-row.factory.ts
     │   │   │   └── permission.factory.ts
     │   │   ├── integration/
+    │   │   │   ├── organization-settings-setup-progress.integration.test.ts
     │   │   │   ├── tenancy-audit-trail.integration.test.ts
     │   │   │   ├── tenancy-detail-happy.integration.test.ts
     │   │   │   ├── tenancy-idempotency.integration.test.ts
