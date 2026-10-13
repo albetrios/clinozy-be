@@ -7,6 +7,7 @@ import {
   loadRoutes,
   loadScenarioFiles,
 } from '@tooling/ci/check-load-coverage.mjs';
+import { RECORD_DELETE_REASON } from '@/shared/constants/record-fields.constants.js';
 
 const workflowPath = join(process.cwd(), '.github/workflows/scheduled-k6-load-slo.yml');
 const configPath = join(process.cwd(), 'src/tests/load/k6/helpers/config.js');
@@ -118,6 +119,16 @@ describe('k6 coverage policy (#67)', () => {
     );
     // A literal elsewhere in the file does not count without a variable-driven tag.
     expect(emitsTag("checkOk(response, 'list-organizations');", 'list-organizations')).toBe(false);
+  });
+
+  it('sends a delete reason the API accepts on role and membership deletes', () => {
+    // A role or membership DELETE states why (launch T12) and answers 400 without one. The role
+    // journeys sent none, so every delete failed, roles piled up to the organization's cap, and the
+    // gate's idempotency storm went red. The k6 helper must stay one of the API's reasons.
+    const config = readFileSync(configPath, 'utf8');
+    const reason = /DELETE_REASON_QUERY = 'reason=([a-z_]+)'/.exec(config)?.[1];
+
+    expect(Object.values(RECORD_DELETE_REASON)).toContain(reason);
   });
 
   it('never load-tests fewer routes nightly than the recorded budget (a ratchet)', () => {

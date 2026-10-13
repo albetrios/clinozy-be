@@ -445,10 +445,12 @@ CI runs a subset in the **organization-scoped routes** job step (see `scheduled-
 
 `tenancy-role-write.js` requires scoped `TEST_TOKEN` and `TEST_ORG_ID`. Each
 journey sends concurrent duplicate creates, requires one persisted role and the
-same replay id, reads back updates and exact permissions, then deletes and
-checks absence. `organization-api-key-lifecycle.js` checks persisted renaming,
-secret omission from detail responses, fresh rotation secrets, new-key authentication, old/deleted-key rejection,
-read-only scope enforcement, and deletion.
+same replay id, reads back updates and exact permissions, then deletes (with the
+`reason` every role and membership delete states — `DELETE_REASON_QUERY` in
+`helpers/config.js`; without it the API answers 400) and checks absence.
+`organization-api-key-lifecycle.js` checks persisted renaming, secret omission
+from detail responses, fresh rotation secrets, new-key authentication,
+old/deleted-key rejection, read-only scope enforcement, and deletion.
 Both enforce 100% checks, a completed-journey minimum (`MIN_COMPLETED`, default 1),
 and zero dropped iterations. `DURATION` overrides the default two-minute run.
 These scenarios share one actor; their VUs are concurrent clients, not distinct users.
