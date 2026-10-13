@@ -45,15 +45,32 @@ export interface PresignedUploadPost {
 }
 
 /**
+ * Browser-puttable presigned upload: the `url` plus the request `headers` it was signed with.
+ *
+ * @remarks
+ * The URL signs these headers, so a PUT without them (or with other values) is refused with
+ * `SignatureDoesNotMatch`. They are what the client sets itself — `content-length` is signed too,
+ * but the browser always sends it, and a page cannot set it.
+ */
+export interface PresignedUploadPut {
+  url: string;
+  headers: Record<string, string>;
+}
+
+/**
  * Port for object storage (S3-compatible). Domain upload code depends on this abstraction.
  */
 export interface ObjectStoragePort {
+  /**
+   * Presigned PUT bound to an exact `Content-Length`. Returns the URL and the headers the
+   * request must carry ({@link PresignedUploadPut}).
+   */
   createPresignedUploadUrl(options: {
     key: string;
     contentType: string;
     contentLength: number;
     expiresInSeconds: number;
-  }): Promise<string>;
+  }): Promise<PresignedUploadPut>;
 
   /**
    * Presigned POST with a `content-length-range` policy so S3 itself rejects oversized or

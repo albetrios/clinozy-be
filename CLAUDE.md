@@ -225,7 +225,8 @@ src/infrastructure/
   storage/
     object-storage.port.ts    # ObjectStoragePort — the one storage contract (services inject it; workers use the default adapter)
     s3-adapter.ts             # Its S3 implementation, getDefaultS3ObjectStorageAdapter() (+ s3-error.util.ts: not-found +
-                              #   circuit classifier, stored-object-purge.util.ts)
+                              #   circuit classifier, stored-object-purge.util.ts, bucket-cors.util.ts: the upload
+                              #   bucket's CORS rule — checked / applied by `pnpm ops:storage:cors`)
   outbound/                   # Hardened outbound HTTP for third-party calls: outbound-fetch.ts (timeouts, redaction),
                               # outbound-call.ts, outbound-defaults.ts, outbound-error.ts, outbound-redaction.ts, index.ts
   resilience/                 # Circuit breaker + retry-with-backoff for outbound/third-party calls (circuit-breaker.ts, retry-with-backoff.util.ts, lua/)
@@ -509,6 +510,7 @@ Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `son
 - `pnpm validate:domain` — validate domain structure (CI gate)
 - `pnpm deps:audit:prod` — `pnpm audit --prod`, the blocking gate (the production tree ships in the image). `pnpm deps:audit` — the full tree incl. devDependencies, **report-only** in CI and `ci:quality` (`deps:audit:report`), so a dev-only advisory with no published fix cannot wedge every PR (same policy as clinozy-fe). Fix an advisory with an `overrides` entry in `pnpm-workspace.yaml`; only when no fixed version exists, add its GHSA to `auditConfig.ignoreGhsas` there with its path and removal condition.
 - `pnpm deps:update` — safe patch/minor updates within ranges; run audit + validate + test after
+- `pnpm ops:storage:cors` — check the upload bucket's CORS with the browser's own preflights (each `ALLOWED_ORIGINS` origin × `POST`/`PUT`/`GET`/`HEAD`; exits 1 on a refusal, needs no AWS permission); `--print` the policy, `--apply` it (an AWS admin's `s3:PutBucketCORS`; replaces the bucket's CORS). A bucket that refuses the web app's origin fails every browser upload while the API answers 200 — see **`docs/deployment/runbooks/upload-storage.md`**
 - `pnpm db:seed` — seed minimal dev data (reference/bootstrap only)
 - `pnpm db:seed:full` — seed full demo data (fixed demo set)
 - `pnpm db:seed:bulk` — scaled bulk seed via the orchestrator; `BULK_PROFILE` (`demo`/`edge`/`load`), `SCALE`, per-knob `BULK_*` overrides (e.g. `BULK_PROFILE=load SCALE=5 pnpm db:seed:bulk`)

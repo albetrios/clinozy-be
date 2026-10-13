@@ -5,6 +5,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   CopyObjectCommand,
+  PutBucketCorsCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
@@ -20,11 +21,13 @@ import {
 } from '@/infrastructure/storage/s3-error.util.js';
 import { buildSharedS3ClientConfig } from '@/infrastructure/storage/s3-client-config.util.js';
 import { inlineContentDisposition } from '@/infrastructure/storage/content-disposition.util.js';
+import type { UploadBucketCorsRule } from '@/infrastructure/storage/bucket-cors.util.js';
 import type {
   ObjectCopyResult,
   ObjectDeleteResult,
   ObjectStoragePort,
   PresignedUploadPost,
+  PresignedUploadPut,
   UploadedObjectMetadata,
   UploadedObjectVerdict,
 } from '@/infrastructure/storage/object-storage.port.js';
@@ -62,13 +65,17 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
    * is the strongest size constraint a presigned PUT supports. For an explicit min/max range
    * prefer the presigned POST flow (`UPLOAD_USE_PRESIGNED_POST=true`, recommended for
    * production); see {@link createPresignedUploadPost}.
+   *
+   * Returns the `headers` the PUT must carry with the URL: `content-type` and the SSE header are
+   * signed, so a client that sent only `Content-Type` was refused with `SignatureDoesNotMatch`.
+   * Every name here must be in the bucket's CORS `AllowedHeaders` (`UPLOAD_BUCKET_CORS_ALLOWED_HEADERS`).
    */
   async createPresignedUploadUrl(options: {
     key: string;
     contentType: string;
     contentLength: number;
     expiresInSeconds: number;
-  }): Promise<string> {
+  }): Promise<PresignedUploadPut> {
     const bucket = requireBucket();
     const command = new PutObjectCommand({
       Bucket: bucket,
@@ -83,7 +90,7 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
       ServerSideEncryption: 'AES256',
     });
 
-    return getSignedUrl(getS3Client(), command, {
+    const url = await getSignedUrl(getS3Client(), command, {
       expiresIn: options.expiresInSeconds,
       // sec-r4-E1: include the SSE header in the signed-headers set so the
       // signature is invalidated if the client strips or rewrites it.
@@ -94,6 +101,13 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
         'x-amz-server-side-encryption',
       ]),
     });
+    return {
+      url,
+      headers: {
+        'content-type': options.contentType,
+        'x-amz-server-side-encryption': 'AES256',
+      },
+    };
   }
 
   async createPresignedUploadPost(options: {
@@ -410,4 +424,26 @@ let defaultAdapter: S3ObjectStorageAdapter | null = null;
 export function getDefaultS3ObjectStorageAdapter(): S3ObjectStorageAdapter {
   defaultAdapter ??= new S3ObjectStorageAdapter();
   return defaultAdapter;
+}
+
+/**
+ * Replaces the upload bucket's CORS configuration with `rules` (`PutBucketCors`).
+ *
+ * @remarks
+ * Operator-only — `pnpm ops:storage:cors --apply` is the one caller. It needs `s3:PutBucketCORS`,
+ * which the app's own credentials do not (and should not) hold, so it is not part of
+ * {@link ObjectStoragePort}. It replaces every existing rule. It calls the client directly rather
+ * than through `outboundCall`: a one-off operator write must not count toward the app's `s3`
+ * circuit, and the circuit's Redis connection would keep the command from exiting. The client's
+ * own request timeouts still bound it.
+ */
+export async function putUploadBucketCorsRules(
+  rules: readonly UploadBucketCorsRule[],
+): Promise<void> {
+  await getS3Client().send(
+    new PutBucketCorsCommand({
+      Bucket: requireBucket(),
+      CORSConfiguration: { CORSRules: [...rules] },
+    }),
+  );
 }

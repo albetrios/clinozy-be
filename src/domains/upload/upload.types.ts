@@ -44,6 +44,11 @@ export interface UploadCreateOutput {
   upload_method: 'PUT' | 'POST';
   /** Present only for `POST` uploads: hidden form fields to submit alongside the file. */
   fields?: Record<string, string>;
+  /**
+   * Present only for `PUT` uploads: the request headers the PUT must carry — the URL signs them,
+   * so a PUT without them is refused by storage.
+   */
+  headers?: Record<string, string>;
 }
 
 /** Response body for the upload metadata endpoints (`GET`, `POST /confirm`). */

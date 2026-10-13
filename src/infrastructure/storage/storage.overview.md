@@ -14,7 +14,8 @@ S3-compatible object storage client. Owns the AWS SDK v3 client instance, presig
 - **Rows go after their objects**: [`purgeRowsAfterTheirObjects`](src/infrastructure/storage/stored-object-purge.util.ts) runs retention — keyset pages, each read and deleted in its own short context, S3 deletes outside both, a row deleted only once its object is gone, the run stopped on an open circuit.
 - **AWS SDK v3 over v2**: smaller bundle, modern promise-based API, native `@aws-sdk/s3-request-presigner` for presigned URLs.
 - **S3-compatible by default**: `S3_ENDPOINT` env lets ops point at MinIO, R2, or any S3-compatible service. Production uses AWS S3 directly.
-- **Presigned URLs for both upload and download**: we never proxy bytes through the API process. Upload uses `createPresignedPost` (browser-friendly form fields); download uses `getSignedUrl` for the GET.
+- **Presigned URLs for both upload and download**: we never proxy bytes through the API process. Upload uses `createPresignedPost` (browser-friendly form fields); download uses `getSignedUrl` for the GET. The presigned-PUT fallback returns the `headers` its URL signs (`content-type`, `x-amz-server-side-encryption`) beside the URL, as POST returns its `fields` — a PUT without them is refused with `SignatureDoesNotMatch`.
+- **The bucket's CORS is code**: [bucket-cors.util.ts](src/infrastructure/storage/bucket-cors.util.ts) builds the one rule the upload bucket needs — the `ALLOWED_ORIGINS` origins, `POST`/`PUT`/`GET`/`HEAD`, the PUT's signed headers, `ETag` exposed — and reads a preflight answer. `pnpm ops:storage:cors` checks the live bucket with the browser's own preflights (no AWS permission), `--print` shows the configuration and `--apply` writes it (an AWS admin's `s3:PutBucketCORS`).
 - **Per-call timeouts** on HEAD-object so the upload-confirm flow can't hang on a slow S3 region.
 - **No PII in object keys**: keys are deterministic from public ids; never include email or organization slug.
 
@@ -22,7 +23,7 @@ S3-compatible object storage client. Owns the AWS SDK v3 client instance, presig
 
 - **Presigned URL TTL**: `PRESIGNED_URL_EXPIRY_SECONDS = 900` (15 min) for upload presigns; `USER_DATA_EXPORT_PRESIGNED_DOWNLOAD_EXPIRY_SECONDS = 900` (15 min) for GDPR export downloads.
 - **Region pinning**: `S3_REGION` env. Cross-region transfers should not happen in normal operation.
-- **CORS configuration on the bucket** must permit the platform's origin and the presigned-POST headers. Documented in setup runbooks.
+- **CORS configuration on the bucket** must admit every web-app origin (`ALLOWED_ORIGINS`) for `POST` — the default upload — as well as `PUT`, `GET` and `HEAD`. Check it with `pnpm ops:storage:cors`; apply it with `pnpm ops:storage:cors --apply` ([upload-storage runbook](docs/deployment/runbooks/upload-storage.md#bucket-cors)).
 - **Signed URLs and SigV4**: AWS caps presigned URL TTL at 7 days for SigV4 signers; the platform runs at much shorter TTLs.
 
 ## External dependencies
@@ -39,5 +40,5 @@ S3-compatible object storage client. Owns the AWS SDK v3 client instance, presig
 ## Failure modes
 
 - **HEAD on missing object** → 404 (handled at confirm time → "upload not landed").
-- **Bucket misconfigured for CORS** → presigned upload from a browser fails; not visible in our logs (it's a browser-side error).
+- **Bucket misconfigured for CORS** → presigned upload from a browser fails while every API step answers 200 (`POST /uploads` is logged, the confirm never comes); the browser console names the CORS refusal. `pnpm ops:storage:cors` lists each refused origin × method.
 - **Region outage** → presign succeeds (no network call) but the upload itself fails; client retries; the platform is unaffected because the row stays `pending`.
