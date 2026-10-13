@@ -106,7 +106,7 @@ canary). A deleted-and-recreated database therefore needs exactly three steps:
 
 1. **Logins** — hosted: re-run clinozy-infra's Neon provisioning. It creates
    `clinozy_be_app`, `clinozy_be_maintenance` and `clinozy_be_migrator` (with the
-   migrator's database / `public` / ADMIN grants) on the new branch and rewrites the three
+   migrator's database / `public` / ADMIN grants) in the environment's Neon project and rewrites the three
    URLs — on Neon a recreated database usually means a new host (direct host, no
    `-pooler`, for the migration URL); `pnpm github:sync` any changed secrets. Passwords
    are per-environment secrets, never in committed SQL.

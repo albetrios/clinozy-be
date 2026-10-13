@@ -57,7 +57,7 @@ These are enforced by `pnpm db:migrate:lint` and cannot be overridden by the `--
      every transactional statement at 5 min. A migration that needs longer is a hidden data change or table
      rewrite — split it or move the long part to the non-transactional lane (see migrations.md → Lock and
      statement timeouts).
-6. **Verify locally** — always against the **local Docker** stack (Postgres 17), never a remote Neon dev branch. The compose Postgres is the only local environment with the `clinozy_be_app` role wired up so RLS security tests can `SET ROLE clinozy_be_app` and exercise policies exactly the way CI does:
+6. **Verify locally** — always against the **local Docker** stack (Postgres 17), never a remote Neon database (the `clinozy-be-development` project included). The compose Postgres is the only local environment with the `clinozy_be_app` role wired up so RLS security tests can `SET ROLE clinozy_be_app` and exercise policies exactly the way CI does:
 
    ```bash
    pnpm compose:up && pnpm compose:wait
@@ -72,7 +72,7 @@ These are enforced by `pnpm db:migrate:lint` and cannot be overridden by the `--
    pnpm vitest run --project security src/tests/security/rls/
    ```
 
-   Remote Neon dev fails these with `42501 permission denied to set role "clinozy_be_app"` and silently masks RLS bugs — always run against Docker.
+   Remote Neon (`clinozy-be-development`) fails these with `42501 permission denied to set role "clinozy_be_app"` and silently masks RLS bugs — always run against Docker.
 
 7. **Seeds**: if new tables need reference/demo data, invoke **be-seed-maintainer**.
 8. **DBML diagram** (`docs/database/clinozy-be.dbml`): regenerated automatically by the local `.husky/pre-commit` hook whenever `migrations/*.sql` is staged (`pnpm tool:generate-dbdiagram` → `git add`). The diagram captures columns, primary keys, foreign keys (with `ON DELETE` actions), unique constraints, and RLS rules. It is **local only** — no CI check enforces it. Run `pnpm tool:generate-dbdiagram` manually if you want to preview the output before committing.
@@ -112,7 +112,7 @@ These are enforced by `pnpm db:migrate:lint` and cannot be overridden by the `--
 - Putting Drizzle schemas under `src/infrastructure/database/schemas/` (use domain co-location)
 - Confusing this skill with **be-supabase-porting** (Edge Functions → Fastify)
 - `SET row_security = off` / `RESET row_security` inside any migration (use `SECURITY DEFINER` + `GRANT EXECUTE` instead)
-- Verifying RLS-touching migrations against remote Neon dev (must use local Docker Postgres 17, which is the only env that grants `clinozy_be_app` and matches CI)
+- Verifying RLS-touching migrations against remote Neon (`clinozy-be-development`) (must use local Docker Postgres 17, which is the only env that grants `clinozy_be_app` and matches CI)
 
 ---
 

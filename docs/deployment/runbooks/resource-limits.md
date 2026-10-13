@@ -132,7 +132,7 @@ Use **`DATABASE_MIGRATION_URL`** (`clinozy_be_migrator`) for migrations and **`D
 
 | Variable                     | Use                                       | Notes                                                                                                                                  |
 | ---------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| **`DATABASE_URL`**           | API + worker runtime                      | Prefer **pooled** endpoint (`-pooler` host / `?pgbouncer=true` per Neon docs). Provisioning requests `pooled=true` from the Neon API. |
+| **`DATABASE_URL`**           | API + worker runtime                      | Prefer **pooled** endpoint (`-pooler` host / `?pgbouncer=true` per Neon docs). Provisioning derives the pooled host (`<endpoint>-pooler`) from the direct one. |
 | **`DATABASE_MIGRATION_URL`** | `pnpm db:migrate`, deploy pre-deploy step | **Direct** (non-pooler) connection as `clinozy_be_migrator`.                                                                           |
 
 Size the connection budget against Neon `max_connections` (see formula above).

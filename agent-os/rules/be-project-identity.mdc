@@ -23,7 +23,7 @@ Import from `@/shared/constants/project-identity.constants.js`:
 
 | Need | Constant | Avoid |
 | ---- | -------- | ----- |
-| Product slug (issuer, Neon name, MCP scheme) | `PROJECT_SLUG` | `'clinozy-be'` |
+| Product slug (issuer, Neon project prefix, MCP scheme) | `PROJECT_SLUG` | `'clinozy-be'` |
 | Human-facing product name (emails, copy) | `PROJECT_DISPLAY_NAME` | `'clinozy-be'` |
 | OpenAPI default `info.title` (emitter fallback) | `PROJECT_OPENAPI_TITLE` | `'clinozy-be API'` |
 | JWT `iss` | `JWT_ISSUER` | slug literal |
@@ -48,7 +48,7 @@ Import from `@/shared/constants/project-identity.constants.js`:
 
 ## Shell scripts and OpenAPI locales
 
-- Scripts: source `.github/project-identity.env` when the slug is needed (see `tooling/ci/restore-drill-neon.sh`).
+- Scripts: read only the key you need from `.github/project-identity.env` (`sed -n 's/^PROJECT_SLUG=//p'`) — never `source` it: `PROJECT_DISPLAY_NAME` holds an unquoted space that bash runs as a command (see `tooling/ci/restore-drill-neon.sh`).
 - `src/shared/locales/{en,es}/openapi.json` — `info.title` is updated by codegen; keep in sync via generate, do not set a one-off product name by hand.
 
 ## Also generated (do not hand-edit)
