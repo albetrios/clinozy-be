@@ -283,6 +283,11 @@ jobs:
         # Every call clinozy-fe makes, walked once by each of 20 pool users; the scenario header lists the
         # calls it cannot reach. Signs in with the static code (job env), so it needs no mail.
         run: k6 run --summary-export=k6-fe-full-surface.json src/tests/load/k6/scenarios/fe-full-surface.js
+        env:
+          # Each user's new organization subscribes to the cheapest plan with a second seat, so the
+          # member steps run (the Free plan's one seat is the owner's). This job sets no
+          # STRIPE_SECRET_KEY, so the API records the subscription itself (TRIALING) — no Stripe call.
+          SUBSCRIBE: 'true'
 
       - name: Upload k6 summaries and server log
         if: always()

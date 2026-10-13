@@ -22,20 +22,25 @@ const POOL_PATH = resolve(here, 'data/credential-pool.json');
 const OVERRIDES_PATH = resolve(here, 'data/loadtest-overrides.env');
 const TARGET_VUS = Number(process.env.VUS || '100'); // checks the pool is big enough for this
 
-function readEnvFileValue(path, key) {
+/** The value `key` has in an env file: `''` for a blank `KEY=` line, `undefined` when absent. */
+function readEnvFileLine(path, key) {
   try {
     const line = readFileSync(path, 'utf8')
       .split('\n')
       .find((l) => l.startsWith(`${key}=`));
     if (!line) return undefined;
-    const value = line
+    return line
       .slice(key.length + 1)
       .trim()
       .replace(/^["']|["']$/g, '');
-    return value === '' ? undefined : value;
   } catch {
     return undefined;
   }
+}
+
+function readEnvFileValue(path, key) {
+  const value = readEnvFileLine(path, key);
+  return value === '' ? undefined : value;
 }
 
 // The value the load-test cluster runs with: its process environment (setup-loadtest.sh exports
@@ -174,7 +179,25 @@ if (serverUp && pool.length) {
   }
 }
 
-// 6 + 7. Postgres: max_connections + role-cap headroom
+// 6. No payment provider: the member chain (RARE=true) subscribes its organization, and only an API
+// without STRIPE_SECRET_KEY records that subscription itself. With a key the subscription waits for
+// payment and keeps the Free plan's single seat. A blank value is unset (the env loader drops it).
+{
+  // The loader's order: the process environment, the overrides it exports, the machine-local file.
+  const stripeKey =
+    process.env.STRIPE_SECRET_KEY ??
+    readEnvFileLine(OVERRIDES_PATH, 'STRIPE_SECRET_KEY') ??
+    readEnvFileLine(resolve(repoRoot, '.env.local'), 'STRIPE_SECRET_KEY');
+  !stripeKey
+    ? ok('payment provider off', 'no STRIPE_SECRET_KEY for the load-test cluster')
+    : fail(
+        'payment provider off',
+        'the load-test cluster may run with a STRIPE_SECRET_KEY',
+        'Re-run setup-loadtest.sh (it writes STRIPE_SECRET_KEY= to data/loadtest-overrides.env) and restart the cluster',
+      );
+}
+
+// 7 + 8. Postgres: max_connections + role-cap headroom
 // The operator login: row-level security shows the application role no rows without an
 // organization context, so the role-cap query below would read 0 on it and always pass.
 const dbUrl = loadTestSetting('DATABASE_OPERATOR_URL') || loadTestSetting('DATABASE_URL');
@@ -214,7 +237,8 @@ if (dbUrl) {
     const maxRoles = Number(
       (
         await client.query(
-          'select coalesce(max(c),0) m from (select organization_id, count(*) c from tenancy.roles group by organization_id) z',
+          // Live roles only: a deleted role is kept (restorable) and does not count toward the cap.
+          'select coalesce(max(c),0) m from (select organization_id, count(*) c from tenancy.roles where deleted_at is null group by organization_id) z',
         )
       ).rows[0].m,
     );
@@ -238,7 +262,7 @@ if (dbUrl) {
   );
 }
 
-// 8. Redis reachable from the HOST (the server connects via REDIS_URL, not in-container).
+// 9. Redis reachable from the HOST (the server connects via REDIS_URL, not in-container).
 // OrbStack/Docker can leave the port-forward half-open while the container stays healthy —
 // `docker exec redis-cli ping` would still PONG, but the server fails to boot with
 // ioredis "Connection is closed". Probe exactly the way the app does.
