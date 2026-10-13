@@ -82,7 +82,10 @@ erDiagram
 - **Open:** (1) "All set" shows for 7 days after the last guide item is done (BRIEF.md:103) — a stored time
   (`setup_guide_done_at`) or worked out from the records' own times? (2) Who may read the setup progress — the
   managers only, or every member (the members' notice needs only "is there an open branch", already readable
-  through `/branches/my`)?
+  through `/branches/my`)? (3) **Cash drawer float — pending your answer (Step 4):** `default_day_float` is stored but
+  read by no rule (launch B25, clinozy-fe D156 — the day opens on the carried or recounted cash), so the `day_float`
+  value in `setup_answered_steps` / `setup_skipped_items`, the guide item and Settings › Clinic's float field are
+  proposed to go.
 
 ```mermaid
 erDiagram

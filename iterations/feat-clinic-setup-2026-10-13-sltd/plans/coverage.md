@@ -66,8 +66,50 @@ coverage is the launch's `plans/coverage.md`, 517 rows, every one covered or out
 
 ## Delta
 
-Step 2 (MODE incremental, brief): `pnpm iteration:diff launch-2026-09-30-jxmr feat-clinic-setup-2026-10-13-sltd`
-must show only `BRIEF.md` added; then the Baseline's Standing deviations this change touches.
+Step 2, 2026-10-13 — MODE incremental, Intake mode `brief`: `BRIEF.md` is the change list.
+
+**The diff.** `pnpm iteration:diff launch-2026-09-30-jxmr feat-clinic-setup-2026-10-13-sltd` — in both repositories:
+`+ added (1): BRIEF.md`; screens unchanged; `PRD.md`, `schema-routes.md` and the prototype unchanged; no entity,
+field, enum, route or operation changed. Nothing changed but the brief — **no finding**.
+
+**Classified** (the brief's changes, against what the launch built):
+
+| Change | Kind | Where |
+| --- | --- | --- |
+| Setup drawer over Today, its 7 steps and Ready | new surface | Today (frontend); three new setup routes (backend) |
+| Setup guide card on Today | new surface | Today |
+| Members' notice while no branch is open | new surface (small) | Today |
+| Places & days in the branch drawer | structural — a fourth step | Users › Branches |
+| Settings › Clinic | new surface | Settings (frontend) |
+| /onboarding shortened | structural — steps removed | /onboarding (frontend) |
+| First branch becomes main | behaviour | branch create (backend) |
+| Setup progress columns + the one-time fill | data | `tenancy.organization_settings` (backend) |
+
+**The Baseline's Standing deviations this change touches** — plan against what was built:
+
+| Item (repository) | Design says | Built as | Since | What it means here |
+| --- | --- | --- | --- | --- |
+| Staff accounts (be) · Users (fe) | a user with a password | an invitation by email; "Invited" with Resend | launch — D4 · D17 | setup step 7 sends invitations, never passwords |
+| Roles (be) · Marketing role (fe) | a fixed list of 9; no Marketing in the prototype | Owner plus eight seeded, editable roles, several per person; Marketing listed | launch — D5 · Q-U2 | step 5 adds Doctor / Therapist as an **extra** role (main stays Owner); step 7's roles are the clinic's real roles |
+| Rooms and machines (be) | a fixed room list, no machines | `app.branch_rooms`, `app.branch_machines` per branch; a booking may name both | launch — D28 | the Places & days editors and the guide's room / machine items have records to write |
+| Access model (be) | role × section matrix | per-resource permission codes | launch | setup gates on `organization:update`; each write keeps its own code |
+| Branch field names · Branch access (be) | `addressLine1`, `pin`, a user's `branchIds` | `address_line_one`, `postal_code`; `app.branch_members` | launch | the owner is put on the main branch's members at create |
+| Branch required fields (fe) | name and address line only | name, address, area, city, six-digit PIN, phone, email | launch — D157 | setup steps 2–3 ask exactly these |
+| Main branch (fe) | a Main switch in the drawer | read-only — "one per clinic, set when it opened" | launch — D157 | **the backend never sets it** (the client must send `is_main`) — RC-4 makes it true |
+| New branch City and State (fe) | "Surat / Gujarat" | copied from the main branch | launch — L-31d | setup's main branch has none to copy — City is asked, State prefilled "Gujarat" |
+| Offering default staff (be) | `defaultDoctorId`, `room` on an offering | none | launch — O6 | starter services set no doctor or room |
+| Offer pricing when billing (be) | the drawer prices a line | the server applies the best live offer | launch — D81 (6) | none — setup creates no offers |
+| Day close opening (be) · Day close default float (fe) | a configured `default_float` | the carried or recounted cash only | launch — B25 · D156 | **`default_day_float` is stored but read by nothing** (`app.container.ts:74` passes it; no rule uses it) — the guide's "Cash drawer float" and Settings › Clinic's float field would set a value with no effect → Step 4 proposes dropping both |
+| Focus (fe) | not moved | trapped in drawers and confirms, returned to the opener | launch — §7.2 | the setup drawer does the same, and moves focus to each step's title (BRIEF.md:256) — resolves F9 for the build |
+| Routes (fe) | one page switching rooms | URL-driven dialog routes | launch — D24 | the setup drawer has its own address, like every drawer |
+| Landing · Splash exit (fe) | Leads; a fixed 3.7 s splash | the role home; the splash leaves when boot resolves (≥ 2,050 ms) | launch — D25, Q-S1 | an Owner lands on Today; the drawer opens after the splash (F14) |
+| Account menu · Settings (fe) | identity, Status, Appearance, Log out; no Settings | plus the platform rows; Settings as a 1040px record drawer | launch — §3.2, D126 | homes for "Setup guide" (account menu) and the Clinic section (Settings) — resolves F21 |
+| Drawer step summaries and peeks · Open step circle (fe) | raw figures; near-black circle | values with units; the stone tone | launch — L-30c, L-35 | setup's peeks read "Mon–Sat · 10:00–19:00", "₹500" like every drawer |
+| Dirty close (fe) | silent | "Discard changes?" guard | launch — Q-P1 | only the open step's unsaved edits can be lost — saved steps never are |
+| Quick-create New offering (fe) | steps that never open | three working steps | launch — §7.3 | step 6's "+ Add your own" can reuse it |
+| Empty states · No clinic room open (fe) | "No … matches" only | the design's unreachable copy + "New …"; `ClinicHomeEmpty` | launch — R26, D101 | the members' notice is a new state beside these |
+
+Every other Standing deviation (money, stock, medical, tasks, messaging, patient file …) is untouched by this change.
 
 ## Reconciliation
 
