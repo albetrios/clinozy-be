@@ -128,7 +128,7 @@ Review this runbook at the start of each calendar quarter (January, April, July,
 ## Related
 
 - [docs/README.md](../README.md) — documentation index (links here)
-- [backup-drills.md](backup-drills.md) — monthly automated restore drill (`MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY`; Neon project `clinozy-be` by name; parent branch = workflow ref)
+- [backup-drills.md](backup-drills.md) — monthly automated restore drill (`MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY`; Neon project `clinozy-be` by name; parent branch = the GitHub Environment's Neon branch)
 - [restore-drill.md](../deployment/restore-drill.md) — workflow secrets and CI artifact names
 - [cicd-and-deployment.md](../deployment/ci-cd/cicd-and-deployment.md) — deploy and secrets
 - [production-go-live.md](../deployment/runbooks/production-go-live.md) — production promotion

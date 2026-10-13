@@ -1,7 +1,8 @@
 # Weekly lightweight restore smoke drill — catches restore/migrate regressions 4x faster
 # than the monthly RTO drill, without the full RTO overhead. Creates a throwaway Neon PITR
-# branch from the workflow ref (main), runs migrate + auth integration smoke, then deletes
-# the branch. No RTO assertion. See docs/process/backup-drills.md.
+# branch from the Neon branch named after the GitHub Environment (main → production), runs
+# migrate + auth integration smoke, then deletes the branch. No RTO assertion.
+# See docs/process/backup-drills.md.
 
 name: Weekly restore smoke drill
 
@@ -35,7 +36,7 @@ jobs:
           set -euo pipefail
           case "${{ github.ref_name }}" in
             main) echo "environment=production"  >> "$GITHUB_OUTPUT" ;;
-            *)    echo "::error::Unsupported branch for restore drill: ${{ github.ref_name }} (single-trunk: Neon parent must be main)" && exit 1 ;;
+            *)    echo "::error::Unsupported branch for restore drill: ${{ github.ref_name }} (single-trunk: the drill runs from main only)" && exit 1 ;;
           esac
 
   restore-smoke:
@@ -56,7 +57,9 @@ jobs:
           --health-retries=20
     env:
       MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY: ${{ secrets.MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY }}
-      RESTORE_DRILL_PARENT_BRANCH_NAME: ${{ github.ref_name }}
+      # The Neon branch is named after the GitHub Environment (the infrastructure repository
+      # provisions development/production), not after the git branch — Neon `main` is an unused default.
+      RESTORE_DRILL_PARENT_BRANCH_NAME: ${{ needs.resolve-environment.outputs.environment }}
       NODE_ENV: development
       REDIS_URL: redis://localhost:6379
     steps:

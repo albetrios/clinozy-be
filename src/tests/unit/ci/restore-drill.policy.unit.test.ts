@@ -16,7 +16,7 @@ describe('restore drill automation policy', () => {
     expect(workflow).not.toContain('recorded_rto_minutes');
   });
 
-  it('uses monthly drill Neon secrets and workflow ref as parent branch', () => {
+  it('uses monthly drill Neon secrets and the GitHub Environment name as parent branch', () => {
     const workflow = readFileSync(
       join(ROOT, '.github/workflows/scheduled-monthly-restore-rto.yml'),
       'utf8',
@@ -25,8 +25,6 @@ describe('restore drill automation policy', () => {
 
     expect(workflow).toContain('MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY');
     expect(workflow).not.toContain('MONTHLY_DATABASE_RESTORE_DRILL_NEON_PROJECT_ID');
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression in the workflow YAML — not a TS template.
-    expect(workflow).toContain('RESTORE_DRILL_PARENT_BRANCH_NAME: ${{ github.ref_name }}');
     // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression in the workflow YAML — not a TS template.
     expect(workflow).toContain('environment: ${{ needs.resolve-environment.outputs.environment }}');
     expect(workflow).toContain('tooling/ci/restore-drill-neon.sh create');
@@ -40,6 +38,24 @@ describe('restore drill automation policy', () => {
     expect(script).toContain('RESTORE_DRILL_PARENT_BRANCH_NAME');
     expect(script).not.toContain('NEON_PARENT_BRANCH_ID');
     expect(script).not.toContain('DATABASE_URL_FOR_MONTHLY');
+  });
+
+  it('restores from the Neon branch named after the GitHub Environment, never the git ref', () => {
+    // Neon branches are provisioned per environment (development/production); the default
+    // `main` branch serves no environment, so a git-ref parent would restore an unused database.
+    for (const workflowFileName of [
+      'scheduled-monthly-restore-rto.yml',
+      'scheduled-weekly-restore-smoke.yml',
+    ]) {
+      const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
+      expect(workflow, workflowFileName).toContain(
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression in the workflow YAML — not a TS template.
+        'RESTORE_DRILL_PARENT_BRANCH_NAME: ${{ needs.resolve-environment.outputs.environment }}',
+      );
+      expect(workflow, workflowFileName).not.toMatch(
+        /RESTORE_DRILL_PARENT_BRANCH_NAME: \$\{\{ github\.ref_name \}\}/,
+      );
+    }
   });
 
   it('advances the id sequences between migrating and the smoke, as the DR runbook does', () => {

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Neon PITR branch helpers for the monthly restore drill workflow.
-# Requires: MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY, RESTORE_DRILL_PARENT_BRANCH_NAME
-#           (GitHub ref name for the workflow run), jq, curl.
+# Requires: MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY (a Neon ORGANIZATION API key — a personal
+#           key on an organization-owned project cannot list projects without org_id),
+#           RESTORE_DRILL_PARENT_BRANCH_NAME (the Neon branch named after the GitHub Environment,
+#           e.g. production), jq, curl.
 # Neon project ID is resolved via API from project name (default: PROJECT_SLUG from setup manifest).
 
 set -euo pipefail
@@ -103,7 +105,7 @@ resolve_parent_branch_id() {
   local parent_branch_id
   parent_branch_id="$(printf '%s' "$branches_json" | jq -r --arg name "$parent_branch_name" '.branches[]? | select(.name == $name) | .id' | head -n 1)"
   if [ -z "$parent_branch_id" ]; then
-    echo "::error::Could not resolve Neon parent branch named ${parent_branch_name} (workflow ref ${RESTORE_DRILL_PARENT_BRANCH_NAME})"
+    echo "::error::Could not resolve Neon parent branch named ${parent_branch_name} — the Neon project needs a branch named after the GitHub Environment"
     exit 1
   fi
   printf '%s' "$parent_branch_id"
