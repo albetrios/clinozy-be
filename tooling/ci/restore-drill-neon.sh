@@ -187,7 +187,9 @@ create_restore_drill_branch() {
   local branch_id database_url
   branch_id="$(printf '%s' "$create_json" | jq -r '.branch.id')"
   # Ask for the project's own database and owner by name — never Neon's default database and role.
-  database_url="$(neon_request GET "/projects/${project_id}/connection_uri?branch_id=${branch_id}&database_name=${NEON_DATABASE_NAME}&role_name=${NEON_OWNER_ROLE_NAME}&pooled=true" | jq -r '.uri')"
+  # DIRECT host (pooled=false): the drill runs `pnpm db:migrate` on this URL, and migrate.ts refuses a
+  # pooler (its advisory lock needs a session pinned to one backend).
+  database_url="$(neon_request GET "/projects/${project_id}/connection_uri?branch_id=${branch_id}&database_name=${NEON_DATABASE_NAME}&role_name=${NEON_OWNER_ROLE_NAME}&pooled=false" | jq -r '.uri')"
   if [ -z "$database_url" ] || [ "$database_url" = "null" ]; then
     echo "::error::Neon did not return a connection URI for branch ${branch_id}"
     exit 1
