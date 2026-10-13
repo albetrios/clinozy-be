@@ -8,7 +8,7 @@
 | Opened | 2026-09-30 |
 | Branch | docs/legacy-prd-import |
 | Baseline | none |
-| Status | implementing |
+| Status | planning |
 | Summary | Full clinic app: 12 screens, 93 routes, 40 entities |
 | Drop placed | 2026-10-03 |
 | Drop source | ~/projects/clinozy/clinozy-fe/iterations/launch-2026-09-30-jxmr/intake-files |
@@ -37,3 +37,4 @@
 - 2026-10-10 · planning → ready-for-approval · — · Claude
 - 2026-10-10 · ready-for-approval → approved · — · Claude
 - 2026-10-10 · approved → implementing · — · Claude
+- 2026-10-13 · implementing → planning · the medical store's route review (routes-final §11, rev 1 by recommendation, D75) goes through its confirmation round with the frontend's medical findings (G6, N19-N21, Q21, M22, M23, M34) and D83's parked return refund (user 2026-10-13: continue final-routes for medical in this iteration) · Claude

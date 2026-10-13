@@ -13,6 +13,8 @@ Tables: `manufacturer`, `supplier`, `medical_rep`, `medical_rep_visit`, `medicin
 
 - Never more than a batch holds, never an expired batch, never above MRP (`operations.medical-sales`)
 - Sales are never edited (`operations.medical-sales`)
+- A return's refund needs `payment:delete`; a partly paid sale is collected before a return (rev 2, D88 — MD23, MD24)
+- A medicine is sold only through the store's sales, never on a hand-made invoice (rev 2, D88 — MD28)
 
 ## Acceptance criteria
 
@@ -20,6 +22,7 @@ Tables: `manufacturer`, `supplier`, `medical_rep`, `medical_rep_visit`, `medicin
 - **medical-store.2** A sale deducts stock by earliest expiry and refuses expired batches and prices above MRP — intake-files/PRD.md:76
 - **medical-store.3** Sales are viewed, collected, returned or voided (stock restored), never edited — intake-files/PRD.md:76
 - **medical-store.4** Purchase orders move Ordered → Received → Paid; paying records a payment — intake-files/PRD.md:76
+- **medical-store.5–11** (rev 2, D88) the return's code and precondition, who owes on sales, goods not ordered on receive, the design's sorts and Created filter, the suppliers' footer and the PO print sheet, `/invoices` refusing medicines, the pharmacy queue's patient — [acceptance.md](../../acceptance.md)
 
 ## Work items
 

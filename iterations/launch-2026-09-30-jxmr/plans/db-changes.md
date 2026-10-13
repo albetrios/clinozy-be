@@ -1550,6 +1550,12 @@ erDiagram
 
 ## Stage 8 — Medical store
 
+**Rev 2 (D88, 2026-10-13) — no table changes.** The medical store's confirmation round adds no column, table, index
+or constraint: the new sorts are SQL sort keys over the existing columns (MD27 — margin from
+`app.medicine_supplier_prices`, as `nearest_expiry` from `app.medicine_batches`), the dues read is a query over
+`app.medical_sales` and `app.invoices` (MD25), goods not ordered are ordinary `app.medical_purchase_order_items` rows
+(MD26), and the rest are reads, gates and refusals. No migration.
+
 ### manufacturer · NEW
 
 - **Holds:** Medicine brand on the pack. Read by medicine pickers, supplier/MR connections; written by Manufacturer drawer.

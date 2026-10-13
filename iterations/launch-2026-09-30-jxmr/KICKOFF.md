@@ -16,8 +16,8 @@
 | Drop placed   | 2026-10-03                                                                                                               |
 | Intake hash   | 036cbb592ac5                                                                                                             |
 | Schema-routes | 5f90325208e1                                                                                                             |
-| Date          | 2026-10-03 · re-planned 2026-10-08 ([D50](plans/decisions.md))                                                           |
-| Route review  | [plans/routes-final.md](plans/routes-final.md) — sub-domains 1–10 ([D46](plans/decisions.md), [D47](plans/decisions.md)) |
+| Date          | 2026-10-03 · re-planned 2026-10-08 ([D50](plans/decisions.md)) · reopened 2026-10-13 ([D88](plans/decisions.md))         |
+| Route review  | [plans/routes-final.md](plans/routes-final.md) — sub-domains 1–10 ([D46](plans/decisions.md), [D47](plans/decisions.md)); 11 rev 2 ([D88](plans/decisions.md)) |
 
 ## 2. Goal and scope
 
@@ -88,6 +88,7 @@ banner ([D40](plans/decisions.md)).
 | [D48](plans/decisions.md) | How is the reviewed design built?                                                                                                              | Rebuild per sub-domain; old folders go in the same row                                                     | RED   |
 | [D49](plans/decisions.md) | Is the medical store in this build?                                                                                                            | Paused until its route review                                                                              | SCOPE |
 | [D50](plans/decisions.md) | Back to planning                                                                                                                               | ROUTE re-planned as rows #124–#153                                                                         | SCOPE |
+| [D88](plans/decisions.md) | How does the medical store's route review settle the frontend's medical findings and D83's parked refund?                                     | Every recommendation: MD23–MD30, routes-final §11 rev 2 (52 routes), ROUTE #181–#189                       | RED   |
 | [D54](plans/decisions.md) | What do we call the levels?                                                                                                                    | The code's words: domain → sub-domain → nested sub-domain; a nested sub-domain sits in its parent's folder | RED   |
 
 ## 4. Features and order
@@ -138,6 +139,13 @@ wait (the user's call); so does load testing. Rows #164–#165 came with D82; ro
 role-by-role QA of a clinic with one member per role found and the user decided ([D83](plans/decisions.md), 2026-10-10). Rows
 #172–#176 give an invited person who signs in their invitations — read, accept without the link, decline — and free
 an expired invite's seat ([D84](plans/decisions.md), 2026-10-10).
+
+**Reopened 2026-10-13 for the medical store's confirmation round** ([D88](plans/decisions.md)). The store was built
+(#153) on routes-final §11 rev 1, decided by recommendation (D75) while the frontend's medical room still read
+fixtures. Rev 2 answers the medical room's findings (clinozy-fe `api-integration.md` §5.5, G6, N8, N19–N21, Q21, M22,
+M23, M34) and D83's parked return refund — MD23–MD30, one route more (52). Rows #181–#189 build it, each small, each
+with its tests, through `/be-build-requirement`, recorded in `AS-BUILT.md`; no table changes and no background work.
+The frontend's medical room moves onto the API after them, in clinozy-fe's own iteration.
 
 **The medical store is not touched** ([D49](plans/decisions.md), [D52](plans/decisions.md)). Its folders
 (`manufacturers/`, `suppliers/`, `medical-reps/`, `medical-rep-visits/`, `medicines/`, `medical-purchase-orders/`,
@@ -205,6 +213,15 @@ its links working (the invoices' medical lines and links) until the medical stor
 | 178 | **Documents** ([D85](plans/decisions.md)) — the OpenAPI document, the overview, the audit actions, the frontend route map | docs | #177 | `/be-build-requirement` | `docs:check`, `iteration:frontend-map --check` | — | done |
 | 179 | **A link that shows each photo and report file** ([D86](plans/decisions.md)) — `file_url` on a photo, `files` (`file_key`, `file_name`, `file_url`) on a report: a 15-minute presigned GET of the organization's confirmed upload, made on every read, served inline under its name; the upload domain mints them through the `fileReadUrls` port | sub-domain | #178 | `/be-build-requirement` | the link on create, get and list; none for a private photo the caller cannot read; `null` for a deleted upload; the report's files in order with their names; the disposition header escaped | — | done |
 | 180 | **Documents** ([D86](plans/decisions.md)) — the OpenAPI document (the two fields, the route descriptions), the overviews, the frontend route map | docs | #179 | `/be-build-requirement` | `docs:check`, `iteration:frontend-map --check` | — | done |
+| 181 | **Medical — the return's refund needs `payment:delete`** ([D88](plans/decisions.md) (1), MD23, MDC19) — route 50's gate; `403` `missing_permission`; the Standing deviation "Medical sale return" closes | sub-domain | — | `/be-build-requirement` | the Pharmacist refused, the Accountant and Admin allowed; the route description and `routes.txt` | — | planned |
+| 182 | **Medical — who owes on sales** ([D88](plans/decisions.md) (3), (5), (8a), MD25, MD27, MD30 (a), MDC20) — `GET /medical-sales/dues` (route 52); the sales' `created_from` / `created_to` and `sort=contact_name` (routes 44, 45) | sub-domain | — | `/be-build-requirement` | the dues rows (grouping, largest first, voided and paid sales left out, the branch rule, `q`, the created range, paging); the new filter and sort | — | planned |
+| 183 | **Medical — receive takes goods not ordered; the order's supplier for the print sheet** ([D88](plans/decisions.md) (4), (8c), MD26, MD30 (c), MDC21) — route 32's lines without `id`; `supplier.phone` and `supplier.gst_number`, a deleted supplier's too | sub-domain | — | `/be-build-requirement` | a received order with an ordered and an unexpected line (batch, stock, price, total, a quick medicine from a new name, the 50-line cap, the 400s); the supplier's fields after it is deleted | — | planned |
+| 184 | **Medical — medicines sort by manufacturer and margin** ([D88](plans/decisions.md) (5), MD27, MDC22) — `sort=manufacturer_name`, `sort=margin_percent` on routes 17 and 18 | sub-domain | — | `/be-build-requirement` | both orders, none last, paging across the ties | — | planned |
+| 185 | **Medical — suppliers' payable footer and order total** ([D88](plans/decisions.md) (8b), MD30 (b), MDC23) — `meta.payable_total` on route 7; `order_total` on the supplier | sub-domain | — | `/be-build-requirement` | the footer over every page and the filters; the total of ordered and received orders, cancelled left out | — | planned |
+| 186 | **Billing — `/invoices` refuses medical bills and medicine lines** ([D88](plans/decisions.md) (6), MD28, M34, MDC24) — create, change and both previews; `400` reason `sold_through_store` | sub-domain | — | `/be-build-requirement` | each of the four routes refuses both; a sale's invoice still lists and reads through `/invoices`; a sale still writes its invoice | — | planned |
+| 187 | **Patients — the prescription row names its patient** ([D88](plans/decisions.md) (7), MD29, MDC25) — `patient` (`id`, `patient_number`, `contact_id`, `name`) on every prescription answer | sub-domain | — | `/be-build-requirement` | the pharmacy queue (`status=approved&is_filled=false`) and the patient file's list name the patient | — | planned |
+| 188 | **Documents** ([D88](plans/decisions.md) (8f), MD30 (f), MDC26) — `docs/routes.txt` and its maps, the OpenAPI document, the overviews, the frontend route map's medical section (M22, M23), the Standing deviations | docs | #181–#187 | `/be-build-requirement` | `routes:catalog:check`, `docs:check`, `iteration:frontend-map --check`, `tsdoc:check` | — | planned |
+| 189 | **Acceptance — the medical store's rev 2** ([D88](plans/decisions.md)) — the new criteria in [acceptance.md](plans/acceptance.md) checked with evidence | flow | #181–#188 | `be-kickoff-iteration` › Close | every rev 2 row of plans/acceptance.md | — | planned |
 
 ### Superseded ledger (the plan of 2026-10-03)
 
