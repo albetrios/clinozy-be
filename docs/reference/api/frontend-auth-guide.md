@@ -229,7 +229,7 @@ token alone can therefore not erase an account or an organization.
 3. Retry the original request once. The window lasts 10 minutes on this session only — a token
    refresh keeps the session, a new login does not — so a second action inside it needs no prompt.
 
-The k6 scenarios `user-data-export.js` and `fe-full-surface.js` (step 52) do exactly this with a
+The k6 scenarios `user-data-export.js` and `fe-full-surface.js` (step 53) do exactly this with a
 password.
 
 ## Entry flows → how many calls to the dashboard

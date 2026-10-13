@@ -131,6 +131,20 @@ describe('k6 coverage policy (#67)', () => {
     expect(Object.values(RECORD_DELETE_REASON)).toContain(reason);
   });
 
+  it('subscribes the fe-full-surface organizations with no payment provider configured', () => {
+    // SUBSCRIBE=true gives each new organization a plan with a second seat, so the member steps run.
+    // With no STRIPE_SECRET_KEY the API records that subscription itself (TRIALING); with one, the
+    // subscription waits for payment and keeps the Free plan's single seat.
+    const workflow = readFileSync(workflowPath, 'utf8');
+    const feStep = workflow.slice(
+      workflow.indexOf('k6 fe-full-surface'),
+      workflow.indexOf('Upload k6 summaries'),
+    );
+
+    expect(feStep).toContain("SUBSCRIBE: 'true'");
+    expect(workflow).not.toContain('STRIPE_SECRET_KEY:');
+  });
+
   it('never load-tests fewer routes nightly than the recorded budget (a ratchet)', () => {
     const { covered, required } = computeCoverage({
       routes: loadRoutes(),
