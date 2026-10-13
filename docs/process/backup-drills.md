@@ -20,7 +20,7 @@ Elapsed restore time must be **strictly less than** `RTO_MINUTES × 60` seconds.
 
 ```mermaid
 flowchart LR
-  A[GitHub Environment secrets] --> B["PITR branch from github.ref_name parent"]
+  A[GitHub Environment secrets] --> B["PITR branch in the environment's Neon project"]
   B --> C[db:migrate + advance id sequences + auth integration smoke]
   C --> D[restore-drill-rto.json]
   D --> E{elapsed < RTO_MINUTES?}
@@ -30,13 +30,13 @@ flowchart LR
 
 | Step | Automated action |
 | ---- | ---------------- |
-| **Parent branch** | Neon branch named **`github.ref_name`** (`main` on schedule; selected branch on manual run) |
+| **Parent branch** | The only branch of the resolved **GitHub Environment**'s Neon project (`main` → **`production`** → project `clinozy-be-production`, branch `production`; the drill runs from `main` only) |
 | **Branch create** | Child branch from that parent at **15-minute** PITR lookback |
 | **Recovery** | `pnpm db:migrate`, then `pnpm db:sequences:advance` (the [DR runbook](dr-runbook.md#advance-the-id-sequences-after-a-restore) step), then auth integration smoke against the new branch — the weekly restore smoke runs the same three |
 | **RTO clock** | Starts at branch creation; ends after smoke passes |
 | **Cleanup** | Ephemeral branch deleted (also has `expires_at` TTL) |
 
-Neon branch names must match the git long-lived branch (`main`).
+Each GitHub Environment has its own Neon project, and every name derives from it: project `clinozy-be-<environment>`, branch `<environment>`, database `clinozy_be_<environment>`, owner `clinozy_be_<environment>_owner` (the drill branch's login). Nothing is named after a git branch or Neon's defaults.
 
 ---
 
@@ -46,9 +46,9 @@ Set in `.env.development` / `.env.production` under the **GitHub Secrets** half 
 
 | Secret | Purpose |
 | --- | --- |
-| `MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY` | Neon Console → Developer settings → API key |
+| `MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY` | Neon API key — written by the infrastructure repository's setup; an **organization** key is preferred (with a personal key the drill looks up the key's only organization) |
 
-Neon **project ID** is resolved automatically via the Neon API using project name **`clinozy-be`**. Single trunk: the workflow maps **`main` → `production`** (environment ≠ branch; there is no `dev` branch). Without the API key in the matching GitHub Environment, the monthly workflow **fails**.
+Neon **project ID** is resolved automatically via the Neon API from the project name **`clinozy-be-<environment>`**. Single trunk: the workflow maps **`main` → `production`** (environment ≠ branch; there is no `dev` branch). Without the API key in the matching GitHub Environment, the monthly workflow **fails**.
 
 ---
 

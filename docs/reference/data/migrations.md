@@ -137,7 +137,7 @@ Production deploys are **forward-only**: we do not run automatic down migrations
 
 ### 1. Neon branch rehearsal (recommended)
 
-1. Create a disposable Neon branch from the production schema.
+1. Create a disposable Neon branch from `production` in project `clinozy-be-production` — prefer `--schema-only` so no patient rows are copied (use a full branch only when the migration backfills data). A branch of the protected `production` branch gets **new role passwords**, so take its URL from `neonctl connection-string <branch> --project-id <id>`, never from `.env.production`.
 2. Apply the PR migration: `DATABASE_URL=<branch> pnpm db:migrate`.
 3. Run targeted Vitest integration tests and `pnpm test:api-smoke` against the branch.
 4. **Simulate rollback** by restoring the branch to a PITR timestamp **before** the migration (Neon console) or by creating a fresh branch from the old snapshot.

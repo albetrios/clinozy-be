@@ -56,8 +56,8 @@ flowchart TD
 
 ### 1. Postgres (Neon) — RPO ≤ 15 minutes
 
-1. Open Neon console → production project → **Restore** or create branch from PITR **≤ 15 minutes** before failure.
-2. Update `DATABASE_URL` in Railway (API + worker) to the restored branch/endpoint.
+1. Open Neon console → project **`clinozy-be-production`** → branch **`production`** → **Restore** to a point **≤ 15 minutes** before failure (history is kept 7 days). `production` is a **protected** branch, which blocks resets — turn protection off for the restore and back on straight after. An in-place restore keeps the host and database (`clinozy_be_production`), and the users' passwords are those at the restore point (unchanged unless rotated since), so the existing `DATABASE_*_URL`s keep working.
+2. Only if you restored into a **new branch** instead: a branch created from a protected branch gets **new passwords** for every role, so take its URLs from Neon (`neonctl connection-string <branch> --project-id <id> --role-name <user>`), not from `.env.production` — then update `DATABASE_URL`, `DATABASE_MAINTENANCE_URL` and `DATABASE_MIGRATION_URL` in Railway (API + worker) and GitHub (`pnpm github:sync`).
 3. Run `pnpm db:migrate` against the restored database (idempotent; fixes schema drift).
 4. **Advance the id sequences** ([below](#advance-the-id-sequences-after-a-restore)) before the API and worker serve traffic on the restored database — if they kept running through the restore, do it straight away.
 5. Verify row counts on critical tables (`tenancy.organizations`, `billing.subscriptions`, `auth.sessions`).
@@ -128,7 +128,7 @@ Review this runbook at the start of each calendar quarter (January, April, July,
 ## Related
 
 - [docs/README.md](../README.md) — documentation index (links here)
-- [backup-drills.md](backup-drills.md) — monthly automated restore drill (`MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY`; Neon project `clinozy-be` by name; parent branch = workflow ref)
+- [backup-drills.md](backup-drills.md) — monthly automated restore drill (`MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY`; one Neon project per environment, `clinozy-be-<environment>`, found by name; parent branch = its `<environment>` branch)
 - [restore-drill.md](../deployment/restore-drill.md) — workflow secrets and CI artifact names
 - [cicd-and-deployment.md](../deployment/ci-cd/cicd-and-deployment.md) — deploy and secrets
 - [production-go-live.md](../deployment/runbooks/production-go-live.md) — production promotion

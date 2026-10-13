@@ -1,6 +1,7 @@
 # Monthly disaster-recovery drill — fully automated RTO measurement.
-# Creates a throwaway Neon PITR branch from the workflow ref (main), runs migrate +
-# integration smoke, asserts RTO, then deletes the branch. See docs/process/backup-drills.md.
+# Creates a throwaway Neon PITR branch in the GitHub Environment's own Neon project
+# (main → production → project <slug>-production, branch production), runs migrate + integration
+# smoke, asserts RTO, then deletes the branch. See docs/process/backup-drills.md.
 
 name: Monthly backup restore & RTO drill
 
@@ -31,15 +32,18 @@ jobs:
         # Single-trunk model (see docs/deployment/runbooks/add-new-environment.md):
         #   main → production   (the only long-lived branch; environment ≠ branch)
         id: map
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          case "${{ github.ref_name }}" in
+          case "$REF_NAME" in
             main) echo "environment=production"  >> "$GITHUB_OUTPUT" ;;
-            *)    echo "::error::Unsupported branch for restore drill: ${{ github.ref_name }} (single-trunk: Neon parent must be main)" && exit 1 ;;
+            *)    echo "::error::Unsupported branch for restore drill: ${REF_NAME} (single-trunk: the drill runs from main only)" && exit 1 ;;
           esac
 
   checklist:
     name: DR drill checklist
+    needs: [resolve-environment]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -48,7 +52,7 @@ jobs:
       - name: Print drill steps
         run: |
           set -euo pipefail
-          echo "::notice title=Restore drill::Parent Neon branch: ${{ github.ref_name }}. See docs/process/backup-drills.md"
+          echo "::notice title=Restore drill::Parent Neon branch: ${{ needs.resolve-environment.outputs.environment }}. See docs/process/backup-drills.md"
           test -f docs/process/backup-drills.md
           test -f docs/process/dr-runbook.md
 
@@ -70,7 +74,9 @@ jobs:
           --health-retries=20
     env:
       MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY: ${{ secrets.MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY }}
-      RESTORE_DRILL_PARENT_BRANCH_NAME: ${{ github.ref_name }}
+      # Each GitHub Environment has its own Neon project; the script derives the project, branch,
+      # database and owner names from it (the infrastructure repository's naming rule).
+      RESTORE_DRILL_ENVIRONMENT: ${{ needs.resolve-environment.outputs.environment }}
       NODE_ENV: development
       REDIS_URL: redis://localhost:6379
     steps:
@@ -194,7 +200,7 @@ jobs:
       - name: Fail when automated restore did not complete
         if: needs.restore-integration.result != 'success'
         run: |
-          echo "::error title=Restore drill not measured::Configure MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY, ensure Neon project clinozy-be and branch names match git refs (main), and verify migrate + integration smoke pass."
+          echo "::error title=Restore drill not measured::Configure MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY, ensure the Neon project clinozy-be-production (branch production) exists, and verify migrate + integration smoke pass."
           exit 1
 
       - name: Download automated RTO report

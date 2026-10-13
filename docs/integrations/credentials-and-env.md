@@ -269,15 +269,24 @@ ingests exactly the three subscription lifecycle events — `customer.subscripti
 
 **Used for:** [Monthly backup restore & RTO drill](../process/backup-drills.md) workflow ([scheduled-monthly-restore-rto.yml](../../.github/workflows/scheduled-monthly-restore-rto.yml)).
 
-These are **GitHub Environment secrets** (not API/worker runtime vars). Add them to `.env.development` / `.env.production` under the GitHub Secrets half and push with `pnpm github:sync`. The scheduled workflow uses the Neon API to create a PITR child branch from the parent branch named **`github.ref_name`** (`main`).
+These are **GitHub Environment secrets** (not API/worker runtime vars). Add them to `.env.development` / `.env.production` under the GitHub Secrets half and push with `pnpm github:sync`. The scheduled workflow uses the Neon API to create a PITR child branch in the Neon project of the **GitHub Environment** the run resolves to (`main` → **`production`** → project **`clinozy-be-production`**).
 
 | Secret | Where to get it |
 | --- | --- |
-| `MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY` | [Neon Console → Developer settings → API keys](https://console.neon.tech/app/settings/api-keys) |
+| `MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY` | Written by the infrastructure repository's setup (its `NEON_API_KEY`); or Neon Console → **Organization settings → API keys** ([key types](https://neon.com/docs/manage/api-keys)) |
 
-Project ID is **not** a separate secret — the workflow lists Neon projects via API and selects **`clinozy-be`** (override with `RESTORE_DRILL_NEON_PROJECT_NAME` only if your Neon project name differs).
+An **organization** API key is preferred. A personal key works too: on an organization-owned project the Neon API answers `org_id is required`, so the drill looks up the key's organization and asks again — it fails only when the key belongs to several organizations.
 
-Neon branch names must match the git ref (`main`). Without both secrets, the monthly workflow **fails**.
+Every Neon name derives from the environment — one Neon project per environment, the infrastructure repository's rule (project ID is **not** a secret; override the project with `RESTORE_DRILL_NEON_PROJECT_NAME` only if yours differs):
+
+| | development | production |
+| --- | --- | --- |
+| Neon project | `clinozy-be-development` | `clinozy-be-production` |
+| Branch (the drill's parent) | `development` | `production` |
+| Database | `clinozy_be_development` | `clinozy_be_production` |
+| Owner (the drill branch's login) | `clinozy_be_development_owner` | `clinozy_be_production_owner` |
+
+Without the secret, the monthly workflow **fails**.
 
 ---
 

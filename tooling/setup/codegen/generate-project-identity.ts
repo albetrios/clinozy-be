@@ -475,12 +475,13 @@ function patchWorkflowFile(
     );
   }
   if (relativePath === 'scheduled-monthly-restore-rto.yml') {
-    // Match the SHAPE of the sentence, not the current slug/branches. Anchoring
+    // Match the SHAPE of the sentence, not the current slug/environments. Anchoring
     // on the literal values makes the rewrite self-disabling: after the first
     // rename the pattern no longer matches and the message silently goes stale.
+    const drillEnvironments = Object.values(snapshot.branchEnvironmentMap);
     contents = contents.replace(
-      /ensure Neon project \S+ and branch names match git refs \([^)]*\)/g,
-      `ensure Neon project ${snapshot.slug} and branch names match git refs (${snapshot.git.protectedBranches.join('/')})`,
+      /ensure the Neon project \S+ \(branch [^)]*\) exists/g,
+      `ensure the Neon project ${drillEnvironments.map((environment) => `${snapshot.slug}-${environment}`).join('/')} (branch ${drillEnvironments.join('/')}) exists`,
     );
   }
   if (relativePath === 'cleanup-ghcr.yml') {

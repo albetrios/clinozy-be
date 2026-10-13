@@ -37,14 +37,15 @@ connection-level property: every bypass policy arm requires BOTH its `app.*` GUC
 ## Operator steps (per environment)
 
 Hosted environments are provisioned by clinozy-infra: its Neon provisioning creates
-`clinozy_be_maintenance` as a `LOGIN NOBYPASSRLS` user on each environment's branch before the
+`clinozy_be_maintenance` as a `LOGIN NOBYPASSRLS` user in each environment's Neon project before the
 first deploy (next to `clinozy_be_app` and `clinozy_be_migrator` — see
 [Database runtime role](resource-limits.md#database-runtime-role-row-level-security-safety)) and
 writes `DATABASE_MAINTENANCE_URL` (pooled host). The deploy's pre-flight
 (`pnpm validate:github-env-runtime`) refuses an environment without it.
 
 1. Create the login on the environment's Postgres — clinozy-infra's Neon provisioning
-   does this via SQL as `neondb_owner` (never the Neon console/CLI/REST API, which add
+   does this via SQL as the project's database owner, `clinozy_be_<environment>_owner` (never the
+   Neon console/CLI/REST API, which add
    `BYPASSRLS`), before the first deploy:
 
    ```sql
@@ -105,7 +106,7 @@ canary). A deleted-and-recreated database therefore needs exactly three steps:
 
 1. **Logins** — hosted: re-run clinozy-infra's Neon provisioning. It creates
    `clinozy_be_app`, `clinozy_be_maintenance` and `clinozy_be_migrator` (with the
-   migrator's database / `public` / ADMIN grants) on the new branch and rewrites the three
+   migrator's database / `public` / ADMIN grants) in the environment's Neon project and rewrites the three
    URLs — on Neon a recreated database usually means a new host (direct host, no
    `-pooler`, for the migration URL); `pnpm github:sync` any changed secrets. Passwords
    are per-environment secrets, never in committed SQL.
