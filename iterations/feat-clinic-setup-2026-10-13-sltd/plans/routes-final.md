@@ -16,7 +16,7 @@ needs; **Idem** `req` = `X-Idempotency-Key` header required; `*` = required.
 | # | Sub-domain | Folder (`src/domains/app/sub-domains/…`) | Paths (`/app/…`) | Routes | Builds on | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Branches & places — **CHANGED** | `branches/` (as built) | `branches` — route 3 only | 1 changed (of the launch's 25) | organization, team | **final (rev 1, confirmed 2026-10-13)** |
-| 2 | Onboarding setup — **NEW** | `onboarding-setup/` (D22) | `onboarding-setup` (+ `complete`) | 3 new | 1, team, offerings, appointments; tenancy organization settings | **rev 2 — reopened for the quick setup (D26–D28), awaiting your OK** |
+| 2 | Onboarding setup — **NEW** | `onboarding-setup/` (D22) | `onboarding-setup` (+ `complete`) | 3 new | 1, team, offerings, appointments; tenancy organization settings | **final (rev 2, confirmed 2026-10-13)** |
 
 App total: **+3 routes, 1 changed, none removed** against the launch — sub-domain 1 changes one behaviour of
 `POST /branches` (a clinic's first branch becomes main); sub-domain 2 is new (the setup status, its answers, going
@@ -225,7 +225,7 @@ BRC1–BRC3 (1.11).
 
 ---
 
-## 2. Onboarding setup — rev 2 (2026-10-13, reopened for the quick setup D26–D28) — nested sub-domain 2.A; awaiting your OK
+## 2. Onboarding setup — final (rev 2, confirmed 2026-10-13; reopened for the quick setup D26–D28) — nested sub-domain 2.A
 
 Code: the **`onboarding-setup` sub-domain folder** — `app/sub-domains/onboarding-setup/` (D22), the setup at the folder
 root; **no table of its own** — it reads the clinic's records and stores progress in `tenancy.organization_settings`
@@ -344,11 +344,11 @@ Every route can answer the errors in 2.5; each route's own are in 2.A.9.
 
 | Nested sub-domain | Folder (`src/domains/app/sub-domains/onboarding-setup/…`) | Tables | Routes | Status |
 | --- | --- | --- | --- | --- |
-| 2.A Onboarding setup | folder root | `tenancy.organization_settings` (7 fields, through its service) | 1–3 | awaiting your OK |
+| 2.A Onboarding setup | folder root | `tenancy.organization_settings` (7 fields, through its service) | 1–3 | final |
 
 ---
 
-### 2.A Onboarding setup — `onboarding-setup/` (folder root) — awaiting your OK
+### 2.A Onboarding setup — `onboarding-setup/` (folder root) — final
 
 #### 2.A.1 Decisions
 

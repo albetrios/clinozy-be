@@ -1,7 +1,6 @@
 # Coverage — feat-clinic-setup-2026-10-13-sltd
 
-Status: **Step 4, 2026-10-13** (every question answered, D13–D23). Every row is `open` until Steps 4–6 give it a requirement, a feature and an
-acceptance, or put it out of scope with the decision that did.
+Status: **Step 6, 2026-10-13** — every row is `covered` (here, or by clinozy-fe for frontend-only rows) or `out-of-scope` with its decision (D1–D30).
 
 Mode: incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` · Intake hash `790d068ffc3b` ·
 Schema-routes `5f90325208e1` (unchanged from the Baseline).
@@ -30,38 +29,38 @@ Line numbers are `BRIEF.md` as re-placed on 2026-10-13 for the quick setup (Inta
 
 | # | Source (file:line) | Item | Requirement | Feature | Acceptance | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| C1 | BRIEF.md:38–40 | the drawer opens by itself — Owner / Admin, the first landing on whichever room, setup not complete, nobody deferred | | | BRIEF.md:251 | open |
-| C2 | BRIEF.md:41–42, 227–228 | not tied to a room — the shell owns the drawer, the ring and the notice; the default room may change | | | BRIEF.md:253 | open |
-| C3 | BRIEF.md:43–48 | the design's right drawer, 560px, a full-screen sheet on a phone, step cards unlocking in order, its own address on any room | | | BRIEF.md:255–256 | open |
-| C4 | BRIEF.md:49 | header "Set up <clinic>", "About a minute · Step n of 3", progress bar | | | BRIEF.md:256 | open |
-| C5 | BRIEF.md:50 | saved as you go; never asked twice; resumes on any device | | | BRIEF.md:256 | open |
-| C6 | BRIEF.md:51–52, 229–230 | closing = "Explore first"; never opens by itself again; "Finish setup" reopens it | | | BRIEF.md:265 | open |
-| C7 | BRIEF.md:57–58 | step 1 — specialties (1–6) | | | BRIEF.md:256 | open |
-| C8 | BRIEF.md:59–64, 235–236 | step 2 — PIN autofill (bundled), address, phone, email, branch name, the hours line; creates the main branch | | | BRIEF.md:258–260 | open |
-| C9 | BRIEF.md:65–68 | step 3 — the owner as doctor / therapist: extra role, the branch's hours, the branch default | | | BRIEF.md:261 | open |
-| C10 | BRIEF.md:69–76 | "Go live" — one Consultation per specialty from the starter list, setup completed, "You're live" | | | BRIEF.md:263 | open |
-| C11 | BRIEF.md:77–79 | "Book your first appointment" · why each step is asked · what setup does not ask | | | BRIEF.md:263 | open |
-| C12 | BRIEF.md:82–103 | the short guide behind the profile icon: the avatar's ring, "Finish setup · n of 3", "Clinic settings" | | | BRIEF.md:269 | open |
-| C13 | BRIEF.md:104–110 | the 3 items — treatments (≥ 2 services, the starter list), team ("Invite your doctor" while nobody can be booked; invitations with real roles and the branch's hours), first appointment | | | BRIEF.md:269 | open |
-| C14 | BRIEF.md:111–112 | the ring and row go when the 3 are done or skipped, or the guide is hidden; "Clinic settings" stays | | | BRIEF.md:271 | open |
-| C15 | BRIEF.md:113–114 | create actions that need a branch open setup at step 2, on any room | | | BRIEF.md:267 | open |
-| C16 | BRIEF.md:115 | the command menu's "Finish setup" | | | BRIEF.md:265 | open |
-| C17 | BRIEF.md:117–121 | the members' notice in the shell, every room, while no branch is open | | | BRIEF.md:273 | open |
-| C18 | BRIEF.md:127–130 | Settings › Clinic — specialties, timezone, reminder hour, lead hold, retarget; links to branches and the logo | | | BRIEF.md:279 | open |
-| C19 | BRIEF.md:131–133 | branch drawer "Places & days"; no cash-drawer float anywhere | | | BRIEF.md:278 | open |
-| C20 | BRIEF.md:135–144 | /onboarding shortened; invite and questions out; "How did you hear" on "You're live" | | | BRIEF.md:280 | open |
-| C21 | BRIEF.md:146–150 | a clinic's first branch becomes main | | | BRIEF.md:277 | open |
-| C22 | BRIEF.md:152–167 | setup states | | | — | open |
-| C23 | BRIEF.md:169–181 | when each step writes | | | — | open |
-| C24 | BRIEF.md:217–219 | who: `organization:update`; each write its own code; never in View-as | | | BRIEF.md:273 | open |
-| C25 | BRIEF.md:220–221 | scope: the clinic, not a person | | | — | open |
-| C26 | BRIEF.md:222–226 | live = clinic type + main branch + a service; completion refused otherwise; someone to book not required | | | BRIEF.md:276 | open |
-| C27 | BRIEF.md:231–234 | never asked twice; safe to repeat; a second main read back; no duplicate Consultation | | | BRIEF.md:259, 263 | open |
-| C28 | BRIEF.md:237–238 | clinics already ready count as live | | | BRIEF.md:275 | open |
-| C29 | BRIEF.md:239 | a personal workspace never shows setup | | | — | open |
-| C30 | BRIEF.md:240–245 | accessible: focus, announcements, keys, phone, en + es | | | BRIEF.md:281 | open |
-| C31 | BRIEF.md:246–247 | measured: analytics events, never patient data | | | — | open |
-| C32 | BRIEF.md:283–end | out of scope, and the ideas for later (D29) | | | — | open |
+| C1 | BRIEF.md:38–40 | the drawer opens by itself — Owner / Admin, the first landing on whichever room, setup not complete, nobody deferred | — (frontend) | clinozy-fe | BRIEF.md:251 | covered (clinozy-fe) |
+| C2 | BRIEF.md:41–42, 227–228 | not tied to a room — the shell owns the drawer, the ring and the notice; the default room may change | — (frontend) | clinozy-fe | BRIEF.md:253 | covered (clinozy-fe) |
+| C3 | BRIEF.md:43–48 | the design's right drawer, 560px, a full-screen sheet on a phone, step cards unlocking in order, its own address on any room | — (frontend) | clinozy-fe | BRIEF.md:255–256 | covered (clinozy-fe) |
+| C4 | BRIEF.md:49 | header "Set up <clinic>", "About a minute · Step n of 3", progress bar | — (frontend) | clinozy-fe | BRIEF.md:256 | covered (clinozy-fe) |
+| C5 | BRIEF.md:50 | saved as you go; never asked twice; resumes on any device | `data.setup-progress`, `operations.read-setup`, `operations.change-setup` | onboarding-setup | A6 | covered |
+| C6 | BRIEF.md:51–52, 229–230 | closing = "Explore first"; never opens by itself again; "Finish setup" reopens it | `operations.change-setup` | onboarding-setup | A9 | covered |
+| C7 | BRIEF.md:57–58 | step 1 — specialties (1–6) | `operations.change-setup` | onboarding-setup | A6 | covered |
+| C8 | BRIEF.md:59–64, 235–236 | step 2 — PIN autofill (bundled), address, phone, email, branch name, the hours line; creates the main branch | `data.first-branch-main`, `operations.first-branch-main` | first-branch-main | A1, A2 | covered |
+| C9 | BRIEF.md:65–68 | step 3 — the owner as doctor / therapist: extra role, the branch's hours, the branch default | `access.owner-extra-role` | flow-clinic-goes-live | A13 | covered |
+| C10 | BRIEF.md:69–76 | "Go live" — one Consultation per specialty from the starter list, setup completed, "You're live" | `operations.go-live` | flow-clinic-goes-live | A4, A5 | covered |
+| C11 | BRIEF.md:77–79 | "Book your first appointment" · why each step is asked · what setup does not ask | — (frontend) | clinozy-fe | BRIEF.md:263 | covered (clinozy-fe) |
+| C12 | BRIEF.md:82–103 | the short guide behind the profile icon: the avatar's ring, "Finish setup · n of 3", "Clinic settings" | `operations.read-setup` | onboarding-setup | A6 | covered |
+| C13 | BRIEF.md:104–110 | the 3 items — treatments (≥ 2 services, the starter list), team ("Invite your doctor" while nobody can be booked; invitations with real roles and the branch's hours), first appointment | `operations.guide-items` | onboarding-setup | A6, A7 | covered |
+| C14 | BRIEF.md:111–112 | the ring and row go when the 3 are done or skipped, or the guide is hidden; "Clinic settings" stays | `operations.guide-done-once`, `operations.change-setup` | onboarding-setup | A8 | covered |
+| C15 | BRIEF.md:113–114 | create actions that need a branch open setup at step 2, on any room | — (frontend; the server keeps refusing without a branch) | clinozy-fe | BRIEF.md:267 | covered (clinozy-fe) |
+| C16 | BRIEF.md:115 | the command menu's "Finish setup" | — (frontend) | clinozy-fe | BRIEF.md:265 | covered (clinozy-fe) |
+| C17 | BRIEF.md:117–121 | the members' notice in the shell, every room, while no branch is open | — (frontend; reads `/branches/my`, as built) | clinozy-fe | BRIEF.md:273 | covered (clinozy-fe) |
+| C18 | BRIEF.md:127–130 | Settings › Clinic — specialties, timezone, reminder hour, lead hold, retarget; links to branches and the logo | `data.no-day-float` (built routes) | clinozy-fe | A12 | covered |
+| C19 | BRIEF.md:131–133 | branch drawer "Places & days"; no cash-drawer float anywhere | `data.no-day-float` (built routes) | clinozy-fe | BRIEF.md:278 | covered (clinozy-fe) |
+| C20 | BRIEF.md:135–144 | /onboarding shortened; invite and questions out; "How did you hear" on "You're live" | — (frontend) | clinozy-fe | BRIEF.md:280 | covered (clinozy-fe) |
+| C21 | BRIEF.md:146–150 | a clinic's first branch becomes main | `data.first-branch-main`, `operations.first-branch-main` | first-branch-main | A1, A3 | covered |
+| C22 | BRIEF.md:152–167 | setup states | `data.setup-progress`, `operations.go-live` | onboarding-setup | A4–A8 | covered |
+| C23 | BRIEF.md:169–181 | when each step writes | `operations.change-setup`, `operations.go-live` | flow-clinic-goes-live | A4, A13 | covered |
+| C24 | BRIEF.md:217–219 | who: `organization:update`; each write its own code; never in View-as | `access.setup-managers-only`, `access.writes-keep-own-gates` | onboarding-setup | A10 | covered |
+| C25 | BRIEF.md:220–221 | scope: the clinic, not a person | `data.setup-progress` | onboarding-setup | A9 | covered |
+| C26 | BRIEF.md:222–226 | live = clinic type + main branch + a service; completion refused otherwise; someone to book not required | `operations.go-live` | onboarding-setup | A4 | covered |
+| C27 | BRIEF.md:231–234 | never asked twice; safe to repeat; a second main read back; no duplicate Consultation | `quality.safe-to-repeat` | onboarding-setup | A2, A5 | covered |
+| C28 | BRIEF.md:237–238 | clinics already ready count as live | `data.existing-clinics-live`, `data.live-by-kept` | onboarding-setup | A11 | covered |
+| C29 | BRIEF.md:239 | a personal workspace never shows setup | `access.setup-team-only` | onboarding-setup | A10 | covered |
+| C30 | BRIEF.md:240–245 | accessible: focus, announcements, keys, phone, en + es | `quality.errors-translated` (server); the rest frontend | onboarding-setup | A14 | covered |
+| C31 | BRIEF.md:246–247 | measured: analytics events, never patient data | — (frontend analytics) | clinozy-fe | — | covered (clinozy-fe) |
+| C32 | BRIEF.md:283–end | out of scope, and the ideas for later (D29) | — | — | — | out-of-scope ([D29](decisions.md)) |
 
 ## Delta
 
