@@ -5,9 +5,9 @@ Intake mode `brief` · Intake hash `a8a0e5889cc1` · 2026-10-13.
 
 ## Coverage
 
-Every item of `intake-files/BRIEF.md` (the change list in brief mode). The carried-forward `PRD.md`
-and `schema-routes.md` are unchanged (`iteration:diff`: only `BRIEF.md` added) and are covered by
-the Baseline.
+Every item of `intake-files/BRIEF.md` (the change list in brief mode). The launch's `PRD.md` and
+`schema-routes.md` are unchanged (`iteration:diff`: only `BRIEF.md` added) and stay covered by the
+launch iteration.
 
 | Source (file:line) | Item | Requirement | Feature | Acceptance | Status |
 | --- | --- | --- | --- | --- | --- |
@@ -43,11 +43,11 @@ the Baseline.
 ## Reconciliation
 
 Brief mode: there is no new design source. `BRIEF.md` is reconciled against the carried-forward
-`PRD.md` / `schema-routes.md` and the current code.
+`PRD.md` / `schema-routes.md` (`launch-2026-09-30-jxmr/intake-files/`) and the current code.
 
 | # | Item | PRD says (file:line) | schema-routes says (file:line) | Verdict | Action |
 | --- | --- | --- | --- | --- | --- |
-| R1 | Analytics consent | nothing — the PRD has no cookie consent (it is a platform surface; `PRD.md` consent lines are a patient's treatment consent, `PRD.md:64`, `:134`) | nothing — `consentGiven` is the patient's (`schema-routes.md:309`, `:1623`) | no conflict: the brief is the only source; the patient's consent is a different thing and is untouched | none |
+| R1 | Analytics consent | nothing — the launch PRD has no cookie consent (it is a platform surface; its consent lines are a patient's treatment consent, launch `PRD.md:64`, `:134`) | nothing — `consentGiven` is the patient's (launch `schema-routes.md:309`, `:1623`) | no conflict: the brief is the only source; the patient's consent is a different thing and is untouched | none |
 | R2 | The account's consent record | — | — | the code today (`user-settings.schema.ts:33–35`, `user.controller.ts:58–83`) already keeps exactly what `BRIEF.md:42–44` asks for | keep ([CC2](decisions.md)) |
 | R3 | Who reads the record | — | — | today the frontend reads it at sign-in (`clinozy-fe` `consent-account-sync.ts`); `BRIEF.md:44` says it is never read back | backend unchanged; the frontend stops reading ([CC1](decisions.md)) |
 
@@ -64,7 +64,7 @@ nothing else changed, as brief mode requires. No finding.
 | Field | `user_settings.analytics_consent*` | unchanged in shape; meaning documented as a receipt | `db-changes.md` |
 | Route | `GET`, `PATCH /users/me/settings` | unchanged in shape; documentation changed | `route-changes.md` RC-1, RC-2 |
 | Route | `POST /auth/logout` | unchanged; pinned by a test | `route-changes.md` RC-3 |
-| Background work | — | none | `worker-changes.md` |
+| Background work | — | none | — |
 
 **The Baseline's Standing deviations this change touches:** none of the backend's list names
 consent (`launch-2026-09-30-jxmr/AS-BUILT.md` › Standing deviations); D85 is a decision, not a
