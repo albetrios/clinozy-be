@@ -9,7 +9,7 @@
 | Branch | feat/clinic-setup |
 | Baseline | launch-2026-09-30-jxmr |
 | Status | planning |
-| Summary | Guided first-time clinic setup — the first time an owner lands on Today, one question per step (clinic type, main branch, hours, services, team), then a setup guide on Today until the clinic is ready |
+| Summary | A new clinic goes live in about a minute — a 3-tap setup in a drawer on any room (what kind of clinic, where it is, do you see patients), then a short 3-item guide behind the profile icon; a clinic's first branch becomes its main branch |
 | Drop placed | 2026-10-13 |
 | Drop source | /tmp/claude-0/-home-user/b7fc1af6-4489-5cd7-b097-1d37236ca7aa/scratchpad/feat-clinic-setup/BRIEF.md |
 | Intake mode | brief |
