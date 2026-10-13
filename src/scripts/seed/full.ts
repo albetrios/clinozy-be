@@ -1,6 +1,6 @@
 /**
- * Full seed — runs minimal seed + demo data + common flows (add user to organization, invite).
- * Orchestration only; entity logic lives in domain seeds.
+ * Full seed — runs minimal seed + demo data + common flows (add user to organization, invite),
+ * then the demo clinic (`demo-clinic.ts`). Orchestration only; entity logic lives in domain seeds.
  *
  * Usage: pnpm db:seed:full
  */
@@ -34,6 +34,7 @@ import {
   generateInviteeEmail,
 } from './faker-data.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { runDemoClinicSeed } from './demo-clinic.js';
 
 const DEMO_EMAIL = 'demo@example.com';
 
@@ -52,7 +53,7 @@ const ADMIN_PERMISSION_CODES = SYSTEM_PERMISSIONS.map((permission) => permission
 /**
  * Orchestrator for the full demo seed: applies the minimal seed (permissions,
  * plans, demo user) and then layers on faker-generated organizations,
- * memberships, invitations, and role wiring. Idempotent — re-running upserts
+ * memberships, invitations, role wiring and the demo clinic. Idempotent — re-running upserts
  * existing rows. Does not manage the DB connection; the CLI entrypoint below
  * drains the pool after it resolves, so a test may call it directly.
  */
@@ -182,6 +183,10 @@ export async function runFullSeed(): Promise<void> {
       logger.info({ email: inviteeEmail }, 'seed.full: invite created (common flow)');
     }
   }
+
+  // A real-looking clinic with patients, visits and bills, which the demo user joins as an Admin.
+  const clinic = await runDemoClinicSeed();
+  logger.info({ slug: clinic.slug, created: clinic.created }, 'seed.full: demo clinic seeded');
 
   logger.info('seed.full: done');
 }

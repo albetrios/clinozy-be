@@ -26,6 +26,7 @@ All three share the contract and the per-domain seeders:
 
 - **`pnpm db:seed`** — minimal: bootstrap/reference data only (permission codes, plans). No users or organizations required for the app to start.
 - **`pnpm db:seed:full`** — fixed demo set: a small, coherent set of users/organizations/memberships and the cross-domain flows that exercise the API (demo, manual testing).
+- **`pnpm db:seed:demo-clinic`** — one real-looking clinic (run by `db:seed:full` too). `demo-clinic.plan.ts` builds it as data from a seeded `fakerEN_IN`; `demo-clinic.ts` writes it through the sub-domains' one-row `seed/` helpers and runs the clinic's task rules once. When an app table gains a required column or a check, update its helper's caller there. The tests are `demo-clinic-plan.unit.test.ts` and `demo-clinic-seed.integration.test.ts`.
 - **`pnpm db:seed:bulk`** — scaled volume via the orchestrator and profiles, for load/pagination/filter testing and full demo tenants.
 
 ## Per-domain `seed/` directory

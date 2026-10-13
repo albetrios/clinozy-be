@@ -1,4 +1,5 @@
 import { RECORD_LABEL_MAX } from '@/shared/constants/record-fields.constants.js';
+import { shortCalendarDate } from '@/shared/utils/validation/record-fields.util.js';
 import { resolveRecordIds, type BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { AppointmentsRepository } from '@/domains/app/sub-domains/appointments/appointments.repository.js';
@@ -10,7 +11,6 @@ import {
   assertDateNotFuture,
   assertTreatmentOfPatient,
   organizationToday,
-  shortCalendarDate,
   usualDoctorOf,
   writePatientFileActivity,
 } from '@/domains/app/sub-domains/patients/patients.rules.js';

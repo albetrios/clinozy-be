@@ -20,13 +20,18 @@ export interface SeedLeadPayload {
   /** The user whose membership owns it (and holds it for three days); absent = open to the team. */
   owner_user_id?: number;
   created_by_user_id?: number;
+  /** The rest of a real-looking lead: its branch, follow-up, notes and when it came in. */
+  details?: Partial<
+    Pick<typeof leads.$inferInsert, 'branch_id' | 'follow_up_at' | 'notes' | 'created_at'>
+  >;
 }
 
 /**
  * Inserts a lead for the named live contact unless the contact already has one (idempotent); a
- * missing contact is skipped. The database assigns the lead number.
+ * missing contact is skipped. The database assigns the lead number. Returns the lead's id (the
+ * existing one on a re-run), or `null` when the contact is missing.
  */
-export async function seedLead(payload: SeedLeadPayload): Promise<void> {
+export async function seedLead(payload: SeedLeadPayload): Promise<number | null> {
   const database = getRequestDatabase();
   const [contact] = await database
     .select({ id: contacts.id })
@@ -40,13 +45,13 @@ export async function seedLead(payload: SeedLeadPayload): Promise<void> {
       ),
     )
     .limit(1);
-  if (!contact) return;
+  if (!contact) return null;
   const [existing] = await database
     .select({ id: leads.id })
     .from(leads)
     .where(eq(leads.contact_id, contact.id))
     .limit(1);
-  if (existing) return;
+  if (existing) return existing.id;
   const [owner] =
     payload.owner_user_id === undefined
       ? []
@@ -61,20 +66,26 @@ export async function seedLead(payload: SeedLeadPayload): Promise<void> {
             ),
           )
           .limit(1);
-  await database.insert(leads).values({
-    public_id: generatePublicId('lead'),
-    organization_id: payload.organization_id,
-    contact_id: contact.id,
-    status: payload.status,
-    source: payload.source,
-    interests: [...payload.interests],
-    ...(owner
-      ? {
-          owner_membership_id: owner.id,
-          held_until: new Date(Date.now() + HOLD_DAYS * MILLISECONDS_PER_DAY),
-        }
-      : {}),
-    created_by_user_id: payload.created_by_user_id,
-    updated_by_user_id: payload.created_by_user_id,
-  });
+  const [row] = await database
+    .insert(leads)
+    .values({
+      public_id: generatePublicId('lead'),
+      organization_id: payload.organization_id,
+      contact_id: contact.id,
+      status: payload.status,
+      source: payload.source,
+      interests: [...payload.interests],
+      ...(owner
+        ? {
+            owner_membership_id: owner.id,
+            held_until: new Date(Date.now() + HOLD_DAYS * MILLISECONDS_PER_DAY),
+          }
+        : {}),
+      created_by_user_id: payload.created_by_user_id,
+      updated_by_user_id: payload.created_by_user_id,
+      ...payload.details,
+      ...(payload.details?.created_at ? { updated_at: payload.details.created_at } : {}),
+    })
+    .returning({ id: leads.id });
+  return row!.id;
 }

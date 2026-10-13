@@ -1,4 +1,4 @@
-import { toText } from '@/shared/utils/validation/record-fields.util.js';
+import { shortCalendarDate, toText } from '@/shared/utils/validation/record-fields.util.js';
 import {
   findMembershipIdOfUser,
   resolveRecordIds,
@@ -10,7 +10,6 @@ import { OfferingsRepository } from '@/domains/app/sub-domains/offerings/offerin
 import {
   assertAppointmentOfPatient,
   assertOfferingActive,
-  shortCalendarDate,
 } from '@/domains/app/sub-domains/patients/patients.rules.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import {

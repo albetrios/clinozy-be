@@ -12,6 +12,32 @@ export interface SeedBranchPayload {
   is_main?: boolean;
   area: string;
   created_by_user_id?: number;
+  /**
+   * The branch's own address, contact and defaults (the demo clinic's real-looking ones); absent
+   * fields keep the placeholders below.
+   */
+  details?: Partial<
+    Pick<
+      typeof branches.$inferInsert,
+      | 'tone'
+      | 'address_line_one'
+      | 'address_line_two'
+      | 'city'
+      | 'state'
+      | 'postal_code'
+      | 'phone'
+      | 'email'
+      | 'gst_number'
+      | 'opens_at'
+      | 'closes_at'
+      | 'working_days'
+      | 'maps_link'
+      | 'review_link'
+      | 'default_doctor_membership_id'
+      | 'default_therapist_membership_id'
+      | 'default_front_desk_membership_id'
+    >
+  >;
 }
 
 /**
@@ -44,6 +70,7 @@ export async function seedBranch(payload: SeedBranchPayload): Promise<number> {
       postal_code: '395009',
       phone: '+919800000000',
       email: `${payload.area.toLowerCase()}@example.com`,
+      ...payload.details,
       created_by_user_id: payload.created_by_user_id,
       updated_by_user_id: payload.created_by_user_id,
     })
