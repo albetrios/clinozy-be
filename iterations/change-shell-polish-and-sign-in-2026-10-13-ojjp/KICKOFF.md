@@ -76,9 +76,9 @@ How the two repositories share the iteration:
 
 | # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| R-1 | Contract check: `pnpm routes:catalog:check`, `pnpm docs:check` and the frontend's `pnpm contracts:drift` against this branch — every route the sign-in screen and the shell call is `KEPT` ([route-changes.md](plans/route-changes.md)) | flow | — | be-route-catalog · be-api-contract-guard (check only) | A1, A2 | Claude | open |
-| R-2 | Frontend route map: `plans/frontend-route-map.md` — §1 "none", §2 the sign-in and shell operations → their routes, §3 by `pnpm iteration:frontend-map`, §4 "none" | flow | R-1 | `pnpm iteration:frontend-map` | `pnpm iteration:frontend-map <it> --check` | Claude | open |
-| R-3 | Close: `pnpm validate`, `pnpm routes:catalog:check`, `pnpm iteration:intake <it> --check`, `/be-pre-merge-review` (review only), `plans/acceptance.md`, `AS-BUILT.md` (rows, summary, Standing deviations), Status `done` | flow | R-1, R-2, the frontend iteration's L-13 | be-kickoff-iteration | A3, A4; README Status `done` | Claude | open |
+| R-1 | Contract check: `pnpm routes:catalog:check`, `pnpm docs:check` and the frontend's `pnpm contracts:drift` against this branch — every route the sign-in screen and the shell call is `KEPT` ([route-changes.md](plans/route-changes.md)) | flow | — | be-route-catalog · be-api-contract-guard (check only) | A1, A2 | Claude | done |
+| R-2 | Frontend route map: `plans/frontend-route-map.md` — §1 "none", §2 the sign-in and shell operations → their routes, §3 by `pnpm iteration:frontend-map`, §4 "none" | flow | R-1 | `pnpm iteration:frontend-map` | `pnpm iteration:frontend-map <it> --check` | Claude | done |
+| R-3 | Close: `pnpm validate`, `pnpm routes:catalog:check`, `pnpm iteration:intake <it> --check`, `/be-pre-merge-review` (review only), `plans/acceptance.md`, `AS-BUILT.md` (rows, summary, Standing deviations), Status `done` | flow | R-1, R-2, the frontend iteration's L-13 | be-kickoff-iteration | A3, A4; README Status `done` | Claude | done |
 
 No `sub-domain`, `table` or `background` row: nothing is built here ([D5](plans/decisions.md)).
 

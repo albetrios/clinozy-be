@@ -7,6 +7,9 @@ What was actually built, ROUTE row by ROUTE row, against the approved plan in
 
 | # | ROUTE row | Planned | Actually built | Difference | Why | Decision | Commit |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| #1 | R-1 | Contract check | `pnpm routes:catalog:check`, `pnpm docs:check` and the frontend's `pnpm contracts:drift` | All three pass on this branch: `docs/routes.txt` in sync, `docs/openapi/` and the Postman collection in sync, and every one of the frontend's 13 endpoint references found among the 439 routes. `git diff main -- src migrations docs/routes.txt` is empty | — | D5 | `3893267` |
+| #2 | R-2 | Frontend route map | `plans/frontend-route-map.md`: §3 generated, §1, §2, §4 by hand | As planned — §1 none, §2 the sign-in and shell operations on their unchanged routes, §3 439 routes, §4 none; `pnpm iteration:frontend-map <it> --check` passes | — | D5, D6 | `3893267` |
+| #3 | R-3 | Close | The gates, `/be-pre-merge-review` (review only), `plans/acceptance.md`, this file, Status `done` | `pnpm validate` (lint, typecheck, markdown) and the intake gate pass. The review pipeline has nothing to review beyond the verifier: no schema (be-sql-design-reviewer n/a), no table or worker (be-rls-tenant-isolation-guard n/a), no route (be-idempotency-guard n/a); the verifier's `pnpm validate` passes and no backend test is affected (no `src/` change). The frontend iteration closed first (its L-13) | — | D5 | the close commit |
 
 ## Revisions to upcoming rows
 
@@ -15,9 +18,11 @@ What was actually built, ROUTE row by ROUTE row, against the approved plan in
 
 ## Summary
 
-- **Planned, not built** (deferred, user OK): —
+- **Planned, not built** (deferred, user OK): — every ROUTE row is done.
 - **Built, not planned:** —
-- **Follow-ups for the next iteration:** —
+- **Follow-ups for the next iteration:** a demo-clinic seed for the demo organization (patients,
+  leads and appointments across their statuses), so a fresh stack shows the rooms and their
+  coloured badges populated (D7); the launch iteration's Status still reads `implementing` (D10).
 
 ## Standing deviations
 
