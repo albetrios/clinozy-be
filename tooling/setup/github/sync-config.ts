@@ -107,6 +107,7 @@ export function validateScopedEnvironments(args: {
   const issues: GitHubSyncConsistencyIssue[] = [];
   const seenNames = new Set<string>();
   const keyOwners = new Map<string, string>();
+  const exampleLines = args.exampleContent.split('\n');
 
   for (const scoped of args.scopedEnvironments) {
     const dimension = 'setup.config.json scopedEnvironments';
@@ -133,7 +134,7 @@ export function validateScopedEnvironments(args: {
       });
     }
     for (const key of scoped.keys) {
-      if (!new RegExp(`^${key}=`, 'm').test(args.exampleContent)) {
+      if (!exampleLines.some((line) => line.startsWith(`${key}=`))) {
         issues.push({
           dimension: 'setup.config.json ↔ .env.example',
           detail: `Scoped environment "${scoped.name}" names ${key}, which .env.example does not declare.`,
