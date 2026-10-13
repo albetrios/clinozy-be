@@ -1,10 +1,14 @@
-# Brief — Guided first-time clinic setup in a drawer over Today, then a setup guide until the clinic is ready
+# Brief — Guided first-time clinic setup in a drawer on any room, with a setup guide in the app shell until the clinic is ready
 
 <!--
-Written 2026-10-13 from the user's answers in the planning conversation (shape: a drawer over Today ·
+Written 2026-10-13 from the user's answers in the planning conversation (shape: a drawer of steps ·
 Explore first allowed · scope complete · /onboarding shortened · setup progress kept with the clinic's
 settings · suggested services per specialty · clinics that are already ready count as set up · placed as
-a brief on the launch). Screens are named by their Slug in _index.md; entities as schema-routes.md names them.
+a brief on the launch). Revised the same day: setup belongs to the app shell, not to Today ("Not in today
+but in common — if we change the default path it should handle easily"), and the guide follows current
+practice ("follow what trending tech companies are following": a setup launcher in the app chrome with its
+progress, opening one drawer that holds the steps and the checklist). Screens are named by their Slug in
+_index.md (the shell by shell.md); entities as schema-routes.md names them.
 -->
 
 ## What changes
@@ -15,32 +19,37 @@ fails with "No open branch to book at". A bill needs a branch and a service. A p
 Nothing tells the owner this, and nothing asks for it.
 
 This change asks for what a new clinic needs **one step at a time**, the first time an Owner or Admin lands
-on Today. After that, a setup guide on Today tracks what is left until the clinic is ready.
+in the clinic — on whichever room the clinic opens on. After that, a setup guide in the app shell tracks what
+is left until the clinic is ready. Nothing of it belongs to one room: the clinic's default room (its role home,
+Today now) can change and setup keeps working.
 
 ```
- Sign up / Google      /onboarding (shortened)          first landing on Today              clinic is usable
- ───────────────►  ┌────────────────────────────┐   ┌──────────────────────────────┐   ┌────────────────────────┐
-                   │ Welcome → Your name →      │   │ CLINIC SETUP drawer over     │   │ Today + Setup guide    │
-                   │ Clinic name → Done         │──►│ Today · 7 steps · ~3 minutes │──►│ card until all done    │
-                   │ (account only)             │   │ one step open at a time      │   │ (or hidden)            │
-                   └────────────────────────────┘   └──────────────────────────────┘   └────────────────────────┘
+ Sign up / Google      /onboarding (shortened)          first landing in the clinic         clinic is usable
+ ───────────────►  ┌────────────────────────────┐   ┌──────────────────────────────┐   ┌──────────────────────────┐
+                   │ Welcome → Your name →      │   │ CLINIC SETUP drawer over the │   │ any room + the shell's   │
+                   │ Clinic name → Done         │──►│ room it opens on (any room)  │──►│ "Setup 5/13" launcher    │
+                   │ (account only)             │   │ 7 steps · ~3 minutes         │   │ until all done (or hidden)│
+                   └────────────────────────────┘   └──────────────────────────────┘   └──────────────────────────┘
 ```
 
-### 1. Clinic setup, a drawer over Today (screen: today)
+### 1. Clinic setup, a drawer in the app shell (screen: shell — every room)
 
 - **When it opens on its own:** for a member who can manage the clinic (Owner, Admin), the first time they land
-  on Today while the clinic's essentials are not done and they have not chosen "Explore first". It opens once
-  per clinic, not on every visit.
+  in the clinic — on whichever room it opens on — while the clinic's essentials are not done and nobody has
+  chosen "Explore first". It opens once per clinic, not on every visit.
+- **Not tied to a room:** the drawer, the launcher (§2) and the members' notice (§3) belong to the app shell. The
+  clinic's default room (its role home — Today now) can change, and nothing about setup changes with it.
 - **What it is:** the design's right drawer (`_patterns.md` › Right drawer), a light form 560px wide and a
   full-screen sheet on a phone. It uses the design's step cards (`_patterns.md` › Step cards): one step open
   at a time, finished steps folded into a ✓ peek, and each open step ending in "Next: <step> →".
-  - Today stays behind it.
-  - The drawer has its own address, so a refresh or a shared link reopens the same step.
+  - The room underneath stays as it is.
+  - The drawer has its own address that rides on any room, as Settings' does, so a refresh, a shared link or a
+    different default room reopens the same step.
 - **Header:** "Set up <clinic name>", sub-line "About 3 minutes · Step <n> of 7", and a progress bar.
 - **Saved as you go:** "Next" saves that step to the clinic. Answers already saved are never asked again, so
   setup resumes on any device at the first unanswered step.
 - **Closing it** (×, Esc, backdrop or "Explore first" on the welcome step) is "Explore first". The drawer
-  does not open on its own again; the setup guide card offers "Continue setup".
+  does not open on its own again; the shell's launcher offers "Continue setup".
 
 ```
  #  Step (the question)            Fields — prefilled / default                          Saved by "Next"
@@ -65,11 +74,12 @@ on Today. After that, a setup guide on Today tracks what is left until the clini
     (skippable)                    Counsellor, Pharmacist, Accountant, Marketing, Admin)   main branch
  ✓  Your clinic is ready           tiles Branch · Hours · Services · Team;                setup completed
                                    optional "How did you hear about us?";
-                                   [Book your first appointment] · [Go to Today]
+                                   [Book your first appointment] · [Done]
 ```
 
 - **The welcome step** says what will be asked and roughly how long it takes.
-- **The Ready step's "Book your first appointment"** opens the booking form already stacked on Today.
+- **The Ready step's "Book your first appointment"** opens the shared booking form over the room underneath;
+  "Done" closes the drawer on that room.
 - **Each step says why it is asked**, in one line under its title:
   - Hours: "Patients can be booked only inside these hours."
   - Services: "Bills and bookings are made from these."
@@ -80,28 +90,42 @@ on Today. After that, a setup guide on Today tracks what is left until the clini
   - Cosmetic procedures carry 18% GST.
   - The owner can change either rate.
 
-### 2. The setup guide on Today (screen: today)
+### 2. The setup guide in the app shell (screen: shell — every room)
 
-A card at the top of Today's main column, above the lane tiles, shown to members who can manage the clinic.
+Current products keep onboarding out of any one page: a **launcher in the app chrome** shows the progress on every
+screen and opens **one side drawer** that holds both the remaining steps and the checklist (Stripe's setup guide,
+Linear's onboarding checklist). Clinozy does the same, for members who can manage the clinic.
 
 ```
- ┌ Set up Sunrise Skin ───────────────────────── 5 of 14 done ━━━━━━──────── [Hide] ┐
- │ ✓ Clinic type  ✓ Main branch  ✓ Hours  ✓ Services  ✓ A doctor to book            │
- │ Next up                                                                         │
- │  ○ Invite your team             front desk, doctors, therapists      [Invite]   │
- │  ○ Add rooms                    so treatments get a room             [Add]      │
- │  ○ Book your first appointment  see it all come together             [Book]     │
- │  Show 6 more ▾                                                                  │
- └─────────────────────────────────────────────────────────────────────────────────┘
+ header (every room):  logo · sections · tabs ……… [⌘K search]  │ ◔ Setup 5/14 │ [branch] (avatar)
+                                                                 └ progress ring + count; phone: the ring alone
+
+ the drawer after the essentials (same address as the steps):
+ ┌ Set up Sunrise Skin ─────────────────────────────── × ┐
+ │ 5 of 14 done ━━━━━━━━━──────────────                  │
+ │ ESSENTIALS                                   ✓ done   │
+ │  ✓ Clinic type ✓ Main branch ✓ Hours ✓ Services ✓ Doctor
+ │ NEXT UP                                               │
+ │  ○ Invite your team           front desk, doctors   [Invite]
+ │  ○ Add rooms                  so treatments get one [Add]   · Skip
+ │  ○ Book your first appointment                      [Book]
+ │  ○ Holidays · GST · logo · links · machines …  (each [Open] · Skip)
+ │                                     Hide setup guide  │
+ └───────────────────────────────────────────────────────┘
 ```
 
-- **Before the essentials are done**, the card's primary action is "Continue setup", which opens the drawer at
-  the first unanswered step. "New booking" with no open branch also opens the drawer, at the branch step,
-  instead of failing.
-- **After the essentials are done**, the card lists the recommended items. Each one opens the screen that does
-  it, and each can be marked "Skip" where the table says so.
-- **When every item is done or skipped**, the card reads "All set" for 7 days and then goes away.
-- **"Hide"** removes it at once. It can be reopened from the account menu and the command menu ("Setup guide").
+- **The launcher:** a compact "Setup" button with a progress ring and "<done>/<total>" in the header's right
+  cluster, on every room, for Owner and Admin, until every item is done or skipped, or the guide is hidden. On a
+  phone it is the ring alone. It opens the drawer: before the essentials are done, at the first unanswered step;
+  after, on the checklist.
+- **Also reachable** from the account menu ("Setup guide") and the command menu ("Continue setup").
+- **Create actions that need a branch** — "New booking", "Walk-in", a new patient, a new bill, receiving a payment
+  — open the drawer at the branch step while the clinic has no open branch, wherever they are, instead of failing.
+- **After the essentials are done**, the checklist lists the recommended items. Each one opens the screen that
+  does it, and each can be marked "Skip" where the table says so.
+- **When every item is done or skipped**, the launcher shows a ✓ "Set up" for 7 days and then goes; the drawer
+  reads "Your clinic is ready".
+- **"Hide setup guide"** removes the launcher at once. The account menu and the command menu still open it.
 - **Every tick is read from the clinic's real records.** Nothing is a checkbox the owner ticks by hand, except
   Skip.
 
@@ -125,12 +149,13 @@ A card at the top of Today's main column, above the lane tiles, shown to members
               Book your first appointment   ≥ 1 Appointment exists                         New booking               no
 ```
 
-### 3. Members who cannot manage the clinic (screen: today)
+### 3. Members who cannot manage the clinic (screen: shell — every room)
 
-They never see the drawer or the guide. While the clinic has no open branch, Today shows one quiet line:
-"Your clinic is still being set up — bookings open once it's ready."
+They never see the drawer, the launcher or the guide. While the clinic has no open branch, the shell shows one
+quiet notice on every room, in the design's one app-wide notice pattern (`shell.md` › System banner): "Your clinic
+is still being set up — bookings open once it's ready."
 
-### 4. Screens that exist only in the API today (screens: users, today)
+### 4. Screens that exist only in the API today (screens: users, shell › Settings)
 
 So that every guide item opens a working screen:
 
@@ -162,16 +187,17 @@ it comes from setup or from Users › Branches.
 ### 7. Setup states
 
 ```
-              Owner/Admin lands on Today        Start, or any step saved
+        Owner/Admin lands (any room)            Start, or any step saved
   NOT STARTED ──────────────────────► OFFERED ──────────────────────► IN PROGRESS ──┐
                                         │ Explore first / close         │ close       │ last essential saved
                                         ▼                               ▼             ▼
                                      DEFERRED ◄──────── (resume any time) ─────  ESSENTIALS DONE  (when, by whom)
-                                        └── "Continue setup" / "New booking" ──►         │
+                                        └── launcher · menu · ⌘K · "New booking" ──►     │
                                                                          all done ┌──────┴──────┐ Hide
                                                                                   ▼             ▼
                                                                             GUIDE DONE     GUIDE HIDDEN
-                                                                            ("All set")    (reopen: account menu, ⌘K)
+                                                                       ("Your clinic is   (reopen: account menu, ⌘K)
+                                                                        ready"; ✓ 7 days)
   A clinic created before this ships that already has an open main branch and a service → ESSENTIALS DONE;
   it is never offered setup.
 ```
@@ -189,7 +215,7 @@ it comes from setup or from Users › Branches.
   step 5  ───────────────────────────────────► add the owner's extra role + the branch's default doctor
   step 6  ───────────────────────────────────► create each ticked Offering (each safe to repeat)
   step 7  ───────────────────────────────────► send each invitation (all sent; failures listed, resend later)
-  Ready   ───────────────────────────────────► mark setup complete → refresh the session, branches, Today
+  Ready   ───────────────────────────────────► mark setup complete → refresh the session, branches, the room
 ```
 
 ## Why
@@ -207,7 +233,8 @@ it comes from setup or from Users › Branches.
 
 ## Affected screens, entities and routes
 
-- Screens: today (setup drawer, setup guide card, the members' notice) · users (branch drawer: Places & days) ·
+- Screens: the app shell on every room (setup drawer, the "Setup" launcher, the members' notice; account menu
+  and command menu entries) · users (branch drawer: Places & days) ·
   offerings (services created by setup, no screen change) · the account wizard `/onboarding` and Settings
   (organization › Clinic) — app surfaces outside `_index.md`
 - Entities:
@@ -218,7 +245,8 @@ it comes from setup or from Users › Branches.
   - Offering.
   - Appointment: read only, for the first-booking item.
 - Routes:
-  - `/organization/:organizationSlug/today`, plus the drawer's own address.
+  - every `/organization/:organizationSlug/…` room — the drawer's own address rides on whichever is open; the
+    clinic's default room (`schema-routes.md` route map, role home) is not changed and not relied on.
   - `/organization/:organizationSlug/users/branches` (the branch drawer).
   - `/onboarding`.
   - New API routes for setup status and progress, and a change to branch creation (first branch → main) —
@@ -240,6 +268,8 @@ it comes from setup or from Users › Branches.
     stays open at the top of the guide, and "New booking" says a doctor is needed.
 - **Owner as doctor:** the owner keeps Owner as their main role, and Doctor or Therapist is added as an extra
   role (launch D81 (4) allows this). They become the main branch's default doctor or therapist.
+- **Not tied to a room:** setup reads no room's state and sits in no room's code; the drawer opens over whichever
+  room is showing, and changing the clinic's default room (role home) needs no change to setup.
 - **Never trapped:** "Explore first" is always available. Closing the drawer is "Explore first", and the
   drawer never opens on its own twice.
 - **Never asked twice:** a step whose answer is already saved is shown done. Data entered elsewhere counts —
@@ -263,8 +293,11 @@ it comes from setup or from Users › Branches.
 
 ## Acceptance criteria
 
-- [ ] A new clinic's Owner who lands on Today for the first time sees the setup drawer open over Today at the
-      welcome step.
+- [ ] A new clinic's Owner who lands in the clinic for the first time sees the setup drawer open over the room
+      it opened on (Today now), at the welcome step.
+- [ ] With the clinic's default room changed (for example to Appointments), the same first landing opens the
+      same drawer over that room — no setup code changes.
+- [ ] The drawer's address opens the same step over any room (a refresh, a shared link).
 - [ ] Each step opens alone, with its fields prefilled as described. "Next" saves it, and a refresh reopens
       the drawer at the first unanswered step.
 - [ ] After step 3 the clinic has exactly one open main branch, with the owner on its team. Repeating the step
@@ -277,14 +310,15 @@ it comes from setup or from Users › Branches.
 - [ ] Step 7 sends one invitation per row with the chosen role, to the main branch. One bad address does not
       block the others.
 - [ ] The Ready step's "Book your first appointment" opens the booking form, and the booking can be saved.
-- [ ] Closing the drawer at any step leaves Today usable, with the setup guide on top showing "Continue
-      setup". The drawer does not open on its own again.
-- [ ] With no open branch, "New booking" opens the setup drawer at the branch step instead of failing.
+- [ ] Closing the drawer at any step leaves the room usable, with the header's "Setup" launcher showing the
+      progress on every room. The drawer does not open on its own again.
+- [ ] With no open branch, "New booking" (and Walk-in, a new patient, a new bill, receiving a payment) opens the
+      setup drawer at the branch step instead of failing, on whichever room it is pressed.
 - [ ] The setup guide ticks each item from the clinic's real records. A branch created in Users › Branches
       ticks "Main branch".
-- [ ] "Hide" removes the guide. It can be reopened from the account menu and the command menu.
-- [ ] A Front desk member never sees the drawer or the guide. While there is no open branch they see the
-      one-line notice.
+- [ ] "Hide setup guide" removes the launcher. The account menu and the command menu still open the drawer.
+- [ ] A Front desk member never sees the drawer, the launcher or the guide. While there is no open branch they
+      see the one-line notice on every room.
 - [ ] A clinic that already had a main branch and a service before this shipped never sees the drawer.
 - [ ] The server refuses to complete setup while an essential is missing.
 - [ ] A clinic's first branch becomes main even when the request does not say so.

@@ -8,7 +8,7 @@ differences go into `AS-BUILT.md` and this file is synced with the final table a
 Viewer's plan mode: `pnpm db:viewer`, then click this iteration under ◇ Plans.
 
 Status: **Step 1 draft, 2026-10-13.** Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
-Intake hash `120675462365`. What exists is the launch as built — its route review
+Intake hash `d5f100464051`. What exists is the launch as built — its route review
 (`launch-2026-09-30-jxmr/plans/routes-final.md`, D9) and `AS-BUILT.md` — not the drop's wording.
 
 **2 tables change, none is new:** `tenancy.organization_settings` gains the clinic's setup progress (D5);
@@ -21,7 +21,7 @@ Intake hash `120675462365`. What exists is the launch as built — its route rev
 | --- | --- | --- |
 | Setup progress lives with the clinic's settings | [D5](decisions.md) | six `setup_*` fields ADDED to `tenancy.organization_settings`; no new table |
 | Clinics that are ready when this ships count as set up | [D7](decisions.md) | a one-time fill of `setup_completed_at` in the same change (below) |
-| Ticks are read from real records | BRIEF.md:105 | no "done" column per item — only answered steps, skipped items and the times |
+| Ticks are read from real records | BRIEF.md:129 | no "done" column per item — only answered steps, skipped items and the times |
 
 ## Stages
 
@@ -64,8 +64,8 @@ erDiagram
   clinic's **setup progress**: which setup steps were answered, which guide items were skipped, when setup was
   deferred ("Explore first"), when the essentials were completed and by whom, and when the guide was hidden.
 - **Table:** `tenancy.organization_settings` (D5) — code `tenancy/sub-domains/organization/organization-settings/`
-- **Sources:** BRIEF.md:40–42 (saved as you go, Explore first) · BRIEF.md:98–105 (guide, Hide, ticks from records) ·
-  BRIEF.md:162–177 (states) · BRIEF.md:232–234 (scope: the clinic, not a person) · BRIEF.md:252–253 (existing clinics)
+- **Sources:** BRIEF.md:49–52 (saved as you go, Explore first) · BRIEF.md:117–129 (the launcher, Hide, ticks from records) ·
+  BRIEF.md:187–203 (states) · BRIEF.md:260–262 (scope: the clinic, not a person) · BRIEF.md:282–283 (existing clinics)
 - **Added:**
   - `setup_answered_steps` — the answers that have no record of their own to read back: `clinic_type`, `hours`,
     `you` (setup steps 1, 4, 5) and `day_float` (the guide's "Cash drawer float" confirmed); the rest are read from
@@ -79,7 +79,7 @@ erDiagram
   `lead_hold_days`, `retarget_after_days` (Settings › Clinic).
 - **One-time fill (D7):** every clinic that, when this ships, has an open main branch and at least one active service
   gets `setup_completed_at` = the time of the change (its settings row created if it has none).
-- **Open:** (1) "All set" shows for 7 days after the last guide item is done (BRIEF.md:103) — a stored time
+- **Open:** (1) the launcher's ✓ "Set up" shows for 7 days after the last guide item is done (BRIEF.md:126–127) — a stored time
   (`setup_guide_done_at`) or worked out from the records' own times? (2) Who may read the setup progress — the
   managers only, or every member (the members' notice needs only "is there an open branch", already readable
   through `/branches/my`)? (3) **Cash drawer float — pending your answer (Step 4):** `default_day_float` is stored but
@@ -108,7 +108,7 @@ erDiagram
 
 - **Holds:** a clinic location (as built, launch routes-final §1.A).
 - **Table:** `app.branches` — code `app/sub-domains/branches/`
-- **Sources:** BRIEF.md:156–160 · users.md:132 ("if none is left main, the first branch becomes main") · launch
+- **Sources:** BRIEF.md:181–185 · users.md:132 ("if none is left main, the first branch becomes main") · launch
   routes-final §1.A.9 (a second main is a `409`)
 - **Changed (rule, no field):** a clinic's **first** branch becomes its main branch even when the request does not
   send `is_main` — from setup or from Users › Branches.
@@ -124,7 +124,7 @@ erDiagram
 
 ## Read only — what the setup guide ticks from
 
-| Item (BRIEF.md:107–126) | Read from | As built |
+| Item (BRIEF.md:133–150) | Read from | As built |
 | --- | --- | --- |
 | Clinic type | `setup_answered_steps` ∋ `clinic_type`; `organization.specialties` | launch §12 |
 | Main branch | an active `branch` with `is_main` | routes-final §1.A |

@@ -5,7 +5,7 @@ at every planning step (`be-iteration-planning` › Worker changes). Plain words
 event or worker names; kickoff names them and records them in `AS-BUILT.md`.
 
 Status: **Step 1 draft, 2026-10-13.** Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
-Intake hash `120675462365`.
+Intake hash `d5f100464051`.
 
 ## Counts
 
@@ -14,11 +14,11 @@ Intake hash `120675462365`.
 | 0 | 0 | 0 |
 
 **None so far.** The brief asks for no work that runs without a user. Every setup write happens in the owner's own
-request, and the guide's ticks are read when Today asks for them, so nothing runs on a schedule.
+request, and the guide's ticks are read when the shell asks for them, so nothing runs on a schedule.
 
 | # | Change | Background work | When it runs | What it touches | On failure | Who is told | Requirement | Source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| — | — | none | — | — | — | — | — | BRIEF.md:179–193 |
+| — | — | none | — | — | — | — | — | BRIEF.md:205–219 |
 
 ## Not background work, noted so it is not missed
 
