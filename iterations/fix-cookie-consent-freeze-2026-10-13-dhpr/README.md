@@ -8,7 +8,7 @@
 | Opened        | 2026-10-13                                                                                                                    |
 | Branch        | fix/cookie-consent-freeze                                                                                                     |
 | Baseline      | none                                                                                                                          |
-| Status        | done                                                                                                                          |
+| Status | frozen |
 | Summary       | Freeze change-cookie-consent-2026-10-13-fmal — it merged to main at `done`; record it as `frozen` so it is never edited again |
 | Drop placed   | —                                                                                                                             |
 | Drop source   | —                                                                                                                             |
@@ -29,3 +29,4 @@
 - 2026-10-13 · ready-for-approval → approved · — · Claude
 - 2026-10-13 · approved → implementing · — · Claude
 - 2026-10-13 · implementing → done · — · Claude
+- 2026-10-13 · done → frozen · — · Claude
