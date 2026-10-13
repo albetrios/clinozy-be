@@ -81,11 +81,11 @@ jobs:
         run: bash tooling/ci/restore-drill-neon.sh create
 
       - name: Setup Node and pnpm
-        if: env.NEON_DRILL_DATABASE_URL != ''
+        if: steps.neon_drill.outputs.database_url != ''
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Export shared CI test env
-        if: env.NEON_DRILL_DATABASE_URL != ''
+        if: steps.neon_drill.outputs.database_url != ''
         uses: ./.github/actions/test-env
 
       - name: Run migrations on restored branch

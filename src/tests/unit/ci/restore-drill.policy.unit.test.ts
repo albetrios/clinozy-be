@@ -79,6 +79,26 @@ describe('restore drill automation policy', () => {
     }
   });
 
+  it('can run its steps: Node is set up once the branch exists, and migrate gets a direct URL', () => {
+    // Nothing ever set NEON_DRILL_DATABASE_URL, so a gate on it skipped Node/pnpm setup and every
+    // later `pnpm` step failed. Gate on the provisioning step's own output instead.
+    for (const workflowFileName of [
+      'scheduled-monthly-restore-rto.yml',
+      'scheduled-weekly-restore-smoke.yml',
+    ]) {
+      const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
+      expect(workflow, workflowFileName).not.toContain('NEON_DRILL_DATABASE_URL');
+      expect(
+        workflow.match(/if: steps\.neon_drill\.outputs\.database_url != ''/g),
+        workflowFileName,
+      ).toHaveLength(2);
+    }
+    // The migrate step runs on the drill URL and migrate.ts refuses a pooler host.
+    const script = readFileSync(join(ROOT, 'tooling/ci/restore-drill-neon.sh'), 'utf8');
+    expect(script).toContain('&pooled=false');
+    expect(script).not.toContain('&pooled=true');
+  });
+
   it('advances the id sequences between migrating and the smoke, as the DR runbook does', () => {
     const runbook = readFileSync(join(ROOT, 'docs/process/dr-runbook.md'), 'utf8');
     expect(runbook).toContain('pnpm db:sequences:advance');
