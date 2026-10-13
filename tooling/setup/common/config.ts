@@ -17,6 +17,20 @@ const environmentSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 
+// A GitHub Environment that is not a deploy target: it receives only `keys`, read from its
+// `source` environment's `.env.<source>` file, and the source environment stops receiving them.
+// For a job that needs one secret without the deploy environment's approval gate or its other
+// secrets — the restore drills' Neon API key. No `.env.<name>` file and no NODE_ENV value.
+const scopedEnvironmentSchema = z.object({
+  name: z.string().regex(/^[a-z][a-z0-9-]*$/),
+  source: z.string().min(1),
+  keys: z
+    .array(z.string().regex(/^[A-Z][A-Z0-9_]*$/))
+    .min(1)
+    .refine((keys) => new Set(keys).size === keys.length, 'keys must be unique'),
+  purpose: z.string().min(1),
+});
+
 const projectArtifactsSchema = z.object({
   apiImage: z.string().min(1),
   workerImage: z.string().min(1),
@@ -73,6 +87,7 @@ export const setupConfigSchema = z.object({
   }),
   git: projectGitSchema.optional(),
   environments: z.array(environmentSchema).min(1),
+  scopedEnvironments: z.array(scopedEnvironmentSchema).optional(),
   providers: z.object({
     github: z.object({
       enabled: z.boolean(),
@@ -116,6 +131,7 @@ function normalizeLoadedConfig(config: ParsedSetupConfig): ParsedSetupConfig {
       packageName: config.project.packageName ?? config.project.name,
     },
     git: { protectedBranches, defaultBranch },
+    scopedEnvironments: config.scopedEnvironments ?? [],
     providers: { ...config.providers, github: { ...github, owners } },
   };
 }
@@ -163,6 +179,56 @@ export function loadConfig(): z.infer<typeof setupConfigSchema> {
 
 export function getEnvironmentNames(config: z.infer<typeof setupConfigSchema>): string[] {
   return config.environments.map((environment) => environment.name);
+}
+
+/** Every GitHub Environment the manifest declares: the deploy environments, then the scoped ones. */
+export function getGithubEnvironmentNames(config: z.infer<typeof setupConfigSchema>): string[] {
+  return [
+    ...getEnvironmentNames(config),
+    ...(config.scopedEnvironments ?? []).map((scoped) => scoped.name),
+  ];
+}
+
+/** Which `.env.<source>` file a GitHub Environment is synced from, and which of its keys it gets. */
+export interface EnvironmentKeyScope {
+  /** The environment whose `.env.<source>` file supplies the values. */
+  readonly sourceEnvironment: string;
+  /** A scoped environment's keys — the only ones it receives; `null` for every other environment. */
+  readonly includeKeys: readonly string[] | null;
+  /** Keys a scoped environment takes from this one, which this environment therefore never gets. */
+  readonly excludeKeys: readonly string[];
+}
+
+/**
+ * The key scope `github:sync` applies to one GitHub Environment.
+ *
+ * @remarks
+ * A scoped environment reads its source's file and keeps only its `keys`; a deploy environment
+ * reads its own file minus every key a scoped environment takes from it, so each key reaches
+ * exactly one GitHub Environment. A name the manifest does not declare reads its own file whole.
+ */
+export function resolveEnvironmentKeyScope(
+  config: z.infer<typeof setupConfigSchema>,
+  environment: string,
+): EnvironmentKeyScope {
+  const scopedEnvironments = config.scopedEnvironments ?? [];
+  const scoped = scopedEnvironments.find((candidate) => candidate.name === environment);
+  if (scoped) {
+    return { sourceEnvironment: scoped.source, includeKeys: scoped.keys, excludeKeys: [] };
+  }
+  return {
+    sourceEnvironment: environment,
+    includeKeys: null,
+    excludeKeys: scopedEnvironments
+      .filter((candidate) => candidate.source === environment)
+      .flatMap((candidate) => candidate.keys),
+  };
+}
+
+/** Whether `key` is synced to the environment that `scope` describes. */
+export function isKeyInEnvironmentScope(scope: EnvironmentKeyScope, key: string): boolean {
+  if (scope.includeKeys !== null && !scope.includeKeys.includes(key)) return false;
+  return !scope.excludeKeys.includes(key);
 }
 
 /**

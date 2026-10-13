@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { resolveGitMetadata } from '@tooling/setup/codegen/project-identity.util.js';
-import { loadConfig, getEnvironmentNames } from '@tooling/setup/common/config.js';
+import { loadConfig, getGithubEnvironmentNames } from '@tooling/setup/common/config.js';
 import type { SetupConfig } from '@tooling/setup/common/types.js';
 
 const projectRoot = resolve(import.meta.dirname, '../../..');
@@ -88,6 +88,72 @@ function deployWorkflowSupportsExplicitEnvironment(): boolean {
   return readFileSync(deployWorkflowPath, 'utf-8').includes('github_environment:');
 }
 
+/**
+ * Checks the manifest's scoped environments against the deploy environments, the committed
+ * `.github/environments/*.json` and `.env.example`.
+ *
+ * @remarks
+ * A scoped environment must take its keys from a deploy environment, must not reuse a deploy
+ * environment's name, must have its protection JSON committed, and may only name keys that
+ * `.env.example` declares. Two scoped environments may not take the same key from one source —
+ * each key reaches exactly one GitHub Environment.
+ */
+export function validateScopedEnvironments(args: {
+  readonly scopedEnvironments: NonNullable<SetupConfig['scopedEnvironments']>;
+  readonly deployEnvironmentNames: ReadonlySet<string>;
+  readonly githubEnvironmentNames: ReadonlySet<string>;
+  readonly exampleContent: string;
+}): GitHubSyncConsistencyIssue[] {
+  const issues: GitHubSyncConsistencyIssue[] = [];
+  const seenNames = new Set<string>();
+  const keyOwners = new Map<string, string>();
+
+  for (const scoped of args.scopedEnvironments) {
+    const dimension = 'setup.config.json scopedEnvironments';
+    if (seenNames.has(scoped.name)) {
+      issues.push({ dimension, detail: `Scoped environment "${scoped.name}" is listed twice.` });
+    }
+    seenNames.add(scoped.name);
+    if (args.deployEnvironmentNames.has(scoped.name)) {
+      issues.push({
+        dimension,
+        detail: `Scoped environment "${scoped.name}" reuses a deploy environment's name.`,
+      });
+    }
+    if (!args.deployEnvironmentNames.has(scoped.source)) {
+      issues.push({
+        dimension,
+        detail: `Scoped environment "${scoped.name}" takes its keys from "${scoped.source}", which is not a configured environment.`,
+      });
+    }
+    if (!args.githubEnvironmentNames.has(scoped.name)) {
+      issues.push({
+        dimension: 'setup.config.json ↔ GitHub envs',
+        detail: `Scoped environment "${scoped.name}" has no .github/environments/${scoped.name}.json.`,
+      });
+    }
+    for (const key of scoped.keys) {
+      if (!new RegExp(`^${key}=`, 'm').test(args.exampleContent)) {
+        issues.push({
+          dimension: 'setup.config.json ↔ .env.example',
+          detail: `Scoped environment "${scoped.name}" names ${key}, which .env.example does not declare.`,
+        });
+      }
+      const ownerKey = `${scoped.source}:${key}`;
+      const owner = keyOwners.get(ownerKey);
+      if (owner !== undefined && owner !== scoped.name) {
+        issues.push({
+          dimension,
+          detail: `${key} from "${scoped.source}" is taken by both "${owner}" and "${scoped.name}".`,
+        });
+      }
+      keyOwners.set(ownerKey, scoped.name);
+    }
+  }
+
+  return issues;
+}
+
 export function validateGithubSyncConsistency(config: SetupConfig): GitHubSyncConsistencyIssue[] {
   const syncEnvironments = environmentsFromConfig(config);
   const nodeEnvironmentValues = new Set(extractNodeEnvironmentValues());
@@ -113,7 +179,20 @@ export function validateGithubSyncConsistency(config: SetupConfig): GitHubSyncCo
     }
   }
 
+  const scopedEnvironments = config.scopedEnvironments ?? [];
+  const scopedEnvironmentNames = new Set(scopedEnvironments.map((scoped) => scoped.name));
+  issues.push(
+    ...validateScopedEnvironments({
+      scopedEnvironments,
+      deployEnvironmentNames: configuredEnvironmentNames,
+      githubEnvironmentNames: githubEnvs,
+      exampleContent: readFileSync(environmentExamplePath, 'utf-8'),
+    }),
+  );
+
   for (const env of githubEnvs) {
+    // Scoped environments are not deploy targets: no NODE_ENV value, checked above instead.
+    if (scopedEnvironmentNames.has(env)) continue;
     if (!nodeEnvironmentValues.has(env)) {
       issues.push({
         dimension: '.github/environments',
@@ -207,13 +286,21 @@ export function printGithubSyncConsistencyReport(config: SetupConfig): void {
   );
   console.log(`GitHub envs:      ${githubEnvs.join(', ')}`);
   console.log(
+    `Scoped envs:      ${
+      (config.scopedEnvironments ?? [])
+        .map((scoped) => `${scoped.source}→${scoped.name} (${scoped.keys.join(', ')})`)
+        .join('; ') || '(none)'
+    }`,
+  );
+  console.log(
     `Workflow mapping: ${[...workflowMap.entries()].map(([b, e]) => `${b}→${e}`).join(', ')}`,
   );
   console.log('');
 }
 
+/** Every GitHub Environment `github:sync` creates and protects — deploy and scoped. */
 export function getGithubSyncEnvironmentNames(config?: SetupConfig): string[] {
-  return getEnvironmentNames(config ?? loadConfig()).sort();
+  return getGithubEnvironmentNames(config ?? loadConfig()).sort();
 }
 
 function buildEnvironmentFile(environment: string, exampleContent: string): string {
@@ -251,6 +338,18 @@ function buildEnvironmentFile(environment: string, exampleContent: string): stri
 
 function buildGithubEnvironmentConfig(environment: string): string {
   return `${JSON.stringify({ name: environment, protection: {} }, null, 2)}\n`;
+}
+
+// A scoped environment exists to skip the deploy approval, so its one guard is the branch policy:
+// only protected branches (the trunk) may use its secrets.
+function buildScopedGithubEnvironmentConfig(environment: string): string {
+  const config = {
+    name: environment,
+    protection: {
+      deploymentBranchPolicy: { protectedBranches: true, customBranchPolicies: false },
+    },
+  };
+  return `${JSON.stringify(config, null, 2)}\n`;
 }
 
 function buildBranchRuleset(branch: string): string {
@@ -348,6 +447,15 @@ export function scaffoldGithubSyncFiles(config?: SetupConfig): GitHubSyncScaffol
     result.createdEnvironmentFiles.push(...single.createdEnvironmentFiles);
     result.createdGithubEnvironmentConfigs.push(...single.createdGithubEnvironmentConfigs);
     result.createdRulesets.push(...single.createdRulesets);
+  }
+
+  // A scoped environment has no `.env.<name>` (its values come from its source's file) and no
+  // branch of its own — only its protection JSON.
+  for (const scoped of cfg.scopedEnvironments ?? []) {
+    const githubEnvPath = resolve(projectRoot, `.github/environments/${scoped.name}.json`);
+    if (writeIfMissing(githubEnvPath, buildScopedGithubEnvironmentConfig(scoped.name))) {
+      result.createdGithubEnvironmentConfigs.push(`.github/environments/${scoped.name}.json`);
+    }
   }
 
   return result;

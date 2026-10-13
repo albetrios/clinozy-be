@@ -18,11 +18,11 @@ Fully automated: Neon PITR child branch in the GitHub Environment's own Neon pro
 
 ## GitHub Environment secrets (required)
 
-| Secret | Purpose |
-| --- | --- |
-| `MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY` | Neon API authentication — an **organization** API key preferred (with a personal key the drill looks up the key's only organization) |
+| Secret | GitHub Environment | Purpose |
+| --- | --- | --- |
+| `MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY` | `production-restore-drill` | Neon API authentication — a key limited to the `clinozy-be-production` project preferred (with a personal key the drill looks up the key's only organization) |
 
-Provision in `.env.development` / `.env.production` (GitHub Secrets half) and sync with `pnpm github:sync`. The workflow resolves the GitHub Environment from the git ref (single trunk: `main` → `production`; environment ≠ branch, there is no `dev` branch) and finds that environment's Neon project **`clinozy-be-<environment>`** by name via the Neon API.
+Provision in `.env.production` (GitHub Secrets half) and sync with `pnpm github:sync`, which pushes it to the scoped GitHub Environment **`production-restore-drill`** only — the Neon key alone, no reviewers, protected branches only — so the scheduled drills never wait on `production`'s deploy approval ([backup-drills.md](../process/backup-drills.md#github-environment-secrets-required)). The workflow resolves the environment from the git ref (single trunk: `main` → `production`; environment ≠ branch, there is no `dev` branch) and finds that environment's Neon project **`clinozy-be-<environment>`** by name via the Neon API.
 
 **Parent branch:** that project's only branch, named after the environment (`production`). The drill branch logs in as the project's database owner (`clinozy_be_production_owner` on `clinozy_be_production`).
 

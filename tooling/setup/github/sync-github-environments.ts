@@ -23,6 +23,11 @@
  * marks it stale and deletes it. Blank keys are reported as `empty` in the summary
  * so a half-filled env file is visible rather than silent.
  *
+ * A scoped environment (`scopedEnvironments` in `tooling/setup/setup.config.json`) has no file of
+ * its own: it is reconciled against its source's `.env.<source>`, limited to its keys, and the
+ * source environment is reconciled without them — so each key lives in exactly one GitHub
+ * Environment (see `resolveEnvironmentKeyScope`).
+ *
  * The schema-default skip only ever applies to VARIABLES whose value matches the
  * exact stringified default from {@link envSchemaDefaults} (secrets and required keys
  * have no resolvable default and are always pushed). The match is conservative — a
@@ -43,6 +48,12 @@ import dotenv from 'dotenv';
 import sodium from 'libsodium-wrappers';
 
 import { envSchemaDefaults } from '@/shared/config/env-schema.js';
+import {
+  type EnvironmentKeyScope,
+  isKeyInEnvironmentScope,
+  loadConfig,
+  resolveEnvironmentKeyScope,
+} from '@tooling/setup/common/config.js';
 import { runGhAuthPreflight } from './auth-preflight.js';
 
 const projectRoot = process.cwd();
@@ -359,6 +370,20 @@ export function selectOnlyEntries<T extends { name: string; value: string }>(
   const entries = declaredEntries.filter((entry) => wanted.has(entry.name) && entry.value !== '');
   const present = new Set(entries.map((entry) => entry.name));
   return { entries, missing: [...wanted].filter((key) => !present.has(key)) };
+}
+
+/**
+ * The entries of a `.env.<source>` file that belong to one GitHub Environment's key scope.
+ *
+ * @remarks
+ * Applied before reconciliation, so a key outside the scope is neither pushed nor declared — a
+ * copy already on that GitHub Environment is pruned like any key whose line was removed.
+ */
+export function scopeEntries<T extends { name: string }>(
+  entries: readonly T[],
+  scope: EnvironmentKeyScope,
+): T[] {
+  return entries.filter((entry) => isKeyInEnvironmentScope(scope, entry.name));
 }
 
 /**
@@ -751,20 +776,24 @@ export async function syncEnvironmentToGitHub(
     keepSchemaDefaults = false,
     onlyKeys,
   } = options;
-  const envFilePath = resolve(projectRoot, `.env.${environment}`);
+  const scope = resolveEnvironmentKeyScope(loadConfig(), environment);
+  const sourceFileName = `.env.${scope.sourceEnvironment}`;
+  const envFilePath = resolve(projectRoot, sourceFileName);
 
   if (!existsSync(envFilePath)) {
     throw new Error(
-      `Missing .env.${environment} at the repo root. Run \`pnpm setup:github\` without --dry-run to scaffold it from setup.config.json.`,
+      `Missing ${sourceFileName} at the repo root. Run \`pnpm setup:github\` without --dry-run to scaffold it from setup.config.json.`,
     );
   }
 
-  const parsedEntries = parseEnvFile(envFilePath);
+  const parsedEntries = scopeEntries(parseEnvFile(envFilePath), scope);
+  // `--only` names keys across every environment it syncs; this one takes those in its scope.
+  const scopedOnlyKeys = onlyKeys?.filter((key) => isKeyInEnvironmentScope(scope, key));
   let declaredEntries = parsedEntries;
-  if (onlyKeys) {
-    const { entries, missing } = selectOnlyEntries(parsedEntries, onlyKeys);
+  if (scopedOnlyKeys) {
+    const { entries, missing } = selectOnlyEntries(parsedEntries, scopedOnlyKeys);
     if (missing.length > 0) {
-      throw new Error(`--only: not set in .env.${environment}: ${missing.join(', ')}`);
+      throw new Error(`--only: not set in ${sourceFileName}: ${missing.join(', ')}`);
     }
     declaredEntries = entries;
   }
@@ -794,10 +823,23 @@ export async function syncEnvironmentToGitHub(
       .map((e) => e.name),
   );
 
-  console.log(`Source:      .env.${environment}`);
+  console.log(`Source:      ${sourceFileName}`);
   console.log(`Environment: ${environment}`);
-  if (onlyKeys)
-    console.log(`Only:        ${onlyKeys.join(', ')} (nothing else is pushed or pruned)`);
+  if (scope.includeKeys !== null) {
+    console.log(`Scope:       ${scope.includeKeys.join(', ')} only (a scoped environment)`);
+  }
+  if (scope.excludeKeys.length > 0) {
+    console.log(
+      `Scope:       without ${scope.excludeKeys.join(', ')} (synced to a scoped environment)`,
+    );
+  }
+  if (scopedOnlyKeys) {
+    if (scopedOnlyKeys.length === 0) {
+      console.log('Only:        none of the requested keys belongs to this environment — skipped');
+      return { pushed: 0, unchanged: 0, emptySkipped: 0, deleted: 0, schemaDefaultSkipped: 0 };
+    }
+    console.log(`Only:        ${scopedOnlyKeys.join(', ')} (nothing else is pushed or pruned)`);
+  }
   console.log(`Plan:        ${secrets.length} secret(s), ${variables.length} variable(s)`);
   if (blankEntries.length > 0) {
     console.log(
@@ -1182,18 +1224,21 @@ export function formatSyncPreviewTable(options: {
 }
 
 /**
- * Read-only preview: reads `.env.<environment>`, fetches the live GitHub Environment (fully paginated),
- * and returns the per-key {@link SyncPreviewRow} decisions `github:sync` would make — writing nothing.
+ * Read-only preview: reads the environment's source file (`.env.<environment>`, or a scoped
+ * environment's `.env.<source>` limited to its keys), fetches the live GitHub Environment (fully
+ * paginated), and returns the per-key {@link SyncPreviewRow} decisions `github:sync` would make —
+ * writing nothing.
  */
 export async function previewEnvironmentSync(options: {
   readonly environment: string;
   readonly keepSchemaDefaults?: boolean;
 }): Promise<SyncPreviewRow[]> {
-  const envFilePath = resolve(projectRoot, `.env.${options.environment}`);
+  const scope = resolveEnvironmentKeyScope(loadConfig(), options.environment);
+  const envFilePath = resolve(projectRoot, `.env.${scope.sourceEnvironment}`);
   if (!existsSync(envFilePath)) {
-    throw new Error(`Missing .env.${options.environment} at the repo root.`);
+    throw new Error(`Missing .env.${scope.sourceEnvironment} at the repo root.`);
   }
-  const declared = parseEnvFile(envFilePath);
+  const declared = scopeEntries(parseEnvFile(envFilePath), scope);
   const token = getGitHubToken();
   const repositoryFullName = getRepositoryFullName();
   const [remoteVariables, remoteSecretNames] = await Promise.all([

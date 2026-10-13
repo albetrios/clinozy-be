@@ -55,6 +55,20 @@ deploy workflow picks the environment explicitly, never from the branch.
 
 Non-hosted runtime mode (no GH env): `local`. The Vitest suite runs as `development`.
 
+### Scoped environments (not deploy targets)
+
+A job that needs one or two secrets without a deploy environment's approval gate, or its other
+secrets, gets a **scoped environment** instead of a new deploy environment: an entry in
+`scopedEnvironments` in `tooling/setup/setup.config.json` (`name`, `source`, `keys`, `purpose`)
+plus its committed `.github/environments/<name>.json`. It needs no `NODE_ENV` value, no
+`.env.<name>` file and no deploy workflow change: `github:sync` pushes its `keys` from
+`.env.<source>` to it and stops pushing them to `source`, and `--check` verifies the source, the
+JSON and that `.env.example` declares each key.
+
+| GitHub Environment | Source | Keys | Used by |
+| --- | --- | --- | --- |
+| `production-restore-drill` | `production` | `MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY` | the restore drills ([backup-drills.md](../../process/backup-drills.md)) |
+
 ## First-time bootstrap
 
 For an existing environment whose values have not been seeded into GitHub yet:

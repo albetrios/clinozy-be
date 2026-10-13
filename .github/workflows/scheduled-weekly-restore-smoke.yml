@@ -27,17 +27,24 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       environment: ${{ steps.map.outputs.environment }}
+      github_environment: ${{ steps.map.outputs.github_environment }}
     steps:
       - name: Map branch to GitHub Environment
         # Single-trunk model (see docs/deployment/runbooks/add-new-environment.md):
         #   main → production   (the only long-lived branch; environment ≠ branch)
+        # `environment` names the Neon project; `github_environment` is the scoped GitHub
+        # Environment holding the drill's Neon key alone, with no deploy approval to wait on
+        # (scopedEnvironments in tooling/setup/setup.config.json).
         id: map
         env:
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           case "$REF_NAME" in
-            main) echo "environment=production"  >> "$GITHUB_OUTPUT" ;;
+            main)
+              echo "environment=production" >> "$GITHUB_OUTPUT"
+              echo "github_environment=production-restore-drill" >> "$GITHUB_OUTPUT"
+              ;;
             *)    echo "::error::Unsupported branch for restore drill: ${REF_NAME} (single-trunk: the drill runs from main only)" && exit 1 ;;
           esac
 
@@ -45,7 +52,7 @@ jobs:
     name: Restore branch — migrate and auth smoke
     needs: [resolve-environment]
     runs-on: ubuntu-latest
-    environment: ${{ needs.resolve-environment.outputs.environment }}
+    environment: ${{ needs.resolve-environment.outputs.github_environment }}
     timeout-minutes: 20
     services:
       redis:

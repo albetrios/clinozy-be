@@ -217,6 +217,13 @@ self-skip when the value is absent.
    under the Secrets half via `gh secret set` and anything under the Variables
    half via `gh api .../variables`. Empty values are skipped.
 
+   A key only one job needs, without the deploy environment's approval gate or
+   its other secrets (the restore drills' Neon key), goes in a **scoped
+   environment** instead: list it under `scopedEnvironments[].keys` in
+   `tooling/setup/setup.config.json`. It still lives in `.env.<source>`, but
+   `github:sync` pushes it to the scoped GitHub Environment only — see
+   `docs/deployment/runbooks/add-new-environment.md#scoped-environments-not-deploy-targets`.
+
 6. **Update the PR description** with the snippet printed by
    `pnpm tool:sync-env-example` (under "--- Copy below into PR description ---").
    Reviewers and the deploy workflow read this to know which secrets / variables

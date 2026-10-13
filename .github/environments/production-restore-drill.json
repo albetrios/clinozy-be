@@ -1,0 +1,9 @@
+{
+  "name": "production-restore-drill",
+  "protection": {
+    "deploymentBranchPolicy": {
+      "protectedBranches": true,
+      "customBranchPolicies": false
+    }
+  }
+}

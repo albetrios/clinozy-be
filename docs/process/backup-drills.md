@@ -42,13 +42,15 @@ Each GitHub Environment has its own Neon project, and every name derives from it
 
 ## GitHub Environment secrets (required)
 
-Set in `.env.development` / `.env.production` under the **GitHub Secrets** half and push with `pnpm github:sync` (see [credentials-and-env.md](../integrations/credentials-and-env.md)).
+Set in `.env.production` under the **GitHub Secrets** half and push with `pnpm github:sync` (see [credentials-and-env.md](../integrations/credentials-and-env.md)). The sync sends it to the scoped GitHub Environment **`production-restore-drill`** — not to `production`:
 
-| Secret | Purpose |
-| --- | --- |
-| `MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY` | Neon API key — written by the infrastructure repository's setup; an **organization** key is preferred (with a personal key the drill looks up the key's only organization) |
+| Secret | GitHub Environment | Purpose |
+| --- | --- | --- |
+| `MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY` | `production-restore-drill` | Neon API key — written by the infrastructure repository's setup; a key limited to the `clinozy-be-production` project is preferred (with a personal key the drill looks up the key's only organization) |
 
-Neon **project ID** is resolved automatically via the Neon API from the project name **`clinozy-be-<environment>`**. Single trunk: the workflow maps **`main` → `production`** (environment ≠ branch; there is no `dev` branch). Without the API key in the matching GitHub Environment, the monthly workflow **fails**.
+**Why its own environment.** `production` requires a reviewer's approval, so a drill job in it waits for someone to click approve — scheduled drills never ran unattended. `production-restore-drill` holds the Neon key and nothing else, has no reviewers, and only protected branches (`main`) may use it ([`.github/environments/production-restore-drill.json`](../../.github/environments/production-restore-drill.json)). It is a **scoped environment** in [`tooling/setup/setup.config.json`](../../tooling/setup/setup.config.json): `github:sync` reads the key from `.env.production` and pushes it there only, and prunes it from `production`.
+
+Neon **project ID** is resolved automatically via the Neon API from the project name **`clinozy-be-<environment>`**. Single trunk: the workflow maps **`main` → `production`** (the Neon project) and runs the job in **`production-restore-drill`** (environment ≠ branch; there is no `dev` branch). Without the API key in that GitHub Environment, the drill **fails**.
 
 ---
 

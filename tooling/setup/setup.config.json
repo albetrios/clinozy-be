@@ -26,6 +26,14 @@
       "protected": true
     }
   ],
+  "scopedEnvironments": [
+    {
+      "name": "production-restore-drill",
+      "source": "production",
+      "keys": ["MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY"],
+      "purpose": "The restore drills run unattended: the Neon API key alone, without the production deploy approval or its other secrets"
+    }
+  ],
   "providers": {
     "github": {
       "enabled": true,

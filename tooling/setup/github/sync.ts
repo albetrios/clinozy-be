@@ -30,14 +30,19 @@
  * Adding or removing a hosted environment: edit tooling/setup/setup.config.json, NODE_ENV,
  * reusable-railway-deploy.yml, and related IaC by hand — then run setup:github. There is no
  * env:add / env:remove script.
+ *
+ * Scoped environments (`scopedEnvironments` in the manifest) are GitHub Environments that are not
+ * deploy targets: each takes a few keys from a deploy environment's `.env.<source>`, which then
+ * stops pushing them. Naming a deploy environment syncs its scoped environments too, since they
+ * share its file.
  */
 
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 
-import { loadConfig } from '@tooling/setup/common/config.js';
+import { getGithubEnvironmentNames, loadConfig } from '@tooling/setup/common/config.js';
 import type { SetupConfig } from '@tooling/setup/common/types.js';
 import { runGithubInit } from './init.js';
 import {
@@ -166,7 +171,7 @@ function parseArguments(): CliOptions {
  */
 async function pruneStaleEnvironments(config: SetupConfig): Promise<void> {
   const { execSync } = await import('node:child_process');
-  const configEnvNames = new Set(config.environments.map((e) => e.name));
+  const configEnvNames = new Set(getGithubEnvironmentNames(config));
 
   // List remote environments
   let remoteEnvs: string[] = [];
@@ -226,31 +231,49 @@ async function pruneStaleEnvironments(config: SetupConfig): Promise<void> {
   console.log('');
 }
 
+/**
+ * The GitHub Environments to reconcile and the `.env.<source>` file each one reads: the requested
+ * ones (all when none is named), plus the scoped environments of every requested deploy
+ * environment — they share its file.
+ */
 function detectLocalEnvironmentFiles(
   requestedEnvironments: readonly string[],
   config: SetupConfig,
-): Array<{ environment: string; filePath: string }> {
+): Array<{ environment: string; filePath: string; keys: readonly string[] | null }> {
+  const scopedEnvironments = config.scopedEnvironments ?? [];
   const environmentNames =
     requestedEnvironments.length > 0
-      ? requestedEnvironments
-      : config.environments.map((e) => e.name);
-  const validEnvironmentNames = new Set(config.environments.map((e) => e.name));
-  const found: Array<{ environment: string; filePath: string }> = [];
+      ? [
+          ...requestedEnvironments,
+          ...scopedEnvironments
+            .filter(
+              (scoped) =>
+                requestedEnvironments.includes(scoped.source) &&
+                !requestedEnvironments.includes(scoped.name),
+            )
+            .map((scoped) => scoped.name),
+        ]
+      : getGithubEnvironmentNames(config);
+  const validEnvironmentNames = new Set(getGithubEnvironmentNames(config));
+  const found: Array<{ environment: string; filePath: string; keys: readonly string[] | null }> =
+    [];
   for (const environment of environmentNames) {
     if (!validEnvironmentNames.has(environment)) {
       throw new Error(
         `${environment} is not listed in setup.config.json. Edit the config file first.`,
       );
     }
-    const filePath = resolve(PROJECT_ROOT, `.env.${environment}`);
+    const scoped = scopedEnvironments.find((candidate) => candidate.name === environment);
+    const sourceEnvironment = scoped?.source ?? environment;
+    const filePath = resolve(PROJECT_ROOT, `.env.${sourceEnvironment}`);
     if (existsSync(filePath)) {
-      found.push({ environment, filePath });
+      found.push({ environment, filePath, keys: scoped?.keys ?? null });
     } else if (requestedEnvironments.length > 0) {
       throw new Error(
-        `Missing .env.${environment} at the repo root. Run \`pnpm setup:envs\` to create it from .env.example.`,
+        `Missing .env.${sourceEnvironment} at the repo root. Run \`pnpm setup:envs\` to create it from .env.example.`,
       );
     } else {
-      console.log(`  Skipping "${environment}" — no .env.${environment} file found.`);
+      console.log(`  Skipping "${environment}" — no .env.${sourceEnvironment} file found.`);
     }
   }
   return found;
@@ -304,7 +327,7 @@ async function main(): Promise<void> {
   const config = loadConfig();
 
   console.log('Sync config: tooling/setup/setup.config.json');
-  console.log(`Configured environments: ${config.environments.map((e) => e.name).join(', ')}`);
+  console.log(`Configured environments: ${getGithubEnvironmentNames(config).join(', ')}`);
   console.log('');
 
   printGithubSyncConsistencyReport(config);
@@ -397,7 +420,10 @@ async function main(): Promise<void> {
 
   console.log('Reconciling environments (push + delete stale)');
   for (const entry of localFiles) {
-    console.log(`  .env.${entry.environment}  → GitHub Environment "${entry.environment}"`);
+    const keysNote = entry.keys ? ` (${entry.keys.join(', ')} only)` : '';
+    console.log(
+      `  ${relative(PROJECT_ROOT, entry.filePath)}  → GitHub Environment "${entry.environment}"${keysNote}`,
+    );
   }
   console.log('');
 

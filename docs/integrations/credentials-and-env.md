@@ -269,11 +269,11 @@ ingests exactly the three subscription lifecycle events — `customer.subscripti
 
 **Used for:** [Monthly backup restore & RTO drill](../process/backup-drills.md) workflow ([scheduled-monthly-restore-rto.yml](../../.github/workflows/scheduled-monthly-restore-rto.yml)).
 
-These are **GitHub Environment secrets** (not API/worker runtime vars). Add them to `.env.development` / `.env.production` under the GitHub Secrets half and push with `pnpm github:sync`. The scheduled workflow uses the Neon API to create a PITR child branch in the Neon project of the **GitHub Environment** the run resolves to (`main` → **`production`** → project **`clinozy-be-production`**).
+These are **GitHub Environment secrets** (not API/worker runtime vars). Add them to `.env.production` under the GitHub Secrets half and push with `pnpm github:sync`: the key goes to the scoped GitHub Environment **`production-restore-drill`** only (the Neon key alone, no reviewers, so the scheduled drills run unattended), never to `production`. The scheduled workflow uses the Neon API to create a PITR child branch in the Neon project of the environment the run resolves to (`main` → **`production`** → project **`clinozy-be-production`**).
 
 | Secret | Where to get it |
 | --- | --- |
-| `MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY` | Written by the infrastructure repository's setup (its `NEON_API_KEY`); or Neon Console → **Organization settings → API keys** ([key types](https://neon.com/docs/manage/api-keys)) |
+| `MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY` | Written by the infrastructure repository's setup; or Neon Console → **Organization settings → API keys** ([key types](https://neon.com/docs/manage/api-keys)) — preferably a key limited to the `clinozy-be-production` project |
 
 An **organization** API key is preferred. A personal key works too: on an organization-owned project the Neon API answers `org_id is required`, so the drill looks up the key's organization and asks again — it fails only when the key belongs to several organizations.
 
