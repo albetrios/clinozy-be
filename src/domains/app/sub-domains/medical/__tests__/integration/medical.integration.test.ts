@@ -1162,4 +1162,26 @@ describe('Medical store — integration (routes-final §11)', () => {
     flow.as('front_desk');
     await flow.expect(403, 'the front desk sees no store', 'GET', '/app/medicines');
   });
+
+  it("a return's refund needs payment:delete (MD23, D83)", async () => {
+    flow.as('owner');
+    await flow.expect(200, 'sell one, paid now', 'POST', '/app/medical-sales', {
+      branch_id: vesu,
+      contact_id: bela,
+      items: [{ medicine_id: glycolac, quantity: 1 }],
+      payment: { splits: [{ mode: 'cash', amount: 369 }] },
+    });
+    const returns = `/app/medical-sales/${flow.last('.data.id')}/returns`;
+    const body = {
+      items: [{ invoice_item_id: flow.last('.data.items[0].invoice_item_id'), quantity: 1 }],
+      reason: 'unused',
+      refund_mode: 'cash',
+    };
+    flow.as('pharmacist');
+    await flow.expect(403, "the pharmacist can't give money back", 'POST', returns, body);
+    flow.expectValue('no refund code: why', REASON, 'missing_permission');
+    flow.as('accountant');
+    await flow.expect(200, 'the accountant refunds the return', 'POST', returns, body);
+    flow.expectValue('returned', '.data.status', 'returned');
+  });
 });

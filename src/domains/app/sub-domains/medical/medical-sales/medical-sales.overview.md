@@ -30,7 +30,7 @@ patient, and the store's Payments tab (launch ROUTE #153 — routes-final 11.H, 
 | `GET /app/medical-sales/{medical_sale_id}` | `medicine:read` |
 | `DELETE /app/medical-sales/{medical_sale_id}` | `medicine:delete` |
 | `POST /app/medical-sales/{medical_sale_id}/restore` | `medicine:delete` |
-| `POST /app/medical-sales/{medical_sale_id}/returns` | `payment:create` |
+| `POST /app/medical-sales/{medical_sale_id}/returns` | `payment:delete` (money given back, as every refund — D83, MD23) |
 | `GET /app/medical-payments` | `medicine:read` |
 
 ## Key invariants

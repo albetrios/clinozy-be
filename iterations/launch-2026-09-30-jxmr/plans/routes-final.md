@@ -6701,36 +6701,36 @@ iteration only and than we will continue on frontend"). Rev 1 is built (ROUTE #1
 frontend's medical research found (clinozy-fe `api-integration.md` §5.5, G6, N8, N19–N21, Q21, M22, M23, M34) and
 D83's parked return refund: decisions **MD23–MD30** (11.1), code changes **MDC19–MDC26** (11.11). Your note on the
 plan (D89) adds **MD31–MD33** — the store manages its payments and its credits — and **MDC27–MDC29**. Built as ROUTE
-#181–#192. Everything rev 2 changes is marked **(rev 2)** below; the rest is rev 1 as built.*
+#186–#197. Everything rev 2 changes is marked **(rev 2)** below; the rest is rev 1 as built.*
 
 ```text
 rev 2 at a glance (D88)                                   nested   routes            rows
 ────────────────────────────────────────────────────────  ───────  ────────────────  ─────
-MD23  the return's refund needs payment:delete            11.H     50 (gate)         #181
+MD23  the return's refund needs payment:delete            11.H     50 (gate)         #186
 MD24  a return stays on a sale paid in full (Q21 — kept)  11.H     50 (unchanged)    —
-MD25  NEW  GET /medical-sales/dues — who owes, largest     11.H     52 (new)          #182
-MD26  receive takes lines that were not ordered (N19)     11.E     32 (body)         #183
-MD27  sorts: medicines by manufacturer · margin;          11.D,    17, 18, 44, 45    #184,
-      sales by customer                                   11.H                       #182
-MD28  /invoices refuses medical bills + medicine lines    8.A      invoices create,  #186
+MD25  NEW  GET /medical-sales/dues — who owes, largest     11.H     52 (new)          #187
+MD26  receive takes lines that were not ordered (N19)     11.E     32 (body)         #188
+MD27  sorts: medicines by manufacturer · margin;          11.D,    17, 18, 44, 45    #189,
+      sales by customer                                   11.H                       #187
+MD28  /invoices refuses medical bills + medicine lines    8.A      invoices create,  #191
                                                                    change, previews
-MD29  the prescription row names its patient              7.C      patient-          #187
+MD29  the prescription row names its patient              7.C      patient-          #192
                                                                    prescriptions
-MD30  (a) sales' Created filter  (b) suppliers'           11.H,    44, 45 · 7, 9 ·   #182,
-      payable_total + order_total  (c) the order's        11.B,    25–32             #185,
-      supplier with phone + GSTIN  (d) no facet route     11.E                       #183,
-      (e) a sale is never edited  (f) route-map fixes                                #191
+MD30  (a) sales' Created filter  (b) suppliers'           11.H,    44, 45 · 7, 9 ·   #187,
+      payable_total + order_total  (c) the order's        11.B,    25–32             #190,
+      supplier with phone + GSTIN  (d) no facet route     11.E                       #188,
+      (e) a sale is never edited  (f) route-map fixes                                #196
 ── D89 ─────────────────────────────────────────────────  ───────  ────────────────  ─────
-MD31  the store manages its payments in Medical:          11.I     51 (moved),       #188
+MD31  the store manages its payments in Medical:          11.I     51 (moved),       #193
       list + NEW export; record · edit · delete ·                  53 (new) + 8.C
       reverse through the ledger's own routes                      14–20 (reused)
-MD32  the store manages its credits in Medical:           11.C,    54, 55 (new) +    #189,
-      supplier credits void + undo; customer credits                                         11.I,    56 (new) +        #190
+MD32  the store manages its credits in Medical:           11.C,    54, 55 (new) +    #194,
+      supplier credits void + undo; customer credits                                         11.I,    56 (new) +        #195
       = the store's pending credits (D90)                  8.D      8.D 22–27 (reused)
-MD33  a return as store credit (refund_mode = credit)     11.H,    50 (body)         #190
+MD33  a return as store credit (refund_mode = credit)     11.H,    50 (body)         #195
                                                           8.B
 ── D91 ─────────────────────────────────────────────────  ───────  ────────────────  ─────
-MD34  supplier credits on the owned-record pattern:       11.C     14 flat · 15, 16, #189
+MD34  supplier credits on the owned-record pattern:       11.C     14 flat · 15, 16, #194
       /supplier-credits (every one) + /suppliers/                  54, 55 moved ·
       {supplier_id}/credits[/{supplier_credit_id}]                 57 (new)
 ```
@@ -6982,18 +6982,18 @@ Each nested sub-domain's .9; common to many routes:
 | MDC3 | MD7: `payments.medical_purchase_order_id` (supplier bills and their reversals only, `RESTRICT`) through the billing ledger, as `stock_purchase_id` (9); `invoice_items.medicine_batch_id` (`RESTRICT`); `GET /medical-payments` through the payments service |
 | MDC4 | MD8: the `medical_rep_visit` task rule and `tasks.medical_rep_id` (10); `is_filled` on `GET /patient-prescriptions` (7) |
 | MDC5 | i18n keys (en, es), OpenAPI response maps, the route catalog and its maps, the saved-view lists (`medicines`, `medical_sales`, `medical_purchase_orders`), seeds, live checks |
-| MDC19 | **(rev 2)** MD23: route 50 gated by `payment:delete`; its description and the role checks; the Standing deviation "Medical sale return" closes — ROUTE #181 |
-| MDC20 | **(rev 2)** MD25, MD27 (sales), MD30 (a): route 52 `GET /medical-sales/dues` through the sales repository (one aggregate over live sales still due, the sales' branch rule); `created_from` / `created_to` and `sort=contact_name` on routes 44 and 45 — ROUTE #182 |
-| MDC21 | **(rev 2)** MD26, MD30 (c): route 32's lines without `id` (a received line appended, a quick medicine for `new_medicine_name`, the batch, the supplier price, the total, the 50-line cap); the order's `supplier` with `phone` and `gst_number`, a deleted supplier included — ROUTE #183 |
-| MDC22 | **(rev 2)** MD27 (medicines): `sort=manufacturer_name` and `sort=margin_percent` on routes 17 and 18 as SQL sort keys (`nullsLastSortKeys`), margin from the lowest live supplier price — ROUTE #184 |
-| MDC23 | **(rev 2)** MD30 (b): `meta.payable_total` on route 7 (as `stock-vendors`' `sumPayables`) and `order_total` on the supplier — ROUTE #185 |
-| MDC24 | **(rev 2)** MD28: the invoice rules refuse `type=medical` and `medicine_id` lines on create, change and both previews (`400` `sold_through_store`), sub-domain 8 — ROUTE #186 |
-| MDC25 | **(rev 2)** MD29: `patient` (`id`, `patient_number`, `contact_id`, `name`) on the prescription row and record, sub-domain 7 — ROUTE #187 |
-| MDC26 | **(rev 2)** MD30 (f) and the documents: `docs/routes.txt` and its maps, the OpenAPI document, the overviews, `plans/frontend-route-map.md` (the medical section, M22, M23), the Standing deviations — ROUTE #191 |
-| MDC27 | **(rev 2, D89)** MD31: the nested sub-domain 11.I `medical/medical-payments/` (routes and controller, the payments service's store slice); route 51 moves into it; route 53 the store's payments CSV (as the payments export, limited to the store) — ROUTE #188 |
-| MDC28 | **(rev 2, D89)** MD32 (supplier): `deleted_at`, `delete_reason`, `delete_note` on `app.supplier_credits` (a migration); routes 54–55 — the void puts the packs back and un-applies the credit from its orders, the undo takes the packs again and re-applies oldest first; the open-credits index and `payable` skip a voided credit — ROUTE #189 |
-| MDC30 | **(rev 2, D91)** MD34: supplier credits under their supplier — routes 15, 16, 54, 55 moved, route 57 new — ROUTE #189 |
-| MDC29 | **(rev 2, D89, D90)** MD32 (customer), MD33: route 56 `GET /medical-pending-credits` (11.I) — 8.D's list limited to credits naming a `medical` invoice, through the pending-credits service; route 50's `refund_mode=credit` — the credit note's refund paid by `credit_amount` and a `give` pending credit on the sale's invoice in the same transaction (billing 8.B / 8.C / 8.D, whatever their checks need) — ROUTE #190 |
+| MDC19 | **(rev 2)** MD23: route 50 gated by `payment:delete`; its description and the role checks; the Standing deviation "Medical sale return" closes — ROUTE #186 |
+| MDC20 | **(rev 2)** MD25, MD27 (sales), MD30 (a): route 52 `GET /medical-sales/dues` through the sales repository (one aggregate over live sales still due, the sales' branch rule); `created_from` / `created_to` and `sort=contact_name` on routes 44 and 45 — ROUTE #187 |
+| MDC21 | **(rev 2)** MD26, MD30 (c): route 32's lines without `id` (a received line appended, a quick medicine for `new_medicine_name`, the batch, the supplier price, the total, the 50-line cap); the order's `supplier` with `phone` and `gst_number`, a deleted supplier included — ROUTE #188 |
+| MDC22 | **(rev 2)** MD27 (medicines): `sort=manufacturer_name` and `sort=margin_percent` on routes 17 and 18 as SQL sort keys (`nullsLastSortKeys`), margin from the lowest live supplier price — ROUTE #189 |
+| MDC23 | **(rev 2)** MD30 (b): `meta.payable_total` on route 7 (as `stock-vendors`' `sumPayables`) and `order_total` on the supplier — ROUTE #190 |
+| MDC24 | **(rev 2)** MD28: the invoice rules refuse `type=medical` and `medicine_id` lines on create, change and both previews (`400` `sold_through_store`), sub-domain 8 — ROUTE #191 |
+| MDC25 | **(rev 2)** MD29: `patient` (`id`, `patient_number`, `contact_id`, `name`) on the prescription row and record, sub-domain 7 — ROUTE #192 |
+| MDC26 | **(rev 2)** MD30 (f) and the documents: `docs/routes.txt` and its maps, the OpenAPI document, the overviews, `plans/frontend-route-map.md` (the medical section, M22, M23), the Standing deviations — ROUTE #196 |
+| MDC27 | **(rev 2, D89)** MD31: the nested sub-domain 11.I `medical/medical-payments/` (routes and controller, the payments service's store slice); route 51 moves into it; route 53 the store's payments CSV (as the payments export, limited to the store) — ROUTE #193 |
+| MDC28 | **(rev 2, D89)** MD32 (supplier): `deleted_at`, `delete_reason`, `delete_note` on `app.supplier_credits` (a migration); routes 54–55 — the void puts the packs back and un-applies the credit from its orders, the undo takes the packs again and re-applies oldest first; the open-credits index and `payable` skip a voided credit — ROUTE #194 |
+| MDC30 | **(rev 2, D91)** MD34: supplier credits under their supplier — routes 15, 16, 54, 55 moved, route 57 new — ROUTE #194 |
+| MDC29 | **(rev 2, D89, D90)** MD32 (customer), MD33: route 56 `GET /medical-pending-credits` (11.I) — 8.D's list limited to credits naming a `medical` invoice, through the pending-credits service; route 50's `refund_mode=credit` — the credit note's refund paid by `credit_amount` and a `give` pending credit on the sale's invoice in the same transaction (billing 8.B / 8.C / 8.D, whatever their checks need) — ROUTE #195 |
 
 ### 11.12 Nested sub-domains
 
@@ -7879,9 +7879,9 @@ payments and credits (MD31–MD33), two more of them in billing. Route by route:
 
 | Sub-domain | What changed | ROUTE |
 | --- | --- | --- |
-| 11 Medical store | the return's refund needs `payment:delete` (MD23); a return stays on a sale paid in full (MD24); `GET /medical-sales/dues` (MD25); receive takes goods not ordered (MD26); medicines sort by manufacturer and margin, sales by customer (MD27); the sales' Created filter, suppliers' `meta.payable_total` and `order_total`, the order's supplier phone and GSTIN (MD30) | #181–#185 |
-| 8 Billing | `POST` / `PATCH /invoices` and both previews refuse `type=medical` and `medicine_id` lines — `400` reason `sold_through_store` (MD28, M34); the `type` filter keeps `medical` for the sales' invoices | #186 |
-| 7 Patients | 7.C's prescription row and record name their patient: `patient` (`id`, `patient_number`, `contact_id`, `name`) — the pharmacy queue in one read (MD29) | #187 |
-| 11 Medical store (D89) | the store manages its payments (route 51 moved to 11.I, route 53 the CSV — writes through 8.C's routes, MD31) and its credits (supplier credits void and undo, routes 54–55; the customers' credits read at route 56, D90 — MD32); a return as store credit (MD33) | #188, #189, #190 |
-| 8 Billing (D89, D90) | 8.D: no route change — the store's customer credits are read at `/medical-pending-credits` (11.I, route 56) and written through 8.D's routes (MD32); 8.B / 8.C: a medical return's refund may be paid by `credit`, leaving a `give` pending credit on the sale (MD33) | #190 |
-| — | The documents: the route catalogue, the OpenAPI document, the overviews and the frontend route map's medical section (M22, M23) | #191 |
+| 11 Medical store | the return's refund needs `payment:delete` (MD23); a return stays on a sale paid in full (MD24); `GET /medical-sales/dues` (MD25); receive takes goods not ordered (MD26); medicines sort by manufacturer and margin, sales by customer (MD27); the sales' Created filter, suppliers' `meta.payable_total` and `order_total`, the order's supplier phone and GSTIN (MD30) | #186–#190 |
+| 8 Billing | `POST` / `PATCH /invoices` and both previews refuse `type=medical` and `medicine_id` lines — `400` reason `sold_through_store` (MD28, M34); the `type` filter keeps `medical` for the sales' invoices | #191 |
+| 7 Patients | 7.C's prescription row and record name their patient: `patient` (`id`, `patient_number`, `contact_id`, `name`) — the pharmacy queue in one read (MD29) | #192 |
+| 11 Medical store (D89) | the store manages its payments (route 51 moved to 11.I, route 53 the CSV — writes through 8.C's routes, MD31) and its credits (supplier credits void and undo, routes 54–55; the customers' credits read at route 56, D90 — MD32); a return as store credit (MD33) | #193, #194, #195 |
+| 8 Billing (D89, D90) | 8.D: no route change — the store's customer credits are read at `/medical-pending-credits` (11.I, route 56) and written through 8.D's routes (MD32); 8.B / 8.C: a medical return's refund may be paid by `credit`, leaving a `give` pending credit on the sale (MD33) | #195 |
+| — | The documents: the route catalogue, the OpenAPI document, the overviews and the frontend route map's medical section (M22, M23) | #196 |

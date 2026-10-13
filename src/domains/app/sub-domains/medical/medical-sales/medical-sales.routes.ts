@@ -134,12 +134,12 @@ export function medicalSalesRoutes(services: {
       '/medical-sales/:medical_sale_id/returns',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PAYMENT_CREATE)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PAYMENT_DELETE)],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Return from patient',
           description:
-            "On a sale paid in full (money still due is a 409 `sale_not_paid`): `items*` (1–50: `invoice_item_id*`, `quantity*` up to what is left of the line — a 400 `items` otherwise), `reason*` (unused, reaction, doctor_changed, wrong_item, damaged), `refund_mode*` (cash, upi, card); optional `note`. The refund is the returned lines' share of their amounts — a credit note on the invoice with its refund payment on the sale's branch, today (a closed day is a 409 `day_closed`). Unused, doctor_changed and wrong_item packs go back into their batch; reaction and damaged are written off. Answers with the sale. Requires payment:create.",
+            "On a sale paid in full (money still due is a 409 `sale_not_paid`): `items*` (1–50: `invoice_item_id*`, `quantity*` up to what is left of the line — a 400 `items` otherwise), `reason*` (unused, reaction, doctor_changed, wrong_item, damaged), `refund_mode*` (cash, upi, card); optional `note`. The refund is the returned lines' share of their amounts — a credit note on the invoice with its refund payment on the sale's branch, today (a closed day is a 409 `day_closed`). Unused, doctor_changed and wrong_item packs go back into their batch; reaction and damaged are written off. Answers with the sale. Requires payment:delete — money given back, as every refund (D83, MD23); without it a 403 `missing_permission`.",
           tags: ['Medical store'],
           params: medicalSalesIdParamsDto,
           body: ReturnMedicalSaleDto,

@@ -29,8 +29,8 @@ store's slice of the payments ledger — never sharing records with clinic stock
 ## Key invariants
 
 - **One code set (MD2):** `medicine:read` · `create` · `update` · `delete` · `export` — every
-  route's gate; money keeps billing's `payment:create` (paying a supplier, a return, a sale's
-  "Paid now").
+  route's gate; money keeps billing's codes — `payment:create` (paying a supplier, a sale's "Paid
+  now"), `payment:delete` for a return's refund (MD23, as every refund since D83).
 - **One store per organization (MD3):** only a sale has a branch — its invoice's.
 - **Whole packs, one balance (MD4):** a medicine's `quantity` is its batches' sum; every writer —
   a batch edited by hand, a received order line, a supplier credit, a sale, its void and undo, a
