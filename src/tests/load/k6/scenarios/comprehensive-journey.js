@@ -13,16 +13,20 @@
  *
  * Coverage every iteration: profile + organization reads, self-service updates, and full
  *   create->read->update->delete lifecycles for roles, api-keys, notification-policies, webhooks.
- * Coverage once per VU (first iteration): the idempotent/heavy flows — create organization,
- *   member invite chain (add member by email -> revoke invitation -> suspend -> remove), data-export.
+ * Coverage once per VU (first iteration, RARE=true): the idempotent/heavy flows — data-export, an
+ *   upload presign, and the member invite chain in an organization of the VU's own (create it ->
+ *   subscribe it to a plan with a second seat -> add a member by email -> change their roles ->
+ *   remove them -> invite again -> revoke the invitation -> delete the organization).
  *
- * Excludes destructive/external: DELETE /users/me, organization delete, Stripe, MFA/WebAuthn, logout.
+ * Excludes destructive/external: DELETE /users/me, deleting any organization but the chain's own,
+ * Stripe (the rig runs with no STRIPE_SECRET_KEY, so the chain's subscription is recorded locally),
+ * MFA/WebAuthn, logout.
  *
  * Run:  VUS=1 DURATION=60s  k6 run comprehensive-journey.js   (1-user baseline)
  *       VUS=100 DURATION=90s k6 run comprehensive-journey.js  (load)
  */
 import http from 'k6/http';
-import { PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
+import { DELETE_REASON_QUERY, PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
 import { idempotencyKey } from '../helpers/idempotency.js';
 import { sleep } from 'k6';
 import { SharedArray } from 'k6/data';
@@ -184,6 +188,9 @@ const OP_NAMES = [
   'patch-organization-settings',
   'mark-all-read',
   'create-org',
+  'list-plans',
+  'create-subscription',
+  'delete-org',
   'step-up',
   'data-export',
   'create-membership',
@@ -361,7 +368,8 @@ function phaseRole(uniq) {
     req('patch-role', 'PATCH', `/tenancy/organization/roles/${roleId}`, {
       name: `Role ${uniq} v2`,
     });
-    req('delete-role', 'DELETE', `/tenancy/organization/roles/${roleId}`);
+    // A role delete states why (launch T12); without `reason` the API answers 400.
+    req('delete-role', 'DELETE', `/tenancy/organization/roles/${roleId}?${DELETE_REASON_QUERY}`);
   }
   think();
   return roleId;
@@ -463,11 +471,80 @@ function phaseRareOnce(uniq) {
   const upId = up.json('data.id');
   if (upId) req('delete-upload', 'DELETE', `/uploads/${upId}`);
 
-  // NOTE: create-organization is intentionally excluded — it has a per-owner cap (MAX_TEAM_ORGANIZATIONS_PER_OWNER)
-  // and no delete here (organization-delete is destructive), so it accumulates unboundedly and isn't a hot path.
+  memberInviteChain(uniq);
+  think();
+}
 
-  // member invite chain: invite a user from ANOTHER organization into this organization, then tear it down.
+/** A new subscription that grants its plan's seats at once (`INCOMPLETE` waits for payment). */
+const ENTITLED_SUBSCRIPTION_STATUSES = ['TRIALING', 'ACTIVE'];
+
+/**
+ * The member invite chain, in an organization of the VU's own.
+ *
+ * A pool organization cannot take another member: the bulk seed fills it to 12 members on a random
+ * plan and billing state, past most seat ceilings (409 `seat_limit_reached`), and inviting into it
+ * would touch real seeded members. So the chain creates a TEAM organization, subscribes it to the
+ * cheapest plan with a second seat — the rig runs with no STRIPE_SECRET_KEY, so the API records the
+ * subscription itself (`TRIALING`) and its seats apply at once — and deletes the organization at the
+ * end, which cancels the subscription. The invitee is another pool user; an invited member cannot be
+ * suspended (only an active one can, launch T10), so the chain changes their roles instead. The
+ * session moves back to the VU's pool organization last.
+ */
+function memberInviteChain(uniq) {
   const invitee = pool[(__VU - 1 + 60) % pool.length];
+  if (!invitee || invitee.email === cred.email) return;
+  const home = cred.organizationPublicId;
+  const label = uniq.toLowerCase();
+
+  const organizationId = req(
+    'create-org',
+    'POST',
+    '/tenancy/organizations',
+    { name: `K6 Journey ${uniq}`, slug: `k6-journey-${label}`.slice(0, 48) },
+    true,
+  ).json('data.id');
+  if (!organizationId) return;
+  if (!switchOrganization(organizationId)) return;
+
+  const plans = req('list-plans', 'GET', '/billing/plans').json('data') || [];
+  const plan = plans
+    .filter((candidate) => candidate.is_active)
+    .sort((a, b) => Number(a.price_monthly ?? 0) - Number(b.price_monthly ?? 0))
+    .find((candidate) => candidate.limits?.seats === null || (candidate.limits?.seats ?? 0) >= 2);
+  const subscription = plan
+    ? req(
+        'create-subscription',
+        'POST',
+        '/billing/subscriptions',
+        { plan_id: plan.id, billing_cycle: 'monthly' },
+        true,
+      ).json('data.status')
+    : null;
+  if (ENTITLED_SUBSCRIPTION_STATUSES.includes(subscription)) {
+    inviteChangeRemoveRevoke(uniq, invitee);
+  } else {
+    // No second seat — an API with a payment provider keeps an unpaid subscription on the Free
+    // ceiling. The member steps cannot run, and that fails the run instead of passing quietly.
+    unexpectedFailures.add(true);
+  }
+
+  // Deleting an organization needs a recent step-up on this session.
+  req('step-up', 'POST', '/auth/step-up', { password: cred.password });
+  req('delete-org', 'DELETE', '/tenancy/organization');
+  if (home) switchOrganization(home);
+}
+
+/** Moves this VU's session to `organizationId`; the switch re-mints the access token. */
+function switchOrganization(organizationId) {
+  const switched = req('switch-org', 'POST', '/auth/switch-to-organization', {
+    organization_id: organizationId,
+  }).json('data.access_token');
+  if (switched) token = switched;
+  return Boolean(switched);
+}
+
+/** Invite -> change roles -> remove -> invite again -> revoke, on a role the chain makes. */
+function inviteChangeRemoveRevoke(uniq, invitee) {
   const roleForMember = req(
     'create-role',
     'POST',
@@ -475,38 +552,48 @@ function phaseRareOnce(uniq) {
     { name: `Member Role ${uniq}` },
     true,
   ).json('data.id');
-  if (invitee && roleForMember && invitee.email !== cred.email) {
-    // pre-clean: drop any leftover membership for this invitee so add-by-email never conflicts (409)
-    const existing = req('list-members', 'GET', '/tenancy/organization/memberships?limit=100');
-    const members = existing.json('data.items') || existing.json('data') || [];
-    const prior = Array.isArray(members)
-      ? members.find(
-          (mm) => mm.user?.email === invitee.email || mm.user_id === invitee.userPublicId,
-        )
-      : null;
-    if (prior?.id) {
-      req('delete-membership', 'DELETE', `/tenancy/organization/memberships/${prior.id}`);
-    }
-    const m = req(
+  if (!roleForMember) return;
+  // The roles a new clinic is provisioned with; Owner and Admin are `is_locked`.
+  const provisioned = req('list-roles', 'GET', '/tenancy/organization/roles').json('data') || [];
+  const nextRole = provisioned.find((role) => !role.is_locked && role.id !== roleForMember);
+  const invite = () =>
+    req(
       'create-membership',
       'POST',
       '/tenancy/organization/memberships',
-      { email: invitee.email, role_id: roleForMember, expires_in_days: 7 },
+      // `role_ids`, the main role first (launch D5).
+      { email: invitee.email, role_ids: [roleForMember], expires_in_days: 7 },
       true,
+    ).json('data.id');
+
+  const membershipId = invite();
+  if (membershipId) {
+    req('list-members', 'GET', '/tenancy/organization/memberships?limit=100');
+    req('patch-membership', 'PATCH', `/tenancy/organization/memberships/${membershipId}`, {
+      role_ids: [nextRole?.id ?? roleForMember],
+    });
+    // A removal states why (launch T12).
+    req(
+      'delete-membership',
+      'DELETE',
+      `/tenancy/organization/memberships/${membershipId}?${DELETE_REASON_QUERY}`,
     );
-    const membershipId = m.json('data.id');
-    const invitationId = m.json('data.invitation.id');
-    if (membershipId) {
-      if (invitationId)
-        req('delete-invitation', 'DELETE', `/tenancy/organization/invitations/${invitationId}`);
-      req('patch-membership', 'PATCH', `/tenancy/organization/memberships/${membershipId}`, {
-        status: 'SUSPENDED',
-      });
-      req('delete-membership', 'DELETE', `/tenancy/organization/memberships/${membershipId}`);
+    // Inviting the same person again brings the removed membership back as an invite; revoking it
+    // removes the invited membership again.
+    const reinvitedId = invite();
+    if (reinvitedId) {
+      req(
+        'delete-invitation',
+        'DELETE',
+        `/tenancy/organization/memberships/${reinvitedId}/invitation`,
+      );
     }
   }
-  if (roleForMember) req('delete-role', 'DELETE', `/tenancy/organization/roles/${roleForMember}`);
-  think();
+  req(
+    'delete-role',
+    'DELETE',
+    `/tenancy/organization/roles/${roleForMember}?${DELETE_REASON_QUERY}`,
+  );
 }
 
 export default function (tokenPool) {

@@ -380,6 +380,7 @@ hand on every `.env.production`:**
 | `LOG_LEVEL`                                                              | `debug` (common in dev)        | `info` (default) / `warn`                 | noisy logs, larger PII surface                                            |
 | `LOG_PRETTY`                                                             | `true` (readable local output) | `false` (default, JSON)                   | no pretty output anyway — every image installs `--prod`, so the `pino-pretty` devDependency is pruned; the logger warns once and stays JSON |
 | `SENTRY_DSN`                                                             | empty                          | real DSN (`SENTRY_ENVIRONMENT=production`) — **required**, boot fails without it | every error, final job failure and alert dropped silently                     |
+| `STRIPE_SECRET_KEY`                                                      | empty (no payment provider)    | the live key (`sk_live_…`)                | subscriptions are recorded locally and never billed — a paid plan's seats for free |
 | `HTTP_SERVER_TIMING_ENABLED`                                            | `true` (journey reads `app;dur=`) | consider `false`                          | exposes server compute time (coarsened to 5 ms in prod, but still a signal) |
 
 The full set of **required** production variables (replicas, retention, JWT,

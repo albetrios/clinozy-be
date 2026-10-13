@@ -131,6 +131,21 @@ describe('k6 coverage policy (#67)', () => {
     expect(Object.values(RECORD_DELETE_REASON)).toContain(reason);
   });
 
+  it('states that reason on every role and membership delete a scenario sends', () => {
+    // Nightly or not: a scenario that drops the reason gets a 400 and leaks the row it meant to remove.
+    const roleOrMembershipDelete =
+      /(?:http\.del\(|'DELETE',)\s*`([^`]*\/(?:roles|memberships)\/\$\{[^}]+\}[^`]*)`/g;
+    const missing = loadScenarioFiles().flatMap(({ name, content }) =>
+      [...content.matchAll(roleOrMembershipDelete)]
+        .map((match) => match[1] ?? '')
+        // Revoking an invitation is its own route and takes no reason.
+        .filter((path) => !(path.endsWith('/invitation') || path.includes('DELETE_REASON_QUERY')))
+        .map((path) => `${name}: ${path}`),
+    );
+
+    expect(missing).toEqual([]);
+  });
+
   it('subscribes the fe-full-surface organizations with no payment provider configured', () => {
     // SUBSCRIBE=true gives each new organization a plan with a second seat, so the member steps run.
     // With no STRIPE_SECRET_KEY the API records that subscription itself (TRIALING); with one, the
