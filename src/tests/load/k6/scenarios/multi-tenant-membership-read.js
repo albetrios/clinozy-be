@@ -142,8 +142,10 @@ export default function (fixtures) {
       actor.token,
       'member-permissions',
     ).json('data');
+    // The effective codes of every role the member holds, main and extra (launch D5).
     requireCheck(
-      Array.isArray(permissions.permissions) && permissions.permissions.includes('membership:read'),
+      Array.isArray(permissions.permission_codes) &&
+        permissions.permission_codes.includes('membership:read'),
       'member permissions reflect seeded role',
     );
     const foreign = fixtures.examples.find(

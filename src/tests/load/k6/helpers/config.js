@@ -16,6 +16,14 @@ export const PUBLIC_AUTH_FORM_HEADERS = {
   'X-Captcha-Bypass': 'true',
 };
 
+/**
+ * The query a `DELETE` of a role or a membership must carry: why it goes (launch T12). The API
+ * answers 400 (`querystring.reason`) without one, so a journey that cannot delete leaves its row
+ * behind — and the next journeys run into the organization's role cap. A load run removes what it
+ * made because it is no longer needed.
+ */
+export const DELETE_REASON_QUERY = 'reason=not_needed';
+
 export const THRESHOLDS = {
   http_req_duration: ['p(95)<500', 'p(99)<1000'],
   http_req_failed: ['rate<0.01'], // Less than 1% failure rate

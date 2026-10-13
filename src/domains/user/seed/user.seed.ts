@@ -3,7 +3,7 @@
  * Domain-owned; used by scripts/seed orchestration.
  */
 import { createHash } from 'node:crypto';
-import { sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { users } from '@/domains/user/user.schema.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
@@ -65,6 +65,16 @@ export async function seedUser(payload: SeedUserPayload) {
     })
     .returning();
   return row ?? null;
+}
+
+/** The id of the live user with this email, or `null` — a lookup that leaves the row untouched. */
+export async function findSeededUserId(email: string): Promise<number | null> {
+  const [row] = await getRequestDatabase()
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.email, email), isNull(users.deleted_at)))
+    .limit(1);
+  return row?.id ?? null;
 }
 
 /**

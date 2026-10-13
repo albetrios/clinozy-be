@@ -54,8 +54,9 @@ async function recordAdminUserAudit({
 }
 
 /**
- * Keeps an analytics consent decision as its own audit row — the decision, the policy version it
- * answered and when: the proof of consent (launch D85). Nothing when the body carried no decision.
+ * Keeps an analytics consent receipt — an answer given while signed in — as its own audit row: the
+ * decision, the policy version it answered and when, the proof of consent (launch D85,
+ * change-cookie-consent CC2). Nothing when the body carried no decision.
  */
 async function recordAnalyticsConsentAudit({
   request,

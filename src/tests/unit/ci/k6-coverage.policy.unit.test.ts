@@ -7,6 +7,7 @@ import {
   loadRoutes,
   loadScenarioFiles,
 } from '@tooling/ci/check-load-coverage.mjs';
+import { RECORD_DELETE_REASON } from '@/shared/constants/record-fields.constants.js';
 
 const workflowPath = join(process.cwd(), '.github/workflows/scheduled-k6-load-slo.yml');
 const configPath = join(process.cwd(), 'src/tests/load/k6/helpers/config.js');
@@ -118,6 +119,45 @@ describe('k6 coverage policy (#67)', () => {
     );
     // A literal elsewhere in the file does not count without a variable-driven tag.
     expect(emitsTag("checkOk(response, 'list-organizations');", 'list-organizations')).toBe(false);
+  });
+
+  it('sends a delete reason the API accepts on role and membership deletes', () => {
+    // A role or membership DELETE states why (launch T12) and answers 400 without one. The role
+    // journeys sent none, so every delete failed, roles piled up to the organization's cap, and the
+    // gate's idempotency storm went red. The k6 helper must stay one of the API's reasons.
+    const config = readFileSync(configPath, 'utf8');
+    const reason = /DELETE_REASON_QUERY = 'reason=([a-z_]+)'/.exec(config)?.[1];
+
+    expect(Object.values(RECORD_DELETE_REASON)).toContain(reason);
+  });
+
+  it('states that reason on every role and membership delete a scenario sends', () => {
+    // Nightly or not: a scenario that drops the reason gets a 400 and leaks the row it meant to remove.
+    const roleOrMembershipDelete =
+      /(?:http\.del\(|'DELETE',)\s*`([^`]*\/(?:roles|memberships)\/\$\{[^}]+\}[^`]*)`/g;
+    const missing = loadScenarioFiles().flatMap(({ name, content }) =>
+      [...content.matchAll(roleOrMembershipDelete)]
+        .map((match) => match[1] ?? '')
+        // Revoking an invitation is its own route and takes no reason.
+        .filter((path) => !(path.endsWith('/invitation') || path.includes('DELETE_REASON_QUERY')))
+        .map((path) => `${name}: ${path}`),
+    );
+
+    expect(missing).toEqual([]);
+  });
+
+  it('subscribes the fe-full-surface organizations with no payment provider configured', () => {
+    // SUBSCRIBE=true gives each new organization a plan with a second seat, so the member steps run.
+    // With no STRIPE_SECRET_KEY the API records that subscription itself (TRIALING); with one, the
+    // subscription waits for payment and keeps the Free plan's single seat.
+    const workflow = readFileSync(workflowPath, 'utf8');
+    const feStep = workflow.slice(
+      workflow.indexOf('k6 fe-full-surface'),
+      workflow.indexOf('Upload k6 summaries'),
+    );
+
+    expect(feStep).toContain("SUBSCRIBE: 'true'");
+    expect(workflow).not.toContain('STRIPE_SECRET_KEY:');
   });
 
   it('never load-tests fewer routes nightly than the recorded budget (a ratchet)', () => {

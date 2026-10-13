@@ -29,8 +29,8 @@ pnpm load:journey                 # comprehensive journey: sets up every prerequ
 ## Fixtures and helpers
 
 - Scenarios under `k6/scenarios/` define RPS / VU / duration patterns and their thresholds.
-- `k6/helpers/` holds the shared helpers (config, auth bootstrap, data generators, idempotency keys,
-  the credential pool).
+- `k6/helpers/` holds the shared helpers (config — base URL, thresholds and the `reason` a role or
+  membership delete carries — auth bootstrap, data generators, idempotency keys, the credential pool).
 
 ## Dependencies
 

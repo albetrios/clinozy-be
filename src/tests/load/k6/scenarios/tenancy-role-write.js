@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
-import { API_PREFIX, THRESHOLDS, SCENARIOS } from '../helpers/config.js';
+import { API_PREFIX, DELETE_REASON_QUERY, THRESHOLDS, SCENARIOS } from '../helpers/config.js';
 import { authHeaders } from '../helpers/auth.js';
 import { idempotencyKey } from '../helpers/idempotency.js';
 import { requireData } from '../helpers/checks.js';
@@ -114,8 +114,10 @@ export function tenancyRoleWriteOps() {
           JSON.stringify(codes),
       'exact permission replacement persisted',
     );
+    // A role delete states why (launch T12); without `reason` the API answers 400.
     requireCheck(
-      http.del(path, null, { headers, tags: { name: 'delete-role' } }).status === 204,
+      http.del(`${path}?${DELETE_REASON_QUERY}`, null, { headers, tags: { name: 'delete-role' } })
+        .status === 204,
       'delete-role: exact 204',
     );
     deleted = true;
@@ -129,8 +131,10 @@ export function tenancyRoleWriteOps() {
   } finally {
     if (roleId && !deleted) {
       requireCheck(
-        http.del(`${base}/${roleId}`, null, { headers, tags: { name: 'cleanup-role' } }).status ===
-          204,
+        http.del(`${base}/${roleId}?${DELETE_REASON_QUERY}`, null, {
+          headers,
+          tags: { name: 'cleanup-role' },
+        }).status === 204,
         'failed journey cleanup',
       );
     }

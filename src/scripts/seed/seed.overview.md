@@ -14,6 +14,14 @@ All three share the contract and the per-domain seeders:
 - **`pnpm db:seed:full`** (`full.ts`) — a small fixed demo set plus the cross-domain flows that exercise the API (add user to organization, send invite).
 - **`pnpm db:seed:bulk`** (`bulk.ts`) — scaled volume via profiles, for load/pagination testing and full demo tenants.
 
+**`pnpm db:seed:demo-clinic`** (`demo-clinic.ts`, run by `db:seed:full` too) — one real-looking skin & hair clinic for working in the app. It has two branches, five staff who can sign in, 24 patients, six weeks of visits, notes, treatments, bills and payments, enquiries with their WhatsApp threads, and today's floor in every lane.
+
+- `demo-clinic.plan.ts` builds the story as data. It is a pure function of a seeded `fakerEN_IN` (`SEED`), today and the clinic's clock, and is unit-tested.
+- `demo-clinic.catalog.ts` holds what Faker cannot supply: clinic names, real city areas and PIN codes, the price list, and a dermatologist's wording.
+- The script writes the plan through each sub-domain's `seed/` helpers, then runs the clinic's task rules once, so the open rule tasks are the app's own.
+- Everything looks real except the emails, which stay on `example.com`. `demo@example.com` joins as an Admin.
+- A clinic already seeded under the plan's slug is kept. `--fresh` deletes it and seeds it again around today (local databases only, `assertBulkSeedAllowed`).
+
 Alongside them, **`pnpm db:seed:stripe-catalog`** (`stripe-catalog.ts`, the sync in `stripe-catalog-sync.ts`) prices the paid plans in a Stripe sandbox: their product and monthly and yearly prices, found again by lookup key on a re-run, with the ids recorded on the plans. Test-mode keys only; Free gets no price.
 
 ## Contract — `seed-contract.ts`
@@ -47,7 +55,9 @@ Dependency order: `user` → `tenancy` → `billing` / `notify` / `upload` / `au
 
 ```bash
 pnpm db:seed                              # reference only
-pnpm db:seed:full                         # fixed demo set
+pnpm db:seed:full                         # fixed demo set (+ the demo clinic)
+pnpm db:seed:demo-clinic                  # the demo clinic alone (kept if already seeded)
+pnpm db:seed:demo-clinic --fresh          # delete and re-seed it around today (local only)
 pnpm db:seed:bulk                         # demo profile (default)
 BULK_PROFILE=load SCALE=5 pnpm db:seed:bulk
 BULK_PROFILE=edge BULK_ORGS=200 pnpm db:seed:bulk
@@ -57,7 +67,8 @@ pnpm db:seed:stripe-catalog --dry-run     # say what it would create; write noth
 
 ## Failure modes
 
-- **Hosted / production `DATABASE_URL`** → `assertBulkSeedAllowed` throws before any write (override only with `ALLOW_BULK_SEED=1`).
+- **Hosted / production `DATABASE_URL`** → `assertBulkSeedAllowed` throws before any write (override only with `ALLOW_BULK_SEED=1`). The demo clinic's `--fresh` asks it before deleting the clinic.
+- **Demo clinic records fail mid-way** → they roll back together (one transaction in the clinic's context). The logins, organization and memberships written before them stay, and `--fresh` replaces them.
 - **Counts exceed `HARD_CAP`** → fatal config error pointing at the out-of-scope COPY path.
 - **Unknown `BULK_PROFILE` / invalid integer env / dependency cycle in `dependsOn`** → throws during config resolution or `orderModules`.
 - **Empty parent pool** (e.g. tenancy runs before user) → the seeder warns and returns early rather than writing orphaned rows.
