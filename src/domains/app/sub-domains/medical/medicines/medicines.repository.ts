@@ -22,6 +22,15 @@ function nearestExpirySql(organizationId: number): SQL {
   return sql`(select min(${medicine_batches.expiry_month}) from ${medicine_batches} where ${medicine_batches.medicine_id} = ${medicines.id} and ${medicine_batches.quantity} > 0 and ${medicine_batches.expiry_month} >= ${thisMonthSql(organizationId)})`;
 }
 
+/** MD27: the medicine's manufacturer's name (a quick medicine without one has none). */
+const MANUFACTURER_NAME = sql`(select ${manufacturers.name} from ${manufacturers} where ${manufacturers.id} = ${medicines.manufacturer_id})`;
+
+/** MD12: the lowest price of a live supplier — the row's `best_rate`. */
+const BEST_RATE = sql`(select min(${medicine_supplier_prices.rate}) from ${medicine_supplier_prices} join ${suppliers} on ${suppliers.id} = ${medicine_supplier_prices.supplier_id} where ${medicine_supplier_prices.medicine_id} = ${medicines.id} and ${suppliers.deleted_at} is null)`;
+
+/** MD12, MD27: (MRP − best rate) ÷ MRP, in percent to the paisa — the row's `margin_percent`. */
+const MARGIN_PERCENT = sql`(case when ${medicines.mrp} > 0 then round((${medicines.mrp} - ${BEST_RATE}) / ${medicines.mrp} * 100, 2) end)`;
+
 /** MD12, MD14: a live batch with stock whose month ends within `days` of today (and has not ended). */
 function expiringWithinSql(organizationId: number, days: number): SQL {
   return sql`exists (select 1 from ${medicine_batches} where ${medicine_batches.medicine_id} = ${medicines.id} and ${medicine_batches.quantity} > 0 and ${medicine_batches.expiry_month} >= ${thisMonthSql(organizationId)} and (${medicine_batches.expiry_month} + interval '1 month' - interval '1 day')::date <= ${organizationTodaySql(organizationId)} + ${days}::int)`;
@@ -98,7 +107,8 @@ const BATCH_COLUMNS = {
  *
  * @remarks
  * - **Algorithm:** `q` on the name and composition, or the number (`#458`); sorts `name` (A–Z,
- *   the default), `medicine_number`, `quantity`, `mrp`, `nearest_expiry` (none last) and
+ *   the default), `medicine_number`, `quantity`, `mrp`, `nearest_expiry` (none last),
+ *   `manufacturer_name` (A–Z, none last) and `margin_percent` (highest first, none last — MD27) and
  *   `created_at`; derived filters `manufacturer_ids`, `stock_level`, `expiring_within_days` and
  *   `supplier_id` (a price from them). Stock moves in one guarded statement per batch and its
  *   medicine, never below 0 (MD4); a sale reads the unexpired batches locked, earliest expiry
@@ -124,6 +134,24 @@ export class MedicinesRepository extends BaseRecordRepository {
             defaultOrder: 'asc',
           }),
           defaultOrder: 'asc',
+        },
+        manufacturer_name: {
+          keys: nullsLastSortKeys({
+            value: () => MANUFACTURER_NAME,
+            sqlType: 'text',
+            empty: sql`''`,
+            defaultOrder: 'asc',
+          }),
+          defaultOrder: 'asc',
+        },
+        margin_percent: {
+          keys: nullsLastSortKeys({
+            value: () => MARGIN_PERCENT,
+            sqlType: 'numeric',
+            empty: sql`0::numeric`,
+            defaultOrder: 'desc',
+          }),
+          defaultOrder: 'desc',
         },
       },
       derivedFilters: {

@@ -92,6 +92,14 @@ export const appRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapUncountedPaginated(schemas.appMembershipSchema, [schemas.appMembershipExample]),
     example: null,
   },
+  // ── Medical store: who owes on sales (MD25 — one answer, no cursor) ──
+  'GET /api/v1/app/medical-sales/dues': {
+    statusCode: 200,
+    schema: wrapSuccess({ type: 'array', items: schemas.medicalSaleDuesSchema }, [
+      schemas.medicalSaleDuesExample,
+    ]),
+    example: null,
+  },
   // ── Roles (the role directory, launch D81 (4)) ──
   'GET /api/v1/app/roles': {
     statusCode: 200,

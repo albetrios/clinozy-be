@@ -343,6 +343,7 @@
   "GET /api/v1/app/medicines/exports": "both",
   "GET /api/v1/app/medical-purchase-orders/exports": "both",
   "GET /api/v1/app/medical-sales/exports": "both",
+  "GET /api/v1/app/medical-sales/dues": "both",
   "GET /api/v1/app/stock-items/exports": "both",
   "GET /api/v1/app/stock-purchases/exports": "both",
   "GET /api/v1/app/tasks/exports": "both",

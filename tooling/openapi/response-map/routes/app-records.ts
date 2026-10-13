@@ -1019,7 +1019,12 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
   },
   'GET /api/v1/app/suppliers': {
     statusCode: 200,
-    schema: wrapPaginated(schemas.suppliersRecordSchema, [schemas.suppliersRecordExample]),
+    schema: wrapPaginated(schemas.suppliersRecordSchema, [schemas.suppliersRecordExample], {
+      payable_total: {
+        type: 'number',
+        description: 'What is owed to every supplier the filters match, over every page (MD30 (b))',
+      },
+    }),
     example: null,
   },
   'POST /api/v1/app/suppliers': {

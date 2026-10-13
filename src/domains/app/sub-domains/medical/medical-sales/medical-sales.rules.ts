@@ -7,6 +7,7 @@ import {
 } from '@/domains/app/base-record.repository.js';
 import type {
   BaseRecordActionInput,
+  BaseRecordCollectionInput,
   BaseRecordRules,
   BaseRecordWriteContext,
 } from '@/domains/app/base-record.types.js';
@@ -31,12 +32,16 @@ import { PatientPrescriptionsRepository } from '@/domains/app/sub-domains/patien
 import { organizationToday } from '@/domains/app/sub-domains/patients/patients.rules.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { paiseOf, toAmount } from '@/shared/utils/validation/record-fields.util.js';
+import { paiseOf, splitRecordIds, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import {
   MEDICAL_SALE_RESTOCKED_REASON_VALUES,
   MEDICAL_SALE_STATUS,
 } from './medical-sales.constants.js';
-import { type CreateMedicalSaleInput, ReturnMedicalSaleDto } from './medical-sales.dto.js';
+import {
+  type CreateMedicalSaleInput,
+  ReturnMedicalSaleDto,
+  medicalSaleDuesQueryDto,
+} from './medical-sales.dto.js';
 import type { MedicalSaleLineRow, MedicalSalesRepository } from './medical-sales.repository.js';
 
 const contactsRepository = new ContactsRepository();
@@ -426,6 +431,44 @@ async function decorateSales(options: {
 }
 
 /**
+ * MD25 — "Send payment reminders": who owes on live sales, one row per buyer (their contact and
+ * patient file, the total due, the sales still due oldest first), largest due first.
+ */
+async function listDues({
+  repository,
+  collection,
+}: {
+  repository: MedicalSalesRepository;
+  collection: BaseRecordCollectionInput;
+}): Promise<unknown> {
+  const query = parseWithSchema({ schema: medicalSaleDuesQueryDto, data: collection.input });
+  const rows = await repository.findDues({
+    organizationId: collection.context.organizationId,
+    q: query.q,
+    createdFrom: query.created_from === undefined ? undefined : new Date(query.created_from),
+    createdTo: query.created_to === undefined ? undefined : new Date(query.created_to),
+    branchScope: await collection.branchScope(
+      query.branch_id === undefined ? undefined : splitRecordIds(query.branch_id),
+    ),
+    limit: query.limit,
+  });
+  const outputs: Record<string, unknown>[] = rows.map((row) => ({
+    contact: { id: row.contact_id },
+    due_total: toAmount(row.due_total) ?? 0,
+    sale_count: row.sale_count,
+    sales: row.sales.map((sale) => ({
+      id: sale.id,
+      sale_number: sale.sale_number,
+      due_amount: toAmount(String(sale.due_amount)) ?? 0,
+      sold_at: new Date(sale.sold_at).toISOString(),
+    })),
+    oldest_sold_at: new Date(row.oldest_sold_at).toISOString(),
+  }));
+  await attachBilledContacts(outputs);
+  return outputs;
+}
+
+/**
  * The medical sale rules (launch ROUTE #153, routes-final 11.H, MD19–MD21): a sale through the
  * invoice ledger with its stock, the void and its undo, the return, and what a page reads.
  *
@@ -437,6 +480,7 @@ async function decorateSales(options: {
  *   invoice; the undo takes the stock again and restores the invoice. The `returns` action refunds
  *   the returned lines' share through a credit note and restocks or writes them off (MD21). Every
  *   read adds the buyer, the invoice, its lines and team, the returns, the margin and the status.
+ *   The `dues` view groups the live sales still due by buyer, largest first (MD25).
  * - **Failure modes:** `ValidationError` on `items`, `member_ids`, `patient_prescription_id`;
  *   `ConflictError` `not_enough_stock`, `prescription_filled`, `day_closed`, `more_than_due`,
  *   `sale_has_payments`, `sale_has_returns`, `sale_not_paid`, `more_than_paid`.
@@ -452,5 +496,6 @@ export function createMedicalSalesRules(repository: MedicalSalesRepository): Bas
       moveSaleStock({ repository, sale: deleted, sign: -1, context }),
     actions: { returns: returnSale },
     decorate: (outputs, context) => decorateSales({ repository, outputs, context }),
+    collectionViews: { dues: (collection) => listDues({ repository, collection }) },
   };
 }

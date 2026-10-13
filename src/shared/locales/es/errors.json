@@ -165,6 +165,8 @@
     "medicalPurchaseOrderDateInFuture": "La fecha del pedido no puede ser posterior a hoy",
     "medicalPurchaseOrderItemNotOnOrder": "{{id}} no es una línea de este pedido",
     "medicalPurchaseOrderNothingReceived": "Recibe al menos una línea",
+    "medicalPurchaseOrderTooManyLines": "Un pedido admite como máximo {{max}} líneas",
+    "invoiceSoldThroughStore": "Los medicamentos se venden a través de las ventas de la farmacia (POST /app/medical-sales)",
     "medicalRepNextVisitWindow": "Elige la próxima visita entre hoy y {{max}} días después",
     "medicalRepVisitInFuture": "La fecha de la visita no puede ser posterior a hoy",
     "medicalRepVisitNextWindow": "La próxima visita va después de esta, como máximo {{max}} días después",

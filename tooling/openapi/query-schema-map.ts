@@ -76,6 +76,7 @@ import {
 } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.dto.js';
 import {
   listMedicalSalesQueryDto as appMedicalSalesListQueryDto,
+  medicalSaleDuesQueryDto as appMedicalSaleDuesQueryDto,
   voidMedicalSaleQueryDto as appVoidMedicalSaleQueryDto,
 } from '@/domains/app/sub-domains/medical/medical-sales/medical-sales.dto.js';
 import { listSupplierCreditsQueryDto as appSupplierCreditsListQueryDto } from '@/domains/app/sub-domains/medical/suppliers/supplier-credits/supplier-credits.dto.js';
@@ -168,6 +169,7 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/medicines/exports': appMedicinesListQueryDto,
   'GET /api/v1/app/medical-purchase-orders/exports': appMedicalPurchaseOrdersListQueryDto,
   'GET /api/v1/app/medical-sales/exports': appMedicalSalesListQueryDto,
+  'GET /api/v1/app/medical-sales/dues': appMedicalSaleDuesQueryDto,
   'GET /api/v1/app/stock-items/exports': appStockItemsListQueryDto,
   'GET /api/v1/app/stock-purchases/exports': appStockPurchasesListQueryDto,
   'GET /api/v1/app/tasks/exports': appTasksListQueryDto,

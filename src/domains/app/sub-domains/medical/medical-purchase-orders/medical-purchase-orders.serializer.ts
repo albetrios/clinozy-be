@@ -5,7 +5,7 @@ import type { MedicalPurchaseOrderOutput } from './medical-purchase-orders.types
 
 /**
  * Shapes an `app.medical_purchase_orders` row as the API returns it (routes-final 11.E.6). The
- * supplier's name and the lines are the rules' `decorate`.
+ * supplier's name, phone and GSTIN and the lines are the rules' `decorate`.
  */
 export function serializeMedicalPurchaseOrder({
   row,
@@ -17,7 +17,12 @@ export function serializeMedicalPurchaseOrder({
   return {
     id: row.public_id,
     purchase_order_number: row.purchase_order_number as number,
-    supplier: { id: references.publicIdOf({ field: 'supplier_id', row }) ?? '', name: '' },
+    supplier: {
+      id: references.publicIdOf({ field: 'supplier_id', row }) ?? '',
+      name: '',
+      phone: null,
+      gst_number: null,
+    },
     supplier_bill_number: (row.supplier_bill_number as string | null) ?? null,
     order_date: row.order_date as string,
     stage: row.stage as string,

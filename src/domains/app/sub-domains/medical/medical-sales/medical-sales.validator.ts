@@ -8,6 +8,11 @@ import {
 } from './medical-sales.dto.js';
 import { deletedRowsForStatuses } from './medical-sales.constants.js';
 
+/** An ISO instant of the query as a `Date`, or undefined when absent. */
+function readInstant(value: string | undefined): Date | undefined {
+  return value === undefined ? undefined : new Date(value);
+}
+
 /** Parses a sale body; throws `ValidationError` naming each bad field. */
 export function validateCreateMedicalSale(data: unknown): CreateMedicalSaleInput {
   return parseWithSchema({ schema: CreateMedicalSaleDto, data });
@@ -33,6 +38,9 @@ export function validateListMedicalSalesQuery(data: unknown): BaseRecordListInpu
       patient_prescription_id: query.patient_prescription_id,
     },
     branchPublicIds: query.branch_id === undefined ? undefined : splitRecordIds(query.branch_id),
+    ranges: {
+      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+    },
     derived: { status: statuses, medicine_id: query.medicine_id },
     deletedRows: deletedRowsForStatuses(statuses),
   };

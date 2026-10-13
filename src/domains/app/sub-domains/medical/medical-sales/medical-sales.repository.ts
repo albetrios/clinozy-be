@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, sql, type SQL } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { BaseRecordRepository, type BaseRecordRow } from '@/domains/app/base-record.repository.js';
@@ -26,6 +26,12 @@ const HAS_RETURN = sql`exists (select 1 from ${medical_sale_returns} where ${med
 
 /** What is still due on a sale's invoice. */
 const INVOICE_DUE = sql`(select ${invoices.due_amount} from ${invoices} where ${invoices.id} = ${medical_sales.invoice_id})`;
+
+/** The buyer's first name (the contacts' name sort, MD27). */
+const CONTACT_FIRST_NAME = sql`(select ${contacts.first_name} from ${contacts} where ${contacts.id} = ${medical_sales.contact_id})`;
+
+/** The buyer's last name, or empty — a contact without one sorts as the contacts' index does. */
+const CONTACT_LAST_NAME = sql`(select coalesce(${contacts.last_name}, '') from ${contacts} where ${contacts.id} = ${medical_sales.contact_id})`;
 
 /** MD21: each status as a condition — voided (deleted), returned, then paid or unpaid. */
 function statusSql(status: string): SQL {
@@ -68,6 +74,23 @@ export interface MedicalSaleInvoiceRow {
   remark: string | null;
 }
 
+/** One sale still due, inside a buyer's dues row (MD25). */
+export interface MedicalSaleDueRow {
+  id: string;
+  sale_number: number;
+  due_amount: number | string;
+  sold_at: string;
+}
+
+/** One buyer who owes on live sales — "Send payment reminders" (MD25, 11.H.6). */
+export interface MedicalSaleDuesRow {
+  contact_id: string;
+  due_total: string;
+  sale_count: number;
+  oldest_sold_at: Date | string;
+  sales: MedicalSaleDueRow[];
+}
+
 /** A return as a page reads it (11.H.6). */
 export interface MedicalSaleReturnRow {
   medical_sale_id: number;
@@ -97,7 +120,8 @@ export interface MedicalSaleReturnItemRow {
  *
  * @remarks
  * - **Algorithm:** `q` on the number (`S-983`), the buyer's names and numbers and the medicines'
- *   names; sorts `sold_at` (newest first, the default), `sale_number` and `total`; derived filters
+ *   names; sorts `sold_at` (newest first, the default), `sale_number`, `total` and `contact_name`
+ *   (the buyer's first then last name, MD27); derived filters
  *   `status` (several — voided, returned, paid, unpaid) and `medicine_id`. A page reads each
  *   sale's invoice, its lines (with each batch's expiry and purchase rate and what came back), its
  *   team and its returns in one query each.
@@ -126,6 +150,13 @@ export class MedicalSalesRepository extends BaseRecordRepository {
             },
           ],
           defaultOrder: 'desc',
+        },
+        contact_name: {
+          keys: [
+            { value: () => CONTACT_FIRST_NAME, sqlType: 'text' },
+            { value: () => CONTACT_LAST_NAME, sqlType: 'text' },
+          ],
+          defaultOrder: 'asc',
         },
       },
       derivedFilters: {
@@ -268,6 +299,54 @@ export class MedicalSalesRepository extends BaseRecordRepository {
           inArray(medical_sales.public_id, [...options.publicIds]),
         ),
       )) as BaseRecordRow[];
+  }
+
+  /**
+   * MD25: who owes on sales — one row per buyer with unpaid sales (live, never returned, still
+   * due — the Sales tab's Unpaid) on the branches in scope, matching `q` and the created range, largest due first (then the contact), at most
+   * `limit`; each row's sales oldest first.
+   */
+  async findDues(options: {
+    organizationId: number;
+    q: string | undefined;
+    createdFrom: Date | undefined;
+    createdTo: Date | undefined;
+    branchScope: { column: string; ids: readonly number[] } | undefined;
+    limit: number;
+  }): Promise<MedicalSaleDuesRow[]> {
+    if (options.branchScope?.ids.length === 0) return [];
+    const dueTotal = sql`sum(${invoices.due_amount})`;
+    const conditions = [
+      eq(medical_sales.organization_id, options.organizationId),
+      // The Sales tab's Unpaid: live, never returned, money still due (a refund lowers the paid
+      // amount, so a returned sale's invoice reads due again — it owes nothing).
+      statusSql(MEDICAL_SALE_STATUS.UNPAID),
+      this.searchCondition(options.q),
+      options.createdFrom === undefined
+        ? undefined
+        : gte(medical_sales.created_at, options.createdFrom),
+      options.createdTo === undefined ? undefined : lt(medical_sales.created_at, options.createdTo),
+      options.branchScope === undefined
+        ? undefined
+        : inArray(medical_sales.branch_id, [...options.branchScope.ids]),
+    ];
+    return (await getRequestDatabase()
+      .select({
+        contact_id: contacts.public_id,
+        due_total: sql<string>`${dueTotal}`,
+        sale_count: sql<number>`count(*)::int`,
+        oldest_sold_at: sql<Date>`min(${medical_sales.sold_at})`,
+        sales: sql<
+          MedicalSaleDueRow[]
+        >`json_agg(json_build_object('id', ${medical_sales.public_id}, 'sale_number', ${medical_sales.sale_number}, 'due_amount', ${invoices.due_amount}, 'sold_at', ${medical_sales.sold_at}) order by ${medical_sales.sold_at}, ${medical_sales.id})`,
+      })
+      .from(medical_sales)
+      .innerJoin(invoices, eq(invoices.id, medical_sales.invoice_id))
+      .innerJoin(contacts, eq(contacts.id, medical_sales.contact_id))
+      .where(and(...conditions))
+      .groupBy(contacts.id, contacts.public_id)
+      .orderBy(desc(dueTotal), asc(contacts.id))
+      .limit(options.limit)) as MedicalSaleDuesRow[];
   }
 
   /** MD20: whether a sale has a return. */

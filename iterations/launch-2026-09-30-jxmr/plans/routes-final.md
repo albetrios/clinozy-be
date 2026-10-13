@@ -7720,7 +7720,7 @@ As 11.5.
 
 **Payment** (route 51): as 8.C.6 — **moved to 11.I (rev 2)**.
 
-**Medical sale dues** (route 52, **rev 2**): `contact` (`id`, `name`, `primary_phone`), `patient_id` (the contact's file, or null), `due_total`, `sale_count`, `sales` (`id`, `sale_number`, `due_amount`, `sold_at` — oldest first), `oldest_sold_at`. One row per contact with live (not voided) sales still due on the branches you can see; largest `due_total` first.
+**Medical sale dues** (route 52, **rev 2**): `contact` (`id`, `name`, `primary_phone`), `patient_id` (the contact's file, or null), `due_total`, `sale_count`, `sales` (`id`, `sale_number`, `due_amount`, `sold_at` — oldest first), `oldest_sold_at`. One row per contact with **unpaid** sales — the Sales tab's Unpaid: live, never returned, money still due (clarified at ROUTE #187: a refund lowers the invoice's paid amount, so a returned sale's invoice reads due again, yet it owes nothing) — on the branches you can see; largest `due_total` first.
 
 #### 11.H.7 Routes (44–51)
 
@@ -7747,7 +7747,7 @@ As 11.5.
 | 48 | `reason*` = `billed_by_mistake` \| `wrong_items` \| `customer_changed_mind` \| `other`, `note` (required for `other`) | — | 204 |
 | 50 | — | `items*` (1–50), `reason*`, `refund_mode*` (`cash` · `upi` · `card`, **rev 2** `credit` — store credit, MD33); optional: `note` | Medical sale |
 | 51 | as 11.I.8 **(moved, rev 2)** | — | Payment[] |
-| 52 | **(rev 2)** `q` (the contact's name or phone, a sale number), `created_from` / `created_to` (the sales'), `branch_id` (several), `limit`, `after`; sorted by `due_total`, largest first | — | Medical sale dues[] |
+| 52 | **(rev 2)** `q` (the contact's name or phone, a sale number), `created_from` / `created_to` (the sales'), `branch_id` (several), `limit` (1–100, default 25) — one answer, no cursor (a collection read, as the appointments' day counts; built #187); sorted by `due_total`, largest first | — | Medical sale dues[] |
 
 #### 11.H.9 Errors
 

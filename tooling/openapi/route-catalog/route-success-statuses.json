@@ -343,6 +343,7 @@
   "GET /api/v1/app/medicines/exports": 200,
   "GET /api/v1/app/medical-purchase-orders/exports": 200,
   "GET /api/v1/app/medical-sales/exports": 200,
+  "GET /api/v1/app/medical-sales/dues": 200,
   "GET /api/v1/app/stock-items/exports": 200,
   "GET /api/v1/app/stock-purchases/exports": 200,
   "GET /api/v1/app/tasks/exports": 200,

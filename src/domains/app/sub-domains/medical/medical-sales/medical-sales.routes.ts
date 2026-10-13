@@ -14,6 +14,7 @@ import {
   CreateMedicalSaleDto,
   ReturnMedicalSaleDto,
   listMedicalSalesQueryDto,
+  medicalSaleDuesQueryDto,
   medicalSalesIdParamsDto,
   voidMedicalSaleQueryDto,
 } from './medical-sales.dto.js';
@@ -23,9 +24,9 @@ type MedicalSaleParams = { Params: { medical_sale_id: string } };
 
 /** What the list and its CSV say about the query. */
 const LIST_QUERY_TEXT =
-  "`q` searches the number (`S-983`), the buyer's name or phone and the medicines' names; filters `status` (unpaid, paid, returned, voided) and `branch_id` (several, comma-separated), `contact_id`, `medicine_id`, `patient_prescription_id`; sort `sold_at` (default, newest first), `sale_number` or `total`. Another branch's sales only with branch:read.";
+  "`q` searches the number (`S-983`), the buyer's name or phone and the medicines' names; filters `status` (unpaid, paid, returned, voided) and `branch_id` (several, comma-separated), `contact_id`, `medicine_id`, `patient_prescription_id`, the created range (`created_from`, `created_to` — the latter exclusive); sort `sold_at` (default, newest first), `sale_number`, `total` or `contact_name` (the buyer's name, A–Z). Another branch's sales only with branch:read.";
 
-/** Registers the `medical-sales` routes (prefix `/api/v1/app`) — routes-final 11.H, routes 44–51. */
+/** Registers the `medical-sales` routes (prefix `/api/v1/app`) — routes-final 11.H, routes 44–52. */
 export function medicalSalesRoutes(services: {
   medicalSalesService: MedicalSalesService;
   paymentsService: PaymentsService;
@@ -64,6 +65,22 @@ export function medicalSalesRoutes(services: {
         },
       },
       controller.export,
+    );
+    zodApplication.get(
+      '/medical-sales/dues',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.MEDICINE_READ)],
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        schema: {
+          summary: 'List who owes on medical sales',
+          description:
+            "\"Send payment reminders\": one row per buyer with unpaid sales (the Sales tab's Unpaid: live, never returned, money still due — a returned sale owes nothing) — the `contact` (`id`, `name`, `primary_phone`), its `patient_id`, `due_total`, `sale_count` and those `sales` (`id`, `sale_number`, `due_amount`, `sold_at`, oldest first), `oldest_sold_at` — largest `due_total` first. `q` searches the buyer's name or phone (or a sale number, `S-983`); the created range (`created_from`, `created_to` — the latter exclusive) and `branch_id` (several, comma-separated) narrow it as the Sales tab does; `limit` 1–100 (default 25) — one answer, no cursor. The app sends nothing itself — the reminders go out from the user's own phone. Another branch's sales only with branch:read. Requires medicine:read.",
+          tags: ['Medical store'],
+          querystring: medicalSaleDuesQueryDto,
+        },
+      },
+      controller.collectionView('dues'),
     );
     zodApplication.post(
       '/medical-sales',

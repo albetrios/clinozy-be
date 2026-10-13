@@ -142,19 +142,42 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
     organizationId: number;
     lines: readonly MedicalPurchaseOrderItemValues[];
   }): Promise<void> {
-    const database = getRequestDatabase();
-    await database
+    await getRequestDatabase()
       .delete(medical_purchase_order_items)
       .where(eq(medical_purchase_order_items.medical_purchase_order_id, options.orderId));
-    if (options.lines.length === 0) return;
-    await database.insert(medical_purchase_order_items).values(
-      options.lines.map((line) => ({
-        ...line,
-        medical_purchase_order_id: options.orderId,
-        organization_id: options.organizationId,
-        public_id: generatePublicId('medicalPurchaseOrderItem'),
-      })),
-    );
+    await this.insertItems(options);
+  }
+
+  /**
+   * Adds lines to an order — a save's whole list, or receive's goods not ordered (MD26) — and
+   * answers them as a receive reads its lines.
+   */
+  async insertItems(options: {
+    orderId: number;
+    organizationId: number;
+    lines: readonly MedicalPurchaseOrderItemValues[];
+  }): Promise<MedicalPurchaseOrderItemRow[]> {
+    if (options.lines.length === 0) return [];
+    return getRequestDatabase()
+      .insert(medical_purchase_order_items)
+      .values(
+        options.lines.map((line) => ({
+          ...line,
+          medical_purchase_order_id: options.orderId,
+          organization_id: options.organizationId,
+          public_id: generatePublicId('medicalPurchaseOrderItem'),
+        })),
+      )
+      .returning({
+        id: medical_purchase_order_items.id,
+        public_id: medical_purchase_order_items.public_id,
+        line_number: medical_purchase_order_items.line_number,
+        medicine_id: medical_purchase_order_items.medicine_id,
+        quantity: medical_purchase_order_items.quantity,
+        free_quantity: medical_purchase_order_items.free_quantity,
+        rate: medical_purchase_order_items.rate,
+        amount: medical_purchase_order_items.amount,
+      });
   }
 
   /** MD16: what receiving did to one line — ticked or not, and the batch it went into. */

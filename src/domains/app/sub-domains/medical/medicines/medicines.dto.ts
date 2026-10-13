@@ -165,7 +165,7 @@ export const NearExpiryDiscountDto = z
  * Query of the Medicines tab, the pickers and the export (11.D.8 #17, #18): `q` (name,
  * composition, `#458`), `manufacturer_id` and `stock_level` (several), `expiring_within_days`,
  * `supplier_id`, `is_quick`, the created range; sort `name` (default) | `medicine_number` |
- * `quantity` | `mrp` | `nearest_expiry` | `created_at`.
+ * `quantity` | `mrp` | `nearest_expiry` | `manufacturer_name` | `margin_percent` (MD27) | `created_at`.
  */
 export const listMedicinesQueryDto = listSearchSortSchema([
   'name',
@@ -173,6 +173,8 @@ export const listMedicinesQueryDto = listSearchSortSchema([
   'quantity',
   'mrp',
   'nearest_expiry',
+  'manufacturer_name',
+  'margin_percent',
   'created_at',
 ] as const)
   .extend({

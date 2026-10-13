@@ -830,6 +830,17 @@ export const patientPrescriptionsRecordSchema = {
     id: { type: 'string', example: 'rx_k7x9m2pqr4w8n1v3a1b2c' },
     prescription_number: { type: 'integer', description: 'Shown as "RX-500"' },
     patient_id: { type: 'string' },
+    patient: {
+      type: 'object',
+      nullable: true,
+      description: 'The patient — number, contact and name (MD29)',
+      properties: {
+        id: { type: 'string' },
+        patient_number: { type: 'integer' },
+        contact_id: { type: 'string' },
+        name: { type: 'string' },
+      },
+    },
     appointment_id: { type: 'string', nullable: true },
     doctor_membership_id: { type: 'string' },
     prescription_date: { type: 'string', format: 'date' },
@@ -877,6 +888,12 @@ export const patientPrescriptionsRecordExample = {
   id: 'rx_k7x9m2pqr4w8n1v3a1b2c',
   prescription_number: 500,
   patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
+  patient: {
+    id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
+    patient_number: 412,
+    contact_id: 'con_k7x9m2pqr4w8n1v3a1b2c',
+    name: 'Asha Patel',
+  },
   appointment_id: null,
   doctor_membership_id: 'mem_k7x9m2pqr4w8n1v3a1b2c',
   prescription_date: '2026-10-08',
@@ -2178,6 +2195,11 @@ export const suppliersRecordSchema = {
       description: 'Days since the oldest received order still due',
     },
     order_count: { type: 'integer' },
+    order_total: {
+      type: 'number',
+      description:
+        "The live orders' totals — an ordered one at its lines, a received one at its received lines",
+    },
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
   },
@@ -2194,6 +2216,7 @@ export const suppliersRecordExample = {
   payable: 827,
   ageing_days: 12,
   order_count: 3,
+  order_total: 4236,
   created_at: '2026-10-08T10:30:00.000Z',
   updated_at: '2026-10-08T10:30:00.000Z',
 };
@@ -2391,7 +2414,16 @@ export const medicalPurchaseOrdersRecordSchema = {
   properties: {
     id: { type: 'string', example: 'mpo_k7x9m2pqr4w8n1v3a1b2c' },
     purchase_order_number: { type: 'integer', description: 'PO #431' },
-    supplier: namedLinkSchema,
+    supplier: {
+      type: 'object',
+      description: "The supplier — with its phone and GSTIN, a deleted one's too (the PO sheet)",
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        phone: { type: 'string', nullable: true },
+        gst_number: { type: 'string', nullable: true },
+      },
+    },
     supplier_bill_number: { type: 'string', nullable: true },
     order_date: { type: 'string', format: 'date' },
     stage: { type: 'string', enum: ['ordered', 'received'] },
@@ -2438,7 +2470,12 @@ export const medicalPurchaseOrdersRecordSchema = {
 export const medicalPurchaseOrdersRecordExample = {
   id: 'mpo_k7x9m2pqr4w8n1v3a1b2c',
   purchase_order_number: 431,
-  supplier: { id: 'sup_k7x9m2pqr4w8n1v3a1b2c', name: 'Shree Medical Agency' },
+  supplier: {
+    id: 'sup_k7x9m2pqr4w8n1v3a1b2c',
+    name: 'Shree Medical Agency',
+    phone: '+919825011223',
+    gst_number: '24AABCS1429B1Z5',
+  },
   supplier_bill_number: 'SMA-2291',
   order_date: '2026-10-08',
   stage: 'received',

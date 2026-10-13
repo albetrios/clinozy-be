@@ -19,7 +19,7 @@ type MedicineParams = { Params: { medicine_id: string } };
 
 /** What every list and export description says about the query. */
 const LIST_QUERY_TEXT =
-  '`q` searches the name and composition, or the number (`#458`); filters `manufacturer_id` and `stock_level` (`ok`, `low` — at or under "Reorder at" — `out`; several, comma-separated), `expiring_within_days` (30, 60, 90 — a stocked batch\'s month ends within it), `supplier_id` (a price from them), `is_quick`, the created range; sort `name` (default, A–Z), `medicine_number`, `quantity`, `mrp`, `nearest_expiry` (none last) or `created_at`.';
+  '`q` searches the name and composition, or the number (`#458`); filters `manufacturer_id` and `stock_level` (`ok`, `low` — at or under "Reorder at" — `out`; several, comma-separated), `expiring_within_days` (30, 60, 90 — a stocked batch\'s month ends within it), `supplier_id` (a price from them), `is_quick`, the created range; sort `name` (default, A–Z), `medicine_number`, `quantity`, `mrp`, `nearest_expiry` (none last), `manufacturer_name` (A–Z, none last), `margin_percent` (highest first, none last) or `created_at`.';
 
 /** Registers the `medicines` routes (prefix `/api/v1/app`) — routes-final 11.D, routes 17–24. */
 export function medicinesRoutes(service: MedicinesService): FastifyPluginAsync {

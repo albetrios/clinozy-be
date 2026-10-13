@@ -16,6 +16,7 @@ export function serializePatientPrescription({
     id: row.public_id,
     prescription_number: row.prescription_number as number,
     patient_id: references.publicIdOf({ field: 'patient_id', row }) ?? '',
+    patient: null,
     appointment_id: references.publicIdOf({ field: 'appointment_id', row }),
     doctor_membership_id: references.publicIdOf({ field: 'doctor_membership_id', row }) ?? '',
     prescription_date: row.prescription_date as string,

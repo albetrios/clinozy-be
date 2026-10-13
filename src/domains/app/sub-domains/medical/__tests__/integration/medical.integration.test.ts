@@ -1184,4 +1184,350 @@ describe('Medical store — integration (routes-final §11)', () => {
     await flow.expect(200, 'the accountant refunds the return', 'POST', returns, body);
     flow.expectValue('returned', '.data.status', 'returned');
   });
+
+  it('who owes on sales, the Created filter and the customer sort (MD25, MD27, MD30)', async () => {
+    flow.as('owner');
+    await flow.expect(200, 'Asha buys one, unpaid', 'POST', '/app/medical-sales', {
+      branch_id: vesu,
+      contact_id: asha,
+      items: [{ medicine_id: glycolac, quantity: 1 }],
+    });
+    const ashaSale = flow.last('.data.id');
+    const ownRows = `[.data[] | select(.contact.id == "${bela}" or .contact.id == "${asha}")]`;
+    const rowOf = (contact: string) => `.data[] | select(.contact.id == "${contact}")`;
+    await flow.expect(200, 'who owes (route 52)', 'GET', '/app/medical-sales/dues');
+    flow.expectValue(
+      'largest due first: Bela, then Asha (MD25)',
+      `${ownRows} | map(.contact.id) | join(",")`,
+      `${bela},${asha}`,
+    );
+    flow.expectValue(
+      'Bela: the split sale only — paid, returned and voided sales owe nothing',
+      `${rowOf(bela)} | [.due_total, .sale_count, .contact.name, .patient_id] | map(tostring) | join(",")`,
+      `1107,1,Bela ${T},null`,
+    );
+    flow.expectValue(
+      'Asha: two unpaid sales, the new one last, her file',
+      `${rowOf(asha)} | [.due_total, .sale_count, .sales[1].id, .sales[1].due_amount, .patient_id] | map(tostring) | join(",")`,
+      `738,2,${ashaSale},369,${ashaFile}`,
+    );
+    await flow.expect(
+      200,
+      "search the buyer's name",
+      'GET',
+      `/app/medical-sales/dues?q=Asha%20${T}`,
+    );
+    flow.expectValue('only Asha', '[.data[].contact.id] | join(",")', asha);
+    await flow.expect(200, 'one row at most', 'GET', '/app/medical-sales/dues?limit=1');
+    flow.expectValue('the largest only', '.data | length', 1);
+    await flow.expect(
+      200,
+      'nothing created before 2000',
+      'GET',
+      '/app/medical-sales/dues?created_to=2000-01-01T00:00:00Z',
+    );
+    flow.expectValue('no dues', '.data | length', 0);
+    await flow.expect(
+      200,
+      'the Created filter on the Sales tab (MD30 (a))',
+      'GET',
+      `/app/medical-sales?contact_id=${asha}&created_from=2000-01-01T00:00:00Z&created_to=2000-01-02T00:00:00Z`,
+    );
+    flow.expectValue('none created then', '.data | length', 0);
+    await flow.expect(
+      200,
+      'sales by customer, A–Z (MD27)',
+      'GET',
+      `/app/medical-sales?q=${T}&sort=contact_name&limit=100`,
+    );
+    flow.expectValue(
+      'Asha before Bela',
+      '[.data[].contact.name] == ([.data[].contact.name] | sort)',
+      true,
+    );
+    flow.expectValue('both buyers listed', '[.data[].contact.name] | unique | length', 2);
+    flow.as('front_desk');
+    await flow.expect(403, 'the front desk reads no dues', 'GET', '/app/medical-sales/dues');
+  });
+
+  it('receive takes goods not ordered; the order names its supplier (MD26, MD30 (c))', async () => {
+    flow.as('owner');
+    await flow.expect(200, 'a supplier with phone and GSTIN', 'POST', '/app/suppliers', {
+      name: `Surprise Agency ${T}`,
+      phone: `+91${digits}41`,
+      gst_number: '24AABCS1429B1Z5',
+    });
+    const surpriseSupplier = flow.last('.data.id');
+    await flow.expect(200, 'order one line', 'POST', '/app/medical-purchase-orders', {
+      supplier_id: surpriseSupplier,
+      items: [{ medicine_id: glycolac, quantity: 2, rate: 100 }],
+    });
+    const order = flow.last('.data.id');
+    const orderedLine = flow.last('.data.items[0].id');
+    flow.expectValue(
+      "the order's supplier: phone and GSTIN (MD30 (c))",
+      '[.data.supplier.name, .data.supplier.phone, .data.supplier.gst_number] | join(",")',
+      `Surprise Agency ${T},+91${digits}41,24AABCS1429B1Z5`,
+    );
+    const receive = `/app/medical-purchase-orders/${order}/receive`;
+    await flow.expect(400, 'a new line naming two medicines', 'POST', receive, {
+      items: [{ medicine_id: glycolac, new_medicine_name: 'Both', quantity: 1, rate: 10 }],
+    });
+    await flow.expect(400, 'past 50 lines', 'POST', receive, {
+      items: Array.from({ length: 50 }, () => ({ medicine_id: glycolac, quantity: 1, rate: 10 })),
+    });
+    flow.expectValue('too many: field', FIELDS, 'items');
+    await flow.expect(200, 'receive with two lines not ordered (MD26)', 'POST', receive, {
+      items: [
+        { id: orderedLine },
+        {
+          medicine_id: glycolac,
+          quantity: 1,
+          free_quantity: 1,
+          rate: 120,
+          batch_number: 'UX1',
+          expiry_month: later,
+        },
+        { new_medicine_name: `Surprise gel ${T}`, quantity: 3, rate: 50 },
+      ],
+    });
+    flow.expectValue(
+      'three received lines, the bill counts them all',
+      '[.data.stage, (.data.items | length), .data.total, .data.items[1].line_number, .data.items[1].batch_number, .data.items[2].line_number, .data.items[2].is_received, .data.items[2].batch_number] | map(tostring) | join(",")',
+      `received,3,470,2,UX1,3,true,NEW-${flow.last('.data.purchase_order_number')}`,
+    );
+    flow.expectEqual('one and one free into batch UX1', await batchStock(glycolac, 'UX1'), '2');
+    await flow.expect(
+      200,
+      'the typed name is a medicine',
+      'GET',
+      `/app/medicines?q=Surprise%20gel%20${T}`,
+    );
+    flow.expectValue(
+      'quick, its three packs in stock',
+      '[.data[0].is_quick, .data[0].quantity] | map(tostring) | join(",")',
+      'true,3',
+    );
+    await flow.expect(
+      200,
+      'pay the supplier in full',
+      'POST',
+      `/app/suppliers/${surpriseSupplier}/payments`,
+      { branch_id: vesu, splits: [{ mode: 'cash', amount: 470 }] },
+    );
+    await flow.expect(
+      204,
+      'delete the supplier, nothing owed',
+      'DELETE',
+      `/app/suppliers/${surpriseSupplier}?${DELETE_REASON}`,
+    );
+    await flow.expect(200, 'the order after', 'GET', `/app/medical-purchase-orders/${order}`);
+    flow.expectValue(
+      "a deleted supplier's phone and GSTIN stay on the order",
+      '[.data.supplier.name, .data.supplier.phone, .data.supplier.gst_number] | join(",")',
+      `Surprise Agency ${T},+91${digits}41,24AABCS1429B1Z5`,
+    );
+  });
+
+  it('medicines sort by manufacturer and margin, none last (MD27)', async () => {
+    flow.as('owner');
+    await flow.expect(200, 'a maker A–Z first', 'POST', '/app/manufacturers', { name: `aaa ${T}` });
+    const makerA = flow.last('.data.id');
+    await flow.expect(200, 'a maker A–Z last', 'POST', '/app/manufacturers', { name: `zzz ${T}` });
+    const makerZ = flow.last('.data.id');
+    await flow.expect(200, 'a supplier for the prices', 'POST', '/app/suppliers', {
+      name: `Sort supplier ${T}`,
+    });
+    const priceSupplier = flow.last('.data.id');
+    await flow.expect(200, 'margin 10%, maker Z', 'POST', '/app/medicines', {
+      name: `Sort ${T} low`,
+      manufacturer_id: makerZ,
+      mrp: 100,
+      supplier_prices: [{ supplier_id: priceSupplier, rate: 90 }],
+    });
+    const low = flow.last('.data.id');
+    await flow.expect(200, 'margin 50%, maker A', 'POST', '/app/medicines', {
+      name: `Sort ${T} high`,
+      manufacturer_id: makerA,
+      mrp: 100,
+      supplier_prices: [{ supplier_id: priceSupplier, rate: 50 }],
+    });
+    const high = flow.last('.data.id');
+    await flow.expect(200, 'no maker, no price (quick)', 'POST', '/app/medicines', {
+      name: `Sort ${T} quick`,
+      is_quick: true,
+    });
+    const quick = flow.last('.data.id');
+    const list = `/app/medicines?q=Sort%20${T}`;
+    await flow.expect(200, 'by margin, highest first', 'GET', `${list}&sort=margin_percent`);
+    flow.expectValue('50%, 10%, then none', IDS, `${high},${low},${quick}`);
+    await flow.expect(200, 'by maker, A–Z', 'GET', `${list}&sort=manufacturer_name`);
+    flow.expectValue('AAA, ZZZ, then none', IDS, `${high},${low},${quick}`);
+    await flow.expect(200, 'by maker, Z–A', 'GET', `${list}&sort=manufacturer_name&order=desc`);
+    flow.expectValue('ZZZ, AAA, none still last', IDS, `${low},${high},${quick}`);
+    await flow.expect(200, 'by margin, two a page', 'GET', `${list}&sort=margin_percent&limit=2`);
+    flow.expectValue('the first page', IDS, `${high},${low}`);
+    const next = flow.last('.meta.pagination.next');
+    await flow.expect(
+      200,
+      'the next page',
+      'GET',
+      `${list}&sort=margin_percent&limit=2&after=${encodeURIComponent(next)}`,
+    );
+    flow.expectValue('the medicine without a margin', IDS, quick);
+  });
+
+  it("the suppliers' payable footer and order total (MD30 (b))", async () => {
+    flow.as('owner');
+    const order = async (supplierId: string, quantity: number): Promise<string> => {
+      await flow.expect(200, 'an order', 'POST', '/app/medical-purchase-orders', {
+        supplier_id: supplierId,
+        items: [{ medicine_id: glycolac, quantity, rate: 100 }],
+      });
+      return flow.last('.data.id');
+    };
+    await flow.expect(200, 'footer supplier one', 'POST', '/app/suppliers', {
+      name: `Footer ${T} one`,
+    });
+    const one = flow.last('.data.id');
+    await flow.expect(200, 'footer supplier two', 'POST', '/app/suppliers', {
+      name: `Footer ${T} two`,
+    });
+    const two = flow.last('.data.id');
+    const received = await order(one, 2);
+    await flow.expect(
+      200,
+      'receive it',
+      'POST',
+      `/app/medical-purchase-orders/${received}/receive`,
+      {},
+    );
+    await order(one, 3);
+    const cancelled = await order(one, 1);
+    await flow.expect(
+      204,
+      'cancel one',
+      'DELETE',
+      `/app/medical-purchase-orders/${cancelled}?reason=mistake`,
+    );
+    const second = await order(two, 1);
+    await flow.expect(
+      200,
+      'receive the other',
+      'POST',
+      `/app/medical-purchase-orders/${second}/receive`,
+      {},
+    );
+    await flow.expect(200, 'supplier one', 'GET', `/app/suppliers/${one}`);
+    flow.expectValue(
+      'two live orders worth 500, 200 owed (the cancelled one left out)',
+      '[.data.order_count, .data.order_total, .data.payable] | map(tostring) | join(",")',
+      '2,500,200',
+    );
+    await flow.expect(
+      200,
+      'the footer over every page',
+      'GET',
+      `/app/suppliers?q=Footer%20${T}&limit=1`,
+    );
+    flow.expectValue(
+      'one row, both suppliers owed',
+      '[(.data | length), .meta.payable_total] | map(tostring) | join(",")',
+      '1,300',
+    );
+    await flow.expect(
+      200,
+      'the footer follows the filters',
+      'GET',
+      `/app/suppliers?q=Footer%20${T}%20two`,
+    );
+    flow.expectValue('only supplier two', '.meta.payable_total', 100);
+  });
+
+  it('/invoices refuses medical bills and medicine lines (MD28)', async () => {
+    flow.as('owner');
+    const medicineLine = { medicine_id: glycolac, quantity: 1 };
+    await flow.expect(400, 'a medical bill by hand', 'POST', '/app/invoices', {
+      branch_id: vesu,
+      contact_id: asha,
+      type: 'medical',
+      items: [medicineLine],
+    });
+    flow.expectValue('sold through the store: the field', FIELDS, 'type');
+    flow.expectValue('sold through the store: why', REASON, 'sold_through_store');
+    await flow.expect(400, 'a medicine on a clinic bill', 'POST', '/app/invoices', {
+      branch_id: vesu,
+      contact_id: asha,
+      items: [medicineLine],
+    });
+    flow.expectValue('the line named', FIELDS, 'items/0/medicine_id');
+    await flow.expect(400, 'the bill preview too', 'POST', '/app/invoices/preview', {
+      branch_id: vesu,
+      items: [medicineLine],
+    });
+    flow.expectValue('the preview: why', REASON, 'sold_through_store');
+    await flow.expect(200, 'an offering to bill', 'POST', '/app/offerings', {
+      name: `Store guard ${T}`,
+      price: 500,
+      branch_ids: [vesu],
+    });
+    const offering = flow.last('.data.id');
+    await flow.expect(200, 'a clinic bill', 'POST', '/app/invoices', {
+      branch_id: vesu,
+      contact_id: asha,
+      items: [{ offering_id: offering, quantity: 1 }],
+    });
+    const clinicBill = flow.last('.data.id');
+    const keptLine = flow.last('.data.items[0].id');
+    const change = { items: [{ id: keptLine, quantity: 1 }, medicineLine] };
+    await flow.expect(
+      400,
+      'a medicine added to it',
+      'PATCH',
+      `/app/invoices/${clinicBill}`,
+      change,
+    );
+    flow.expectValue('the added line named', FIELDS, 'items/1/medicine_id');
+    await flow.expect(
+      400,
+      'the change preview too',
+      'POST',
+      `/app/invoices/${clinicBill}/preview`,
+      change,
+    );
+    await flow.expect(
+      200,
+      "the sales' bills still list",
+      'GET',
+      `/app/invoices?type=medical&contact_id=${asha}`,
+    );
+    flow.expectValue('medical invoices of sales', '[.data[].type] | unique | join(",")', 'medical');
+    await flow.call('GET', `/app/medical-sales?contact_id=${asha}&status=unpaid&limit=1`);
+    const saleInvoice = flow.last('.data[0].invoice.id');
+    await flow.expect(
+      409,
+      "a sale's bill stays the sale's",
+      'PATCH',
+      `/app/invoices/${saleInvoice}`,
+      {
+        items: [medicineLine],
+      },
+    );
+    flow.expectValue("the sale's: why", REASON, 'invoice_of_sale');
+  });
+
+  it('the prescription row names its patient (MD29)', async () => {
+    flow.as('owner');
+    await flow.expect(
+      200,
+      'the approved prescriptions',
+      'GET',
+      '/app/patient-prescriptions?status=approved&limit=100',
+    );
+    flow.expectValue(
+      "Asha's prescription names her: the file, the contact, the name",
+      `[.data[] | select(.patient_id == "${ashaFile}") | .patient] | first | [.id, .contact_id, .name, (.patient_number > 0)] | map(tostring) | join(",")`,
+      `${ashaFile},${asha},Asha ${T},true`,
+    );
+  });
 });

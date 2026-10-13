@@ -165,6 +165,8 @@
     "medicalPurchaseOrderDateInFuture": "The order date can't be after today",
     "medicalPurchaseOrderItemNotOnOrder": "{{id}} is not a line of this order",
     "medicalPurchaseOrderNothingReceived": "Receive at least one line",
+    "medicalPurchaseOrderTooManyLines": "An order holds at most {{max}} lines",
+    "invoiceSoldThroughStore": "Medicines are sold through the medical store's sales (POST /app/medical-sales)",
     "medicalRepNextVisitWindow": "Pick a next visit from today to {{max}} days ahead",
     "medicalRepVisitInFuture": "The visit date can't be after today",
     "medicalRepVisitNextWindow": "The next visit falls after this one, at most {{max}} days on",
