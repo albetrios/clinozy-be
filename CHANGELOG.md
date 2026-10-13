@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.0.0](https://github.com/albetrios/clinozy-be/compare/v8.0.0...v9.0.0) (2026-10-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* close the full-codebase review findings across security, billing, reliability and tests ([#47](https://github.com/albetrios/clinozy-be/issues/47))
+
+### Added
+
+* **setup:** bring cloud sessions fully live, pin agent tools, guard env connection URLs ([#44](https://github.com/albetrios/clinozy-be/issues/44)) ([03211ff](https://github.com/albetrios/clinozy-be/commit/03211ff1c202ab0469ab985d0de88b100d7fb355))
+* the clinic launch API, on main's concepts ([#50](https://github.com/albetrios/clinozy-be/issues/50)) ([e438fa5](https://github.com/albetrios/clinozy-be/commit/e438fa5829e4720b19faf3c816bfb5b47af31dc2))
+
+
+### Fixed
+
+* close the full-codebase review findings across security, billing, reliability and tests ([#47](https://github.com/albetrios/clinozy-be/issues/47)) ([34a85f6](https://github.com/albetrios/clinozy-be/commit/34a85f6958db013b710aad9a51e357e6c8120af5))
+* resolve tenant load overload and strengthen test oracles ([#46](https://github.com/albetrios/clinozy-be/issues/46)) ([06f2f3b](https://github.com/albetrios/clinozy-be/commit/06f2f3bf5e4c4e2b6b915ed8e9dcd1d3aee87b34))
+* **setup:** enable database logins after migrate in cloud bootstrap ([#42](https://github.com/albetrios/clinozy-be/issues/42)) ([aead401](https://github.com/albetrios/clinozy-be/commit/aead401b6ce4c079dacf7138f8a7257f0765446e))
+
 ## [8.0.0](https://github.com/albetrios/clinozy-be/compare/v7.2.1...v8.0.0) (2026-10-06)
 
 
