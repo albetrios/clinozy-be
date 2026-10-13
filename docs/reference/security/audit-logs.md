@@ -114,7 +114,7 @@ A webhook URL is recorded as its origin only — the path and query can carry th
 | Action | Resource type | When |
 | ------ | ------------- | ---- |
 | `user.settings.update` | `user_settings` | User settings changed |
-| `user.settings.analytics_consent.update` | `user_settings` | The person answered or changed their analytics consent; `metadata` holds the decision, its policy version and when — the proof of consent (launch D85) |
+| `user.settings.analytics_consent.update` | `user_settings` | The person gave an analytics answer while signed in (a receipt — the browser's cookie decides what runs); `metadata` holds the decision, its policy version and when — the proof of consent (launch D85, change-cookie-consent CC2) |
 | `user.self.delete` | `user` | Account deleted by its owner (`WARNING`) |
 | `user.data_export.request` | `user_data_export` | Personal-data export requested |
 | `user.data_export.url_minted` | `user_data_export` | Export download link issued |

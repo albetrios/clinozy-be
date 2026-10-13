@@ -6,7 +6,8 @@ import { ANALYTICS_CONSENT_VALUES } from './user-settings.constants.js';
  * Zod schema for the `PATCH /api/v1/users/me/settings` body. All fields are optional so callers
  * can update one toggle at a time; omitted fields keep their existing or default value (the
  * service performs an upsert merge with the stored row). `analytics_consent` and
- * `analytics_consent_version` come together (launch D85); the server stamps when.
+ * `analytics_consent_version` come together (launch D85) — a receipt of an answer given while
+ * signed in (change-cookie-consent CC2); the server stamps when.
  */
 export const UpdateUserSettingsDto = z
   .object({

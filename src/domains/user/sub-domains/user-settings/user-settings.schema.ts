@@ -14,8 +14,9 @@ import { users } from '@/domains/user/user.schema.js';
 
 /**
  * `auth.user_settings` — a singleton row per user (PK = `user_id`) holding personalization toggles
- * and locale preferences, and the person's analytics consent (launch D85: the decision, the policy
- * version it answered and when — null until first answered, set together). Cascades on user delete so offboarding sweeps the row automatically;
+ * and locale preferences, and the receipt of the person's last analytics answer given while signed in
+ * (launch D85 / change-cookie-consent CC2: the decision, the policy version it answered and when —
+ * null until first answered, set together; the browser's cookie decides what runs). Cascades on user delete so offboarding sweeps the row automatically;
  * absence of a row is interpreted as the platform default in the serializer. RLS-gated by
  * `app.current_user_public_id` (set via `withAppDatabaseContext (user scope)`) so users can only read/write their own row.
  */
