@@ -1550,11 +1550,25 @@ erDiagram
 
 ## Stage 8 — Medical store
 
-**Rev 2 (D88, 2026-10-13) — no table changes.** The medical store's confirmation round adds no column, table, index
-or constraint: the new sorts are SQL sort keys over the existing columns (MD27 — margin from
-`app.medicine_supplier_prices`, as `nearest_expiry` from `app.medicine_batches`), the dues read is a query over
-`app.medical_sales` and `app.invoices` (MD25), goods not ordered are ordinary `app.medical_purchase_order_items` rows
-(MD26), and the rest are reads, gates and refusals. No migration.
+**Rev 2 (D88, D89, 2026-10-13).** D88's answers add no column, table, index or constraint: the new sorts are SQL
+sort keys over the existing columns (MD27 — margin from `app.medicine_supplier_prices`, as `nearest_expiry` from
+`app.medicine_batches`), the dues read is a query over `app.medical_sales` and `app.invoices` (MD25), goods not ordered
+are ordinary `app.medical_purchase_order_items` rows (MD26), and the rest are reads, gates and refusals. **D89 adds one
+table change and may touch two checks — one migration** (be-db-migration-maintainer decides its form):
+
+```text
+app.supplier_credits                          before                    after (rev 2, MD32)
+  deleted_at       timestamptz NULL           —                         + (a voided credit)
+  delete_reason    varchar(16) NULL           —                         + mistake · wrong_quantity · supplier_refused · other
+  delete_note      varchar(280) NULL          —                         + required for `other`
+  chk_supplier_credits_delete_*               —                         + the three standard delete checks
+  idx … (supplier_id) WHERE applied_amount < amount
+                                              open credits              + AND deleted_at IS NULL
+
+app.payments / app.pending_credits            a refund is cash/UPI/card  a medical return's refund may be paid by
+  (only if their checks refuse it — MD33)                                `credit_amount`, with a `give` pending credit
+                                                                         naming the sale's invoice
+```
 
 ### manufacturer · NEW
 

@@ -156,7 +156,7 @@ A task appears by itself when its condition becomes true, and closes by itself w
 | ----- | ---- | ------ |
 | WC-49 | An invitation left more than 7 days past its expiry frees its seat: daily at 04:10 the `membership-invitation-expiry` sweep ends each such `invited` membership with `delete_reason = invitation_expired` and revokes its invitation, a batch of 100 a run (ROUTE #175) | NEW — `membership-invitation-expiry` (family `retention`, scheduler `daily-membership-invitation-expiry`, `'10 4 * * *'`); one failed row is skipped and counted, never the run |
 
-## Medical store rev 2 (D88)
+## Medical store rev 2 (D88, D89)
 
 No background work changes. The dues read (MD25) is read on demand and sends nothing (D87); WC-34 (the
 `medical_rep_visit` task rule) and the `payment_due` rule stay as built.
