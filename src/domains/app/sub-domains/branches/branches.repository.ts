@@ -143,6 +143,19 @@ export class BranchesRepository {
     return new Map(rows.map((row) => [row.public_id, row.id]));
   }
 
+  /**
+   * Whether the organization has a main branch — active or not, as the one-main index counts it
+   * (feat-clinic-setup BR1: a clinic's first branch becomes main).
+   */
+  async hasMainBranch(organization_id: number): Promise<boolean> {
+    const rows = await getRequestDatabase()
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(inOrganization(organization_id), eq(branches.is_main, true)))
+      .limit(1);
+    return rows.length > 0;
+  }
+
   /** Inserts a branch; returns its internal and public ids. */
   async create(data: BranchCreateData): Promise<{ id: number; public_id: string }> {
     return runInsertWithPublicIdentifierRetry({

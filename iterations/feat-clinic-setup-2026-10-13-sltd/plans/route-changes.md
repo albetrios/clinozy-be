@@ -22,53 +22,53 @@ Intake hash `790d068ffc3b`. What exists is the launch's route review (`launch-20
 
 ## Onboarding setup (app domain, sub-domain `onboarding-setup` — D22)
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| RC-1 | NEW | GET | `/api/v1/app/onboarding-setup` | `organization:update` — managers only (D19) | the setup: answered steps, skips, live or not, the 3 guide items with their ticks read from the records | BRIEF.md:50, 104–112, 169–171 |
-| RC-2 | NEW | PATCH | `/api/v1/app/onboarding-setup` | `organization:update` | answer a step, skip or un-skip a guide item, "Explore first", hide or reopen the guide | BRIEF.md:51–52, 104–112, 229–230 |
-| RC-3 | NEW | POST | `/api/v1/app/onboarding-setup/complete` | `organization:update` | go live — refused while the clinic type, the main branch or a service is missing | BRIEF.md:69–76, 222–224, 276 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RC-1 | NEW | GET | `/api/v1/app/onboarding-setup` | `organization:update` — managers only (D19) | the setup: answered steps, skips, live or not, the 3 guide items with their ticks read from the records | BRIEF.md:50, 104–112, 169–171 | — |
+| RC-2 | NEW | PATCH | `/api/v1/app/onboarding-setup` | `organization:update` | answer a step, skip or un-skip a guide item, "Explore first", hide or reopen the guide | BRIEF.md:51–52, 104–112, 229–230 | — |
+| RC-3 | NEW | POST | `/api/v1/app/onboarding-setup/complete` | `organization:update` | go live — refused while the clinic type, the main branch or a service is missing | BRIEF.md:69–76, 222–224, 276 | — |
 
 ## Branches & places (launch routes-final §1)
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| RC-4 | CHANGED | POST | `/api/v1/app/branches` | `branch:create` | create a branch — a clinic's first branch becomes main by itself | BRIEF.md:146–150, 277 · users.md:132 |
-| RC-5 | REUSED | GET | `/api/v1/app/branches/my` | any member | the members' notice ("still being set up") and the shell's "needs a branch" guard on every room | BRIEF.md:117–121 |
-| RC-6 | REUSED | PATCH | `/api/v1/app/branches/{branch_id}` | `branch:update` | setup step 3 (the branch's default doctor / therapist); hours, GST and links later from the branch drawer | BRIEF.md:65–68, 131–133 |
-| RC-7 | REUSED | GET | `/api/v1/app/branches/{branch_id}/rooms` | any member | the branch drawer's Places & days | BRIEF.md:131–133 |
-| RC-8 | REUSED | POST | `/api/v1/app/branches/{branch_id}/rooms` | `branch:create` | add a room | BRIEF.md:131–133 |
-| RC-9 | REUSED | PATCH · DELETE | `/api/v1/app/branches/{branch_id}/rooms/{branch_room_id}` | `branch:update` · `branch:delete` | rename, switch off, remove a room | BRIEF.md:131–133 |
-| RC-10 | REUSED | GET · POST | `/api/v1/app/branches/{branch_id}/machines` | any member · `branch:create` | list, add a machine | BRIEF.md:131–133 |
-| RC-11 | REUSED | PATCH · DELETE | `/api/v1/app/branches/{branch_id}/machines/{branch_machine_id}` | `branch:update` · `branch:delete` | rename, switch off, remove a machine | BRIEF.md:131–133 |
-| RC-12 | REUSED | GET · POST | `/api/v1/app/branches/{branch_id}/holidays` | any member · `branch:create` | list, add a holiday | BRIEF.md:131–133 |
-| RC-13 | REUSED | DELETE | `/api/v1/app/branches/{branch_id}/holidays/{branch_holiday_id}` | `branch:delete` | remove a holiday | BRIEF.md:131–133 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RC-4 | CHANGED | POST | `/api/v1/app/branches` | `branch:create` | create a branch — a clinic's first branch becomes main by itself | BRIEF.md:146–150, 277 · users.md:132 | `POST /api/v1/app/branches` as planned — AS-BUILT #2 |
+| RC-5 | REUSED | GET | `/api/v1/app/branches/my` | any member | the members' notice ("still being set up") and the shell's "needs a branch" guard on every room | BRIEF.md:117–121 | as built (launch) |
+| RC-6 | REUSED | PATCH | `/api/v1/app/branches/{branch_id}` | `branch:update` | setup step 3 (the branch's default doctor / therapist); hours, GST and links later from the branch drawer | BRIEF.md:65–68, 131–133 | as built (launch) |
+| RC-7 | REUSED | GET | `/api/v1/app/branches/{branch_id}/rooms` | any member | the branch drawer's Places & days | BRIEF.md:131–133 | as built (launch) |
+| RC-8 | REUSED | POST | `/api/v1/app/branches/{branch_id}/rooms` | `branch:create` | add a room | BRIEF.md:131–133 | as built (launch) |
+| RC-9 | REUSED | PATCH · DELETE | `/api/v1/app/branches/{branch_id}/rooms/{branch_room_id}` | `branch:update` · `branch:delete` | rename, switch off, remove a room | BRIEF.md:131–133 | as built (launch) |
+| RC-10 | REUSED | GET · POST | `/api/v1/app/branches/{branch_id}/machines` | any member · `branch:create` | list, add a machine | BRIEF.md:131–133 | as built (launch) |
+| RC-11 | REUSED | PATCH · DELETE | `/api/v1/app/branches/{branch_id}/machines/{branch_machine_id}` | `branch:update` · `branch:delete` | rename, switch off, remove a machine | BRIEF.md:131–133 | as built (launch) |
+| RC-12 | REUSED | GET · POST | `/api/v1/app/branches/{branch_id}/holidays` | any member · `branch:create` | list, add a holiday | BRIEF.md:131–133 | as built (launch) |
+| RC-13 | REUSED | DELETE | `/api/v1/app/branches/{branch_id}/holidays/{branch_holiday_id}` | `branch:delete` | remove a holiday | BRIEF.md:131–133 | as built (launch) |
 
 ## Team (launch routes-final §2, §12)
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| RC-14 | REUSED | PATCH | `/api/v1/tenancy/organization/memberships/{membership_id}` | `membership:update` (the owner's extra roles: the owner only, D81 (4)) | setup step 3 — Doctor or Therapist as an extra role, the branch's days and hours as the owner's | BRIEF.md:65–68, 225–226 |
-| RC-15 | REUSED | POST | `/api/v1/tenancy/organization/memberships` | `membership:create` | the guide's "Invite your team" — one invitation per row, a real role, the main branch, the branch's days and hours (D16) | BRIEF.md:107–109 |
-| RC-16 | REUSED | GET | `/api/v1/app/roles` | any member | the invite role picker; finding Doctor / Therapist for step 3 | BRIEF.md:65–68, 107–109 |
-| RC-17 | REUSED | GET | `/api/v1/app/memberships` | any member | the guide's "Invite your team" / "Invite your doctor" (with `holds=`) | BRIEF.md:107–109 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RC-14 | REUSED | PATCH | `/api/v1/tenancy/organization/memberships/{membership_id}` | `membership:update` (the owner's extra roles: the owner only, D81 (4)) | setup step 3 — Doctor or Therapist as an extra role, the branch's days and hours as the owner's | BRIEF.md:65–68, 225–226 | as built (launch) |
+| RC-15 | REUSED | POST | `/api/v1/tenancy/organization/memberships` | `membership:create` | the guide's "Invite your team" — one invitation per row, a real role, the main branch, the branch's days and hours (D16) | BRIEF.md:107–109 | as built (launch) |
+| RC-16 | REUSED | GET | `/api/v1/app/roles` | any member | the invite role picker; finding Doctor / Therapist for step 3 | BRIEF.md:65–68, 107–109 | as built (launch) |
+| RC-17 | REUSED | GET | `/api/v1/app/memberships` | any member | the guide's "Invite your team" / "Invite your doctor" (with `holds=`) | BRIEF.md:107–109 | as built (launch) |
 
 ## Offerings (launch routes-final §3)
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| RC-18 | REUSED | POST | `/api/v1/app/offerings` | `offering:create` | "Go live" — one Consultation per chosen specialty; the guide's "Add your treatments" — one service per ticked row | BRIEF.md:69–76, 105–106 |
-| RC-19 | REUSED | GET | `/api/v1/app/offerings` | any member | no duplicate Consultation; the guide shows what already exists | BRIEF.md:73–76, 231–234 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RC-18 | REUSED | POST | `/api/v1/app/offerings` | `offering:create` | "Go live" — one Consultation per chosen specialty; the guide's "Add your treatments" — one service per ticked row | BRIEF.md:69–76, 105–106 | as built (launch) |
+| RC-19 | REUSED | GET | `/api/v1/app/offerings` | any member | no duplicate Consultation; the guide shows what already exists | BRIEF.md:73–76, 231–234 | as built (launch) |
 
 ## Organization and its settings (platform — tenancy)
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| RC-20 | REUSED | GET | `/api/v1/tenancy/organization` | any member | prefill: clinic name (branch name), specialties | BRIEF.md:57–64 |
-| RC-21 | REUSED | PATCH | `/api/v1/tenancy/organization` | `organization:update` | setup step 1 (specialties); Settings › Clinic (specialties, timezone) | BRIEF.md:57–58, 127–130 |
-| RC-22 | REUSED | GET | `/api/v1/tenancy/organization/settings` | `organization:read` | Settings › Clinic | BRIEF.md:127–130 |
-| RC-23 | REUSED | PATCH | `/api/v1/tenancy/organization/settings` | `organization:update` | Settings › Clinic — reminder hour, lead hold, retarget (no day float, D17) | BRIEF.md:127–130 |
-| RC-24 | REUSED | PUT | `/api/v1/tenancy/organization/logo` | `organization:update` | Settings › Clinic links to the logo (Settings › General, as built) | BRIEF.md:127–130 |
-| RC-25 | REUSED | POST | `/api/v1/users/me/onboarding/complete` | signed in | the shortened /onboarding still marks the account onboarded | BRIEF.md:135–144 |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RC-20 | REUSED | GET | `/api/v1/tenancy/organization` | any member | prefill: clinic name (branch name), specialties | BRIEF.md:57–64 | as built (launch) |
+| RC-21 | REUSED | PATCH | `/api/v1/tenancy/organization` | `organization:update` | setup step 1 (specialties); Settings › Clinic (specialties, timezone) | BRIEF.md:57–58, 127–130 | as built (launch) |
+| RC-22 | REUSED | GET | `/api/v1/tenancy/organization/settings` | `organization:read` | Settings › Clinic | BRIEF.md:127–130 | as built (launch) |
+| RC-23 | REUSED | PATCH | `/api/v1/tenancy/organization/settings` | `organization:update` | Settings › Clinic — reminder hour, lead hold, retarget (no day float, D17) | BRIEF.md:127–130 | as built (launch) |
+| RC-24 | REUSED | PUT | `/api/v1/tenancy/organization/logo` | `organization:update` | Settings › Clinic links to the logo (Settings › General, as built) | BRIEF.md:127–130 | as built (launch) |
+| RC-25 | REUSED | POST | `/api/v1/users/me/onboarding/complete` | signed in | the shortened /onboarding still marks the account onboarded | BRIEF.md:135–144 | as built (launch) |
 
 ## Before → after
 

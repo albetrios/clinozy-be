@@ -75,7 +75,7 @@ export function branchesRoutes(service: BranchesService): FastifyPluginAsync {
         schema: {
           summary: 'Create branch',
           description:
-            'Adds a branch with who works there from day one — `membership_ids` (team member ids), else its creator (D13). Each default-staff member must be one of them, else a 400 (D10). A name already used here, or a second main branch, is a 409. Requires branch:create.',
+            "Adds a branch with who works there from day one — `membership_ids` (team member ids), else its creator (D13). Each default-staff member must be one of them, else a 400 (D10). A clinic's first branch becomes its main branch even when `is_main` is not sent. A name already used here, or `is_main: true` while another branch is main, is a 409. Requires branch:create.",
           tags: ['Branch'],
           body: CreateBranchDto,
         },

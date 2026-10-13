@@ -47,6 +47,10 @@ One set of permission codes for the whole sub-domain (D12): `branch:read|create|
   on the deleted-record purge list.
 - **One main branch per organization** (`idx_branches_one_main_per_organization`) and **names unique
   per organization, ignoring case** — both a 409.
+- **A clinic's first branch is its main branch** (feat-clinic-setup BR1–BR3): `create` writes it as main
+  whenever the organization has none, unless the body itself sent `is_main: true`; two first branches at
+  once leave one main — the one-main index refuses the loser inside a savepoint and it is written again as
+  not main. An explicit `is_main: true` while a main exists is still the 409.
 - **Closing after opening:** checked by the DTO when both come in a body, by the service against the
   stored row on a partial update, and by `chk_branches_hours`.
 - **Default staff work there (D10, D14):** each default-staff field names one of the branch's live

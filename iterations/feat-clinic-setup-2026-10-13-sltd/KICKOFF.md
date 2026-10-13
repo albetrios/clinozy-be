@@ -74,7 +74,7 @@ The ordered ledger — schema change first, then the changed and new sub-domains
 | # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `tenancy.organization_settings` — the seven `setup_*` columns, their checks, the member key, the one-time fill (OSC1, OSC2) | table | — | `/be-build-requirement` (CHANGE table) · be-db-migration-maintainer · be-sql-design-guard · be-rls-tenant-isolation-guard | migration lint + RLS-role lane green; the fill test (A11); settings routes unchanged (A12) | Claude | done |
-| 2 | Sub-domain 1 — first branch becomes main (BRC1–BRC3; routes-final §1) | sub-domain | — | `/be-build-requirement` (CHANGE) · be-api-contract-guard · be-test-generator | A1, A2, A3 | — | open |
+| 2 | Sub-domain 1 — first branch becomes main (BRC1–BRC3; routes-final §1) | sub-domain | — | `/be-build-requirement` (CHANGE) · be-api-contract-guard · be-test-generator | A1, A2, A3 | Claude | done |
 | 3 | Organization-settings service and repository — read, merge, complete, mark done (OSC3) | sub-domain | 1 | `/be-build-requirement` (CHANGE) · be-tsdoc-export-guard | unit tests for each method; A9 merge | — | open |
 | 4 | Sub-domain 2 — `onboarding-setup` routes, controller, service, DTO, validator, serializer (OSC4, OSC5; routes-final §2) | sub-domain | 2, 3 | `/be-build-requirement` (NEW sub-domain, no table) · be-domain-generator · be-route-schema-doc-guard · be-openapi-multilingual · be-i18n-message-guard · be-route-catalog | A4–A10, A14 | — | open |
 | 5 | Tests, seeds and docs (OSC6–OSC8) | flow | 4 | be-test-generator · be-seed-maintainer · be-system-narrative-maintainer | A15; `pnpm validate:route-success-coverage`; the demo seed is live | — | open |
