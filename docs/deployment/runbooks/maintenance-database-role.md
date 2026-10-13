@@ -37,14 +37,15 @@ connection-level property: every bypass policy arm requires BOTH its `app.*` GUC
 ## Operator steps (per environment)
 
 Hosted environments are provisioned by clinozy-infra: its Neon provisioning creates
-`clinozy_be_maintenance` as a `LOGIN NOBYPASSRLS` user on each environment's branch before the
+`clinozy_be_maintenance` as a `LOGIN NOBYPASSRLS` user in each environment's Neon project before the
 first deploy (next to `clinozy_be_app` and `clinozy_be_migrator` — see
 [Database runtime role](resource-limits.md#database-runtime-role-row-level-security-safety)) and
 writes `DATABASE_MAINTENANCE_URL` (pooled host). The deploy's pre-flight
 (`pnpm validate:github-env-runtime`) refuses an environment without it.
 
 1. Create the login on the environment's Postgres — clinozy-infra's Neon provisioning
-   does this via SQL as `neondb_owner` (never the Neon console/CLI/REST API, which add
+   does this via SQL as the project's database owner, `clinozy_be_<environment>_owner` (never the
+   Neon console/CLI/REST API, which add
    `BYPASSRLS`), before the first deploy:
 
    ```sql

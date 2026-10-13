@@ -478,9 +478,10 @@ function patchWorkflowFile(
     // Match the SHAPE of the sentence, not the current slug/environments. Anchoring
     // on the literal values makes the rewrite self-disabling: after the first
     // rename the pattern no longer matches and the message silently goes stale.
+    const drillEnvironments = Object.values(snapshot.branchEnvironmentMap);
     contents = contents.replace(
-      /ensure Neon project \S+ has a branch named after the GitHub Environment \([^)]*\)/g,
-      `ensure Neon project ${snapshot.slug} has a branch named after the GitHub Environment (${Object.values(snapshot.branchEnvironmentMap).join('/')})`,
+      /ensure the Neon project \S+ \(branch [^)]*\) exists/g,
+      `ensure the Neon project ${drillEnvironments.map((environment) => `${snapshot.slug}-${environment}`).join('/')} (branch ${drillEnvironments.join('/')}) exists`,
     );
   }
   if (relativePath === 'cleanup-ghcr.yml') {

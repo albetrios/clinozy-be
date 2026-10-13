@@ -310,10 +310,10 @@ The deploy's **"Deploy API and worker to Railway"** step fails: the image builds
 
 ```text
 [ERROR] Server failed to start error="database.rls_safety.unsafe_role: DATABASE_URL connects as
-"neondb_owner" with rolsuper=false rolbypassrls=true. ..."
+"clinozy_be_production_owner" with rolsuper=false rolbypassrls=true. ..."
 ```
 
-Common triggers: **Neon's `neondb_owner`** (`BYPASSRLS=true`), **Railway's default `postgres`** superuser, or a role created through Neon's REST API / console / CLI (all of which grant `BYPASSRLS`) used directly as `DATABASE_URL`.
+Common triggers: **the Neon project's database owner** (`clinozy_be_<environment>_owner`, `BYPASSRLS=true`), **Railway's default `postgres`** superuser, or a role created through Neon's REST API / console / CLI (all of which grant `BYPASSRLS`) used directly as `DATABASE_URL`.
 
 ### Fix — split the database URLs by role
 
@@ -323,14 +323,15 @@ Common triggers: **Neon's `neondb_owner`** (`BYPASSRLS=true`), **Railway's defau
 | `DATABASE_MAINTENANCE_URL` (maintenance pool, pooled) | `clinozy_be_maintenance` — `LOGIN NOBYPASSRLS` | maintenance contexts stay RLS-subject ([runbook](maintenance-database-role.md)) |
 | `DATABASE_MIGRATION_URL` (migrations only, direct host) | `clinozy_be_migrator` — `LOGIN CREATEROLE BYPASSRLS` | DDL + role management; runs every migration, the first one on an empty database included |
 
-API and worker share these users (tenant jobs on `DATABASE_URL`, retention/cleanup on the maintenance pool). The provider owner (`neondb_owner` / `postgres`) is in none of them — it only creates the users. `BYPASSRLS` on the migrator mirrors the provider owner it replaces: SECURITY DEFINER resolvers run as the role that created them, and `FORCE ROW LEVEL SECURITY` would otherwise make them return zero rows (see the header of `migrations/20260827050000_role_taxonomy_owner_operator_migrator.sql`). Create the users **as the provider owner** with SQL `CREATE ROLE` — not Neon's REST API, which taints roles with `BYPASSRLS`:
+API and worker share these users (tenant jobs on `DATABASE_URL`, retention/cleanup on the maintenance pool). The provider owner (`clinozy_be_<environment>_owner` on Neon / `postgres` on Railway) is in none of them — it only creates the users. `BYPASSRLS` on the migrator mirrors the provider owner it replaces: SECURITY DEFINER resolvers run as the role that created them, and `FORCE ROW LEVEL SECURITY` would otherwise make them return zero rows (see the header of `migrations/20260827050000_role_taxonomy_owner_operator_migrator.sql`). Create the users **as the provider owner** with SQL `CREATE ROLE` — not Neon's REST API, which taints roles with `BYPASSRLS`:
 
 ```sql
+-- The environment's database: clinozy_be_development or clinozy_be_production.
 CREATE ROLE clinozy_be_app LOGIN PASSWORD '<generated>';
 CREATE ROLE clinozy_be_maintenance LOGIN PASSWORD '<generated>';
 CREATE ROLE clinozy_be_migrator LOGIN CREATEROLE BYPASSRLS PASSWORD '<generated>';
-GRANT CONNECT ON DATABASE neondb TO clinozy_be_app, clinozy_be_maintenance, clinozy_be_migrator;
-GRANT ALL ON DATABASE neondb TO clinozy_be_migrator WITH GRANT OPTION;
+GRANT CONNECT ON DATABASE clinozy_be_production TO clinozy_be_app, clinozy_be_maintenance, clinozy_be_migrator;
+GRANT ALL ON DATABASE clinozy_be_production TO clinozy_be_migrator WITH GRANT OPTION;
 GRANT ALL ON SCHEMA public TO clinozy_be_migrator WITH GRANT OPTION;
 -- ADMIN only (no inherited privileges): the migrations grant these roles to others.
 GRANT clinozy_be_app TO clinozy_be_migrator WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
@@ -339,7 +340,7 @@ GRANT clinozy_be_maintenance TO clinozy_be_migrator WITH ADMIN TRUE, INHERIT FAL
 
 The migrations create every role `NOLOGIN` only when it is missing, so they leave these users' attributes alone and attach the grants — including `clinozy_be_migrator`'s membership in `clinozy_be_owner`, the `NOLOGIN` group that owns the tables. Point each URL at its user (pooler host for the two runtime URLs, direct host for the migration URL) and re-deploy. Confirm with `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = session_user` on `DATABASE_URL` — both must be `false`.
 
-> clinozy-infra's Neon provisioning (`setup-neon`) creates these three users on each environment's branch before the first deploy — via SQL as `neondb_owner` — and writes the three URLs into `.env.<environment>`. A database set up **outside** that flow (e.g. a hand-created Neon branch) must have the users created and wired manually as above.
+> clinozy-infra's Neon provisioning (`setup-neon`) creates one Neon project per environment (`clinozy-be-<environment>`: branch `<environment>`, database `clinozy_be_<environment>`, owner `clinozy_be_<environment>_owner`) and these three users in it before the first deploy — via SQL as that owner — and writes the three URLs into `.env.<environment>`. A database set up **outside** that flow (e.g. a hand-created Neon project) must have the users created and wired manually as above.
 
 ### Do NOT disable the guard to "fix" it
 

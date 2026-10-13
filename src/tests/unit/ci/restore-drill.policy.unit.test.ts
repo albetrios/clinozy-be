@@ -16,7 +16,7 @@ describe('restore drill automation policy', () => {
     expect(workflow).not.toContain('recorded_rto_minutes');
   });
 
-  it('uses monthly drill Neon secrets and the GitHub Environment name as parent branch', () => {
+  it('uses monthly drill Neon secrets and the GitHub Environment to find its Neon project', () => {
     const workflow = readFileSync(
       join(ROOT, '.github/workflows/scheduled-monthly-restore-rto.yml'),
       'utf8',
@@ -35,14 +35,35 @@ describe('restore drill automation policy', () => {
     expect(script).toContain('RESTORE_DRILL_NEON_PROJECT_NAME');
     expect(script).toContain('project-identity.env');
     expect(script).toContain('PROJECT_SLUG');
-    expect(script).toContain('RESTORE_DRILL_PARENT_BRANCH_NAME');
+    expect(script).toContain('RESTORE_DRILL_ENVIRONMENT');
+    expect(script).not.toContain('RESTORE_DRILL_PARENT_BRANCH_NAME');
     expect(script).not.toContain('NEON_PARENT_BRANCH_ID');
     expect(script).not.toContain('DATABASE_URL_FOR_MONTHLY');
   });
 
-  it('restores from the Neon branch named after the GitHub Environment, never the git ref', () => {
-    // Neon branches are provisioned per environment (development/production); the default
-    // `main` branch serves no environment, so a git-ref parent would restore an unused database.
+  it("derives every Neon name from the environment — never Neon's defaults", () => {
+    // One Neon project per environment (the infrastructure repository's rule): project
+    // <slug>-<environment>, branch <environment>, database <slug_with_underscores>_<environment>,
+    // owner <database>_owner. Neon's `main` / `neondb` / `neondb_owner` exist nowhere.
+    const script = readFileSync(join(ROOT, 'tooling/ci/restore-drill-neon.sh'), 'utf8');
+    for (const derivation of [
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
+      '-${RESTORE_DRILL_ENVIRONMENT}}',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
+      'NEON_PARENT_BRANCH_NAME="${RESTORE_DRILL_ENVIRONMENT}"',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
+      'NEON_DATABASE_NAME="${NEON_PROJECT_NAME//-/_}"',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
+      'NEON_OWNER_ROLE_NAME="${NEON_DATABASE_NAME}_owner"',
+    ]) {
+      expect(script).toContain(derivation);
+    }
+    expect(script).not.toMatch(/neondb/);
+    // The identity file is not shell-safe to `source` (an unquoted display name with a space).
+    expect(script).not.toMatch(/^\s*(source|\.)\s+.*project-identity\.env/m);
+  });
+
+  it('passes the GitHub Environment, never the git ref, in both drill workflows', () => {
     for (const workflowFileName of [
       'scheduled-monthly-restore-rto.yml',
       'scheduled-weekly-restore-smoke.yml',
@@ -50,10 +71,10 @@ describe('restore drill automation policy', () => {
       const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
       expect(workflow, workflowFileName).toContain(
         // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression in the workflow YAML — not a TS template.
-        'RESTORE_DRILL_PARENT_BRANCH_NAME: ${{ needs.resolve-environment.outputs.environment }}',
+        'RESTORE_DRILL_ENVIRONMENT: ${{ needs.resolve-environment.outputs.environment }}',
       );
       expect(workflow, workflowFileName).not.toMatch(
-        /RESTORE_DRILL_PARENT_BRANCH_NAME: \$\{\{ github\.ref_name \}\}/,
+        /RESTORE_DRILL_\w+: \$\{\{ github\.ref_name \}\}/,
       );
     }
   });
