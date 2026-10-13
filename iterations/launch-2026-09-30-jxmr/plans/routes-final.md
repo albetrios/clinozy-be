@@ -6990,8 +6990,19 @@ Each nested sub-domain's .9; common to many routes:
 
 ### 11.12 Nested sub-domains
 
-| Nested sub-domain | Folder | Tables | Routes |
-| --- | --- | --- | --- |
+| Nested sub-domain | Folder (`src/domains/app/sub-domains/medical/…`) | Tables | Routes | Status |
+| --- | --- | --- | --- | --- |
+| 11.A Manufacturers | `manufacturers/` | `app.manufacturers` | 1–6 | final |
+| 11.B Suppliers | `suppliers/` | `app.suppliers`, `app.supplier_manufacturers` | 7–13 | final · rev 2 |
+| 11.C Supplier credits | `suppliers/supplier-credits/` | `app.supplier_credits` | 14–16, 54–55 | final · rev 2 |
+| 11.D Medicines | `medicines/` | `app.medicines`, `app.medicine_batches`, `app.medicine_supplier_prices` | 17–24 | final · rev 2 |
+| 11.E Medical purchase orders | `medical-purchase-orders/` | `app.medical_purchase_orders`, `app.medical_purchase_order_items` | 25–32 | final · rev 2 |
+| 11.F Medical reps | `medical-reps/` | `app.medical_reps`, `app.medical_rep_manufacturers` | 33–38 | final |
+| 11.G Medical rep visits | `medical-reps/medical-rep-visits/` | `app.medical_rep_visits` | 39–43 | final |
+| 11.H Medical sales | `medical-sales/` | `app.medical_sales`, `app.medical_sale_returns`, `app.medical_sale_return_items` | 44–50, 52 | final · rev 2 |
+| 11.I Medical payments | `medical-payments/` | — (the store's slice of `app.payments`, 8.C) | 51, 53 | new · rev 2 (D89) |
+
+--- | --- | --- | --- |
 | 11.A Manufacturers | `medical/manufacturers/` | `app.manufacturers` | 1–6 |
 | 11.B Suppliers | `medical/suppliers/` | `app.suppliers`, `app.supplier_manufacturers` | 7–13 |
 | 11.C Supplier credits | `medical/suppliers/supplier-credits/` | `app.supplier_credits` | 14–16, 54–55 **(rev 2)** |
