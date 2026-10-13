@@ -9,6 +9,7 @@ import {
 import { AppFlow } from '@/domains/app/__tests__/factories/app-flow.factory.js';
 import {
   APP_COLLECTION_WRITES,
+  collectionWritePath,
   findBookableDay,
   seedAppRouteReferences,
 } from '@/domains/app/__tests__/factories/app-route-references.factory.js';
@@ -139,11 +140,14 @@ describe('Security: app bodies and filters never reach another organization’s 
     const unproven: string[] = [];
     let swaps = 0;
     for (const route of APP_COLLECTION_WRITES) {
-      const { method, path } = split(route);
-      const base = JSON.stringify(appRouteBody({ method, path, references: attackerReferences }));
+      const { method, path: template } = split(route);
+      const path = collectionWritePath(template, attackerReferences);
+      const base = JSON.stringify(
+        appRouteBody({ method, path: template, references: attackerReferences }),
+      );
       for (const key of REFERENCE_KEYS) {
         const references = { ...attackerReferences, [key]: victimReferences[key] };
-        const body = appRouteBody({ method, path, references });
+        const body = appRouteBody({ method, path: template, references });
         if (JSON.stringify(body) === base) continue; // the body does not name this reference
         swaps += 1;
         const response = await attackFlow.call(method, path, body);

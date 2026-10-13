@@ -27,6 +27,7 @@ import {
   invoices,
 } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { invoice_credit_notes } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.schema.js';
+import { pending_credits } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.schema.js';
 import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.schema.js';
 import {
   MEDICAL_SALE_REFUND_MODE_VALUES,
@@ -148,8 +149,10 @@ export const medical_sales = appSchema
  * ROUTE #153, MD21); no routes of its own (K1) — written by the sale's return route.
  *
  * @remarks
- * - **Notes:** append-only; its credit note (8, B16) carries the refund (unique); who took it back
- *   is K8's composite key (`RESTRICT`, K2). The sale stays while returns name it (`RESTRICT`). RLS
+ * - **Notes:** append-only; its credit note (8, B16) carries the refund (unique) — or, as store
+ *   credit (`refund_mode` `credit`, MD33), no refund and the `give` pending credit it left
+ *   (`pending_credit_id`, unique; a purged credit sets it null); who took it back is K8's composite
+ *   key (`RESTRICT`, K2). The sale stays while returns name it (`RESTRICT`). RLS
  *   on the organization GUC.
  */
 export const medical_sale_returns = appSchema
@@ -165,12 +168,17 @@ export const medical_sale_returns = appSchema
         .notNull()
         .references(() => medical_sales.id, { onDelete: 'restrict' }),
       reason: varchar('reason', { length: 14 }).notNull(),
-      refund_mode: varchar('refund_mode', { length: 4 }).notNull(),
+      refund_mode: varchar('refund_mode', { length: 6 }).notNull(),
       note: varchar('note', { length: 280 }),
       amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
       invoice_credit_note_id: bigint('invoice_credit_note_id', { mode: 'number' })
         .notNull()
         .references((): AnyPgColumn => invoice_credit_notes.id, { onDelete: 'restrict' }),
+      // A store-credit return's `give` pending credit (MD33)
+      pending_credit_id: bigint('pending_credit_id', { mode: 'number' }).references(
+        (): AnyPgColumn => pending_credits.id,
+        { onDelete: 'set null' },
+      ),
       returned_by_membership_id: bigint('returned_by_membership_id', { mode: 'number' }),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
@@ -182,6 +190,9 @@ export const medical_sale_returns = appSchema
       uniqueIndex('idx_medical_sale_returns_invoice_credit_note_id').on(
         table.invoice_credit_note_id,
       ),
+      uniqueIndex('idx_medical_sale_returns_pending_credit_id')
+        .on(table.pending_credit_id)
+        .where(sql`${table.pending_credit_id} IS NOT NULL`),
       index('idx_medical_sale_returns_sale_created').on(
         table.medical_sale_id,
         table.created_at,
@@ -203,6 +214,10 @@ export const medical_sale_returns = appSchema
         sql`${table.refund_mode} IN (${sqlLiteralList(MEDICAL_SALE_REFUND_MODE_VALUES)})`,
       ),
       check('chk_medical_sale_returns_amount', sql`${table.amount} > 0`),
+      check(
+        'chk_medical_sale_returns_pending_credit',
+        sql`${table.pending_credit_id} IS NULL OR ${table.refund_mode} = 'credit'`,
+      ),
       foreignKey({
         name: 'medical_sale_returns_returned_by_membership_fk',
         columns: [table.organization_id, table.returned_by_membership_id],

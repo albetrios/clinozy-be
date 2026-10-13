@@ -6,6 +6,11 @@ import {
   listSupplierCreditsQueryDto,
 } from './supplier-credits.dto.js';
 
+/** An ISO instant of the query as a `Date`, or undefined when absent. */
+function readInstant(value: string | undefined): Date | undefined {
+  return value === undefined ? undefined : new Date(value);
+}
+
 /** Parses a "Return expiring stock" body; throws `ValidationError` naming each bad field. */
 export function validateCreateSupplierCredit(data: unknown): CreateSupplierCreditInput {
   return parseWithSchema({ schema: CreateSupplierCreditDto, data });
@@ -16,7 +21,7 @@ export function refuseSupplierCreditUpdate(): Record<string, unknown> {
   throw new Error('supplier credits are never changed');
 }
 
-/** Parses the credits list's query into a list input (routes-final 11.C.8 #14). */
+/** Parses the credits list's query into a list input (routes-final 11.C.8 #14, #57). */
 export function validateListSupplierCreditsQuery(data: unknown): BaseRecordListInput {
   const query = parseWithSchema({ schema: listSupplierCreditsQueryDto, data });
   return {
@@ -25,6 +30,9 @@ export function validateListSupplierCreditsQuery(data: unknown): BaseRecordListI
     sort: query.sort,
     order: query.order,
     referenceEquals: { supplier_id: query.supplier_id, medicine_id: query.medicine_id },
+    ranges: {
+      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+    },
     derived: { status: query.status },
   };
 }

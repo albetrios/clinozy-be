@@ -35,12 +35,14 @@ import {
   PENDING_CREDIT_SETTLE_METHOD,
   PENDING_CREDIT_STATUS,
 } from './pending-credits.constants.js';
+import { PendingCreditsRepository } from './pending-credits.repository.js';
 import { SettlePendingCreditDto, type SettlePendingCreditInput } from './pending-credits.dto.js';
 import { pending_credits } from './pending-credits.schema.js';
 
 const invoicesRepository = new InvoicesRepository();
 const creditNotesRepository = new InvoiceCreditNotesRepository();
 const paymentsRepository = new PaymentsRepository();
+const pendingCreditsRepository = new PendingCreditsRepository();
 
 /**
  * B23: a contact or a typed name — and an invoice it names is that contact's.
@@ -244,6 +246,36 @@ async function settlePendingCredit(input: BaseRecordActionInput): Promise<BaseRe
     await settleByMoneyBack({ credit: existing, body, context });
   }
   return (await input.repository.findById(existing.id)) ?? existing;
+}
+
+/**
+ * Writes a pending credit another write makes in its transaction — a medical return kept as store
+ * credit (MD33): `give` (the clinic owes it) to the contact, open, numbered by the record counter;
+ * no invoice, so giving it back is a plain refund (the return's credit note already lowered the
+ * bill) and using it on a bill is the usual receipt paid by `credit`.
+ *
+ * @remarks
+ * - **Notes:** no payment is written — nothing is settled yet (B24).
+ */
+export async function recordStoreCredit(options: {
+  context: BaseRecordWriteContext;
+  contactId: number;
+  amount: number;
+  reason: string;
+  note: string | null;
+}): Promise<BaseRecordRow> {
+  const { context } = options;
+  return pendingCreditsRepository.insert({
+    organization_id: context.organizationId,
+    direction: PENDING_CREDIT_DIRECTION.GIVE,
+    contact_id: options.contactId,
+    amount: options.amount.toFixed(2),
+    status: PENDING_CREDIT_STATUS.OPEN,
+    reason: options.reason,
+    note: options.note,
+    created_by_user_id: context.userId,
+    updated_by_user_id: context.userId,
+  });
 }
 
 /**

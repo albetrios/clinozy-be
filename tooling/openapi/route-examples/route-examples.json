@@ -10150,7 +10150,7 @@
       }
     }
   },
-  "GET /api/v1/app/supplier-credits/:supplier_credit_id": {
+  "GET /api/v1/app/suppliers/:supplier_id/credits/:supplier_credit_id": {
     "responses": {
       "200": {
         "data": {
@@ -26361,10 +26361,9 @@
       }
     }
   },
-  "POST /api/v1/app/supplier-credits": {
+  "POST /api/v1/app/suppliers/:supplier_id/credits": {
     "request_body": {
       "medicine_batch_id": "mbt_example00000000000000",
-      "supplier_id": "sup_example00000000000000",
       "quantity": 1
     },
     "responses": {
@@ -26387,23 +26386,6 @@
         },
         "meta": {
           "request_id": "2b0c44d4-26dd-4448-975a-a4e6dff26e7c"
-        }
-      },
-      "400": {
-        "error": {
-          "type": "validation_error",
-          "code": "invalid_field",
-          "detail": "sup_000000000000000000000 is not a supplier of this organization",
-          "documentation_url": "https://example.com/resource",
-          "errors": [
-            {
-              "field": "supplier_id",
-              "message": "sup_000000000000000000000 is not a supplier of this organization"
-            }
-          ]
-        },
-        "meta": {
-          "request_id": "a4a75a95-9570-44b8-9cdd-b8798d95132a"
         }
       },
       "401": {

@@ -252,6 +252,29 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
     return rows.length > 0;
   }
 
+  /**
+   * MD32: takes every supplier credit off a supplier's orders (`credited_amount` back to 0) — a
+   * credit voided or restored, before the live ones are applied again oldest first.
+   */
+  async uncreditSupplierOrders(options: {
+    supplierId: number;
+    userId: number | null;
+  }): Promise<void> {
+    await getRequestDatabase()
+      .update(medical_purchase_orders)
+      .set({
+        credited_amount: '0.00',
+        updated_at: sql`greatest(${medical_purchase_orders.created_at}, now())`,
+        updated_by_user_id: options.userId,
+      } as never)
+      .where(
+        and(
+          eq(medical_purchase_orders.supplier_id, options.supplierId),
+          gt(medical_purchase_orders.credited_amount, '0'),
+        ),
+      );
+  }
+
   /** MD15: whether a supplier has a live order still waiting to be received. */
   async hasOrderWaiting(supplierId: number): Promise<boolean> {
     const rows = await getRequestDatabase()

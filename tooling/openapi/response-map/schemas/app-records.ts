@@ -2573,10 +2573,19 @@ export const medicalSalesRecordSchema = {
             type: 'string',
             enum: ['unused', 'reaction', 'doctor_changed', 'wrong_item', 'damaged'],
           },
-          refund_mode: { type: 'string', enum: ['cash', 'upi', 'card'] },
+          refund_mode: {
+            type: 'string',
+            enum: ['cash', 'upi', 'card', 'credit'],
+            description: '`credit` — kept as store credit, no money moved (MD33)',
+          },
           note: { type: 'string', nullable: true },
           amount: { type: 'number' },
           invoice_credit_note_id: { type: 'string' },
+          pending_credit_id: {
+            type: 'string',
+            nullable: true,
+            description: "A store-credit return's `give` pending credit (MD33)",
+          },
           items: {
             type: 'array',
             items: {

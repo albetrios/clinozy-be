@@ -3,13 +3,8 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import { requireOrganizationPermission } from '@/shared/utils/auth/authorization.util.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
-import { listPaymentsQueryDto } from '@/domains/app/sub-domains/billing/payments/payments.dto.js';
-import type { PaymentsService } from '@/domains/app/sub-domains/billing/payments/payments.service.js';
 import type { MedicalSalesService } from './medical-sales.service.js';
-import {
-  createMedicalPaymentsController,
-  createMedicalSalesController,
-} from './medical-sales.controller.js';
+import { createMedicalSalesController } from './medical-sales.controller.js';
 import {
   CreateMedicalSaleDto,
   ReturnMedicalSaleDto,
@@ -27,12 +22,8 @@ const LIST_QUERY_TEXT =
   "`q` searches the number (`S-983`), the buyer's name or phone and the medicines' names; filters `status` (unpaid, paid, returned, voided) and `branch_id` (several, comma-separated), `contact_id`, `medicine_id`, `patient_prescription_id`, the created range (`created_from`, `created_to` — the latter exclusive); sort `sold_at` (default, newest first), `sale_number`, `total` or `contact_name` (the buyer's name, A–Z). Another branch's sales only with branch:read.";
 
 /** Registers the `medical-sales` routes (prefix `/api/v1/app`) — routes-final 11.H, routes 44–52. */
-export function medicalSalesRoutes(services: {
-  medicalSalesService: MedicalSalesService;
-  paymentsService: PaymentsService;
-}): FastifyPluginAsync {
-  const controller = createMedicalSalesController(services.medicalSalesService);
-  const paymentsController = createMedicalPaymentsController(services.paymentsService);
+export function medicalSalesRoutes(service: MedicalSalesService): FastifyPluginAsync {
+  const controller = createMedicalSalesController(service);
 
   return async (app) => {
     const zodApplication = app.withTypeProvider<ZodTypeProvider>();
@@ -163,22 +154,6 @@ export function medicalSalesRoutes(services: {
         },
       },
       controller.transition('returns'),
-    );
-    zodApplication.get(
-      '/medical-payments',
-      {
-        onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.MEDICINE_READ)],
-        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
-        schema: {
-          summary: "List the medical store's payments",
-          description:
-            "The store's Payments tab: the payments ledger limited to the medical store — receipts and refunds on `medical` invoices, supplier bills of medical orders and `medicines` expenses (and their reversals) — with the ledger's filters (`q`, `direction`, `kind`, `mode`, `branch_id`, the paid days, `is_settled`, …) and sorts. Another branch's payments only with branch:read. Requires medicine:read.",
-          tags: ['Medical store'],
-          querystring: listPaymentsQueryDto,
-        },
-      },
-      paymentsController.list,
     );
   };
 }

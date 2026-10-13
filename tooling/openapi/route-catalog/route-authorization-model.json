@@ -600,8 +600,23 @@
     "model": "organization",
     "verifyNoMutation": true
   },
-  "GET /api/v1/app/supplier-credits/:supplier_credit_id": {
+  "GET /api/v1/app/suppliers/:supplier_id/credits": {
     "model": "organization"
+  },
+  "POST /api/v1/app/suppliers/:supplier_id/credits": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "GET /api/v1/app/suppliers/:supplier_id/credits/:supplier_credit_id": {
+    "model": "organization"
+  },
+  "DELETE /api/v1/app/suppliers/:supplier_id/credits/:supplier_credit_id": {
+    "model": "organization",
+    "verifyNoMutation": true
+  },
+  "POST /api/v1/app/suppliers/:supplier_id/credits/:supplier_credit_id/restore": {
+    "model": "organization",
+    "verifyNoMutation": true
   },
   "GET /api/v1/app/stock-vendors/:stock_vendor_id": {
     "model": "organization"

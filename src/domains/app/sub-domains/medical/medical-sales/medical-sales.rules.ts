@@ -13,6 +13,7 @@ import type {
 } from '@/domains/app/base-record.types.js';
 import { ContactsRepository } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
 import { recordCreditNote } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.rules.js';
+import { recordStoreCredit } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.rules.js';
 import { INVOICE_TYPE } from '@/domains/app/sub-domains/billing/invoices/invoices.constants.js';
 import type { InvoicePaidNowInput } from '@/domains/app/sub-domains/billing/invoices/invoices.dto.js';
 import type { InvoiceLineInput } from '@/domains/app/sub-domains/billing/invoices/invoices.lines.js';
@@ -34,6 +35,7 @@ import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import { paiseOf, splitRecordIds, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import {
+  MEDICAL_SALE_REFUND_MODE,
   MEDICAL_SALE_RESTOCKED_REASON_VALUES,
   MEDICAL_SALE_STATUS,
 } from './medical-sales.constants.js';
@@ -264,8 +266,9 @@ function returnedLine(options: {
 /**
  * MD21: "Return from patient" — on a sale paid in full, the lines (up to what is left of each)
  * come back: the refund is their share of the amounts, a credit note on the invoice with its
- * refund payment (B16); unused, doctor-changed and wrong-item packs go back into their batch, the
- * rest are written off.
+ * refund payment (B16) — or, as store credit (MD33), the credit note alone and a `give` pending
+ * credit the return names; unused, doctor-changed and wrong-item packs go back into their batch,
+ * the rest are written off.
  */
 async function returnSale(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing: sale, context } = input;
@@ -291,14 +294,25 @@ async function returnSale(input: BaseRecordActionInput): Promise<BaseRecordRow> 
     }),
   );
   const totalPaise = returned.reduce((total, item) => total + item.paise, 0);
+  const reason = `Sale ${saleLabel(sale)} returned: ${body.reason}`;
+  const storeCredit = body.refund_mode === MEDICAL_SALE_REFUND_MODE.CREDIT;
   const creditNote = await recordCreditNote({
     context,
     invoice,
     amount: totalPaise / 100,
-    reason: `Sale ${saleLabel(sale)} returned: ${body.reason}`,
-    splits: [{ mode: body.refund_mode, amount: totalPaise / 100 }],
+    reason,
+    splits: storeCredit ? null : [{ mode: body.refund_mode, amount: totalPaise / 100 }],
     note: body.note ?? null,
   });
+  const pendingCredit = storeCredit
+    ? await recordStoreCredit({
+        context,
+        contactId: sale.contact_id as number,
+        amount: totalPaise / 100,
+        reason: `Store credit — ${reason}`,
+        note: body.note ?? null,
+      })
+    : null;
   await repository.insertReturn({
     values: {
       organization_id: context.organizationId,
@@ -308,6 +322,7 @@ async function returnSale(input: BaseRecordActionInput): Promise<BaseRecordRow> 
       note: body.note ?? null,
       amount: (totalPaise / 100).toFixed(2),
       invoice_credit_note_id: creditNote.id,
+      pending_credit_id: pendingCredit?.id ?? null,
       returned_by_membership_id: await findMembershipIdOfUser({
         organizationId: context.organizationId,
         userId: context.userId,

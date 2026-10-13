@@ -5,6 +5,7 @@ import { BaseRecordRepository, type BaseRecordRow } from '@/domains/app/base-rec
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { invoice_credit_notes } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.schema.js';
+import { pending_credits } from '@/domains/app/sub-domains/billing/pending-credits/pending-credits.schema.js';
 import {
   invoice_items,
   invoice_members,
@@ -101,6 +102,8 @@ export interface MedicalSaleReturnRow {
   note: string | null;
   amount: string;
   invoice_credit_note_id: string;
+  /** The `give` pending credit a store-credit return left (MD33) — null otherwise. */
+  pending_credit_id: string | null;
   returned_by_membership_id: string | null;
   created_at: Date;
 }
@@ -253,6 +256,7 @@ export class MedicalSalesRepository extends BaseRecordRepository {
         note: medical_sale_returns.note,
         amount: medical_sale_returns.amount,
         invoice_credit_note_id: invoice_credit_notes.public_id,
+        pending_credit_id: pending_credits.public_id,
         returned_by_membership_id: memberships.public_id,
         created_at: medical_sale_returns.created_at,
       })
@@ -261,6 +265,7 @@ export class MedicalSalesRepository extends BaseRecordRepository {
         invoice_credit_notes,
         eq(invoice_credit_notes.id, medical_sale_returns.invoice_credit_note_id),
       )
+      .leftJoin(pending_credits, eq(pending_credits.id, medical_sale_returns.pending_credit_id))
       .leftJoin(memberships, eq(memberships.id, medical_sale_returns.returned_by_membership_id))
       .where(inArray(medical_sale_returns.medical_sale_id, [...saleIds]))
       .orderBy(asc(medical_sale_returns.created_at), asc(medical_sale_returns.id));
@@ -383,6 +388,7 @@ export class MedicalSalesRepository extends BaseRecordRepository {
       note: string | null;
       amount: string;
       invoice_credit_note_id: number;
+      pending_credit_id: number | null;
       returned_by_membership_id: number | null;
       created_by_user_id: number | null;
     };

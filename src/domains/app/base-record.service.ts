@@ -902,7 +902,8 @@ export class BaseRecordService<Output> {
 
   /**
    * Every row a list query matches, for a download — up to {@link BASE_RECORD_EXPORT_ROW_LIMIT},
-   * paging through the list (its filters, sort, visibility and rules).
+   * paging through the list (its filters, sort, visibility and rules, and the route's own derived
+   * filters — a store's slice of the ledger).
    */
   async exportRows({
     scope,
@@ -914,6 +915,8 @@ export class BaseRecordService<Output> {
     options: {
       actingUserPublicId?: string | undefined;
       visibility?: BaseRecordVisibility | undefined;
+      /** Derived filters the route adds beside the query's (as {@link BaseRecordService.list}). */
+      derived?: Readonly<Record<string, unknown>> | undefined;
     };
   }): Promise<{ rows: Output[]; is_truncated: boolean }> {
     const { after: _after, limit: _limit, ...filters } = (query ?? {}) as Record<string, unknown>;

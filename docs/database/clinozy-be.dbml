@@ -742,6 +742,7 @@ Table app.medical_sale_returns {
   medical_sale_id bigint [not null]
   note varchar(280)
   organization_id bigint [not null]
+  pending_credit_id bigint
   public_id varchar(28) [not null]
   reason varchar(14) [not null]
   refund_mode varchar(4) [not null]
@@ -1591,6 +1592,7 @@ Table app.supplier_credits {
   created_at timestamptz [not null]
   created_by_membership_id bigint
   created_by_user_id bigint
+  deleted_at timestamptz
   id bigint [pk, increment, not null]
   medicine_batch_id bigint [not null]
   medicine_id bigint [not null]
@@ -2490,6 +2492,7 @@ Ref: app.medical_sale_returns.created_by_user_id > auth.users.id [delete: no act
 Ref: app.medical_sale_returns.invoice_credit_note_id > app.invoice_credit_notes.id [delete: restrict]
 Ref: app.medical_sale_returns.medical_sale_id > app.medical_sales.id [delete: restrict]
 Ref: app.medical_sale_returns.organization_id > tenancy.organizations.id [delete: cascade]
+Ref: app.medical_sale_returns.pending_credit_id > app.pending_credits.id [delete: set null]
 Ref: app.medical_sales.branch_id > app.branches.id [delete: restrict]
 Ref: app.medical_sales.contact_id > app.contacts.id [delete: restrict]
 Ref: app.medical_sales.created_by_user_id > auth.users.id [delete: no action]

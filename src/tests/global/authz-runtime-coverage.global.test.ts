@@ -248,8 +248,14 @@ const RUNTIME_COVERAGE: Readonly<Record<string, string>> = {
   'DELETE /api/v1/app/medical-sales/:medical_sale_id': 'app-cross-organization: medical-sales',
   'POST /api/v1/app/medical-sales/:medical_sale_id/restore':
     'app-cross-organization: medical-sales',
-  'GET /api/v1/app/supplier-credits/:supplier_credit_id':
-    'app-cross-organization: supplier-credits',
+  'GET /api/v1/app/suppliers/:supplier_id/credits': 'app-cross-organization: suppliers',
+  'POST /api/v1/app/suppliers/:supplier_id/credits': 'app-cross-organization: suppliers',
+  'GET /api/v1/app/suppliers/:supplier_id/credits/:supplier_credit_id':
+    'app-cross-organization: suppliers',
+  'DELETE /api/v1/app/suppliers/:supplier_id/credits/:supplier_credit_id':
+    'app-cross-organization: suppliers',
+  'POST /api/v1/app/suppliers/:supplier_id/credits/:supplier_credit_id/restore':
+    'app-cross-organization: suppliers',
   'GET /api/v1/app/stock-vendors/:stock_vendor_id': 'app-cross-organization: stock-vendors',
   'PATCH /api/v1/app/stock-vendors/:stock_vendor_id': 'app-cross-organization: stock-vendors',
   'DELETE /api/v1/app/stock-vendors/:stock_vendor_id': 'app-cross-organization: stock-vendors',

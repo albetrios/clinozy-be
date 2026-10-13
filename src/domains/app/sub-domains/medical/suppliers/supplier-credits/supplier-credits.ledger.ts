@@ -53,3 +53,25 @@ export async function applySupplierCredits(options: {
     }
   }
 }
+
+/**
+ * MD32: a credit voided or its void undone — takes back what every credit of the supplier applied
+ * and applies its live credits again, the oldest to the oldest received order still due, as if the
+ * voided credit had never been (or had never been voided).
+ *
+ * @remarks
+ * - **Algorithm:** the credits' applied amounts, then the orders' credited amounts, go back to 0
+ *   (credits before orders — the lock order {@link applySupplierCredits} takes); then
+ *   {@link applySupplierCredits}. Where a credit went is not recorded, so the live credits are laid
+ *   again on today's dues: what the supplier is owed moves by exactly the voided credit's amount.
+ * - **Failure modes:** as {@link applySupplierCredits}.
+ */
+export async function reapplySupplierCredits(options: {
+  context: BaseRecordWriteContext;
+  supplierId: number;
+}): Promise<void> {
+  const { context, supplierId } = options;
+  await creditsRepository.takeBackApplied({ supplierId, userId: context.userId });
+  await ordersRepository.uncreditSupplierOrders({ supplierId, userId: context.userId });
+  await applySupplierCredits({ context, supplierId });
+}

@@ -704,11 +704,11 @@ describe('Medical store — integration (routes-final §11)', () => {
     flow.expectValue('owed: why', REASON, 'supplier_has_dues');
   });
 
-  it('11.C supplier credits (routes 14–16)', async () => {
+  it('11.C supplier credits under their supplier (routes 14–16, 57 — MD34)', async () => {
     flow.as('owner');
-    await flow.expect(200, 'return expiring stock', 'POST', '/app/supplier-credits', {
+    const credits = `/app/suppliers/${supplier}/credits`;
+    await flow.expect(200, 'return expiring stock', 'POST', credits, {
       medicine_batch_id: batchOne,
-      supplier_id: supplier,
       quantity: 1,
     });
     const credit = flow.last('.data.id');
@@ -729,25 +729,128 @@ describe('Medical store — integration (routes-final §11)', () => {
       '[.data.credited_amount, .data.due_amount, .data.payment_status] | map(tostring) | join(",")',
       '246,2214,partial',
     );
-    await flow.expect(409, 'more than the batch holds', 'POST', '/app/supplier-credits', {
+    await flow.expect(409, 'more than the batch holds', 'POST', credits, {
       medicine_batch_id: batchOne,
-      supplier_id: supplier,
       quantity: 99,
     });
     flow.expectValue('stock: why', REASON, 'not_enough_stock');
-    await flow.expect(400, 'a supplier not here', 'POST', '/app/supplier-credits', {
+    await flow.expect(400, 'the supplier is the path', 'POST', credits, {
       medicine_batch_id: batchOne,
-      supplier_id: 'sup_000000000000000000000',
+      supplier_id: supplier,
       quantity: 1,
     });
     await flow.expect(
+      404,
+      'a supplier not here',
+      'POST',
+      '/app/suppliers/sup_000000000000000000000/credits',
+      { medicine_batch_id: batchOne, quantity: 1 },
+    );
+    await flow.expect(200, "a supplier's credits (route 57)", 'GET', `${credits}?status=adjusted`);
+    flow.expectValue('the credit', IDS, credit);
+    await flow.expect(400, 'the path is the supplier', 'GET', `${credits}?supplier_id=${supplier}`);
+    await flow.expect(
       200,
-      "a supplier's credits",
+      'created since yesterday',
+      'GET',
+      `/app/supplier-credits?supplier_id=${supplier}&created_from=${calendarDay(fixture, -1)}T00:00:00Z`,
+    );
+    flow.expectValue('still the credit', IDS, credit);
+    await flow.expect(
+      200,
+      'created before today',
+      'GET',
+      `/app/supplier-credits?supplier_id=${supplier}&created_to=2000-01-01T00:00:00Z`,
+    );
+    flow.expectValue('none', '.data | length', 0);
+    await flow.expect(
+      200,
+      'every credit, by supplier (route 14)',
       'GET',
       `/app/supplier-credits?supplier_id=${supplier}&status=adjusted`,
     );
-    flow.expectValue('the credit', IDS, credit);
-    await flow.expect(200, 'get the credit', 'GET', `/app/supplier-credits/${credit}`);
+    flow.expectValue('the same credit', IDS, credit);
+    await flow.expect(200, 'get the credit', 'GET', `${credits}/${credit}`);
+    await flow.expect(200, 'another supplier', 'POST', '/app/suppliers', {
+      name: `Creditless agency ${T}`,
+    });
+    const other = flow.last('.data.id');
+    await flow.expect(
+      404,
+      "another supplier's path",
+      'GET',
+      `/app/suppliers/${other}/credits/${credit}`,
+    );
+    await flow.expect(200, 'none of its own', 'GET', `/app/suppliers/${other}/credits`);
+    flow.expectValue('empty', '.data | length', 0);
+  });
+
+  it('11.C a supplier credit voided and undone (routes 54, 55 — MD32)', async () => {
+    flow.as('owner');
+    const credits = `/app/suppliers/${supplier}/credits`;
+    const orderDues = async (label: string, want: string) => {
+      await flow.expect(200, label, 'GET', `/app/medical-purchase-orders/${purchaseOrder}`);
+      flow.expectValue(
+        label,
+        '[.data.credited_amount, .data.due_amount] | map(tostring) | join(",")',
+        want,
+      );
+    };
+    const payable = async (label: string, want: number) => {
+      await flow.expect(200, label, 'GET', `/app/suppliers/${supplier}`);
+      flow.expectValue(label, '.data.payable', want);
+    };
+    await flow.expect(200, 'the first credit', 'GET', `${credits}?status=adjusted`);
+    const first = flow.last('.data[0].id');
+    await flow.expect(200, 'two more packs back', 'POST', credits, {
+      medicine_batch_id: batchOne,
+      quantity: 2,
+    });
+    const second = flow.last('.data.id');
+    flow.expectEqual('three packs left', await batchStock(glycolac, 'B1'), '3');
+    await orderDues('both credits on the order', '738,1722');
+    await payable('the store owes 1,722', 1722);
+    flow.as('pharmacist');
+    await flow.expect(
+      403,
+      "the pharmacist can't void (medicine:delete)",
+      'DELETE',
+      `${credits}/${first}?reason=mistake`,
+    );
+    flow.as('owner');
+    await flow.expect(400, 'other needs a note', 'DELETE', `${credits}/${first}?reason=other`);
+    await flow.expect(
+      400,
+      "the store's own reasons",
+      'DELETE',
+      `${credits}/${first}?reason=duplicate`,
+    );
+    await flow.expect(204, 'void the first', 'DELETE', `${credits}/${first}?reason=wrong_quantity`);
+    flow.expectEqual('its pack back', await batchStock(glycolac, 'B1'), '4');
+    await orderDues('only the second on the order — applied again', '492,1968');
+    await payable('owed 246 more', 1968);
+    await flow.expect(404, 'a voided credit is not read', 'GET', `${credits}/${first}`);
+    await flow.expect(200, 'nor listed', 'GET', credits);
+    flow.expectValue('the second only', IDS, second);
+    await flow.expect(200, 'undo the void', 'POST', `${credits}/${first}/restore`);
+    flow.expectValue(
+      'applied again, in its place',
+      '[.data.id, .data.applied_amount, .data.status] | map(tostring) | join(",")',
+      `${first},246,adjusted`,
+    );
+    flow.expectEqual('the pack out again', await batchStock(glycolac, 'B1'), '3');
+    await orderDues('both on the order again', '738,1722');
+    await flow.expect(409, 'undo a live credit', 'POST', `${credits}/${first}/restore`);
+    flow.expectValue('live: why', REASON, 'record_not_deleted');
+    await flow.expect(
+      204,
+      'void the second for good',
+      'DELETE',
+      `${credits}/${second}?${DELETE_REASON}`,
+    );
+    flow.expectEqual('its packs back', await batchStock(glycolac, 'B1'), '5');
+    await orderDues('as before', '246,2214');
+    await payable('as before', 2214);
   });
 
   it('11.B pay a supplier (route 13) and supplier bills on an order (MD7)', async () => {
@@ -1046,6 +1149,94 @@ describe('Medical store — integration (routes-final §11)', () => {
       '[.data[].kind] | sort | join(",")',
       'receipt,refund,refund',
     );
+    await flow.expect(200, 'a rent expense — not the store', 'POST', '/app/payments', {
+      kind: 'expense',
+      branch_id: vesu,
+      expense_category: 'rent',
+      payee_name: `Shree Landlord ${T}`,
+      splits: [{ mode: 'cash', amount: 50 }],
+    });
+    const rent = flow.last('.data.id');
+    await flow.expect(200, 'the ledger has it', 'GET', `/app/payments?q=Shree%20Landlord`);
+    flow.expectValue('in the ledger', `[.data[] | select(.id == "${rent}")] | length`, 1);
+    await flow.expect(200, "the store's payments again", 'GET', '/app/medical-payments?q=Shree');
+    flow.expectValue('not the store', `[.data[] | select(.id == "${rent}")] | length`, 0);
+    const storeRows = flow.last('.data | length');
+    await flow.expect(
+      200,
+      "the store's payments CSV (MD31)",
+      'GET',
+      '/app/medical-payments/exports?q=Shree',
+    );
+    flow.expectValue(
+      "the same rows, the store's file name",
+      '[.data.row_count, (.data.file_name | startswith("medical-payments-")), (.data.content | contains("Landlord"))] | map(tostring) | join(",")',
+      `${storeRows},true,false`,
+    );
+  });
+
+  it("the store's payments managed through the ledger (MD31)", async () => {
+    flow.as('owner');
+    const at = (day: string) => `${day}T10:00:00+05:30`;
+    const yesterday = calendarDay(fixture, -1);
+    const storeHas = async (label: string, id: string, want: number) => {
+      await flow.expect(200, label, 'GET', `/app/medical-payments?q=Ledger%20${T}`);
+      flow.expectValue(label, `[.data[] | select(.id == "${id}")] | length`, want);
+    };
+    await flow.expect(200, 'a medicines expense through the ledger', 'POST', '/app/payments', {
+      kind: 'expense',
+      branch_id: vesu,
+      expense_category: 'medicines',
+      payee_name: `Ledger ${T}`,
+      splits: [{ mode: 'cash', amount: 30 }],
+    });
+    const expense = flow.last('.data.id');
+    await storeHas("in the store's payments", expense, 1);
+    await flow.expect(200, 'changed on an open day', 'PATCH', `/app/payments/${expense}`, {
+      note: 'Strips',
+    });
+    await flow.expect(200, 'the change shows', 'GET', `/app/medical-payments?q=Ledger%20${T}`);
+    flow.expectValue(
+      'its note and edit count',
+      `.data[] | select(.id == "${expense}") | [.note, .edit_count] | map(tostring) | join(",")`,
+      'Strips,1',
+    );
+    await flow.expect(204, 'deleted', 'DELETE', `/app/payments/${expense}?reason=mistake`);
+    await storeHas('gone from the store', expense, 0);
+    await flow.expect(200, 'restored', 'POST', `/app/payments/${expense}/restore`);
+    await storeHas('back in the store', expense, 1);
+    await flow.expect(200, "yesterday's medicines expense", 'POST', '/app/payments', {
+      kind: 'expense',
+      branch_id: vesu,
+      expense_category: 'medicines',
+      payee_name: `Ledger ${T}`,
+      paid_at: at(yesterday),
+      splits: [{ mode: 'upi', amount: 20 }],
+    });
+    const settled = flow.last('.data.id');
+    await flow.expect(200, 'open yesterday', 'POST', '/app/day-closes', {
+      branch_id: vesu,
+      close_date: yesterday,
+    });
+    const dayClose = flow.last('.data.id');
+    await flow.expect(200, 'and close it', 'POST', `/app/day-closes/${dayClose}/close`, {
+      counted_cash: 0,
+    });
+    await flow.expect(200, 'reverse the settled one', 'POST', `/app/payments/${settled}/reverse`, {
+      reason: 'Wrong supplier',
+    });
+    const reversal = flow.last('.data.id');
+    await flow.expect(
+      200,
+      "the store's reversals",
+      'GET',
+      '/app/medical-payments?kind=reversal&limit=100',
+    );
+    flow.expectValue(
+      "the reversal is the store's, pointing at the settled one",
+      `[.data[] | select(.id == "${reversal}") | .reverses_payment_id] | join(",")`,
+      settled,
+    );
   });
 
   it('a prescription filled once (MD19, MDC4)', async () => {
@@ -1138,6 +1329,18 @@ describe('Medical store — integration (routes-final §11)', () => {
       `/app/manufacturers/${quickManufacturer}?${DELETE_REASON}`,
     );
     await flow.expect(403, "the pharmacist can't export", 'GET', '/app/medicines/exports');
+    await flow.expect(
+      200,
+      "the pharmacist reads the store's payments",
+      'GET',
+      '/app/medical-payments',
+    );
+    await flow.expect(
+      403,
+      "nor export the store's payments",
+      'GET',
+      '/app/medical-payments/exports',
+    );
     flow.as('accountant');
     await flow.expect(
       200,
@@ -1150,6 +1353,12 @@ describe('Medical store — integration (routes-final §11)', () => {
       'the accountant exports',
       'GET',
       `/app/medical-sales/exports?contact_id=${asha}`,
+    );
+    await flow.expect(
+      200,
+      "the accountant exports the store's payments",
+      'GET',
+      '/app/medical-payments/exports',
     );
     await flow.expect(403, "the accountant can't add", 'POST', '/app/medicines', {
       name: `Accountant ${T}`,
@@ -1528,6 +1737,135 @@ describe('Medical store — integration (routes-final §11)', () => {
       "Asha's prescription names her: the file, the contact, the name",
       `[.data[] | select(.patient_id == "${ashaFile}") | .patient] | first | [.id, .contact_id, .name, (.patient_number > 0)] | map(tostring) | join(",")`,
       `${ashaFile},${asha},Asha ${T},true`,
+    );
+  });
+
+  it("a return as store credit and the store's customer credits (MD32, MD33, D90)", async () => {
+    flow.as('owner');
+    await flow.expect(200, 'Bela buys one, paid now', 'POST', '/app/medical-sales', {
+      branch_id: vesu,
+      contact_id: bela,
+      items: [{ medicine_id: glycolac, quantity: 1 }],
+      payment: { splits: [{ mode: 'cash', amount: 369 }] },
+    });
+    const sale = flow.last('.data.id');
+    const invoice = flow.last('.data.invoice.id');
+    const line = flow.last('.data.items[0].invoice_item_id');
+    await flow.expect(
+      200,
+      'her refunds before',
+      'GET',
+      `/app/payments?contact_id=${bela}&kind=refund&limit=100`,
+    );
+    const refundsBefore = flow.last('.data | length');
+    await flow.expect(
+      200,
+      'returned as store credit (MD33)',
+      'POST',
+      `/app/medical-sales/${sale}/returns`,
+      {
+        items: [{ invoice_item_id: line, quantity: 1 }],
+        reason: 'unused',
+        refund_mode: 'credit',
+      },
+    );
+    flow.expectValue(
+      'returned, the credit named, the bill paid in full',
+      '[.data.status, .data.returns[0].refund_mode, (.data.returns[0].pending_credit_id | startswith("pcr_")), .data.returns[0].amount, .data.invoice.paid_amount, .data.invoice.due_amount] | map(tostring) | join(",")',
+      'returned,credit,true,369,369,0',
+    );
+    const credit = flow.last('.data.returns[0].pending_credit_id');
+    await flow.expect(
+      200,
+      'no money moved',
+      'GET',
+      `/app/payments?contact_id=${bela}&kind=refund&limit=100`,
+    );
+    flow.expectValue('no refund payment', '.data | length', Number(refundsBefore));
+    await flow.expect(
+      200,
+      'the credit note lowers the bill',
+      'GET',
+      `/app/invoices/${invoice}/credit-notes`,
+    );
+    flow.expectValue(
+      'one note, no refund payment',
+      '[(.data | length), .data[0].amount, .data[0].payment_id] | map(tostring) | join(",")',
+      '1,369,null',
+    );
+    await flow.expect(
+      200,
+      "the store's customer credits (route 56)",
+      'GET',
+      `/app/medical-pending-credits?contact_id=${bela}`,
+    );
+    flow.expectValue(
+      'owed to Bela, open, no invoice',
+      `.data[] | select(.id == "${credit}") | [.direction, .amount, .left_amount, .status, .invoice_id] | map(tostring) | join(",")`,
+      'give,369,369,open,null',
+    );
+    await flow.expect(200, 'a credit added naming her sale', 'POST', '/app/pending-credits', {
+      direction: 'take',
+      contact_id: bela,
+      amount: 10,
+      reason: 'Strip short',
+      invoice_id: invoice,
+    });
+    const named = flow.last('.data.id');
+    await flow.expect(200, 'a credit of the clinic', 'POST', '/app/pending-credits', {
+      direction: 'give',
+      contact_id: bela,
+      amount: 20,
+      reason: 'Consult advance',
+    });
+    const clinic = flow.last('.data.id');
+    await flow.expect(
+      200,
+      'the store keeps its own',
+      'GET',
+      `/app/medical-pending-credits?contact_id=${bela}&limit=100`,
+    );
+    flow.expectValue(
+      "the sale's and the return's, never the clinic's",
+      `[.data[].id | select(. == "${credit}" or . == "${named}" or . == "${clinic}")] | sort | join(",")`,
+      [credit, named].sort().join(','),
+    );
+    flow.as('pharmacist');
+    await flow.expect(
+      200,
+      'the pharmacist reads them (medicine:read)',
+      'GET',
+      '/app/medical-pending-credits',
+    );
+    flow.as('owner');
+    await flow.expect(200, 'Bela buys again, unpaid', 'POST', '/app/medical-sales', {
+      branch_id: vesu,
+      contact_id: bela,
+      items: [{ medicine_id: glycolac, quantity: 1 }],
+    });
+    const nextSale = flow.last('.data.id');
+    const nextInvoice = flow.last('.data.invoice.id');
+    await flow.expect(
+      200,
+      'the credit used on the next bill',
+      'POST',
+      `/app/pending-credits/${credit}/settle`,
+      {
+        amount: 369,
+        method: 'use_on_bill',
+        invoice_id: nextInvoice,
+      },
+    );
+    flow.expectValue(
+      'used',
+      '[.data.status, .data.left_amount] | map(tostring) | join(",")',
+      'used,0',
+    );
+    await flow.expect(200, 'the next sale paid by it', 'GET', `/app/medical-sales/${nextSale}`);
+    flow.expectValue(
+      'paid',
+      '[.data.status, .data.invoice.due_amount] | map(tostring) | join(",")',
+      'paid,0',
     );
   });
 });

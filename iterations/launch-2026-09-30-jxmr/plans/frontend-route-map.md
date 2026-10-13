@@ -116,23 +116,31 @@ Paths below drop `/api/v1`. "→ §n" points at the route review section that ex
 
 ### Medical store
 
+Rev 2 (D88–D92, ROUTE #186–#195): the store manages its own payments and both sides of its credits; the
+frontend shows Payments and Credits as two tabs (`/medical/payments`, `/medical/credits`, D90).
+
 | Design operation | Route(s) today | Notes |
 | --- | --- | --- |
-| `listSales` | `GET /app/medical-sales` | |
-| `listPrescriptionsToFill` | `GET /app/patient-prescriptions?status=approved&is_filled=false` | the pharmacy queue |
-| `listMedicines` | `GET /app/medicines` | batches and supplier prices inside each medicine |
-| `listPurchaseOrders` | `GET /app/medical-purchase-orders` | `stage`, `payment_status`, `supplier_id` |
-| `listSuppliers` / `listManufacturers` / `listMRs` | `GET /app/suppliers` / `GET /app/manufacturers` / `GET /app/medical-reps` | supplier credits: `GET /app/supplier-credits` |
-| `listMedicalPayments` | `GET /app/medical-payments` | |
-| `createSale` | `POST /app/medical-sales` | the buyer is a contact; may name the `patient_prescription_id` it fills; batches drawn by earliest expiry |
-| `returnSale` | `POST /app/medical-sales/:medical_sale_id/returns` | |
+| `listSales` | `GET /app/medical-sales` | `created_from` / `created_to` (the Created filter), `sort=contact_name` (the customer A–Z); CSV `GET /app/medical-sales/exports` |
+| Send payment reminders (Sales › Unpaid) | `GET /app/medical-sales/dues` | one row per buyer with unpaid sales, largest due first — one answer, no cursor (`limit` 1–100); nothing is sent by the API |
+| `listPrescriptionsToFill` | `GET /app/patient-prescriptions?status=approved&is_filled=false` | the pharmacy queue — each row names its `patient` (`id`, `patient_number`, `contact_id`, `name`) |
+| `listMedicines` | `GET /app/medicines` | batches and supplier prices inside each medicine; `sort=manufacturer_name` (A–Z) or `margin_percent` (highest first), none last |
+| `listPurchaseOrders` | `GET /app/medical-purchase-orders` | `stage`, `payment_status`, `supplier_id`; the order's `supplier` carries `phone` and `gst_number` (the PO print sheet) |
+| `listSuppliers` / `listManufacturers` / `listMRs` | `GET /app/suppliers` / `GET /app/manufacturers` / `GET /app/medical-reps` | suppliers: `order_total` on each, `meta.payable_total` over every page; "Pay all received" opens Suppliers filtered `has_payable=true` |
+| `listMedicalPayments` | `GET /app/medical-payments` | the store's slice of the ledger (receipts and refunds on medical invoices, supplier bills of medical orders, `medicines` expenses and their reversals); CSV `GET /app/medical-payments/exports` (`medicine:export`); record, change, delete, undo and reverse through `/app/payments…` (their `payment:*` codes) |
+| Credits tab — supplier side | `GET /app/supplier-credits` | every credit; a supplier's own: `GET /app/suppliers/:supplier_id/credits` |
+| Credits tab — customer side | `GET /app/medical-pending-credits` | the store's customer credits (naming a medical invoice, or left by a store-credit return); add, give back, get back, use on a bill, change and delete through `/app/pending-credits…` (`payment:*`; giving back needs `payment:delete`) |
+| `createSale` | `POST /app/medical-sales` | the buyer is a contact; may name the `patient_prescription_id` it fills; batches drawn by earliest expiry; never edited — changed by a return |
+| `returnSale` | `POST /app/medical-sales/:medical_sale_id/returns` | **only on a sale paid in full** — otherwise `409 sale_not_paid` (collect first); needs `payment:delete` (`403 missing_permission`); `refund_mode` `cash` · `upi` · `card`, or `credit` — store credit: no money moves, the return's `pending_credit_id` names the `give` credit (M22) |
 | `voidSale` | `DELETE /app/medical-sales/:medical_sale_id?reason=` | the void is the delete |
-| `createMedicine` / `updateMedicine`, `quickCreateMedicine` | `POST` / `PATCH /app/medicines[/:medicine_id]` | the quick create is the same `POST` with the name; near-expiry discount: `POST /app/medicines/near-expiry-discount` |
+| `createMedicine` / `updateMedicine`, `quickCreateMedicine` | `POST` / `PATCH /app/medicines[/:medicine_id]` | the quick create is the same `POST` with the name **and `is_quick: true`** (M22); near-expiry discount: `POST /app/medicines/near-expiry-discount` |
 | `createPO` / `updatePO` | `POST` / `PATCH /app/medical-purchase-orders[/:medical_purchase_order_id]` | |
-| `receivePO` | `POST /app/medical-purchase-orders/:medical_purchase_order_id/receive` | |
+| `receivePO` | `POST /app/medical-purchase-orders/:medical_purchase_order_id/receive` | `items` may add goods not ordered — lines without `id` (`medicine_id` or `new_medicine_name`, `quantity`, `rate`, batch, expiry); 50 lines at most |
 | `cancelPO` | `DELETE /app/medical-purchase-orders/:medical_purchase_order_id?reason=` | the cancel is the delete |
-| create / update Supplier, Manufacturer, MR | `POST` / `PATCH /app/suppliers`, `/app/manufacturers`, `/app/medical-reps` | pay a supplier: `POST /app/suppliers/:supplier_id/payments`; a credit: `POST /app/supplier-credits` |
+| create / update Supplier, Manufacturer, MR | `POST` / `PATCH /app/suppliers`, `/app/manufacturers`, `/app/medical-reps` | pay a supplier: `POST /app/suppliers/:supplier_id/payments` |
+| Return expiring stock (a supplier credit) | `POST /app/suppliers/:supplier_id/credits` | `medicine_batch_id`, `quantity` — the supplier is the path's; read one `GET …/credits/:supplier_credit_id`; void `DELETE …?reason=` (`mistake` · `wrong_quantity` · `supplier_refused` · `other`), undo `POST …/restore` (`medicine:delete`) |
 | `logMRVisit` | `POST /app/medical-reps/:medical_rep_id/visits` | |
+| a bill on `/invoices` | — | `/app/invoices` refuses `type=medical` and medicine lines (`400 sold_through_store`) — sell through the store |
 
 ### Clinic stock
 
@@ -153,7 +161,7 @@ Paths below drop `/api/v1`. "→ §n" points at the route review section that ex
 | --- | --- | --- |
 | `listLedger` | `GET /app/payments` | `direction`, `kind`, `mode`, `contact_id`, `invoice_id`, paid dates; a payment's edits: `GET …/:payment_id/edits` |
 | `listPendingCredits` | `GET /app/pending-credits` | |
-| `listOpenSupplierBills` | `GET /app/medical-purchase-orders?payment_status=unpaid,partial` + `GET /app/stock-purchases?payment_status=unpaid,partial` | |
+| `listOpenSupplierBills` | `GET /app/medical-purchase-orders?stage=received&payment_status=unpaid,partial` + `GET /app/stock-purchases?payment_status=unpaid,partial` | a medical order is billed once received — `stage=received` (M23) |
 | `listOpenInvoices` | `GET /app/invoices?payment_status=unpaid,partial` | |
 | `getDayClose` | `GET /app/day-closes?branch_id=…&close_date_from=<day>&close_date_to=<day>` → `GET /app/day-closes/:day_close_id` | the day's totals by mode and the expected cash are on the day close |
 | `getInvoice` | `GET /app/invoices/:invoice_id` · `GET …/credit-notes` | |
@@ -211,7 +219,7 @@ webhooks, subscription billing). Section 3 lists them all.
 
 <!-- GENERATED:START -->
 
-442 routes, 306 of them the clinic's under `/api/v1/app`, from `docs/routes.txt`.
+445 routes, 309 of them the clinic's under `/api/v1/app`, from `docs/routes.txt`.
 Paths drop `/api/v1`; the health and operations routes in the last module sit outside it.
 **Gate**: a permission code, `signed in`, `public`, `platform admin` or a token. **Idem** `req`:
 `X-Idempotency-Key` required. **Team** `team`: team organizations only (`422` on a personal one).
@@ -224,14 +232,14 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | [Organization and team](#organization-and-team) | 52 |
 | [Branches and places](#branches-and-places) | 25 |
 | [Offerings](#offerings) | 19 |
-| [Contacts and messaging](#contacts-and-messaging) | 25 |
+| [Contacts and messaging](#contacts-and-messaging) | 22 |
 | [Leads](#leads) | 9 |
 | [Appointments](#appointments) | 20 |
 | [Patients](#patients) | 74 |
 | [Billing — invoices, payments, credits, day close](#billing--invoices-payments-credits-day-close) | 34 |
 | [Clinic stock](#clinic-stock) | 28 |
 | [Tasks](#tasks) | 12 |
-| [Medical store](#medical-store) | 51 |
+| [Medical store](#medical-store) | 57 |
 | [Files](#files) | 4 |
 | [Notifications and webhooks](#notifications-and-webhooks) | 14 |
 | [Subscription billing (the platform)](#subscription-billing-the-platform) | 13 |
@@ -406,7 +414,6 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | Method | Path | Gate | Idem | Team | # | What it does |
 | --- | --- | --- | --- | --- | --- | --- |
 | POST | `/app/contact-activities/message-batches` | `contact_activity:create` | req |  | 4.16 | Send contact message batch |
-| GET | `/app/contact-activities/messaging-status` | `contact_activity:read` |  |  |  | Messaging status |
 | GET | `/app/contact-message-templates` | `organization:read` |  |  | 4.17 | List contact message templates |
 | POST | `/app/contact-message-templates` | `contact_activity:create` | req |  | 4.18 | Create contact message template |
 | GET | `/app/contact-message-templates/:contact_message_template_id` | `organization:read` |  |  | 4.19 | Get contact message template |
@@ -428,8 +435,6 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | PUT | `/app/contacts/:contact_id/members` | `contact:update` |  |  | 4.9 | Replace contact members |
 | GET | `/app/contacts/:contact_id/preview` | `contact:read` |  |  | 4.7 | Preview contact |
 | POST | `/app/contacts/:contact_id/restore` | `contact:delete` | req |  | 4.6 | Restore contact |
-| GET | `/app/messaging-webhook` | public |  |  |  | Messaging webhook handshake |
-| POST | `/app/messaging-webhook` | public |  |  |  | Messaging webhook callback |
 
 ### Leads
 
@@ -649,6 +654,8 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | DELETE | `/app/manufacturers/:manufacturer_id` | `medicine:delete` |  |  | 11.5 | Delete a manufacturer |
 | POST | `/app/manufacturers/:manufacturer_id/restore` | `medicine:delete` | req |  | 11.6 | Restore a manufacturer |
 | GET | `/app/medical-payments` | `medicine:read` |  |  | 11.51 | List the medical store's payments |
+| GET | `/app/medical-payments/exports` | `medicine:export` |  |  | 11.53 | Export the medical store's payments |
+| GET | `/app/medical-pending-credits` | `medicine:read` |  |  | 11.56 | List the medical store's customer credits |
 | GET | `/app/medical-purchase-orders` | `medicine:read` |  |  | 11.25 | List medical purchase orders |
 | POST | `/app/medical-purchase-orders` | `medicine:create` | req |  | 11.27 | Create a medical purchase order |
 | GET | `/app/medical-purchase-orders/:medical_purchase_order_id` | `medicine:read` |  |  | 11.28 | Get a medical purchase order |
@@ -673,7 +680,8 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | GET | `/app/medical-sales/:medical_sale_id` | `medicine:read` |  |  | 11.47 | Get a medical sale |
 | DELETE | `/app/medical-sales/:medical_sale_id` | `medicine:delete` |  |  | 11.48 | Void a medical sale |
 | POST | `/app/medical-sales/:medical_sale_id/restore` | `medicine:delete` | req |  | 11.49 | Undo a medical sale void |
-| POST | `/app/medical-sales/:medical_sale_id/returns` | `payment:create` | req |  | 11.50 | Return from patient |
+| POST | `/app/medical-sales/:medical_sale_id/returns` | `payment:delete` | req |  | 11.50 | Return from patient |
+| GET | `/app/medical-sales/dues` | `medicine:read` |  |  | 11.52 | List who owes on medical sales |
 | GET | `/app/medical-sales/exports` | `medicine:export` |  |  | 11.45 | Export medical sales |
 | GET | `/app/medicines` | `medicine:read` |  |  | 11.17 | List medicines |
 | POST | `/app/medicines` | `medicine:create` | req |  | 11.19 | Add a medicine |
@@ -684,13 +692,16 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | GET | `/app/medicines/exports` | `medicine:export` |  |  | 11.18 | Export medicines |
 | POST | `/app/medicines/near-expiry-discount` | `medicine:update` | req |  | 11.24 | Set the near-expiry discount |
 | GET | `/app/supplier-credits` | `medicine:read` |  |  | 11.14 | List supplier credits |
-| POST | `/app/supplier-credits` | `medicine:update` | req |  | 11.15 | Return stock to a supplier |
-| GET | `/app/supplier-credits/:supplier_credit_id` | `medicine:read` |  |  | 11.16 | Get a supplier credit |
 | GET | `/app/suppliers` | `medicine:read` |  |  | 11.7 | List suppliers |
 | POST | `/app/suppliers` | `medicine:create` | req |  | 11.8 | Add a supplier |
 | GET | `/app/suppliers/:supplier_id` | `medicine:read` |  |  | 11.9 | Get a supplier |
 | PATCH | `/app/suppliers/:supplier_id` | `medicine:update` |  |  | 11.10 | Change a supplier |
 | DELETE | `/app/suppliers/:supplier_id` | `medicine:delete` |  |  | 11.11 | Delete a supplier |
+| GET | `/app/suppliers/:supplier_id/credits` | `medicine:read` |  |  | 11.57 | List a supplier's credits |
+| POST | `/app/suppliers/:supplier_id/credits` | `medicine:update` | req |  | 11.15 | Return stock to a supplier |
+| GET | `/app/suppliers/:supplier_id/credits/:supplier_credit_id` | `medicine:read` |  |  | 11.16 | Get a supplier credit |
+| DELETE | `/app/suppliers/:supplier_id/credits/:supplier_credit_id` | `medicine:delete` |  |  | 11.54 | Void a supplier credit |
+| POST | `/app/suppliers/:supplier_id/credits/:supplier_credit_id/restore` | `medicine:delete` | req |  | 11.55 | Undo a supplier credit void |
 | POST | `/app/suppliers/:supplier_id/payments` | `payment:create` | req |  | 11.13 | Pay a supplier |
 | POST | `/app/suppliers/:supplier_id/restore` | `medicine:delete` | req |  | 11.12 | Restore a supplier |
 
@@ -754,7 +765,7 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | POST | `/users/:user_id/suspend` | platform admin |  |  |  | Suspend user (admin) |
 | POST | `/users/:user_id/unsuspend` | platform admin |  |  |  | Unsuspend user (admin) |
 | GET | `/internal/ops/circuit-breakers` | token (metrics) |  |  |  | List the outbound circuit breakers (operations only) |
-| POST | `/internal/ops/circuit-breakers/:circuit_name/reset` | token (metrics) |  |  |  | Reset one circuit breaker (operations only) |
+| POST | `/internal/ops/circuit-breakers/:circuit_name/reset` | token (ops-admin) |  |  |  | Reset one circuit breaker (operations only) |
 | GET | `/livez` | public |  |  |  | Liveness probe |
 | GET | `/readyz` | public |  |  |  | Readiness probe |
 | GET | `/metrics` | token (metrics) |  |  |  | Prometheus metrics (operations only) |

@@ -378,7 +378,7 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'POST /api/v1/app/stock-items': appCreateStockItemDto,
   'PATCH /api/v1/app/stock-vendors/{stock_vendor_id}': appUpdateStockVendorDto,
   'POST /api/v1/app/stock-vendors': appCreateStockVendorDto,
-  'POST /api/v1/app/supplier-credits': appCreateSupplierCreditDto,
+  'POST /api/v1/app/suppliers/{supplier_id}/credits': appCreateSupplierCreditDto,
   'POST /api/v1/app/medical-sales': appCreateMedicalSaleDto,
   'POST /api/v1/app/medical-sales/{medical_sale_id}/returns': appReturnMedicalSaleDto,
   'POST /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/receive':

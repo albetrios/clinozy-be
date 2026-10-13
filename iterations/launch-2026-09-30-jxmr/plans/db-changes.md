@@ -1570,6 +1570,28 @@ app.payments / app.pending_credits            a refund is cash/UPI/card  a medic
                                                                          naming the sale's invoice
 ```
 
+**Built (ROUTE #194, #195 — four migrations, `AS-BUILT.md`):**
+
+```text
+app.supplier_credits                          before                    after (built)
+  deleted_at · delete_reason · delete_note    —                         + as proposed, the three checks
+                                                                          (20261013104032_supplier_credits_void)
+  idx_supplier_credits_supplier_open          (supplier_id, created_at, id) WHERE applied_amount < amount
+  → idx_supplier_credits_supplier_live_open   + AND deleted_at IS NULL — built concurrently, the old one dropped
+                                                                          (20261013104033_supplier_credits_live_open_index)
+
+app.medical_sale_returns                      before                    after (built, MD33)
+  refund_mode      varchar(4) cash·upi·card   —                         varchar(6) + credit
+  pending_credit_id bigint NULL               —                         + → pending_credits ON DELETE SET NULL,
+                                                                          only on a store-credit return; unique
+                                                                          (20261013104034_medical_sale_returns_store_credit,
+                                                                           20261013104035_…_pending_credit_index)
+
+app.payments / app.pending_credits            unchanged — a store-credit return writes no payment; its `give`
+                                              credit names no invoice (giving back an invoice's credit writes a
+                                              second credit note on it)
+```
+
 ### manufacturer · NEW
 
 - **Holds:** Medicine brand on the pack. Read by medicine pickers, supplier/MR connections; written by Manufacturer drawer.

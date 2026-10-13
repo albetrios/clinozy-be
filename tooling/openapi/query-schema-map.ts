@@ -79,7 +79,11 @@ import {
   medicalSaleDuesQueryDto as appMedicalSaleDuesQueryDto,
   voidMedicalSaleQueryDto as appVoidMedicalSaleQueryDto,
 } from '@/domains/app/sub-domains/medical/medical-sales/medical-sales.dto.js';
-import { listSupplierCreditsQueryDto as appSupplierCreditsListQueryDto } from '@/domains/app/sub-domains/medical/suppliers/supplier-credits/supplier-credits.dto.js';
+import {
+  listSupplierAccountCreditsQueryDto as appSupplierAccountCreditsListQueryDto,
+  listSupplierCreditsQueryDto as appSupplierCreditsListQueryDto,
+  voidSupplierCreditQueryDto as appVoidSupplierCreditQueryDto,
+} from '@/domains/app/sub-domains/medical/suppliers/supplier-credits/supplier-credits.dto.js';
 import { listStockVendorsQueryDto as appStockVendorsListQueryDto } from '@/domains/app/sub-domains/stock/stock-vendors/stock-vendors.dto.js';
 import { listStockItemsQueryDto as appStockItemsListQueryDto } from '@/domains/app/sub-domains/stock/stock-items/stock-items.dto.js';
 import { listStockPurchasesQueryDto as appStockPurchasesListQueryDto } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.dto.js';
@@ -150,8 +154,11 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/medicines': appMedicinesListQueryDto,
   'GET /api/v1/app/medical-purchase-orders': appMedicalPurchaseOrdersListQueryDto,
   'GET /api/v1/app/medical-payments': appPaymentsListQueryDto,
+  'GET /api/v1/app/medical-payments/exports': appPaymentsListQueryDto,
+  'GET /api/v1/app/medical-pending-credits': appPendingCreditsListQueryDto,
   'GET /api/v1/app/medical-sales': appMedicalSalesListQueryDto,
   'GET /api/v1/app/supplier-credits': appSupplierCreditsListQueryDto,
+  'GET /api/v1/app/suppliers/{supplier_id}/credits': appSupplierAccountCreditsListQueryDto,
   'GET /api/v1/app/stock-vendors': appStockVendorsListQueryDto,
   'GET /api/v1/app/stock-items': appStockItemsListQueryDto,
   'GET /api/v1/app/stock-purchases': appStockPurchasesListQueryDto,
@@ -219,6 +226,8 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'DELETE /api/v1/app/medical-purchase-orders/{medical_purchase_order_id}':
     appCancelMedicalPurchaseOrderQueryDto,
   'DELETE /api/v1/app/medical-sales/{medical_sale_id}': appVoidMedicalSaleQueryDto,
+  'DELETE /api/v1/app/suppliers/{supplier_id}/credits/{supplier_credit_id}':
+    appVoidSupplierCreditQueryDto,
   'DELETE /api/v1/tenancy/organization/memberships/{membership_id}': deleteMembershipQueryDto,
   'DELETE /api/v1/tenancy/organization/roles/{role_id}': deleteMemberRoleQueryDto,
   'GET /api/v1/notify/webhooks': listWebhooksQueryDto,

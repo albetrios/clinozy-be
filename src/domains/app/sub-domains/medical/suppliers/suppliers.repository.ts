@@ -23,7 +23,7 @@ export const SUPPLIER_MANUFACTURERS_LINK: BaseRecordLinkTable = {
  * MD10: what the store owes a supplier — their live received orders' dues less their open
  * credits, never below 0.
  */
-const PAYABLE = sql`greatest(0, coalesce((select sum(${medical_purchase_orders.due_amount}) from ${medical_purchase_orders} where ${medical_purchase_orders.supplier_id} = ${suppliers.id} and ${medical_purchase_orders.deleted_at} is null and ${medical_purchase_orders.stage} = ${MEDICAL_PURCHASE_ORDER_STAGE.RECEIVED}), 0) - coalesce((select sum(${supplier_credits.amount} - ${supplier_credits.applied_amount}) from ${supplier_credits} where ${supplier_credits.supplier_id} = ${suppliers.id}), 0))`;
+const PAYABLE = sql`greatest(0, coalesce((select sum(${medical_purchase_orders.due_amount}) from ${medical_purchase_orders} where ${medical_purchase_orders.supplier_id} = ${suppliers.id} and ${medical_purchase_orders.deleted_at} is null and ${medical_purchase_orders.stage} = ${MEDICAL_PURCHASE_ORDER_STAGE.RECEIVED}), 0) - coalesce((select sum(${supplier_credits.amount} - ${supplier_credits.applied_amount}) from ${supplier_credits} where ${supplier_credits.supplier_id} = ${suppliers.id} and ${supplier_credits.deleted_at} is null), 0))`;
 
 /** A supplier's account as a page reads it (MD10). */
 export interface SupplierAccountRow {
@@ -149,7 +149,7 @@ export class SuppliersRepository extends BaseRecordRepository {
     return new Map(rows.map(({ public_id: publicId, ...summary }) => [publicId, summary]));
   }
 
-  /** MD10: whether a supplier holds an open credit. */
+  /** MD10: whether a supplier holds a live open credit (a voided one counts for nothing, MD32). */
   async hasOpenCredit(supplierId: number): Promise<boolean> {
     const rows = await getRequestDatabase()
       .select({ id: supplier_credits.id })
@@ -157,6 +157,7 @@ export class SuppliersRepository extends BaseRecordRepository {
       .where(
         and(
           eq(supplier_credits.supplier_id, supplierId),
+          isNull(supplier_credits.deleted_at),
           sql`${supplier_credits.applied_amount} < ${supplier_credits.amount}`,
         ),
       )

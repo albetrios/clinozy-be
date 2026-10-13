@@ -36,7 +36,9 @@ const pendingRefunds = new WeakMap<BaseRecordWriteContext, PendingRefund>();
 /**
  * Writes a credit note another write makes in its transaction — a medical sale's return (MD21):
  * the note, then its refund payment on the invoice's branch and contact, as
- * `POST …/credit-notes` does; at most what the invoice has paid.
+ * `POST …/credit-notes` does; at most what the invoice has paid. A return kept as store credit
+ * (MD33) passes no splits: the note lowers the bill and no money moves — what is owed is the
+ * caller's `give` pending credit.
  *
  * @remarks
  * - **Failure modes:** `ConflictError` `more_than_paid`, `day_closed`.
@@ -46,7 +48,8 @@ export async function recordCreditNote(options: {
   invoice: BaseRecordRow;
   amount: number;
   reason: string;
-  splits: PaymentSplit[];
+  /** The refund's splits — `null` for store credit (no refund payment, MD33). */
+  splits: PaymentSplit[] | null;
   note: string | null;
 }): Promise<BaseRecordRow> {
   const { context, invoice } = options;
@@ -61,6 +64,7 @@ export async function recordCreditNote(options: {
     created_by_user_id: context.userId,
     updated_by_user_id: context.userId,
   });
+  if (options.splits === null) return creditNote;
   await recordPayment({
     context,
     values: {

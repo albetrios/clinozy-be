@@ -7,7 +7,9 @@ Parent: [medical](../medical.overview.md)
 ## Purpose
 
 The store's sales — each with its `medical` invoice — their void and undo, returns from the
-patient, and the store's Payments tab (launch ROUTE #153 — routes-final 11.H, MD19–MD22). Tables
+patient, and who owes on them (launch ROUTE #153 — routes-final 11.H, MD19–MD21; rev 2 MD23–MD25,
+ROUTE #186–#187). The store's Payments tab moved to [`medical-payments/`](../medical-payments/medical-payments.overview.md)
+(MD31). Tables
 `app.medical_sales`, `app.medical_sale_returns` and `app.medical_sale_return_items`.
 
 ## Layout
@@ -18,7 +20,7 @@ patient, and the store's Payments tab (launch ROUTE #153 — routes-final 11.H, 
 | `medical-sales.rules.ts` | the sale through the invoice ledger, the void and undo with the stock, the return, the page fields |
 | `medical-sales.repository.ts` | the shared reads and writes, the status filter, lines, invoices, returns |
 | `medical-sales.{dto,validator,serializer,types}.ts` | request shapes, the response |
-| `medical-sales.service.ts` / `.controller.ts` / `.routes.ts` | routes 44–51 (the payments list through the payments service) |
+| `medical-sales.service.ts` / `.controller.ts` / `.routes.ts` | routes 44–50 and 52 (`dues` a collection view of the rules) |
 
 ## Routes
 
@@ -31,7 +33,7 @@ patient, and the store's Payments tab (launch ROUTE #153 — routes-final 11.H, 
 | `DELETE /app/medical-sales/{medical_sale_id}` | `medicine:delete` |
 | `POST /app/medical-sales/{medical_sale_id}/restore` | `medicine:delete` |
 | `POST /app/medical-sales/{medical_sale_id}/returns` | `payment:delete` (money given back, as every refund — D83, MD23) |
-| `GET /app/medical-payments` | `medicine:read` |
+| `GET /app/medical-sales/dues` | `medicine:read` |
 
 ## Key invariants
 

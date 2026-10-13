@@ -1060,12 +1060,29 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     ]),
     example: null,
   },
-  'POST /api/v1/app/supplier-credits': {
+  'GET /api/v1/app/suppliers/{supplier_id}/credits': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.supplierCreditsRecordSchema, [
+      schemas.supplierCreditsRecordExample,
+    ]),
+    example: null,
+  },
+  'POST /api/v1/app/suppliers/{supplier_id}/credits': {
     statusCode: 200,
     schema: wrapSuccess(schemas.supplierCreditsRecordSchema, schemas.supplierCreditsRecordExample),
     example: null,
   },
-  'GET /api/v1/app/supplier-credits/{supplier_credit_id}': {
+  'GET /api/v1/app/suppliers/{supplier_id}/credits/{supplier_credit_id}': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.supplierCreditsRecordSchema, schemas.supplierCreditsRecordExample),
+    example: null,
+  },
+  'DELETE /api/v1/app/suppliers/{supplier_id}/credits/{supplier_credit_id}': {
+    statusCode: 204,
+    schema: null,
+    example: null,
+  },
+  'POST /api/v1/app/suppliers/{supplier_id}/credits/{supplier_credit_id}/restore': {
     statusCode: 200,
     schema: wrapSuccess(schemas.supplierCreditsRecordSchema, schemas.supplierCreditsRecordExample),
     example: null,
@@ -1270,6 +1287,18 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
   'GET /api/v1/app/medical-payments': {
     statusCode: 200,
     schema: wrapPaginated(schemas.paymentsRecordSchema, [schemas.paymentsRecordExample]),
+    example: null,
+  },
+  'GET /api/v1/app/medical-payments/exports': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.recordExportSchema, schemas.recordExportExample),
+    example: null,
+  },
+  'GET /api/v1/app/medical-pending-credits': {
+    statusCode: 200,
+    schema: wrapPaginated(schemas.pendingCreditsRecordSchema, [
+      schemas.pendingCreditsRecordExample,
+    ]),
     example: null,
   },
   'GET /api/v1/app/stock-items': {

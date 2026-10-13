@@ -49,8 +49,21 @@ export const MEDICAL_SALE_RESTOCKED_REASON_VALUES = [
   MEDICAL_SALE_RETURN_REASON.WRONG_ITEM,
 ] as const;
 
-/** How a return's money goes back ("Refund by"). */
-export const MEDICAL_SALE_REFUND_MODE_VALUES = ['cash', 'upi', 'card'] as const;
+/** How a return's money goes back ("Refund by") — or stays with the store as credit (MD33). */
+export const MEDICAL_SALE_REFUND_MODE = {
+  CASH: 'cash',
+  UPI: 'upi',
+  CARD: 'card',
+  CREDIT: 'credit',
+} as const;
+
+/** Allowed values of `medical_sale_returns.refund_mode`. */
+export const MEDICAL_SALE_REFUND_MODE_VALUES = [
+  MEDICAL_SALE_REFUND_MODE.CASH,
+  MEDICAL_SALE_REFUND_MODE.UPI,
+  MEDICAL_SALE_REFUND_MODE.CARD,
+  MEDICAL_SALE_REFUND_MODE.CREDIT,
+] as const;
 
 /** Most lines a sale carries (MD19). */
 export const MEDICAL_SALE_ITEMS_MAX = 50;

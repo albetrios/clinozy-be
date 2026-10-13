@@ -452,7 +452,7 @@ Proposed 2026-10-10 from the frontend's per-room research; built and confirmed r
 
 ## 13. Medical store rev 2 (D88–D91, ROUTE #186–#196)
 
-Proposed 2026-10-13 from the medical room's findings (routes-final §11 rev 2, MD23–MD30) and your note on the plan (D89 — the store's payments and credits, MD31–MD33); awaiting the plan's approval.
+Proposed 2026-10-13 from the medical room's findings (routes-final §11 rev 2, MD23–MD30) and your note on the plan (D89 — the store's payments and credits, MD31–MD33); approved with the plan (D92); built as ROUTE #186–#195 (`AS-BUILT.md` — the differences are marked **built** below).
 
 | #   | Method     | Path                                                     | Change  | What                                                                                                                                       |
 | --- | ---------- | -------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -469,10 +469,10 @@ Proposed 2026-10-13 from the medical room's findings (routes-final §11 rev 2, M
 | I45 | GET        | `/app/medical-payments`                                  | CHANGED | moved to the new nested sub-domain 11.I `medical/medical-payments/`; the path, gate and answer stay (MD31, ROUTE #193)                     |
 | I46 | GET        | `/app/medical-payments/exports`                          | NEW     | the store's payments CSV — `medicine:export` (MD31, ROUTE #193)                                                                            |
 | I47 | DELETE, POST | `/app/suppliers/{supplier_id}/credits/{supplier_credit_id}`, `…/restore` | NEW   | void a supplier credit (why: `mistake` · `wrong_quantity` · `supplier_refused` · `other`) — packs back, dues again — and undo it; `medicine:delete` (MD32, MD34, ROUTE #194) |
-| I48 | GET        | `/app/medical-pending-credits`                           | NEW     | the store's customer credits — 8.D's list limited to credits naming a `medical` invoice; `medicine:read`; the frontend's Credits tab (MD32, D90, ROUTE #195) |
+| I48 | GET        | `/app/medical-pending-credits`                           | NEW     | the store's customer credits — 8.D's list limited to credits naming a `medical` invoice **or left by a store-credit return (built)**; 8.D's query (no `branch_id`); `medicine:read`; the frontend's Credits tab (MD32, D90, ROUTE #195) |
 | I50 | POST, GET  | `/app/supplier-credits` → `/app/suppliers/{supplier_id}/credits`, `/app/supplier-credits/{supplier_credit_id}` → `/app/suppliers/{supplier_id}/credits/{supplier_credit_id}` | MOVED | create and read-one under the supplier — the owned-record pattern of 7.C, 8.B, 9.B; `supplier_id` leaves the create body; the flat `GET /app/supplier-credits` stays (MD34, D91, ROUTE #194) |
 | I51 | GET        | `/app/suppliers/{supplier_id}/credits`                   | NEW     | a supplier's credits — its Account (MD34, D91, ROUTE #194)                                                                                  |
-| I49 | POST       | `/app/medical-sales/{medical_sale_id}/returns`           | CHANGED | `refund_mode` adds `credit`: no money leaves — the refund is paid by credit and a `give` pending credit names the sale's invoice (MD33, ROUTE #195) |
+| I49 | POST       | `/app/medical-sales/{medical_sale_id}/returns`           | CHANGED | `refund_mode` adds `credit`: no money leaves — ~~the refund is paid by credit and a `give` pending credit names the sale's invoice~~ **built:** the credit note without a refund payment and a `give` pending credit the return names (`returns[].pending_credit_id`) (MD33, ROUTE #195) |
 
 
 ## Before → after

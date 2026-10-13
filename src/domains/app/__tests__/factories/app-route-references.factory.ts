@@ -7,7 +7,8 @@ import {
 } from '@/tests/helpers/app-route-requests.js';
 
 /**
- * The app's collection writes: their bodies name records, their paths none. The patient comes
+ * The app's collection writes: their bodies name records, their paths none but the caller's own
+ * supplier (a supplier's credits, MD34 — filled by {@link collectionWritePath}). The patient comes
  * first: its own write files the contact as a patient, which an invoice needs.
  */
 export const APP_COLLECTION_WRITES = [
@@ -26,8 +27,13 @@ export const APP_COLLECTION_WRITES = [
   'POST /app/prescription-kits',
   'POST /app/stock-counts',
   'POST /app/stock-purchases',
-  'POST /app/supplier-credits',
+  'POST /app/suppliers/:supplier_id/credits',
 ] as const;
+
+/** A collection write's path with the caller's own records in it (`:supplier_id`). */
+export function collectionWritePath(path: string, references: AppRouteReferences): string {
+  return path.replace(':supplier_id', references.supplierId);
+}
 
 /**
  * One real record of every kind a request body names, made through the API as `fixture`'s owner —

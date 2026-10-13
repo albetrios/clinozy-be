@@ -175,11 +175,12 @@ export type PaymentEditPageRow = Omit<PaymentEditRow, 'id'> & {
 };
 
 /**
- * MD22: a payment of the medical store — money on a `medical` invoice (receipts, refunds and their
- * reversals), a supplier bill of a medical order, or a `medicines` expense.
+ * MD22, MD31: a payment of the medical store — money on a `medical` invoice (receipts, refunds and
+ * their reversals), a supplier bill of a medical order, or a `medicines` expense — and the reversal
+ * of a `medicines` expense, which carries the expense's links but not its category.
  */
 function medicalStorePayment(): SQL {
-  return sql`(${payments.medical_purchase_order_id} is not null or ${payments.expense_category} = ${PAYMENT_EXPENSE_CATEGORY.MEDICINES} or exists (select 1 from ${invoices} where ${invoices.id} = ${payments.invoice_id} and ${invoices.type} = ${INVOICE_TYPE.MEDICAL}))`;
+  return sql`(${payments.medical_purchase_order_id} is not null or ${payments.expense_category} = ${PAYMENT_EXPENSE_CATEGORY.MEDICINES} or exists (select 1 from ${invoices} where ${invoices.id} = ${payments.invoice_id} and ${invoices.type} = ${INVOICE_TYPE.MEDICAL}) or exists (select 1 from ${payments} as reversed where reversed.id = ${payments.reverses_payment_id} and reversed.expense_category = ${PAYMENT_EXPENSE_CATEGORY.MEDICINES}))`;
 }
 
 /**
