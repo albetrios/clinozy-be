@@ -6,7 +6,7 @@ or `SCOPE` (a scope decision during implementation). Row numbers (`D1`, `D2`, �
 [coverage.md](coverage.md), the stories and `KICKOFF.md`.
 
 The same-named clinozy-fe iteration records the same answers in its own `plans/decisions.md` (same
-numbers for the shared rows D1–D12).
+numbers for the shared rows D1–D23).
 
 | # | Question | Options | Decision | Date | Who | Kind |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -22,3 +22,46 @@ numbers for the shared rows D1–D12).
 | D10 | Inside the drawer, how is "one detail at a time" shown? | the design's step cards (`_patterns.md` › Step cards) · one screen per question with its own Back / Next | **The design's step cards** — one step open at a time, finished steps folded into a ✓ peek, "Next: <step> →" saves the step (BRIEF.md:42–50). Reuses the house drawer pattern; still open for the user to change. | 2026-10-13 | Claude (from the brief) | AMBER |
 | D11 | Where does setup live — Today, or the app shell? | over Today (D1) · in the app shell on any room | **In the app shell, not in Today** ("Not in today but in common — if we change default path it should handle easily"). Supersedes D1's placement (the drawer itself stays, D1): the drawer, its launcher and the members' notice belong to the shell; the drawer opens over whichever room the clinic lands on (the role home — Today now) and has an address that rides on any room, like Settings' `#settings/…`; changing the default room needs no change to setup. `BRIEF.md` re-placed with `--replace` (Intake hash `d5f100464051`). | 2026-10-13 | Nikunj Mavani | RED |
 | D12 | Where does the setup guide show after the first run? | a slim bar in the shell · a card on the home room · only in the drawer | **Follow current practice** ("follow what trending tech companies are following") — taken as the pattern of Stripe's setup guide and Linear's onboarding checklist: a **"Setup" launcher in the header** with a progress ring and count on every room (the ring alone on a phone), opening **one drawer** that holds the remaining steps and the checklist; also the account menu ("Setup guide") and the command menu ("Continue setup"). Supersedes the brief's card on Today (D2's "Today with the guide pinned" now reads "the shell's launcher"). | 2026-10-13 | Nikunj Mavani (pattern chosen by Claude on that instruction) | RED |
+| D13 | Q1 · How wide is the setup drawer? | 680px · 840px · 560px | **680px** — fits prices, 6 specialty chips and 7 day chips; step 6's rows wrap inside it; a full-screen sheet on a phone. Supersedes the brief's 560px (BRIEF.md:42; coverage F7). | 2026-10-13 | Nikunj Mavani | RED |
+| D14 | Q2 · Can a later step open before the earlier ones are saved? | unlock in order · any step any time | **Unlock in order** — a later step shows greyed with "After <step>" until the one before is saved (the design's New-lead precedent, leads.md:252); a saved step stays open to edit (coverage F8). | 2026-10-13 | Nikunj Mavani | RED |
+| D15 | Q3 · What counts as the essential "someone to book"? | Doctor or Therapist · Doctor only | **Doctor or Therapist** — a live member holding either role; the guide item reads "Someone to book". Supersedes the brief's "A doctor to book" (BRIEF.md:139, 263–268; coverage F13). | 2026-10-13 | Nikunj Mavani | RED |
+| D16 | Q4 · Do step-7 invitations carry the branch's days and hours? | yes · keep staff defaults | **Yes** — each invitation sends the main branch's working days, opening and closing time as the member's working hours (editable later in Users); the staff default (10:00–19:00) stays for invitations made elsewhere (coverage F4). | 2026-10-13 | Nikunj Mavani | RED |
+| D17 | Q5 · Drop the cash-drawer float? | drop it · keep it and make day close use it | **Drop it** — the guide loses "Cash drawer float" (13 items) and Settings › Clinic has no float field: `default_day_float` is read by nothing (launch B25, clinozy-fe D156). `day_float` leaves the setup fields' allowed values (coverage F15). | 2026-10-13 | Nikunj Mavani | RED |
+| D18 | Q6 · The starter services list | this list · consultation only | **This list** (below, "Starter services") — only Consultation is pre-ticked; the owner ticks the rest and edits name, minutes, price and GST before saving; with two or more specialties a consultation is named for its specialty ("Skin consultation"), since names are unique in a clinic (coverage F1, F11, F12). | 2026-10-13 | Nikunj Mavani | RED |
+| D19 | Q7 · Who may read a clinic's setup progress? | managers only · every member | **Managers only** — the setup-status route needs `organization:update` (Owner, Admin); the members' notice uses `/app/branches/my`, which every member already reads. | 2026-10-13 | Nikunj Mavani | RED |
+| D20 | Q8 · How is the moment "every guide item done" known? | stored · worked out each time | **Stored** — `setup_guide_done_at` on the clinic's settings, written once by the setup route when it first finds every item done or skipped; the launcher's ✓ "Set up" shows for 7 days after it. | 2026-10-13 | Nikunj Mavani | RED |
+| D21 | Q9 · A "finish setting up" reminder email? | not in this iteration · one email after 24 hours | **Not in this iteration** — no background work; the launcher reminds the managers on every room. | 2026-10-13 | Nikunj Mavani | RED |
+| D22 | Q10 · Where do the setup routes live? | the app domain, no table of its own · tenancy, under the organization | **"app-onboarding-setup"** — read as: the **app** domain, sub-domain **`onboarding-setup`** (`src/domains/app/sub-domains/onboarding-setup/`, no table of its own), routes under `/api/v1/app/onboarding-setup`; it reads the clinic's records and stores progress through the tenancy settings service, so tenancy never reaches into app records. The exact paths are confirmed in the route review (Step 5). | 2026-10-13 | Nikunj Mavani | RED |
+| D23 | Q11 · The safe defaults, together | confirm all · one by one | **All confirmed** — progress ring and bar in the theme's progress green (F10); starter rows take the New-offering defaults: GST exclusive, lowest price 85% of the offer price rounded to ₹50 (F11); "Places & days" is a fourth branch-drawer step when editing an existing branch (F20); the launcher sits between the search and the branch picker, the ring alone on a phone (F23); step cards inside the drawer (D10 — now confirmed). | 2026-10-13 | Nikunj Mavani | RED |
+
+## Starter services (D18)
+
+Shown in setup step 6 for each chosen specialty; only Consultation is pre-ticked. Prices in rupees; GST: clinical care
+0% (exempt), cosmetic and aesthetic work 18%, exclusive. With one specialty chosen the first row is "Consultation";
+with two or more it is "<Specialty> consultation".
+
+| Specialty | Name | Category | Minutes | Price ₹ | GST | Sessions · validity | Ticked |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Skin | Consultation | consultation | 20 | 500 | 0% | 1 | ✓ |
+| Skin | Chemical peel | treatment | 30 | 2,500 | 18% | 1 | |
+| Skin | Hydrafacial | treatment | 45 | 3,500 | 18% | 1 | |
+| Skin | LHR full face (session) | lhr | 30 | 2,500 | 18% | 1 | |
+| Skin | Acne scar treatment | treatment | 45 | 4,000 | 18% | 1 | |
+| Hair | Consultation | consultation | 20 | 500 | 0% | 1 | ✓ |
+| Hair | PRP session | treatment | 45 | 4,000 | 18% | 1 | |
+| Hair | PRP pack | package | 45 | 21,000 | 18% | 6 · 180 days | |
+| Hair | Scalp treatment | treatment | 30 | 1,500 | 18% | 1 | |
+| Dental | Consultation | consultation | 15 | 300 | 0% | 1 | ✓ |
+| Dental | Scaling & polishing | treatment | 30 | 1,200 | 0% | 1 | |
+| Dental | Tooth filling | treatment | 30 | 1,500 | 0% | 1 | |
+| Dental | Root canal | treatment | 60 | 5,000 | 0% | 1 | |
+| Dental | Teeth whitening | treatment | 60 | 6,000 | 18% | 1 | |
+| Gynac | Consultation | consultation | 20 | 600 | 0% | 1 | ✓ |
+| Gynac | Pap smear | treatment | 15 | 800 | 0% | 1 | |
+| Gynac | Pelvic ultrasound | treatment | 20 | 1,200 | 0% | 1 | |
+| Physio | Consultation | consultation | 30 | 500 | 0% | 1 | ✓ |
+| Physio | Physio session | treatment | 45 | 700 | 0% | 1 | |
+| Physio | Physio pack | package | 45 | 6,000 | 0% | 10 · 90 days | |
+| General | Consultation | consultation | 15 | 400 | 0% | 1 | ✓ |
+| General | Follow-up visit | consultation | 10 | 200 | 0% | 1 | |
+| General | Dressing | treatment | 15 | 300 | 0% | 1 | |

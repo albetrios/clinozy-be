@@ -1,6 +1,6 @@
 # Coverage — feat-clinic-setup-2026-10-13-sltd
 
-Status: **Step 3, 2026-10-13.** Every row is `open` until Steps 4–6 give it a requirement, a feature and an
+Status: **Step 4, 2026-10-13** (every question answered, D13–D23). Every row is `open` until Steps 4–6 give it a requirement, a feature and an
 acceptance, or put it out of scope with the decision that did.
 
 Mode: incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` · Intake hash `d5f100464051` ·
@@ -154,18 +154,20 @@ rests on it is marked *pending your answer*.
 | F23 | The launcher's place in the header | right cluster, before the branch picker (BRIEF.md:96–99, 117–120) | — (the header's slots, shell.md:14–27, have none for it) | **D12 decides the pattern; its exact slot is screen-only** | between the search and the branch picker; on a phone the ring alone → **AMBER group (Q11)** |
 | F24 | Create actions with no open branch | they open setup at the branch step (BRIEF.md:122–123) | today they fail in the form ("No open branch to book at"); the server refuses a booking, patient or bill without a branch (routes-final §6, §7.A, §8) | **settled — brief** | a frontend guard in the shell; the server keeps refusing (no backend change) |
 
-### Questions for Step 4 (from the rows above and the change files' Open items)
+### Step 4 — the questions, answered (2026-10-13)
 
-| Q | Question | Proposed default | From |
-| --- | --- | --- | --- |
-| Q1 | The setup drawer's width | 680px (light steps), with step 6's rows wrapping inside it | F7 |
-| Q2 | Can a later step open before the earlier ones are saved? | no — later steps stay locked until the one before is saved (the New lead precedent) | F8 |
-| Q3 | What counts as "someone to book"? | a member holding Doctor **or** Therapist | F13 |
-| Q4 | Do step-7 invitations carry the branch's days and hours? | yes | F4 |
-| Q5 | Drop the cash-drawer float (guide item + Settings field)? | yes — it changes nothing today | F15 |
-| Q6 | The starter services per specialty — names, minutes, prices, GST | a short list per specialty (to be shown for your edits) | F1, F11, F12 |
-| Q7 | Who may read the setup progress? | managers only (`organization:update`); members need only `/branches/my` | db-changes Open 2 |
-| Q8 | The 7-day "✓ Set up" — a stored time or worked out from the records? | stored (`setup_guide_done_at`), set by the write that completes the last item | db-changes Open 1 |
-| Q9 | A "finish setting up" reminder email for an unfinished setup? | no — out of this iteration | worker-changes Open |
-| Q10 | Where do the three setup routes live? | the app domain (a `clinic-setup` sub-domain with no table of its own), reading the tenancy settings through their service | route-changes Findings |
-| Q11 | The AMBER group, confirmed together | progress green (F10); New-offering defaults for starter rows (F11); Places & days as a fourth step when editing (F20); launcher before the branch picker (F23); D10 step cards | F10, F11, F20, F23, D10 |
+| Q | Question | Answer | Decision | From |
+| --- | --- | --- | --- | --- |
+| Q1 | The setup drawer's width | 680px | [D13](decisions.md) | F7 |
+| Q2 | Can a later step open before the earlier ones are saved? | no — unlock in order | [D14](decisions.md) | F8 |
+| Q3 | What counts as "someone to book"? | a member holding Doctor or Therapist | [D15](decisions.md) | F13 |
+| Q4 | Do step-7 invitations carry the branch's days and hours? | yes | [D16](decisions.md) | F4 |
+| Q5 | Drop the cash-drawer float? | yes — the guide has 13 items | [D17](decisions.md) | F15 |
+| Q6 | The starter services per specialty | the drafted list | [D18](decisions.md) | F1, F11, F12 |
+| Q7 | Who may read the setup progress? | managers only (`organization:update`) | [D19](decisions.md) | db-changes |
+| Q8 | The 7-day "✓ Set up" moment | stored (`setup_guide_done_at`) | [D20](decisions.md) | db-changes |
+| Q9 | A "finish setting up" reminder email? | not in this iteration | [D21](decisions.md) | worker-changes |
+| Q10 | Where do the setup routes live? | "app-onboarding-setup" — the app domain, sub-domain `onboarding-setup` | [D22](decisions.md) | route-changes |
+| Q11 | The safe defaults, together | all confirmed (and D10) | [D23](decisions.md) | F10, F11, F20, F23 |
+
+Every RED is answered; no AMBER is left open. Rows C1–C38 get their requirement, feature and acceptance at Step 6.

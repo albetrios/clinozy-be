@@ -7,7 +7,7 @@ is unclear) decides each table's physical design (types, indexes, constraints, t
 differences go into `AS-BUILT.md` and this file is synced with the final table and field names. See it drawn in the DB
 Viewer's plan mode: `pnpm db:viewer`, then click this iteration under ◇ Plans.
 
-Status: **Step 1 draft, 2026-10-13.** Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
+Status: **Step 4, 2026-10-13** — every RED answered (D1–D23). Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
 Intake hash `d5f100464051`. What exists is the launch as built — its route review
 (`launch-2026-09-30-jxmr/plans/routes-final.md`, D9) and `AS-BUILT.md` — not the drop's wording.
 
@@ -19,7 +19,10 @@ Intake hash `d5f100464051`. What exists is the launch as built — its route rev
 
 | Change | Decision | What it changes here |
 | --- | --- | --- |
-| Setup progress lives with the clinic's settings | [D5](decisions.md) | six `setup_*` fields ADDED to `tenancy.organization_settings`; no new table |
+| Setup progress lives with the clinic's settings | [D5](decisions.md) | seven `setup_*` fields ADDED to `tenancy.organization_settings`; no new table |
+| The 7-day "✓ Set up" moment is stored | [D20](decisions.md) | `setup_guide_done_at` ADDED |
+| The cash-drawer float is dropped from setup | [D17](decisions.md) | `day_float` is not an allowed value of the setup fields; `default_day_float` stays untouched (read by nothing, launch B25) |
+| Only managers read the setup progress | [D19](decisions.md) | no member-facing read of these fields |
 | Clinics that are ready when this ships count as set up | [D7](decisions.md) | a one-time fill of `setup_completed_at` in the same change (below) |
 | Ticks are read from real records | BRIEF.md:129 | no "done" column per item — only answered steps, skipped items and the times |
 
@@ -68,24 +71,20 @@ erDiagram
   BRIEF.md:187–203 (states) · BRIEF.md:260–262 (scope: the clinic, not a person) · BRIEF.md:282–283 (existing clinics)
 - **Added:**
   - `setup_answered_steps` — the answers that have no record of their own to read back: `clinic_type`, `hours`,
-    `you` (setup steps 1, 4, 5) and `day_float` (the guide's "Cash drawer float" confirmed); the rest are read from
-    records (main branch, services, team).
-  - `setup_skipped_items` — guide items marked Skip: `invite_team`, `rooms`, `machines`, `holidays`, `gst`,
-    `day_float`, `logo`, `review_links`.
+    `you` (setup steps 1, 4, 5); the rest are read from records (main branch, services, someone to book, team).
+  - `setup_skipped_items` — guide items marked Skip: `invite_team`, `rooms`, `machines`, `holidays`, `gst`, `logo`,
+    `review_links` (D17: no `day_float`).
   - `setup_deferred_at` — "Explore first" (or the drawer closed); the drawer stops opening by itself.
   - `setup_completed_at`, `setup_completed_by_membership_id` — the essentials done (refused while one is missing).
-  - `setup_guide_hidden_at` — "Hide"; cleared when the guide is reopened.
-- **Read, not changed:** `default_day_float` ("Cash drawer float" item and Settings › Clinic), `reminder_hour`,
-  `lead_hold_days`, `retarget_after_days` (Settings › Clinic).
+  - `setup_guide_hidden_at` — "Hide setup guide"; cleared when the guide is reopened.
+  - `setup_guide_done_at` — the first time every guide item was done or skipped (D20); the launcher's ✓ "Set up"
+    shows for 7 days after it.
+- **Read, not changed:** `reminder_hour`, `lead_hold_days`, `retarget_after_days` (Settings › Clinic).
+  `default_day_float` is not touched and not shown (D17).
 - **One-time fill (D7):** every clinic that, when this ships, has an open main branch and at least one active service
   gets `setup_completed_at` = the time of the change (its settings row created if it has none).
-- **Open:** (1) the launcher's ✓ "Set up" shows for 7 days after the last guide item is done (BRIEF.md:126–127) — a stored time
-  (`setup_guide_done_at`) or worked out from the records' own times? (2) Who may read the setup progress — the
-  managers only, or every member (the members' notice needs only "is there an open branch", already readable
-  through `/branches/my`)? (3) **Cash drawer float — pending your answer (Step 4):** `default_day_float` is stored but
-  read by no rule (launch B25, clinozy-fe D156 — the day opens on the carried or recounted cash), so the `day_float`
-  value in `setup_answered_steps` / `setup_skipped_items`, the guide item and Settings › Clinic's float field are
-  proposed to go.
+- **Open:** none — the 7-day moment is stored (D20), only managers read the progress (D19), the float is dropped
+  (D17). Written by the `onboarding-setup` sub-domain of the app domain through the tenancy settings service (D22).
 
 ```mermaid
 erDiagram
@@ -97,6 +96,7 @@ erDiagram
     datetime setup_completed_at "ADDED"
     id setup_completed_by_membership_id FK "ADDED → membership"
     datetime setup_guide_hidden_at "ADDED"
+    datetime setup_guide_done_at "ADDED"
   }
   membership["membership · EXISTING · tenancy.memberships"] {
     id id PK
@@ -130,10 +130,9 @@ erDiagram
 | Main branch | an active `branch` with `is_main` | routes-final §1.A |
 | Opening hours | `setup_answered_steps` ∋ `hours` | — |
 | Services | ≥ 1 active `offering` | routes-final §3.B |
-| A doctor to book | ≥ 1 active `membership` holding the Doctor role (main or extra) | routes-final §2.B, §12 (D81 (4)) |
+| Someone to book (D15) | ≥ 1 active `membership` holding the Doctor or Therapist role (main or extra) | routes-final §2.B, §12 (D81 (4)) |
 | Invite your team | ≥ 1 `membership` other than the owner's (invited or active) | routes-final §2.B |
 | Add rooms · machines · holidays | ≥ 1 live `branch_room` / `branch_machine` at an open branch · ≥ 1 `branch_holiday` this year or later | routes-final §1.C–§1.E |
 | GST on invoices · review & maps links | the main `branch`'s `gst_number` · `review_link`, `maps_link` | routes-final §1.A |
-| Cash drawer float | `setup_answered_steps` ∋ `day_float`, or skipped | — |
 | Clinic logo | `organization.logo_url` | platform |
 | Book your first appointment | ≥ 1 `appointment` | routes-final §6 |

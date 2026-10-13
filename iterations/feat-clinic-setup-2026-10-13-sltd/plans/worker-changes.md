@@ -4,7 +4,7 @@ The iteration's background work — everything that happens without a user — i
 at every planning step (`be-iteration-planning` › Worker changes). Plain words only: no queue, job,
 event or worker names; kickoff names them and records them in `AS-BUILT.md`.
 
-Status: **Step 1 draft, 2026-10-13.** Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
+Status: **Step 4, 2026-10-13** — none (D21). Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
 Intake hash `d5f100464051`.
 
 ## Counts
@@ -27,8 +27,7 @@ request, and the guide's ticks are read when the shell asks for them, so nothing
 - **Invitations (setup step 7)** — the invitation email already goes out through the built invitation flow (launch
   routes-final §2.C); setup sends nothing of its own.
 
-## Open (Step 4)
+## Decided (Step 4)
 
-- **A "finish setting up" reminder?** Big products email an owner who left setup unfinished (for example a day
-  later). The brief does not ask for it (BRIEF.md › Out of scope lists no such item either) — a question for Step 4:
-  add it (NEW background work) or leave it out.
+- **No "finish setting up" reminder email in this iteration** (D21) — the header launcher reminds the managers on
+  every room. A later iteration can add the email with its own timing and unsubscribe rules.

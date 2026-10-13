@@ -4,7 +4,7 @@ The iteration's proposed routes, in one file (`be-iteration-planning` › Route 
 kickoff confirms each route when it builds it and records any change in `AS-BUILT.md`; the built truth is
 `docs/routes.txt`.
 
-Status: **Step 1 draft, 2026-10-13.** Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
+Status: **Step 4, 2026-10-13** — paths follow D22 (`onboarding-setup`); access D19; confirmed per sub-domain at Step 5. Mode incremental (Baseline `launch-2026-09-30-jxmr`) · Intake mode `brief` ·
 Intake hash `d5f100464051`. What exists is the launch's route review (`launch-2026-09-30-jxmr/plans/routes-final.md`,
 §1–§12 — D9), not the drop's `schema-routes.md` wording. **Change** is against that: `NEW` · `CHANGED` · `REUSED`
 (the same route as built, called by setup — no change).
@@ -13,20 +13,20 @@ Intake hash `d5f100464051`. What exists is the launch's route review (`launch-20
 
 | Area | NEW | CHANGED | REUSED | Total |
 | --- | --- | --- | --- | --- |
-| Clinic setup | 3 | 0 | 0 | 3 |
+| Onboarding setup | 3 | 0 | 0 | 3 |
 | Branches & places | 0 | 1 | 9 | 10 |
 | Team | 0 | 0 | 4 | 4 |
 | Offerings | 0 | 0 | 2 | 2 |
 | Organization and its settings (platform) | 0 | 0 | 6 | 6 |
 | **Total** | **3** | **1** | **21** | **25** |
 
-## Clinic setup
+## Onboarding setup (app domain, sub-domain `onboarding-setup` — D22)
 
 | # | Change | Method | Path | Access | Operation | Source |
 | --- | --- | --- | --- | --- | --- | --- |
-| RC-1 | NEW | GET | `/api/v1/app/clinic-setup` | managers (`organization:update`) — open: or every member (db-changes › Open 2) | the setup status: answered steps, skipped items, deferred / completed / hidden, and each guide item's done flag read from the records | BRIEF.md:49–50, 129, 205–207 |
-| RC-2 | NEW | PATCH | `/api/v1/app/clinic-setup` | `organization:update` | answer a step, skip or un-skip an item, defer ("Explore first"), hide or reopen the guide | BRIEF.md:51–52, 124–128, 273–274 |
-| RC-3 | NEW | POST | `/api/v1/app/clinic-setup/complete` | `organization:update` | complete the essentials — refused while one is missing | BRIEF.md:216, 263–268, 323 |
+| RC-1 | NEW | GET | `/api/v1/app/onboarding-setup` | `organization:update` — managers only (D19) | the setup status: answered steps, skipped items, deferred / completed / hidden, and each guide item's done flag read from the records | BRIEF.md:49–50, 129, 205–207 |
+| RC-2 | NEW | PATCH | `/api/v1/app/onboarding-setup` | `organization:update` | answer a step, skip or un-skip an item, defer ("Explore first"), hide or reopen the guide | BRIEF.md:51–52, 124–128, 273–274 |
+| RC-3 | NEW | POST | `/api/v1/app/onboarding-setup/complete` | `organization:update` | complete the essentials — refused while one is missing | BRIEF.md:216, 263–268, 323 |
 
 ## Branches & places (launch routes-final §1)
 
@@ -48,9 +48,9 @@ Intake hash `d5f100464051`. What exists is the launch's route review (`launch-20
 | # | Change | Method | Path | Access | Operation | Source |
 | --- | --- | --- | --- | --- | --- | --- |
 | RC-14 | REUSED | PATCH | `/api/v1/tenancy/organization/memberships/{membership_id}` | `membership:update` (the owner's extra roles: the owner only, D81 (4)) | step 4 (the owner's hours), step 5 (Doctor or Therapist as an extra role) | BRIEF.md:65–69, 269–270 |
-| RC-15 | REUSED | POST | `/api/v1/tenancy/organization/memberships` | `membership:create` | step 7 — one invitation per row, a real role, the main branch | BRIEF.md:73–74, 279–281 |
+| RC-15 | REUSED | POST | `/api/v1/tenancy/organization/memberships` | `membership:create` | step 7 — one invitation per row, a real role, the main branch, the branch's days and hours as the member's working hours (D16) | BRIEF.md:73–74, 279–281 |
 | RC-16 | REUSED | GET | `/api/v1/app/roles` | any member | step 7's role picker; finding the Doctor / Therapist role for step 5 | BRIEF.md:73 |
-| RC-17 | REUSED | GET | `/api/v1/app/memberships` | any member | the guide's "A doctor to book" and "Invite your team" (with `holds=`) | BRIEF.md:139–140 |
+| RC-17 | REUSED | GET | `/api/v1/app/memberships` | any member | the guide's "Someone to book" (D15) and "Invite your team" (with `holds=`) | BRIEF.md:139–140 |
 
 ## Offerings (launch routes-final §3)
 
@@ -66,7 +66,7 @@ Intake hash `d5f100464051`. What exists is the launch's route review (`launch-20
 | RC-20 | REUSED | GET | `/api/v1/tenancy/organization` | any member | prefill: clinic name, specialties, timezone, logo | BRIEF.md:57–67 |
 | RC-21 | REUSED | PATCH | `/api/v1/tenancy/organization` | `organization:update` | step 1 (specialties), step 4 (timezone, when changed), Settings › Clinic | BRIEF.md:59, 65–67, 164–167 |
 | RC-22 | REUSED | GET | `/api/v1/tenancy/organization/settings` | `organization:read` | Settings › Clinic | BRIEF.md:164–167 |
-| RC-23 | REUSED | PATCH | `/api/v1/tenancy/organization/settings` | `organization:update` | Settings › Clinic — day float, reminder hour, lead hold, retarget | BRIEF.md:164–167 |
+| RC-23 | REUSED | PATCH | `/api/v1/tenancy/organization/settings` | `organization:update` | Settings › Clinic — reminder hour, lead hold, retarget (no day float, D17) | BRIEF.md:164–167 |
 | RC-24 | REUSED | PUT | `/api/v1/tenancy/organization/logo` | `organization:update` | the guide's "Clinic logo" (Settings › General, as built) | BRIEF.md:147 |
 | RC-25 | REUSED | POST | `/api/v1/users/me/onboarding/complete` | signed in | the shortened /onboarding still marks the account onboarded | BRIEF.md:169–179 |
 
@@ -78,6 +78,6 @@ Intake hash `d5f100464051`. What exists is the launch's route review (`launch-20
 
 ## Findings
 
-- **No route serves a clinic's setup progress today** — RC-1 to RC-3 are new; where they live (the app domain,
-  reading the tenancy settings through its service) is a Step 4 question.
+- **No route serves a clinic's setup progress today** — RC-1 to RC-3 are new; they live in the app domain's
+  `onboarding-setup` sub-domain and store through the tenancy settings service (D22).
 - **`schema-routes.md` names no setup operation** (it is a brief) — RC-1 to RC-3 trace to `BRIEF.md` only.
