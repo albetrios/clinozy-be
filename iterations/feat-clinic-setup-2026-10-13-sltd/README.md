@@ -8,7 +8,7 @@
 | Opened | 2026-10-13 |
 | Branch | feat/clinic-setup |
 | Baseline | launch-2026-09-30-jxmr |
-| Status | approved |
+| Status | implementing |
 | Summary | A new clinic goes live in about a minute — a 3-tap setup in a drawer on any room (what kind of clinic, where it is, do you see patients), then a short 3-item guide behind the profile icon; a clinic's first branch becomes its main branch |
 | Drop placed | 2026-10-13 |
 | Drop source | /tmp/claude-0/-home-user/b7fc1af6-4489-5cd7-b097-1d37236ca7aa/scratchpad/feat-clinic-setup/BRIEF.md |
@@ -21,3 +21,4 @@
 - 2026-10-13 · Baseline — → launch-2026-09-30-jxmr · — · Claude
 - 2026-10-13 · planning → ready-for-approval · — · Claude
 - 2026-10-13 · ready-for-approval → approved · — · Claude
+- 2026-10-13 · approved → implementing · — · Claude
