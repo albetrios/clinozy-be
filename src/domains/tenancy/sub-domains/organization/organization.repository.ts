@@ -302,7 +302,9 @@ export class OrganizationRepository {
       .select({ public_id: organizations.public_id })
       .from(memberships)
       .innerJoin(organizations, eq(organizations.id, memberships.organization_id))
-      .innerJoin(authUsers, eq(authUsers.id, memberships.user_id))
+      // LEFT, not INNER: should the caller's own row ever be hidden by its RLS policy, nothing
+      // counts as remembered and the default degrades to the newest membership — never to none.
+      .leftJoin(authUsers, eq(authUsers.id, memberships.user_id))
       .where(
         and(
           eq(memberships.user_id, user_id),
