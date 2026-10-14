@@ -157,7 +157,7 @@ one-line PR there (owner: **be-dependency-security**); never a version in the wo
 ### Supporting ignore files
 
 - `.gitleaks.toml` -- paths Gitleaks skips (node_modules, .env.example, lock files, generated docs)
-- `.semgrepignore` -- paths Semgrep skips (node_modules, dist, migrations, lock files)
+- `.semgrepignore` -- paths Semgrep skips (node_modules, dist, migrations, lock files, design drops' `iterations/*/intake-files/`)
 
 ## Convenience scripts (`package.json`)
 
