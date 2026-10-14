@@ -18,7 +18,8 @@ import {
  * @remarks
  * - **Algorithm:** the shared {@link BaseRecordService} on `app.suppliers` — the organization's,
  *   no branch (MD3); `manufacturer_ids` replaces the link rows the manufacturer's `supplier_ids`
- *   writes too. Never the clinic stock's vendors (S13). Reading needs `medicine:read`, adding
+ *   writes too; the list's `meta.payable_total` is what every matching supplier is owed, over every
+ *   page (MD30 (b)). Never the clinic stock's vendors (S13). Reading needs `medicine:read`, adding
  *   `medicine:create`, changing `medicine:update`, deleting and restoring `medicine:delete`,
  *   paying `payment:create` (the routes' gates, MD2).
  * - **Failure modes:** `NotFoundError('Supplier')`; `ValidationError` for a bad body or query, or a
@@ -35,6 +36,9 @@ export class SuppliersService extends BaseRecordService<SupplierOutput> {
       parseUpdate: validateUpdateSupplier,
       parseList: validateListSuppliersQuery,
       serialize: serializeSupplier,
+      listMeta: async ({ organizationId, query }) => ({
+        payable_total: await repository.sumPayables({ organizationId, query }),
+      }),
       referenceLists: [
         { field: 'manufacturer_ids', link: SUPPLIER_MANUFACTURERS_LINK, label: 'manufacturer' },
       ],

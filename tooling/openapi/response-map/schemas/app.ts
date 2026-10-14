@@ -530,3 +530,57 @@ export const contactMessageTemplateExample = {
   created_at: '2026-10-08T10:30:00.000Z',
   updated_at: '2026-10-08T10:30:00.000Z',
 };
+
+// ── Who owes on medical sales (GET /app/medical-sales/dues — "Send payment reminders", MD25) ──
+export const medicalSaleDuesSchema = {
+  type: 'object',
+  properties: {
+    contact: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        primary_phone: { type: 'string' },
+      },
+    },
+    patient_id: nullableString,
+    due_total: { type: 'number' },
+    sale_count: { type: 'integer' },
+    sales: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: 'msal_k7x9m2pqr4w8n1v3a1b2c' },
+          sale_number: { type: 'integer', description: 'S-983' },
+          due_amount: { type: 'number' },
+          sold_at: { type: 'string', format: 'date-time' },
+        },
+      },
+    },
+    oldest_sold_at: { type: 'string', format: 'date-time' },
+  },
+};
+
+export const medicalSaleDuesExample = {
+  contact: { id: 'con_k7x9m2pqr4w8n1v3a1b2c', name: 'Asha Patel', primary_phone: '+919825044122' },
+  patient_id: 'pat_k7x9m2pqr4w8n1v3a1b2c',
+  due_total: 1101,
+  sale_count: 2,
+  sales: [
+    {
+      id: 'msal_k7x9m2pqr4w8n1v3a1b2c',
+      sale_number: 981,
+      due_amount: 738,
+      sold_at: '2026-10-11T10:12:00.000Z',
+    },
+    {
+      id: 'msal_q4w8e2r6t1y5u9i3o7p0a',
+      sale_number: 983,
+      due_amount: 363,
+      sold_at: '2026-10-13T10:12:00.000Z',
+    },
+  ],
+  oldest_sold_at: '2026-10-11T10:12:00.000Z',
+};

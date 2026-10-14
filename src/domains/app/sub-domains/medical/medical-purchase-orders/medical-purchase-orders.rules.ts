@@ -15,6 +15,7 @@ import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.uti
 import { paiseOf, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import {
   MEDICAL_PURCHASE_ORDER_DEFAULT_EXPIRY_MONTHS,
+  MEDICAL_PURCHASE_ORDER_ITEMS_MAX,
   MEDICAL_PURCHASE_ORDER_STAGE,
 } from './medical-purchase-orders.constants.js';
 import {
@@ -218,11 +219,86 @@ async function receiveLine(options: {
   return batchId;
 }
 
+/** How one line arrived — ticked or not, its batch and expiry as sent (defaults otherwise). */
+interface ReceivedLineChoice {
+  is_received?: boolean | undefined;
+  batch_number?: string | undefined;
+  expiry_month?: string | undefined;
+}
+
 /**
- * MD16: "Receive goods" — each line ticked (default) goes into its batch with its number (default
- * `NEW-<order number>`) and expiry (default 24 months on); the order is received, its total the
- * received lines', the bill number may come with the goods, and the supplier's open credits are
- * applied.
+ * MD16: one line of a receive — ticked (default) it goes into its batch (number default
+ * `NEW-<order number>`, expiry default 24 months on) and counts in the total; either way the line
+ * records how it arrived. Returns what it adds to the total, in paise.
+ */
+async function receiveOrderLine(options: {
+  repository: MedicalPurchaseOrdersRepository;
+  order: BaseRecordRow;
+  line: MedicalPurchaseOrderItemRow;
+  choice: ReceivedLineChoice | undefined;
+  context: BaseRecordWriteContext;
+}): Promise<number> {
+  const { repository, order, line, choice, context } = options;
+  const isReceived = choice?.is_received ?? true;
+  const batchNumber = choice?.batch_number ?? `NEW-${Number(order.purchase_order_number)}`;
+  const expiryMonth =
+    choice?.expiry_month === undefined
+      ? defaultExpiryMonth(String(order.order_date))
+      : `${choice.expiry_month}-01`;
+  const batchId = isReceived
+    ? await receiveLine({ order, line, batchNumber, expiryMonth, context })
+    : null;
+  await repository.markItemReceived({
+    id: line.id,
+    isReceived,
+    batchNumber: isReceived ? batchNumber : null,
+    expiryMonth: isReceived ? expiryMonth : null,
+    medicineBatchId: batchId,
+  });
+  return isReceived ? paiseOf(line.amount) : 0;
+}
+
+/**
+ * MD26: goods that came but were not ordered — added after the order's last line (a listed
+ * medicine, or a quick one added as typed), the order holding at most 50 lines.
+ */
+async function addUnorderedLines(options: {
+  repository: MedicalPurchaseOrdersRepository;
+  order: BaseRecordRow;
+  orderedCount: number;
+  lastLineNumber: number;
+  items: readonly MedicalPurchaseOrderItemInput[];
+  context: BaseRecordWriteContext;
+}): Promise<MedicalPurchaseOrderItemRow[]> {
+  const { repository, order, items, context } = options;
+  if (items.length === 0) return [];
+  if (options.orderedCount + items.length > MEDICAL_PURCHASE_ORDER_ITEMS_MAX) {
+    throw fieldValidationError({
+      field: 'items',
+      messageKey: 'errors:validation.medicalPurchaseOrderTooManyLines',
+      messageParams: { max: MEDICAL_PURCHASE_ORDER_ITEMS_MAX },
+    });
+  }
+  const lines = await resolveLines({
+    items,
+    supplierId: order.supplier_id as number,
+    context,
+  });
+  return repository.insertItems({
+    orderId: order.id,
+    organizationId: context.organizationId,
+    lines: lines.map((line, index) => ({
+      ...line,
+      line_number: options.lastLineNumber + index + 1,
+    })),
+  });
+}
+
+/**
+ * MD16, MD26: "Receive goods" — each ordered line ticked (default) goes into its batch, and goods
+ * that came but were not ordered become received lines of the order; the order is received, its
+ * total the received lines', the bill number may come with the goods, and the supplier's open
+ * credits are applied.
  */
 async function receiveOrder(input: BaseRecordActionInput): Promise<BaseRecordRow> {
   const { existing: order, context } = input;
@@ -230,7 +306,12 @@ async function receiveOrder(input: BaseRecordActionInput): Promise<BaseRecordRow
   assertNotReceived({ existing: order, action: 'receive' });
   const body = parseWithSchema({ schema: ReceiveMedicalPurchaseOrderDto, data: input.input });
   const lines = await repository.lockItems(order.id);
-  const sent = new Map((body.items ?? []).map((item) => [item.id, item]));
+  const sent = new Map<string, ReceivedLineChoice>();
+  const unordered: (MedicalPurchaseOrderItemInput & ReceivedLineChoice)[] = [];
+  for (const item of body.items ?? []) {
+    if ('id' in item) sent.set(item.id, item);
+    else unordered.push(item);
+  }
   const unknown = [...sent.keys()].find((id) => !lines.some((line) => line.public_id === id));
   if (unknown !== undefined) {
     throw fieldValidationError({
@@ -239,25 +320,31 @@ async function receiveOrder(input: BaseRecordActionInput): Promise<BaseRecordRow
       messageParams: { id: unknown },
     });
   }
+  const added = await addUnorderedLines({
+    repository,
+    order,
+    orderedCount: lines.length,
+    lastLineNumber: lines.at(-1)?.line_number ?? 0,
+    items: unordered,
+    context,
+  });
   let totalPaise = 0;
   for (const line of lines) {
-    const choice = sent.get(line.public_id);
-    const isReceived = choice?.is_received ?? true;
-    const batchNumber = choice?.batch_number ?? `NEW-${Number(order.purchase_order_number)}`;
-    const expiryMonth =
-      choice?.expiry_month === undefined
-        ? defaultExpiryMonth(String(order.order_date))
-        : `${choice.expiry_month}-01`;
-    const batchId = isReceived
-      ? await receiveLine({ order, line, batchNumber, expiryMonth, context })
-      : null;
-    if (isReceived) totalPaise += paiseOf(line.amount);
-    await repository.markItemReceived({
-      id: line.id,
-      isReceived,
-      batchNumber: isReceived ? batchNumber : null,
-      expiryMonth: isReceived ? expiryMonth : null,
-      medicineBatchId: batchId,
+    totalPaise += await receiveOrderLine({
+      repository,
+      order,
+      line,
+      choice: sent.get(line.public_id),
+      context,
+    });
+  }
+  for (const [index, line] of added.entries()) {
+    totalPaise += await receiveOrderLine({
+      repository,
+      order,
+      line,
+      choice: { ...unordered[index], is_received: true },
+      context,
     });
   }
   if (totalPaise === 0) {
@@ -282,7 +369,7 @@ async function receiveOrder(input: BaseRecordActionInput): Promise<BaseRecordRow
   return (await repository.findById(order.id)) ?? received ?? order;
 }
 
-/** The lines, their counts and the supplier's name of a page's orders (11.E.6). */
+/** The lines, their counts and the supplier (name, phone, GSTIN — MD30 (c)) of a page's orders (11.E.6). */
 async function decorateOrders(options: {
   repository: MedicalPurchaseOrdersRepository;
   outputs: Record<string, unknown>[];
@@ -295,7 +382,7 @@ async function decorateOrders(options: {
     publicIds: outputs.map((output) => String(output.id)),
   });
   const items = await repository.findItems([...idsByPublicId.values()]);
-  const supplierNames = await suppliersRepository.findNamesByPublicId(
+  const suppliersById = await suppliersRepository.findSummariesByPublicId(
     outputs.map((output) => (output.supplier as { id: string }).id),
   );
   for (const output of outputs) {
@@ -309,8 +396,14 @@ async function decorateOrders(options: {
     }));
     output.item_count = own.length;
     output.free_count = own.reduce((total, item) => total + item.free_quantity, 0);
-    const supplier = output.supplier as { id: string; name: string };
-    supplier.name = supplierNames.get(supplier.id) ?? '';
+    const supplier = output.supplier as { id: string };
+    const summary = suppliersById.get(supplier.id);
+    output.supplier = {
+      id: supplier.id,
+      name: summary?.name ?? '',
+      phone: summary?.phone ?? null,
+      gst_number: summary?.gst_number ?? null,
+    };
   }
 }
 

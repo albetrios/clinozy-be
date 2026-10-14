@@ -1,8 +1,18 @@
-import { sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
+import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { BaseRecordRepository, nullsLastSortKeys } from '@/domains/app/base-record.repository.js';
 import { contactLinkedSearchCondition } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
+import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import type { ContactLinkedSearch } from '@/domains/app/sub-domains/contacts/contacts.validator.js';
 import { patients } from './patients.schema.js';
+
+/** A patient as a record about them names them (a prescription's `patient`, MD29). */
+export interface PatientSummaryRow {
+  id: string;
+  patient_number: number;
+  contact_id: string;
+  name: string;
+}
 
 /**
  * Persistence for `app.patients` (launch ROUTE #133, routes-final 7.A) — the shared app record
@@ -54,5 +64,31 @@ export class PatientsRepository extends BaseRecordRepository {
       defaultSort: 'created_at',
       defaultOrder: 'desc',
     });
+  }
+
+  /**
+   * MD29: the patients records name, by public id — the number, the contact and its first and
+   * last name; a deleted file's too (a prescription keeps naming its patient).
+   */
+  async findSummaries(publicIds: readonly string[]): Promise<Map<string, PatientSummaryRow>> {
+    const unique = [...new Set(publicIds)];
+    if (unique.length === 0) return new Map();
+    const rows = await getRequestDatabase()
+      .select({
+        id: patients.public_id,
+        patient_number: patients.patient_number,
+        contact_id: contacts.public_id,
+        first_name: contacts.first_name,
+        last_name: contacts.last_name,
+      })
+      .from(patients)
+      .innerJoin(contacts, eq(contacts.id, patients.contact_id))
+      .where(inArray(patients.public_id, unique));
+    return new Map(
+      rows.map(({ first_name: firstName, last_name: lastName, ...row }) => [
+        row.id,
+        { ...row, name: [firstName, lastName].filter(Boolean).join(' ') },
+      ]),
+    );
   }
 }

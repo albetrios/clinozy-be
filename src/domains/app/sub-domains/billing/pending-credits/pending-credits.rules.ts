@@ -10,6 +10,7 @@ import { attachBilledContacts } from '@/domains/app/sub-domains/billing/invoices
 import { InvoicesRepository } from '@/domains/app/sub-domains/billing/invoices/invoices.repository.js';
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { InvoiceCreditNotesRepository } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.repository.js';
+import { assertCreditNoteRefundable } from '@/domains/app/sub-domains/billing/invoice-credit-notes/invoice-credit-notes.rules.js';
 import {
   PAYMENT_DIRECTION,
   PAYMENT_KIND,
@@ -35,12 +36,14 @@ import {
   PENDING_CREDIT_SETTLE_METHOD,
   PENDING_CREDIT_STATUS,
 } from './pending-credits.constants.js';
+import { PendingCreditsRepository } from './pending-credits.repository.js';
 import { SettlePendingCreditDto, type SettlePendingCreditInput } from './pending-credits.dto.js';
 import { pending_credits } from './pending-credits.schema.js';
 
 const invoicesRepository = new InvoicesRepository();
 const creditNotesRepository = new InvoiceCreditNotesRepository();
 const paymentsRepository = new PaymentsRepository();
+const pendingCreditsRepository = new PendingCreditsRepository();
 
 /**
  * B23: a contact or a typed name — and an invoice it names is that contact's.
@@ -61,6 +64,23 @@ async function assertParty(values: Readonly<Record<string, unknown>>): Promise<v
       });
     }
   }
+}
+
+/** MD33: what may change on the store credit a medical return left — its note and settle-by. */
+const RETURN_CREDIT_EDITABLE: ReadonlySet<string> = new Set(['note', 'settle_by']);
+
+/**
+ * MD33: the store credit a medical return left is the return's — its amount, way, party and bill
+ * stay as the return wrote them, and it is not deleted (only its note and settle-by change):
+ * otherwise a second credit note for the same goods, or a credit larger than the goods returned.
+ */
+async function assertNotReturnCredit(options: {
+  existing: BaseRecordRow;
+  changed: readonly string[] | null;
+}): Promise<void> {
+  if (options.changed?.every((field) => RETURN_CREDIT_EDITABLE.has(field))) return;
+  if (!(await pendingCreditsRepository.isReturnStoreCredit(options.existing.id))) return;
+  throw new ConflictError('errors:pendingCreditOfReturn').withReason('credit_of_return');
 }
 
 /** B24: change and delete only while nothing is settled. */
@@ -108,9 +128,7 @@ async function settleByRefund(options: {
       : null;
   let creditNoteId: number | null = null;
   if (invoice) {
-    if (paiseOf(body.amount) > paiseOf(invoice.paid_amount)) {
-      throw new ConflictError('errors:paymentMoreThanPaid').withReason('more_than_paid');
-    }
+    await assertCreditNoteRefundable({ invoice, amount: body.amount });
     const creditNote = await creditNotesRepository.insert({
       organization_id: context.organizationId,
       invoice_id: invoice.id,
@@ -247,19 +265,49 @@ async function settlePendingCredit(input: BaseRecordActionInput): Promise<BaseRe
 }
 
 /**
+ * Writes a pending credit another write makes in its transaction — a medical return kept as store
+ * credit (MD33): `give` (the clinic owes it) to the contact, open, numbered by the record counter;
+ * no invoice, so giving it back is a plain refund (the return's credit note already lowered the
+ * bill) and using it on a bill is the usual receipt paid by `credit`.
+ *
+ * @remarks
+ * - **Notes:** no payment is written — nothing is settled yet (B24).
+ */
+export async function recordStoreCredit(options: {
+  context: BaseRecordWriteContext;
+  contactId: number;
+  amount: number;
+  reason: string;
+  note: string | null;
+}): Promise<BaseRecordRow> {
+  const { context } = options;
+  return pendingCreditsRepository.insert({
+    organization_id: context.organizationId,
+    direction: PENDING_CREDIT_DIRECTION.GIVE,
+    contact_id: options.contactId,
+    amount: options.amount.toFixed(2),
+    status: PENDING_CREDIT_STATUS.OPEN,
+    reason: options.reason,
+    note: options.note,
+    created_by_user_id: context.userId,
+    updated_by_user_id: context.userId,
+  });
+}
+
+/**
  * The pending-credit rules (launch ROUTE #136, routes-final 8.D): who it is with, what a change or
  * a delete may do, the settlement, and what a page reads.
  *
  * @remarks
  * - **Algorithm:** a contact or a typed name (B23); a change or a delete only while nothing is
- *   settled. The settle action writes one payment pointing at the credit — a refund (with a credit
+ *   settled, and on a medical return's store credit only its note and settle-by change (MD33). The settle action writes one payment pointing at the credit — a refund (with a credit
  *   note on the credit's invoice), a `money_back` receipt, or a receipt paid by `credit_amount` on
  *   one of the party's invoices — and the payment's write moves the settled amount and the status
  *   ({@link recordPayment}, B24). A page reads the contact's summary, the settlements and who
  *   recorded each credit (D81).
  * - **Failure modes:** `ValidationError` on `party_name`, `invoice_id`, `amount`, `method`,
  *   `branch_id`; `ForbiddenError` `missing_permission` (settling a `give` credit without
- *   `payment:delete`, D83 (1)); `ConflictError` `credit_settled`, `credit_closed`, `nothing_due`,
+ *   `payment:delete`, D83 (1)); `ConflictError` `credit_settled`, `credit_of_return`, `credit_closed`, `nothing_due`,
  *   `more_than_paid`, `more_than_due`, `day_closed`.
  */
 export function createPendingCreditsRules(): BaseRecordRules {
@@ -270,10 +318,12 @@ export function createPendingCreditsRules(): BaseRecordRules {
     },
     prepareUpdate: async (values, existing) => {
       assertNothingSettled(existing);
+      await assertNotReturnCredit({ existing, changed: Object.keys(values) });
       await assertParty({ ...existing, ...values });
     },
-    prepareRemove: (existing) => {
+    prepareRemove: async (existing) => {
       assertNothingSettled(existing);
+      await assertNotReturnCredit({ existing, changed: null });
     },
     actions: { settle: settlePendingCredit },
     decorate: async (outputs, context) => {

@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 440
+  Total routes: 446
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 303
+  Routes: 309
 ================================================================================
 
   — Sub Domains —
@@ -118,6 +118,8 @@ Legend:
   DELETE /api/v1/app/manufacturers/:manufacturer_id               204  -    both  PERM: medicine:delete
   POST   /api/v1/app/manufacturers/:manufacturer_id/restore       200  req  both  PERM: medicine:delete
   GET    /api/v1/app/medical-payments                             200  -    both  PERM: medicine:read
+  GET    /api/v1/app/medical-payments/exports                     200  -    both  PERM: medicine:export
+  GET    /api/v1/app/medical-pending-credits                      200  -    both  PERM: medicine:read
   GET    /api/v1/app/medical-purchase-orders                      200  -    both  PERM: medicine:read
   POST   /api/v1/app/medical-purchase-orders                      200  req  both  PERM: medicine:create
   GET    /api/v1/app/medical-purchase-orders/:medical_purchase_order_id  200  -    both  PERM: medicine:read
@@ -142,7 +144,8 @@ Legend:
   GET    /api/v1/app/medical-sales/:medical_sale_id               200  -    both  PERM: medicine:read
   DELETE /api/v1/app/medical-sales/:medical_sale_id               204  -    both  PERM: medicine:delete
   POST   /api/v1/app/medical-sales/:medical_sale_id/restore       200  req  both  PERM: medicine:delete
-  POST   /api/v1/app/medical-sales/:medical_sale_id/returns       200  req  both  PERM: payment:create
+  POST   /api/v1/app/medical-sales/:medical_sale_id/returns       200  req  both  PERM: payment:delete
+  GET    /api/v1/app/medical-sales/dues                           200  -    both  PERM: medicine:read
   GET    /api/v1/app/medical-sales/exports                        200  -    both  PERM: medicine:export
   GET    /api/v1/app/medicines                                    200  -    both  PERM: medicine:read
   POST   /api/v1/app/medicines                                    200  req  both  PERM: medicine:create
@@ -299,13 +302,16 @@ Legend:
   DELETE /api/v1/app/stock-vendors/:stock_vendor_id               204  -    both  PERM: stock_item:delete
   POST   /api/v1/app/stock-vendors/:stock_vendor_id/restore       200  req  both  PERM: stock_item:delete
   GET    /api/v1/app/supplier-credits                             200  -    both  PERM: medicine:read
-  POST   /api/v1/app/supplier-credits                             200  req  both  PERM: medicine:update
-  GET    /api/v1/app/supplier-credits/:supplier_credit_id         200  -    both  PERM: medicine:read
   GET    /api/v1/app/suppliers                                    200  -    both  PERM: medicine:read
   POST   /api/v1/app/suppliers                                    200  req  both  PERM: medicine:create
   GET    /api/v1/app/suppliers/:supplier_id                       200  -    both  PERM: medicine:read
   PATCH  /api/v1/app/suppliers/:supplier_id                       200  -    both  PERM: medicine:update
   DELETE /api/v1/app/suppliers/:supplier_id                       204  -    both  PERM: medicine:delete
+  GET    /api/v1/app/suppliers/:supplier_id/credits               200  -    both  PERM: medicine:read
+  POST   /api/v1/app/suppliers/:supplier_id/credits               200  req  both  PERM: medicine:update
+  GET    /api/v1/app/suppliers/:supplier_id/credits/:supplier_credit_id  200  -    both  PERM: medicine:read
+  DELETE /api/v1/app/suppliers/:supplier_id/credits/:supplier_credit_id  204  -    both  PERM: medicine:delete
+  POST   /api/v1/app/suppliers/:supplier_id/credits/:supplier_credit_id/restore  200  req  both  PERM: medicine:delete
   POST   /api/v1/app/suppliers/:supplier_id/payments              200  req  both  PERM: payment:create
   POST   /api/v1/app/suppliers/:supplier_id/restore               200  req  both  PERM: medicine:delete
   GET    /api/v1/app/task-rule-settings                           200  -    both  PERM: task:read
@@ -531,16 +537,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 440
+  Total routes    : 446
   Public          : 16
   Authenticated   : 54
   Role-guarded    : 9
-  Perm-guarded    : 356
+  Perm-guarded    : 362
   Token-guarded   : 5
   Team-only (O)   : 10
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (128) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (129) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -647,8 +653,9 @@ Legend:
     POST /api/v1/app/stock-purchases/:stock_purchase_id/restore
     POST /api/v1/app/stock-vendors
     POST /api/v1/app/stock-vendors/:stock_vendor_id/restore
-    POST /api/v1/app/supplier-credits
     POST /api/v1/app/suppliers
+    POST /api/v1/app/suppliers/:supplier_id/credits
+    POST /api/v1/app/suppliers/:supplier_id/credits/:supplier_credit_id/restore
     POST /api/v1/app/suppliers/:supplier_id/payments
     POST /api/v1/app/suppliers/:supplier_id/restore
     POST /api/v1/app/tasks

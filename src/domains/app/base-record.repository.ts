@@ -693,8 +693,11 @@ export class BaseRecordRepository {
     return liveRowFilter(this.config.table) !== undefined;
   }
 
-  /** `q` over the search columns, or the running number when `q` reads as one. */
-  private searchCondition(q: string | undefined): SQL | undefined {
+  /**
+   * `q` over the search columns, or the running number when `q` reads as one — a table's own list,
+   * and a read of its rows grouped another way (the sales' dues, MD25).
+   */
+  protected searchCondition(q: string | undefined): SQL | undefined {
     const text = buildSearchCondition({
       columns: [
         ...this.config.searchColumns.map((name) => {

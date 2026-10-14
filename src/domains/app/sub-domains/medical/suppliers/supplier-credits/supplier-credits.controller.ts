@@ -9,6 +9,7 @@ export class SupplierCreditsController extends BaseRecordController<SupplierCred
     super(service, {
       resource: 'supplier_credit',
       idParam: 'supplier_credit_id',
+      parentParam: 'supplier_id',
       readPermission: APP_PERMISSIONS.MEDICINE_READ,
     });
   }

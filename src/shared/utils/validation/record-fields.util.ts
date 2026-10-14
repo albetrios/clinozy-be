@@ -322,6 +322,28 @@ export function toInstant(value: unknown): string | null {
 }
 
 /**
+ * A list query's instant range (`created_from` / `created_to`, `due_from` / `due_to`, …) as the
+ * repository's `Date` bounds — the one reader every list validator hands its ranges through.
+ *
+ * @remarks
+ * - **Algorithm:** each ISO string → `new Date(value)`; a bound the query leaves out stays
+ *   `undefined`, so the repository skips it.
+ * - **Failure modes:** none — the DTO already checked each bound's format.
+ */
+export function queryInstantRange({
+  from,
+  to,
+}: {
+  from: string | undefined;
+  to: string | undefined;
+}): { from: Date | undefined; to: Date | undefined } {
+  return {
+    from: from === undefined ? undefined : new Date(from),
+    to: to === undefined ? undefined : new Date(to),
+  };
+}
+
+/**
  * A stored value as text — the one way a row's `unknown` column reaches a string.
  *
  * @remarks

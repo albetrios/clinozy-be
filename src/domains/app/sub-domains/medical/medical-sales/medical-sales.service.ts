@@ -27,7 +27,7 @@ import {
  *   delete with its own reasons (MD20). The rules write the invoice through the invoice ledger and
  *   move the batches (MD4, MD7). A create answers with the sale as its invoice left it (a fresh
  *   read). Reading needs `medicine:read`, selling `medicine:create` (and `payment:create` for
- *   "Paid now"), voiding and its undo `medicine:delete`, a return `payment:create`, the CSV
+ *   "Paid now"), voiding and its undo `medicine:delete`, a return `payment:delete` (MD23), the CSV
  *   `medicine:export` (the routes' gates, MD2).
  * - **Failure modes:** `NotFoundError('Medical sale')`; `ValidationError` for a bad body or query,
  *   or a branch, contact or prescription that is no live record here; `ConflictError` per the

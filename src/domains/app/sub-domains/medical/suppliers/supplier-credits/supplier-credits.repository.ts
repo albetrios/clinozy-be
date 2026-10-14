@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { BaseRecordRepository } from '@/domains/app/base-record.repository.js';
 import {
@@ -37,8 +37,9 @@ export interface SupplierCreditNamesRow {
  *
  * @remarks
  * - **Algorithm:** sorted newest first (`created_at`); the derived filter `status` (`open` until
- *   fully applied, then `adjusted`). The open credits of a supplier are read locked, oldest first;
- *   applying moves `applied_amount` in one guarded statement (never over the amount).
+ *   fully applied, then `adjusted`). The live open credits of a supplier are read locked, oldest
+ *   first; applying moves `applied_amount` in one guarded statement (never over the amount); a void
+ *   or its undo takes back every applied amount of the supplier first (MD32).
  */
 export class SupplierCreditsRepository extends BaseRecordRepository {
   constructor() {
@@ -63,10 +64,34 @@ export class SupplierCreditsRepository extends BaseRecordRepository {
       })
       .from(supplier_credits)
       .where(
-        and(eq(supplier_credits.supplier_id, supplierId), statusSql(SUPPLIER_CREDIT_STATUS.OPEN)),
+        and(
+          eq(supplier_credits.supplier_id, supplierId),
+          isNull(supplier_credits.deleted_at),
+          statusSql(SUPPLIER_CREDIT_STATUS.OPEN),
+        ),
       )
       .orderBy(asc(supplier_credits.created_at), asc(supplier_credits.id))
       .for('update');
+  }
+
+  /**
+   * MD32: takes back what is applied of every credit of a supplier — voided ones too — before
+   * its live credits are applied again oldest first.
+   */
+  async takeBackApplied(options: { supplierId: number; userId: number | null }): Promise<void> {
+    await getRequestDatabase()
+      .update(supplier_credits)
+      .set({
+        applied_amount: '0.00',
+        updated_at: sql`greatest(${supplier_credits.created_at}, now())`,
+        updated_by_user_id: options.userId,
+      } as never)
+      .where(
+        and(
+          eq(supplier_credits.supplier_id, options.supplierId),
+          gt(supplier_credits.applied_amount, '0'),
+        ),
+      );
   }
 
   /** MD11: applies `delta` more of a credit (never over its amount); false when refused. */

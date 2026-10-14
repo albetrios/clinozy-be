@@ -372,6 +372,11 @@ src/
     │   │   │   │   ├── manufacturers.service.ts
     │   │   │   │   ├── manufacturers.types.ts
     │   │   │   │   └── manufacturers.validator.ts
+    │   │   │   ├── medical-payments/
+    │   │   │   │   ├── medical-payments.controller.ts
+    │   │   │   │   ├── medical-payments.dto.ts
+    │   │   │   │   ├── medical-payments.overview.md
+    │   │   │   │   └── medical-payments.routes.ts
     │   │   │   ├── medical-purchase-orders/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
@@ -3481,6 +3486,7 @@ src/
     │   │   │   ├── file-magic.util.unit.test.ts
     │   │   │   ├── parse-with-schema.util.unit.test.ts
     │   │   │   ├── record-fields.money.unit.test.ts
+    │   │   │   ├── record-fields.query-instant-range.unit.test.ts
     │   │   │   ├── record-fields.rupees.unit.test.ts
     │   │   │   ├── record-fields.time-zone.unit.test.ts
     │   │   │   ├── record-fields.to-text.unit.test.ts

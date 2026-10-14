@@ -39,4 +39,9 @@ What the store orders from its suppliers — ordered, then received into batches
   reasons); once received it is read-only (`409 transition_not_allowed`).
 - **Receive** moves each ticked line into its batch, refreshes the supplier's price, sets the
   total to the received lines' and applies the supplier's open credits.
+- **Goods not ordered (MD26):** receive's lines without `id` — a medicine or a quick one added as
+  typed, its quantity, free packs and rate — become received lines of the order (at most 50), with
+  their batch and price like an ordered line.
+- **The supplier on every order** carries its name, phone and GSTIN — a deleted supplier's too —
+  for the PO sheet (MD30 (c)).
 - **`due_amount`** = total − paid − credited once received; payments move `paid_amount`.

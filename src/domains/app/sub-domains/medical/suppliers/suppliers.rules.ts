@@ -117,7 +117,7 @@ async function assertNothingOwed({
   }
 }
 
-/** MD10: a page's account fields — payable, ageing, live orders — and the manufacturers. */
+/** MD10: a page's account fields — payable, ageing, live orders and their total — and the manufacturers. */
 async function decorateSuppliers(options: {
   repository: SuppliersRepository;
   outputs: Record<string, unknown>[];
@@ -141,6 +141,7 @@ async function decorateSuppliers(options: {
     const oldest = account?.oldest_due_received_at ?? null;
     output.payable = account?.payable ?? 0;
     output.order_count = account?.order_count ?? 0;
+    output.order_total = account?.order_total ?? 0;
     output.ageing_days =
       oldest === null
         ? null
@@ -160,7 +161,7 @@ async function decorateSuppliers(options: {
  * - **Algorithm:** a delete is refused while something is payable, a credit is open or an order
  *   waits to be received. The `payments` action pays the received orders still due, oldest first —
  *   one supplier bill each, the splits taken mode by mode — after applying the open credits
- *   (MD11). Every read adds `payable`, `ageing_days`, `order_count` and the manufacturers.
+ *   (MD11). Every read adds `payable`, `ageing_days`, `order_count`, `order_total` and the manufacturers.
  * - **Failure modes:** `ValidationError` on `branch_id`, `splits`; `ConflictError`
  *   `supplier_has_dues`, `more_than_due`, `day_closed`.
  */

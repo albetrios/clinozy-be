@@ -21,6 +21,7 @@ import {
 } from '@/domains/app/__tests__/factories/app-records.factory.js';
 import {
   APP_COLLECTION_WRITES,
+  collectionWritePath,
   findBookableDay,
 } from '@/domains/app/__tests__/factories/app-route-references.factory.js';
 
@@ -163,7 +164,11 @@ describe('Security: the app tables’ rows stay inside their organization (appli
     references.laterDay = await findBookableDay({ flow, fixture: victim, references });
     for (const route of APP_COLLECTION_WRITES) {
       const [, path = ''] = route.split(' ');
-      await flow.call('POST', path, appRouteBody({ method: 'POST', path, references }));
+      await flow.call(
+        'POST',
+        collectionWritePath(path, references),
+        appRouteBody({ method: 'POST', path, references }),
+      );
     }
   });
 

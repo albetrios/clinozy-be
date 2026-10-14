@@ -44,7 +44,7 @@ import { tasks } from '@/domains/app/sub-domains/tasks/tasks.schema.js';
  *   deleted (D3, D16) — nor `app.patients` (never purged, P7), nor the tables that never soft-delete
  *   (`app.patient_treatments` — reversed, TR6; the append-only `app.patient_feedback_actions`,
  *   `app.payment_edits`, `app.day_close_events`, `app.stock_item_movements`, `app.stock_counts`,
- *   `app.task_owner_changes`; `app.supplier_credits` — adjusted, never deleted, MD7;
+ *   `app.task_owner_changes`; `app.supplier_credits` — a voided credit is kept, never purged, MD32;
  *   `app.task_rule_settings` — upserted; `app.day_closes` — opened and
  *   closed, B25; an invoice's lines and members, a purchase's lines and a count's lines, which go
  *   with it).

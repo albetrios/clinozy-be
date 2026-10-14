@@ -42,6 +42,7 @@ import {
   type PaymentSplit,
   purchaseEffect,
   recordPayment,
+  scaleInvoiceMove,
   splitsToColumns,
   writePaymentActivity,
 } from './payments.ledger.js';
@@ -282,6 +283,35 @@ async function recordEdit(options: {
 }
 
 /**
+ * B20, B21, B16: a change moves the invoice's paid and refunded amounts by the difference — one
+ * move on the same invoice, or out of the old one and into the new one.
+ */
+async function moveInvoiceMoney(options: {
+  before: BaseRecordRow;
+  after: BaseRecordRow;
+  reversed: BaseRecordRow | undefined;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
+  const { before, after, reversed, context } = options;
+  const was = invoiceEffect({ row: before, reversed });
+  const now = invoiceEffect({ row: after, reversed });
+  if (before.invoice_id === after.invoice_id) {
+    await applyInvoicePaid({
+      context,
+      invoiceId: after.invoice_id,
+      move: scaleInvoiceMove({ move: now, minus: was }),
+    });
+    return;
+  }
+  await applyInvoicePaid({
+    context,
+    invoiceId: before.invoice_id,
+    move: scaleInvoiceMove({ move: was, factor: -1 }),
+  });
+  await applyInvoicePaid({ context, invoiceId: after.invoice_id, move: now });
+}
+
+/**
  * B20, B21, S11, MD7: a change moves the invoice's and the purchase's paid amount by the
  * difference — one delta on the same record, or out of the old one and into the new one.
  */
@@ -292,12 +322,8 @@ async function moveLinkedPaid(options: {
   context: BaseRecordWriteContext;
 }): Promise<void> {
   const { before, after, reversed, context } = options;
+  await moveInvoiceMoney(options);
   const links = [
-    {
-      field: 'invoice_id',
-      effect: invoiceEffect,
-      apply: (id: unknown, delta: number) => applyInvoicePaid({ context, invoiceId: id, delta }),
-    },
     ...SUPPLIER_BILL_PURCHASE_FIELDS.map((field) => ({
       field,
       effect: ({

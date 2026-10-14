@@ -38,8 +38,9 @@ export interface InvoiceItemOutput {
  * An invoice as the API returns it (launch ROUTE #136, routes-final 8.A.6) — the print preview.
  *
  * @remarks
- * - **Notes:** the amounts are the server's (B9); `paid_amount` moves with every payment,
- *   `due_amount` and `payment_status` are generated (B5); `is_settled` — a payment on a closed day
+ * - **Notes:** the amounts are the server's (B9); `paid_amount` moves with every payment and
+ *   `refunded_amount` with every refund (a refund moves money from one to the other, B16),
+ *   `due_amount` (total − paid − refunded) and `payment_status` are generated (B5); `is_settled` — a payment on a closed day
  *   (B12); `contact` and `patient_id` the billed person and their patient file (B3);
  *   `created_by_membership_id` who billed it (the "By" column, D81).
  */
@@ -61,6 +62,7 @@ export interface InvoiceOutput {
   gst_total: number;
   total: number;
   paid_amount: number;
+  refunded_amount: number;
   due_amount: number;
   payment_status: string;
   is_settled: boolean;
@@ -109,7 +111,8 @@ export interface InvoicePreviewItemOutput {
  *
  * @remarks
  * - **Notes:** `type` and `invoice_date` as the save would set them (the date the offers are live
- *   on); `paid_amount` what is already paid (0 for a new bill) and `due_amount` the rest.
+ *   on); `paid_amount` what is already paid and `refunded_amount` what its credit notes refunded
+ *   (0 for a new bill), `due_amount` the rest.
  */
 export interface InvoicePreviewOutput {
   type: string;
@@ -122,5 +125,6 @@ export interface InvoicePreviewOutput {
   gst_total: number;
   total: number;
   paid_amount: number;
+  refunded_amount: number;
   due_amount: number;
 }

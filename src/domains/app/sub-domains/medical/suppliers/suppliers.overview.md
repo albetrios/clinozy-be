@@ -8,7 +8,8 @@ Parent: [medical](../medical.overview.md)
 
 The agencies the medical store buys from, what each is owed, and paying them (launch ROUTE #153 —
 routes-final 11.B, MD10). Tables `app.suppliers` and `app.supplier_manufacturers`; never the clinic
-stock's vendors. Its credits nest in [`supplier-credits/`](supplier-credits/supplier-credits.overview.md).
+stock's vendors. Its credits nest in [`supplier-credits/`](supplier-credits/supplier-credits.overview.md) —
+their routes under `/suppliers/{supplier_id}/credits` (MD34).
 
 ## Layout
 
@@ -34,7 +35,8 @@ stock's vendors. Its credits nest in [`supplier-credits/`](supplier-credits/supp
 
 ## Key invariants
 
-- **`payable`** = the live received orders' dues less the open credits, never below 0;
+- **`payable`** = the live received orders' dues less the live open credits (a voided credit
+  counts for nothing, MD32), never below 0;
   `ageing_days` counts from the oldest received order still due.
 - **Paying** applies the open credits first, then one `supplier_bill` payment per received order
   still due, oldest first, the splits taken mode by mode (`409 more_than_due` over the payable).

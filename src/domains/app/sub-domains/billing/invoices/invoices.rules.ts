@@ -103,6 +103,28 @@ async function assertNotSaleInvoice({
   }
 }
 
+/**
+ * MD28: a medicine is sold only through the store — `/invoices` (a bill, a change, either preview)
+ * refuses a `medical` bill and any medicine line, which would draw no stock and have no sale; a 400
+ * `sold_through_store`. A sale writes its own bill through {@link recordInvoice}.
+ */
+function refuseStoreSale(values: Record<string, unknown>): void {
+  if (values.type === INVOICE_TYPE.MEDICAL) {
+    throw fieldValidationError({
+      field: 'type',
+      messageKey: 'errors:validation.invoiceSoldThroughStore',
+    }).withReason('sold_through_store');
+  }
+  const items = (values.items as { medicine_id?: unknown }[] | undefined) ?? [];
+  const index = items.findIndex((item) => item.medicine_id !== undefined);
+  if (index >= 0) {
+    throw fieldValidationError({
+      field: `items/${index}/medicine_id`,
+      messageKey: 'errors:validation.invoiceSoldThroughStore',
+    }).withReason('sold_through_store');
+  }
+}
+
 /** A stored line as a change would send it unchanged — the plan keeps its snapshot. */
 function keptLine(row: InvoiceItemWriteRow): InvoiceItemInput {
   return {
@@ -222,8 +244,10 @@ async function replanChangedLines(options: {
     items: (values.items as InvoiceItemInput[] | undefined) ?? stored.map(keptLine),
     existing: stored,
   });
-  const paid = toAmount(existing.paid_amount) ?? 0;
-  if (paiseOf(plan.totals.total) < paiseOf(paid)) {
+  // What came in — kept or refunded against a credit note — the total can't drop below (B16).
+  const received =
+    (toAmount(existing.paid_amount) ?? 0) + (toAmount(existing.refunded_amount) ?? 0);
+  if (paiseOf(plan.totals.total) < paiseOf(received)) {
     throw new ConflictError('errors:invoiceBelowPaid').withReason('below_paid');
   }
   return plan;
@@ -293,6 +317,7 @@ async function planInvoiceChange(options: {
 }): Promise<{ plan: InvoiceLinePlan | null; patientId: number | null; contactChanges: boolean }> {
   const { values, existing, context } = options;
   await assertNotSaleInvoice({ repository: options.repository, invoiceId: existing.id });
+  refuseStoreSale(values);
   const contactChanges = 'contact_id' in values && values.contact_id !== existing.contact_id;
   await assertInvoiceChangeable({ values, existing, contactChanges, context });
   const patientId = await requirePatientFile({
@@ -397,6 +422,7 @@ async function previewOf(options: {
   invoiceDate: string;
   overallDiscount: number;
   paidAmount: number;
+  refundedAmount: number;
 }): Promise<InvoicePreviewOutput> {
   const idsOf = (field: string) =>
     options.plan.lines.flatMap((line) => {
@@ -409,6 +435,7 @@ async function previewOf(options: {
     invoice_date: options.invoiceDate,
     overall_discount: options.overallDiscount,
     paid_amount: options.paidAmount,
+    refunded_amount: options.refundedAmount,
     public_ids: {
       offerings: await resolveRecordPublicIds({ table: offerings, ids: idsOf('offering_id') }),
       medicines: await resolveRecordPublicIds({ table: medicines, ids: idsOf('medicine_id') }),
@@ -428,6 +455,7 @@ async function previewOf(options: {
 async function previewInvoice(input: BaseRecordCollectionInput): Promise<InvoicePreviewOutput> {
   const { member_ids: _memberIds, ...parsed } = validatePreviewInvoice(input.input);
   const values: Record<string, unknown> = { ...parsed };
+  refuseStoreSale(values);
   await input.resolveReferences(values);
   const visible = await input.branchScope([parsed.branch_id]);
   if (visible && !visible.ids.includes(values.branch_id as number)) {
@@ -443,6 +471,7 @@ async function previewInvoice(input: BaseRecordCollectionInput): Promise<Invoice
     invoiceDate: String(values.invoice_date),
     overallDiscount: Number(values.overall_discount ?? 0),
     paidAmount: 0,
+    refundedAmount: 0,
   });
 }
 
@@ -490,6 +519,7 @@ async function previewInvoiceChange({
     invoiceDate: String(values.invoice_date ?? existing.invoice_date),
     overallDiscount: Number(values.overall_discount ?? toAmount(existing.overall_discount) ?? 0),
     paidAmount: toAmount(existing.paid_amount) ?? 0,
+    refundedAmount: toAmount(existing.refunded_amount) ?? 0,
   });
 }
 
@@ -541,7 +571,9 @@ export async function recordInvoice(options: {
  *   change (nothing paid) moves the patient offerings with it. A delete needs nothing paid or
  *   credited and no spent session (B14); its patient offerings go and come back with it. A
  *   medical sale's invoice is the sale's (MDC18) — changing, deleting or restoring it here is a
- *   409 `invoice_of_sale`. The previews (`preview` — a bill, or a change of one) plan the same way
+ *   409 `invoice_of_sale`; a `medical` bill or a medicine line through `/invoices` is a 400
+ *   `sold_through_store` (MD28 — the sale writes its own, {@link recordInvoice}). The previews
+ *   (`preview` — a bill, or a change of one) plan the same way
  *   and write nothing (D81, Q2); a page reads who billed each invoice (D81).
  * - **Failure modes:** `ValidationError` on `contact_id` (`patient_file_required`), `items`,
  *   `invoice_date`, `overall_discount`, `patient_treatment_ids`, `below_lowest_price`;
@@ -550,7 +582,10 @@ export async function recordInvoice(options: {
  */
 export function createInvoicesRules(repository: InvoicesRepository): BaseRecordRules {
   return {
-    prepareCreate: (values, context) => prepareInvoiceCreate({ values, context }),
+    prepareCreate: (values, context) => {
+      refuseStoreSale(values);
+      return prepareInvoiceCreate({ values, context });
+    },
     prepareUpdate: (values, existing, context) =>
       prepareInvoiceUpdate({ repository, values, existing, context }),
     prepareRemove: async (existing) => {

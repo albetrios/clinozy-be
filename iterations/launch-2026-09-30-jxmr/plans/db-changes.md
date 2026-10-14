@@ -1200,6 +1200,7 @@ erDiagram
 
 - **Built:** `app.invoices` · ROUTE #30 (2026-10-07)
 - **Built (ROUTE #136, routes-final 8.A, code `billing/invoices/`):** `app.invoices` — `invoice_sequence` and `invoice_number` / `financial_year` from the triggers (B11); `contact_id` → contacts `RESTRICT`, required except `medical` (B3, `chk_invoices_contact_unless_medical`; `patient_id` and `medical_contact_id` go); `subtotal`, `discount_total`, `taxable_total`, `gst_total`, `total` (`= taxable_total + gst_total`), `overall_discount`, `paid_amount` (`0 ≤ paid ≤ total`) stored by the save and the payment writes; generated `due_amount` and `payment_status`; `patient_prescription_id` `SET NULL`; the jsonb `items` goes. NEW **`app.invoice_items`** — one row per line: `line_number` (DEFERRABLE unique per invoice), exactly one of `offering_id` / `medicine_id` (`RESTRICT`), the snapshot (`name`, `pack_size`, `rate`, `gst_percent` 0/5/12/18/28, `is_gst_inclusive`), `quantity` 1–999, `discount_percent`, the computed `discount_amount` / `taxable_amount` / `gst_amount` / `amount`, `patient_offering_suggestion_id` `SET NULL`, `batch_number`. Renamed **`app.invoice_members`** (was `invoice_team_memberships`) — key `(invoice_id, membership_id)`, K8 `RESTRICT`. FORCE RLS on all three.
+- **Built (ROUTE #199, D93, migration `20261013124709_invoices_refunded_amount.sql`):** `app.invoices` — **`refunded_amount`** `numeric(12,2) NOT NULL DEFAULT 0` (before → after: a refund lowered `paid_amount` and the invoice read due again → it moves its money from `paid_amount` to `refunded_amount`, its reversal or delete back); `due_amount` `total − paid_amount` → `total − paid_amount − refunded_amount` and `payment_status` reading both (Postgres 17 `SET EXPRESSION`, in place); `chk_invoices_paid_amount` `0 ≤ paid ≤ total` → `paid ≥ 0`, `refunded ≥ 0`, `paid + refunded ≤ total` (NOT VALID, then validated). Backfill: each invoice's live refunds less the reversals of them, kept within total − paid (under the RLS owner bracket).
 ```mermaid
 erDiagram
   invoice["invoice · NEW"] {
@@ -1549,6 +1550,48 @@ erDiagram
 ```
 
 ## Stage 8 — Medical store
+
+**Rev 2 (D88, D89, 2026-10-13).** D88's answers add no column, table, index or constraint: the new sorts are SQL
+sort keys over the existing columns (MD27 — margin from `app.medicine_supplier_prices`, as `nearest_expiry` from
+`app.medicine_batches`), the dues read is a query over `app.medical_sales` and `app.invoices` (MD25), goods not ordered
+are ordinary `app.medical_purchase_order_items` rows (MD26), and the rest are reads, gates and refusals. **D89 adds one
+table change and may touch two checks — one migration** (be-db-migration-maintainer decides its form):
+
+```text
+app.supplier_credits                          before                    after (rev 2, MD32)
+  deleted_at       timestamptz NULL           —                         + (a voided credit)
+  delete_reason    varchar(16) NULL           —                         + mistake · wrong_quantity · supplier_refused · other
+  delete_note      varchar(280) NULL          —                         + required for `other`
+  chk_supplier_credits_delete_*               —                         + the three standard delete checks
+  idx … (supplier_id) WHERE applied_amount < amount
+                                              open credits              + AND deleted_at IS NULL
+
+app.payments / app.pending_credits            a refund is cash/UPI/card  a medical return's refund may be paid by
+  (only if their checks refuse it — MD33)                                `credit_amount`, with a `give` pending credit
+                                                                         naming the sale's invoice
+```
+
+**Built (ROUTE #194, #195 — four migrations, `AS-BUILT.md`):**
+
+```text
+app.supplier_credits                          before                    after (built)
+  deleted_at · delete_reason · delete_note    —                         + as proposed, the three checks
+                                                                          (20261013104032_supplier_credits_void)
+  idx_supplier_credits_supplier_open          (supplier_id, created_at, id) WHERE applied_amount < amount
+  → idx_supplier_credits_supplier_live_open   + AND deleted_at IS NULL — built concurrently, the old one dropped
+                                                                          (20261013104033_supplier_credits_live_open_index)
+
+app.medical_sale_returns                      before                    after (built, MD33)
+  refund_mode      varchar(4) cash·upi·card   —                         varchar(6) + credit
+  pending_credit_id bigint NULL               —                         + → pending_credits ON DELETE SET NULL,
+                                                                          only on a store-credit return; unique
+                                                                          (20261013104034_medical_sale_returns_store_credit,
+                                                                           20261013104035_…_pending_credit_index)
+
+app.payments / app.pending_credits            unchanged — a store-credit return writes no payment; its `give`
+                                              credit names no invoice (giving back an invoice's credit writes a
+                                              second credit note on it)
+```
 
 ### manufacturer · NEW
 

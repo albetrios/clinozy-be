@@ -16,6 +16,7 @@ export function serializeSupplier({ row }: { row: BaseRecordRow }): SupplierOutp
     payable: 0,
     ageing_days: null,
     order_count: 0,
+    order_total: 0,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
   };

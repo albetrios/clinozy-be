@@ -1,27 +1,49 @@
 import { findMembershipIdOfUser, resolveRecordIds } from '@/domains/app/base-record.repository.js';
-import type { BaseRecordRules } from '@/domains/app/base-record.types.js';
+import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { MedicinesRepository } from '@/domains/app/sub-domains/medical/medicines/medicines.repository.js';
 import { moveMedicineBatch } from '@/domains/app/sub-domains/medical/medicines/medicines.stock.js';
 import { roundToPaise, toAmount } from '@/shared/utils/validation/record-fields.util.js';
-import { applySupplierCredits } from './supplier-credits.ledger.js';
+import { applySupplierCredits, reapplySupplierCredits } from './supplier-credits.ledger.js';
 import type { SupplierCreditsRepository } from './supplier-credits.repository.js';
 import { supplier_credits } from './supplier-credits.schema.js';
 
 const medicinesRepository = new MedicinesRepository();
 
+/** Moves a credit's packs in or out of its batch (MD4) — named by its medicine for the 409. */
+async function moveCreditPacks(options: {
+  context: BaseRecordWriteContext;
+  batchId: number;
+  change: number;
+}): Promise<void> {
+  const batch = await medicinesRepository.findBatch(options.batchId);
+  const medicine =
+    batch === null
+      ? null
+      : (await medicinesRepository.findLive([batch.medicine_id])).get(batch.medicine_id);
+  await moveMedicineBatch({
+    context: options.context,
+    batchId: options.batchId,
+    change: options.change,
+    ...(medicine ? { name: String(medicine.name) } : {}),
+  });
+}
+
 /**
- * The supplier credit rules (launch ROUTE #153, routes-final 11.C, MD11): "Return expiring stock"
- * takes the packs out of the batch at its purchase rate, and the credit is applied to the
- * supplier's dues at once.
+ * The supplier credit rules (launch ROUTE #153, routes-final 11.C, MD11; rev 2 MD32, MD34): "Return
+ * expiring stock" takes the packs out of the batch at its purchase rate, and the credit is applied
+ * to the supplier's dues at once; a void puts the packs back and takes the credit off the dues, its
+ * undo takes the packs again and applies it again.
  *
  * @remarks
  * - **Algorithm:** a create reads the batch (its medicine and purchase rate — 0 for an opening
  *   batch without one), takes the quantity out of it (guarded, MD4), prices the credit
  *   (`amount` = quantity × rate) and names the caller's membership (K2); once written, the
- *   supplier's open credits are applied to their received orders still due, oldest first. Every
- *   read adds the supplier, medicine and batch names.
- * - **Failure modes:** `ConflictError` `not_enough_stock` (more than the batch holds),
- *   `record_changed` (a balance moved meanwhile).
+ *   supplier's open credits are applied to their received orders still due, oldest first. A void
+ *   puts the quantity back into the batch; an undo takes it again; after either, the supplier's
+ *   live credits are applied again oldest first ({@link reapplySupplierCredits}). Every read adds
+ *   the supplier, medicine and batch names.
+ * - **Failure modes:** `ConflictError` `not_enough_stock` (more than the batch holds — on create or
+ *   undo), `batch_full` (a void past 9999 packs), `record_changed` (a balance moved meanwhile).
  */
 export function createSupplierCreditsRules(repository: SupplierCreditsRepository): BaseRecordRules {
   return {
@@ -36,20 +58,32 @@ export function createSupplierCreditsRules(repository: SupplierCreditsRepository
         organizationId: context.organizationId,
         userId: context.userId,
       });
-      const medicine =
-        batch === null
-          ? null
-          : (await medicinesRepository.findLive([batch.medicine_id])).get(batch.medicine_id);
-      await moveMedicineBatch({
+      await moveCreditPacks({
         context,
         batchId: values.medicine_batch_id as number,
         change: -quantity,
-        ...(medicine ? { name: String(medicine.name) } : {}),
+      });
+    },
+    prepareRemove: async (existing, context) => {
+      await moveCreditPacks({
+        context,
+        batchId: existing.medicine_batch_id as number,
+        change: existing.quantity as number,
+      });
+    },
+    prepareRestore: async (deleted, context) => {
+      await moveCreditPacks({
+        context,
+        batchId: deleted.medicine_batch_id as number,
+        change: -(deleted.quantity as number),
       });
     },
     afterWrite: async (row, change, context) => {
-      if (change.kind !== 'create') return;
-      await applySupplierCredits({ context, supplierId: row.supplier_id as number });
+      const supplierId = row.supplier_id as number;
+      if (change.kind === 'create') await applySupplierCredits({ context, supplierId });
+      if (change.kind === 'delete' || change.kind === 'restore') {
+        await reapplySupplierCredits({ context, supplierId });
+      }
     },
     decorate: async (outputs, context) => {
       const idsByPublicId = await resolveRecordIds({

@@ -1,8 +1,10 @@
-import { inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { BaseRecordRepository } from '@/domains/app/base-record.repository.js';
 import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
+import { payments } from '@/domains/app/sub-domains/billing/payments/payments.schema.js';
+import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { invoice_credit_notes } from './invoice-credit-notes.schema.js';
 
 /** The credit notes whose invoice matches a condition on `app.invoices`. */
@@ -43,5 +45,23 @@ export class InvoiceCreditNotesRepository extends BaseRecordRepository {
       defaultSort: 'created_at',
       defaultOrder: 'desc',
     });
+  }
+
+  /**
+   * MD33: what an invoice's live store-credit notes hold — the credit notes no refund payment
+   * carries, whose money stays with the customer as a credit — rupees.
+   */
+  async findStoreCreditedAmount(invoiceId: number): Promise<number> {
+    const rows = await getRequestDatabase()
+      .select({ total: sql<string>`coalesce(sum(${invoice_credit_notes.amount}), 0)` })
+      .from(invoice_credit_notes)
+      .where(
+        and(
+          eq(invoice_credit_notes.invoice_id, invoiceId),
+          isNull(invoice_credit_notes.deleted_at),
+          sql`not exists (select 1 from ${payments} where ${payments.invoice_credit_note_id} = ${invoice_credit_notes.id})`,
+        ),
+      );
+    return Number(rows[0]?.total ?? 0);
   }
 }

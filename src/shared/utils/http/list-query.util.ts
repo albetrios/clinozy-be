@@ -35,6 +35,12 @@ import {
 const SEARCH_TERM_MAX_LENGTH = 200;
 
 /**
+ * A list's `q` search term: trimmed, 1–200 characters. The one rule for every search — a keyset
+ * list's ({@link listSearchSortSchema}) and a limit-only read's.
+ */
+export const searchTermSchema = z.string().trim().min(1).max(SEARCH_TERM_MAX_LENGTH);
+
+/**
  * Builds a `.strict()` list-query schema: cursor pagination + optional `q`, `sort` (constrained to
  * `sortFields`), and `order` (`asc`/`desc`, default `asc`). Reuse per list endpoint DTO.
  */
@@ -43,7 +49,7 @@ export function listSearchSortSchema<const Fields extends readonly [string, ...s
 ) {
   return cursorPaginationSchema
     .extend({
-      q: z.string().trim().min(1).max(SEARCH_TERM_MAX_LENGTH).optional(),
+      q: searchTermSchema.optional(),
       sort: z.enum(sortFields).optional(),
       // Optional (not `.default`) so OpenAPI emits it as an optional query param — a defaulted
       // param serializes as `required`, a breaking contract change. Defaulted to
