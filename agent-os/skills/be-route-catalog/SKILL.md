@@ -139,10 +139,10 @@ Legend:
   Team-only (O)   : <count>
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (13) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (<count>) — X-Idempotency-Key required
 ================================================================================
 
-  <the 13 routes whose I column is `req` — listed automatically>
+  <every route whose I column is `req` — listed automatically>
 
 ================================================================================
   PERMISSION CODES REFERENCE
@@ -166,7 +166,7 @@ Legend:
 
 These two sections are derived programmatically — never hand-maintained:
 
-1. **IDEMPOTENCY-REQUIRED WRITES** — the routes whose `I` column is `req` (the `idempotencyRequired` set, 13 today); a missing or reused `X-Idempotency-Key` is rejected with 422.
+1. **IDEMPOTENCY-REQUIRED WRITES** — the routes whose `I` column is `req` (the `idempotencyRequired` set, with its live count in the heading); a missing or reused `X-Idempotency-Key` is rejected with 422.
 2. **PERMISSION CODES REFERENCE** — every permission string grouped by domain, **auto-derived from the `*.permissions.ts` constants**. Because it reads the constants (not a hand-curated list), newly added codes such as `upload:manage` appear automatically.
 
 ## Output
