@@ -209,6 +209,7 @@ import {
 import { UpdateUserSettingsDto } from '@/domains/user/sub-domains/user-settings/user-settings.dto.js';
 import { PutNotificationPreferencesDto } from '@/domains/user/sub-domains/user-notification-preferences/user-notification-preferences.dto.js';
 import { exportUserDataBodyDto } from '@/domains/user/sub-domains/user-data-export/user-data-export.dto.js';
+import { CreateUserBugReportDto } from '@/domains/user/sub-domains/user-bug-report/user-bug-report.dto.js';
 import {
   webauthnAuthenticateOptionsDto,
   webauthnAuthenticateVerifyDto,
@@ -305,6 +306,7 @@ export const routeSchemaMap: Record<string, ZodTypeAny> = {
   'PUT /api/v1/users/me/presence': UpdateMyPresenceDto,
   'PATCH /api/v1/users/me/settings': UpdateUserSettingsDto,
   'PUT /api/v1/users/me/notification-preferences': PutNotificationPreferencesDto,
+  'POST /api/v1/users/me/bug-reports': CreateUserBugReportDto,
 
   // ── Admin: Users ──
   'PATCH /api/v1/users/{user_id}': AdminUpdateUserDto,

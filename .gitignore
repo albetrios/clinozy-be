@@ -118,6 +118,9 @@ reports/
 **/*-report.*
 **/*.report.*
 *REPORT*.md
+# …but never domain source code: a resource can be named "<something>-report" (the user domain's
+# `user-bug-report`), and the pattern above silently left its files untracked.
+!src/domains/**/*-report.*
 
 # Setup automation (secrets + provisioned state). Runtime files live in `.setup/`
 # (ignored above); these patterns also block any stray legacy file at the repo root.

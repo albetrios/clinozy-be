@@ -1,4 +1,5 @@
 import type { user_data_exports } from './user-data-export.schema.js';
+import type { UserBugReportExportEntry } from '@/domains/user/sub-domains/user-bug-report/user-bug-report.types.js';
 
 /** Thrown when an export job should stop without retry (user deleted or export row removed). */
 export class UserDataExportCancelledError extends Error {
@@ -59,6 +60,8 @@ export interface UserDataExport {
     resource_type: string;
     created_at: string;
   }[];
+  /** The bug reports the person filed, newest first (feat-bug-report BR11). */
+  bug_reports: UserBugReportExportEntry[];
   /**
    * Disclosure of any per-category row caps hit while building this export. When
    * `truncated_categories` is non-empty the listed sections contain only the most

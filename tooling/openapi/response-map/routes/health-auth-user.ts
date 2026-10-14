@@ -442,6 +442,42 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
     schema: null,
     example: null,
   },
+  'POST /api/v1/users/me/bug-reports': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          description: { type: 'string' },
+          input_method: {
+            type: 'string',
+            enum: ['typed', 'voice', 'mixed'],
+            description: 'Possible values: typed | voice | mixed',
+          },
+          page_path: { type: 'string', nullable: true },
+          app_version: { type: 'string', nullable: true },
+          user_id: { type: 'string', description: 'The reporter, stamped from the session.' },
+          reporter_name: { type: 'string', nullable: true },
+          organization_id: { type: 'string', nullable: true },
+          created_at: { type: 'string', format: 'date-time' },
+        },
+        required: ['id', 'description', 'input_method', 'user_id', 'created_at'],
+      },
+      {
+        id: 'bug_k7x9m2pqr4w8n1v3a1b2c',
+        description: 'The invoice total does not update after I remove a line.',
+        input_method: 'voice',
+        page_path: '/organization/acme/billing',
+        app_version: '1.13.0',
+        user_id: 'usr_k7x9m2pqr4w8n1v3a1b2c',
+        reporter_name: 'Asha Rao',
+        organization_id: 'org_k7x9m2pqr4w8n1v3a1b2c',
+        created_at: '2026-10-13T12:00:00.000Z',
+      },
+    ),
+    example: null,
+  },
   'POST /api/v1/users/me/data-export': {
     statusCode: 200,
     schema: wrapSuccess(

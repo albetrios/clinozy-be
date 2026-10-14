@@ -126,7 +126,7 @@ HTTP Request
 **Domains/sub-domains with all four (schema, dto, types, serializer):**
 
 - **Domain root:** audit, upload, user.
-- **Sub-domains:** subscription, plan, membership-invitation, member-role-permission, membership, member-roles (member-role), organization, organization-settings, organization-notification-policy, organization-api-key, permission, user-settings, user-notification-preferences, user-data-export, webhook.
+- **Sub-domains:** subscription, plan, membership-invitation, member-role-permission, membership, member-roles (member-role), organization, organization-settings, organization-notification-policy, organization-api-key, permission, user-settings, user-notification-preferences, user-data-export, user-bug-report, webhook.
 
 **Domains/sub-domains missing one or more:**
 
@@ -282,7 +282,7 @@ Always use `.js` extensions in import specifiers. CI gate: `src/tests/global/imp
 
 **Sub-domain directory prefix patterns:**
 
-- **user:** `user-settings`, `user-notification-preferences`, `user-data-export`
+- **user:** `user-settings`, `user-notification-preferences`, `user-data-export`, `user-bug-report`
 - **organization (under tenancy):** `organization-settings`, `organization-notification-policy`, `organization-api-key`
 - **membership:** `membership-invitation`
 - **member-roles:** `member-role-permission`

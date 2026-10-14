@@ -2029,6 +2029,28 @@ src/
     │   │   ├── user.faker.ts
     │   │   └── user.seed.ts
     │   ├── sub-domains/
+    │   │   ├── user-bug-report/
+    │   │   │   ├── __tests__/
+    │   │   │   │   ├── integration/
+    │   │   │   │   │   └── user-bug-report.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   ├── user-bug-report.serializer.unit.test.ts
+    │   │   │   │   │   ├── user-bug-report.service.unit.test.ts
+    │   │   │   │   │   └── user-bug-report.validator.unit.test.ts
+    │   │   │   ├── seed/
+    │   │   │   │   ├── index.ts
+    │   │   │   │   ├── user-bug-report.bulk.seed.ts
+    │   │   │   │   └── user-bug-report.faker.ts
+    │   │   │   ├── user-bug-report.constants.ts
+    │   │   │   ├── user-bug-report.controller.ts
+    │   │   │   ├── user-bug-report.dto.ts
+    │   │   │   ├── user-bug-report.overview.md
+    │   │   │   ├── user-bug-report.repository.ts
+    │   │   │   ├── user-bug-report.schema.ts
+    │   │   │   ├── user-bug-report.serializer.ts
+    │   │   │   ├── user-bug-report.service.ts
+    │   │   │   ├── user-bug-report.types.ts
+    │   │   │   └── user-bug-report.validator.ts
     │   │   ├── user-data-export/
     │   │   │   ├── __tests__/
     │   │   │   │   ├── integration/

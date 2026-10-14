@@ -16,6 +16,7 @@ import type { UserContainer } from '@/domains/user/user.container.js';
 import { completeUserContainer, createUserContainerBase } from '@/domains/user/user.container.js';
 import { UserDataExportService } from '@/domains/user/sub-domains/user-data-export/user-data-export.service.js';
 import { UserDataExportRepository } from '@/domains/user/sub-domains/user-data-export/user-data-export.repository.js';
+import { UserBugReportRepository } from '@/domains/user/sub-domains/user-bug-report/user-bug-report.repository.js';
 import { createAppMembershipLeaveStep } from '@/domains/app/app-membership-leave.js';
 
 /**
@@ -73,6 +74,7 @@ export function createDomainContainers(
     userBase.userService,
     userDataExportRepository,
     objectStorage,
+    new UserBugReportRepository(),
   );
   const userDomainWithRepository = completeUserContainer({ base: userBase, userDataExportService });
   const userDomain: UserContainer = {
@@ -80,6 +82,7 @@ export function createDomainContainers(
     userSettingsService: userDomainWithRepository.userSettingsService,
     userNotificationPreferencesService: userDomainWithRepository.userNotificationPreferencesService,
     userDataExportService: userDomainWithRepository.userDataExportService,
+    userBugReportService: userDomainWithRepository.userBugReportService,
   };
 
   userDomain.userService.wireOffboardingServices({
