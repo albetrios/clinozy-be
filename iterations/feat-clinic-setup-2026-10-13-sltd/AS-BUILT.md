@@ -29,6 +29,13 @@ None yet.
   budget on the frontend (its row 14) to be lowered again once a route group leaves the entry chunk; the count of
   idempotency-required routes in `be-idempotency-guard` and `docs/reference/api/frontend-auth-guide.md` ("13",
   stale on main already — the catalog's `I` column is the list).
+- Intake trimmed (user, 2026-10-14): `intake-files/` keeps only `BRIEF.md` (received this iteration) and the two
+  mandatory files, `PRD.md` and `schema-routes.md`. The 20 files the brief mode carried forward from
+  `launch-2026-09-30-jxmr` (the prototype `Clinozy.dc.html`, `support.js` and the screen specs) were removed; they
+  were byte-identical to the launch's, so every citation of them here (`users.md:…`, `shell.md:…`) reads
+  `iterations/launch-2026-09-30-jxmr/intake-files/`. The README's Intake note and Intake hash still describe the full
+  snapshot, so `pnpm iteration:intake feat-clinic-setup-2026-10-13-sltd --check` reports the change; a later iteration
+  takes `launch-2026-09-30-jxmr` (or a later full snapshot) as its Baseline, not this one.
 
 ## Standing deviations
 
