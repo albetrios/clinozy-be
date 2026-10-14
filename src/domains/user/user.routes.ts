@@ -4,6 +4,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   EXPENSIVE_AUTHED_RATE_LIMIT,
   MODERATE_AUTHED_RATE_LIMIT,
+  STRICT_AUTHED_RATE_LIMIT,
 } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import { GLOBAL_ROLES } from '@/shared/constants/index.js';
 import { requireRole } from '@/shared/utils/auth/authorization.util.js';
@@ -11,6 +12,8 @@ import { listOrganizationsQueryDto } from '@/domains/tenancy/sub-domains/organiz
 import { listMyMembershipInvitationsQueryDto } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.dto.js';
 import { createUserController } from './user.controller.js';
 import { createUserDataExportController } from './sub-domains/user-data-export/user-data-export.controller.js';
+import { createUserBugReportController } from './sub-domains/user-bug-report/user-bug-report.controller.js';
+import { CreateUserBugReportDto } from './sub-domains/user-bug-report/user-bug-report.dto.js';
 import { PutNotificationPreferencesDto } from './sub-domains/user-notification-preferences/user-notification-preferences.dto.js';
 import { UpdateUserSettingsDto } from './sub-domains/user-settings/user-settings.dto.js';
 import {
@@ -24,7 +27,7 @@ import {
 
 /**
  * Fastify plugin that mounts the user domain HTTP surface: admin user management routes, the
- * `/me` self-service routes (profile, settings, notification preferences, avatar), and the GDPR
+ * `/me` self-service routes (profile, settings, notification preferences, avatar, bug reports), and the GDPR
  * data-export request/status endpoints. Admin routes require the `SUPER_ADMIN` or `ADMIN` global
  * role; data-export request is rate-limited via {@link EXPENSIVE_AUTHED_RATE_LIMIT}.
  */
@@ -40,6 +43,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
     membershipInvitationService: app.tenancyDomain?.membershipInvitationService,
   });
   const dataExportController = createUserDataExportController(app.userDomain.userDataExportService);
+  const bugReportController = createUserBugReportController(app.userDomain.userBugReportService);
   const zodApplication = app.withTypeProvider<ZodTypeProvider>();
   // ── Admin user routes (require admin+ role) ────────────────
   zodApplication.get(
@@ -341,6 +345,25 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       },
     },
     controller.deleteAvatar,
+  );
+
+  // ── Bug reports (feat-bug-report-2026-10-13-dgnx) ──────────
+  zodApplication.post(
+    '/me/bug-reports',
+    {
+      onRequest: [app.authenticate],
+      // A report is a deliberate act: 10 a minute per person stops a stuck client or a script
+      // from flooding the table (feat-bug-report BR7).
+      ...STRICT_AUTHED_RATE_LIMIT,
+      schema: {
+        summary: 'Report a bug',
+        description:
+          "Files a bug report for the signed-in person: what went wrong (typed or dictated), how it was written, and optionally the in-app path and the frontend release. The reporter's id, name and email are taken from the session — never from the body, which refuses them. Works in a personal or a team workspace; the workspace is recorded when there is one.",
+        tags: ['User'],
+        body: CreateUserBugReportDto,
+      },
+    },
+    bugReportController.createBugReport,
   );
 
   // ── GDPR / Privacy ─────────────────────────────────────────

@@ -53,6 +53,7 @@ const TENANT_CRUD_EXCLUDED_POLICY_SHAPES = new Set([
   'auth.mfa_methods',
   'auth.mfa_recovery_codes',
   'auth.sessions',
+  'auth.user_bug_reports',
   'auth.user_data_exports',
   'auth.user_notification_preferences',
   'auth.user_settings',

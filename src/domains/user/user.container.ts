@@ -9,6 +9,8 @@ import { UserSettingsService } from './sub-domains/user-settings/user-settings.s
 import { UserNotificationPreferencesService } from './sub-domains/user-notification-preferences/user-notification-preferences.service.js';
 import { UserDataExportService } from './sub-domains/user-data-export/user-data-export.service.js';
 import { UserDataExportRepository } from './sub-domains/user-data-export/user-data-export.repository.js';
+import { UserBugReportService } from './sub-domains/user-bug-report/user-bug-report.service.js';
+import { UserBugReportRepository } from './sub-domains/user-bug-report/user-bug-report.repository.js';
 
 /** Public DI surface: services only (repository stays inside the user domain). */
 export type UserContainer = {
@@ -16,6 +18,7 @@ export type UserContainer = {
   userSettingsService: UserSettingsService;
   userNotificationPreferencesService: UserNotificationPreferencesService;
   userDataExportService: UserDataExportService;
+  userBugReportService: UserBugReportService;
 };
 
 /** Internal DI surface that also exposes {@link UserRepository} for tests and offboarding wiring. */
@@ -30,7 +33,7 @@ export type UserContainerWithRepository = UserContainer & {
 export type UserContainerBase = Omit<UserContainerWithRepository, 'userDataExportService'>;
 
 /**
- * Wire the core user domain (repository + services minus data-export) so callers can construct
+ * Wire the core user domain (repository + services minus data-export, bug reports included) so callers can construct
  * `UserDataExportService` against the resulting `userService` before completing the container.
  */
 export function createUserContainerBase(objectStorage: ObjectStoragePort): UserContainerBase {
@@ -44,12 +47,14 @@ export function createUserContainerBase(objectStorage: ObjectStoragePort): UserC
     userService,
     userNotificationPreferencesRepository,
   );
+  const userBugReportService = new UserBugReportService(new UserBugReportRepository());
 
   return {
     userRepository,
     userService,
     userSettingsService,
     userNotificationPreferencesService,
+    userBugReportService,
   };
 }
 
@@ -76,6 +81,7 @@ export function createUserContainer(objectStorage: ObjectStoragePort): UserConta
     base.userService,
     userDataExportRepository,
     objectStorage,
+    new UserBugReportRepository(),
   );
   const withRepository = completeUserContainer({ base, userDataExportService });
   return {
@@ -83,6 +89,7 @@ export function createUserContainer(objectStorage: ObjectStoragePort): UserConta
     userSettingsService: withRepository.userSettingsService,
     userNotificationPreferencesService: withRepository.userNotificationPreferencesService,
     userDataExportService: withRepository.userDataExportService,
+    userBugReportService: withRepository.userBugReportService,
   };
 }
 

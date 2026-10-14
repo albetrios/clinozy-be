@@ -5,7 +5,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-api-contract-guard/SKILL.md",
-      "computedHash": "c8570e723b7bf87d242c5ace2603cd1a055984cdf4a6a9e6519f3070cbe9f9ca"
+      "computedHash": "e3feb9b83a7ec650f98422bcbcc15c58a69b2f276fa3381d95e1df21e4dd9f97"
     },
     "be-auto-implement": {
       "source": "local",
@@ -125,7 +125,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-idempotency-guard/SKILL.md",
-      "computedHash": "aeab589cdcfd3344ac3d465061e2313723aa2f44920e69efa0d074a775dca84b"
+      "computedHash": "83357df5dce8e8b5db6fc8633466c31d3694199f0f4dc121cf01f6f388711ec6"
     },
     "be-iteration-planning": {
       "source": "local",
@@ -191,7 +191,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-route-catalog/SKILL.md",
-      "computedHash": "67afd69c0fccff26baf0cfaafa5242ebfd716aecece70c4a2248fb4e6805c0b7"
+      "computedHash": "606d54fd8d969359902709ad3018f350eac562f25655c5fe964b01c23098455c"
     },
     "be-route-schema-doc-guard": {
       "source": "local",

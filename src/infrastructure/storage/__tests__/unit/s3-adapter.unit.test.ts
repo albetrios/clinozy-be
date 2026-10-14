@@ -132,7 +132,7 @@ describe('S3ObjectStorageAdapter', () => {
   });
 
   it('createPresignedUploadUrl returns a signed PUT URL bound to an exact Content-Length', async () => {
-    const url = await adapter.createPresignedUploadUrl({
+    const { url, headers } = await adapter.createPresignedUploadUrl({
       key: 'uploads/file.png',
       contentType: 'image/png',
       contentLength: 1024,
@@ -151,6 +151,14 @@ describe('S3ObjectStorageAdapter', () => {
     expect(command.input.ContentLength).toBe(1024);
     expect(signingOptions.signableHeaders).toBeInstanceOf(Set);
     expect([...(signingOptions.signableHeaders ?? [])]).toContain('content-length');
+    // The client is told every header the URL signs that it must set itself.
+    expect(headers).toEqual({
+      'content-type': 'image/png',
+      'x-amz-server-side-encryption': 'AES256',
+    });
+    for (const name of Object.keys(headers)) {
+      expect([...(signingOptions.signableHeaders ?? [])]).toContain(name);
+    }
   });
 
   // sec-U11: server-side writes (worker putObject, copyObject) must request

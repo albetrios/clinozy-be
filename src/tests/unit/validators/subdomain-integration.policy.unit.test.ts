@@ -42,6 +42,7 @@ describe('subdomain integration policy', () => {
       'tenancy/organization-api-key',
       'tenancy/organization-notification-policy',
       'tenancy/organization-settings',
+      'user/user-bug-report',
       'user/user-data-export',
       'user/user-notification-preferences',
       'user/user-settings',

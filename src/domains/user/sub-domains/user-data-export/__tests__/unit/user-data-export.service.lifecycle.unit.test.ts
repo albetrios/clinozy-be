@@ -91,10 +91,12 @@ describe('UserDataExportService — markProcessing and cleanup branches', () => 
     deleteAllByUserId: vi.fn(),
   };
   const objectStorage = createObjectStoragePortMock();
+  const bugReportRepository = { listForUserDataExport: vi.fn().mockResolvedValue([]) };
   const service = new UserDataExportService(
     userService as never,
     exportRepository as never,
     objectStorage,
+    bugReportRepository as never,
   );
 
   beforeEach(() => {

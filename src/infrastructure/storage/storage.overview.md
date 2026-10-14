@@ -14,7 +14,8 @@ S3-compatible object storage client. Owns the AWS SDK v3 client instance, presig
 - **Rows go after their objects**: [`purgeRowsAfterTheirObjects`](src/infrastructure/storage/stored-object-purge.util.ts) runs retention — keyset pages, each read and deleted in its own short context, S3 deletes outside both, a row deleted only once its object is gone, the run stopped on an open circuit.
 - **AWS SDK v3 over v2**: smaller bundle, modern promise-based API, native `@aws-sdk/s3-request-presigner` for presigned URLs.
 - **S3-compatible by default**: `S3_ENDPOINT` env lets ops point at MinIO, R2, or any S3-compatible service. Production uses AWS S3 directly.
-- **Presigned URLs for both upload and download**: we never proxy bytes through the API process. Upload uses `createPresignedPost` (browser-friendly form fields); download uses `getSignedUrl` for the GET.
+- **Presigned URLs for both upload and download**: we never proxy bytes through the API process. Upload uses `createPresignedPost` (browser-friendly form fields); download uses `getSignedUrl` for the GET. The presigned-PUT fallback returns the `headers` its URL signs (`content-type`, `x-amz-server-side-encryption`) beside the URL, as POST returns its `fields` — a PUT without them is refused with `SignatureDoesNotMatch`.
+- **The bucket's CORS is not ours to write**: clinozy-infra provisions the bucket and its CORS rule; this folder holds no bucket-configuration code, and the app's keys cannot read or write it.
 - **Per-call timeouts** on HEAD-object so the upload-confirm flow can't hang on a slow S3 region.
 - **No PII in object keys**: keys are deterministic from public ids; never include email or organization slug.
 
@@ -22,7 +23,7 @@ S3-compatible object storage client. Owns the AWS SDK v3 client instance, presig
 
 - **Presigned URL TTL**: `PRESIGNED_URL_EXPIRY_SECONDS = 900` (15 min) for upload presigns; `USER_DATA_EXPORT_PRESIGNED_DOWNLOAD_EXPIRY_SECONDS = 900` (15 min) for GDPR export downloads.
 - **Region pinning**: `S3_REGION` env. Cross-region transfers should not happen in normal operation.
-- **CORS configuration on the bucket** must permit the platform's origin and the presigned-POST headers. Documented in setup runbooks.
+- **CORS configuration on the bucket** must admit every web-app origin (`ALLOWED_ORIGINS`) for `POST` — the default upload — as well as `PUT`, `GET` and `HEAD`. clinozy-infra sets it; the [upload-storage runbook](docs/deployment/runbooks/upload-storage.md#bucket-cors) lists what it must admit and how to preflight it.
 - **Signed URLs and SigV4**: AWS caps presigned URL TTL at 7 days for SigV4 signers; the platform runs at much shorter TTLs.
 
 ## External dependencies
@@ -39,5 +40,5 @@ S3-compatible object storage client. Owns the AWS SDK v3 client instance, presig
 ## Failure modes
 
 - **HEAD on missing object** → 404 (handled at confirm time → "upload not landed").
-- **Bucket misconfigured for CORS** → presigned upload from a browser fails; not visible in our logs (it's a browser-side error).
+- **Bucket misconfigured for CORS** → presigned upload from a browser fails while every API step answers 200 (`POST /uploads` is logged, the confirm never comes); the browser console names the CORS refusal. A preflight from the web app's origin shows what the bucket refuses ([runbook](docs/deployment/runbooks/upload-storage.md#bucket-cors)).
 - **Region outage** → presign succeeds (no network call) but the upload itself fails; client retries; the platform is unaffected because the row stays `pending`.

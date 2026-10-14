@@ -44,10 +44,37 @@ Applied in [src/domains/upload/upload.validator.ts](../../../src/domains/upload/
 
 | Mode           | Pros                                                                                                                                             | Notes                                                                                                                               |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Presigned PUT  | Simplest client integration; signed `Content-Type` + `Content-Length`.                                                                           | S3 enforces the signed headers, but the client may omit `Content-Length` on some HTTP stacks and still upload via chunked encoding. |
+| Presigned PUT  | Simplest client integration; signed `Content-Type` + `Content-Length`.                                                                           | Response carries `upload_method: 'PUT'` plus `headers` (`content-type`, `x-amz-server-side-encryption`) the PUT must send — the URL signs them, so a PUT without them is refused with `SignatureDoesNotMatch`. S3 enforces the signed headers, but the client may omit `Content-Length` on some HTTP stacks and still upload via chunked encoding. |
 | Presigned POST | S3 enforces a `content-length-range` policy condition and explicit `eq` on `$Content-Type`; ideal for browser uploads via `multipart/form-data`. | Response carries `upload_method: 'POST'` plus `fields` the client must submit alongside the file.                                    |
 
 **Production default:** leave `UPLOAD_USE_PRESIGNED_POST=true` unless a client compatibility rollback is needed. If you must fall back to presigned PUT temporarily, update the value via `pnpm github:sync <environment>` and file a follow-up to restore POST once clients consume the discriminated upload response. See [environment-variables.md](environment-variables.md) for the sync workflow.
+
+## Bucket CORS
+
+The browser sends the bytes **straight to S3**, so the bucket's CORS configuration — not the API —
+decides whether the page may. A bucket that does not admit the web app's origin fails every browser
+upload (avatar, organization logo, patient photos, report files) with a CORS error in the console,
+while every API step still answers 200: `POST /uploads` succeeds and the confirm never arrives.
+
+**clinozy-infra owns the bucket's CORS** — its AWS provisioning creates the bucket and writes the
+rule; this repository neither checks nor applies it, and the app's own keys cannot (the development
+IAM user is denied even `s3:GetBucketCORS`). What this repository defines is what the rule must
+admit, because these are the requests the upload flow makes:
+
+| Key              | What the upload flow needs                                                            |
+| ---------------- | ------------------------------------------------------------------------------------- |
+| `AllowedOrigins` | every web-app origin (`ALLOWED_ORIGINS`; `http://localhost:5173` locally) — not only the API's |
+| `AllowedMethods` | `POST` (the presigned form — the default, and required in production), `PUT` (the fallback), `GET`, `HEAD` |
+| `AllowedHeaders` | at least `content-type` and `x-amz-server-side-encryption` — the headers a presigned PUT sends |
+| `ExposeHeaders`  | `ETag`                                                                                |
+
+To see what the bucket admits, send the browser's preflight yourself — `200` with an
+`Access-Control-Allow-Origin` for the origin means admitted, `403` means refused:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X OPTIONS "https://<bucket>.s3.<region>.amazonaws.com/" \
+  -H 'Origin: http://localhost:5173' -H 'Access-Control-Request-Method: POST'
+```
 
 ## Confirm and attach gate
 
@@ -110,7 +137,7 @@ Additional bucket hardening:
 
 - Public access block enabled (Block all public access).
 - Server-side encryption (`AES256` or KMS) default.
-- CORS allows `PUT`/`POST` from the API client origin only; `*` is acceptable for development only.
+- CORS admits the web app's origins (`ALLOWED_ORIGINS`) for `POST`, `PUT`, `GET` and `HEAD` — set by clinozy-infra, see [Bucket CORS](#bucket-cors); `*` is acceptable for development only.
 
 ### Every object is private — reads are presigned
 
@@ -153,6 +180,7 @@ before organization files are opened to clinical documents. The two options weig
 
 | Symptom                                                   | First checks                                                                                                                                                                                                          |
 | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Browser upload fails at once ("Couldn't send the file to storage", console: `blocked by CORS policy`); the API logged `POST /uploads` 200 and no confirm | The bucket's CORS refuses the web app's origin or the method (often `POST`, the default upload): preflight it ([Bucket CORS](#bucket-cors)), then fix the rule in clinozy-infra's AWS provisioning. |
 | Many uploads stuck in `PENDING`                           | Inspect sweeper logs (`upload-pending-sweep.completed`); verify the worker process is running and the scheduler is enabled (`SCHEDULER_ENABLED=true`).                                                                |
 | Client reports `400 errors:uploadPendingQuotaExceeded`    | Expected when a buggy or malicious client loops `createUpload` without `confirmUpload`. Increase `UPLOAD_MAX_PENDING_PER_USER` only after confirming the workload is legitimate; otherwise let the sweeper reconcile. |
 | `confirmUpload` returns `errors:uploadVerificationFailed` | S3 `HEAD` returned a content type or length that does not match what the client declared. Verify the client actually uploaded to the returned key/method and did not strip the `Content-Type` header.                 |

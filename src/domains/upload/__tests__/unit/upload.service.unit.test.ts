@@ -140,6 +140,33 @@ describe('UploadService', () => {
     expect(repository.create).toHaveBeenCalled();
   });
 
+  it('createUpload hands a PUT upload the headers its URL signs, and no form fields', async () => {
+    vi.mocked(objectStorage.createPresignedUploadUrl).mockResolvedValueOnce({
+      url: 'https://s3.example/put',
+      headers: { 'content-type': 'image/png', 'x-amz-server-side-encryption': 'AES256' },
+    });
+
+    const result = await service.createUpload({
+      input: {
+        purpose: 'avatar',
+        for: 'user',
+        content_type: 'image/png',
+        file_name: 'avatar.png',
+        file_size: 1024,
+      },
+      principal,
+    });
+
+    expect(result.upload_method).toBe('PUT');
+    expect(result.upload_url).toBe('https://s3.example/put');
+    // Without these the PUT is refused with SignatureDoesNotMatch: the URL signs both.
+    expect(result.headers).toEqual({
+      'content-type': 'image/png',
+      'x-amz-server-side-encryption': 'AES256',
+    });
+    expect(result).not.toHaveProperty('fields');
+  });
+
   it('createUpload returns a presigned POST with content-length-range when enabled', async () => {
     const { getEnv } = await import('@/shared/config/env.config.js');
     // createUpload calls getEnv twice (once for the pending cap, once for the bucket/presign env).
@@ -173,6 +200,7 @@ describe('UploadService', () => {
     expect(objectStorage.createPresignedUploadUrl).not.toHaveBeenCalled();
     expect(result.upload_method).toBe('POST');
     expect(result.fields).toMatchObject({ 'Content-Type': 'image/png' });
+    expect(result).not.toHaveProperty('headers');
   });
 
   it('createUpload rejects organization upload without manage permission', async () => {
@@ -829,7 +857,7 @@ describe('UploadService', () => {
     });
     vi.mocked(objectStorage.createPresignedUploadUrl).mockImplementationOnce(async () => {
       callOrder.push('presign');
-      return 'https://presigned.example/upload';
+      return { url: 'https://presigned.example/upload', headers: { 'content-type': 'image/png' } };
     });
 
     await service.createUpload({

@@ -38,7 +38,8 @@ business logic; this module owns the network primitive.
 
 ## External dependencies
 
-- **Stripe** API (`STRIPE_SECRET_KEY`).
+- **Stripe** API (`STRIPE_SECRET_KEY`). Required in production together with `STRIPE_WEBHOOK_SECRET`
+  (the env schema refuses to boot without either); optional elsewhere.
 
 ## Tuning parameters
 

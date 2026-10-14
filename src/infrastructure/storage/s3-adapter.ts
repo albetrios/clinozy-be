@@ -25,6 +25,7 @@ import type {
   ObjectDeleteResult,
   ObjectStoragePort,
   PresignedUploadPost,
+  PresignedUploadPut,
   UploadedObjectMetadata,
   UploadedObjectVerdict,
 } from '@/infrastructure/storage/object-storage.port.js';
@@ -62,13 +63,17 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
    * is the strongest size constraint a presigned PUT supports. For an explicit min/max range
    * prefer the presigned POST flow (`UPLOAD_USE_PRESIGNED_POST=true`, recommended for
    * production); see {@link createPresignedUploadPost}.
+   *
+   * Returns the `headers` the PUT must carry with the URL: `content-type` and the SSE header are
+   * signed, so a client that sent only `Content-Type` was refused with `SignatureDoesNotMatch`.
+   * The bucket's CORS `AllowedHeaders` (owned by clinozy-infra) must admit every name here.
    */
   async createPresignedUploadUrl(options: {
     key: string;
     contentType: string;
     contentLength: number;
     expiresInSeconds: number;
-  }): Promise<string> {
+  }): Promise<PresignedUploadPut> {
     const bucket = requireBucket();
     const command = new PutObjectCommand({
       Bucket: bucket,
@@ -83,7 +88,7 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
       ServerSideEncryption: 'AES256',
     });
 
-    return getSignedUrl(getS3Client(), command, {
+    const url = await getSignedUrl(getS3Client(), command, {
       expiresIn: options.expiresInSeconds,
       // sec-r4-E1: include the SSE header in the signed-headers set so the
       // signature is invalidated if the client strips or rewrites it.
@@ -94,6 +99,13 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
         'x-amz-server-side-encryption',
       ]),
     });
+    return {
+      url,
+      headers: {
+        'content-type': options.contentType,
+        'x-amz-server-side-encryption': 'AES256',
+      },
+    };
   }
 
   async createPresignedUploadPost(options: {

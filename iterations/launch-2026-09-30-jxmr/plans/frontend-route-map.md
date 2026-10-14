@@ -219,7 +219,7 @@ webhooks, subscription billing). Section 3 lists them all.
 
 <!-- GENERATED:START -->
 
-445 routes, 309 of them the clinic's under `/api/v1/app`, from `docs/routes.txt`.
+446 routes, 309 of them the clinic's under `/api/v1/app`, from `docs/routes.txt`.
 Paths drop `/api/v1`; the health and operations routes in the last module sit outside it.
 **Gate**: a permission code, `signed in`, `public`, `platform admin` or a token. **Idem** `req`:
 `X-Idempotency-Key` required. **Team** `team`: team organizations only (`422` on a personal one).
@@ -228,7 +228,7 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 
 | Module | Routes |
 | --- | --- |
-| [Session and account](#session-and-account) | 48 |
+| [Session and account](#session-and-account) | 49 |
 | [Organization and team](#organization-and-team) | 52 |
 | [Branches and places](#branches-and-places) | 25 |
 | [Offerings](#offerings) | 19 |
@@ -287,6 +287,7 @@ or `204` for a `DELETE`. **What it does** is the OpenAPI summary.
 | DELETE | `/users/me` | signed in |  |  |  | Delete my account |
 | PUT | `/users/me/avatar` | signed in |  |  |  | Upload avatar |
 | DELETE | `/users/me/avatar` | signed in |  |  |  | Remove avatar |
+| POST | `/users/me/bug-reports` | signed in |  |  |  | Report a bug |
 | POST | `/users/me/data-export` | signed in |  |  |  | Request GDPR data export |
 | GET | `/users/me/data-export/:data_export_id` | signed in |  |  |  | Get GDPR data export status |
 | GET | `/users/me/membership-invitations` | signed in |  |  |  | List my invitations |

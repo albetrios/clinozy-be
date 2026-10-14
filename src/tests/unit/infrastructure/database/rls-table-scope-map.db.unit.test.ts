@@ -57,6 +57,7 @@ const RLS_TABLE_SCOPE_MAP: Record<string, readonly string[]> = {
     'app.current_user_public_id',
     'app.session_retention_cleanup',
   ],
+  'auth.user_bug_reports': ['app.current_user_public_id'],
   'auth.user_data_exports': ['app.current_user_public_id', 'app.global_retention_cleanup'],
   'auth.user_notification_preferences': ['app.current_user_public_id'],
   'auth.user_settings': ['app.current_user_public_id'],

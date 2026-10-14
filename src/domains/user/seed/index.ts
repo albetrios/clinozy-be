@@ -1,8 +1,9 @@
 /**
  * User domain seed module. The user domain has no reference data; its bulk seeder first fills the
  * user pool that downstream domains (tenancy, auth) draw from, then composes the per-user
- * sub-domain extras (settings, notification preferences, data exports) on top of that pool.
+ * sub-domain extras (settings, notification preferences, data exports, bug reports) on top of that pool.
  */
+import { userBugReportSeedContribution } from '@/domains/user/sub-domains/user-bug-report/seed/index.js';
 import { userDataExportSeedContribution } from '@/domains/user/sub-domains/user-data-export/seed/index.js';
 import { userNotificationPreferencesSeedContribution } from '@/domains/user/sub-domains/user-notification-preferences/seed/index.js';
 import { userSettingsSeedContribution } from '@/domains/user/sub-domains/user-settings/seed/index.js';
@@ -26,6 +27,7 @@ const bulkContribution = composeContributions(
   userSettingsSeedContribution,
   userNotificationPreferencesSeedContribution,
   userDataExportSeedContribution,
+  userBugReportSeedContribution,
 );
 
 /** The user domain's seed module (registered by the bulk orchestrator). */

@@ -22,6 +22,7 @@ const ENTITY_LABELS: Record<PublicIdEntity, string> = {
   subscription: 'subscription',
   upload: 'upload',
   userDataExport: 'data export',
+  userBugReport: 'bug report',
   webhookDeliveryAttempt: 'webhook delivery attempt',
   webhookEvent: 'webhook event',
   auditLog: 'audit log entry',
