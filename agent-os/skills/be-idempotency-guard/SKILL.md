@@ -1,6 +1,6 @@
 ---
 name: be-idempotency-guard
-description: Keeps clinozy-be request idempotency correct — the 13 idempotencyRequired writes (X-Idempotency-Key → 422 when missing/reused, 409 in-flight), the post-commit Redis replay write (never in onSend), secret-bearing response bodies excluded from caching, and the client X-Idempotency-Key forwarded as Stripe's idempotencyKey on customer/subscription mutations. Use when adding or changing a mutating money/state route, the idempotency middleware or utils, the Stripe client, or the subscription controller/service.
+description: Keeps clinozy-be request idempotency correct — the idempotencyRequired writes, listed live as `req` in the docs/routes.txt `I` column (X-Idempotency-Key → 422 when missing/reused, 409 in-flight), the post-commit Redis replay write (never in onSend), secret-bearing response bodies excluded from caching, and the client X-Idempotency-Key forwarded as Stripe's idempotencyKey on customer/subscription mutations. Use when adding or changing a mutating money/state route, the idempotency middleware or utils, the Stripe client, or the subscription controller/service.
 trigger: src/shared/middlewares/core/idempotency.middleware.ts, src/infrastructure/payment/stripe.client.ts
 triggerNote: Idempotency engine + idempotencyRequired writes + Stripe mutations
 indexNote: X-Idempotency-Key writes, post-commit Redis replay, Stripe idempotencyKey
@@ -8,7 +8,7 @@ indexNote: X-Idempotency-Key writes, post-commit Redis replay, Stripe idempotenc
 
 # Idempotency guard
 
-Exactly **13 writes** in clinozy-be are idempotency-required; getting the replay, fingerprint, and Stripe-forwarding right is what makes a retried subscription-create safe end-to-end (no duplicate charge). This guard codifies the rules; contract tests (`src/tests/contract/stripe.contract.test.ts`) and unit tests (`src/tests/unit/utils/idempotency/**`) catch regressions.
+The writes registered with `config: { idempotencyRequired: true }` require an `X-Idempotency-Key`; getting the replay, fingerprint, and Stripe-forwarding right is what makes a retried subscription-create safe end-to-end (no duplicate charge). This guard codifies the rules; contract tests (`src/tests/contract/stripe.contract.test.ts`) and unit tests (`src/tests/unit/utils/idempotency/**`) catch regressions.
 
 ## Mechanism
 
@@ -18,31 +18,22 @@ Exactly **13 writes** in clinozy-be are idempotency-required; getting the replay
 - **Completed entry is written only after the DB transaction commits** — dispatched from `src/shared/middlewares/core/request-lifecycle.middleware.ts` (post-commit), never directly in `onSend`. Rollback/settle-failure → `DEL` the placeholder so the client can safely retry. TTL: placeholder = session TTL; completed = 24 h.
 - **Never cache secrets:** `onSend` skips bodies > 100 KB or containing secret fields (`responseBodyContainsSecretFields`); token/secret-issuance routes are in `IDEMPOTENCY_EXCLUDED_ROUTE_PATTERNS` (`idempotency-fingerprint.util.ts`).
 
-## The 13 idempotencyRequired routes
+## The idempotencyRequired routes
 
-Source of truth = the `config: { idempotencyRequired: true }` flag on each route registration (typed in `src/fastify.d.ts`); there is **no central array** — the live list is the `I` (`req`) column in `docs/routes.txt`. The set:
+Source of truth = the `config: { idempotencyRequired: true }` flag on each route registration (typed in `src/fastify.d.ts`); there is **no central array** and no hand-kept list or count anywhere. The live set is the `I` column of `docs/routes.txt` (`req`), repeated with its current count in the catalog's generated **IDEMPOTENCY-REQUIRED WRITES (n)** footer — regenerate with `pnpm routes:catalog`.
 
-| # | Route | File |
-| - | ----- | ---- |
-| 1 | `POST /tenancy/organizations` | `tenancy/sub-domains/organization/organization.routes.ts` |
-| 2 | `POST /tenancy/organization/memberships` | `tenancy/sub-domains/membership/membership.routes.ts` |
-| 3 | `POST /tenancy/organization/transfer-ownership` | `…/membership/membership.routes.ts` |
-| 4 | `POST /billing/subscriptions` | `billing/sub-domains/subscription/subscription.routes.ts` |
-| 5 | `POST /billing/subscriptions/:subscription_id/change-plan` | `…/subscription/subscription.routes.ts` |
-| 6 | `POST /billing/subscriptions/:subscription_id/cancel` | `…/subscription/subscription.routes.ts` |
-| 7 | `POST /billing/subscriptions/:subscription_id/resume` | `…/subscription/subscription.routes.ts` |
-| 8 | `POST /billing/payment-methods/setup` | `…/subscription/subscription.routes.ts` |
-| 9 | `POST /notify/webhooks` | `notify/sub-domains/webhook/webhook.routes.ts` |
-| 10 | `POST /tenancy/organization/api-keys` | `tenancy/sub-domains/organization/organization.routes.ts` |
-| 11 | `POST /tenancy/organization/notification-policies` | `tenancy/sub-domains/organization/organization.routes.ts` |
-| 12 | `POST /tenancy/organization/roles` | `tenancy/sub-domains/member-roles/member-role.routes.ts` |
-| 13 | `POST /uploads` | `upload/upload.routes.ts` |
+A few members, as examples only (not the set):
 
-Routes 9–13 are the resource-creation writes added in the audit remediation (EX-06). Step-up-gated
-`/auth/me/*` routes are intentionally **not** in this set — the global `onRequest` required-key gate
-runs before route auth, so mandatory idempotency there would return 422 before the 401/403 those
-routes assert, and their handlers dedupe server-side. The count of 13 is mirrored in
-`docs/reference/api/frontend-auth-guide.md`.
+| Route | File |
+| ----- | ---- |
+| `POST /tenancy/organizations` | `tenancy/sub-domains/organization/organization.routes.ts` |
+| `POST /billing/subscriptions` (key forwarded to Stripe) | `billing/sub-domains/subscription/subscription.routes.ts` |
+| `POST /uploads` | `upload/upload.routes.ts` |
+| `POST /app/appointments` | `app/sub-domains/appointments/appointments.routes.ts` |
+
+Step-up-gated `/auth/me/*` routes are intentionally **not** in this set — the global `onRequest`
+required-key gate runs before route auth, so mandatory idempotency there would return 422 before the
+401/403 those routes assert, and their handlers dedupe server-side.
 
 ## When this guard triggers
 
@@ -51,7 +42,7 @@ routes assert, and their handlers dedupe server-side. The count of 13 is mirrore
 ## Enforcement checklist
 
 - [ ] A **new externally-mutating write** (creates/charges/transfers state) gets `config: { idempotencyRequired: true }` — **merge it into the existing `config` object**, don't spread a rate-limit preset at top level or it drops the flag (see the inline warnings in `membership.routes.ts` / `organization.routes.ts`).
-- [ ] Bump the "13 routes" count in `docs/reference/api/frontend-auth-guide.md` (and any idempotency doc) when the set changes.
+- [ ] Run `pnpm routes:catalog` so the route reads `req` in the catalog's `I` column. Docs point at the catalog instead of keeping a count or list, so there is nothing else to bump — never add one.
 - [ ] Document the `X-Idempotency-Key` header in the route schema (keeps OpenAPI accurate); 409/422 are already in `docs/reference/api/response-codes.md`.
 - [ ] **Stripe:** new mutation helpers in `stripe.client.ts` accept and forward `options.idempotencyKey` as Stripe's native `RequestOptions.idempotencyKey`; the controller reads the request header via `readIdempotencyKey` and threads it controller → service → client. Add a contract test asserting `matchHeader('idempotency-key', …)`.
 - [ ] **New secret response fields** → add to `IDEMPOTENCY_SECRET_RESPONSE_FIELD_NAMES` / `RESPONSE_BODY_SECRET_FRAGMENTS`; new token-issuance routes → `IDEMPOTENCY_EXCLUDED_ROUTE_PATTERNS`.

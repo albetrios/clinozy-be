@@ -93,10 +93,10 @@ describe('Security: Idempotency', () => {
   });
 
   it('rejects a MISSING X-Idempotency-Key on an idempotency-required write (422)', async () => {
-    // POST /tenancy/organizations is one of the 13 `idempotencyRequired` writes (the `I`/`req`
+    // POST /tenancy/organizations is one of the `idempotencyRequired` writes (the `I`/`req`
     // column in docs/routes.txt; organization.routes.ts sets config.idempotencyRequired = true).
     // The middleware is route-agnostic, so this one representative route proves the missing-key gate
-    // for all 13 (the other 12 share the identical preHandler path). Omitting the header must
+    // for all of them (the others share the identical preHandler path). Omitting the header must
     // fail closed with 422 — proving the requirement is enforced on a real required route, not
     // only that malformed keys are rejected. Without this, a regression dropping the flag would
     // let a duplicate create slip through and no test would catch it.
