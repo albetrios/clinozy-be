@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.1.0](https://github.com/albetrios/clinozy-be/compare/v9.0.1...v9.1.0) (2026-10-14)
+
+
+### Added
+
+* **app:** clinic setup — first branch is main, setup status, answers and go live ([#70](https://github.com/albetrios/clinozy-be/issues/70)) ([f3153cb](https://github.com/albetrios/clinozy-be/commit/f3153cb35df666da357a35b93c2a58c3b71ce927))
+* **medical:** the medical store's rev 2 for the frontend integration ([#65](https://github.com/albetrios/clinozy-be/issues/65)) ([3821bf8](https://github.com/albetrios/clinozy-be/commit/3821bf856b3a493dd4eaa4a7fbd67fd18d21a0c5))
+* **seed:** add a real-looking demo clinic seed ([#62](https://github.com/albetrios/clinozy-be/issues/62)) ([af62803](https://github.com/albetrios/clinozy-be/commit/af62803475e0ecec0597b36f03351a631c8b361d))
+* **user-bug-report:** store bug reports with the signed-in reporter ([#69](https://github.com/albetrios/clinozy-be/issues/69)) ([4cebdbe](https://github.com/albetrios/clinozy-be/commit/4cebdbe737141693af0fd65f9f9787b03b55b869))
+
+
+### Fixed
+
+* **env:** require both Stripe keys in production ([#67](https://github.com/albetrios/clinozy-be/issues/67)) ([527f5c9](https://github.com/albetrios/clinozy-be/commit/527f5c961851c97dd1fdc88f3078f5043fa660da))
+* **upload:** ship the bucket CORS the browser upload needs, and sign the PUT fallback's headers ([#66](https://github.com/albetrios/clinozy-be/issues/66)) ([c4c2d93](https://github.com/albetrios/clinozy-be/commit/c4c2d93358fc90a89d4530cb6af8d03f7d953037))
+
+
+### Changed
+
+* **storage:** remove pnpm ops:storage:cors — clinozy-infra owns the bucket CORS ([#68](https://github.com/albetrios/clinozy-be/issues/68)) ([9940e25](https://github.com/albetrios/clinozy-be/commit/9940e25558836ee092e1dafea6f3e1086235c755))
+
+
+### Documentation
+
+* **idempotency:** point at the route catalog instead of a fixed count ([#71](https://github.com/albetrios/clinozy-be/issues/71)) ([128c8ab](https://github.com/albetrios/clinozy-be/commit/128c8ab0780cbf48f90c61ae3f75854da6d71147))
+* **user-bug-report:** cite the co-located integration suite in the overview ([#73](https://github.com/albetrios/clinozy-be/issues/73)) ([367c6a8](https://github.com/albetrios/clinozy-be/commit/367c6a89e35cffb75b4801ca73be53b07c1a2f1f))
+
 ## [9.0.1](https://github.com/albetrios/clinozy-be/compare/v9.0.0...v9.0.1) (2026-10-13)
 
 
