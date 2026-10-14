@@ -22,6 +22,7 @@ import { branch_members } from '@/domains/app/sub-domains/branches/branch-member
 import { membership_additional_roles } from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
 import { user_settings } from '@/domains/user/sub-domains/user-settings/user-settings.schema.js';
 import { user_data_exports } from '@/domains/user/sub-domains/user-data-export/user-data-export.schema.js';
+import { user_bug_reports } from '@/domains/user/sub-domains/user-bug-report/user-bug-report.schema.js';
 import { webauthn_credentials } from '@/domains/auth/sub-domains/auth-webauthn/webauthn-credential.schema.js';
 import { mfa_recovery_codes } from '@/domains/auth/sub-domains/auth-mfa/auth-mfa-recovery-code.schema.js';
 import { mfa_methods } from '@/domains/auth/sub-domains/auth-mfa/auth-mfa-method.schema.js';
@@ -55,6 +56,7 @@ export const USER_SCOPED_FORCE_RLS_TABLES: ForceRlsTableRef[] = [
   { schemaName: 'auth', tableName: 'auth_methods' },
   { schemaName: 'auth', tableName: 'user_settings' },
   { schemaName: 'auth', tableName: 'user_data_exports' },
+  { schemaName: 'auth', tableName: 'user_bug_reports' },
   { schemaName: 'auth', tableName: 'webauthn_credentials' },
   { schemaName: 'auth', tableName: 'mfa_recovery_codes' },
   { schemaName: 'auth', tableName: 'mfa_methods' },
@@ -633,6 +635,26 @@ export async function seedUserScopedRlsFixtures(): Promise<RlsUserFixture> {
   rowIdsByTable.set(tableKey({ schemaName: 'auth', tableName: 'user_data_exports' }), {
     userA: exportA!.id,
     userB: exportB!.id,
+  });
+
+  const bugReportRow = (user: { id: number }) => ({
+    public_id: generatePublicId('userBugReport'),
+    user_id: user.id,
+    reporter_email: `${generatePublicId('user')}@example.com`,
+    description: 'The page froze',
+    input_method: 'typed',
+  });
+  const [bugReportA] = await database
+    .insert(user_bug_reports)
+    .values(bugReportRow(userA))
+    .returning();
+  const [bugReportB] = await database
+    .insert(user_bug_reports)
+    .values(bugReportRow(userB))
+    .returning();
+  rowIdsByTable.set(tableKey({ schemaName: 'auth', tableName: 'user_bug_reports' }), {
+    userA: bugReportA!.id,
+    userB: bugReportB!.id,
   });
 
   const [credentialA] = await database

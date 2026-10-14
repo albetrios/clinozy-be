@@ -48,6 +48,7 @@ describe('Policy: UserContainer trims repository from public surface', () => {
     const keys = [...typeBody!.matchAll(/^\s+(\w+):/gm)].map((match) => match[1]);
     expect(keys.sort()).toEqual(
       [
+        'userBugReportService',
         'userDataExportService',
         'userNotificationPreferencesService',
         'userService',

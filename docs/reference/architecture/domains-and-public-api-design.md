@@ -47,7 +47,7 @@ src/domains/<domain>/              # domain = DB schema
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **audit**       | (single domain, no sub-domains)                                                                                                                                                 |
 | **auth**        | auth-method (email verification-code, oauth; verification-token nested persistence module), auth-session, auth-mfa, auth-mfa-session (Redis MFA challenge-ticket store), auth-webauthn        |
-| **user**        | user-settings, user-notification-preferences, user-data-export                                                                                                                  |
+| **user**        | user-settings, user-notification-preferences, user-data-export, user-bug-report                                                                                                 |
 | **tenancy**     | organization (organization-settings, organization-notification-policy, organization-api-key), membership (membership-invitation, membership-additional-roles), member-roles (member-role-permission), permission |
 | **billing**     | plan, subscription, stripe-webhook                                                                                                                                              |
 | **notify**      | notification, webhook (webhook-event, webhook-delivery)                                                                                                                          |

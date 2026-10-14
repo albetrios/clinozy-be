@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 442
+  Total routes: 443
 ================================================================================
 
 Legend:
@@ -481,7 +481,7 @@ Legend:
 
 ================================================================================
   DOMAIN: USER (/api/v1/users)
-  Routes: 21
+  Routes: 22
 ================================================================================
 
   GET    /api/v1/users                                            200  -    both  ROLE: super_admin
@@ -495,6 +495,7 @@ Legend:
   DELETE /api/v1/users/me                                         204  -    both  AUTH
   PUT    /api/v1/users/me/avatar                                  200  -    both  AUTH
   DELETE /api/v1/users/me/avatar                                  204  -    both  AUTH
+  POST   /api/v1/users/me/bug-reports                             200  -    both  AUTH
   POST   /api/v1/users/me/data-export                             200  -    both  AUTH
   GET    /api/v1/users/me/data-export/:data_export_id             200  -    both  AUTH
   GET    /api/v1/users/me/membership-invitations                  200  -    both  AUTH
@@ -533,9 +534,9 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 442
+  Total routes    : 443
   Public          : 16
-  Authenticated   : 53
+  Authenticated   : 54
   Role-guarded    : 9
   Perm-guarded    : 359
   Token-guarded   : 5

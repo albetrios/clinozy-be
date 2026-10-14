@@ -130,6 +130,7 @@
   "POST /api/v1/uploads/:upload_id/confirm": 200,
   "POST /api/v1/users/:user_id/suspend": 200,
   "POST /api/v1/users/:user_id/unsuspend": 200,
+  "POST /api/v1/users/me/bug-reports": 200,
   "POST /api/v1/users/me/data-export": 200,
   "POST /api/v1/users/me/onboarding/complete": 200,
   "POST /internal/ops/circuit-breakers/:circuit_name/reset": 200,

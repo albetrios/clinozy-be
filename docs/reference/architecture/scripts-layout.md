@@ -30,7 +30,6 @@ Build-time and operational scripts live under `src/scripts/`, grouped by concern
 | `pnpm ci:quality` | Includes scripts layout check + TSDoc coverage gate (`tsdoc:check`) |
 | `pnpm tool:project-structure-tree` | `codegen/generate-project-structure-tree.ts` |
 | `pnpm verify:base` | `ops/verify-base.ts` |
-| `pnpm ops:storage:cors` | `ops/storage-cors.ts` — check the upload bucket's CORS by preflight; `--print` / `--apply` the policy |
 | `pnpm tsdoc:check` | `tooling/tsdoc-coverage/check-coverage.ts` (budget-driven ratchet against [`tooling/tsdoc-coverage/budget.json`](../../../tooling/tsdoc-coverage/budget.json)) |
 | `pnpm tsdoc:check:report` | Same gate, plus a `<file>\t<symbol>\t<needs>` line for every missing pair |
 | `pnpm tsdoc:check:refresh-budget` | Rewrites the budget once missing counts have decreased |

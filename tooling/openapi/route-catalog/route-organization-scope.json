@@ -130,6 +130,7 @@
   "POST /api/v1/uploads/:upload_id/confirm": "both",
   "POST /api/v1/users/:user_id/suspend": "both",
   "POST /api/v1/users/:user_id/unsuspend": "both",
+  "POST /api/v1/users/me/bug-reports": "both",
   "POST /api/v1/users/me/data-export": "both",
   "POST /api/v1/users/me/onboarding/complete": "both",
   "POST /internal/ops/circuit-breakers/:circuit_name/reset": "both",
