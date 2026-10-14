@@ -181,6 +181,7 @@ export class UploadService {
     let uploadUrl: string;
     let uploadMethod: 'PUT' | 'POST';
     let fields: Record<string, string> | undefined;
+    let headers: Record<string, string> | undefined;
 
     if (environment.UPLOAD_USE_PRESIGNED_POST) {
       // S3 enforces the content-length-range at upload time, rejecting empty/oversized bodies.
@@ -200,12 +201,14 @@ export class UploadService {
       fields = post.fields;
       uploadMethod = 'POST';
     } else {
-      uploadUrl = await this.objectStorage.createPresignedUploadUrl({
+      const put = await this.objectStorage.createPresignedUploadUrl({
         key: pendingKey,
         contentType: input.content_type,
         contentLength: input.file_size,
         expiresInSeconds: PRESIGNED_URL_EXPIRY_SECONDS,
       });
+      uploadUrl = put.url;
+      headers = put.headers;
       uploadMethod = 'PUT';
     }
 
@@ -218,6 +221,7 @@ export class UploadService {
       expires_at: expiresAt,
       upload_method: uploadMethod,
       ...(fields !== undefined ? { fields } : {}),
+      ...(headers !== undefined ? { headers } : {}),
     });
   }
 
