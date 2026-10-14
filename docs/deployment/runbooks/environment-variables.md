@@ -335,6 +335,7 @@ instead of running insecure — you cannot ship the dev value:
 | `FRONTEND_URL`                        | optional (dev fallback)   | **required**, `https://` (emailed links and the OAuth callback are built from it) |
 | `S3_BUCKET` + `S3_REGION`             | optional                  | **required** (uploads and personal-data exports); the access-key pair is set together or not at all |
 | `RESEND_API_KEY`                      | optional (mail skipped)   | **required** (email codes, password resets, invitations) — and with it `EMAIL_FROM_ADDRESS` |
+| `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` | empty (no payment provider) | **both required**: the live key (`sk_live_…`) and the signing secret (`whsec_…`) of the production webhook endpoint — unset, subscriptions are recorded locally and never charged, and Stripe events are refused |
 | `WEBAUTHN_RP_ID`                      | `localhost` / fallback    | optional; when set, a bare hostname the `FRONTEND_URL` host equals or sits under (passkeys are bound to it) |
 | `COOKIE_SECURE`                       | `false`                   | `true` (cookies sent over HTTPS only)                                              |
 | `UPLOAD_USE_PRESIGNED_POST`           | may be `false`            | `true` (presigned PUT has no min-size enforcement)                                 |
@@ -380,7 +381,6 @@ hand on every `.env.production`:**
 | `LOG_LEVEL`                                                              | `debug` (common in dev)        | `info` (default) / `warn`                 | noisy logs, larger PII surface                                            |
 | `LOG_PRETTY`                                                             | `true` (readable local output) | `false` (default, JSON)                   | no pretty output anyway — every image installs `--prod`, so the `pino-pretty` devDependency is pruned; the logger warns once and stays JSON |
 | `SENTRY_DSN`                                                             | empty                          | real DSN (`SENTRY_ENVIRONMENT=production`) — **required**, boot fails without it | every error, final job failure and alert dropped silently                     |
-| `STRIPE_SECRET_KEY`                                                      | empty (no payment provider)    | the live key (`sk_live_…`)                | subscriptions are recorded locally and never billed — a paid plan's seats for free |
 | `HTTP_SERVER_TIMING_ENABLED`                                            | `true` (journey reads `app;dur=`) | consider `false`                          | exposes server compute time (coarsened to 5 ms in prod, but still a signal) |
 
 The full set of **required** production variables (replicas, retention, JWT,

@@ -51,6 +51,9 @@ const productionRequiredBase = {
   WEBAUTHN_RP_ID: 'app.example.com',
   // Production cannot start without error reporting.
   SENTRY_DSN: 'https://public@o0.ingest.sentry.io/0',
+  // Production cannot start without Stripe: a live secret key and the webhook signing secret.
+  STRIPE_SECRET_KEY: 'sk_live_production_fixture_key',
+  STRIPE_WEBHOOK_SECRET: 'whsec_production_fixture_secret',
   ...productionRedisTopology,
 };
 
@@ -1143,35 +1146,95 @@ describe('env-schema', () => {
     expect(parsed.success).toBe(true);
   });
 
-  // sec-B5 / sec-B6 — Stripe production guards. Without these, a typo or
-  // missing GitHub secret silently puts the system into "fictional mode"
-  // (subscriptions persist locally but never charge), and a wrong-mode key
-  // (sk_test_ in prod) silently freezes subscription state because every
-  // webhook HMAC fails.
+  // sec-B5 / sec-B6 — Stripe production guards. Without these, a missing GitHub
+  // secret silently records every subscription locally without charging (or
+  // refuses every Stripe event), and a wrong-mode key (sk_test_ in prod)
+  // silently freezes subscription state because every webhook HMAC fails.
   describe('Stripe production guards (sec-B5 / sec-B6)', () => {
-    it('rejects production env with only STRIPE_SECRET_KEY set (half-configured)', () => {
-      const parsed = envSchema.safeParse({
-        ...productionRequiredBase,
-        STRIPE_SECRET_KEY: 'sk_live_X',
-      });
-      expect(parsed.success).toBe(false);
-      const issue = parsed.success
-        ? undefined
-        : parsed.error.issues.find((i) => i.path.includes('STRIPE_WEBHOOK_SECRET'));
-      expect(issue).toBeDefined();
+    const {
+      STRIPE_SECRET_KEY: _stripeSecretKey,
+      STRIPE_WEBHOOK_SECRET: _stripeWebhookSecret,
+      ...productionWithoutStripe
+    } = productionRequiredBase;
+    void _stripeSecretKey;
+    void _stripeWebhookSecret;
+
+    function stripeIssueMessages(environment: Record<string, unknown>) {
+      const parsed = envSchema.safeParse(environment);
+      const fieldErrors = parsed.success ? {} : parsed.error.flatten().fieldErrors;
+      return {
+        success: parsed.success,
+        secretKey: fieldErrors.STRIPE_SECRET_KEY ?? [],
+        webhookSecret: fieldErrors.STRIPE_WEBHOOK_SECRET ?? [],
+      };
+    }
+
+    it('refuses production with neither Stripe key, naming both', () => {
+      const result = stripeIssueMessages(productionWithoutStripe);
+      expect(result.success).toBe(false);
+      expect(result.secretKey).toContain(
+        'STRIPE_SECRET_KEY must be set in production (the live `sk_live_` key) — without it subscriptions are recorded locally and never charged.',
+      );
+      expect(
+        result.webhookSecret.some((message) =>
+          message.startsWith('STRIPE_WEBHOOK_SECRET must be set in production'),
+        ),
+      ).toBe(true);
     });
 
-    it('rejects production env with only STRIPE_WEBHOOK_SECRET set (half-configured)', () => {
-      const parsed = envSchema.safeParse({
-        ...productionRequiredBase,
+    it('refuses production with only STRIPE_SECRET_KEY set (no webhook secret)', () => {
+      const result = stripeIssueMessages({
+        ...productionWithoutStripe,
+        STRIPE_SECRET_KEY: 'sk_live_X',
+      });
+      expect(result.success).toBe(false);
+      expect(result.secretKey).toEqual([]);
+      expect(
+        result.webhookSecret.some((message) =>
+          message.startsWith('STRIPE_WEBHOOK_SECRET must be set in production'),
+        ),
+      ).toBe(true);
+    });
+
+    it('refuses production with only STRIPE_WEBHOOK_SECRET set (no secret key)', () => {
+      const result = stripeIssueMessages({
+        ...productionWithoutStripe,
         STRIPE_WEBHOOK_SECRET: 'whsec_X',
       });
-      expect(parsed.success).toBe(false);
-      const issue = parsed.success
-        ? undefined
-        : parsed.error.issues.find((i) => i.path.includes('STRIPE_SECRET_KEY'));
-      expect(issue).toBeDefined();
+      expect(result.success).toBe(false);
+      expect(result.webhookSecret).toEqual([]);
+      expect(
+        result.secretKey.some((message) =>
+          message.startsWith('STRIPE_SECRET_KEY must be set in production'),
+        ),
+      ).toBe(true);
     });
+
+    it.each(['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'] as const)(
+      'refuses production with an empty %s',
+      (key) => {
+        const result = stripeIssueMessages({ ...productionRequiredBase, [key]: '' });
+        expect(result.success).toBe(false);
+        const messages = key === 'STRIPE_SECRET_KEY' ? result.secretKey : result.webhookSecret;
+        expect(messages.length).toBeGreaterThan(0);
+      },
+    );
+
+    it.each(['development', 'local'] as const)(
+      'still lets %s start without Stripe, or with only one key (no payment provider)',
+      (nodeEnvironment) => {
+        for (const stripeKeys of [
+          {},
+          { STRIPE_WEBHOOK_SECRET: 'whsec_X' },
+          { STRIPE_SECRET_KEY: 'sk_test_X', EMAIL_FROM_ADDRESS: 'billing@example.com' },
+        ]) {
+          expect(
+            envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: nodeEnvironment, ...stripeKeys })
+              .success,
+          ).toBe(true);
+        }
+      },
+    );
 
     it('rejects production env with a test-mode STRIPE_SECRET_KEY (sk_test_*)', () => {
       const parsed = envSchema.safeParse({
@@ -1259,7 +1322,7 @@ describe('env-schema', () => {
       expect(parsed.success).toBe(true);
     });
 
-    it('accepts production env with no Stripe keys at all (billing disabled)', () => {
+    it('accepts the production fixture, which carries both Stripe keys', () => {
       const parsed = envSchema.safeParse(productionRequiredBase);
       expect(parsed.success).toBe(true);
     });
