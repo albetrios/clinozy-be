@@ -105,7 +105,7 @@ src/infrastructure/
     workers/
     templates/
   storage/
-    object-storage.port.ts    # + s3-adapter.ts, s3-error.util.ts, stored-object-purge.util.ts
+    object-storage.port.ts    # + s3-adapter.ts, s3-error.util.ts, stored-object-purge.util.ts, bucket-cors.util.ts
   payment/
     stripe.client.ts          # Stripe SDK client + helpers (customer, subscription, webhook)
   outbound/            # Outbound HTTP call safety (outbound-fetch / call / defaults / error / redaction)

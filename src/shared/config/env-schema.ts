@@ -1926,9 +1926,8 @@ export const envSchema = envSchemaBase
     },
   )
   // sec-B6: Stripe secret key, when set, must carry a valid mode prefix
-  // (`sk_test_` or `sk_live_`). A garbled value defeats every Stripe API
-  // call and pushes the system into "fictional mode" (subs persist locally
-  // but never charge); fail closed at boot instead of silently at runtime.
+  // (`sk_test_` or `sk_live_`). A garbled value fails every Stripe API
+  // call; fail closed at boot instead of at the first subscription.
   .refine(
     (data) =>
       data.STRIPE_SECRET_KEY === undefined ||
@@ -1980,42 +1979,22 @@ export const envSchema = envSchemaBase
       path: ['STRIPE_SECRET_KEY'],
     },
   )
-  // sec-B5: In production, half-configured Stripe (one of the two keys set,
-  // the other missing — typically a typo or missing GitHub Actions secret)
-  // would otherwise leave `isStripeConfigured()` returning false and the
-  // subscription service silently issuing local-only trials without ever
-  // charging. Reject the half-configured state loudly at boot.
-  .refine(
-    (data) => {
-      if (data.NODE_ENV !== 'production') return true;
-      const hasSecretKey = Boolean(data.STRIPE_SECRET_KEY);
-      const hasWebhookSecret = Boolean(data.STRIPE_WEBHOOK_SECRET);
-      // Both unset = billing disabled (allowed). Both set = handled by the
-      // format / live-mode refines above. Only one set = error.
-      return hasSecretKey === hasWebhookSecret;
-    },
-    {
-      message:
-        'In production, STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET must both be set or both unset; a half-configured Stripe environment silently runs in fictional mode (subscriptions persist locally without charging).',
-      path: ['STRIPE_WEBHOOK_SECRET'],
-    },
-  )
-  // Mirror of the half-config refine — Zod path is informational, so we emit
-  // a second clause targeting `STRIPE_SECRET_KEY` so either-missing-side error
-  // surfaces on the offending key in deploy validators.
-  .refine(
-    (data) => {
-      if (data.NODE_ENV !== 'production') return true;
-      const hasSecretKey = Boolean(data.STRIPE_SECRET_KEY);
-      const hasWebhookSecret = Boolean(data.STRIPE_WEBHOOK_SECRET);
-      return hasSecretKey === hasWebhookSecret;
-    },
-    {
-      message:
-        'In production, STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET must both be set or both unset (see sec-B5).',
-      path: ['STRIPE_SECRET_KEY'],
-    },
-  )
+  // sec-B5: production refuses to boot without Stripe. With no secret key the billing domain
+  // records every subscription locally and never charges anyone (a paid plan's seats for free);
+  // with no webhook secret the webhook route refuses every Stripe event, so renewals, failed
+  // payments and cancellations never reach a subscription. Both keys are required (non-empty) in
+  // production — one refine per key, so the error names the missing one. Outside production both
+  // stay optional: a developer's machine, CI and the load-test rig run without a payment provider.
+  .refine((data) => data.NODE_ENV !== 'production' || Boolean(data.STRIPE_SECRET_KEY), {
+    message:
+      'STRIPE_SECRET_KEY must be set in production (the live `sk_live_` key) — without it subscriptions are recorded locally and never charged.',
+    path: ['STRIPE_SECRET_KEY'],
+  })
+  .refine((data) => data.NODE_ENV !== 'production' || Boolean(data.STRIPE_WEBHOOK_SECRET), {
+    message:
+      'STRIPE_WEBHOOK_SECRET must be set in production (the `whsec_` signing secret of the production webhook endpoint) — without it every Stripe event is refused and subscription state never updates.',
+    path: ['STRIPE_WEBHOOK_SECRET'],
+  })
   // audit #8: the RS256 signing keys were validated only by `min(1)`. A truncated PEM, a
   // non-RSA key, or an accidental sub-2048-bit key passed boot and either failed opaquely at
   // first sign/verify or (weak-but-valid) issued practically-forgeable tokens. Assert real RSA
@@ -2177,6 +2156,14 @@ export const envSchemaConditionallyRequiredKeys: ReadonlyArray<{
   { key: 'RESEND_API_KEY', condition: 'NODE_ENV=production (email codes, resets, invitations)' },
   { key: 'S3_BUCKET', condition: 'NODE_ENV=production (uploads and personal-data exports)' },
   { key: 'S3_REGION', condition: 'NODE_ENV=production (uploads and personal-data exports)' },
+  {
+    key: 'STRIPE_SECRET_KEY',
+    condition: 'NODE_ENV=production, as a live sk_live_ key (subscriptions are charged through it)',
+  },
+  {
+    key: 'STRIPE_WEBHOOK_SECRET',
+    condition: 'NODE_ENV=production (Stripe events update subscription state through it)',
+  },
   {
     key: 'FRONTEND_URL',
     condition: 'NODE_ENV=production, as an https URL (emailed links and the OAuth callback use it)',

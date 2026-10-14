@@ -41,7 +41,10 @@ const FAKE_CONTENT_LENGTH = 1024;
 // contract is proven inside the user domain rather than only in a platform-wide file.
 vi.mock('@/infrastructure/storage/s3-adapter.js', () => {
   const fakeObjectStorage = {
-    createPresignedUploadUrl: async () => 'https://fake-s3.local/presigned-put',
+    createPresignedUploadUrl: async () => ({
+      url: 'https://fake-s3.local/presigned-put',
+      headers: { 'content-type': 'image/png' },
+    }),
     createPresignedUploadPost: async () => ({
       url: 'https://fake-s3.local/upload',
       fields: { key: 'fake-policy-key' },

@@ -4,7 +4,8 @@ import type { UploadCreateOutput, UploadDetailOutput } from './upload.types.js';
 /**
  * Shapes the `POST /api/v1/uploads` response from the presigned URL flow,
  * normalizing `expires_at` to an ISO string and including the multipart
- * `fields` map only for `POST`-method (presigned-post) uploads.
+ * `fields` map only for `POST`-method (presigned-post) uploads and the signed
+ * request `headers` only for `PUT`-method uploads.
  */
 export function serializeUploadCreate(data: {
   id: string;
@@ -13,6 +14,7 @@ export function serializeUploadCreate(data: {
   expires_at: Date;
   upload_method: 'PUT' | 'POST';
   fields?: Record<string, string>;
+  headers?: Record<string, string>;
 }): UploadCreateOutput {
   return {
     id: data.id,
@@ -21,6 +23,7 @@ export function serializeUploadCreate(data: {
     expires_at: data.expires_at.toISOString(),
     upload_method: data.upload_method,
     ...(data.fields !== undefined ? { fields: data.fields } : {}),
+    ...(data.headers !== undefined ? { headers: data.headers } : {}),
   };
 }
 

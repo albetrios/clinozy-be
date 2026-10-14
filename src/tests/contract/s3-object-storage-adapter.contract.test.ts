@@ -66,7 +66,7 @@ describe('Amazon S3 contract (`S3ObjectStorageAdapter`)', () => {
   test('createPresignedUploadUrl returns SigV4 PUT URL with deterministic bucket hostname', async () => {
     const adapter = getDefaultS3ObjectStorageAdapter();
 
-    const presignedAbsoluteUrl = await adapter.createPresignedUploadUrl({
+    const { url: presignedAbsoluteUrl, headers } = await adapter.createPresignedUploadUrl({
       key: objectKeyOutbound,
       contentType: 'application/pdf',
       contentLength: 1024,
@@ -99,6 +99,13 @@ describe('Amazon S3 contract (`S3ObjectStorageAdapter`)', () => {
     expect(queryParameters.get(signedHeadersKey!)?.toLowerCase()).toContain(
       'x-amz-server-side-encryption',
     );
+    // Every header the client must set is one the URL signs — a PUT without them is refused.
+    const signedHeaderNames = queryParameters.get(signedHeadersKey!)?.toLowerCase().split(';');
+    expect(headers).toEqual({
+      'content-type': 'application/pdf',
+      'x-amz-server-side-encryption': 'AES256',
+    });
+    for (const name of Object.keys(headers)) expect(signedHeaderNames).toContain(name);
   });
 
   test('verifyUploadedObject verifies an object whose HEAD matches the declared type and length', async () => {
