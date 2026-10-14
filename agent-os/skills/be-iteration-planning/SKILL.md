@@ -75,21 +75,27 @@ user (`be-kickoff-iteration` › Each ROUTE row).
 | `iterations/<iteration>/intake-files/BRIEF.md` | brief mode — the written change (what, why, affected screens / entities / routes, rules, acceptance criteria, out of scope) |
 | the Baseline's `AS-BUILT.md` › Standing deviations | where the build already differs from the drop — plan against what was actually built |
 
-`intake-files/` always holds a **full snapshot**, exactly as placed by `pnpm iteration:intake`. The
-README's **Intake mode** says how it was built: `full` — the drop as received (always the launch);
-`overlay` — only the changed files arrived, laid over the Baseline's snapshot; `brief` — no design
-files, only a written change: the Baseline's snapshot plus `BRIEF.md`.
+`intake-files/` stores **only what arrived**, exactly as placed by `pnpm iteration:intake`; the
+README's **Intake mode** says what that was: `full` — the whole drop (always the launch);
+`overlay` — only the changed files; `brief` — no design files, only a written change, `BRIEF.md`.
+The inputs above are the iteration's **resolved snapshot**: for `full`, what it stores; for
+`overlay` / `brief`, its Baseline's resolved snapshot — up the Baseline chain — with its own stored
+files laid over it. A file this iteration does not store is read from the nearest Baseline up the
+chain whose `intake-files/` stores it (the gate's line reads `<n> files resolved (<s> stored, <b>
+from <baseline>)`); cite the path it resolves to.
 
 - **Baseline `none` → MODE initial** — the first iteration in this repository: plan everything.
 - **Baseline `<iteration>` → MODE incremental** — the Baseline the user confirms at Step 0. The delta
   depends on the Intake mode: `full` / `overlay` — the designer's "What changed" notes **plus**
-  `pnpm iteration:diff <baseline> <iteration>`, which compares the two `intake-files/` folders and
-  nothing else (anything the diff shows that the notes omit is a finding); `brief` — `BRIEF.md` is
-  the change list, and the diff must show nothing but `BRIEF.md` added. The Baseline's
-  `intake-files/` is therefore mandatory (`iteration:baseline` refuses a Baseline without it).
+  `pnpm iteration:diff <baseline> <iteration>`, which compares the two resolved `intake-files/`
+  snapshots and nothing else (anything the diff shows that the notes omit is a finding); `brief` —
+  `BRIEF.md` is the change list, and the diff must show nothing but `BRIEF.md` added. The
+  Baseline's `intake-files/` is therefore mandatory (`iteration:baseline` refuses a Baseline whose
+  snapshot does not resolve or lacks the required set).
 
 **Gate rule.** `pnpm iteration:intake <iteration> --check [--baseline <baseline>]` proves every
-mandatory file is in the snapshot (and the Baseline's) and that nothing changed since the intake.
+mandatory file is in the resolved snapshot (and the Baseline's) and that nothing changed since the
+intake — in `intake-files/` or, for an overlay or a brief, anywhere up its Baseline chain.
 When it exits non-zero, stop now — write nothing, change no status, ask nothing else; print the
 command's output and end the turn. A failing gate goes back to whoever placed the drop; the plan
 never works around a missing or edited file.
@@ -391,7 +397,8 @@ Run `pnpm iteration:list` and show:
 - Eligible = Status `planning`. Recommend the earliest-opened eligible iteration (the launch always
   comes first). If the user named one, check it against the rule.
 - **Incremental:** suggest the Baseline — the latest `done` / `frozen` iteration in this repository
-  with a complete `intake-files/` (`pnpm iteration:diff <iteration>` prints the suggestion). The user
+  whose resolved `intake-files/` snapshot is complete (`pnpm iteration:diff <iteration>` prints the
+  suggestion). The user
   confirms it or picks another; save it with `pnpm iteration:baseline <iteration> <baseline|none>`.
   An `overlay` or `brief` snapshot was built on the Baseline recorded at intake; picking another
   means rebuilding it (the gate fails until
@@ -407,10 +414,10 @@ pnpm iteration:intake <iteration> --check --baseline <baseline>   # MODE increme
 
 ### Step 1 — Inventory, then stop
 
-- The gate passed, so the snapshot is complete and unedited; extras the intake warned about are
-  findings.
-- Read **every** intake file **in full** — no skimming, no grep-only — `BRIEF.md` first in brief
-  mode.
+- The gate passed, so the resolved snapshot is complete and unedited; extras the intake warned
+  about are findings.
+- Read **every** file of the resolved snapshot **in full** — no skimming, no grep-only —
+  `BRIEF.md` first in brief mode.
 - Draft `plans/coverage.md` › Coverage with one row per PRD screen, flow, must-have and open
   question, and per `schema-routes.md` entity, enum and operation — each with its `file:line`.
 - Create `plans/db-changes.md` with the overview diagram and one section per table, grouped into
@@ -531,14 +538,14 @@ absent:
 
 Fix before presenting, never after:
 
-- [ ] The gate (`pnpm iteration:intake <iteration> --check`) passed, and every intake file was read in full
+- [ ] The gate (`pnpm iteration:intake <iteration> --check`) passed, and every file of the resolved snapshot was read in full
 - [ ] MODE incremental: the delta follows the Intake mode (full / overlay: `iteration:diff` ⟷ "What changed"; brief: `BRIEF.md`, nothing else changed), every omission raised as a finding
 - [ ] The Baseline's Standing deviations were read, and the ones this change touches are in `KICKOFF.md`
 - [ ] Every `plans/coverage.md` row is `covered` or `out-of-scope`
 - [ ] Every RED is answered in `plans/decisions.md`; every open AMBER is in `KICKOFF.md`
 - [ ] Every requirement identifier is used by a feature and reached by a ROUTE row
 - [ ] Every `CHANGED` or `REMOVED` requirement has its before → after row (each `requirements/` file ends with the section)
-- [ ] Every acceptance criterion traces to a line in `intake-files/PRD.md` (brief mode: in `intake-files/BRIEF.md`)
+- [ ] Every acceptance criterion traces to a line in the resolved snapshot's `PRD.md` (brief mode: in `intake-files/BRIEF.md`)
 - [ ] `plans/db-changes.md` matches `data.md` and every decision; incremental field comments match the diff
 - [ ] `plans/db-changes.md` is stage-wise: every table has its section (holds, table, sources, added / replaced, open, diagram), and the stages follow the ROUTE order
 - [ ] `plans/route-changes.md` serves every operation in scope, each route has access and a source line, every path follows the API contract, and every `CHANGED` route has its before → after row

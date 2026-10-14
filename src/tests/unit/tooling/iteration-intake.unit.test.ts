@@ -1,13 +1,14 @@
 /**
- * Design-iteration tooling — `pnpm iteration:intake` and its `--check` gate
+ * Design-iteration tooling — `pnpm iteration:intake`, its `--check` gate and `--compact`
  * (`tooling/iterations/iteration-intake.util.ts`).
  *
- * Pins the shared intake contract with clinozy-fe: the three modes (full, overlay, brief) and the
- * snapshot each builds, the Intake note formats, the README rows, the launch-is-full rule, the
+ * Pins the shared intake contract with clinozy-fe: the three modes (full, overlay, brief), what
+ * each stores and the snapshot each resolves to (an overlay or a brief laid over its Baseline
+ * chain), the Intake note formats, the README rows, the launch-is-full rule, the
  * approved-or-later lock, replace-only-while-planning (removals included), the BRIEF.md sections,
- * `--both` on the sibling's own Baseline, and every gate failure with its message.
+ * `--both` on the sibling's own Baseline, every gate failure with its message, and `--compact`.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -29,8 +30,10 @@ import {
 } from '@tooling/iterations/iteration-intake.util.js';
 import {
   BRIEF_SECTIONS,
+  flatFileNames,
   intakeHash,
   parseIterationReadme,
+  resolveIntakeSnapshot,
 } from '@tooling/iterations/iteration.util.js';
 
 const LAUNCH = 'launch-2026-09-30-jxmr';
@@ -127,6 +130,23 @@ describe('parseIntakeArguments', () => {
       /works only with --check/,
     );
     expect(() => parseIntakeArguments([FEATURE, 'x', '--mode'])).toThrow(/needs a value/);
+    expect(() => parseIntakeArguments([FEATURE, '--check', '--dry-run'])).toThrow(
+      /--check takes only/,
+    );
+  });
+
+  it('reads --compact with --dry-run, and nothing else beside it', () => {
+    expect(parseIntakeArguments([FEATURE, '--compact', '--dry-run'])).toMatchObject({
+      iteration: FEATURE,
+      compact: true,
+      dryRun: true,
+      check: false,
+    });
+    for (const extra of [['x'], ['--check'], ['--both'], ['--replace'], ['--mode', 'brief']]) {
+      expect(() => parseIntakeArguments([FEATURE, '--compact', ...extra])).toThrow(
+        /--compact takes only <iteration> \[--dry-run\]/,
+      );
+    }
   });
 });
 
@@ -178,7 +198,7 @@ describe('full intake', () => {
     expect(fields.get('Intake note')).toBe('4 received');
     expect(fields.get('Drop placed')).toBe(ITERATION_TEST_TODAY);
     expect(fields.get('Intake hash')).toBe(
-      intakeHash(intakeOf({ repositoryRoot, iteration: LAUNCH })),
+      intakeHash(resolveIntakeSnapshot({ repositoryRoot, iteration: LAUNCH }).files),
     );
     expect(runGate({ repositoryRoot, iteration: LAUNCH, baseline: undefined }).exitCode).toBe(0);
   });
@@ -294,7 +314,7 @@ describe('full intake', () => {
 });
 
 describe('overlay and brief intake', () => {
-  it('overlay lays the received files over the Baseline snapshot', () => {
+  it('overlay stores only the received files; the rest resolves from the Baseline', () => {
     const repositoryRoot = incrementalRepository();
     const plan = planIntake({
       repositoryRoot,
@@ -306,14 +326,29 @@ describe('overlay and brief intake', () => {
     });
     expect(plan.problems).toEqual([]);
     expect(plan.baseline).toBe(LAUNCH);
+    expect(plan.local?.files.map((file) => `${file.action} ${file.name}`)).toEqual(['add PRD.md']);
     applyIntake(plan);
     const intake = intakeOf({ repositoryRoot, iteration: FEATURE });
+    expect(flatFileNames(intake)).toEqual(['PRD.md']);
     expect(readFileSync(join(intake, 'PRD.md'), 'utf-8')).toBe('# PRD v2\n');
-    expect(readFileSync(join(intake, 'schema-routes.md'), 'utf-8')).toBe(SCHEMA_ROUTES);
-    expect(fieldsOf({ repositoryRoot, iteration: FEATURE }).get('Intake note')).toBe(
+    const resolved = resolveIntakeSnapshot({ repositoryRoot, iteration: FEATURE });
+    expect(resolved.baseline).toBe(LAUNCH);
+    expect(readFileSync(resolved.files.get('schema-routes.md') ?? '', 'utf-8')).toBe(SCHEMA_ROUTES);
+    const fields = fieldsOf({ repositoryRoot, iteration: FEATURE });
+    expect(fields.get('Intake note')).toBe(
       `1 received (PRD.md) · 1 carried forward from ${LAUNCH}`,
     );
-    expect(runGate({ repositoryRoot, iteration: FEATURE, baseline: LAUNCH }).exitCode).toBe(0);
+    expect(fields.get('Intake hash')).toBe(intakeHash(resolved.files));
+    expect(fields.get('Schema-routes')).toBe(
+      fieldsOf({ repositoryRoot, iteration: LAUNCH }).get('Schema-routes'),
+    );
+    const gate = runGate({ repositoryRoot, iteration: FEATURE, baseline: LAUNCH });
+    expect(gate.exitCode).toBe(0);
+    expect(gate.lines[0]).toMatch(
+      new RegExp(
+        `^✓ iterations/${FEATURE}/intake-files/ — 2 files resolved \\(1 stored, 1 from ${LAUNCH}\\), mandatory set complete, Intake hash [0-9a-f]{12} unchanged \\(Intake mode overlay\\)$`,
+      ),
+    );
   });
 
   it('overlay and brief need a confirmed Baseline whose intake passes the gate', () => {
@@ -358,7 +393,7 @@ describe('overlay and brief intake', () => {
     );
   });
 
-  it('brief adds the received BRIEF.md and nothing else', () => {
+  it('brief stores only the received BRIEF.md, and the gate passes on the resolved snapshot', () => {
     const repositoryRoot = incrementalRepository();
     const plan = planIntake({
       repositoryRoot,
@@ -370,10 +405,53 @@ describe('overlay and brief intake', () => {
     });
     expect(plan.problems).toEqual([]);
     applyIntake(plan);
+    expect(flatFileNames(intakeOf({ repositoryRoot, iteration: FEATURE }))).toEqual(['BRIEF.md']);
     expect(fieldsOf({ repositoryRoot, iteration: FEATURE }).get('Intake note')).toBe(
       `1 received (BRIEF.md) · 2 carried forward from ${LAUNCH}`,
     );
-    expect(runGate({ repositoryRoot, iteration: FEATURE, baseline: LAUNCH }).exitCode).toBe(0);
+    expect(
+      [...resolveIntakeSnapshot({ repositoryRoot, iteration: FEATURE }).files.keys()].sort(),
+    ).toEqual(['BRIEF.md', 'PRD.md', 'schema-routes.md']);
+    const gate = runGate({ repositoryRoot, iteration: FEATURE, baseline: LAUNCH });
+    expect(gate.exitCode).toBe(0);
+    expect(gate.lines[0]).toContain(
+      `— 3 files resolved (1 stored, 2 from ${LAUNCH}), mandatory set complete`,
+    );
+  });
+
+  it('a re-run over an older intake that stored copies of the Baseline shows them as removals', () => {
+    const repositoryRoot = incrementalRepository();
+    addTestIteration({
+      repositoryRoot,
+      name: FEATURE,
+      fields: {
+        type: 'feat',
+        opened: '2026-10-06',
+        baseline: LAUNCH,
+        intakeMode: 'brief',
+        intakeNote: `1 received (BRIEF.md) · 2 carried forward from ${LAUNCH}`,
+      },
+      intake: { ...COMPLETE, 'BRIEF.md': BRIEF },
+      recordIntake: true,
+    });
+    const request = {
+      repositoryRoot,
+      iteration: FEATURE,
+      source: drop({ 'BRIEF.md': BRIEF }),
+      mode: 'brief' as const,
+      siblingRoot: undefined,
+    };
+    const stopped = planIntake({ ...request, replace: false });
+    expect(stopped.problems.join()).toMatch(
+      /already holds a different snapshot \(removed: PRD\.md, schema-routes\.md\) — re-run with --replace/,
+    );
+    const replaced = planIntake({ ...request, replace: true });
+    expect(replaced.problems).toEqual([]);
+    expect(replaced.local?.hash).toBe(
+      fieldsOf({ repositoryRoot, iteration: FEATURE }).get('Intake hash'),
+    );
+    applyIntake(replaced);
+    expect(flatFileNames(intakeOf({ repositoryRoot, iteration: FEATURE }))).toEqual(['BRIEF.md']);
   });
 
   it('brief refuses a missing BRIEF.md, missing sections and any other changed file', () => {
@@ -466,6 +544,263 @@ describe('the gate (--check)', () => {
       `the overlay snapshot was built on fix-old-2026-10-02-aaaa, but the README's Baseline is ${LAUNCH}`,
     );
   });
+
+  it('fails a layered intake whose Baseline is missing, none, or loops back — the snapshot does not resolve', () => {
+    const repositoryRoot = incrementalRepository();
+    const brief = (baseline: string) =>
+      addTestIteration({
+        repositoryRoot,
+        name: FEATURE,
+        fields: {
+          type: 'feat',
+          opened: '2026-10-06',
+          baseline,
+          intakeMode: 'brief',
+          intakeNote: `1 received (BRIEF.md) · 2 carried forward from ${baseline}`,
+          intakeHash: 'aaaaaaaaaaaa',
+        },
+        intake: { 'BRIEF.md': BRIEF },
+      });
+    brief('feat-gone-2026-10-02-gone');
+    expect(runGate({ repositoryRoot, iteration: FEATURE, baseline: undefined }).lines).toContain(
+      `✗ iterations/${FEATURE}/intake-files/: the brief snapshot does not resolve — ${FEATURE}'s Baseline feat-gone-2026-10-02-gone does not exist (no README.md)`,
+    );
+    brief('none');
+    expect(
+      runGate({ repositoryRoot, iteration: FEATURE, baseline: undefined }).lines.join('\n'),
+    ).toContain(
+      `the brief snapshot does not resolve — ${FEATURE} is a brief intake with Baseline none`,
+    );
+    const other = 'fix-other-2026-10-05-oooo';
+    addTestIteration({
+      repositoryRoot,
+      name: other,
+      fields: { type: 'fix', opened: '2026-10-05', baseline: FEATURE, intakeMode: 'overlay' },
+      intake: { 'PRD.md': PRD },
+    });
+    brief(other);
+    expect(
+      runGate({ repositoryRoot, iteration: FEATURE, baseline: undefined }).lines.join('\n'),
+    ).toContain(`the Baseline chain loops: ${FEATURE} → ${other} → ${FEATURE}`);
+  });
+
+  it("says a change in the Baseline chain also changes a layered intake's hash", () => {
+    const repositoryRoot = incrementalRepository();
+    applyIntake(
+      planIntake({
+        repositoryRoot,
+        iteration: FEATURE,
+        source: drop({ 'BRIEF.md': BRIEF }),
+        mode: 'brief',
+        siblingRoot: undefined,
+        replace: false,
+      }),
+    );
+    writeFileSync(
+      join(intakeOf({ repositoryRoot, iteration: LAUNCH }), 'PRD.md'),
+      '# PRD (edited)\n',
+    );
+    const result = runGate({ repositoryRoot, iteration: FEATURE, baseline: undefined });
+    expect(result.exitCode).toBe(1);
+    expect(result.lines.join('\n')).toContain(
+      `A brief intake's hash covers its resolved snapshot, so a change in its Baseline chain changes it too — check ${LAUNCH}: pnpm iteration:intake ${LAUNCH} --check`,
+    );
+  });
+});
+
+describe('resolveIntakeSnapshot', () => {
+  it('resolves a chain of two layered iterations, the nearest stored file winning', () => {
+    const repositoryRoot = incrementalRepository();
+    const later = 'feat-refunds-2026-10-08-rfnd';
+    applyIntake(
+      planIntake({
+        repositoryRoot,
+        iteration: FEATURE,
+        source: drop({ 'BRIEF.md': BRIEF }),
+        mode: 'brief',
+        siblingRoot: undefined,
+        replace: false,
+      }),
+    );
+    addTestIteration({
+      repositoryRoot,
+      name: later,
+      fields: { type: 'feat', opened: '2026-10-08', baseline: FEATURE },
+    });
+    applyIntake(
+      planIntake({
+        repositoryRoot,
+        iteration: later,
+        source: drop({ 'PRD.md': '# PRD v3\n' }),
+        mode: 'overlay',
+        siblingRoot: undefined,
+        replace: false,
+      }),
+    );
+    const resolved = resolveIntakeSnapshot({ repositoryRoot, iteration: later });
+    expect(resolved.problem).toBeUndefined();
+    expect(resolved.baseline).toBe(FEATURE);
+    expect(resolved.storedNames).toEqual(['PRD.md']);
+    expect(
+      Object.fromEntries(
+        [...resolved.files].map(([name, path]) => [name, readFileSync(path, 'utf-8')]),
+      ),
+    ).toEqual({
+      'BRIEF.md': BRIEF,
+      'PRD.md': '# PRD v3\n',
+      'schema-routes.md': SCHEMA_ROUTES,
+    });
+    expect(fieldsOf({ repositoryRoot, iteration: later }).get('Intake note')).toBe(
+      `1 received (PRD.md) · 2 carried forward from ${FEATURE}`,
+    );
+    expect(runGate({ repositoryRoot, iteration: later, baseline: FEATURE }).exitCode).toBe(0);
+  });
+
+  it('reads an iteration without a README as full, and reports a Baseline that stores nothing', () => {
+    const repositoryRoot = createIterationRepository();
+    const folder = join(repositoryRoot, 'iterations', LAUNCH, 'intake-files');
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, 'PRD.md'), PRD);
+    expect(resolveIntakeSnapshot({ repositoryRoot, iteration: LAUNCH })).toMatchObject({
+      storedNames: ['PRD.md'],
+      baseline: undefined,
+      problem: undefined,
+    });
+    addTestIteration({ repositoryRoot, name: LAUNCH, fields: { status: 'done' } });
+    rmSync(folder, { recursive: true });
+    addTestIteration({
+      repositoryRoot,
+      name: FEATURE,
+      fields: { type: 'feat', opened: '2026-10-06', baseline: LAUNCH, intakeMode: 'overlay' },
+      intake: { 'PRD.md': PRD },
+    });
+    const resolved = resolveIntakeSnapshot({ repositoryRoot, iteration: FEATURE });
+    expect(resolved.problem).toBe(`${FEATURE}'s Baseline ${LAUNCH} stores no intake-files/ yet`);
+    expect([...resolved.files.keys()]).toEqual(['PRD.md']);
+  });
+});
+
+/** A feature whose older brief intake stored full copies of the launch next to its BRIEF.md. */
+function fullCopyBriefRepository(status = 'done'): string {
+  const repositoryRoot = incrementalRepository();
+  addTestIteration({
+    repositoryRoot,
+    name: FEATURE,
+    fields: {
+      type: 'feat',
+      opened: '2026-10-06',
+      baseline: LAUNCH,
+      status,
+      intakeMode: 'brief',
+      intakeNote: `1 received (BRIEF.md) · 2 carried forward from ${LAUNCH}`,
+    },
+    intake: { ...COMPLETE, 'BRIEF.md': BRIEF },
+    recordIntake: true,
+  });
+  return repositoryRoot;
+}
+
+describe('--compact', () => {
+  const compact = (repositoryRoot: string, ...flags: string[]) =>
+    runIntake({
+      commandLine: [FEATURE, '--compact', ...flags],
+      repositoryRoot,
+      resolveSibling: () => '',
+    });
+
+  it('keeps the Intake hash of an older full-copy intake: it equals the resolved hash after compaction', () => {
+    const repositoryRoot = fullCopyBriefRepository();
+    const recorded = fieldsOf({ repositoryRoot, iteration: FEATURE }).get('Intake hash');
+    const fullCopies = new Map(
+      ['BRIEF.md', 'PRD.md', 'schema-routes.md'].map((name) => [
+        name,
+        join(intakeOf({ repositoryRoot, iteration: FEATURE }), name),
+      ]),
+    );
+    expect(intakeHash(fullCopies)).toBe(recorded);
+    expect(compact(repositoryRoot).exitCode).toBe(0);
+    expect(intakeHash(resolveIntakeSnapshot({ repositoryRoot, iteration: FEATURE }).files)).toBe(
+      recorded,
+    );
+  });
+
+  it('removes the copies identical to the Baseline, keeps the received files, at any Status', () => {
+    const repositoryRoot = fullCopyBriefRepository('frozen');
+    const readme = readFileSync(join(repositoryRoot, 'iterations', FEATURE, 'README.md'), 'utf-8');
+    const hash = fieldsOf({ repositoryRoot, iteration: FEATURE }).get('Intake hash');
+    const result = compact(repositoryRoot);
+    expect(result).toEqual({
+      exitCode: 0,
+      lines: [
+        `Compacted iterations/${FEATURE}/intake-files/: removed 2 copies identical to ${LAUNCH} (PRD.md, schema-routes.md) · kept BRIEF.md · Intake hash ${hash} unchanged`,
+      ],
+    });
+    expect(flatFileNames(intakeOf({ repositoryRoot, iteration: FEATURE }))).toEqual(['BRIEF.md']);
+    expect(readFileSync(join(repositoryRoot, 'iterations', FEATURE, 'README.md'), 'utf-8')).toBe(
+      readme,
+    );
+    expect(runGate({ repositoryRoot, iteration: FEATURE, baseline: LAUNCH }).exitCode).toBe(0);
+    expect(compact(repositoryRoot).lines[0]).toBe(
+      `Nothing to compact in iterations/${FEATURE}/intake-files/: no stored copy besides the received files is identical to ${LAUNCH} · kept BRIEF.md · Intake hash ${hash} unchanged`,
+    );
+  });
+
+  it('keeps a received file even when it matches the Baseline, and a stored file that differs', () => {
+    const repositoryRoot = incrementalRepository();
+    addTestIteration({
+      repositoryRoot,
+      name: FEATURE,
+      fields: {
+        type: 'feat',
+        opened: '2026-10-06',
+        baseline: LAUNCH,
+        intakeMode: 'overlay',
+        intakeNote: `1 received (schema-routes.md) · 1 carried forward from ${LAUNCH}`,
+      },
+      intake: { 'PRD.md': '# PRD v2\n', 'schema-routes.md': SCHEMA_ROUTES },
+      recordIntake: true,
+    });
+    expect(compact(repositoryRoot).lines[0]).toMatch(
+      /^Nothing to compact .* kept PRD\.md, schema-routes\.md · /,
+    );
+  });
+
+  it('removes nothing in a dry run', () => {
+    const repositoryRoot = fullCopyBriefRepository();
+    const hash = fieldsOf({ repositoryRoot, iteration: FEATURE }).get('Intake hash');
+    expect(compact(repositoryRoot, '--dry-run').lines).toEqual([
+      `Dry run — nothing removed; would remove 2 copies identical to ${LAUNCH} (PRD.md, schema-routes.md) · would keep BRIEF.md · Intake hash ${hash} unchanged`,
+    ]);
+    expect(flatFileNames(intakeOf({ repositoryRoot, iteration: FEATURE }))).toEqual([
+      'BRIEF.md',
+      'PRD.md',
+      'schema-routes.md',
+    ]);
+  });
+
+  it('refuses a full intake and an iteration whose gate fails', () => {
+    const repositoryRoot = fullCopyBriefRepository();
+    const full = runIntake({
+      commandLine: [LAUNCH, '--compact'],
+      repositoryRoot,
+      resolveSibling: () => '',
+    });
+    expect(full).toEqual({
+      exitCode: 1,
+      lines: [
+        `✗ iterations/${LAUNCH}/intake-files/: a full intake stores the whole drop — there is nothing to compact (--compact is for an overlay or a brief).`,
+        'Nothing removed.',
+      ],
+    });
+    writeFileSync(join(intakeOf({ repositoryRoot, iteration: FEATURE }), 'PRD.md'), '# edited\n');
+    const failed = compact(repositoryRoot);
+    expect(failed.exitCode).toBe(1);
+    expect(failed.lines[0]).toBe(
+      'Gate failed — 1 problem. Stop here: write nothing, change no status.',
+    );
+    expect(failed.lines.at(-1)).toBe('Nothing removed.');
+    expect(flatFileNames(intakeOf({ repositoryRoot, iteration: FEATURE }))).toHaveLength(3);
+  });
 });
 
 describe('--both', () => {
@@ -543,6 +878,9 @@ describe('--both', () => {
     });
     expect(plan.problems).toEqual([]);
     expect(plan.sibling?.note).toBe(`1 received (BRIEF.md) · 2 carried forward from ${LAUNCH}`);
+    expect(plan.sibling?.files.map((file) => `${file.action} ${file.name}`)).toEqual([
+      'add BRIEF.md',
+    ]);
 
     writeFileSync(
       join(intakeOf({ repositoryRoot: siblingRoot, iteration: LAUNCH }), 'PRD.md'),

@@ -13,9 +13,9 @@ The iteration rule (in full: [iterations/README.md](../../../iterations/README.m
 
 - Folders are `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/`, opened with `pnpm iteration:new` —
   e.g. `launch-2026-09-30-jxmr`, `feat-pharmacy-returns-2026-10-06-kqzx`.
-- Every iteration's `intake-files/` holds a full snapshot (Intake mode `full`, `overlay` or
-  `brief`); the kickoff runs the gate, `pnpm iteration:intake <iteration> --check`, first and stops
-  when it fails.
+- Every iteration's `intake-files/` stores what arrived (Intake mode `full`, `overlay` or
+  `brief` — an overlay or a brief resolves the rest of its snapshot from its Baseline); the kickoff
+  runs the gate, `pnpm iteration:intake <iteration> --check`, first and stops when it fails.
 - `AS-BUILT.md` ends with the Standing deviations — the Baseline's list, minus what this iteration
   resolves, plus its new ones.
 - `KICKOFF.md` is the approved plan and ROUTE ledger — frozen at approval. What was actually built

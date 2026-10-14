@@ -24,6 +24,7 @@ import {
   appendHistoryEntry,
   BRIEF_SECTIONS,
   checkIntakeSet,
+  flatFilePaths,
   intakeHash,
   missingBriefSections,
   recordedIntakeMode,
@@ -267,6 +268,29 @@ describe('suggestBaseline', () => {
     expect(suggestBaseline({ repositoryRoot })).toBeUndefined();
   });
 
+  it('accepts a done brief that stores only BRIEF.md, its snapshot resolving from its Baseline', () => {
+    const repositoryRoot = createIterationRepository();
+    addTestIteration({
+      repositoryRoot,
+      name: 'launch-2026-09-30-jxmr',
+      intake: COMPLETE_INTAKE,
+      fields: { status: 'frozen' },
+    });
+    addTestIteration({
+      repositoryRoot,
+      name: 'feat-alpha-2026-10-02-aaaa',
+      intake: { 'BRIEF.md': '# Brief\n' },
+      fields: {
+        type: 'feat',
+        opened: '2026-10-02',
+        status: 'done',
+        baseline: 'launch-2026-09-30-jxmr',
+        intakeMode: 'brief',
+      },
+    });
+    expect(suggestBaseline({ repositoryRoot })).toBe('feat-alpha-2026-10-02-aaaa');
+  });
+
   it('suggests nothing while no iteration is done or frozen', () => {
     const repositoryRoot = createIterationRepository();
     addTestIteration({ repositoryRoot, name: 'launch-2026-09-30-jxmr' });
@@ -464,6 +488,41 @@ describe('readIterationListings', () => {
     );
     expect(new Set(lines.map((line) => line.length)).size).toBe(1);
   });
+
+  it("hashes the resolved snapshot: a brief storing only BRIEF.md shows its Baseline's schema-routes", () => {
+    const repositoryRoot = createIterationRepository();
+    addTestIteration({
+      repositoryRoot,
+      name: 'launch-2026-09-30-jxmr',
+      fields: { status: 'done' },
+      intake: COMPLETE_INTAKE,
+      recordIntake: true,
+    });
+    addTestIteration({
+      repositoryRoot,
+      name: 'feat-returns-2026-10-06-kqzx',
+      fields: {
+        type: 'feat',
+        opened: '2026-10-06',
+        baseline: 'launch-2026-09-30-jxmr',
+        intakeMode: 'brief',
+        intakeNote: '1 received (BRIEF.md) · 2 carried forward from launch-2026-09-30-jxmr',
+      },
+      intake: { 'BRIEF.md': '# Brief\n' },
+      recordIntake: true,
+    });
+    addTestIteration({
+      repositoryRoot,
+      name: 'fix-orphan-2026-10-07-orph',
+      fields: { type: 'fix', opened: '2026-10-07', baseline: 'none', intakeMode: 'overlay' },
+      intake: { 'PRD.md': '# PRD\n' },
+    });
+    const [launch, feature, orphan] = readIterationListings(repositoryRoot);
+    expect(feature?.schemaRoutes).toBe(launch?.schemaRoutes);
+    expect(feature?.intakeHash).toMatch(/^[0-9a-f]{12}$/);
+    expect(feature?.intakeHash).not.toBe(launch?.intakeHash);
+    expect(orphan?.intakeHash).toBe('unresolved ≠ README —');
+  });
 });
 
 describe('iteration:status', () => {
@@ -616,6 +675,43 @@ describe('iteration:baseline', () => {
       }),
     ).toThrow(/no complete intake-files\/ \(missing PRD\.md, schema-routes\.md\)/);
   });
+
+  it('refuses a Baseline whose snapshot does not resolve, and takes a layered one that does', () => {
+    const repositoryRoot = repository();
+    addTestIteration({
+      repositoryRoot,
+      name: 'feat-orphan-2026-10-03-orph',
+      intake: { 'BRIEF.md': '# Brief\n' },
+      fields: { type: 'feat', opened: '2026-10-03', baseline: 'none', intakeMode: 'brief' },
+    });
+    expect(() =>
+      planBaselineChange({
+        repositoryRoot,
+        iteration: 'feat-returns-2026-10-06-kqzx',
+        baseline: 'feat-orphan-2026-10-03-orph',
+      }),
+    ).toThrow(
+      /Baseline "feat-orphan-2026-10-03-orph" has no resolvable intake-files\/ \(feat-orphan-2026-10-03-orph is a brief intake with Baseline none/,
+    );
+    addTestIteration({
+      repositoryRoot,
+      name: 'feat-orphan-2026-10-03-orph',
+      intake: { 'BRIEF.md': '# Brief\n' },
+      fields: {
+        type: 'feat',
+        opened: '2026-10-03',
+        baseline: 'launch-2026-09-30-jxmr',
+        intakeMode: 'brief',
+      },
+    });
+    expect(
+      planBaselineChange({
+        repositoryRoot,
+        iteration: 'feat-returns-2026-10-06-kqzx',
+        baseline: 'feat-orphan-2026-10-03-orph',
+      }).to,
+    ).toBe('feat-orphan-2026-10-03-orph');
+  });
 });
 
 describe('the Intake hash (shared byte for byte with clinozy-fe)', () => {
@@ -642,11 +738,12 @@ describe('the Intake hash (shared byte for byte with clinozy-fe)', () => {
     writeFileSync(join(folder, '.DS_Store'), 'ignored');
     mkdirSync(join(folder, 'nested'));
     writeFileSync(join(folder, 'nested', 'x.md'), 'ignored');
-    const first = intakeHash(folder);
+    const first = intakeHash(flatFilePaths(folder));
+    expect([...flatFilePaths(folder).keys()]).toEqual(['PRD.md', 'schema-routes.md']);
     expect(first).toMatch(/^[0-9a-f]{12}$/);
     writeFileSync(join(folder, 'PRD.md'), '# PRD (edited)\n');
-    expect(intakeHash(folder)).not.toBe(first);
-    expect(intakeHash(join(folder, 'missing'))).toBe('—');
+    expect(intakeHash(flatFilePaths(folder))).not.toBe(first);
+    expect(intakeHash(flatFilePaths(join(folder, 'missing')))).toBe('—');
   });
 });
 

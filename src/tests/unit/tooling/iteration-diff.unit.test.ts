@@ -187,6 +187,42 @@ describe('summarizeIntakeDiff', () => {
     ).toContain('+| `/returns` | Returns | page |');
   });
 
+  it('compares resolved snapshots, the raw diff naming the paths a full intake would have', () => {
+    const repositoryRoot = repository();
+    addTestIteration({
+      repositoryRoot,
+      name: 'fix-tabs-2026-10-08-tabs',
+      fields: {
+        type: 'fix',
+        opened: '2026-10-08',
+        status: 'done',
+        baseline: 'feat-returns-2026-10-06-kqzx',
+        intakeMode: 'overlay',
+      },
+      intake: { 'sales.md': '# Sales (no tabs)\n' },
+    });
+    const request = {
+      repositoryRoot,
+      baseline: 'feat-returns-2026-10-06-kqzx',
+      current: 'fix-tabs-2026-10-08-tabs',
+    };
+    expect(summarizeIntakeDiff(request).files).toEqual({
+      added: [],
+      removed: [],
+      changed: ['sales.md'],
+    });
+    const raw = rawIntakeDiff(request);
+    expect(raw.split('\n').filter((line) => /^(diff|---|\+\+\+) /.test(line))).toEqual([
+      'diff --git a/iterations/feat-returns-2026-10-06-kqzx/intake-files/sales.md b/iterations/fix-tabs-2026-10-08-tabs/intake-files/sales.md',
+      '--- a/iterations/feat-returns-2026-10-06-kqzx/intake-files/sales.md',
+      '+++ b/iterations/fix-tabs-2026-10-08-tabs/intake-files/sales.md',
+    ]);
+    expect(raw).toContain('-# Sales (tabs)\n+# Sales (no tabs)');
+    expect(
+      summarizeIntakeDiff({ ...request, baseline: 'launch-2026-09-30-jxmr' }).files.added,
+    ).toEqual(['returns.md']);
+  });
+
   it('requires intake-files/ on both sides — the comparison covers intake-files/ only', () => {
     const repositoryRoot = repository();
     addTestIteration({

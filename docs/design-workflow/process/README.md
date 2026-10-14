@@ -9,7 +9,7 @@ every step with its questions is in the [step-by-step guide](iteration-guide.md)
 
 ```mermaid
 flowchart TB
-  NEW["pnpm iteration:new<br/>Status: planning"] --> INTAKE["pnpm iteration:intake --mode full|overlay|brief<br/>full snapshot → intake-files/ · --check gate"]
+  NEW["pnpm iteration:new<br/>Status: planning"] --> INTAKE["pnpm iteration:intake --mode full|overlay|brief<br/>what arrived → intake-files/ · --check gate"]
   INTAKE --> PLAN["be-iteration-planning — no code<br/>Steps 0–7 → routes-final.md (sub-domain by sub-domain)<br/>+ KICKOFF.md + plans/"]
   PLAN --> READY["Status: ready-for-approval"]
   READY -->|your go-ahead| APPROVED["Status: approved<br/>KICKOFF.md + intake-files/ freeze"]
@@ -24,7 +24,7 @@ flowchart TB
 | Step | Who / what | Output | Stops for |
 | --- | --- | --- | --- |
 | Open | `pnpm iteration:new <type> [topic]` | the folder + README (`Status: planning`) | the opening questions ([guide](iteration-guide.md)) |
-| Intake | `pnpm iteration:intake <iteration> <source> [--mode full\|overlay\|brief]` | a full snapshot in `intake-files/`; the README's Drop, Intake and Schema-routes rows | a missing mandatory file; a different snapshot already there |
+| Intake | `pnpm iteration:intake <iteration> <source> [--mode full\|overlay\|brief]` | what arrived in `intake-files/` (an overlay or a brief resolves the rest from its Baseline); the README's Drop, Intake and Schema-routes rows | a missing mandatory file in the resolved snapshot; different stored files already there |
 | Plan | **be-iteration-planning**, [prompt](../prompts/iteration-planning-prompt.md) | `plans/routes-final.md` (the route review, [template](routes-final-template.md)), `KICKOFF.md` (plan + ROUTE ledger) and `plans/`; `Status: ready-for-approval` | which iteration and Baseline (Step 0); every step; RED questions; your OK on each sub-domain of the route review |
 | Approve | you — `pnpm iteration:status <iteration> approved` | `Status: approved`, logged in `plans/decisions.md` | — |
 | Kick off | **be-kickoff-iteration**, [prompt](../prompts/kickoff-iteration-prompt.md) | `Status: implementing` | which iteration (Step 0) |
@@ -75,15 +75,18 @@ credentials out of records. The user review contains the same concise informatio
 
 ## Rules that hold the flow together
 
-- **The snapshot is always full.** Whatever arrived — the whole drop (`full`), only the changed
-  files (`overlay`) or only a written change (`brief`, a `BRIEF.md`) — `intake-files/` holds a full
-  snapshot. An incremental delta is the designer's "What changed" notes plus
-  `pnpm iteration:diff <baseline> <iteration>` (brief: `BRIEF.md`, and nothing else changed) — a diff
-  of `intake-files/` only, so the Baseline's `intake-files/` is mandatory. Anything the diff shows
-  that the notes omit is a finding.
+- **What arrived is stored; the snapshot resolves.** `intake-files/` stores only what arrived —
+  the whole drop (`full`), only the changed files (`overlay`) or only a written change (`brief`, a
+  `BRIEF.md`). An overlay or a brief resolves the rest of its snapshot from its Baseline's, up the
+  Baseline chain, and every reader works on that resolved snapshot. An incremental delta is the
+  designer's "What changed" notes plus `pnpm iteration:diff <baseline> <iteration>` (brief:
+  `BRIEF.md`, and nothing else changed) — a diff of the resolved `intake-files/` snapshots only, so
+  the Baseline's `intake-files/` is mandatory. Anything the diff shows that the notes omit is a
+  finding.
 - **The gate comes first.** Planning and kickoff run `pnpm iteration:intake <iteration> --check`
-  before anything else and stop when it fails: a missing mandatory file or an Intake hash that no
-  longer matches goes back to whoever placed the drop.
+  before anything else and stop when it fails: a missing mandatory file, a snapshot that does not
+  resolve or an Intake hash that no longer matches (for an overlay or a brief, a change anywhere up
+  its Baseline chain counts) goes back to whoever placed the drop.
 - **Deviations are carried forward.** `AS-BUILT.md` › Standing deviations lists where the code
   differs from the drop; the next iteration copies it and plans against what was actually built.
 - **The user confirms the Baseline.** Planning Step 0 suggests the latest `done` / `frozen`

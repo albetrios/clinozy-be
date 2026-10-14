@@ -1,23 +1,28 @@
 /**
- * `pnpm iteration:diff` — compare two iterations' `intake-files/` (Baseline ↔ current).
+ * `pnpm iteration:diff` — compare two iterations' resolved `intake-files/` snapshots (Baseline ↔
+ * current).
  *
- * Every iteration's intake holds a full snapshot, so the delta of an incremental iteration is this
- * comparison plus the designer's "What changed" notes (in brief mode, `BRIEF.md` — and the
- * comparison shows nothing else); anything the comparison shows that the notes omit is a finding. The summary covers files, screens (via `_index.md` Slugs where present),
- * whether the PRD, `schema-routes.md` or the prototype changed, and the `schema-routes.md` entities,
- * fields, enums, routes and operations added, removed or changed.
+ * An overlay or a brief stores only what arrived and resolves the rest from its Baseline, so both
+ * sides are compared as resolved snapshots — the files each would hold laid out in full. The delta
+ * of an incremental iteration is this comparison plus the designer's "What changed" notes (in brief
+ * mode, `BRIEF.md` — and the comparison shows nothing else); anything the comparison shows that the
+ * notes omit is a finding. The summary covers files, screens (via `_index.md` Slugs where
+ * present), whether the PRD, `schema-routes.md` or the prototype changed, and the
+ * `schema-routes.md` entities, fields, enums, routes and operations added, removed or changed.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 import {
   EMPTY_FIELD,
   INTAKE_DIRECTORY,
-  readSnapshot,
   ITERATIONS_DIRECTORY,
   NO_BASELINE,
   readIterationReadme,
+  readSnapshotBytes,
+  resolveIntakeSnapshot,
   suggestBaseline,
 } from './iteration.util.js';
 
@@ -201,11 +206,31 @@ export function compareSchemaRoutes(models: {
   };
 }
 
-function intakeFolder(location: {
+/**
+ * An iteration's resolved snapshot — file name → path — for a comparison.
+ *
+ * @remarks
+ * Failure modes: throws when the iteration has no README, its own `intake-files/` stores nothing,
+ * or its snapshot does not resolve (`resolveIntakeSnapshot`).
+ */
+function comparableSnapshot(location: {
   readonly repositoryRoot: string;
   readonly iteration: string;
-}): string {
-  return join(location.repositoryRoot, ITERATIONS_DIRECTORY, location.iteration, INTAKE_DIRECTORY);
+}): ReadonlyMap<string, string> {
+  const { iteration } = location;
+  readIterationReadme(location);
+  const resolved = resolveIntakeSnapshot(location);
+  if (resolved.storedNames.length === 0) {
+    throw new Error(
+      `${iteration} has no ${INTAKE_DIRECTORY}/ — the incremental delta is a diff of ${INTAKE_DIRECTORY}/ only, so both iterations need theirs: pnpm iteration:intake ${iteration} <source-folder>.`,
+    );
+  }
+  if (resolved.problem !== undefined) {
+    throw new Error(
+      `${iteration}'s ${INTAKE_DIRECTORY}/ snapshot does not resolve — ${resolved.problem}.`,
+    );
+  }
+  return resolved.files;
 }
 
 function screenSlugs(index: Buffer | undefined): string[] {
@@ -227,16 +252,18 @@ function screenSlugs(index: Buffer | undefined): string[] {
 }
 
 /**
- * Summarizes the difference between two iterations' intake files.
+ * Summarizes the difference between two iterations' resolved intake snapshots.
  *
  * @remarks
- * Algorithm: compares the flat file sets byte by byte; maps changed `<slug>.md` files to screens
+ * Algorithm: resolves both snapshots (an overlay or a brief laid over its Baseline chain), compares
+ * the flat file sets byte by byte; maps changed `<slug>.md` files to screens
  * through either side's `_index.md` Slug column; flags `PRD.md`, `schema-routes.md` and prototype
  * (`.html`, `.js`) changes; parses both `schema-routes.md` files ({@link parseSchemaRoutes}) and
  * compares them ({@link compareSchemaRoutes}).
  *
- * Failure modes: throws when either iteration has no README or no `intake-files/` — the
- * comparison covers `intake-files/` only, so both sides are mandatory.
+ * Failure modes: throws when either iteration has no README, stores no `intake-files/`, or has a
+ * snapshot that does not resolve — the comparison covers `intake-files/` only, so both sides are
+ * mandatory.
  */
 export function summarizeIntakeDiff(request: {
   readonly repositoryRoot: string;
@@ -244,22 +271,8 @@ export function summarizeIntakeDiff(request: {
   readonly current: string;
 }): IntakeDiffSummary {
   const { repositoryRoot, baseline, current } = request;
-  readIterationReadme({ repositoryRoot, iteration: baseline });
-  readIterationReadme({ repositoryRoot, iteration: current });
-  const beforeFolder = intakeFolder({ repositoryRoot, iteration: baseline });
-  const afterFolder = intakeFolder({ repositoryRoot, iteration: current });
-  for (const [iteration, folder] of [
-    [baseline, beforeFolder],
-    [current, afterFolder],
-  ] as const) {
-    if (!existsSync(folder)) {
-      throw new Error(
-        `${iteration} has no ${INTAKE_DIRECTORY}/ — the incremental delta is a diff of ${INTAKE_DIRECTORY}/ only, so both iterations need theirs: pnpm iteration:intake ${iteration} <source-folder>.`,
-      );
-    }
-  }
-  const before = readSnapshot(beforeFolder);
-  const after = readSnapshot(afterFolder);
+  const before = readSnapshotBytes(comparableSnapshot({ repositoryRoot, iteration: baseline }));
+  const after = readSnapshotBytes(comparableSnapshot({ repositoryRoot, iteration: current }));
   const files = compareMaps({ before, after, same: (left, right) => left.equals(right) });
   const touched = new Set([...files.added, ...files.removed, ...files.changed]);
   const slugs = new Set([
@@ -323,28 +336,48 @@ export function formatIntakeDiffSummary(summary: IntakeDiffSummary): string {
   ].join('\n');
 }
 
-/** Runs `git diff --no-index` between the two iterations' `intake-files/` and returns its output. */
+/**
+ * Runs `git diff --no-index` between the two iterations' resolved `intake-files/` snapshots and
+ * returns its output.
+ *
+ * @remarks
+ * Algorithm: copies both resolved snapshots into a temporary folder laid out as
+ * `iterations/<iteration>/intake-files/<file>` and runs git there, so the diff's paths read
+ * exactly as a diff of two fully stored `intake-files/` folders would.
+ *
+ * Failure modes: throws as {@link summarizeIntakeDiff} does.
+ *
+ * Side effects: writes and then removes the temporary folder.
+ */
 export function rawIntakeDiff(request: {
   readonly repositoryRoot: string;
   readonly baseline: string;
   readonly current: string;
 }): string {
-  const result = spawnSync(
-    'git',
-    [
-      'diff',
-      '--no-index',
-      '--',
-      join(ITERATIONS_DIRECTORY, request.baseline, INTAKE_DIRECTORY),
-      join(ITERATIONS_DIRECTORY, request.current, INTAKE_DIRECTORY),
-    ],
-    {
-      cwd: request.repositoryRoot,
-      encoding: 'utf-8',
-      env: gitEnvironmentWithoutInheritedRepository(),
-    },
-  );
-  return result.stdout ?? '';
+  const { repositoryRoot } = request;
+  const sides = [request.baseline, request.current].map((iteration) => ({
+    folder: join(ITERATIONS_DIRECTORY, iteration, INTAKE_DIRECTORY),
+    files: comparableSnapshot({ repositoryRoot, iteration }),
+  }));
+  const workspace = mkdtempSync(join(tmpdir(), 'iteration-diff-'));
+  try {
+    for (const side of sides) {
+      mkdirSync(join(workspace, side.folder), { recursive: true });
+      for (const [name, path] of side.files) copyFileSync(path, join(workspace, side.folder, name));
+    }
+    const result = spawnSync(
+      'git',
+      ['diff', '--no-index', '--', ...sides.map((side) => side.folder)],
+      {
+        cwd: workspace,
+        encoding: 'utf-8',
+        env: gitEnvironmentWithoutInheritedRepository(),
+      },
+    );
+    return result.stdout ?? '';
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
 }
 
 /** Parsed `pnpm iteration:diff [<baseline>] <current> [--json]` command line. */

@@ -21,7 +21,11 @@ export type IterationType = (typeof ITERATION_TYPES)[number];
 /** Folder (relative to a repository root) that holds every iteration. */
 export const ITERATIONS_DIRECTORY = 'iterations';
 
-/** Folder inside an iteration holding the files received from outside, exactly as delivered. */
+/**
+ * Folder inside an iteration holding the files received from outside, exactly as delivered — the
+ * whole drop for a `full` intake, only what arrived for an `overlay` or a `brief` (the rest
+ * resolves from the Baseline: {@link resolveIntakeSnapshot}).
+ */
 export const INTAKE_DIRECTORY = 'intake-files';
 
 /** README Status values, in lifecycle order. */
@@ -63,7 +67,11 @@ export const MAXIMUM_NAME_ATTEMPTS = 20;
 /** Files every drop for this (backend) repository must contain. */
 export const REQUIRED_INTAKE_FILES = ['PRD.md', 'schema-routes.md'] as const;
 
-/** Intake modes: how the snapshot in `intake-files/` was built from what arrived. */
+/**
+ * Intake modes: what arrived and what `intake-files/` stores — `full`, the whole drop; `overlay`,
+ * only the changed files; `brief`, only `BRIEF.md`. An overlay or a brief resolves the rest of its
+ * snapshot from its Baseline.
+ */
 export const INTAKE_MODES = ['full', 'overlay', 'brief'] as const;
 
 /** One of {@link INTAKE_MODES}. */
@@ -174,9 +182,12 @@ export interface IterationListing {
   readonly baseline: string;
   readonly status: string;
   readonly intakeMode: string;
-  /** Live fingerprint of `intake-files/schema-routes.md` ({@link schemaRoutesHash}). */
+  /** Live fingerprint of the resolved snapshot's `schema-routes.md` ({@link schemaRoutesHash}). */
   readonly schemaRoutes: string;
-  /** Live {@link intakeHash}; `<live> ≠ README <recorded>` when it differs from the README's. */
+  /**
+   * Live {@link intakeHash} of the resolved snapshot; `<live> ≠ README <recorded>` when it differs
+   * from the README's, `unresolved ≠ README <recorded>` when the snapshot does not resolve.
+   */
   readonly intakeHash: string;
   readonly dropPlaced: string;
 }
@@ -589,24 +600,131 @@ export function readAllIterationFields(
   return all;
 }
 
-/**
- * Lists the required intake files an iteration's `intake-files/` lacks — empty when complete.
- *
- * @remarks
- * An incremental iteration's delta is a diff of `intake-files/` against its Baseline's, so a
- * Baseline is usable only when this is empty.
- */
-export function missingIntakeFiles(location: {
+/** An iteration's resolved snapshot — see {@link resolveIntakeSnapshot}. */
+export interface ResolvedIntakeSnapshot {
+  /**
+   * File name → absolute path of the file that wins: the iteration's own stored file, else the
+   * nearest Baseline's. Only the stored files while {@link ResolvedIntakeSnapshot.problem} is set.
+   */
+  readonly files: ReadonlyMap<string, string>;
+  /** The names the iteration's own `intake-files/` stores, in `localeCompare` order. */
+  readonly storedNames: readonly string[];
+  /** The Baseline the stored files are laid over — `undefined` for a `full` intake. */
+  readonly baseline: string | undefined;
+  /** Why the snapshot does not resolve — `undefined` when it does. */
+  readonly problem: string | undefined;
+}
+
+/** Path of an iteration's `intake-files/`. */
+export function intakeFolderPath(location: {
   readonly repositoryRoot: string;
   readonly iteration: string;
-}): string[] {
-  const folder = join(
-    location.repositoryRoot,
-    ITERATIONS_DIRECTORY,
-    location.iteration,
-    INTAKE_DIRECTORY,
-  );
-  return REQUIRED_INTAKE_FILES.filter((name) => !existsSync(join(folder, name)));
+}): string {
+  return join(location.repositoryRoot, ITERATIONS_DIRECTORY, location.iteration, INTAKE_DIRECTORY);
+}
+
+function resolveAlongChain(request: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+  readonly chain: readonly string[];
+}): ResolvedIntakeSnapshot {
+  const { repositoryRoot, iteration } = request;
+  const stored = flatFilePaths(intakeFolderPath({ repositoryRoot, iteration }));
+  const storedNames = [...stored.keys()];
+  const readmePath = iterationReadmePath({ repositoryRoot, iteration });
+  const fields = existsSync(readmePath)
+    ? parseIterationReadme(readFileSync(readmePath, 'utf-8'))
+    : new Map<string, string>();
+  const mode = recordedIntakeMode(fields);
+  if (mode === DEFAULT_INTAKE_MODE) {
+    return { files: stored, storedNames, baseline: undefined, problem: undefined };
+  }
+  const baseline = fields.get('Baseline') ?? EMPTY_FIELD;
+  const unresolved = (problem: string, named: string | undefined): ResolvedIntakeSnapshot => ({
+    files: stored,
+    storedNames,
+    baseline: named,
+    problem,
+  });
+  if (baseline === NO_BASELINE || baseline === EMPTY_FIELD) {
+    return unresolved(
+      `${iteration} is a ${mode} intake with Baseline ${baseline} — the rest of its snapshot resolves from a Baseline`,
+      undefined,
+    );
+  }
+  const chain = [...request.chain, iteration];
+  if (chain.includes(baseline)) {
+    return unresolved(`the Baseline chain loops: ${[...chain, baseline].join(' → ')}`, baseline);
+  }
+  if (
+    parseIterationName(baseline) === undefined ||
+    !existsSync(iterationReadmePath({ repositoryRoot, iteration: baseline }))
+  ) {
+    return unresolved(
+      `${iteration}'s Baseline ${baseline} does not exist (no README.md)`,
+      baseline,
+    );
+  }
+  if (flatFileNames(intakeFolderPath({ repositoryRoot, iteration: baseline })).length === 0) {
+    return unresolved(
+      `${iteration}'s Baseline ${baseline} stores no ${INTAKE_DIRECTORY}/ yet`,
+      baseline,
+    );
+  }
+  const below = resolveAlongChain({ repositoryRoot, iteration: baseline, chain });
+  if (below.problem !== undefined) return unresolved(below.problem, baseline);
+  return {
+    files: new Map([...below.files, ...stored]),
+    storedNames,
+    baseline,
+    problem: undefined,
+  };
+}
+
+/**
+ * Resolves an iteration's snapshot: what its `intake-files/` stores, laid over its Baseline's.
+ *
+ * @remarks
+ * Algorithm: a `full` intake (and an iteration without a README) is its stored files. An `overlay`
+ * or a `brief` is its Baseline's resolved snapshot — recursively, up the Baseline chain — with its
+ * own stored files laid over it; a stored file wins on a name clash. An old intake that stores
+ * full copies of its Baseline's files therefore resolves to the same set.
+ *
+ * Failure modes: never throws; `problem` names why a layered snapshot does not resolve — its
+ * Baseline is `none` or `—`, the Baseline has no README, the Baseline stores no intake, or the
+ * Baseline chain loops — and `files` then holds only the stored files.
+ *
+ * Side effects: reads READMEs and lists `intake-files/` folders.
+ */
+export function resolveIntakeSnapshot(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): ResolvedIntakeSnapshot {
+  return resolveAlongChain({ ...location, chain: [] });
+}
+
+/**
+ * Why an iteration cannot serve as a Baseline — `undefined` when its resolved snapshot resolves
+ * and holds {@link REQUIRED_INTAKE_FILES}.
+ *
+ * @remarks
+ * An incremental iteration's delta is a diff of its resolved snapshot against its Baseline's, and
+ * an overlay or a brief resolves the rest of its snapshot from the Baseline, so a Baseline is
+ * usable only when this is `undefined`. The reason reads after `has` (`has no complete …`).
+ */
+export function unusableBaselineReason(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): string | undefined {
+  const resolved = resolveIntakeSnapshot(location);
+  if (resolved.problem !== undefined) {
+    return `no resolvable ${INTAKE_DIRECTORY}/ (${resolved.problem})`;
+  }
+  const { missing } = checkIntakeSet({ names: [...resolved.files.keys()] });
+  if (missing.length > 0) {
+    return `no complete ${INTAKE_DIRECTORY}/ (missing ${missing.join(', ')})`;
+  }
+  return undefined;
 }
 
 /** The date of the last History line that moved an iteration to `done` (or `frozen`), if any. */
@@ -623,10 +741,11 @@ function finishedDate(readme: string): string {
  * Suggests a Baseline: the latest `done` or `frozen` iteration in this repository.
  *
  * @remarks
- * Algorithm: among working-tree iterations whose Status is `done` or `frozen` and whose
- * `intake-files/` holds the required set (excluding `excluding`), the one that finished last — the latest History date moving it to `done` or
- * `frozen`, then the latest Opened, then the name. The user confirms or picks another at planning
- * Step 0 (`pnpm iteration:baseline`).
+ * Algorithm: among working-tree iterations whose Status is `done` or `frozen` and whose resolved
+ * snapshot holds the required set ({@link unusableBaselineReason}; excluding `excluding`), the one
+ * that finished last — the latest History date moving it to `done` or `frozen`, then the latest
+ * Opened, then the name. The user confirms or picks another at planning Step 0
+ * (`pnpm iteration:baseline`).
  *
  * Failure modes: returns `undefined` when no iteration is done or frozen.
  */
@@ -638,7 +757,8 @@ export function suggestBaseline(location: {
   for (const [name, fields] of readAllIterationFields(location.repositoryRoot)) {
     if (name === location.excluding || !BASELINE_STATUSES.has(fields.get('Status') ?? '')) continue;
     if (
-      missingIntakeFiles({ repositoryRoot: location.repositoryRoot, iteration: name }).length > 0
+      unusableBaselineReason({ repositoryRoot: location.repositoryRoot, iteration: name }) !==
+      undefined
     ) {
       continue;
     }
@@ -683,9 +803,14 @@ export function flatFileNames(folder: string): string[] {
     .sort((left, right) => left.localeCompare(right));
 }
 
-/** Reads a folder's flat, visible files into file name → bytes. */
-export function readSnapshot(folder: string): ReadonlyMap<string, Buffer> {
-  return new Map(flatFileNames(folder).map((name) => [name, readFileSync(join(folder, name))]));
+/** A folder's flat, visible files ({@link flatFileNames}) as file name → absolute path. */
+export function flatFilePaths(folder: string): ReadonlyMap<string, string> {
+  return new Map(flatFileNames(folder).map((name) => [name, join(folder, name)]));
+}
+
+/** Reads a snapshot's files — file name → path — into file name → bytes. */
+export function readSnapshotBytes(files: ReadonlyMap<string, string>): ReadonlyMap<string, Buffer> {
+  return new Map([...files].map(([name, path]) => [name, readFileSync(path)]));
 }
 
 function byCodeUnit(left: string, right: string): number {
@@ -714,9 +839,17 @@ export function snapshotFingerprint(files: ReadonlyMap<string, Buffer>): string 
   return hash.digest('hex').slice(0, FINGERPRINT_LENGTH);
 }
 
-/** The Intake hash of a folder as it is on disk ({@link snapshotFingerprint}). */
-export function intakeHash(folder: string): string {
-  return snapshotFingerprint(readSnapshot(folder));
+/**
+ * The Intake hash of a snapshot's files — file name → path — as they are on disk
+ * ({@link snapshotFingerprint} of their bytes).
+ *
+ * @remarks
+ * An iteration's Intake hash is taken over its resolved snapshot
+ * (`intakeHash(resolveIntakeSnapshot(location).files)`), so a layered intake's hash also changes
+ * when a file in its Baseline chain changes.
+ */
+export function intakeHash(files: ReadonlyMap<string, string>): string {
+  return snapshotFingerprint(readSnapshotBytes(files));
 }
 
 /** The `## ` sections of {@link BRIEF_SECTIONS} a `BRIEF.md` lacks. */
@@ -960,8 +1093,8 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
   return [...readAllIterationFields(repositoryRoot)]
     .map(([name, fields]) => {
       const field = (label: ReadmeFieldLabel): string => fields.get(label) ?? EMPTY_FIELD;
-      const folder = join(repositoryRoot, ITERATIONS_DIRECTORY, name, INTAKE_DIRECTORY);
-      const liveHash = intakeHash(folder);
+      const resolved = resolveIntakeSnapshot({ repositoryRoot, iteration: name });
+      const liveHash = resolved.problem === undefined ? intakeHash(resolved.files) : 'unresolved';
       return {
         name,
         type: field('Type'),
@@ -970,7 +1103,7 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
         baseline: field('Baseline'),
         status: field('Status'),
         intakeMode: field('Intake mode'),
-        schemaRoutes: schemaRoutesHash(join(folder, 'schema-routes.md')),
+        schemaRoutes: schemaRoutesHash(resolved.files.get('schema-routes.md')),
         intakeHash:
           liveHash === field('Intake hash')
             ? liveHash
@@ -1159,9 +1292,10 @@ export function planStatusChange(request: {
  *
  * @remarks
  * Algorithm: the Baseline must be `none` or an existing iteration in this repository's working
- * tree, other than the iteration itself, opened no later than it, whose `intake-files/` holds the
- * required set (the incremental delta is a diff of `intake-files/`). Sets the Baseline row and
- * appends a History line `Baseline <from> → <to>`.
+ * tree, other than the iteration itself, opened no later than it, whose resolved snapshot resolves
+ * and holds the required set ({@link unusableBaselineReason} — the incremental delta is a diff of
+ * resolved snapshots, and an overlay or a brief resolves the rest of its own from the Baseline).
+ * Sets the Baseline row and appends a History line `Baseline <from> → <to>`.
  *
  * Failure modes: throws on an unknown iteration, a Baseline that is not an earlier iteration, an
  * unchanged Baseline, or an empty `user.name`.
@@ -1188,10 +1322,10 @@ export function planBaselineChange(request: {
         `Baseline "${baseline}" must be "none" or an earlier iteration in this repository — see pnpm iteration:list.`,
       );
     }
-    const missing = missingIntakeFiles({ repositoryRoot, iteration: baseline });
-    if (missing.length > 0) {
+    const unusable = unusableBaselineReason({ repositoryRoot, iteration: baseline });
+    if (unusable !== undefined) {
       throw new Error(
-        `Baseline "${baseline}" has no complete ${INTAKE_DIRECTORY}/ (missing ${missing.join(', ')}) — an incremental iteration diffs ${INTAKE_DIRECTORY}/ against its Baseline's, so it must be there.`,
+        `Baseline "${baseline}" has ${unusable} — an incremental iteration diffs its resolved snapshot against its Baseline's, so the Baseline's must resolve and be complete.`,
       );
     }
   }

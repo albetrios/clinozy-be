@@ -164,7 +164,7 @@ authorize changing either.
 - Every ROUTE row is `done`, or `deferred` with the user's explicit OK.
 - Fill `plans/acceptance.md` — a Result and Evidence for every item.
 - Write the frontend's route map, `plans/frontend-route-map.md`: section 1 the contract changes, section 2
-  each design operation (`intake-files/schema-routes.md` › Operations) → the route that serves it, section 4
+  each design operation (the resolved snapshot's `schema-routes.md` › Operations) → the route that serves it, section 4
   the design features dropped (to remove from the frontend) — by hand; section 3, every route, by
   `pnpm iteration:frontend-map <iteration>` (rerun after any route change; `--check` fails when stale).
 - Finish `AS-BUILT.md` with its closing summary: planned but not built (deferred, user OK), built but

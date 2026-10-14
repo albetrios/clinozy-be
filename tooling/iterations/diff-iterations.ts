@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * pnpm iteration:diff — compare a Baseline's intake-files/ with the current iteration's.
+ * pnpm iteration:diff — compare a Baseline's resolved intake-files/ snapshot with the current
+ * iteration's (an overlay or a brief laid over its Baseline chain).
  *
  * Usage:
  *   pnpm iteration:diff [<baseline>] <current> [--json]

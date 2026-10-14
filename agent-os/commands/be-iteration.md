@@ -26,7 +26,8 @@ needs the user, then continue or change.
    - Topic: lowercase kebab-case, no digits.
    - Repositories: backend only, or backend and frontend (`--both`).
    - Branch: is the current branch `<type>/<topic>`? If not, offer to create it.
-   - The drop: which folder holds the **full** drop (`PRD.md`, `schema-routes.md`)?
+   - The drop: which folder (or single file) holds what arrived — the whole drop (`PRD.md`,
+     `schema-routes.md`), only the changed files, or only a `BRIEF.md`?
 3. **Open it** — `pnpm iteration:new <type> [topic] [--both] --dry-run`, show the name and the
    suggested Baseline, and run it for real only after the user confirms. Write the Summary.
 4. **Place the drop** — ask what arrived: the whole drop (`full`), only the changed files

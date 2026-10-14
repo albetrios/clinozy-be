@@ -17,8 +17,8 @@ Answer these before running anything. `/be-iteration` asks them for you.
 | 3 | **What is the topic?** Lowercase kebab-case words, no digits (`pharmacy-returns`) | It names the folder in both repositories | the folder name, `README.md` › Topic |
 | 4 | **Which repositories does it touch?** backend only, or backend and frontend | `--both` opens the same folder in clinozy-fe and copies `PRD.md` + `schema-routes.md` there | `iteration:new … --both`, `iteration:intake … --both` |
 | 5 | **Are you on the branch it will be built on?** `<type>/<topic>`, per the branch-naming rule | The README records the current branch | `README.md` › Branch |
-| 6 | **What arrived, and where?** The whole drop (`full`), only the changed files (`overlay`), or only a written change, `BRIEF.md` (`brief`) — a folder or a single file | It picks the Intake mode; every mode still leaves a full snapshot | `intake-files/`, `README.md` › Intake mode, Drop source |
-| 7 | **What does it build on?** The Baseline — for a later iteration, normally the latest `done` / `frozen` one, and it must have its own `intake-files/` | The incremental delta is a diff of the two `intake-files/` folders | `README.md` › Baseline (confirmed at planning Step 0) |
+| 6 | **What arrived, and where?** The whole drop (`full`), only the changed files (`overlay`), or only a written change, `BRIEF.md` (`brief`) — a folder or a single file | It picks the Intake mode: `intake-files/` stores only what arrived, and an overlay or a brief resolves the rest from the Baseline | `intake-files/`, `README.md` › Intake mode, Drop source |
+| 7 | **What does it build on?** The Baseline — for a later iteration, normally the latest `done` / `frozen` one, and it must have its own `intake-files/` | The incremental delta is a diff of the two resolved `intake-files/` snapshots, and an overlay or a brief resolves the rest of its own from it | `README.md` › Baseline (confirmed at planning Step 0) |
 
 ## The steps
 
@@ -52,17 +52,23 @@ pnpm iteration:intake <iteration> BRIEF.md --mode brief --both --dry-run     # o
 pnpm iteration:intake <iteration> <source> [--mode …] --both                 # then for real
 ```
 
-- Every mode leaves a **full snapshot** in `intake-files/`: `full` is the drop as received (always the
-  launch); `overlay` lays the received files over the Baseline's snapshot; `brief` adds `BRIEF.md`
-  (start from `tooling/iterations/templates/BRIEF.md`; all six sections required) to the Baseline's
-  snapshot and refuses any other changed file.
+- `intake-files/` stores **only what arrived**: `full` stores the drop as received (always the
+  launch); `overlay` stores the received files, laid over the Baseline's resolved snapshot; `brief`
+  stores `BRIEF.md` (start from `tooling/iterations/templates/BRIEF.md`; all six sections required),
+  added to the Baseline's resolved snapshot, and refuses any other changed file. The resolved
+  snapshot — what every reader works on — is the Baseline chain's files with the stored ones laid
+  over them.
 - `overlay` and `brief` build on the README's Baseline — confirm it first if it is `—`
   (`pnpm iteration:baseline <iteration> <baseline>`); its own intake must pass the gate.
 - The README's Drop placed, Drop source, Intake mode, Intake note, Schema-routes and Intake hash rows
-  are filled. It stops when `PRD.md` or `schema-routes.md` is missing, and when a different snapshot
-  is already there — re-run with `--replace` while the iteration is still `planning`.
-- With `--both`, the sibling's same-named iteration gets a snapshot in the same mode on its own
-  Baseline; `pnpm iteration:list` in both repositories shows the same **Schema-routes** value.
+  are filled from the resolved snapshot. It stops when `PRD.md` or `schema-routes.md` is missing
+  from it, and when different stored files are already there — re-run with `--replace` while the
+  iteration is still `planning`.
+- With `--both`, the sibling's same-named iteration stores its files in the same mode, resolved on
+  its own Baseline; `pnpm iteration:list` in both repositories shows the same **Schema-routes** value.
+- An older overlay or brief that stored copies of its Baseline's files can drop them with
+  `pnpm iteration:intake <iteration> --compact [--dry-run]` — the resolved snapshot and its Intake
+  hash stay the same.
 - Check it: `pnpm iteration:intake <iteration> --check` — the gate planning and kickoff run first.
 
 **Ask before moving on:** is this the final drop for the iteration, and the right Intake mode? Does

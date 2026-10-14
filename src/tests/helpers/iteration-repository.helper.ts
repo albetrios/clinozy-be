@@ -12,6 +12,7 @@ import {
   type IterationReadmeFields,
   intakeHash,
   renderIterationReadme,
+  resolveIntakeSnapshot,
   schemaRoutesHash,
 } from '@tooling/iterations/iteration.util.js';
 import { resolveGitMetadata } from '@tooling/setup/codegen/project-identity.util.js';
@@ -65,8 +66,8 @@ export function createIterationRepository(packageName = 'demo-be'): string {
 /**
  * Writes an iteration folder with a full README (the field values default to a planning launch).
  * `intake` files go into `intake-files/`; with `recordIntake`, the README records them the way an
- * intake would — Intake mode (`full` unless given), note, Schema-routes and the Intake hash — so the
- * gate passes.
+ * intake would — Intake mode (`full` unless given), note, and the Schema-routes and Intake hash of
+ * the resolved snapshot (an overlay or a brief laid over its Baseline's) — so the gate passes.
  */
 export function addTestIteration(iteration: {
   readonly repositoryRoot: string;
@@ -99,25 +100,36 @@ export function addTestIteration(iteration: {
     mkdirSync(join(folder, 'intake-files'), { recursive: true });
     writeFileSync(join(folder, 'intake-files', name), content);
   }
-  const intakeFolder = join(folder, 'intake-files');
-  const recorded: IterationReadmeFields = iteration.recordIntake
-    ? {
-        ...fields,
-        intakeMode: iteration.fields?.intakeMode ?? 'full',
-        intakeNote:
-          iteration.fields?.intakeNote ?? `${Object.keys(iteration.intake ?? {}).length} received`,
-        schemaRoutes: schemaRoutesHash(join(intakeFolder, 'schema-routes.md')),
-        intakeHash: intakeHash(intakeFolder),
-      }
-    : fields;
   const history =
     iteration.history === undefined || iteration.history.length === 0
       ? ''
       : `\n## History\n\n${iteration.history.join('\n')}\n`;
-  writeFileSync(
-    join(folder, 'README.md'),
-    `${renderIterationReadme({ name: iteration.name, fields: recorded })}${history}`,
-  );
+  const writeReadme = (values: IterationReadmeFields): void => {
+    writeFileSync(
+      join(folder, 'README.md'),
+      `${renderIterationReadme({ name: iteration.name, fields: values })}${history}`,
+    );
+  };
+  if (!iteration.recordIntake) {
+    writeReadme(fields);
+    return folder;
+  }
+  const withMode: IterationReadmeFields = {
+    ...fields,
+    intakeMode: iteration.fields?.intakeMode ?? 'full',
+    intakeNote:
+      iteration.fields?.intakeNote ?? `${Object.keys(iteration.intake ?? {}).length} received`,
+  };
+  writeReadme(withMode);
+  const resolved = resolveIntakeSnapshot({
+    repositoryRoot: iteration.repositoryRoot,
+    iteration: iteration.name,
+  });
+  writeReadme({
+    ...withMode,
+    schemaRoutes: schemaRoutesHash(resolved.files.get('schema-routes.md')),
+    intakeHash: intakeHash(resolved.files),
+  });
   return folder;
 }
 
