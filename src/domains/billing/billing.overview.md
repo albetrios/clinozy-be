@@ -69,6 +69,7 @@ stateDiagram-v2
 ## External integrations
 
 - **Stripe** — subscriptions, invoices, customer portal links, webhooks. Wrapped by [src/infrastructure/payment/stripe.client.ts](src/infrastructure/payment/stripe.client.ts), which runs every call through `outboundCall` behind the shared Redis-backed `stripe` circuit.
+  Required in production: the env schema refuses to boot without `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. Elsewhere both may be unset, and a subscription is then recorded locally (no provider id) and never charged.
 
 ## Failure modes
 

@@ -6,7 +6,7 @@ import {
   MEMBERSHIP_STATUS,
   type MembershipStatus,
 } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
-import { sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
@@ -14,6 +14,7 @@ import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.sc
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { role_permissions } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.schema.js';
 import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
+import { membership_additional_roles } from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
 import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
 
 /** Input for {@link seedOrganization}; `owner_user_id` is the internal id of the future organization owner. */
@@ -118,6 +119,9 @@ export interface SeedMembershipPayload {
   created_by_user_id: number;
   joined_at?: Date | null;
   invited_by_user_id?: number;
+  /** The member's staff profile (Users › Team): their colour and phone; absent = the defaults. */
+  tone?: string;
+  phone?: string;
 }
 
 /**
@@ -125,7 +129,8 @@ export interface SeedMembershipPayload {
  * given role. When status is `invited` `joined_at` is left null; otherwise it
  * defaults to `now()` so demo flows can immediately resolve permissions.
  * `invited_by_user_id` is recorded when provided (e.g. seeded invitations).
- * Idempotent: re-running updates `role_id` and `status` on (user_id, organization_id) conflict.
+ * Idempotent: re-running updates `role_id`, `status` (and `tone` / `phone` when given) on
+ * (user_id, organization_id) conflict.
  */
 export async function seedMembership(payload: SeedMembershipPayload) {
   const status = payload.status ?? MEMBERSHIP_STATUS.ACTIVE;
@@ -140,11 +145,18 @@ export async function seedMembership(payload: SeedMembershipPayload) {
       joined_at: payload.joined_at ?? (status === MEMBERSHIP_STATUS.INVITED ? null : new Date()),
       created_by_user_id: payload.created_by_user_id,
       invited_by_user_id: payload.invited_by_user_id ?? null,
+      ...(payload.tone === undefined ? {} : { tone: payload.tone }),
+      ...(payload.phone === undefined ? {} : { phone: payload.phone }),
     })
     .onConflictDoUpdate({
       target: [memberships.user_id, memberships.organization_id],
       targetWhere: sql`${memberships.deleted_at} IS NULL`,
-      set: { role_id: payload.role_id, status },
+      set: {
+        role_id: payload.role_id,
+        status,
+        ...(payload.tone === undefined ? {} : { tone: payload.tone }),
+        ...(payload.phone === undefined ? {} : { phone: payload.phone }),
+      },
     })
     .returning();
   return row ?? null;
@@ -175,6 +187,54 @@ export async function seedRolePermissions({
     )
     .onConflictDoNothing()
     .returning();
+}
+
+/**
+ * Gives a membership an "Also" role after its main one (`membership_additional_roles`, position 1
+ * onwards) — a clinic's owner who also sees patients as a Doctor. Safe to re-run.
+ */
+export async function seedMembershipAdditionalRole(options: {
+  membership_id: number;
+  role_id: number;
+  organization_id: number;
+  position: number;
+  created_by_user_id: number;
+}): Promise<void> {
+  await getRequestDatabase()
+    .insert(membership_additional_roles)
+    .values(options)
+    .onConflictDoNothing();
+}
+
+/** The id of the live organization with this slug, or `null` when there is none. */
+export async function findSeededOrganizationId(slug: string): Promise<number | null> {
+  const [row] = await getRequestDatabase()
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(and(eq(organizations.slug, slug), isNull(organizations.deleted_at)))
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/**
+ * Removes a seeded organization and everything it owns, for a seed that rebuilds it
+ * (`pnpm db:seed:demo-clinic --fresh`). The foreign keys cascade from the organization; the
+ * audit log, sessions and notifications keep their rows with the organization cleared.
+ */
+export async function deleteSeededOrganization(organizationId: number): Promise<void> {
+  await getRequestDatabase().delete(organizations).where(eq(organizations.id, organizationId));
+}
+
+/** Sets an organization's clinic profile: what it practises and the time zone its day runs in. */
+export async function seedOrganizationProfile(options: {
+  organization_id: number;
+  specialties: readonly string[];
+  timezone: string;
+}): Promise<void> {
+  await getRequestDatabase()
+    .update(organizations)
+    .set({ specialties: [...options.specialties], timezone: options.timezone })
+    .where(eq(organizations.id, options.organization_id));
 }
 
 /**

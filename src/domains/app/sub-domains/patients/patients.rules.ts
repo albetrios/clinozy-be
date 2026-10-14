@@ -108,15 +108,6 @@ export async function assertOfferingActive({
   }
 }
 
-/** `2026-10-08` → `8 Oct` — a patient-file date as a label names it (TR9, PK8). */
-export function shortCalendarDate(date: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  }).format(new Date(`${date}T00:00:00Z`));
-}
-
 /** The patient's usual doctor (internal membership id), or null. */
 export async function usualDoctorOf(patientId: number): Promise<number | null> {
   const patient = await patientsRepository.findById(patientId);

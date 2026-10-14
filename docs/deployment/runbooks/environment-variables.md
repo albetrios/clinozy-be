@@ -335,6 +335,7 @@ instead of running insecure — you cannot ship the dev value:
 | `FRONTEND_URL`                        | optional (dev fallback)   | **required**, `https://` (emailed links and the OAuth callback are built from it) |
 | `S3_BUCKET` + `S3_REGION`             | optional                  | **required** (uploads and personal-data exports); the access-key pair is set together or not at all |
 | `RESEND_API_KEY`                      | optional (mail skipped)   | **required** (email codes, password resets, invitations) — and with it `EMAIL_FROM_ADDRESS` |
+| `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` | empty (no payment provider) | **both required**: the live key (`sk_live_…`) and the signing secret (`whsec_…`) of the production webhook endpoint — unset, subscriptions are recorded locally and never charged, and Stripe events are refused |
 | `WEBAUTHN_RP_ID`                      | `localhost` / fallback    | optional; when set, a bare hostname the `FRONTEND_URL` host equals or sits under (passkeys are bound to it) |
 | `COOKIE_SECURE`                       | `false`                   | `true` (cookies sent over HTTPS only)                                              |
 | `UPLOAD_USE_PRESIGNED_POST`           | may be `false`            | `true` (presigned PUT has no min-size enforcement)                                 |

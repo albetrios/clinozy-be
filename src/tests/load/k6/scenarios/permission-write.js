@@ -1,6 +1,6 @@
 import http from 'k6/http';
 import { sleep } from 'k6';
-import { API_PREFIX, THRESHOLDS, SCENARIOS } from '../helpers/config.js';
+import { API_PREFIX, DELETE_REASON_QUERY, THRESHOLDS, SCENARIOS } from '../helpers/config.js';
 import { checkOk, checkResponseTime } from '../helpers/checks.js';
 import { authHeaders } from '../helpers/auth.js';
 import { idempotencyKey } from '../helpers/idempotency.js';
@@ -88,7 +88,7 @@ export function teardown(data) {
   if (!(token && data?.roleId)) {
     return;
   }
-  http.del(`${API_PREFIX}/tenancy/organization/roles/${data.roleId}`, null, {
+  http.del(`${API_PREFIX}/tenancy/organization/roles/${data.roleId}?${DELETE_REASON_QUERY}`, null, {
     ...authHeaders(token),
     tags: { name: 'delete-target-role' },
   });

@@ -209,7 +209,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-seed-maintainer/SKILL.md",
-      "computedHash": "9b5cb0124f2c14243b3a232ddcab53e0c6fe42ac23424a54abcd62f216d5471c"
+      "computedHash": "ccd7d8c747441eac4be1abaa5ffd3bb36ee3304fae78c2217727cd4753233ede"
     },
     "be-skill-index": {
       "source": "local",
@@ -233,7 +233,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-structure-maintainer/SKILL.md",
-      "computedHash": "bb7e16a23bdbb3e6180f46a7d82a4144ba003f8a84a8b00e14fac2891b23a0a0"
+      "computedHash": "8a7f9da42075c3f47092a16f47b36645d5046c619fc20022282c7f708b3f2d89"
     },
     "be-supabase-porting": {
       "source": "local",

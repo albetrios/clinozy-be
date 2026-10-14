@@ -53,6 +53,9 @@ const ALLOWED_IMPORTERS = [
   'src/domains/user/user.service.ts',
   // The namespace's own definition module.
   'src/infrastructure/database/contexts/database-context.ts',
+  // The demo clinic seed (`pnpm db:seed:demo-clinic`): writes the records of the organization it
+  // has just provisioned, in one transaction — the provisioning path's own claim, from a script.
+  'src/scripts/seed/demo-clinic.ts',
 ] as const;
 
 function productionImportersOf(moduleFragment: string): string[] {

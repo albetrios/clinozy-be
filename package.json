@@ -1,6 +1,6 @@
 {
   "name": "clinozy-be",
-  "version": "9.0.0",
+  "version": "9.0.1",
   "description": "Node.js API with Fastify, Drizzle ORM, and BullMQ",
   "license": "MIT",
   "private": true,
@@ -138,6 +138,7 @@
     "db:seed": "tsx src/scripts/seed/minimal.ts",
     "db:seed:full": "tsx src/scripts/seed/full.ts",
     "db:seed:demo-admin": "tsx src/scripts/seed/ensure-demo-admin.ts",
+    "db:seed:demo-clinic": "tsx src/scripts/seed/demo-clinic.ts",
     "db:seed:bulk": "tsx src/scripts/seed/bulk.ts",
     "db:seed:loadtest": "BULK_PROFILE=demo BULK_ORGS=12 BULK_USERS_PER_ORG=10 pnpm db:seed:bulk && pnpm tool:load-test-credential-pool",
     "db:seed:sync-demo": "tsx src/scripts/seed/sync-demo-permissions.ts",
@@ -200,6 +201,7 @@
     "tool:send-load-test-results-email": "tsx src/scripts/ops/send-load-test-results-email.ts",
     "verify:base": "tsx src/scripts/ops/verify-base.ts",
     "ops:secrets:rotate": "tsx src/scripts/ops/secrets-key-rotate.ts",
+    "ops:storage:cors": "tsx src/scripts/ops/storage-cors.ts",
     "ops:stripe:reconcile": "tsx src/scripts/ops/stripe-subscription-reconcile.ts",
     "ops:worker:drain": "tsx src/scripts/ops/worker-drain.ts",
     "setup:local": "tsx tooling/dev/setup-local.ts",

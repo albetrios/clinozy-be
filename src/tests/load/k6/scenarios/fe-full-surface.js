@@ -1,5 +1,5 @@
 import http from 'k6/http';
-import { PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
+import { DELETE_REASON_QUERY, PUBLIC_AUTH_FORM_HEADERS } from '../helpers/config.js';
 import { idempotencyKey } from '../helpers/idempotency.js';
 import { check, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
@@ -11,7 +11,7 @@ import { SharedArray } from 'k6/data';
  * Where `full-journey.js` starts from the backend's route catalogue and asks "what can one user
  * reach", this starts from the OTHER side: every `apiClient` call site in `clinozy-fe`, resolved to a
  * concrete path, walked in the order the app performs it. If the front end does not call it, it is
- * not here — even when the backend exposes it. The one exception is teardown: step 52 deletes the
+ * not here — even when the backend exposes it. The one exception is teardown: step 53 deletes the
  * organization the journey created, which clinozy-fe itself never does.
  *
  * ## Where the list came from
@@ -24,9 +24,10 @@ import { SharedArray } from 'k6/data';
  * `clinozy-fe/src/core/config/constants.ts`, plus the lists the app reads through `fetchListPage` /
  * `fetchAllPages` (API keys, roles, memberships, webhooks and their delivery attempts,
  * notifications, invoices). That comes to **78** distinct calls (method + path). This scenario
- * walks **52** of them — 49 by default and three more behind `STEP_UP=true` — in 55 steps: it
- * reads `me/context` three times, as the app does, and step 52 is the teardown above. The block
- * below states why each of the other **26** is out of reach for a signed-in pool user.
+ * walks **53** of them — 49 by default, one more behind `SUBSCRIBE=true` and three more behind
+ * `STEP_UP=true` — in 56 steps: it reads `me/context` three times, as the app does, and step 53 is
+ * the teardown above. The block below states why each of the other **25** is out of reach for a
+ * signed-in pool user.
  *
  * ## What the front end calls that this cannot do
  *
@@ -54,9 +55,9 @@ import { SharedArray } from 'k6/data';
  *   DELETE /users/me                      Ends the account, and pool users are reused every run.
  *   POST /notify/webhooks/:id/test        Delivers to the webhook's URL, live.
  *
- * Also out: Stripe — `POST /billing/subscriptions`, `payment-methods/setup`, and a subscription's
- * `change-plan`, `cancel`, `resume` and `payment-setup` — and `GET /billing/subscriptions/:id`,
- * since a new organization has no subscription until Stripe creates one. And the S3 upload flow —
+ * Also out: Stripe — `payment-methods/setup`, and a subscription's `change-plan`, `cancel`,
+ * `resume` and `payment-setup` — and `GET /billing/subscriptions/:id`, since a new organization has
+ * no subscription unless step 42 makes one. And the S3 upload flow —
  * `POST /uploads`, `POST /uploads/:id/confirm`, `PUT`/`DELETE /users/me/avatar` and
  * `PUT`/`DELETE /tenancy/organization/logo`: the file goes straight to S3 and `confirm` checks
  * the object there, so the flow needs a bucket a load run does not have.
@@ -69,13 +70,25 @@ import { SharedArray } from 'k6/data';
  * is per VU and runs in parallel, so it costs ~60s of wall clock for the whole run rather than 60s
  * each. It is still off by default; set `STEP_UP=true` to include it and the two routes it unlocks.
  *
+ * ## The subscription is opt-in
+ *
+ * A new organization has no subscription, so it gets the Free plan's single seat — and the owner
+ * fills it, so the invite in step 44 is refused (`409 seat_limit_reached`) and steps 44-46 cannot
+ * run. `SUBSCRIBE=true` adds step 42: `POST /billing/subscriptions` to the cheapest plan with a
+ * second seat, as the app's plan picker does. Against an API with no payment provider
+ * (`STRIPE_SECRET_KEY` unset — the nightly job) the API records that subscription itself,
+ * `TRIALING`, and its seats apply at once; the member steps are then required. With Stripe
+ * configured the call creates a sandbox subscription that waits for payment and keeps the Free
+ * ceiling, so it stays off by default; without it the summary reports why steps 44-46 did not run.
+ *
  * ## Self-cleaning
  *
  * Each VU creates its own TEAM organization, invites a SECOND pool user into it to exercise the
- * membership routes, and deletes the organization at the end — which takes the membership with it.
- * The invitee is an existing pool user rather than a freshly signed-up account, so no user rows
- * accumulate. Step 54 re-reads `me/context` and requires the organization to be gone from the
- * owner's own list; the proof runs inside the session rather than against the database.
+ * membership routes, and deletes the organization at the end — which takes the membership, and the
+ * subscription step 42 made, with it. The invitee is an existing pool user rather than a freshly
+ * signed-up account, so no user rows accumulate. Step 55 re-reads `me/context` and requires the
+ * organization to be gone from the owner's own list; the proof runs inside the session rather than
+ * against the database.
  *
  * Run:
  *   TEST_MODE=true AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED=true \
@@ -84,6 +97,9 @@ import { SharedArray } from 'k6/data';
  *
  *   # include the step-up cluster (adds a 60s wait per VU, in parallel):
  *   BASE_URL=http://localhost:3000 VUS=20 STEP_UP=true k6 run src/tests/load/k6/scenarios/fe-full-surface.js
+ *
+ *   # include the subscription and so the member steps (an API started without STRIPE_SECRET_KEY):
+ *   BASE_URL=http://localhost:3000 VUS=20 SUBSCRIBE=true k6 run src/tests/load/k6/scenarios/fe-full-surface.js
  *
  *   # re-running within 5 minutes? DELETE /organization is 5 per 5 min per user — move along the pool:
  *   BASE_URL=http://localhost:3000 VUS=20 USER_OFFSET=20 k6 run src/tests/load/k6/scenarios/fe-full-surface.js
@@ -98,6 +114,7 @@ const STATIC_CODE = __ENV.STATIC_CODE || 'TEST24';
 const OAUTH_PROVIDER = __ENV.OAUTH_PROVIDER || 'google';
 const USER_OFFSET = Number(__ENV.USER_OFFSET || 0);
 const STEP_UP = String(__ENV.STEP_UP || '').toLowerCase() === 'true';
+const SUBSCRIBE = String(__ENV.SUBSCRIBE || '').toLowerCase() === 'true';
 
 const credentialPool = new SharedArray('pool', () =>
   JSON.parse(open('../data/credential-pool.json')),
@@ -162,28 +179,34 @@ const STEPS = [
   ['40-put-role-perms', 'PUT', '/tenancy/organization/roles/:id/permissions'],
   ['41-delete-role', 'DELETE', '/tenancy/organization/roles/:id'],
 
-  // ── settings › members (needs a second identity) ───────────────────────────
-  ['42-list-memberships', 'GET', '/tenancy/organization/memberships'],
-  ['43-invite-member', 'POST', '/tenancy/organization/memberships'],
-  ['44-patch-membership', 'PATCH', '/tenancy/organization/memberships/:id'],
-  ['45-delete-membership', 'DELETE', '/tenancy/organization/memberships/:id'],
+  // ── settings › billing: a plan with a seat for the member, only when SUBSCRIBE=true ──
+  ['42-subscribe', 'POST', '/billing/subscriptions'],
 
-  // ── billing screen (reads only; every write goes to Stripe) ────────────────
-  ['46-list-subscriptions', 'GET', '/billing/subscriptions'],
-  ['47-list-invoices', 'GET', '/billing/invoices'],
-  ['48-payment-methods', 'GET', '/billing/payment-methods'],
+  // ── settings › members (needs a second identity) ───────────────────────────
+  ['43-list-memberships', 'GET', '/tenancy/organization/memberships'],
+  ['44-invite-member', 'POST', '/tenancy/organization/memberships'],
+  ['45-patch-membership', 'PATCH', '/tenancy/organization/memberships/:id'],
+  ['46-delete-membership', 'DELETE', '/tenancy/organization/memberships/:id'],
+
+  // ── billing screen (reads only; its other writes go to Stripe) ─────────────
+  ['47-list-subscriptions', 'GET', '/billing/subscriptions'],
+  ['48-list-invoices', 'GET', '/billing/invoices'],
+  ['49-payment-methods', 'GET', '/billing/payment-methods'],
 
   // ── step-up cluster, only when STEP_UP=true ────────────────────────────────
-  ['49-step-up', 'POST', '/auth/step-up'],
-  ['50-mfa-enroll', 'POST', '/auth/me/mfa/enroll'],
-  ['51-webauthn-options', 'POST', '/auth/me/webauthn/register/options'],
+  ['50-step-up', 'POST', '/auth/step-up'],
+  ['51-mfa-enroll', 'POST', '/auth/me/mfa/enroll'],
+  ['52-webauthn-options', 'POST', '/auth/me/webauthn/register/options'],
 
   // ── teardown (clinozy-fe never deletes an organization), then sign out ────────
-  ['52-delete-org', 'DELETE', '/tenancy/organization'],
-  ['53-switch-personal', 'POST', '/auth/switch-to-personal'],
-  ['54-me-context-3', 'GET', '/auth/me/context'],
-  ['55-logout', 'POST', '/auth/logout'],
+  ['53-delete-org', 'DELETE', '/tenancy/organization'],
+  ['54-switch-personal', 'POST', '/auth/switch-to-personal'],
+  ['55-me-context-3', 'GET', '/auth/me/context'],
+  ['56-logout', 'POST', '/auth/logout'],
 ];
+
+/** Steps one journey walks: the step-up cluster (3) and the subscription (1) only when asked. */
+const PLANNED_STEPS = STEPS.length - (STEP_UP ? 0 : 3) - (SUBSCRIBE ? 0 : 1);
 
 const metricKey = (name) => name.replace(/-/g, '_');
 
@@ -293,8 +316,12 @@ function publicBlock() {
   const active = rows(body(plans)).filter((plan) => plan.is_active);
   active.sort((a, b) => Number(a.price_monthly ?? 0) - Number(b.price_monthly ?? 0));
   const seatCeiling = active.length > 0 ? (active[0].limits?.seats ?? null) : null;
+  // The plan SUBSCRIBE=true takes: the cheapest with a seat for the owner AND the invitee (a null
+  // seat limit is unlimited).
+  const memberPlan =
+    active.find((plan) => plan.limits?.seats === null || (plan.limits?.seats ?? 0) >= 2) ?? null;
 
-  return { ok: state.ok, seatCeiling };
+  return { ok: state.ok, seatCeiling, memberPlan };
 }
 
 /** 07-15 the account surface the app renders once signed in. */
@@ -670,7 +697,8 @@ function roleBlock(auth, unique) {
     );
     step(
       '41-delete-role',
-      http.del(`${API}/tenancy/organization/roles/${roleId}`, null, {
+      // A role delete states why (launch T12); without `reason` the API answers 400.
+      http.del(`${API}/tenancy/organization/roles/${roleId}?${DELETE_REASON_QUERY}`, null, {
         headers: auth,
         tags: { name: '41-delete-role' },
       }),
@@ -684,8 +712,55 @@ function roleBlock(auth, unique) {
   return state.ok;
 }
 
+/** A new subscription that grants its plan's seats at once (`INCOMPLETE` waits for payment). */
+const ENTITLED_SUBSCRIPTION_STATUSES = ['TRIALING', 'ACTIVE'];
+
 /**
- * 42-45 settings › members.
+ * 42 settings › billing — only when SUBSCRIBE=true: subscribe the organization to the cheapest plan
+ * with a seat for the member the next block invites.
+ *
+ * A new organization has no subscription, so it gets the Free plan's single seat, and the owner
+ * already fills it. Against an API with no payment provider (`STRIPE_SECRET_KEY` unset — the
+ * nightly job) this is the subscription itself: the API records it locally, `TRIALING`, and the
+ * plan's seats apply at once. With Stripe configured the same call creates a sandbox subscription
+ * that waits for payment (`INCOMPLETE`) and keeps the Free ceiling, so leave SUBSCRIBE off there.
+ * Deleting the organization at teardown cancels the subscription with it.
+ *
+ * Returns the seat ceiling the member block works against: the subscribed plan's, or the Free one
+ * from the opening block when step 42 is skipped or grants nothing.
+ */
+function subscriptionBlock(auth, opening) {
+  const state = { ok: true };
+  const plan = opening.memberPlan;
+  if (!(SUBSCRIBE && plan)) {
+    // An empty catalogue has no ceiling to raise and nothing to subscribe to. A catalogue with no
+    // plan that seats two cannot host the member steps, and the member block fails for it.
+    skip('42-subscribe');
+    return { ok: true, seatCeiling: opening.seatCeiling };
+  }
+
+  const subscribed = http.post(
+    `${API}/billing/subscriptions`,
+    JSON.stringify({ plan_id: plan.id, billing_cycle: 'monthly' }),
+    {
+      headers: { ...auth, 'X-Idempotency-Key': idempotencyKey('fe-subscribe') },
+      tags: { name: '42-subscribe' },
+    },
+  );
+  const created = record('42-subscribe', subscribed, [200]);
+  const entitled =
+    created && ENTITLED_SUBSCRIPTION_STATUSES.includes(String(body(subscribed).status));
+  check(subscribed, { "42 subscription grants the plan's seats": () => entitled });
+  if (!entitled) state.ok = false;
+
+  return {
+    ok: state.ok,
+    seatCeiling: entitled ? (plan.limits?.seats ?? null) : opening.seatCeiling,
+  };
+}
+
+/**
+ * 43-46 settings › members.
  *
  * The invitee is ANOTHER pool user rather than a freshly signed-up account, so the run creates no
  * user rows. Inviting writes the mail to the transactional outbox and enqueues a job — the Resend
@@ -697,124 +772,123 @@ function membershipBlock(auth, inviteeEmail, seatCeiling) {
   const step = stepper(state);
 
   const listed = step(
-    '42-list-memberships',
+    '43-list-memberships',
     http.get(`${API}/tenancy/organization/memberships`, {
       headers: auth,
-      tags: { name: '42-list-memberships' },
+      tags: { name: '43-list-memberships' },
     }),
     [200],
   );
 
-  // The invite needs a role id, and the role must be one this Owner may grant.
+  // The invite takes the member's roles (`role_ids`, the main role first — launch D5), from the roles
+  // a new clinic is provisioned with. Owner and Admin are `is_locked`; any other one this Owner may
+  // grant. Step 45 then moves the member to a second role.
   const roleList = http.get(`${API}/tenancy/organization/roles`, {
     headers: auth,
     tags: { name: 'roles-lookup' },
   });
-  const available = rows(body(roleList));
-  const member =
-    available.find((r) =>
-      String(r.name || '')
-        .toUpperCase()
-        .startsWith('MEMBER'),
-    ) ?? available[0];
-  const viewer =
-    available.find((r) =>
-      String(r.name || '')
-        .toUpperCase()
-        .startsWith('VIEWER'),
-    ) ?? member;
+  const grantable = rows(body(roleList)).filter((role) => !role.is_locked);
+  const member = grantable[0];
+  const nextRole = grantable[1] ?? member;
 
   if (!member || listed.status !== 200) {
-    for (const n of ['43-invite-member', '44-patch-membership', '45-delete-membership']) skip(n);
+    for (const n of ['44-invite-member', '45-patch-membership', '46-delete-membership']) skip(n);
     return false;
   }
 
   // A seat is consumed by ACTIVE **and** INVITED memberships, and the owner already holds one. With
-  // the real plan catalogue seeded the cheapest active plan is Free at a single seat, so there is
-  // no room for anyone else and the invite would come back 409 `seat_limit_reached`. Raising the
-  // ceiling means subscribing to Starter (5) or Pro (25), which is a Stripe call — verified: it
-  // answers 503 with no Stripe reachable. Skip rather than fire a request known to fail, so the
-  // board stays clean and the summary explains why these three did not run.
+  // the real plan catalogue seeded and no subscription, the ceiling is the Free plan's single seat,
+  // so there is no room for anyone else and the invite would come back 409 `seat_limit_reached`.
+  // SUBSCRIBE=true raises it first (step 42). Without it, skip rather than fire a request known to
+  // fail, so the board stays clean and the summary explains why these three did not run; with it,
+  // a full ceiling means the subscription did not take, and the journey fails.
   const seatsUsed = rows(body(listed)).length;
   if (seatCeiling !== null && seatsUsed >= seatCeiling) {
     seatLimitHit.add(1);
-    for (const n of ['43-invite-member', '44-patch-membership', '45-delete-membership']) skip(n);
-    return true;
+    for (const n of ['44-invite-member', '45-patch-membership', '46-delete-membership']) skip(n);
+    return !SUBSCRIBE;
   }
 
   const invited = http.post(
     `${API}/tenancy/organization/memberships`,
-    JSON.stringify({ email: inviteeEmail, role_id: member.id }),
+    JSON.stringify({ email: inviteeEmail, role_ids: [member.id] }),
     {
       headers: { ...auth, 'X-Idempotency-Key': idempotencyKey('fe-invite') },
-      tags: { name: '43-invite-member' },
+      tags: { name: '44-invite-member' },
     },
   );
-  // A 409 `seat_limit_reached` is a PLAN constraint, not a failure: a new organization lands on the
-  // Free plan, which allows exactly one seat, so the owner is already the whole allowance. Raising
-  // it means subscribing to Starter (5) or Pro (25) — a Stripe call this run deliberately avoids.
-  // Accept that outcome so the run reads honestly either way: with no plans seeded the invite
-  // succeeds and the member routes run end to end; with the real catalogue seeded it is refused,
-  // and the summary says which happened instead of reporting a red run.
+  // Without SUBSCRIBE a 409 `seat_limit_reached` is a PLAN constraint, not a failure: a new
+  // organization lands on the Free plan, which allows exactly one seat, so the owner is already the
+  // whole allowance. Accept that outcome so the run reads honestly either way: with no plans seeded
+  // the invite succeeds and the member routes run end to end; with the real catalogue seeded it is
+  // refused, and the summary says which happened instead of reporting a red run. With SUBSCRIBE
+  // the plan has the seat, so a refusal is a failure.
   const seatLimited =
-    invited.status === 409 && String(invited.body || '').includes('seat_limit_reached');
+    !SUBSCRIBE &&
+    invited.status === 409 &&
+    String(invited.body || '').includes('seat_limit_reached');
   if (seatLimited) seatLimitHit.add(1);
-  const inviteOk = record('43-invite-member', invited, seatLimited ? [409] : [200, 201]);
+  const inviteOk = record('44-invite-member', invited, seatLimited ? [409] : [200, 201]);
   if (!inviteOk) state.ok = false;
   const membershipId = !seatLimited && inviteOk ? (body(invited).id ?? null) : null;
 
   if (membershipId) {
     step(
-      '44-patch-membership',
+      '45-patch-membership',
       http.patch(
         `${API}/tenancy/organization/memberships/${membershipId}`,
-        JSON.stringify({ role_id: viewer.id }),
+        JSON.stringify({ role_ids: [nextRole.id] }),
         {
           headers: auth,
-          tags: { name: '44-patch-membership' },
+          tags: { name: '45-patch-membership' },
         },
       ),
       [200],
     );
     step(
-      '45-delete-membership',
-      http.del(`${API}/tenancy/organization/memberships/${membershipId}`, null, {
-        headers: auth,
-        tags: { name: '45-delete-membership' },
-      }),
+      '46-delete-membership',
+      // A removal states why (launch T12); without `reason` the API answers 400.
+      http.del(
+        `${API}/tenancy/organization/memberships/${membershipId}?${DELETE_REASON_QUERY}`,
+        null,
+        {
+          headers: auth,
+          tags: { name: '46-delete-membership' },
+        },
+      ),
       [200, 204],
     );
   } else {
-    skip('44-patch-membership');
-    skip('45-delete-membership');
+    skip('45-patch-membership');
+    skip('46-delete-membership');
   }
 
   return state.ok;
 }
 
-/** 46-48 the billing screen. Reads only — every write on it goes to Stripe. */
+/** 47-49 the billing screen. Reads only — its writes go to Stripe (step 42 aside). */
 function billingBlock(auth) {
   const state = { ok: true };
   const step = stepper(state);
 
   step(
-    '46-list-subscriptions',
+    '47-list-subscriptions',
     http.get(`${API}/billing/subscriptions`, {
       headers: auth,
-      tags: { name: '46-list-subscriptions' },
+      tags: { name: '47-list-subscriptions' },
     }),
     [200],
   );
   step(
-    '47-list-invoices',
-    http.get(`${API}/billing/invoices`, { headers: auth, tags: { name: '47-list-invoices' } }),
+    '48-list-invoices',
+    http.get(`${API}/billing/invoices`, { headers: auth, tags: { name: '48-list-invoices' } }),
     [200],
   );
   step(
-    '48-payment-methods',
+    '49-payment-methods',
     http.get(`${API}/billing/payment-methods`, {
       headers: auth,
-      tags: { name: '48-payment-methods' },
+      tags: { name: '49-payment-methods' },
     }),
     [200],
   );
@@ -823,7 +897,7 @@ function billingBlock(auth) {
 }
 
 /**
- * 49-51 the step-up cluster, only when STEP_UP=true.
+ * 50-52 the step-up cluster, only when STEP_UP=true.
  *
  * A verification code is issued at most once per 60 seconds per email and sign-in consumed the
  * first one, so this waits out that cooldown before asking for a second. The wait is per VU and
@@ -832,6 +906,10 @@ function billingBlock(auth) {
 function stepUpBlock(auth, email) {
   const state = { ok: true };
   const step = stepper(state);
+  if (!STEP_UP) {
+    for (const n of ['50-step-up', '51-mfa-enroll', '52-webauthn-options']) skip(n);
+    return true;
+  }
 
   sleep(63);
   const reissued = http.post(`${API}/auth/email/send-code`, JSON.stringify({ email }), {
@@ -841,31 +919,31 @@ function stepUpBlock(auth, email) {
   const code = reissued.status === 200 ? body(reissued).debug_verification_code : null;
   if (!code) {
     // Without TEST_MODE the real code never reaches the client, so step-up cannot be reached.
-    for (const n of ['49-step-up', '50-mfa-enroll', '51-webauthn-options']) skip(n);
+    for (const n of ['50-step-up', '51-mfa-enroll', '52-webauthn-options']) skip(n);
     return false;
   }
 
   step(
-    '49-step-up',
+    '50-step-up',
     http.post(`${API}/auth/step-up`, JSON.stringify({ code }), {
       headers: auth,
-      tags: { name: '49-step-up' },
+      tags: { name: '50-step-up' },
     }),
     [200],
   );
   step(
-    '50-mfa-enroll',
+    '51-mfa-enroll',
     http.post(`${API}/auth/me/mfa/enroll`, JSON.stringify({ method_type: 'MFA_TOTP' }), {
       headers: auth,
-      tags: { name: '50-mfa-enroll' },
+      tags: { name: '51-mfa-enroll' },
     }),
     [200],
   );
   step(
-    '51-webauthn-options',
+    '52-webauthn-options',
     http.post(`${API}/auth/me/webauthn/register/options`, JSON.stringify({}), {
       headers: auth,
-      tags: { name: '51-webauthn-options' },
+      tags: { name: '52-webauthn-options' },
     }),
     [200],
   );
@@ -873,7 +951,7 @@ function stepUpBlock(auth, email) {
   return state.ok;
 }
 
-/** 52-55 teardown: step up, delete what this VU made, return home, prove it is gone, sign out. */
+/** 53-56 teardown: step up, delete what this VU made, return home, prove it is gone, sign out. */
 function teardownBlock(auth, json, slug, password) {
   const state = { ok: true };
   const step = stepper(state);
@@ -887,9 +965,9 @@ function teardownBlock(auth, json, slug, password) {
   });
   const removed = http.del(`${API}/tenancy/organization`, null, {
     headers: session,
-    tags: { name: '52-delete-org' },
+    tags: { name: '53-delete-org' },
   });
-  const removedOk = record('52-delete-org', removed, [200, 204]);
+  const removedOk = record('53-delete-org', removed, [200, 204]);
   if (!removedOk) {
     state.ok = false;
     orgsLeaked.add(1);
@@ -899,10 +977,10 @@ function teardownBlock(auth, json, slug, password) {
   // Deleting the active organization leaves this token scoped to a row that no longer resolves —
   // `me/context` answers 404 "Organization not found" until the session moves somewhere real.
   const home = step(
-    '53-switch-personal',
+    '54-switch-personal',
     http.post(`${API}/auth/switch-to-personal`, null, {
       headers: session,
-      tags: { name: '53-switch-personal' },
+      tags: { name: '54-switch-personal' },
     }),
     [200],
   );
@@ -912,14 +990,14 @@ function teardownBlock(auth, json, slug, password) {
   }
 
   const after = step(
-    '54-me-context-3',
-    http.get(`${API}/auth/me/context`, { headers: session, tags: { name: '54-me-context-3' } }),
+    '55-me-context-3',
+    http.get(`${API}/auth/me/context`, { headers: session, tags: { name: '55-me-context-3' } }),
     [200],
   );
   if (removedOk) {
     if (after.status === 200) {
       const stillListed = (body(after).organizations ?? []).some((o) => o?.slug === slug);
-      check(after, { '54 organization no longer listed': () => !stillListed });
+      check(after, { '55 organization no longer listed': () => !stillListed });
       if (stillListed) {
         state.ok = false;
         orgsLeaked.add(1);
@@ -933,8 +1011,8 @@ function teardownBlock(auth, json, slug, password) {
   }
 
   step(
-    '55-logout',
-    http.post(`${API}/auth/logout`, null, { headers: session, tags: { name: '55-logout' } }),
+    '56-logout',
+    http.post(`${API}/auth/logout`, null, { headers: session, tags: { name: '56-logout' } }),
     [200, 204],
   );
 
@@ -947,10 +1025,10 @@ export function setup() {
   http.post(
     `${BASE}/__monitor/run`,
     JSON.stringify({
-      command: `BASE_URL=${BASE} VUS=${VUS}${USER_OFFSET ? ` USER_OFFSET=${USER_OFFSET}` : ''}${STEP_UP ? ' STEP_UP=true' : ''} \\\n    k6 run src/tests/load/k6/scenarios/fe-full-surface.js`,
+      command: `BASE_URL=${BASE} VUS=${VUS}${USER_OFFSET ? ` USER_OFFSET=${USER_OFFSET}` : ''}${STEP_UP ? ' STEP_UP=true' : ''}${SUBSCRIBE ? ' SUBSCRIBE=true' : ''} \\\n    k6 run src/tests/load/k6/scenarios/fe-full-surface.js`,
       vus: VUS,
-      mode: `${VUS} users x 1 pass x ${STEP_UP ? STEPS.length : STEPS.length - 3} steps`,
-      stepsPerJourney: STEP_UP ? STEPS.length : STEPS.length - 3,
+      mode: `${VUS} users x 1 pass x ${PLANNED_STEPS} steps`,
+      stepsPerJourney: PLANNED_STEPS,
       poolMax: POOL,
     }),
     {
@@ -1076,14 +1154,12 @@ export function feFullJourney() {
   if (!apiKeyBlock(auth, unique)) state.ok = false;
   if (!webhookBlock(auth, unique)) state.ok = false;
   if (!roleBlock(auth, unique)) state.ok = false;
-  if (!membershipBlock(auth, invitee.email, opening.seatCeiling)) state.ok = false;
+  const seats = subscriptionBlock(auth, opening);
+  if (!seats.ok) state.ok = false;
+  if (!membershipBlock(auth, invitee.email, seats.seatCeiling)) state.ok = false;
   if (!billingBlock(auth)) state.ok = false;
 
-  if (STEP_UP) {
-    if (!stepUpBlock(auth, cred.email)) state.ok = false;
-  } else {
-    for (const n of ['49-step-up', '50-mfa-enroll', '51-webauthn-options']) skip(n);
-  }
+  if (!stepUpBlock(auth, cred.email)) state.ok = false;
 
   if (!teardownBlock(auth, json, slug, cred.password)) state.ok = false;
 
@@ -1124,12 +1200,13 @@ export function handleSummary(data) {
   const line = '-'.repeat(102);
   const rule = '='.repeat(102);
   const out = [];
-  const planned = STEP_UP ? STEPS.length : STEPS.length - 3;
+  const planned = PLANNED_STEPS;
 
   out.push(rule);
   out.push(`  CLINOZY-FE FULL JOURNEY   ${VUS} user(s)  x  1 pass  x  ${planned} steps`);
   out.push(
-    `  DATABASE_POOL_MAX = ${POOL}   ·   step-up cluster ${STEP_UP ? 'INCLUDED' : 'skipped (set STEP_UP=true)'}`,
+    `  DATABASE_POOL_MAX = ${POOL}   ·   step-up cluster ${STEP_UP ? 'INCLUDED' : 'skipped (set STEP_UP=true)'}` +
+      `   ·   subscription ${SUBSCRIBE ? 'INCLUDED' : 'skipped (set SUBSCRIBE=true)'}`,
   );
   out.push(rule);
   out.push('');
@@ -1178,7 +1255,9 @@ export function handleSummary(data) {
     [
       'member invite',
       seats > 0
-        ? `refused for ${seats} VU(s) — Free plan allows 1 seat; steps 44-45 need Starter/Pro, a Stripe call`
+        ? SUBSCRIBE
+          ? `refused for ${seats} VU(s) — the subscription in step 42 did not grant a second seat`
+          : `refused for ${seats} VU(s) — Free plan allows 1 seat; steps 44-46 need SUBSCRIBE=true`
         : 'accepted — member routes exercised end to end',
     ],
     [

@@ -49,6 +49,8 @@ src/
     │   │   │   │   │   └── appointments.integration.test.ts
     │   │   │   │   └── unit/
     │   │   │   │   │   └── appointments.service.unit.test.ts
+    │   │   │   ├── seed/
+    │   │   │   │   └── appointments.seed.ts
     │   │   │   ├── appointments.constants.ts
     │   │   │   ├── appointments.controller.ts
     │   │   │   ├── appointments.dto.ts
@@ -121,6 +123,8 @@ src/
     │   │   │   │   │   │   ├── invoices.amounts.unit.test.ts
     │   │   │   │   │   │   ├── invoices.pricing.unit.test.ts
     │   │   │   │   │   │   └── invoices.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── invoices.seed.ts
     │   │   │   │   ├── invoices.amounts.ts
     │   │   │   │   ├── invoices.constants.ts
     │   │   │   │   ├── invoices.controller.ts
@@ -141,6 +145,8 @@ src/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   ├── payments.ledger.unit.test.ts
     │   │   │   │   │   │   └── payments.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── payments.seed.ts
     │   │   │   │   ├── payments.constants.ts
     │   │   │   │   ├── payments.controller.ts
     │   │   │   │   ├── payments.dto.ts
@@ -198,6 +204,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── branch-machines.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── branch-machines.seed.ts
     │   │   │   │   ├── branch-machines.controller.ts
     │   │   │   │   ├── branch-machines.dto.ts
     │   │   │   │   ├── branch-machines.overview.md
@@ -224,6 +232,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── branch-rooms.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── branch-rooms.seed.ts
     │   │   │   │   ├── branch-rooms.controller.ts
     │   │   │   │   ├── branch-rooms.dto.ts
     │   │   │   │   ├── branch-rooms.overview.md
@@ -262,6 +272,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── contact-activities.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── contact-activities.seed.ts
     │   │   │   │   ├── contact-activities.constants.ts
     │   │   │   │   ├── contact-activities.controller.ts
     │   │   │   │   ├── contact-activities.dto.ts
@@ -563,6 +575,8 @@ src/
     │   │   │   │   ├── offers.service.ts
     │   │   │   │   ├── offers.types.ts
     │   │   │   │   └── offers.validator.ts
+    │   │   │   ├── seed/
+    │   │   │   │   └── offerings.seed.ts
     │   │   │   ├── offerings.constants.ts
     │   │   │   ├── offerings.controller.ts
     │   │   │   ├── offerings.dto.ts
@@ -598,6 +612,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── patient-check-ins.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── patient-check-ins.seed.ts
     │   │   │   │   ├── patient-check-ins.constants.ts
     │   │   │   │   ├── patient-check-ins.controller.ts
     │   │   │   │   ├── patient-check-ins.dto.ts
@@ -614,6 +630,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── patient-clinical-notes.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── patient-clinical-notes.seed.ts
     │   │   │   │   ├── patient-clinical-notes.constants.ts
     │   │   │   │   ├── patient-clinical-notes.controller.ts
     │   │   │   │   ├── patient-clinical-notes.dto.ts
@@ -753,6 +771,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── patient-reviews.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── patient-reviews.seed.ts
     │   │   │   │   ├── patient-reviews.constants.ts
     │   │   │   │   ├── patient-reviews.controller.ts
     │   │   │   │   ├── patient-reviews.dto.ts
@@ -769,6 +789,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── patient-treatments.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── patient-treatments.seed.ts
     │   │   │   │   ├── patient-treatments.constants.ts
     │   │   │   │   ├── patient-treatments.controller.ts
     │   │   │   │   ├── patient-treatments.dto.ts
@@ -796,6 +818,8 @@ src/
     │   │   │   │   ├── prescription-kits.service.ts
     │   │   │   │   ├── prescription-kits.types.ts
     │   │   │   │   └── prescription-kits.validator.ts
+    │   │   │   ├── seed/
+    │   │   │   │   └── patients.seed.ts
     │   │   │   ├── patients.constants.ts
     │   │   │   ├── patients.controller.ts
     │   │   │   ├── patients.dto.ts
@@ -917,6 +941,8 @@ src/
     │   │   │   ├── queues/
     │   │   │       ├── task-rules.job.schema.ts
     │   │   │       └── task-rules.queue.ts
+    │   │   │   ├── seed/
+    │   │   │       └── tasks.seed.ts
     │   │   │   ├── task-rule-settings/
     │   │   │       ├── __tests__/
     │   │   │       │   └── unit/
@@ -2383,11 +2409,13 @@ src/
     └── storage/
     │   ├── __tests__/
     │       └── unit/
+    │       │   ├── bucket-cors.util.unit.test.ts
     │       │   ├── content-disposition.util.unit.test.ts
     │       │   ├── s3-adapter.unit.test.ts
     │       │   ├── s3-client-config.unit.test.ts
     │       │   ├── s3-error.util.unit.test.ts
     │       │   └── stored-object-purge.util.unit.test.ts
+    │   ├── bucket-cors.util.ts
     │   ├── content-disposition.util.ts
     │   ├── object-storage.port.ts
     │   ├── s3-adapter.ts
@@ -2436,12 +2464,16 @@ src/
     │   ├── settle-check.config.ts
     │   ├── settle-check.evaluate.ts
     │   ├── settle-check.ts
+    │   ├── storage-cors.ts
     │   ├── stripe-subscription-reconcile.ts
     │   ├── verify-base.ts
     │   └── worker-drain.ts
     ├── seed/
     │   ├── bulk-config.ts
     │   ├── bulk.ts
+    │   ├── demo-clinic.catalog.ts
+    │   ├── demo-clinic.plan.ts
+    │   ├── demo-clinic.ts
     │   ├── ensure-demo-admin.ts
     │   ├── faker-data.ts
     │   ├── full.ts
@@ -2936,6 +2968,7 @@ src/
     │   │   ├── webhook-claim-race.integration.test.ts
     │   │   ├── webhook-delivery-race.integration.test.ts
     │   │   └── webhook-reclaim.integration.test.ts
+    │   ├── demo-clinic-seed.integration.test.ts
     │   ├── empty-body-json-parser.integration.test.ts
     │   ├── full-seed.integration.test.ts
     │   ├── integration.overview.md
@@ -3321,6 +3354,7 @@ src/
     │   ├── scripts/
     │   │   ├── seed/
     │   │   │   ├── bulk-config.unit.test.ts
+    │   │   │   ├── demo-clinic-plan.unit.test.ts
     │   │   │   ├── modules.unit.test.ts
     │   │   │   ├── production-guard.unit.test.ts
     │   │   │   ├── seed-contract.unit.test.ts

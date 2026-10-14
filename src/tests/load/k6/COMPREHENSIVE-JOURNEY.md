@@ -66,7 +66,10 @@ worker cluster exceed 12 cores. The cluster has spare capacity; it just can't ge
    `helpers/config.js`), so it also passes against an API that enforces CAPTCHA with
    `CAPTCHA_BYPASS_ALLOWED=true` (`pnpm setup:local --with-captcha`).
 9. **Rate limits lifted** — a token works and isn't 429'd.
-10. **Role-cap headroom** — `max(roles/organization)` well under `MEMBER_ROLE_MAX_PER_ORG` (data hygiene, §3).
+10. **Role-cap headroom** — `max(live roles/organization)` well under `MEMBER_ROLE_MAX_PER_ORG`
+    (data hygiene, §3). A deleted role is kept, restorable, and does not count toward the cap.
+11. **No payment provider** — the cluster runs with no `STRIPE_SECRET_KEY` (§1), so a run never
+    calls Stripe and the member chain's subscription is recorded by the API itself (§5).
 
 ---
 
@@ -92,6 +95,7 @@ so these values win without anyone editing `.env.local`.
 | `DEPLOYMENT_WORKER_REPLICA_COUNT` | `1` | `1` | min allowed is 1. |
 | `PORT` | `3001` | `3000` | run beside any `:3000` dev server; k6 `BASE_URL` must match. |
 | `SENTRY_DSN` | `<empty>` | placeholder | disables Sentry (the loader drops blank values). **Measured impact on latency: ~0 ms** (4.70 vs 4.72 ms). |
+| `STRIPE_SECRET_KEY` | `<empty>` | your sandbox key | no payment provider: a run never calls Stripe, and the member chain (`RARE=true`) subscribes its organization through `POST /billing/subscriptions`, which the API then records itself (`TRIALING`) so the plan's seats apply at once. With a key the subscription waits for payment and keeps the Free plan's single seat. |
 | `OVERLOAD_MAX_EVENT_LOOP_DELAY_MS` | `250` (default) | `250` | leave as-is; above this the overload guard sheds 503s (a saturation signal). |
 
 Boot: `setup-loadtest.sh` (or the commands in §4).
@@ -105,9 +109,10 @@ Boot: `setup-loadtest.sh` (or the commands in §4).
 - **Pending-upload quota** (per user): the journey **deletes** the pending upload it creates so it
   never fills. Leak reset: `pnpm load:reset`.
 - **`MEMBER_ROLE_MAX_PER_ORG`** (per organization, env, max 500): raise it **and** clean leaked roles (§3).
-- **`MAX_TEAM_ORGANIZATIONS_PER_OWNER`** (20): why `create-org` is excluded from the journey (it
-  accumulates organizations with no cleanup — organization-delete is destructive).
-- **Idempotency** (`X-Idempotency-Key` on `POST /organizations|/memberships|/roles|/api-keys|/notification-policies|/webhooks|/uploads`): reused key
+- **`MAX_TEAM_ORGANIZATIONS_PER_OWNER`** (20): only the member chain (`RARE=true`) creates an
+  organization — one per VU, deleted at the end of the chain. A VU stopped mid-chain can leave its
+  `K6 Journey …` organization behind; it counts toward its owner's cap until the owner deletes it.
+- **Idempotency** (`X-Idempotency-Key` on `POST /organizations|/memberships|/roles|/api-keys|/notification-policies|/webhooks|/uploads|/subscriptions`): reused key
   - different body → 422. Every write gets a fresh key from `idempotencyKey()` (`helpers/idempotency.js`):
   `k6-<label>-<vu>-<iter>-<ms>-<random>` — 16–255 characters, unique across runs without `RUN`.
 
@@ -164,9 +169,9 @@ RUN=$(date +%s) VUS=100 DURATION=60s k6 run src/tests/load/k6/scenarios/comprehe
 
 `VUS`, `DURATION`, `RUN` (names the resources a run creates; a fresh value by default),
 `THINK` (think-time s/phase, default 0.4), `WRITE_EVERY` (write phases every Nth iteration; >1 =
-read-dominant), `RARE` (`true` to include the cross-organization member-invite flow — OFF by default because
-it churns other users' permission caches under load), `DIAG` (`true` logs each failure's status/body),
-`BASE_URL`.
+read-dominant), `RARE` (`true` to include the once-per-VU flows: data export, an upload presign and
+the member invite chain — OFF by default because inviting a pool user churns that user's permission
+cache under load), `DIAG` (`true` logs each failure's status/body), `BASE_URL`.
 
 ## 5. Journey design (why each guard exists)
 
@@ -178,7 +183,17 @@ it churns other users' permission caches under load), `DIAG` (`true` logs each f
 - **Run-unique names** (`RUN`) and a **fresh idempotency key per write** — no cross-run slug/key
   collisions; a rerun never replays an earlier run's response.
 - **Self-cleaning writes** — created roles/keys/policies/webhooks/uploads/memberships are deleted
-  in-iteration so data + per-organization caps don't grow.
+  in-iteration so data + per-organization caps don't grow. A role or membership delete states why
+  (`?reason=not_needed`, `DELETE_REASON_QUERY` in `helpers/config.js`); without it the API answers
+  400.
+- **The member invite chain runs in an organization of the VU's own** (`RARE=true`). A pool
+  organization is full: the bulk seed puts 12 members on a random plan and billing state, past most
+  seat ceilings (`409 seat_limit_reached`). The chain creates a TEAM organization, subscribes it to the
+  cheapest plan with a second seat (recorded locally — no payment provider, §1), invites a pool user
+  (`role_ids`, the main role first), changes their roles — an invited member cannot be suspended, only
+  an active one can — removes them, invites them again, revokes that invitation
+  (`DELETE …/memberships/:id/invitation`), then steps up, deletes the organization (which cancels the
+  subscription) and switches back to the pool organization. No second seat fails the run.
 - **Per-op metrics**: total / `Server-Timing` server-compute / TTFB(waiting) / queue+network, plus
   per-op 4xx/429/503 counters. `handleSummary` prints a table sorted by server-compute and writes
   `/tmp/journey-<vus>vu.json`.

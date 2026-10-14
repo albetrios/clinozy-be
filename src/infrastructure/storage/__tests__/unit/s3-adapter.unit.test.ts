@@ -36,6 +36,9 @@ vi.mock('@aws-sdk/client-s3', () => {
   class CopyObjectCommand {
     constructor(public readonly input: unknown) {}
   }
+  class PutBucketCorsCommand {
+    constructor(public readonly input: unknown) {}
+  }
   return {
     S3Client: vi.fn(function S3ClientMock() {
       return { send: sendMock };
@@ -45,6 +48,7 @@ vi.mock('@aws-sdk/client-s3', () => {
     DeleteObjectCommand,
     GetObjectCommand,
     CopyObjectCommand,
+    PutBucketCorsCommand,
   };
 });
 
@@ -73,7 +77,14 @@ vi.mock('@/shared/utils/infrastructure/logger.util.js', () => ({
   },
 }));
 
-import { S3ObjectStorageAdapter } from '@/infrastructure/storage/s3-adapter.js';
+import {
+  S3ObjectStorageAdapter,
+  putUploadBucketCorsRules,
+} from '@/infrastructure/storage/s3-adapter.js';
+import {
+  UPLOAD_BUCKET_CORS_ALLOWED_HEADERS,
+  buildUploadBucketCorsRules,
+} from '@/infrastructure/storage/bucket-cors.util.js';
 import { CircuitBreakerOpenError } from '@/infrastructure/resilience/circuit-breaker.js';
 import { ConfigurationError } from '@/shared/errors/index.js';
 
@@ -132,7 +143,7 @@ describe('S3ObjectStorageAdapter', () => {
   });
 
   it('createPresignedUploadUrl returns a signed PUT URL bound to an exact Content-Length', async () => {
-    const url = await adapter.createPresignedUploadUrl({
+    const { url, headers } = await adapter.createPresignedUploadUrl({
       key: 'uploads/file.png',
       contentType: 'image/png',
       contentLength: 1024,
@@ -151,6 +162,16 @@ describe('S3ObjectStorageAdapter', () => {
     expect(command.input.ContentLength).toBe(1024);
     expect(signingOptions.signableHeaders).toBeInstanceOf(Set);
     expect([...(signingOptions.signableHeaders ?? [])]).toContain('content-length');
+    // The client is told every header the URL signs that it must set itself — and the bucket's
+    // CORS must admit each one, or the browser's preflight refuses the PUT.
+    expect(headers).toEqual({
+      'content-type': 'image/png',
+      'x-amz-server-side-encryption': 'AES256',
+    });
+    for (const name of Object.keys(headers)) {
+      expect([...(signingOptions.signableHeaders ?? [])]).toContain(name);
+      expect(UPLOAD_BUCKET_CORS_ALLOWED_HEADERS).toContain(name);
+    }
   });
 
   // sec-U11: server-side writes (worker putObject, copyObject) must request
@@ -409,5 +430,32 @@ describe('S3ObjectStorageAdapter', () => {
         sourceETag: '"verified-etag"',
       }),
     ).rejects.toBeDefined();
+  });
+});
+
+describe('putUploadBucketCorsRules', () => {
+  beforeEach(() => {
+    sendMock.mockReset();
+    mockEnv.S3_BUCKET = 'test-bucket';
+  });
+
+  it('replaces the bucket CORS configuration with the given rules', async () => {
+    sendMock.mockResolvedValueOnce({});
+    const rules = buildUploadBucketCorsRules(['http://localhost:5173']);
+
+    await putUploadBucketCorsRules(rules);
+
+    expect(sendMock).toHaveBeenCalledOnce();
+    const [command] = sendMock.mock.calls[0] as [{ input: unknown }];
+    expect(command.input).toEqual({
+      Bucket: 'test-bucket',
+      CORSConfiguration: { CORSRules: rules },
+    });
+  });
+
+  it('refuses without a bucket', async () => {
+    mockEnv.S3_BUCKET = undefined;
+    await expect(putUploadBucketCorsRules([])).rejects.toBeInstanceOf(ConfigurationError);
+    expect(sendMock).not.toHaveBeenCalled();
   });
 });

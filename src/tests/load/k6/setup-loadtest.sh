@@ -89,6 +89,9 @@ RATE_LIMIT_WINDOW_MS=1000
 WEBHOOK_URL_ALLOWLIST=example.com
 # Empty = unset (the env loader drops blank values): no Sentry during a run.
 SENTRY_DSN=
+# No payment provider either: a run never calls Stripe, and the member chain's subscription
+# (comprehensive-journey.js, RARE=true) is recorded by the API itself, so its seats apply at once.
+STRIPE_SECRET_KEY=
 # Role create/delete under concurrency.
 MEMBER_ROLE_MAX_PER_ORG=500
 # The connection-budget check reads these.
