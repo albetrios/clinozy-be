@@ -50,6 +50,6 @@ stateDiagram-v2
 - `__tests__/unit/user-bug-report.serializer.unit.test.ts` — the reply, the export entry, the
   reporter's name.
 - `__tests__/unit/user-bug-report.service.unit.test.ts` — the stamp from the session.
-- `src/domains/user/__tests__/integration/user-bug-report.integration.test.ts` — the route end to
-  end against Postgres.
+- `__tests__/integration/user-bug-report.integration.test.ts` — the route end to end against
+  Postgres.
 - `src/tests/security/rls/rls-matrix.security.test.ts` — one person cannot see another's report.
