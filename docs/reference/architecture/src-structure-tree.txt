@@ -1078,6 +1078,7 @@ src/
     │   │   │   ├── auth-recovery-atomicity.integration.test.ts
     │   │   │   ├── auth-route-smoke.integration.test.ts
     │   │   │   ├── auth.integration.test.ts
+    │   │   │   ├── login-restores-last-clinic.integration.test.ts
     │   │   │   ├── logout-revokes-token.integration.test.ts
     │   │   │   ├── organization-mfa-enforcement.integration.test.ts
     │   │   │   ├── refresh-preserves-active-organization.integration.test.ts
@@ -1802,6 +1803,7 @@ src/
     │   │   │   │   │   ├── organization-profile-fields.integration.test.ts
     │   │   │   │   │   └── organization.integration.test.ts
     │   │   │   │   └── unit/
+    │   │   │   │   │   ├── default-active-organization.db.unit.test.ts
     │   │   │   │   │   ├── organization-capability.unit.test.ts
     │   │   │   │   │   ├── organization-offboarding-reconcile.processor.unit.test.ts
     │   │   │   │   │   ├── organization-routes-rate-limit.policy.unit.test.ts

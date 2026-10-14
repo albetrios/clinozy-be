@@ -49,11 +49,19 @@ PERSONAL_ORGANIZATION_ENABLED   (default true)
 TEAM_ORGANIZATION_ENABLED       (default true)   — at least one must be true
 ```
 
-| Mode   | PERSONAL | TEAM | Signup                        | Login default                                                             |
-| ------ | -------- | ---- | ----------------------------- | ------------------------------------------------------------------------- |
-| Hybrid | on       | on   | personal organization auto-provisioned | personal organization                                                              |
-| B2C    | on       | off  | personal organization auto-provisioned | personal organization                                                              |
-| B2B    | off      | on   | nothing provisioned           | most-recent team, else **none** → frontend redirects to "create your own" |
+| Mode   | PERSONAL | TEAM | Signup                                 | Login default                                                                                   |
+| ------ | -------- | ---- | -------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Hybrid | on       | on   | personal organization auto-provisioned | last clinic switched to, else most-recent team, else the personal organization                  |
+| B2C    | on       | off  | personal organization auto-provisioned | personal organization                                                                           |
+| B2B    | off      | on   | nothing provisioned                    | last clinic switched to, else most-recent team, else **none** → frontend redirects to "create your own" |
+
+"Last clinic switched to" is `auth.users.last_active_organization_id`: every successful
+`POST /auth/switch-to-organization` remembers its organization (only when it changes; a failed
+write is logged and never fails the switch), and the login opens it while that membership and the
+organization are still active — otherwise it is skipped, never cleared. A clinic beats the personal
+organization because a personal workspace has no clinic and the frontend answers it with the
+organization picker, which would otherwise greet every login. The same default is the refresh
+fallback when a session's organization is no longer valid.
 
 `GET /users/me` returns `personal_organization_id` so the frontend can render the organization switcher.
 Which organization kinds are enabled is a deployment setting the frontend reads from its own
@@ -145,7 +153,7 @@ catalog, subscription reads, Stripe webhook), `/notify/*`,
   `403 teamOrganizationsDisabled`; existing team organizations are not deleted, only no longer
   creatable. The frontend hides team UI based on its own `VITE_TEAM_ORGANIZATIONS` build flag.
 - **`PERSONAL` on → off** (hybrid → B2B): no new personal organizations are provisioned and
-  `switch-to-personal` returns `404`; users default to their most-recent team (or the
+  `switch-to-personal` returns `404`; users default to their last or most-recent team (or the
   onboarding redirect when they have none). Existing personal organizations persist until account
   deletion.
 
@@ -156,10 +164,10 @@ The active organization is a signed JWT claim (`org`), not a header or path para
 
 | Endpoint                                                            | Effect                                                                                                                            |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /auth/login` (and email verification-code / OAuth / WebAuthn) | mints the token with the default-organization `org` claim                                                                         |
+| `POST /auth/login` (and email verification-code / OAuth / WebAuthn) | mints the token with the default-organization `org` claim (the login default above)                                               |
 | `POST /auth/refresh`                                                | re-mints with the resolved `org` claim                                                                                            |
 | `POST /auth/switch-to-personal`                                     | no body; self-heals (provisions the personal organization if missing when personal is enabled), then re-mints + re-binds the session to it |
-| `POST /auth/switch-to-organization { organization_id }`             | membership-validated (403 if not a member, 400 missing id); re-mints + re-binds                                                   |
+| `POST /auth/switch-to-organization { organization_id }`             | membership-validated (403 if not a member, 400 missing id); re-mints + re-binds; remembers it as the login default                |
 
 Switching re-mints the access token and re-binds the session's `token_hash` to it (no refresh
 rotation); the previously held token immediately fails `verifyActiveAccessToken` (hash drift).

@@ -363,6 +363,29 @@ export class UserRepository {
     return rows[0] ?? null;
   }
 
+  /**
+   * Records `organizationId` as the user's remembered organization (`last_active_organization_id`),
+   * the login default. Writes only when the value changes (`IS DISTINCT FROM`), so a repeat switch
+   * to the same organization touches no row. Returns whether a row was updated.
+   */
+  async rememberLastActiveOrganization(publicId: string, organizationId: number): Promise<boolean> {
+    const rows = await getRequestDatabase()
+      .update(users)
+      .set({
+        last_active_organization_id: organizationId,
+        updated_at: databaseNowTimestamp,
+      })
+      .where(
+        and(
+          eq(users.public_id, publicId),
+          isNull(users.deleted_at),
+          sql`${users.last_active_organization_id} IS DISTINCT FROM ${organizationId}`,
+        ),
+      )
+      .returning({ id: users.id });
+    return rows.length > 0;
+  }
+
   async updateLoginAttempt(
     publicId: string,
     failedLoginCount: number,
