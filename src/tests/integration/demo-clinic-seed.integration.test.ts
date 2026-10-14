@@ -14,6 +14,7 @@ import { memberships } from '@/domains/tenancy/sub-domains/membership/membership
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
+import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
 
 /** 15:30 in Kolkata — the afternoon every Today lane is planned around. */
 const NOW = new Date('2026-10-13T10:00:00Z');
@@ -84,6 +85,13 @@ describe.runIf(runAsApplicationBehaviour)('Demo clinic seed — integration', ()
     expect(new Set(bills.map((bill) => bill.status))).toEqual(
       new Set(['paid', 'partial', 'unpaid']),
     );
+
+    // Its setup is complete (feat-clinic-setup OSC7): the staff never meet the setup drawer.
+    const [setup] = await getRequestDatabase()
+      .select({ completedAt: organization_settings.setup_completed_at })
+      .from(organization_settings)
+      .where(eq(organization_settings.organization_id, clinic!.id));
+    expect(setup?.completedAt).toBeInstanceOf(Date);
   });
 
   it('keeps the clinic on a re-run and rebuilds it with fresh', async () => {

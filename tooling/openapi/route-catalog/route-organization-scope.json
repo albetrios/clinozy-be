@@ -444,5 +444,8 @@
   "POST /api/v1/app/medicines/near-expiry-discount": "both",
   "POST /api/v1/app/suppliers/:supplier_id/payments": "both",
   "POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/decline": "both",
-  "GET /api/v1/users/me/membership-invitations": "both"
+  "GET /api/v1/users/me/membership-invitations": "both",
+  "GET /api/v1/app/onboarding-setup": "team",
+  "PATCH /api/v1/app/onboarding-setup": "team",
+  "POST /api/v1/app/onboarding-setup/complete": "team"
 }

@@ -17,3 +17,17 @@ export const ORGANIZATION_SETTINGS_DEFAULT_RETARGET_AFTER_DAYS = 90;
 
 /** Days a soft-deleted app record stays restorable before the purge erases it. */
 export const ORGANIZATION_SETTINGS_DEFAULT_DELETED_RECORD_PURGE_DAYS = SEVEN_DAYS;
+
+/**
+ * The clinic-setup steps whose answers have no record of their own to read back — step 1 (what kind of
+ * clinic) and step 3 (whether the owner sees patients); step 2 is read from the main branch.
+ */
+export const ORGANIZATION_SETTINGS_SETUP_ANSWERED_STEP_VALUES = ['clinic_type', 'you'] as const;
+
+/**
+ * The setup guide's items a manager may skip; booking the first appointment cannot be skipped.
+ */
+export const ORGANIZATION_SETTINGS_SETUP_SKIPPABLE_ITEM_VALUES = [
+  'treatments',
+  'invite_team',
+] as const;

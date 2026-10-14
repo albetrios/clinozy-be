@@ -12,6 +12,9 @@ import type {
 } from './base-record.types.js';
 import { BranchesRepository } from './sub-domains/branches/branches.repository.js';
 import { BranchesService } from './sub-domains/branches/branches.service.js';
+import { OnboardingSetupService } from './sub-domains/onboarding-setup/onboarding-setup.service.js';
+import { OfferingsRepository } from './sub-domains/offerings/offerings.repository.js';
+import { AppointmentsRepository } from './sub-domains/appointments/appointments.repository.js';
 import { BranchMembersRepository } from './sub-domains/branches/branch-members/branch-members.repository.js';
 import { BranchMembersService } from './sub-domains/branches/branch-members/branch-members.service.js';
 import { type AppRecordServices, createAppRecordServices } from './app-records.container.js';
@@ -35,6 +38,8 @@ import {
 /** The app domain's services (the app's own records), decorated on Fastify as `appDomain`. */
 export type AppContainer = {
   branchesService: BranchesService;
+  /** The clinic setup's status, answers and going live (feat-clinic-setup). */
+  onboardingSetupService: OnboardingSetupService;
   branchMembersService: BranchMembersService;
   membershipPreferencesService: MembershipPreferencesService;
   membershipSavedViewsService: MembershipSavedViewsService;
@@ -97,6 +102,14 @@ export function createAppContainer({
       membershipService,
       branchesRepository,
       branchMembersRepository,
+    ),
+    onboardingSetupService: new OnboardingSetupService(
+      organizationService,
+      membershipService,
+      organizationSettingsService,
+      branchesRepository,
+      new OfferingsRepository(),
+      new AppointmentsRepository(),
     ),
     branchMembersService: new BranchMembersService(
       organizationService,

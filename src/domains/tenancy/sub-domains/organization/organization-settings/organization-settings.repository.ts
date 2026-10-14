@@ -1,11 +1,16 @@
-import type { OrganizationDefaultLocale } from './organization-settings.types.js';
-import { eq, sql } from 'drizzle-orm';
+import type {
+  OrganizationDefaultLocale,
+  OrganizationSetupProgress,
+  OrganizationSetupProgressChange,
+} from './organization-settings.types.js';
+import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { databaseNowTimestamp } from '@/shared/utils/infrastructure/database-timestamp.util.js';
 import {
   getContextFreeDatabase,
   getRequestDatabase,
 } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
+import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 
 /** BCP 47 locale tag persisted in `organization_settings.default_locale` (constrained to translated locales). */
 
@@ -31,6 +36,29 @@ function operatingSettings(data: {
     }),
   };
 }
+
+/** A `text[]` literal of `values` (`'{}'` when empty) — one bound parameter per value. */
+function textArray(values: readonly string[]): SQL {
+  if (values.length === 0) return sql`'{}'::text[]`;
+  return sql`ARRAY[${sql.join(
+    values.map((value) => sql`${value}`),
+    sql`, `,
+  )}]::text[]`;
+}
+
+/** The distinct values of `values`, minus `without` — the stored form of a new row's list. */
+function distinctWithout(values: readonly string[], without: readonly string[] = []): string[] {
+  return [...new Set(values)]
+    .filter((value) => !without.includes(value))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+/**
+ * A setup write's `updated_at`: now, but never before the row's `created_at` — a row another
+ * request created after this transaction began would otherwise break `chk_org_settings_updated`
+ * (`now()` is the transaction's start).
+ */
+const setupUpdatedAt = sql`greatest(now(), ${organization_settings.created_at})`;
 
 /**
  * Drizzle data-access for `tenancy.organization_settings`. The `upsert`
@@ -76,6 +104,146 @@ export class OrganizationSettingsRepository {
       .where(eq(organization_settings.organization_id, organization_id))
       .limit(1);
     return rows[0] ?? null;
+  }
+
+  /**
+   * The clinic's setup progress (feat-clinic-setup), with the public id of the member who took it
+   * live; null when the clinic has no settings row yet. `lock` holds the row until the transaction
+   * ends, so a change checked against `updated_at` cannot pass alongside another one.
+   */
+  async findSetupProgress(
+    organization_id: number,
+    options: { lock?: boolean } = {},
+  ): Promise<OrganizationSetupProgress | null> {
+    // The lock is its own read: Drizzle writes `FOR UPDATE OF` schema-qualified, which Postgres
+    // refuses, and a plain `FOR UPDATE` cannot lock the nullable side of the join below.
+    if (options.lock) {
+      await getRequestDatabase()
+        .select({ organization_id: organization_settings.organization_id })
+        .from(organization_settings)
+        .where(eq(organization_settings.organization_id, organization_id))
+        .for('update');
+    }
+    const rows = await getRequestDatabase()
+      .select({
+        answered_steps: organization_settings.setup_answered_steps,
+        skipped_items: organization_settings.setup_skipped_items,
+        deferred_at: organization_settings.setup_deferred_at,
+        completed_at: organization_settings.setup_completed_at,
+        completed_by_membership_public_id: memberships.public_id,
+        guide_hidden_at: organization_settings.setup_guide_hidden_at,
+        guide_done_at: organization_settings.setup_guide_done_at,
+        updated_at: organization_settings.updated_at,
+        updated_by_user_id: organization_settings.updated_by_user_id,
+      })
+      .from(organization_settings)
+      .leftJoin(
+        memberships,
+        and(
+          eq(memberships.organization_id, organization_settings.organization_id),
+          eq(memberships.id, organization_settings.setup_completed_by_membership_id),
+        ),
+      )
+      .where(eq(organization_settings.organization_id, organization_id))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  /**
+   * Creates the clinic's settings row with every default when it has none, and changes nothing when
+   * it has one — never an update, so two first reads at once cannot collide (feat-clinic-setup).
+   */
+  async ensureRow(organization_id: number): Promise<void> {
+    await getRequestDatabase()
+      .insert(organization_settings)
+      .values({ organization_id })
+      .onConflictDoNothing({ target: organization_settings.organization_id });
+  }
+
+  /**
+   * Merges one change into the setup progress in a single statement (feat-clinic-setup OS5): lists
+   * gain or lose single values against what is stored at that moment, so two admins answering at
+   * once never lose each other's answers; "Explore first" is set once; hiding sets or clears its
+   * time. Creates the settings row when the clinic has none.
+   */
+  async mergeSetupProgress(
+    organization_id: number,
+    change: OrganizationSetupProgressChange & { updated_by_user_id?: number | null },
+  ): Promise<void> {
+    const answeredAdd = change.answered_steps_add ?? [];
+    const skippedAdd = change.skipped_items_add ?? [];
+    const skippedRemove = change.skipped_items_remove ?? [];
+    // Hiding stamps the time, reopening clears it; left alone, the column is not written.
+    let hidden: SQL | null | undefined;
+    if (change.guide_hidden !== undefined)
+      hidden = change.guide_hidden ? databaseNowTimestamp : null;
+    await getRequestDatabase()
+      .insert(organization_settings)
+      .values({
+        organization_id,
+        setup_answered_steps: distinctWithout(answeredAdd),
+        setup_skipped_items: distinctWithout(skippedAdd, skippedRemove),
+        ...(change.deferred && { setup_deferred_at: databaseNowTimestamp }),
+        ...(hidden !== undefined && { setup_guide_hidden_at: hidden }),
+        updated_by_user_id: change.updated_by_user_id ?? undefined,
+      })
+      .onConflictDoUpdate({
+        target: organization_settings.organization_id,
+        set: {
+          ...(answeredAdd.length > 0 && {
+            setup_answered_steps: sql`ARRAY(SELECT DISTINCT element FROM unnest(${organization_settings.setup_answered_steps} || ${textArray(answeredAdd)}) AS element ORDER BY element)`,
+          }),
+          ...((skippedAdd.length > 0 || skippedRemove.length > 0) && {
+            setup_skipped_items: sql`ARRAY(SELECT DISTINCT element FROM unnest(${organization_settings.setup_skipped_items} || ${textArray(skippedAdd)}) AS element WHERE element <> ALL (${textArray(skippedRemove)}) ORDER BY element)`,
+          }),
+          ...(change.deferred && {
+            setup_deferred_at: sql`coalesce(${organization_settings.setup_deferred_at}, now())`,
+          }),
+          ...(hidden !== undefined && { setup_guide_hidden_at: hidden }),
+          updated_at: setupUpdatedAt,
+          updated_by_user_id: change.updated_by_user_id ?? undefined,
+        },
+      });
+  }
+
+  /**
+   * Takes the clinic live once (feat-clinic-setup OS6): sets the time and the member only while no
+   * time is set, so the first completer stays recorded. Returns whether this call set it.
+   */
+  async completeSetup(organization_id: number, membership_id: number | null): Promise<boolean> {
+    const rows = await getRequestDatabase()
+      .update(organization_settings)
+      .set({
+        setup_completed_at: databaseNowTimestamp,
+        setup_completed_by_membership_id: membership_id,
+        updated_at: setupUpdatedAt,
+      })
+      .where(
+        and(
+          eq(organization_settings.organization_id, organization_id),
+          isNull(organization_settings.setup_completed_at),
+        ),
+      )
+      .returning({ organization_id: organization_settings.organization_id });
+    return rows.length > 0;
+  }
+
+  /**
+   * Records the first time all three guide items were done or skipped (feat-clinic-setup OS7);
+   * never moves an earlier time. Returns whether this call set it.
+   */
+  async markSetupGuideDone(organization_id: number): Promise<boolean> {
+    const rows = await getRequestDatabase()
+      .update(organization_settings)
+      .set({ setup_guide_done_at: databaseNowTimestamp })
+      .where(
+        and(
+          eq(organization_settings.organization_id, organization_id),
+          isNull(organization_settings.setup_guide_done_at),
+        ),
+      )
+      .returning({ organization_id: organization_settings.organization_id });
+    return rows.length > 0;
   }
 
   async upsert(

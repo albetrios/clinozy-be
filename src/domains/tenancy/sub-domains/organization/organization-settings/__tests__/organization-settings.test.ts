@@ -177,6 +177,44 @@ describe('Tenancy Organization Settings Sub-Domain — Integration', () => {
       expect(response.statusCode).toBe(400);
     });
 
+    // feat-clinic-setup OS2 (A12): the clinic's setup progress lives on the settings row but is the
+    // onboarding-setup routes' alone — these routes neither show nor take a `setup_*` field, and the
+    // values Settings › Clinic edits save as before.
+    it('keeps the setup progress out of the settings routes', async () => {
+      const { token } = await createAuthorizedOrganizationContext([
+        TENANCY_PERMISSIONS.ORGANIZATION_READ,
+        TENANCY_PERMISSIONS.ORGANIZATION_UPDATE,
+      ]);
+
+      const refused = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: ORGANIZATION_SETTINGS_PATH,
+        token,
+        payload: { setup_completed_at: new Date().toISOString() },
+      });
+      expect(refused.statusCode).toBe(400);
+
+      const saved = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: ORGANIZATION_SETTINGS_PATH,
+        token,
+        payload: { reminder_hour: 9, lead_hold_days: 5, retarget_after_days: 120 },
+      });
+      expect(saved.statusCode).toBe(200);
+      const savedBody = saved.json() as { data: Record<string, unknown> };
+      expect(savedBody.data).toMatchObject({
+        reminder_hour: 9,
+        lead_hold_days: 5,
+        retarget_after_days: 120,
+      });
+
+      const read = await injectAuthenticated(app, { url: ORGANIZATION_SETTINGS_PATH, token });
+      expect(read.statusCode).toBe(200);
+      const readBody = read.json() as { data: Record<string, unknown> };
+      expect(Object.keys(readBody.data).filter((key) => key.startsWith('setup_'))).toEqual([]);
+      expect(Object.keys(savedBody.data).filter((key) => key.startsWith('setup_'))).toEqual([]);
+    });
+
     it('should update settings with organization update permission', async () => {
       const { token } = await createAuthorizedOrganizationContext([
         TENANCY_PERMISSIONS.ORGANIZATION_READ,

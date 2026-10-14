@@ -444,5 +444,8 @@
   "POST /api/v1/app/medicines/near-expiry-discount": 200,
   "POST /api/v1/app/suppliers/:supplier_id/payments": 200,
   "POST /api/v1/tenancy/membership-invitations/:membership_invitation_id/decline": 200,
-  "GET /api/v1/users/me/membership-invitations": 200
+  "GET /api/v1/users/me/membership-invitations": 200,
+  "GET /api/v1/app/onboarding-setup": 200,
+  "PATCH /api/v1/app/onboarding-setup": 200,
+  "POST /api/v1/app/onboarding-setup/complete": 200
 }

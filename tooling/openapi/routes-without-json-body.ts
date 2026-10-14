@@ -23,4 +23,5 @@ export const ROUTES_WITHOUT_JSON_BODY = new Set([
   'PATCH /api/v1/notify/notifications/{notification_id}/read',
   'POST /api/v1/notify/webhooks/{webhook_id}/test',
   'POST /api/v1/mcp',
+  'POST /api/v1/app/onboarding-setup/complete',
 ]);

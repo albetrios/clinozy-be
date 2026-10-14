@@ -271,6 +271,15 @@ const MARKETING_PRESET: AppRolePreset = {
 };
 
 /**
+ * The roles that make a member bookable for a patient visit — the Doctor and Therapist presets'
+ * fixed names (feat-clinic-setup D15: "someone to book" holds one, as main or extra role).
+ */
+export const APP_BOOKABLE_ROLE_NAMES: readonly string[] = [
+  DOCTOR_PRESET.name,
+  THERAPIST_PRESET.name,
+];
+
+/**
  * The clinic roles seeded into every TEAM organization next to Owner (D12, D13, D15, D16, D18, TK2).
  *
  * @remarks

@@ -47,6 +47,7 @@ import {
   seedMembership,
   seedMembershipAdditionalRole,
   seedOrganizationProfile,
+  seedOrganizationSetupLive,
   seedRole,
 } from '@/domains/tenancy/seed/tenancy.seed.js';
 import { findSeededUserId, seedUser } from '@/domains/user/seed/user.seed.js';
@@ -121,6 +122,8 @@ export async function runDemoClinicSeed(
   const existing = await findSeededOrganizationId(plan.slug);
   if (existing !== null) {
     if (!options.fresh) {
+      // A clinic seeded before the clinic setup shipped is set up too (feat-clinic-setup OSC7).
+      await seedOrganizationSetupLive({ organization_id: existing });
       logger.info(
         { slug: plan.slug },
         'seed.demo-clinic: already seeded — run with --fresh to rebuild it around today',
@@ -158,6 +161,8 @@ export async function runDemoClinicSeed(
     specialties: ['skin', 'hair'],
     timezone: timeZone,
   });
+  // The demo clinic is set up (feat-clinic-setup OSC7): its staff never meet the setup drawer.
+  await seedOrganizationSetupLive({ organization_id: organization.id });
 
   // The provisioned clinic roles, by name (the upsert returns the existing row).
   const roleId = async (name: string): Promise<number> => {

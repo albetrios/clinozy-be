@@ -93,6 +93,7 @@ export function buildTagDefinitions(
     'Webhook',
     'Upload',
     'Branch',
+    'Onboarding setup',
     'Saved view',
     'Offering',
     'Contact',

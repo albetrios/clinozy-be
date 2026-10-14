@@ -2286,6 +2286,7 @@ Table tenancy.organization_settings {
   reminder_hour smallint [not null]
   retarget_after_days int [not null]
   security_policy jsonb [not null]
+  setup_answered_steps text [not null]
   updated_at timestamptz [not null]
   updated_by_user_id bigint
 }

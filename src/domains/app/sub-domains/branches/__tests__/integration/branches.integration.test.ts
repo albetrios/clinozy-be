@@ -383,6 +383,56 @@ describe('Branches — Integration', () => {
       expect(response.statusCode).toBe(409);
     });
 
+    // feat-clinic-setup BR1–BR3 (routes-final §1): a clinic always has a main branch once it has a branch.
+    it.each([
+      ['without is_main', {}],
+      ['with is_main false', { is_main: false }],
+    ])("makes a clinic's first branch its main branch, %s", async (_case, change) => {
+      const { token } = await adminContext();
+      const response = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/app/branches'),
+        token,
+        headers: { 'x-idempotency-key': `branch-${randomUUID()}` },
+        payload: { ...VALID_BRANCH, ...change },
+      });
+      expect(response.statusCode).toBe(200);
+      expect((response.json() as BranchBody).data.is_main).toBe(true);
+    });
+
+    it('keeps a later branch as sent', async () => {
+      const { organization, token } = await adminContext();
+      await createTestBranch({ organizationId: organization.id, name: 'Vesu', isMain: true });
+      const response = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/app/branches'),
+        token,
+        headers: { 'x-idempotency-key': `branch-${randomUUID()}` },
+        payload: VALID_BRANCH,
+      });
+      expect(response.statusCode).toBe(200);
+      expect((response.json() as BranchBody).data.is_main).toBe(false);
+    });
+
+    it('leaves exactly one main, and no error, when two first branches are created at once', async () => {
+      const { token } = await adminContext();
+      const responses = await Promise.all(
+        ['Adajan', 'Vesu'].map((name) =>
+          injectAuthenticated(app, {
+            method: 'POST',
+            url: testApiPath('/app/branches'),
+            token,
+            headers: { 'x-idempotency-key': `branch-${randomUUID()}` },
+            payload: { ...VALID_BRANCH, name },
+          }),
+        ),
+      );
+      expect(responses.map((response) => response.statusCode)).toEqual([200, 200]);
+      expect(
+        responses.map((response) => (response.json() as BranchBody).data.is_main).sort(),
+      ).toEqual([false, true]);
+    });
+
     it('returns 403 without branch:create', async () => {
       const { organization } = await adminContext();
       const reader = await memberWith([APP_PERMISSIONS.BRANCH_READ], organization);

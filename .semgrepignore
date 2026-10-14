@@ -10,3 +10,5 @@ migrations/
 pnpm-lock.yaml
 docs/openapi/
 docs/postman-collection.json
+# Design-tool exports (a design drop's prototype HTML/JS) — reference material, never built or deployed
+iterations/*/intake-files/

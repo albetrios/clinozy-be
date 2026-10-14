@@ -13,6 +13,12 @@ const branchResponse: ResponseDefinition = {
   example: null,
 };
 
+const onboardingSetupResponse: ResponseDefinition = {
+  statusCode: 200,
+  schema: wrapSuccess(schemas.onboardingSetupSchema, schemas.onboardingSetupExample),
+  example: null,
+};
+
 const contactResponse: ResponseDefinition = {
   statusCode: 200,
   schema: wrapSuccess(schemas.contactSchema, schemas.contactExample),
@@ -85,6 +91,10 @@ export const appRouteResponses: Record<string, ResponseDefinition> = {
   'GET /api/v1/app/branches/{branch_id}': branchResponse,
   'POST /api/v1/app/branches': branchResponse,
   'PATCH /api/v1/app/branches/{branch_id}': branchResponse,
+  // ── Onboarding setup (feat-clinic-setup) ──
+  'GET /api/v1/app/onboarding-setup': onboardingSetupResponse,
+  'PATCH /api/v1/app/onboarding-setup': onboardingSetupResponse,
+  'POST /api/v1/app/onboarding-setup/complete': onboardingSetupResponse,
   // ── Memberships (the team picker and member directory) ──
   // Neither directory counts: no `meta.pagination.estimated_total` (SHELL-M2)
   'GET /api/v1/app/memberships': {

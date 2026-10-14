@@ -4,6 +4,7 @@ import {
   type OrganizationPrincipalDatabaseScope,
   withAppDatabaseContext,
 } from '@/infrastructure/database/contexts/database-context.js';
+import { withSavepoint } from '@/infrastructure/database/transaction.js';
 import { ConflictError, NotFoundError, ValidationError } from '@/shared/errors/index.js';
 import {
   getPostgresConstraintName,
@@ -18,7 +19,7 @@ import {
 } from '@/domains/app/sub-domains/memberships/memberships.rules.js';
 import type { BranchesRepository } from './branches.repository.js';
 import { BranchesSerializer } from './branches.serializer.js';
-import type { BranchUpdateData } from './branches.types.js';
+import type { BranchCreateData, BranchUpdateData } from './branches.types.js';
 import type { CreateBranchInput, UpdateBranchInput } from './branches.dto.js';
 import { validateCreateBranch, validateUpdateBranch } from './branches.validator.js';
 
@@ -35,10 +36,13 @@ type DefaultStaffField = (typeof DEFAULT_STAFF_FIELDS)[number];
 /** D10: a default-staff member who does not work at the branch. */
 const DEFAULT_STAFF_NOT_MEMBER_KEY = 'errors:validation.defaultStaffNotBranchMember';
 
+/** The partial unique index that allows one main branch per organization. */
+const ONE_MAIN_BRANCH_INDEX = 'idx_branches_one_main_per_organization';
+
 /** Unique indexes whose violation is a client conflict, with the message each one gives. */
 const UNIQUE_CONFLICT_KEYS: Record<string, string> = {
   idx_branches_organization_name_unique: 'errors:branchNameExists',
-  idx_branches_one_main_per_organization: 'errors:branchMainExists',
+  [ONE_MAIN_BRANCH_INDEX]: 'errors:branchMainExists',
 };
 
 /**
@@ -157,16 +161,22 @@ export class BranchesService {
           membershipPublicIds === undefined
             ? undefined
             : await this.resolveMemberIds({ organizationId: organization.id, membershipPublicIds });
+        const createData = omitUndefined({
+          ...withoutDefaultStaff(fields),
+          organization_id: organization.id,
+          created_by_user_id: userId,
+        });
+        // feat-clinic-setup BR1: a clinic's first branch is its main branch unless the body asked
+        // for main itself — an explicit `is_main: true` keeps the one-main 409 (BR2).
+        const becomesFirstMain =
+          parsed.is_main !== true &&
+          !(await this.branchesRepository.hasMainBranch(organization.id));
         const created = await this.mapConflicts({
           name: parsed.name,
           write: () =>
-            this.branchesRepository.create(
-              omitUndefined({
-                ...withoutDefaultStaff(fields),
-                organization_id: organization.id,
-                created_by_user_id: userId,
-              }),
-            ),
+            becomesFirstMain
+              ? this.createFirstBranch(createData)
+              : this.branchesRepository.create(createData),
         });
         // D13: who works there from day one — the list given, else the creator.
         if (memberIds !== undefined) {
@@ -332,6 +342,25 @@ export class BranchesService {
           messageParams: { field },
         })),
       );
+    }
+  }
+
+  /**
+   * Writes a clinic's first branch as its main branch (feat-clinic-setup BR1). When another first
+   * branch was written as main at the same moment, the one-main index refuses this one inside its
+   * savepoint and it is written again as not main — it never asked for main (BR3).
+   */
+  private async createFirstBranch(data: BranchCreateData) {
+    try {
+      return await withSavepoint(() => this.branchesRepository.create({ ...data, is_main: true }));
+    } catch (error) {
+      if (
+        isPostgresUniqueViolation(error) &&
+        getPostgresConstraintName(error) === ONE_MAIN_BRANCH_INDEX
+      ) {
+        return this.branchesRepository.create({ ...data, is_main: false });
+      }
+      throw error;
     }
   }
 

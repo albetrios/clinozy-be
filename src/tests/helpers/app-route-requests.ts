@@ -210,6 +210,7 @@ export function appRouteBody(options: {
     'PATCH /app/offering-groups/:offering_group_id': { sort_order: 5 },
     'PATCH /app/offerings/:offering_id': { price: 900 },
     'PATCH /app/offers/:offer_id': { is_active: false },
+    'PATCH /app/onboarding-setup': { guide_hidden: true },
     'PATCH /app/patient-diagnoses/:patient_diagnosis_id': { name: 'Renamed' },
     'PATCH /app/patients/:patient_id': { status: 'regular' },
     'PATCH /app/patients/:patient_id/check-ins/:patient_check_in_id': { score: 2 },

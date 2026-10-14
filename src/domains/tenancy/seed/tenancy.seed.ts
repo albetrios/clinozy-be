@@ -15,12 +15,37 @@ import { memberships } from '@/domains/tenancy/sub-domains/membership/membership
 import { role_permissions } from '@/domains/tenancy/sub-domains/member-roles/member-role-permission/member-role-permission.schema.js';
 import { membership_invitations } from '@/domains/tenancy/sub-domains/membership/membership-invitation/membership-invitation.schema.js';
 import { membership_additional_roles } from '@/domains/tenancy/sub-domains/membership/membership-additional-roles/membership-additional-roles.schema.js';
+import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
 
 /** Input for {@link seedOrganization}; `owner_user_id` is the internal id of the future organization owner. */
 export interface SeedOrganizationPayload {
   name: string;
   slug: string;
   owner_user_id: number;
+}
+
+/**
+ * Marks a seeded clinic's setup complete (feat-clinic-setup OSC7): its clinic type and the owner's
+ * answer recorded and the clinic live, so a demo sign-in never opens the setup drawer. Idempotent —
+ * an earlier go-live time is kept. A clinic seeded without it keeps the setup to try.
+ */
+export async function seedOrganizationSetupLive(payload: {
+  organization_id: number;
+}): Promise<void> {
+  await getRequestDatabase()
+    .insert(organization_settings)
+    .values({
+      organization_id: payload.organization_id,
+      setup_answered_steps: ['clinic_type', 'you'],
+      setup_completed_at: sql`now()`,
+    })
+    .onConflictDoUpdate({
+      target: organization_settings.organization_id,
+      set: {
+        setup_answered_steps: ['clinic_type', 'you'],
+        setup_completed_at: sql`coalesce(${organization_settings.setup_completed_at}, now())`,
+      },
+    });
 }
 
 /**

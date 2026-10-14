@@ -1,6 +1,6 @@
 ================================================================================
   ROUTE CATALOG — Clinozy Backend
-  Total routes: 446
+  Total routes: 449
 ================================================================================
 
 Legend:
@@ -13,7 +13,7 @@ Legend:
 
 ================================================================================
   DOMAIN: APP (/api/v1/app)
-  Routes: 309
+  Routes: 312
 ================================================================================
 
   — Sub Domains —
@@ -182,6 +182,9 @@ Legend:
   PATCH  /api/v1/app/offers/:offer_id                             200  -    both  PERM: offering:update
   DELETE /api/v1/app/offers/:offer_id                             204  -    both  PERM: offering:delete
   POST   /api/v1/app/offers/:offer_id/restore                     200  req  both  PERM: offering:delete
+  GET    /api/v1/app/onboarding-setup                             200  -    team  PERM: organization:update
+  PATCH  /api/v1/app/onboarding-setup                             200  -    team  PERM: organization:update
+  POST   /api/v1/app/onboarding-setup/complete                    200  req  team  PERM: organization:update
   GET    /api/v1/app/patient-diagnoses                            200  -    both  PERM: organization:read
   POST   /api/v1/app/patient-diagnoses                            200  req  both  PERM: patient_prescription:create
   GET    /api/v1/app/patient-diagnoses/:patient_diagnosis_id      200  -    both  PERM: organization:read
@@ -537,16 +540,16 @@ Legend:
   SUMMARY
 ================================================================================
 
-  Total routes    : 446
+  Total routes    : 449
   Public          : 16
   Authenticated   : 54
   Role-guarded    : 9
-  Perm-guarded    : 362
+  Perm-guarded    : 365
   Token-guarded   : 5
-  Team-only (O)   : 10
+  Team-only (O)   : 13
 
 ================================================================================
-  IDEMPOTENCY-REQUIRED WRITES (129) — X-Idempotency-Key required
+  IDEMPOTENCY-REQUIRED WRITES (130) — X-Idempotency-Key required
 ================================================================================
 
   Routes flagged I = req reject a missing or reused key (422); every other write
@@ -613,6 +616,7 @@ Legend:
     POST /api/v1/app/offerings/:offering_id/restore
     POST /api/v1/app/offers
     POST /api/v1/app/offers/:offer_id/restore
+    POST /api/v1/app/onboarding-setup/complete
     POST /api/v1/app/patient-diagnoses
     POST /api/v1/app/patient-diagnoses/:patient_diagnosis_id/restore
     POST /api/v1/app/patients

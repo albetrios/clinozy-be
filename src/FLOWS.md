@@ -379,3 +379,59 @@ sequenceDiagram
 - **The organization is deleted** → organization offboarding emits no `subscription.cancelled` (nothing could deliver it); `webhook-delivery-reclaim` skips its pending attempts, and a delivery job already queued completes as skipped (`attempt_missing`).
 - **`organization.created`** → cannot reach a webhook: the new organization has none yet. It is emitted for completeness.
 - **Ownership transfer, organization settings, seat-quantity sync** → no event: the organization's public JSON does not change, settings are another resource, and Stripe's quantity update returns as a `customer.subscription.updated` that emits `subscription.updated`.
+
+## clinic-setup-flow
+
+### Trigger
+
+An Owner or Admin of a team clinic lands in the clinic for the first time (any room); the frontend reads
+`GET /api/v1/app/onboarding-setup` and opens the setup drawer while `is_live` is false and `deferred_at` is null
+(iteration `feat-clinic-setup-2026-10-13-sltd`).
+
+### Sequence
+
+```mermaid
+sequenceDiagram
+  participant Client
+  participant Setup as OnboardingSetupService
+  participant Settings as OrganizationSettingsService
+  participant Org as OrganizationService
+  participant Branch as BranchesService
+  participant Offer as offerings records
+  participant Member as MembershipService
+  participant DB as Postgres
+
+  Client->>Setup: GET /app/onboarding-setup
+  Setup->>Settings: getSetupProgress (setup_* on organization_settings)
+  Setup->>DB: active main branch · active services · any appointment
+  Setup->>Member: summarizeTeamForSetup (someone besides the owner · Doctor/Therapist)
+  Setup-->>Client: next_step clinic_type, live_checks, guide_items
+  Client->>Org: PATCH /tenancy/organization {specialties}
+  Client->>Setup: PATCH /app/onboarding-setup {answered_steps_add: [clinic_type]}
+  Setup->>Settings: changeSetupProgress (one merge statement)
+  Client->>Branch: POST /app/branches (the first branch becomes main)
+  Client->>Member: PATCH memberships/{owner} (Doctor or Therapist as an extra role, the branch's hours)
+  Client->>Setup: PATCH /app/onboarding-setup {answered_steps_add: [you]}
+  Client->>Offer: POST /app/offerings (one Consultation per specialty)
+  Client->>Setup: POST /app/onboarding-setup/complete
+  Setup->>Settings: completeSetup (once: when, and by which member)
+  Setup-->>Client: is_live true, the 3 guide items
+```
+
+### Side effects
+
+- The seven `setup_*` fields of `tenancy.organization_settings` — answered steps, skipped guide items, deferred,
+  completed (and by whom), guide hidden, guide done. Every tick is read from the clinic's records.
+- A clinic's first branch becomes its main branch (`POST /app/branches`).
+- The first read that finds a live clinic's three guide items done or skipped stores `setup_guide_done_at` once.
+- No events, no background work, no email (D21).
+
+### Failure modes
+
+- **Going live too early** → `409 onboarding_setup_incomplete`, the message naming each missing check (clinic type,
+  main branch, a service); nothing is written.
+- **Two admins answering at once** → both answers land (single-statement merge); a save with a stale
+  `expected_updated_at` is `409 record_changed`.
+- **Two first branches at once** → one is main, the other saved as not main; neither request fails.
+- **A personal workspace** → `422 team_organization_required` on every setup route.
+- **Going live twice** → the second call answers as it stands; the first completer stays recorded.

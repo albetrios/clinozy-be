@@ -533,6 +533,56 @@ export class MembershipRepository {
       .returning();
   }
 
+  /**
+   * The two team facts a clinic's setup reads (feat-clinic-setup, routes-final §2.A.10): whether anyone
+   * besides the owner is invited or active, and whether an active member holds one of the named
+   * system roles (Doctor, Therapist) as their main or an extra role.
+   */
+  async summarizeTeamForSetup(options: {
+    organization_id: number;
+    owner_user_id: number;
+    bookable_role_names: readonly string[];
+  }): Promise<{ has_teammate: boolean; has_bookable_member: boolean }> {
+    const database = getRequestDatabase();
+    const teammate = await database
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.organization_id, options.organization_id),
+          ne(memberships.user_id, options.owner_user_id),
+          inArray(memberships.status, [MEMBERSHIP_STATUS.ACTIVE, MEMBERSHIP_STATUS.INVITED]),
+          isNull(memberships.deleted_at),
+        ),
+      )
+      .limit(1);
+    const bookable =
+      options.bookable_role_names.length === 0
+        ? []
+        : await database
+            .select({ id: memberships.id })
+            .from(memberships)
+            .innerJoin(
+              roles,
+              and(
+                eq(roles.organization_id, memberships.organization_id),
+                eq(roles.is_system, true),
+                inArray(roles.name, [...options.bookable_role_names]),
+                isNull(roles.deleted_at),
+              ),
+            )
+            .where(
+              and(
+                eq(memberships.organization_id, options.organization_id),
+                eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
+                isNull(memberships.deleted_at),
+                membershipHoldsRole(roles.id),
+              ),
+            )
+            .limit(1);
+    return { has_teammate: teammate.length > 0, has_bookable_member: bookable.length > 0 };
+  }
+
   async findByUserAndOrganization(
     user_id: number,
     organization_id: number,
