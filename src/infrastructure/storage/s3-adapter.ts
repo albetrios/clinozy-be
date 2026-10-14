@@ -5,7 +5,6 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   CopyObjectCommand,
-  PutBucketCorsCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
@@ -21,7 +20,6 @@ import {
 } from '@/infrastructure/storage/s3-error.util.js';
 import { buildSharedS3ClientConfig } from '@/infrastructure/storage/s3-client-config.util.js';
 import { inlineContentDisposition } from '@/infrastructure/storage/content-disposition.util.js';
-import type { UploadBucketCorsRule } from '@/infrastructure/storage/bucket-cors.util.js';
 import type {
   ObjectCopyResult,
   ObjectDeleteResult,
@@ -68,7 +66,7 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
    *
    * Returns the `headers` the PUT must carry with the URL: `content-type` and the SSE header are
    * signed, so a client that sent only `Content-Type` was refused with `SignatureDoesNotMatch`.
-   * Every name here must be in the bucket's CORS `AllowedHeaders` (`UPLOAD_BUCKET_CORS_ALLOWED_HEADERS`).
+   * The bucket's CORS `AllowedHeaders` (owned by clinozy-infra) must admit every name here.
    */
   async createPresignedUploadUrl(options: {
     key: string;
@@ -424,26 +422,4 @@ let defaultAdapter: S3ObjectStorageAdapter | null = null;
 export function getDefaultS3ObjectStorageAdapter(): S3ObjectStorageAdapter {
   defaultAdapter ??= new S3ObjectStorageAdapter();
   return defaultAdapter;
-}
-
-/**
- * Replaces the upload bucket's CORS configuration with `rules` (`PutBucketCors`).
- *
- * @remarks
- * Operator-only — `pnpm ops:storage:cors --apply` is the one caller. It needs `s3:PutBucketCORS`,
- * which the app's own credentials do not (and should not) hold, so it is not part of
- * {@link ObjectStoragePort}. It replaces every existing rule. It calls the client directly rather
- * than through `outboundCall`: a one-off operator write must not count toward the app's `s3`
- * circuit, and the circuit's Redis connection would keep the command from exiting. The client's
- * own request timeouts still bound it.
- */
-export async function putUploadBucketCorsRules(
-  rules: readonly UploadBucketCorsRule[],
-): Promise<void> {
-  await getS3Client().send(
-    new PutBucketCorsCommand({
-      Bucket: requireBucket(),
-      CORSConfiguration: { CORSRules: [...rules] },
-    }),
-  );
 }
