@@ -13,7 +13,8 @@ The writes registered with `config: { idempotencyRequired: true }` require an `X
 ## Mechanism
 
 - Engine: `src/shared/middlewares/core/idempotency.middleware.ts` + `src/shared/utils/idempotency/**`. Applies to `POST/PUT/PATCH/DELETE`.
-- **Required-key gate** (`onRequest`): routes with `config.idempotencyRequired === true` throw `UnprocessableEntityError('errors:idempotencyKeyRequired')` → **422** when the `X-Idempotency-Key` header is missing, `errors:idempotencyKeyInvalid` → **422** when malformed. A malformed key on a write where the key is optional (and on an unknown path) is the same **422** `idempotencyKeyInvalid`, raised at `onRequest` — one status for one bad header (launch USERS-M6). Key format: 16–255 chars, `/^[A-Za-z0-9._:~+/=-]+$/`.
+- **Key-format check** (global `onRequest`, `idempotencyOnRequest`): a malformed key on a write where the key is optional (and on an unknown path) → **422** `idempotencyKeyInvalid` at once — one status for one bad header (launch USERS-M6). On a required route it does nothing and leaves both rejections to the gate below. Key format: 16–255 chars, `/^[A-Za-z0-9._:~+/=-]+$/`.
+- **Required-key gate** (route `preHandler`: `idempotencyClaimPreHandler` → `assertIdempotencyKeyPresentWhenRequired`): routes with `config.idempotencyRequired === true` throw `UnprocessableEntityError('errors:idempotencyKeyRequired')` → **422** when the `X-Idempotency-Key` header is missing, `errors:idempotencyKeyInvalid` → **422** when malformed. The `onRoute` hook appends this preHandler **after** the route's own `onRequest: [authenticate]` and `preHandler`s (step-up, permission guards), so an anonymous caller gets **401** and a caller without step-up or permission gets **403** before any 422.
 - **Claim/replay** (route `preHandler`, after auth so anonymous callers never occupy keys): scope = active `org` JWT claim + actor (`userId` or `apiKeyPublicId`); **unauthenticated callers get no caching**. Redis key: `idempotency:<organization|none>:<actor>:<key>`. Request fingerprint = SHA-256(method + normalized route + canonical validated body, schema defaults included); every entry carries it. On a hit: fingerprint mismatch → **422** (`idempotency_key_reuse`); `completed` → replay stored response with header `x-idempotency-replay: true`; `in_flight` → **409**; an entry without a fingerprint (corrupt, not one the middleware wrote) is never replayed or overwritten → **409** until it expires. Tests seed entries with `buildInFlightIdempotencyEntry` / `buildCompletedIdempotencyEntry` (`src/tests/helpers/idempotency-entry.helper.ts`). Over the per-actor cap → **429** + `Retry-After`. Redis error on claim → **fail closed 503** + `Retry-After`.
 - **Completed entry is written only after the DB transaction commits** — dispatched from `src/shared/middlewares/core/request-lifecycle.middleware.ts` (post-commit), never directly in `onSend`. Rollback/settle-failure → `DEL` the placeholder so the client can safely retry. TTL: placeholder = session TTL; completed = 24 h.
 - **Never cache secrets:** `onSend` skips bodies > 100 KB or containing secret fields (`responseBodyContainsSecretFields`); token/secret-issuance routes are in `IDEMPOTENCY_EXCLUDED_ROUTE_PATTERNS` (`idempotency-fingerprint.util.ts`).
@@ -31,9 +32,9 @@ A few members, as examples only (not the set):
 | `POST /uploads` | `upload/upload.routes.ts` |
 | `POST /app/appointments` | `app/sub-domains/appointments/appointments.routes.ts` |
 
-Step-up-gated `/auth/me/*` routes are intentionally **not** in this set — the global `onRequest`
-required-key gate runs before route auth, so mandatory idempotency there would return 422 before the
-401/403 those routes assert, and their handlers dedupe server-side.
+Step-up-gated `/auth/me/*` routes are intentionally **not** in this set: their handlers dedupe
+server-side. Hook order is not the reason — the required-key gate runs after route auth and the
+step-up preHandler, so flagging one of them would still answer 401/403 before 422.
 
 ## When this guard triggers
 

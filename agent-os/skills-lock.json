@@ -125,7 +125,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-idempotency-guard/SKILL.md",
-      "computedHash": "3c9ac04a12a0974553f998cc27948507c15894d1ae60734796e869329088f544"
+      "computedHash": "83357df5dce8e8b5db6fc8633466c31d3694199f0f4dc121cf01f6f388711ec6"
     },
     "be-iteration-planning": {
       "source": "local",
