@@ -14,6 +14,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { appSchema } from '@/infrastructure/database/pg-schemas.js';
+import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
 import { users } from '@/domains/user/user.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
@@ -22,6 +23,7 @@ import {
   medicines,
 } from '@/domains/app/sub-domains/medical/medicines/medicines.schema.js';
 import { suppliers } from '@/domains/app/sub-domains/medical/suppliers/suppliers.schema.js';
+import { SUPPLIER_CREDIT_VOID_REASON_VALUES } from './supplier-credits.constants.js';
 
 /**
  * Drizzle table for `app.supplier_credits` — stock returned to a supplier, owed back (launch
@@ -30,7 +32,8 @@ import { suppliers } from '@/domains/app/sub-domains/medical/suppliers/suppliers
  * @remarks
  * - **Notes:** `amount` = quantity × the batch's purchase rate; `applied_amount` is what has been
  *   set against the supplier's received orders (their `credited_amount`) — open until it reaches
- *   the amount. Never changed but for the applied amount, never deleted; the supplier, medicine and
+ *   the amount. Never changed but for the applied amount; voided and undone (MD32 — `deleted_at`,
+ *   `delete_reason`, `delete_note`), a voided credit kept, never purged; the supplier, medicine and
  *   batch stay (`RESTRICT`); the member who returned it is K8's composite key (`RESTRICT`, K2). RLS
  *   on the organization GUC.
  */
@@ -61,6 +64,9 @@ export const supplier_credits = appSchema
       created_by_membership_id: bigint('created_by_membership_id', { mode: 'number' }),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+      deleted_at: timestamp('deleted_at', { withTimezone: true }),
+      delete_reason: varchar('delete_reason', { length: 16 }),
+      delete_note: varchar('delete_note', { length: 280 }),
       created_by_user_id: bigint('created_by_user_id', { mode: 'number' }).references(
         () => users.id,
       ),
@@ -80,10 +86,10 @@ export const supplier_credits = appSchema
         table.created_at,
         table.id,
       ),
-      // A supplier's open credits, oldest first — applied to their dues (MD11)
-      index('idx_supplier_credits_supplier_open')
+      // A supplier's live open credits, oldest first — applied to their dues (MD11, MD32)
+      index('idx_supplier_credits_supplier_live_open')
         .on(table.supplier_id, table.created_at, table.id)
-        .where(sql`${table.applied_amount} < ${table.amount}`),
+        .where(sql`${table.deleted_at} IS NULL AND ${table.applied_amount} < ${table.amount}`),
       index('idx_supplier_credits_medicine_id').on(table.medicine_id),
       index('idx_supplier_credits_medicine_batch_id').on(table.medicine_batch_id),
       index('idx_supplier_credits_created_by_user_id')
@@ -103,6 +109,18 @@ export const supplier_credits = appSchema
         sql`${table.applied_amount} >= 0 AND ${table.applied_amount} <= ${table.amount}`,
       ),
       check('chk_supplier_credits_updated', sql`${table.updated_at} >= ${table.created_at}`),
+      check(
+        'chk_supplier_credits_delete_reason',
+        sql`${table.delete_reason} IN (${sqlLiteralList(SUPPLIER_CREDIT_VOID_REASON_VALUES)})`,
+      ),
+      check(
+        'chk_supplier_credits_delete_reason_when_deleted',
+        sql`(${table.deleted_at} IS NULL) = (${table.delete_reason} IS NULL)`,
+      ),
+      check(
+        'chk_supplier_credits_delete_note_when_other',
+        sql`${table.delete_reason} IS DISTINCT FROM 'other' OR ${table.delete_note} IS NOT NULL`,
+      ),
       foreignKey({
         name: 'supplier_credits_created_by_membership_fk',
         columns: [table.organization_id, table.created_by_membership_id],

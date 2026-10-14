@@ -18,13 +18,14 @@ export interface MedicalPurchaseOrderItemOutput {
  *
  * @remarks
  * - **Notes:** money in rupees; `due_amount` and `payment_status` follow total − paid − credited
- *   once received (MD15); the supplier's name, the lines and their counts are the rules'
+ *   once received (MD15); the supplier's name, phone and GSTIN, the lines and their counts are the rules'
  *   `decorate`. A cancelled one carries its `delete_reason` and `delete_note`.
  */
 export interface MedicalPurchaseOrderOutput {
   id: string;
   purchase_order_number: number;
-  supplier: { id: string; name: string };
+  /** The supplier — with its phone and GSTIN, a deleted one's too (the PO print sheet, MD30 (c)). */
+  supplier: { id: string; name: string; phone: string | null; gst_number: string | null };
   supplier_bill_number: string | null;
   order_date: string;
   stage: string;

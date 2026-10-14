@@ -131,9 +131,45 @@ export async function assertPaymentDayOpen(options: {
   }
 }
 
+/** How a payment moves its invoice's money: what is paid, and what its credit notes refunded. */
+export interface InvoiceMoneyMove {
+  paid: number;
+  refunded: number;
+}
+
+/** No move at all. */
+const NO_INVOICE_MOVE: InvoiceMoneyMove = { paid: 0, refunded: 0 };
+
 /**
- * What a payment does to its invoice's paid amount (8.10): a receipt adds, a refund takes away, a
- * reversal undoes what it reverses; nothing else touches it.
+ * The move scaled by `factor` (−1 undoes it), or the difference `move − minus`.
+ *
+ * @remarks
+ * - **Algorithm:** component by component.
+ * - **Failure modes:** none.
+ */
+export function scaleInvoiceMove({
+  move,
+  factor = 1,
+  minus = NO_INVOICE_MOVE,
+}: {
+  move: InvoiceMoneyMove;
+  factor?: number;
+  minus?: InvoiceMoneyMove;
+}): InvoiceMoneyMove {
+  return {
+    paid: factor * move.paid - minus.paid,
+    refunded: factor * move.refunded - minus.refunded,
+  };
+}
+
+/**
+ * What a payment does to its invoice's money (8.10, B16): a receipt adds to what is paid; a refund
+ * — always against a credit note — moves its money from paid to refunded, so the invoice owes no
+ * more than before it; a reversal undoes what it reverses; nothing else touches it.
+ *
+ * @remarks
+ * - **Algorithm:** by kind; a reversal is the negated effect of the payment it reverses.
+ * - **Failure modes:** none.
  */
 export function invoiceEffect({
   row,
@@ -141,31 +177,35 @@ export function invoiceEffect({
 }: {
   row: Readonly<Record<string, unknown>>;
   reversed?: BaseRecordRow | undefined;
-}): number {
+}): InvoiceMoneyMove {
   const amount = toAmount(row.amount) ?? 0;
-  if (row.kind === PAYMENT_KIND.RECEIPT) return amount;
-  if (row.kind === PAYMENT_KIND.REFUND) return -amount;
-  if (row.kind === PAYMENT_KIND.REVERSAL && reversed) return -invoiceEffect({ row: reversed });
-  return 0;
+  if (row.kind === PAYMENT_KIND.RECEIPT) return { paid: amount, refunded: 0 };
+  if (row.kind === PAYMENT_KIND.REFUND) return { paid: -amount, refunded: amount };
+  if (row.kind === PAYMENT_KIND.REVERSAL && reversed) {
+    return scaleInvoiceMove({ move: invoiceEffect({ row: reversed }), factor: -1 });
+  }
+  return NO_INVOICE_MOVE;
 }
 
 /**
- * B5, B21: moves an invoice's paid amount by `delta` in one guarded statement — over its total is
- * a 409 `more_than_due`, under nothing a 409 `more_than_paid`.
+ * B5, B16, B21: moves an invoice's paid and refunded amounts by `move` in one guarded statement —
+ * more than it owes is a 409 `more_than_due`, under nothing paid a 409 `more_than_paid`.
  */
 export async function applyInvoicePaid(options: {
   context: BaseRecordWriteContext;
   invoiceId: unknown;
-  delta: number;
+  move: InvoiceMoneyMove;
 }): Promise<void> {
-  if (typeof options.invoiceId !== 'number' || options.delta === 0) return;
+  const { move } = options;
+  if (typeof options.invoiceId !== 'number' || (move.paid === 0 && move.refunded === 0)) return;
   const moved = await paymentsRepository.adjustInvoicePaid({
     invoiceId: options.invoiceId,
-    delta: options.delta,
+    paidDelta: move.paid,
+    refundedDelta: move.refunded,
     userId: options.context.userId,
   });
   if (moved) return;
-  throw options.delta > 0
+  throw move.paid > 0
     ? new ConflictError('errors:paymentMoreThanDue').withReason('more_than_due')
     : new ConflictError('errors:paymentMoreThanPaid').withReason('more_than_paid');
 }
@@ -297,7 +337,10 @@ export async function applyPaymentEffects(options: {
   await applyInvoicePaid({
     context,
     invoiceId: row.invoice_id,
-    delta: sign * invoiceEffect({ row, reversed: options.reversed }),
+    move: scaleInvoiceMove({
+      move: invoiceEffect({ row, reversed: options.reversed }),
+      factor: sign,
+    }),
   });
   await applyPendingCreditSettled({ context, row, delta: sign * pendingCreditEffect(row) });
   for (const field of SUPPLIER_BILL_PURCHASE_FIELDS) {

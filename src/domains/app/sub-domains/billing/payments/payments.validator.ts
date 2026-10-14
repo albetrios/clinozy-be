@@ -1,6 +1,10 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { splitRecordIds, withInstants } from '@/shared/utils/validation/record-fields.util.js';
+import {
+  queryInstantRange,
+  splitRecordIds,
+  withInstants,
+} from '@/shared/utils/validation/record-fields.util.js';
 import {
   CreatePaymentDto,
   type CreatePaymentInput,
@@ -8,11 +12,6 @@ import {
   UpdatePaymentDto,
   type UpdatePaymentInput,
 } from './payments.dto.js';
-
-/** A query instant as a `Date` (undefined when absent). */
-function readInstant(value: string | undefined): Date | undefined {
-  return value === undefined ? undefined : new Date(value);
-}
 
 /** Parses a payment create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePayment(data: unknown): CreatePaymentInput {
@@ -60,7 +59,7 @@ export function validateListPaymentsQuery(data: unknown): BaseRecordListInput {
       is_settled: query.is_settled === undefined ? undefined : query.is_settled === 'true',
     },
     ranges: {
-      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+      created_at: queryInstantRange({ from: query.created_from, to: query.created_to }),
     },
   };
 }

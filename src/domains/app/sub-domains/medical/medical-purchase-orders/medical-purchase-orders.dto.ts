@@ -22,22 +22,50 @@ import {
 /** True when every entry of a list is different. */
 const distinct = (values: readonly unknown[]) => new Set(values).size === values.length;
 
+/** An order line's fields (MD15) — an ordered line's and, on receive, a line not ordered's. */
+const medicalPurchaseOrderItemFields = z.object({
+  medicine_id: recordIdSchema.optional(),
+  new_medicine_name: trimmedStringMinMax({ min: 1, max: 120 }).optional(),
+  quantity: z.number().int().min(1).max(MEDICINE_QUANTITY_MAX),
+  free_quantity: z.number().int().min(0).max(MEDICINE_QUANTITY_MAX).optional(),
+  rate: moneySchema.refine((rate) => rate > 0, { message: 'errors:validation.moreThanZero' }),
+});
+
+/** Exactly one of `medicine_id` and `new_medicine_name` names a line's medicine. */
+const oneMedicine = (item: {
+  medicine_id?: string | undefined;
+  new_medicine_name?: string | undefined;
+}) => (item.medicine_id === undefined) !== (item.new_medicine_name === undefined);
+
 /**
  * One order line (MD15): a medicine — or `new_medicine_name`, a quick one added as typed —
  * `quantity*` (1–9999), `free_quantity`, `rate*` (above 0).
  */
-const medicalPurchaseOrderItemDto = z
+const medicalPurchaseOrderItemDto = medicalPurchaseOrderItemFields
+  .strict()
+  .refine(oneMedicine, { message: 'errors:validation.medicineIdOrNewMedicineName' });
+
+/** How an ordered line arrived (MD16): ticked (default) or not, its batch number and expiry. */
+const receivedOrderedLineDto = z
   .object({
-    medicine_id: recordIdSchema.optional(),
-    new_medicine_name: trimmedStringMinMax({ min: 1, max: 120 }).optional(),
-    quantity: z.number().int().min(1).max(MEDICINE_QUANTITY_MAX),
-    free_quantity: z.number().int().min(0).max(MEDICINE_QUANTITY_MAX).optional(),
-    rate: moneySchema.refine((rate) => rate > 0, { message: 'errors:validation.moreThanZero' }),
+    id: recordIdSchema,
+    is_received: z.boolean().optional(),
+    batch_number: trimmedStringMinMax({ min: 1, max: 20 }).optional(),
+    expiry_month: expiryMonthSchema.optional(),
+  })
+  .strict();
+
+/**
+ * Goods that came but were not ordered (MD26, "+ Add unexpected item"): a line without `id` — the
+ * medicine (or `new_medicine_name`), `quantity*`, `free_quantity`, `rate*`, its batch and expiry.
+ */
+const receivedNewLineDto = medicalPurchaseOrderItemFields
+  .extend({
+    batch_number: trimmedStringMinMax({ min: 1, max: 20 }).optional(),
+    expiry_month: expiryMonthSchema.optional(),
   })
   .strict()
-  .refine((item) => (item.medicine_id === undefined) !== (item.new_medicine_name === undefined), {
-    message: 'errors:validation.medicineIdOrNewMedicineName',
-  });
+  .refine(oneMedicine, { message: 'errors:validation.medicineIdOrNewMedicineName' });
 
 /** An order's lines — 1–50. */
 const itemsSchema = z
@@ -87,24 +115,17 @@ export const UpdateMedicalPurchaseOrderDto = z
   });
 
 /**
- * Body of `POST …/{medical_purchase_order_id}/receive` (11.E.8 #32, MD16): optional `items`
- * (`id*`, `is_received` — default yes — `batch_number`, `expiry_month`) and `supplier_bill_number`.
+ * Body of `POST …/{medical_purchase_order_id}/receive` (11.E.8 #32, MD16, MD26): optional `items` —
+ * an ordered line (`id*`, `is_received` — default yes — `batch_number`, `expiry_month`) or goods
+ * not ordered (no `id`: the medicine or `new_medicine_name`, `quantity*`, `free_quantity`, `rate*`,
+ * `batch_number`, `expiry_month`) — and `supplier_bill_number`.
  */
 export const ReceiveMedicalPurchaseOrderDto = z
   .object({
     items: z
-      .array(
-        z
-          .object({
-            id: recordIdSchema,
-            is_received: z.boolean().optional(),
-            batch_number: trimmedStringMinMax({ min: 1, max: 20 }).optional(),
-            expiry_month: expiryMonthSchema.optional(),
-          })
-          .strict(),
-      )
+      .array(z.union([receivedOrderedLineDto, receivedNewLineDto]))
       .max(MEDICAL_PURCHASE_ORDER_ITEMS_MAX)
-      .refine((items) => distinct(items.map((item) => item.id)), {
+      .refine((items) => distinct(items.flatMap((item) => ('id' in item ? [item.id] : []))), {
         message: 'errors:validation.eachLineOnce',
       })
       .optional(),

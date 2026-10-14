@@ -8,6 +8,7 @@ import {
   medicines,
 } from '@/domains/app/sub-domains/medical/medicines/medicines.schema.js';
 import { suppliers } from '@/domains/app/sub-domains/medical/suppliers/suppliers.schema.js';
+import { voidSupplierCreditQueryDto } from './supplier-credits.dto.js';
 import type { SupplierCreditsRepository } from './supplier-credits.repository.js';
 import { createSupplierCreditsRules } from './supplier-credits.rules.js';
 import { serializeSupplierCredit } from './supplier-credits.serializer.js';
@@ -19,17 +20,22 @@ import {
 } from './supplier-credits.validator.js';
 
 /**
- * Stock returned to a supplier and what they owe back (launch ROUTE #153, routes-final 11.C): the
- * credits list (a supplier's account), "Return expiring stock", one credit.
+ * Stock returned to a supplier and what they owe back (launch ROUTE #153, routes-final 11.C; rev 2
+ * MD32, MD34): every credit (the Credits tab), a supplier's credits (its account), "Return expiring
+ * stock", one credit, its void and the undo.
  *
  * @remarks
- * - **Algorithm:** the shared {@link BaseRecordService} on `app.supplier_credits` — the
- *   organization's, no branch (MD3); never changed or deleted (MD11 — no such routes). The rules
- *   take the stock out of the batch and apply the credit to the supplier's dues in the same
- *   transaction; a create answers with a fresh read (the credit as applied). Reading needs `medicine:read`, returning stock `medicine:update` (the routes'
- *   gates, MD2).
- * - **Failure modes:** `NotFoundError('Supplier credit')`; `ValidationError` for a bad body or
- *   query, or a batch or supplier that is no live record here; `ConflictError` per the rules.
+ * - **Algorithm:** the shared {@link BaseRecordService} on `app.supplier_credits`, nested under the
+ *   supplier (`supplier_id` — a removed or unknown supplier is a 404, another supplier's credit a
+ *   404; the nested list's path wins over `?supplier_id=`) and top-level for the Credits tab — the
+ *   organization's, no branch (MD3); never changed (MD11), voided with why (`mistake`,
+ *   `wrong_quantity`, `supplier_refused`, `other`) and undone (MD32). The rules move the stock and
+ *   the supplier's dues in the same transaction; a create answers with a fresh read (the credit as
+ *   applied). Reading needs `medicine:read`, returning stock `medicine:update`, a void and its undo
+ *   `medicine:delete` (the routes' gates, MD2).
+ * - **Failure modes:** `NotFoundError('Supplier credit')` / `('Supplier')`; `ValidationError` for a
+ *   bad body or query, or a batch that is no live record here; `ConflictError` per the rules and a
+ *   restore of a live credit (`record_not_deleted`).
  */
 export class SupplierCreditsService extends BaseRecordService<SupplierCreditOutput> {
   constructor(organizationService: OrganizationService, repository: SupplierCreditsRepository) {
@@ -46,6 +52,8 @@ export class SupplierCreditsService extends BaseRecordService<SupplierCreditOutp
         { field: 'medicine_batch_id', table: medicine_batches, label: 'medicine batch' },
         memberReference('created_by_membership_id'),
       ],
+      parent: { field: 'supplier_id', table: suppliers, label: 'Supplier' },
+      deleteQuery: voidSupplierCreditQueryDto,
       ...createSupplierCreditsRules(repository),
     });
   }
@@ -75,5 +83,23 @@ export class SupplierCreditsService extends BaseRecordService<SupplierCreditOutp
       createName,
     });
     return this.get({ scope, publicId: created.id, actingUserPublicId, visibility });
+  }
+
+  /** Undoes a void — and answers with the credit as applying the supplier's credits again left it (MD32). */
+  override async restore({
+    scope,
+    publicId,
+    actingUserPublicId,
+    visibility,
+    parentPublicId,
+  }: {
+    scope: OrganizationPrincipalDatabaseScope;
+    publicId: string;
+    actingUserPublicId: string | undefined;
+    visibility?: BaseRecordVisibility | undefined;
+    parentPublicId?: string | undefined;
+  }): Promise<SupplierCreditOutput> {
+    await super.restore({ scope, publicId, actingUserPublicId, visibility, parentPublicId });
+    return this.get({ scope, publicId, actingUserPublicId, visibility });
   }
 }

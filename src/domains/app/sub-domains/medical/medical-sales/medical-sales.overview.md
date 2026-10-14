@@ -7,7 +7,9 @@ Parent: [medical](../medical.overview.md)
 ## Purpose
 
 The store's sales — each with its `medical` invoice — their void and undo, returns from the
-patient, and the store's Payments tab (launch ROUTE #153 — routes-final 11.H, MD19–MD22). Tables
+patient, and who owes on them (launch ROUTE #153 — routes-final 11.H, MD19–MD21; rev 2 MD23–MD25,
+ROUTE #186–#187). The store's Payments tab moved to [`medical-payments/`](../medical-payments/medical-payments.overview.md)
+(MD31). Tables
 `app.medical_sales`, `app.medical_sale_returns` and `app.medical_sale_return_items`.
 
 ## Layout
@@ -18,7 +20,7 @@ patient, and the store's Payments tab (launch ROUTE #153 — routes-final 11.H, 
 | `medical-sales.rules.ts` | the sale through the invoice ledger, the void and undo with the stock, the return, the page fields |
 | `medical-sales.repository.ts` | the shared reads and writes, the status filter, lines, invoices, returns |
 | `medical-sales.{dto,validator,serializer,types}.ts` | request shapes, the response |
-| `medical-sales.service.ts` / `.controller.ts` / `.routes.ts` | routes 44–51 (the payments list through the payments service) |
+| `medical-sales.service.ts` / `.controller.ts` / `.routes.ts` | routes 44–50 and 52 (`dues` a collection view of the rules) |
 
 ## Routes
 
@@ -30,8 +32,8 @@ patient, and the store's Payments tab (launch ROUTE #153 — routes-final 11.H, 
 | `GET /app/medical-sales/{medical_sale_id}` | `medicine:read` |
 | `DELETE /app/medical-sales/{medical_sale_id}` | `medicine:delete` |
 | `POST /app/medical-sales/{medical_sale_id}/restore` | `medicine:delete` |
-| `POST /app/medical-sales/{medical_sale_id}/returns` | `payment:create` |
-| `GET /app/medical-payments` | `medicine:read` |
+| `POST /app/medical-sales/{medical_sale_id}/returns` | `payment:delete` (money given back, as every refund — D83, MD23) |
+| `GET /app/medical-sales/dues` | `medicine:read` |
 
 ## Key invariants
 
@@ -39,5 +41,7 @@ patient, and the store's Payments tab (launch ROUTE #153 — routes-final 11.H, 
   restore it (`409 invoice_of_sale`).
 - **Void** only with nothing paid and nothing returned; it puts the stock back and deletes the
   invoice; the undo takes the stock again from the same batches.
-- **Return** only on a sale paid in full; the refund is a credit note with its refund payment;
+- **Return** only on a sale paid in full — its invoice's `due_amount` is 0 (`409 sale_not_paid`;
+  a refund or a store-credit return never raises it, launch D93); the refund is a credit note with
+  its refund payment;
   `unused`, `doctor_changed` and `wrong_item` packs go back into their batch.

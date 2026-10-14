@@ -3,17 +3,13 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import { requireOrganizationPermission } from '@/shared/utils/auth/authorization.util.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
-import { listPaymentsQueryDto } from '@/domains/app/sub-domains/billing/payments/payments.dto.js';
-import type { PaymentsService } from '@/domains/app/sub-domains/billing/payments/payments.service.js';
 import type { MedicalSalesService } from './medical-sales.service.js';
-import {
-  createMedicalPaymentsController,
-  createMedicalSalesController,
-} from './medical-sales.controller.js';
+import { createMedicalSalesController } from './medical-sales.controller.js';
 import {
   CreateMedicalSaleDto,
   ReturnMedicalSaleDto,
   listMedicalSalesQueryDto,
+  medicalSaleDuesQueryDto,
   medicalSalesIdParamsDto,
   voidMedicalSaleQueryDto,
 } from './medical-sales.dto.js';
@@ -23,15 +19,11 @@ type MedicalSaleParams = { Params: { medical_sale_id: string } };
 
 /** What the list and its CSV say about the query. */
 const LIST_QUERY_TEXT =
-  "`q` searches the number (`S-983`), the buyer's name or phone and the medicines' names; filters `status` (unpaid, paid, returned, voided) and `branch_id` (several, comma-separated), `contact_id`, `medicine_id`, `patient_prescription_id`; sort `sold_at` (default, newest first), `sale_number` or `total`. Another branch's sales only with branch:read.";
+  "`q` searches the number (`S-983`), the buyer's name or phone and the medicines' names; filters `status` (unpaid, paid, returned, voided) and `branch_id` (several, comma-separated), `contact_id`, `medicine_id`, `patient_prescription_id`, the created range (`created_from`, `created_to` — the latter exclusive); sort `sold_at` (default, newest first), `sale_number`, `total` or `contact_name` (the buyer's name, A–Z). Another branch's sales only with branch:read.";
 
-/** Registers the `medical-sales` routes (prefix `/api/v1/app`) — routes-final 11.H, routes 44–51. */
-export function medicalSalesRoutes(services: {
-  medicalSalesService: MedicalSalesService;
-  paymentsService: PaymentsService;
-}): FastifyPluginAsync {
-  const controller = createMedicalSalesController(services.medicalSalesService);
-  const paymentsController = createMedicalPaymentsController(services.paymentsService);
+/** Registers the `medical-sales` routes (prefix `/api/v1/app`) — routes-final 11.H, routes 44–52. */
+export function medicalSalesRoutes(service: MedicalSalesService): FastifyPluginAsync {
+  const controller = createMedicalSalesController(service);
 
   return async (app) => {
     const zodApplication = app.withTypeProvider<ZodTypeProvider>();
@@ -64,6 +56,22 @@ export function medicalSalesRoutes(services: {
         },
       },
       controller.export,
+    );
+    zodApplication.get(
+      '/medical-sales/dues',
+      {
+        onRequest: [app.authenticate],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.MEDICINE_READ)],
+        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        schema: {
+          summary: 'List who owes on medical sales',
+          description:
+            "\"Send payment reminders\": one row per buyer with unpaid sales (the Sales tab's Unpaid: live, never returned, money still due — a returned sale owes nothing) — the `contact` (`id`, `name`, `primary_phone`), its `patient_id`, `due_total`, `sale_count` and those `sales` (`id`, `sale_number`, `due_amount`, `sold_at`, oldest first), `oldest_sold_at` — largest `due_total` first. `q` searches the buyer's name or phone (or a sale number, `S-983`); the created range (`created_from`, `created_to` — the latter exclusive) and `branch_id` (several, comma-separated) narrow it as the Sales tab does; `limit` 1–100 (default 25) — one answer, no cursor. The app sends nothing itself — the reminders go out from the user's own phone. Another branch's sales only with branch:read. Requires medicine:read.",
+          tags: ['Medical store'],
+          querystring: medicalSaleDuesQueryDto,
+        },
+      },
+      controller.collectionView('dues'),
     );
     zodApplication.post(
       '/medical-sales',
@@ -134,34 +142,18 @@ export function medicalSalesRoutes(services: {
       '/medical-sales/:medical_sale_id/returns',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PAYMENT_CREATE)],
+        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PAYMENT_DELETE)],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Return from patient',
           description:
-            "On a sale paid in full (money still due is a 409 `sale_not_paid`): `items*` (1–50: `invoice_item_id*`, `quantity*` up to what is left of the line — a 400 `items` otherwise), `reason*` (unused, reaction, doctor_changed, wrong_item, damaged), `refund_mode*` (cash, upi, card); optional `note`. The refund is the returned lines' share of their amounts — a credit note on the invoice with its refund payment on the sale's branch, today (a closed day is a 409 `day_closed`). Unused, doctor_changed and wrong_item packs go back into their batch; reaction and damaged are written off. Answers with the sale. Requires payment:create.",
+            "On a sale paid in full (money still due is a 409 `sale_not_paid`): `items*` (1–50: `invoice_item_id*`, `quantity*` up to what is left of the line — a 400 `items` otherwise), `reason*` (unused, reaction, doctor_changed, wrong_item, damaged), `refund_mode*` (cash, upi, card, or credit — kept as store credit); optional `note`. The refund is the returned lines' share of their amounts — a credit note on the invoice with its refund payment on the sale's branch, today (a closed day is a 409 `day_closed`); as store credit, the credit note alone and an open `give` pending credit for the customer, named by the return's `pending_credit_id` (MD33). One return at a time per sale; more than the sale can still give back is a 409 `more_than_paid`. Unused, doctor_changed and wrong_item packs go back into their batch; reaction and damaged are written off. Answers with the sale. Requires payment:delete — money given back, as every refund (D83, MD23); without it a 403 `missing_permission`.",
           tags: ['Medical store'],
           params: medicalSalesIdParamsDto,
           body: ReturnMedicalSaleDto,
         },
       },
       controller.transition('returns'),
-    );
-    zodApplication.get(
-      '/medical-payments',
-      {
-        onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.MEDICINE_READ)],
-        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
-        schema: {
-          summary: "List the medical store's payments",
-          description:
-            "The store's Payments tab: the payments ledger limited to the medical store — receipts and refunds on `medical` invoices, supplier bills of medical orders and `medicines` expenses (and their reversals) — with the ledger's filters (`q`, `direction`, `kind`, `mode`, `branch_id`, the paid days, `is_settled`, …) and sorts. Another branch's payments only with branch:read. Requires medicine:read.",
-          tags: ['Medical store'],
-          querystring: listPaymentsQueryDto,
-        },
-      },
-      paymentsController.list,
     );
   };
 }

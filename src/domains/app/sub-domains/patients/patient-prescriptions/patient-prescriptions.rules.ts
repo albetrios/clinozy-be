@@ -1,6 +1,7 @@
 import { findMembershipIdOfUser, resolveRecordIds } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { medicines } from '@/domains/app/sub-domains/medical/medicines/medicines.schema.js';
+import { PatientsRepository } from '@/domains/app/sub-domains/patients/patients.repository.js';
 import {
   assertAppointmentOfPatient,
   writePatientFileActivity,
@@ -8,6 +9,8 @@ import {
 import { ConflictError, fieldValidationError, ForbiddenError } from '@/shared/errors/index.js';
 import { PATIENT_PRESCRIPTION_STATUS } from './patient-prescriptions.constants.js';
 import type { PatientPrescriptionLine } from './patient-prescriptions.dto.js';
+
+const patientsRepository = new PatientsRepository();
 
 /** The action that makes a prescription final (P15). */
 const APPROVE = 'approve';
@@ -44,6 +47,16 @@ export async function assertLineMedicinesLive(options: {
   });
 }
 
+/** MD29: each prescription names its patient — "Prescriptions to fill" in one read. */
+async function attachPatients(outputs: Record<string, unknown>[]): Promise<void> {
+  const summaries = await patientsRepository.findSummaries(
+    outputs.map((output) => String(output.patient_id)),
+  );
+  for (const output of outputs) {
+    output.patient = summaries.get(String(output.patient_id)) ?? null;
+  }
+}
+
 /**
  * The patient prescription rules (launch ROUTE #133, routes-final 7.C): a draft until approved,
  * then final; lines name live medicines; the visit is the patient's; approving shows in the
@@ -54,7 +67,8 @@ export async function assertLineMedicinesLive(options: {
  *   `PATCH` or `DELETE` of an approved prescription is refused (P15). `approve` needs at least one
  *   line and records the caller's membership as the approver (a caller who is not a member is a
  *   403); after it a `system` entry linked to the prescription joins the contact's activity —
- *   shown only to `patient_prescription:read` holders (7.10, M10).
+ *   shown only to `patient_prescription:read` holders (7.10, M10). Every read names the patient
+ *   (`patient` — number, contact, name; MD29).
  * - **Failure modes:** `ConflictError` `prescription_approved`; `ValidationError` on `items` or
  *   `appointment_id`; `ForbiddenError` `not_a_member`.
  */
@@ -96,6 +110,7 @@ export const patientPrescriptionsRules: BaseRecordRules = {
     }
     values.approved_by_membership_id = membershipId;
   },
+  decorate: (outputs) => attachPatients(outputs),
   afterWrite: async (row, change, context) => {
     if (!(change.kind === 'transition' && change.action === APPROVE)) return;
     await writePatientFileActivity({

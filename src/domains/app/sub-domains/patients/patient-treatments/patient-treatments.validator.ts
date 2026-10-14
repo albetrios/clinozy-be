@@ -1,6 +1,6 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { withInstants } from '@/shared/utils/validation/record-fields.util.js';
+import { queryInstantRange, withInstants } from '@/shared/utils/validation/record-fields.util.js';
 import {
   CreatePatientTreatmentDto,
   type CreatePatientTreatmentInput,
@@ -9,11 +9,6 @@ import {
   UpdatePatientTreatmentDto,
   type UpdatePatientTreatmentInput,
 } from './patient-treatments.dto.js';
-
-/** A query instant as a `Date` (undefined when absent). */
-function readInstant(value: string | undefined): Date | undefined {
-  return value === undefined ? undefined : new Date(value);
-}
 
 /** Parses a session create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePatientTreatment(data: unknown): CreatePatientTreatmentInput {
@@ -62,7 +57,7 @@ export function validateListPatientTreatmentsQuery(data: unknown): BaseRecordLis
       performed_to: query.performed_to,
     },
     ranges: {
-      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+      created_at: queryInstantRange({ from: query.created_from, to: query.created_to }),
     },
   };
 }

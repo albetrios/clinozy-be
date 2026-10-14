@@ -129,6 +129,7 @@ export class PatientsService extends BaseRecordService<PatientOutput> {
     options: {
       actingUserPublicId?: string | undefined;
       visibility?: BaseRecordVisibility | undefined;
+      derived?: Readonly<Record<string, unknown>> | undefined;
     };
   }): Promise<{ rows: PatientExportRow[]; is_truncated: boolean }> {
     const { rows, is_truncated } = await super.exportRows({ scope, query, options });

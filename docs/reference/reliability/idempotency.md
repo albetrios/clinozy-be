@@ -39,15 +39,16 @@ Any entry that is not a well-formed `completed` record (no `state`, an unknown `
 
 ## Required vs optional
 
-The header is **required on 13 writes** — a missing or malformed key fails closed with **422**
-(`idempotencyKeyRequired` / `idempotencyKeyInvalid`). It is **optional but strongly recommended** on
+The header is **required on the `idempotencyRequired` writes** — a missing or malformed key fails
+closed with **422** (`idempotencyKeyRequired` / `idempotencyKeyInvalid`). It is **optional but strongly recommended** on
 every other write, where duplicate side effects are costly. A malformed key answers the same **422**
 (`idempotencyKeyInvalid`) everywhere — on an optional-key write and on an unknown path too (launch
 USERS-M6): a client that sent a key meant to be protected, so it is never silently dropped.
 
 The required set's source of truth is the `config: { idempotencyRequired: true }` flag on each route;
-the generated route catalog (`docs/routes.txt`) lists it under **IDEMPOTENCY-REQUIRED WRITES (13)**, and
-each route's OpenAPI parameter advertises the header as required. For example, on
+the generated route catalog (`docs/routes.txt`) marks each one `req` in its `I` column and lists them,
+with the live count, under **IDEMPOTENCY-REQUIRED WRITES**, and each route's OpenAPI parameter
+advertises the header as required. For example, on
 `POST /api/v1/billing/subscriptions` the key is forwarded to Stripe `subscriptions.create` when Stripe is
 configured.
 

@@ -1,15 +1,11 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
+import { queryInstantRange } from '@/shared/utils/validation/record-fields.util.js';
 import {
   CreateStockCountDto,
   type CreateStockCountInput,
   listStockCountsQueryDto,
 } from './stock-counts.dto.js';
-
-/** A query instant as a `Date` (undefined when absent). */
-function readInstant(value: string | undefined): Date | undefined {
-  return value === undefined ? undefined : new Date(value);
-}
 
 /** Parses a stock check; throws `ValidationError` naming each bad field. */
 export function validateCreateStockCount(data: unknown): CreateStockCountInput {
@@ -30,7 +26,7 @@ export function validateListStockCountsQuery(data: unknown): BaseRecordListInput
     sort: query.sort,
     order: query.order,
     ranges: {
-      counted_at: { from: readInstant(query.counted_from), to: readInstant(query.counted_to) },
+      counted_at: queryInstantRange({ from: query.counted_from, to: query.counted_to }),
     },
   };
 }

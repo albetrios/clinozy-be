@@ -11,7 +11,8 @@ export interface SupplierManufacturerOutput {
  * @remarks
  * - **Notes:** `payable` (rupees) is the received orders' dues less the open credits, never below
  *   0; `ageing_days` counts from the oldest received order still due (null when nothing is due);
- *   `order_count` the live orders (MD10) — all the rules' `decorate`.
+ *   `order_count` the live orders and `order_total` their totals (MD10, MD30 (b)) — all the rules'
+ *   `decorate`.
  */
 export interface SupplierOutput {
   id: string;
@@ -23,6 +24,7 @@ export interface SupplierOutput {
   payable: number;
   ageing_days: number | null;
   order_count: number;
+  order_total: number;
   created_at: string;
   updated_at: string;
 }

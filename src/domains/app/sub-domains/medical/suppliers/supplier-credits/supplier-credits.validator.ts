@@ -1,5 +1,6 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
+import { queryInstantRange } from '@/shared/utils/validation/record-fields.util.js';
 import {
   CreateSupplierCreditDto,
   type CreateSupplierCreditInput,
@@ -16,7 +17,7 @@ export function refuseSupplierCreditUpdate(): Record<string, unknown> {
   throw new Error('supplier credits are never changed');
 }
 
-/** Parses the credits list's query into a list input (routes-final 11.C.8 #14). */
+/** Parses the credits list's query into a list input (routes-final 11.C.8 #14, #57). */
 export function validateListSupplierCreditsQuery(data: unknown): BaseRecordListInput {
   const query = parseWithSchema({ schema: listSupplierCreditsQueryDto, data });
   return {
@@ -25,6 +26,9 @@ export function validateListSupplierCreditsQuery(data: unknown): BaseRecordListI
     sort: query.sort,
     order: query.order,
     referenceEquals: { supplier_id: query.supplier_id, medicine_id: query.medicine_id },
+    ranges: {
+      created_at: queryInstantRange({ from: query.created_from, to: query.created_to }),
+    },
     derived: { status: query.status },
   };
 }

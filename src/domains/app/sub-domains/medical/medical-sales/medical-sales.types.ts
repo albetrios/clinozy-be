@@ -22,6 +22,8 @@ export interface MedicalSaleReturnOutput {
   note: string | null;
   amount: number;
   invoice_credit_note_id: string;
+  /** A store-credit return's `give` pending credit (MD33) — null otherwise. */
+  pending_credit_id: string | null;
   items: { invoice_item_id: string; quantity: number; amount: number; is_restocked: boolean }[];
   returned_by_membership_id: string | null;
   created_at: string;

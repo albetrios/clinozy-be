@@ -1,7 +1,9 @@
 import { z } from 'zod';
-import { listSearchSortSchema } from '@/shared/utils/http/list-query.util.js';
+import { listSearchSortSchema, searchTermSchema } from '@/shared/utils/http/list-query.util.js';
+import { listLimitQuerySchema } from '@/shared/utils/http/pagination.util.js';
 import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.js';
 import {
+  instantSchema,
   moneySchema,
   percentSchema,
   recordDeleteQuerySchemaOf,
@@ -104,12 +106,14 @@ export const voidMedicalSaleQueryDto = recordDeleteQuerySchemaOf(MEDICAL_SALE_VO
 /**
  * Query of the Sales tab and its CSV (11.H.8 #44, #45): `q` (`S-983`, the buyer's name or phone, a
  * medicine's name), `status` and `branch_id` (several), `contact_id`, `medicine_id`,
- * `patient_prescription_id`; sort `sold_at` (default, newest first) | `sale_number` | `total`.
+ * `patient_prescription_id`, the created range (MD30 (a)); sort `sold_at` (default, newest first) |
+ * `sale_number` | `total` | `contact_name` (A–Z, MD27).
  */
 export const listMedicalSalesQueryDto = listSearchSortSchema([
   'sold_at',
   'sale_number',
   'total',
+  'contact_name',
 ] as const)
   .extend({
     status: valueListSchema(MEDICAL_SALE_STATUS_VALUES).optional(),
@@ -117,9 +121,27 @@ export const listMedicalSalesQueryDto = listSearchSortSchema([
     branch_id: recordIdListSchema.optional(),
     medicine_id: recordIdSchema.optional(),
     patient_prescription_id: recordIdSchema.optional(),
+    created_from: instantSchema.optional(),
+    created_to: instantSchema.optional(),
   })
   .strict();
 
+/**
+ * Query of "Send payment reminders" (11.H.8 #52, MD25): `q` (the buyer's name or phone, a sale
+ * number), the sales' created range, `branch_id` (several) and `limit` (1–100, default 25) — the
+ * largest dues first; one answer, no cursor (a collection read, as the appointments' day counts).
+ */
+export const medicalSaleDuesQueryDto = listLimitQuerySchema
+  .extend({
+    q: searchTermSchema.optional(),
+    created_from: instantSchema.optional(),
+    created_to: instantSchema.optional(),
+    branch_id: recordIdListSchema.optional(),
+  })
+  .strict();
+
+/** Parsed {@link medicalSaleDuesQueryDto}. */
+export type MedicalSaleDuesQuery = z.infer<typeof medicalSaleDuesQueryDto>;
 /** Parsed {@link CreateMedicalSaleDto}. */
 export type CreateMedicalSaleInput = z.infer<typeof CreateMedicalSaleDto>;
 /** Parsed {@link ReturnMedicalSaleDto}. */

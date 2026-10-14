@@ -1,6 +1,9 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
-import { addDaysToCalendarDate } from '@/shared/utils/validation/record-fields.util.js';
+import {
+  addDaysToCalendarDate,
+  queryInstantRange,
+} from '@/shared/utils/validation/record-fields.util.js';
 import {
   CreatePatientCheckInDto,
   type CreatePatientCheckInInput,
@@ -8,11 +11,6 @@ import {
   UpdatePatientCheckInDto,
   type UpdatePatientCheckInInput,
 } from './patient-check-ins.dto.js';
-
-/** A query instant as a `Date` (undefined when absent). */
-function readInstant(value: string | undefined): Date | undefined {
-  return value === undefined ? undefined : new Date(value);
-}
 
 /** Parses a check-in create body; throws `ValidationError` naming each bad field. */
 export function validateCreatePatientCheckIn(data: unknown): CreatePatientCheckInInput {
@@ -50,7 +48,7 @@ export function validateListPatientCheckInsQuery(data: unknown): BaseRecordListI
             ? undefined
             : addDaysToCalendarDate({ date: query.check_in_date_to, days: 1 }),
       },
-      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+      created_at: queryInstantRange({ from: query.created_from, to: query.created_to }),
     },
   };
 }

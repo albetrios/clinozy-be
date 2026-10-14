@@ -176,12 +176,11 @@ export function appRouteBody(options: {
       items: [{ stock_item_id: references.stockItemId, quantity: 1, rate: 10 }],
     },
     'POST /app/stock-vendors': { name: 'Skin Supplies' },
-    'POST /app/supplier-credits': {
+    'POST /app/suppliers': { name: 'Shree Agency' },
+    'POST /app/suppliers/:supplier_id/credits': {
       medicine_batch_id: references.medicineBatchId,
-      supplier_id: references.supplierId,
       quantity: 1,
     },
-    'POST /app/suppliers': { name: 'Shree Agency' },
     'POST /app/tasks': {
       title: 'Call the lab',
       due_at: new Date(Date.now() + 3_600_000).toISOString(),
@@ -328,6 +327,7 @@ export function appRouteBody(options: {
 export function appRouteDeleteQuery(path: string): string {
   if (path.startsWith('/app/medical-purchase-orders/')) return '?reason=supplier_cant_deliver';
   if (path.startsWith('/app/medical-sales/')) return '?reason=customer_changed_mind';
+  if (/^\/app\/suppliers\/[^/]+\/credits\//.test(path)) return '?reason=wrong_quantity';
   if (path.endsWith('/invitation')) return '';
   if (path.startsWith('/app/') || /^\/tenancy\/organization\/(memberships|roles)\//.test(path)) {
     return '?reason=mistake';

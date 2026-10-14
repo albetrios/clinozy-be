@@ -22,7 +22,7 @@ Every paginated list also takes `limit` (1–100) and `after` (cursor), plus `cr
 | 8 | Billing | `billing/` (your call) | `invoices` (+ `exports`, `credit-notes`), `invoice-credit-notes`, `payments` (+ `exports`, `edits`, `reverse`), `pending-credits` (+ `settle`), `day-closes` (+ `close`, `reopen`) | 32 | 1, 3, 4, 7 | **final (rev 2, confirmed 2026-10-08)** · old 10 |
 | 9 | Stock | `stock/` | `stock-items` (+ `exports`, `movements`, `revert`), `stock-item-movements`, `stock-counts`, `stock-purchases` (+ `exports`), `stock-vendors` | 28 | 1, 7, 8 | **final (rev 2, confirmed 2026-10-08)** · old 12 |
 | 10 | Tasks & rules | `tasks/` | `tasks` (+ `exports`, `snooze`, `resolve`, `reassign`), `task-rule-settings` | 12 | 2, 4, 5, 6, 7, 8 | **final (rev 1, confirmed 2026-10-08)** · old 13 |
-| 11 | Medical store | `medical/` | `manufacturers`, `suppliers` (+ `payments`), `supplier-credits`, `medicines` (+ `exports`, `near-expiry-discount`), `medical-purchase-orders` (+ `exports`, `receive`), `medical-reps` (+ `visits`), `medical-sales` (+ `exports`, `returns`), `medical-payments` | 51 | 4, 7, 8, 10 | **final (rev 1, recommendation — D75, 2026-10-08)** · old 11 |
+| 11 | Medical store | `medical/` | `manufacturers`, `suppliers` (+ `payments`, `credits`), `supplier-credits`, `medicines` (+ `exports`, `near-expiry-discount`), `medical-purchase-orders` (+ `exports`, `receive`), `medical-reps` (+ `visits`), `medical-sales` (+ `exports`, `dues`, `returns`), `medical-payments` (+ `exports`), `medical-pending-credits` | 57 | 4, 7, 8, 10 | **final (rev 2, confirmed 2026-10-13 — D92)** (D88–D91; rev 1 by recommendation — D75, 2026-10-08) · old 11 |
 | — | Platform (outside `/app`, already shipped) | `src/domains/<platform>/` | auth 33 · users/me 20 · tenancy 41 · billing 13 · notify 14 · uploads 4 · audit 1 · mcp 2 | 128 | — | review last |
 
 **Restructured 2026-10-08 (your call): one folder per sub-domain, grouped by connection** — what a record owns is
@@ -37,6 +37,14 @@ decision and code-change id (P…, TR…, PK…, B…, S…) keeps its name.
 App total: **248 routes** without the medical store (sub-domain 2's 19 tenancy routes count with the platform) — was 310 with it at the start: contacts with their activity, and leads +7 — convert is automatic, activity has one route per action; patients drop the timeline and search −2 and patient notes −6 (the old patient-file sub-domain merged in); appointments merge the visit in −3 and name their status moves +3; feedback actions nest under their check-in or review −4; patient offerings are bought only by invoicing −3; billing adds refunds, payment history, reversal and settling and drops "checked" +4; saved views lose restore −1; tasks add reassign +1. Rows #68–#72 and the messaging worker are not built yet — their routes land in sub-domains 4, 6, 8, 9, 10 and the medical store.
 
 **Sub-domain 11 (Medical store) is back in this file** (D75 — your call, 2026-10-08: "continue with medical plan … go ahead with your recommendings"): §11, decided by recommendation. Where another sub-domain mentions sub-domain 11, medicines or the medical store, §11 now says how it connects. App total with it: **299 routes** (248 + 51).
+
+**Sub-domain 11 rev 2 — its confirmation round** (D88, your answers of 2026-10-13: "continue final-routes for medical
+on backend in launch iteration only"): the frontend's medical findings (its `api-integration.md` §5.5 and G6; N8,
+N19–N21; Q21; M22, M23, M34) and D83's parked return refund, settled as decisions MD23–MD30 in §11.1. One route more
+(52 — the dues read); app total **300 routes** (248 + 52). Two changes land in other sub-domains (7.C — the
+prescription row names its patient; 8.A — `/invoices` refuses medical bills) and are listed in §12. Then **D89** (your
+note on the plan: "have payments in medical … manage all payments there and credits as well"): the store manages
+its payments and both sides of its credits (MD31–MD33) — three routes more (53–55); and **D90** (your answer: "/medical/payments /credits … whichever you suggest"): Credits is its own tab, and the store's customer credits are read at `/medical-pending-credits` (route 56), named like `/medical-payments`; and **D91** ("everywhere we will go ahead as per pattern"): supplier credits take the owned-record pattern of 7.C, 8.B and 9.B — the flat list for every credit, create, read, void and undo under their supplier, and a supplier's list (route 57) — app total **305 routes** (248 + 57); the return's credit note (8.B) gains a store side, listed in §12.
 
 **Code layout** (your rule, 2026-10-08; names D54): the plan uses the code's words — a **domain** is
 `src/domains/<domain>/` (the platform's `auth`, `tenancy`, `billing`, … and the app's `app`); each numbered section here is a
@@ -5094,7 +5102,7 @@ Every route can answer the errors in 8.5; each route's own errors are in its nes
 
 ### 8.10 Rules worth knowing
 
-- Paid = receipts against the invoice − refunds against it (reversals cancel either); due = total − paid; status `paid` · `partial` · `unpaid`. Nobody pays more than the due (`409 more_than_due`).
+- Paid = receipts against the invoice; a refund moves its money from paid to refunded (reversals cancel either); due = total − paid − refunded (**D93**: a refunded invoice owes no more than before it); status `paid` · `partial` · `unpaid`. Nobody pays more than the due (`409 more_than_due`), and nobody refunds more than is paid less the store-credit notes on the invoice (`409 more_than_paid`).
 - A refund to a patient is always a credit note on the invoice plus its refund payment (8.B); money given back without an invoice goes through a pending credit (8.D).
 - Selling an offering or a plan row is invoicing it (7): a `treatment`, `package` or `lhr` line creates the patient offering, links the plan row and marks it accepted, and links the treatments it bills (B28).
 - Today's checkout "Previous due" and "Advance paid" are separate entries: a receipt against the older invoice, and an advance (a receipt with no invoice) moved onto the bill by changing its invoice on an open day.
@@ -5157,8 +5165,9 @@ None.
 | `invoice_date` | `date` | no | | stays in its financial year |
 | `overall_discount` | `numeric(12,2)` | no | `0` | `≥ 0` |
 | `subtotal`, `discount_total`, `taxable_total`, `gst_total`, `total` | `numeric(12,2)` | no | `0` | computed (B9); each `≥ 0`; `total = taxable_total + gst_total` |
-| `paid_amount` | `numeric(12,2)` | no | `0` | `0 ≤ paid_amount ≤ total`; kept by the payment writes |
-| `due_amount` | `numeric(12,2)` | | generated | `total − paid_amount`, stored |
+| `paid_amount` | `numeric(12,2)` | no | `0` | `≥ 0`; kept by the payment writes |
+| `refunded_amount` | `numeric(12,2)` | no | `0` | `≥ 0`; `paid_amount + refunded_amount ≤ total`; a refund moves its money here from `paid_amount`, its reversal or delete back (**D93**) |
+| `due_amount` | `numeric(12,2)` | | generated | `total − paid_amount − refunded_amount`, stored (**D93**) |
 | `payment_status` | `varchar(7)` | | generated | `paid` (nothing due) · `partial` · `unpaid`, stored |
 | `remark` | `varchar(500)` | yes | | printed |
 | `patient_prescription_id` | `bigint` | yes | | → patient_prescriptions `ON DELETE SET NULL` |
@@ -5208,7 +5217,7 @@ As 8.5.
 
 #### 8.A.6 Objects returned
 
-**Invoice**: `id` (`invc_…`), `invoice_sequence`, `invoice_number`, `financial_year`, `type`, `branch_id`, `contact` (`{ id, name, primary_phone }` or null), `patient_id` (the contact's patient file, or null), `member_ids`, `items` (Invoice item[]), `overall_discount`, `subtotal`, `discount_total`, `taxable_total`, `gst_total`, `total`, `paid_amount`, `due_amount`, `payment_status`, `is_settled`, `invoice_date`, `remark`, `patient_prescription_id`, `created_at`, `updated_at`.
+**Invoice**: `id` (`invc_…`), `invoice_sequence`, `invoice_number`, `financial_year`, `type`, `branch_id`, `contact` (`{ id, name, primary_phone }` or null), `patient_id` (the contact's patient file, or null), `member_ids`, `items` (Invoice item[]), `overall_discount`, `subtotal`, `discount_total`, `taxable_total`, `gst_total`, `total`, `paid_amount`, `refunded_amount` (**D93**), `due_amount`, `payment_status`, `is_settled`, `invoice_date`, `remark`, `patient_prescription_id`, `created_at`, `updated_at`.
 
 **Invoice item**: `id` (`iitm_…`, new prefix), `line_number`, `offering_id`, `medicine_id`, `name`, `pack_size`, `quantity`, `rate`, `discount_percent`, `discount_amount`, `gst_percent`, `is_gst_inclusive`, `taxable_amount`, `gst_amount`, `amount`, `patient_offering_suggestion_id`, `patient_offering_id` (the patient offering it created, or null), `patient_treatment_ids` (the treatments it bills), `batch_number`.
 
@@ -5280,7 +5289,7 @@ None beyond 8.10.
 
 | # | Decision |
 | --- | --- |
-| B16 | **A credit note is an invoice's refund**: `POST /invoices/{invoice_id}/credit-notes` with the amount, the reason and how the money goes back (cash, UPI, card) writes the credit note ("CN-001") and its refund payment together, on the invoice's branch and an open day; the amount can't exceed what is paid (`409 more_than_paid`) and lowers it. Never edited (`schema-routes.md`); deleting its refund payment on an open day removes the credit note too, and a settled refund is reversed (8.C). Today credit notes are read-only and nothing creates them. A refund of unused sessions also lowers the patient offering (7, PK6). |
+| B16 | **A credit note is an invoice's refund**: `POST /invoices/{invoice_id}/credit-notes` with the amount, the reason and how the money goes back (cash, UPI, card) writes the credit note ("CN-001") and its refund payment together, on the invoice's branch and an open day; the amount can't exceed what is paid less the store-credit notes on the invoice (`409 more_than_paid`) and moves from paid to refunded, so the invoice owes no more than before it (**D93**). Never edited (`schema-routes.md`); deleting its refund payment on an open day removes the credit note too, and a settled refund is reversed (8.C). Today credit notes are read-only and nothing creates them. A refund of unused sessions also lowers the patient offering (7, PK6). |
 
 #### 8.B.2 Open questions
 
@@ -6683,20 +6692,59 @@ None beyond 10.10.
 
 ---
 
-## 11. Medical store — final (rev 1, recommendation, 2026-10-08) — nested sub-domains 11.A–11.H
+## 11. Medical store — final (rev 2, confirmed 2026-10-13 — D92; D88–D91; rev 1 by recommendation 2026-10-08, D75) — nested sub-domains 11.A–11.I
 
 *Back in the build (D75 — user 2026-10-08: "continue with medical plan for final-routes … go ahead with your
 recommendings"); D49's pause ends. Decided by recommendation — every decision below says what the code does today.*
 
+*Rev 2 — the confirmation round (D88 — user 2026-10-13: "continue final-routes for medical on backend in launch
+iteration only and than we will continue on frontend"). Rev 1 is built (ROUTE #153); rev 2 answers what the
+frontend's medical research found (clinozy-fe `api-integration.md` §5.5, G6, N8, N19–N21, Q21, M22, M23, M34) and
+D83's parked return refund: decisions **MD23–MD30** (11.1), code changes **MDC19–MDC26** (11.11). Your note on the
+plan (D89) adds **MD31–MD33** — the store manages its payments and its credits — and **MDC27–MDC29**. Built as ROUTE
+#186–#197. Everything rev 2 changes is marked **(rev 2)** below; the rest is rev 1 as built.*
+
+```text
+rev 2 at a glance (D88)                                   nested   routes            rows
+────────────────────────────────────────────────────────  ───────  ────────────────  ─────
+MD23  the return's refund needs payment:delete            11.H     50 (gate)         #186
+MD24  a return stays on a sale paid in full (Q21 — kept)  11.H     50 (unchanged)    —
+MD25  NEW  GET /medical-sales/dues — who owes, largest     11.H     52 (new)          #187
+MD26  receive takes lines that were not ordered (N19)     11.E     32 (body)         #188
+MD27  sorts: medicines by manufacturer · margin;          11.D,    17, 18, 44, 45    #189,
+      sales by customer                                   11.H                       #187
+MD28  /invoices refuses medical bills + medicine lines    8.A      invoices create,  #191
+                                                                   change, previews
+MD29  the prescription row names its patient              7.C      patient-          #192
+                                                                   prescriptions
+MD30  (a) sales' Created filter  (b) suppliers'           11.H,    44, 45 · 7, 9 ·   #187,
+      payable_total + order_total  (c) the order's        11.B,    25–32             #190,
+      supplier with phone + GSTIN  (d) no facet route     11.E                       #188,
+      (e) a sale is never edited  (f) route-map fixes                                #196
+── D89 ─────────────────────────────────────────────────  ───────  ────────────────  ─────
+MD31  the store manages its payments in Medical:          11.I     51 (moved),       #193
+      list + NEW export; record · edit · delete ·                  53 (new) + 8.C
+      reverse through the ledger's own routes                      14–20 (reused)
+MD32  the store manages its credits in Medical:           11.C,    54, 55 (new) +    #194,
+      supplier credits void + undo; customer credits                                         11.I,    56 (new) +        #195
+      = the store's pending credits (D90)                  8.D      8.D 22–27 (reused)
+MD33  a return as store credit (refund_mode = credit)     11.H,    50 (body)         #195
+                                                          8.B
+── D91 ─────────────────────────────────────────────────  ───────  ────────────────  ─────
+MD34  supplier credits on the owned-record pattern:       11.C     14 flat · 15, 16, #194
+      /supplier-credits (every one) + /suppliers/                  54, 55 moved ·
+      {supplier_id}/credits[/{supplier_credit_id}]                 57 (new)
+```
+
 Code: the **`medical` sub-domain folder** — `src/domains/app/sub-domains/medical/` (only `medical.routes.ts` and
 `medical.container.ts` at the root, like `billing/` and `stock/`) with `manufacturers/`, `suppliers/` (its
 `supplier-credits/` inside), `medicines/`, `medical-purchase-orders/`, `medical-reps/` (its `medical-rep-visits/`
-inside) and `medical-sales/`.
+inside), `medical-sales/` and — rev 2 (D89) — `medical-payments/`.
 
 11.1 Decisions (whole sub-domain) · 11.2 Open questions · 11.3 Tables and relations · 11.4 Permissions · 11.5 Common to every route ·
 11.6 Objects returned · 11.7 Routes · 11.8 Request details · 11.9 Errors · 11.10 Rules worth knowing · 11.11 Code changes (whole sub-domain) ·
 11.12 Nested sub-domains · then **11.A Manufacturers · 11.B Suppliers · 11.C Supplier credits · 11.D Medicines · 11.E Medical
-purchase orders · 11.F Medical reps · 11.G Medical rep visits · 11.H Medical sales** — each with the same eleven sections.
+purchase orders · 11.F Medical reps · 11.G Medical rep visits · 11.H Medical sales · 11.I Medical payments (rev 2)** — each with the same eleven sections.
 
 The in-house medicine store (`medical.md`): medicines with batches and expiry, sales to patients and other contacts,
 purchase orders that become batches, suppliers and what the clinic owes them, manufacturers, MRs and their visits, and
@@ -6723,10 +6771,22 @@ nested sub-domain.
 | MD6 | **The buyer is a contact** (B3): `app.medical_contacts` and its 6 routes go; a sale names `contact_id*` — a patient's, a lead's or anyone's (the picker is `GET /contacts`; "Add contact" is `POST /contacts`, its mobile the contact's phone). A medical invoice therefore always has a contact. |
 | MD7 | **Money through billing** (8): a sale writes its `medical` invoice through the invoice ledger in the same transaction (B8, B9 — one line per batch it draws from, rate = MRP with GST inside, the line's discount, "Paid now" as receipts, B13); collecting the rest is `POST /payments` against the invoice; a return refunds through a credit note (B16); paying for an order is a `supplier_bill` payment pointing at it (`payments.medical_purchase_order_id`, as 9's `stock_purchase_id`); the store's Payments tab is `GET /medical-payments`. |
 | MD8 | **Background work**: WC-34 → the task rule `medical_rep_visit` (10.A.10's fifteenth rule, the pharmacist queue; `tasks.medical_rep_id` joins the record links); WC-45 → no worker: the pharmacy queue is `GET /patient-prescriptions?is_filled=false` (7), read on refresh (D37). |
+| MD23 | **(rev 2) The return's refund needs `payment:delete`** (D88 (1)): route 50 gives money back, so it takes the code every other refund takes since D83 (1) — the credit note and the give-back settle — held by Owner, Admin and Accountant; without it a `403` `missing_permission`. The Pharmacist keeps `payment:create` (a sale's "Paid now", paying a supplier) but records a return only with one of them. Supersedes MD2's "a return's refund … `payment:create`"; the Standing deviation "Medical sale return" closes. Today: `payment:create`. |
+| MD24 | **(rev 2) A return stays on a sale paid in full** (D88 (2), the frontend's Q21): MD21's `409 sale_not_paid` is kept — the design offers "Return medicines" only on a paid sale, and a credit note always gives money back up to what was paid (B16), so a partly paid sale is collected first. Other option (not taken): a credit note kind that only lowers what is due, in billing (8). |
+| MD25 | **(rev 2) Who owes on sales — the dues read** (D88 (3), N20): `GET /medical-sales/dues` (route 52) is "Send payment reminders": one row per contact with live sales still due — the contact, its patient file, `due_total`, `sale_count` and those sales (number, due, date, oldest first) — largest due first; `q`, the created range and `branch_id` as route 44, the sales' branch rule. Nothing is sent: the frontend opens WhatsApp or a call with the reminder typed (D87 — messaging is not in Clinozy). Today: no route; the frontend's fixture world groups the unpaid sales. |
+| MD26 | **(rev 2) Receive takes goods that were not ordered** (D88 (4), N19 — "+ Add unexpected item"): route 32's `items` may hold lines without an `id` — `medicine_id` or `new_medicine_name` (a quick medicine, as MD15), `quantity*`, `free_quantity`, `rate*`, `batch_number`, `expiry_month` — each added to the order as a received line (the next `line_number`), its stock in its batch and the supplier's price refreshed like an ordered line, and counted in the order's total; the order holds at most 50 lines. Today: only the ordered lines, by `id`. |
+| MD27 | **(rev 2) The design's sorts** (D88 (5), G6): medicines sort by `manufacturer_name` (A–Z, quick ones without a maker last) and `margin_percent` (highest first, none last); sales by `contact_name` (A–Z, the buyer's first and last name). Each is a SQL sort key over the list's own query, as `nearest_expiry` is (the kernel's `nullsLastSortKeys`) — margin from the lowest price of a live supplier, as the row's `margin_percent` — so no column is stored. Today: neither sort exists. |
+| MD28 | **(rev 2) A medicine is sold only through the store** (D88 (6), M34): `POST /invoices`, `PATCH /invoices/{invoice_id}` and both previews refuse `type=medical` (`400` `type`) and any line with `medicine_id` (`400` `items/<n>/medicine_id`), reason `sold_through_store` — a hand-made medical bill would draw no stock and have no sale. A sale's invoice still reads and lists through `/invoices` (`type` filter `medical`); changing it is `409 invoice_of_sale` (MDC18). Today: accepted. |
+| MD29 | **(rev 2) The prescription row names its patient** (D88 (7), G6 — "Prescriptions to fill"): every `GET /patient-prescriptions` row and record (7.C.6) gains `patient` (`id`, `patient_number`, `contact_id`, `name` — the contact's first and last name), so the pharmacy queue is one read. Today: `patient_id` only. |
+| MD30 | **(rev 2) Six safe defaults** (D88 (8)): **(a)** the sales list and CSV take `created_from` / `created_to` (11.5 — the design's "Created" filter); **(b)** `GET /suppliers` answers `meta.payable_total` (the payable of every supplier the filters match, over every page — as the stock vendors, D81 (9)) and each supplier gains `order_total` (its live orders' totals — "Orders · 1 · ₹4,236"); **(c)** an order's `supplier` is `id`, `name`, `phone`, `gst_number`, read even when the supplier was deleted — the PO print sheet (N21; the clinic's phone and GSTIN are `GET /branches/my`'s, D81 (7)); **(d)** no facet route (N8): the filter sections read `GET /manufacturers` (`medicine_count`), `GET /suppliers` and `GET /medical-reps`, and Payments' What and Mode are fixed lists; **(e)** a sale stays never edited (MD19 — "a sale is changed by a return, not edited"); **(f)** the frontend route map says the return's precondition and code, the quick create's `is_quick: true` and `stage=received` on the open medical bills (M22, M23). |
+| MD31 | **(rev 2, D89) The store manages its payments in Medical**: Medical › Payments is where the store's money is kept, not only read. It lists the store's slice of the ledger (route 51 — receipts and refunds on `medical` invoices, supplier bills of medical orders, `medicines` expenses — and, as built, a `medicines` expense's reversal, which carries no category (AS-BUILT #193)) and writes through the **ledger's own routes** (8.C 14–20): record a receipt on a sale's invoice, a supplier bill on a medical order, a `medicines` expense or money back; change one on an open day (its edit history, 8.C 17); delete and undo on an open day; reverse a settled one — each by its payment code, with every ledger rule (B6, B17–B21). No second set of money routes: a store-scoped copy would duplicate the ledger and its rules. New: `GET /medical-payments/exports` (route 53, `medicine:export`) — the tab's CSV. Route 51 moves to a nested sub-domain of its own, 11.I `medical/medical-payments/` (routes and controller only; the rows are `app.payments`). Route 13 stays the supplier's one-tap "Pay ₹827". Other option: store-scoped write routes under `/medical-payments/{payment_id}` gated by `medicine:*`, so a Pharmacist could change store payments without `payment:update` — not taken (D83 keeps money corrections with Owner, Admin and Accountant). Today: route 51 only. |
+| MD32 | **(rev 2, D89) The store manages its credits in Medical** — both sides, in a Credits view beside Payments. **Supplier credits** (what suppliers owe the store, 11.C): list, "Return expiring stock" (route 15), and now **void and undo** — `DELETE /supplier-credits/{supplier_credit_id}` (route 54, why: `mistake` · `wrong_quantity` · `supplier_refused` · `other`) puts the packs back into their batch and takes the credit off the orders it lowered (their `credited_amount`, due again); `POST …/restore` (route 55) takes the packs again (`409 not_enough_stock`) and re-applies the credit oldest first (as built: where a credit went is not recorded, so a void or its undo takes back every applied amount of the supplier and applies its live credits again oldest first — the payable moves by the credit's amount, AS-BUILT #194); `medicine:delete`. Supersedes MD11's "never changed or deleted". **Customer credits** (what the store owes its customers or is owed): 8.D's pending credits that name a sale's invoice — read at `GET /medical-pending-credits` (route 56, 11.I, `medicine:read` — the store's slice of 8.D as route 51 is of 8.C; D90), added (naming one of the customer's sales), given back, got back or used on the customer's next sale through 8.D's own routes (22–27) and codes (a give-back needs `payment:delete`, D83). The frontend shows both sides in its own Credits tab (D90). Today: credits are created only, and the store has no customer credits. |
+| MD33 | **(rev 2, D89) A return as store credit**: route 50's `refund_mode` adds `credit` — the return still writes its credit note on the sale's invoice (the bill lowered, the stock back or written off), but no money leaves: ~~the refund is paid by `credit` (B18's `credit_amount`) and a `give` pending credit for the same amount names the sale's invoice~~ **as built (AS-BUILT #195): the credit note has no refund payment and a `give` pending credit for the same amount holds what the store owes — naming no invoice, the return names it (`pending_credit_id`)** — a payment naming a pending credit settles it (B24), and giving back a credit that names an invoice writes a second credit note on it — so the customer uses it on their next bill (8.D "use on a bill") or is given it back later as a plain refund. Still only on a sale paid in full (MD24) and with `payment:delete` (MD23). Today: cash, UPI or card only. |
+| MD34 | **(rev 2, D91) Supplier credits on the owned-record pattern** ("everywhere we will go ahead as per pattern"): a credit is its supplier's (its folder sits in `suppliers/`), so its routes follow 7.C's prescriptions, 8.B's credit notes and 9.B's movements — the flat list for every credit (route 14, the Credits tab), a supplier's list `GET /suppliers/{supplier_id}/credits` (route 57, the supplier's Account — **new**), and create, read, void and undo under the supplier: `POST /suppliers/{supplier_id}/credits` (15, `supplier_id` leaves the body), `GET …/credits/{supplier_credit_id}` (16), `DELETE …/credits/{supplier_credit_id}` (54), `POST …/restore` (55) — moved from `/supplier-credits/…`. A credit of another supplier on the path is a `404`. Today: every route flat. |
 
 ### 11.2 Open questions
 
-None — every decision follows the recommendation (D75).
+None — every decision follows the recommendation (D75); rev 2's questions were answered 2026-10-13 (D88).
 
 ### 11.3 Tables and relations
 
@@ -6787,12 +6847,14 @@ One code set (MD2), in the **Medical** row of the Roles matrix; each nested sub-
 
 | Code | Roles matrix | Allows | Routes | Held by default |
 | --- | --- | --- | --- | --- |
-| `medicine:read` | Medical · View | every list and record of the store, its payments | 1, 3, 7, 9, 14, 16, 17, 20, 25, 28, 33, 35, 39, 41, 44, 47, 51 | Owner, Admin, Pharmacist, Accountant |
+| `medicine:read` | Medical · View | every list and record of the store, its payments, who owes on sales | 1, 3, 7, 9, 14, 16, 17, 20, 25, 28, 33, 35, 39, 41, 44, 47, 51, 52 **(rev 2)** | Owner, Admin, Pharmacist, Accountant (and the Doctor — AS-BUILT #153 (1)) |
 | `medicine:create` | Medical · Create | add a manufacturer, supplier, medicine, order, MR or sale; log a visit | 2, 8, 19, 27, 34, 40, 46 | Owner, Admin, Pharmacist |
 | `medicine:update` | Medical · Edit | change any of them; receive an order; return stock to a supplier; the near-expiry discount | 4, 10, 15, 21, 24, 29, 32, 36 | Owner, Admin, Pharmacist |
 | `medicine:delete` | Medical · Delete | delete or restore a record; cancel an order; void a sale | 5, 6, 11, 12, 22, 23, 30, 31, 37, 38, 42, 43, 48, 49 | Owner, Admin |
 | `medicine:export` | Medical · Export | the medicines, orders and sales CSVs | 18, 26, 45 | Owner, Admin, Accountant |
-| `payment:create` (8) | Payments · Create | pay a supplier; refund a return; a sale's "Paid now" (field) | 13, 50 | Owner, Admin, Accountant, **Pharmacist** (MD2) |
+| `payment:create` (8) | Payments · Create | pay a supplier; a sale's "Paid now" (field) | 13, (46) | Owner, Admin, Accountant, **Pharmacist** (MD2) |
+| `payment:delete` (8) | Payments · Delete | refund a return **(rev 2, MD23 — was `payment:create`)** | 50 | Owner, Admin, Accountant |
+| (rev 2, D89) | | the store's payments and customer credits are written through 8.C and 8.D's routes with their own codes (MD31, MD32); the CSV is `medicine:export` (53); a supplier credit's void and undo `medicine:delete` (54, 55); the store's customer credits `medicine:read` (56, D90); a supplier's credits `medicine:read` (57, D91) | 53–57 | as the codes above |
 
 ### 11.5 Common to every route
 
@@ -6816,7 +6878,8 @@ One code set (MD2), in the **Medical** row of the Roles matrix; each nested sub-
 | Medical purchase order · Medical purchase orders export | 11.E.6 |
 | Medical rep | 11.F.6 |
 | Medical rep visit | 11.G.6 |
-| Medical sale · Medical sales export · Payment (8.C.6) | 11.H.6 |
+| Medical sale · Medical sales export · Medical sale dues **(rev 2)** | 11.H.6 |
+| Payment (8.C.6) · Medical payments export · Pending credit (8.D.6) **(rev 2)** | 11.I.6 |
 
 ### 11.7 Routes
 
@@ -6828,17 +6891,17 @@ One code set (MD2), in the **Medical** row of the Roles matrix; each nested sub-
 | 4 | PATCH | `/manufacturers/{manufacturer_id}` | Change one and its suppliers and MRs | `medicine:update` | | 11.A |
 | 5 | DELETE | `/manufacturers/{manufacturer_id}` | Delete one without medicines | `medicine:delete` | | 11.A |
 | 6 | POST | `/manufacturers/{manufacturer_id}/restore` | Undo | `medicine:delete` | req | 11.A |
-| 7 | GET | `/suppliers` | The Suppliers tab and picker | `medicine:read` | | 11.B |
+| 7 | GET | `/suppliers` | The Suppliers tab and picker — with `meta.payable_total` and `order_total` **(rev 2)** | `medicine:read` | | 11.B |
 | 8 | POST | `/suppliers` | Add one | `medicine:create` | req | 11.B |
 | 9 | GET | `/suppliers/{supplier_id}` | Get one with what is owed | `medicine:read` | | 11.B |
 | 10 | PATCH | `/suppliers/{supplier_id}` | Change one | `medicine:update` | | 11.B |
 | 11 | DELETE | `/suppliers/{supplier_id}` | Delete one with nothing owed | `medicine:delete` | | 11.B |
 | 12 | POST | `/suppliers/{supplier_id}/restore` | Undo | `medicine:delete` | req | 11.B |
 | 13 | POST | `/suppliers/{supplier_id}/payments` | Pay what is due — "Pay ₹827" **(new)** | `payment:create` | req | 11.B |
-| 14 | GET | `/supplier-credits` | Every credit — a supplier's account | `medicine:read` | | 11.C |
-| 15 | POST | `/supplier-credits` | Return expiring stock and take credit | `medicine:update` | req | 11.C |
-| 16 | GET | `/supplier-credits/{supplier_credit_id}` | Get one | `medicine:read` | | 11.C |
-| 17 | GET | `/medicines` | The Medicines tab and the pickers | `medicine:read` | | 11.D |
+| 14 | GET | `/supplier-credits` | Every credit — a supplier's account and the Credits view **(rev 2)** | `medicine:read` | | 11.C |
+| 15 | POST | `/suppliers/{supplier_id}/credits` | Return expiring stock and take credit **(moved, rev 2 — MD34)** | `medicine:update` | req | 11.C |
+| 16 | GET | `/suppliers/{supplier_id}/credits/{supplier_credit_id}` | Get one **(moved, rev 2 — MD34)** | `medicine:read` | | 11.C |
+| 17 | GET | `/medicines` | The Medicines tab and the pickers — sorts by manufacturer and margin **(rev 2)** | `medicine:read` | | 11.D |
 | 18 | GET | `/medicines/exports` | The medicines CSV | `medicine:export` | | 11.D |
 | 19 | POST | `/medicines` | Add a medicine with its batches and supplier prices | `medicine:create` | req | 11.D |
 | 20 | GET | `/medicines/{medicine_id}` | Get one | `medicine:read` | | 11.D |
@@ -6846,14 +6909,14 @@ One code set (MD2), in the **Medical** row of the Roles matrix; each nested sub-
 | 22 | DELETE | `/medicines/{medicine_id}` | Delete one at zero stock | `medicine:delete` | | 11.D |
 | 23 | POST | `/medicines/{medicine_id}/restore` | Undo | `medicine:delete` | req | 11.D |
 | 24 | POST | `/medicines/near-expiry-discount` | "Sell all at 20% off" / remove it **(new)** | `medicine:update` | req | 11.D |
-| 25 | GET | `/medical-purchase-orders` | The Purchases tab | `medicine:read` | | 11.E |
+| 25 | GET | `/medical-purchase-orders` | The Purchases tab — the supplier with phone and GSTIN **(rev 2)** | `medicine:read` | | 11.E |
 | 26 | GET | `/medical-purchase-orders/exports` | The orders CSV | `medicine:export` | | 11.E |
 | 27 | POST | `/medical-purchase-orders` | Create an order | `medicine:create` | req | 11.E |
 | 28 | GET | `/medical-purchase-orders/{medical_purchase_order_id}` | Get one | `medicine:read` | | 11.E |
 | 29 | PATCH | `/medical-purchase-orders/{medical_purchase_order_id}` | Change an order not yet received | `medicine:update` | | 11.E |
 | 30 | DELETE | `/medical-purchase-orders/{medical_purchase_order_id}` | Cancel an order not yet received | `medicine:delete` | | 11.E |
 | 31 | POST | `/medical-purchase-orders/{medical_purchase_order_id}/restore` | Undo the cancel | `medicine:delete` | req | 11.E |
-| 32 | POST | `/medical-purchase-orders/{medical_purchase_order_id}/receive` | Receive goods — lines become batches | `medicine:update` | req | 11.E |
+| 32 | POST | `/medical-purchase-orders/{medical_purchase_order_id}/receive` | Receive goods — lines become batches; goods not ordered come as new lines **(rev 2)** | `medicine:update` | req | 11.E |
 | 33 | GET | `/medical-reps` | The MRs tab and picker | `medicine:read` | | 11.F |
 | 34 | POST | `/medical-reps` | Add an MR | `medicine:create` | req | 11.F |
 | 35 | GET | `/medical-reps/{medical_rep_id}` | Get one | `medicine:read` | | 11.F |
@@ -6865,18 +6928,25 @@ One code set (MD2), in the **Medical** row of the Roles matrix; each nested sub-
 | 41 | GET | `/medical-reps/{medical_rep_id}/visits/{medical_rep_visit_id}` | Get one **(moved)** | `medicine:read` | | 11.G |
 | 42 | DELETE | `/medical-reps/{medical_rep_id}/visits/{medical_rep_visit_id}` | Delete one **(moved)** | `medicine:delete` | | 11.G |
 | 43 | POST | `/medical-reps/{medical_rep_id}/visits/{medical_rep_visit_id}/restore` | Undo **(moved)** | `medicine:delete` | req | 11.G |
-| 44 | GET | `/medical-sales` | The Sales tab | `medicine:read` | | 11.H |
+| 44 | GET | `/medical-sales` | The Sales tab — the Created filter and the customer sort **(rev 2)** | `medicine:read` | | 11.H |
 | 45 | GET | `/medical-sales/exports` | The sales CSV | `medicine:export` | | 11.H |
 | 46 | POST | `/medical-sales` | New sale — the medical invoice, stock by earliest expiry | `medicine:create` | req | 11.H |
 | 47 | GET | `/medical-sales/{medical_sale_id}` | Get one (the Sale drawer) | `medicine:read` | | 11.H |
 | 48 | DELETE | `/medical-sales/{medical_sale_id}` | Void an unpaid sale — stock goes back **(was `/void`)** | `medicine:delete` | | 11.H |
 | 49 | POST | `/medical-sales/{medical_sale_id}/restore` | Undo the void | `medicine:delete` | req | 11.H |
-| 50 | POST | `/medical-sales/{medical_sale_id}/returns` | Return from patient — refund, stock back **(new)** | `payment:create` | req | 11.H |
-| 51 | GET | `/medical-payments` | The store's Payments tab **(new)** | `medicine:read` | | 11.H |
+| 50 | POST | `/medical-sales/{medical_sale_id}/returns` | Return from patient — refund (or store credit, rev 2 MD33), stock back **(new)** | `payment:delete` **(rev 2, MD23 — was `payment:create`)** | req | 11.H |
+| 51 | GET | `/medical-payments` | The store's Payments tab **(new)** — moved to 11.I **(rev 2)** | `medicine:read` | | 11.I |
+| 52 | GET | `/medical-sales/dues` | Who owes on sales — "Send payment reminders" **(new, rev 2)** | `medicine:read` | | 11.H |
+| 53 | GET | `/medical-payments/exports` | The store's payments CSV **(new, rev 2 — MD31)** | `medicine:export` | | 11.I |
+| 54 | DELETE | `/suppliers/{supplier_id}/credits/{supplier_credit_id}` | Void a supplier credit — packs back, dues again **(back, rev 2 — MD32, MD34)** | `medicine:delete` | | 11.C |
+| 55 | POST | `/suppliers/{supplier_id}/credits/{supplier_credit_id}/restore` | Undo the void **(back, rev 2 — MD32, MD34)** | `medicine:delete` | req | 11.C |
+| 56 | GET | `/medical-pending-credits` | The store's customer credits — the Credits tab **(new, rev 2 — MD32, D90)** | `medicine:read` | | 11.I |
+| 57 | GET | `/suppliers/{supplier_id}/credits` | A supplier's credits — its Account **(new, rev 2 — MD34)** | `medicine:read` | | 11.C |
 
 Gone (8 routes): `/medical-contacts` (6 — MD6), `/medical-purchase-orders/{id}/cancel` (→ route 30), `/medical-sales/{id}/void` (→ route 48);
 `PATCH /medical-rep-visits/{id}` and the rest of `/medical-rep-visits` move under the rep (39–43); `/supplier-credits/{id}`
-`DELETE` and `restore` go (a credit is never undone — MD11).
+`DELETE` and `restore` go (a credit is never undone — MD11) — **and come back in rev 2 as routes 54–55 (MD32): a void that
+puts the stock back and the dues again, and its undo — under the supplier, with create and read-one (MD34).**
 
 ### 11.8 Request details
 
@@ -6892,13 +6962,16 @@ Each nested sub-domain's .9; common to many routes:
 | 2, 4, 8, 10, 19, 21 | `409` · `record_already_exists` | the name (or a batch number) is taken |
 | 6, 12, 23, 31, 38, 43, 49 | `409` · `record_not_deleted` / `record_restore_conflict` | it is live, or its name was reused meanwhile |
 | every `{…_id}` route | `404` | not in the organization (a sale of a branch you cannot see) |
+| 50 | `403` · `missing_permission` **(rev 2)** | a return without `payment:delete` (MD23) |
 
 ### 11.10 Rules worth knowing
 
 - A sale, a received order, a return and a supplier credit each move a batch and its medicine in the same transaction (MD4).
-- "Prescriptions to fill" is `GET /patient-prescriptions?is_filled=false` (7); opening one prefills the sale's `patient_prescription_id`.
+- "Prescriptions to fill" is `GET /patient-prescriptions?status=approved&is_filled=false` (7) — each row names its patient **(rev 2, MD29)**; opening one prefills the sale's `patient_prescription_id`.
 - A sale's invoice is the patient file's invoice too (its contact's) — the Invoices tab shows it (8).
-- Unpaid sales get the `payment_due` task the day after (10.A.10); "Send payment reminders" is a message batch (4).
+- Unpaid sales get the `payment_due` task the day after (10.A.10); "Send payment reminders" reads who owes, `GET /medical-sales/dues` **(rev 2, MD25 — was a message batch, gone with D87)**; nothing is sent from Clinozy.
+- A medicine is sold only through `/medical-sales`; `/invoices` refuses a medical bill or a medicine line (`400` `sold_through_store`) **(rev 2, MD28)**.
+- **(rev 2, D89)** The store's money is managed in Medical › Payments through the ledger's own routes (MD31), and both sides of its credits in its own Credits tab — supplier credits (11.C, void and undo) and the customers' pending credits naming a sale (route 56, D90) (MD32); a return may leave its refund as store credit (MD33).
 - An MR's next visit opens the `medical_rep_visit` task in the pharmacist queue on that day (MD8).
 
 ### 11.11 Code changes (whole sub-domain)
@@ -6910,19 +6983,33 @@ Each nested sub-domain's .9; common to many routes:
 | MDC3 | MD7: `payments.medical_purchase_order_id` (supplier bills and their reversals only, `RESTRICT`) through the billing ledger, as `stock_purchase_id` (9); `invoice_items.medicine_batch_id` (`RESTRICT`); `GET /medical-payments` through the payments service |
 | MDC4 | MD8: the `medical_rep_visit` task rule and `tasks.medical_rep_id` (10); `is_filled` on `GET /patient-prescriptions` (7) |
 | MDC5 | i18n keys (en, es), OpenAPI response maps, the route catalog and its maps, the saved-view lists (`medicines`, `medical_sales`, `medical_purchase_orders`), seeds, live checks |
+| MDC19 | **(rev 2)** MD23: route 50 gated by `payment:delete`; its description and the role checks; the Standing deviation "Medical sale return" closes — ROUTE #186 |
+| MDC20 | **(rev 2)** MD25, MD27 (sales), MD30 (a): route 52 `GET /medical-sales/dues` through the sales repository (one aggregate over live sales still due, the sales' branch rule); `created_from` / `created_to` and `sort=contact_name` on routes 44 and 45 — ROUTE #187 |
+| MDC21 | **(rev 2)** MD26, MD30 (c): route 32's lines without `id` (a received line appended, a quick medicine for `new_medicine_name`, the batch, the supplier price, the total, the 50-line cap); the order's `supplier` with `phone` and `gst_number`, a deleted supplier included — ROUTE #188 |
+| MDC22 | **(rev 2)** MD27 (medicines): `sort=manufacturer_name` and `sort=margin_percent` on routes 17 and 18 as SQL sort keys (`nullsLastSortKeys`), margin from the lowest live supplier price — ROUTE #189 |
+| MDC23 | **(rev 2)** MD30 (b): `meta.payable_total` on route 7 (as `stock-vendors`' `sumPayables`) and `order_total` on the supplier — ROUTE #190 |
+| MDC24 | **(rev 2)** MD28: the invoice rules refuse `type=medical` and `medicine_id` lines on create, change and both previews (`400` `sold_through_store`), sub-domain 8 — ROUTE #191 |
+| MDC25 | **(rev 2)** MD29: `patient` (`id`, `patient_number`, `contact_id`, `name`) on the prescription row and record, sub-domain 7 — ROUTE #192 |
+| MDC26 | **(rev 2)** MD30 (f) and the documents: `docs/routes.txt` and its maps, the OpenAPI document, the overviews, `plans/frontend-route-map.md` (the medical section, M22, M23), the Standing deviations — ROUTE #196 |
+| MDC27 | **(rev 2, D89)** MD31: the nested sub-domain 11.I `medical/medical-payments/` (routes and controller, the payments service's store slice); route 51 moves into it; route 53 the store's payments CSV (as the payments export, limited to the store) — ROUTE #193 |
+| MDC28 | **(rev 2, D89)** MD32 (supplier): `deleted_at`, `delete_reason`, `delete_note` on `app.supplier_credits` (a migration); routes 54–55 — the void puts the packs back and un-applies the credit from its orders, the undo takes the packs again and re-applies oldest first; the open-credits index and `payable` skip a voided credit — ROUTE #194 |
+| MDC30 | **(rev 2, D91)** MD34: supplier credits under their supplier — routes 15, 16, 54, 55 moved, route 57 new — ROUTE #194 |
+| MDC29 | **(rev 2, D89, D90)** MD32 (customer), MD33: route 56 `GET /medical-pending-credits` (11.I) — 8.D's list limited to credits naming a `medical` invoice, through the pending-credits service; route 50's `refund_mode=credit` — ~~the credit note's refund paid by `credit_amount` and a `give` pending credit on the sale's invoice~~ as built: the credit note without a refund payment and a `give` pending credit the return names, in the same transaction (billing 8.B `recordCreditNote`, 8.D `recordStoreCredit`; a migration — AS-BUILT #195) — ROUTE #195 |
 
 ### 11.12 Nested sub-domains
 
-| Nested sub-domain | Folder | Tables | Routes |
-| --- | --- | --- | --- |
-| 11.A Manufacturers | `medical/manufacturers/` | `app.manufacturers` | 1–6 |
-| 11.B Suppliers | `medical/suppliers/` | `app.suppliers`, `app.supplier_manufacturers` | 7–13 |
-| 11.C Supplier credits | `medical/suppliers/supplier-credits/` | `app.supplier_credits` | 14–16 |
-| 11.D Medicines | `medical/medicines/` | `app.medicines`, `app.medicine_batches`, `app.medicine_supplier_prices` | 17–24 |
-| 11.E Medical purchase orders | `medical/medical-purchase-orders/` | `app.medical_purchase_orders`, `app.medical_purchase_order_items` | 25–32 |
-| 11.F Medical reps | `medical/medical-reps/` | `app.medical_reps`, `app.medical_rep_manufacturers` | 33–38 |
-| 11.G Medical rep visits | `medical/medical-reps/medical-rep-visits/` | `app.medical_rep_visits` | 39–43 |
-| 11.H Medical sales | `medical/medical-sales/` | `app.medical_sales`, `app.medical_sale_returns`, `app.medical_sale_return_items` | 44–51 |
+| Nested sub-domain | Folder (`src/domains/app/sub-domains/medical/…`) | Tables | Routes | Status |
+| --- | --- | --- | --- | --- |
+| 11.A Manufacturers | `manufacturers/` | `app.manufacturers` | 1–6 | final |
+| 11.B Suppliers | `suppliers/` | `app.suppliers`, `app.supplier_manufacturers` | 7–13 | final · rev 2 |
+| 11.C Supplier credits | `suppliers/supplier-credits/` | `app.supplier_credits` | 14–16, 54, 55, 57 | final · rev 2 |
+| 11.D Medicines | `medicines/` | `app.medicines`, `app.medicine_batches`, `app.medicine_supplier_prices` | 17–24 | final · rev 2 |
+| 11.E Medical purchase orders | `medical-purchase-orders/` | `app.medical_purchase_orders`, `app.medical_purchase_order_items` | 25–32 | final · rev 2 |
+| 11.F Medical reps | `medical-reps/` | `app.medical_reps`, `app.medical_rep_manufacturers` | 33–38 | final |
+| 11.G Medical rep visits | `medical-reps/medical-rep-visits/` | `app.medical_rep_visits` | 39–43 | final |
+| 11.H Medical sales | `medical-sales/` | `app.medical_sales`, `app.medical_sale_returns`, `app.medical_sale_return_items` | 44–50, 52 | final · rev 2 |
+| 11.I Medical payments | `medical-payments/` | — (the store's slices of `app.payments`, 8.C, and `app.pending_credits`, 8.D) | 51, 53, 56 | new · rev 2 (D89, D90) |
+
 
 ---
 
@@ -7009,7 +7096,7 @@ None beyond 11.10.
 
 ---
 
-### 11.B Suppliers — `medical/suppliers/` — final
+### 11.B Suppliers — `medical/suppliers/` — final · rev 2 (MD30 (b))
 
 #### 11.B.1 Decisions
 
@@ -7052,7 +7139,7 @@ As 11.5.
 
 #### 11.B.6 Objects returned
 
-**Supplier**: `id` (`sup_…`), `name`, `phone`, `gst_number`, `is_quick`, `manufacturers` (`id`, `name`, `tone`), `payable`, `ageing_days` (or null), `order_count`, `created_at`, `updated_at`.
+**Supplier**: `id` (`sup_…`), `name`, `phone`, `gst_number`, `is_quick`, `manufacturers` (`id`, `name`, `tone`), `payable`, `ageing_days` (or null), `order_count`, `order_total` **(rev 2 — its live orders' totals: an ordered one at its lines, a received one at its received lines)**, `created_at`, `updated_at`. The list's `meta` adds `payable_total` **(rev 2)** — the payable of every supplier the filters match, over every page (the footer "4 suppliers · ₹6,563 payable").
 
 #### 11.B.7 Routes (7–13)
 
@@ -7070,7 +7157,7 @@ As 11.5.
 
 | # | Query | Body | Response |
 | --- | --- | --- | --- |
-| 7 | `q` (name, phone), `manufacturer_id`, `has_payable` (`true`), `sort` = `name` (default) \| `payable` \| `created_at`, `order`, `limit`, `after` | — | Supplier[] |
+| 7 | `q` (name, phone), `manufacturer_id`, `has_payable` (`true`), `sort` = `name` (default) \| `payable` \| `created_at`, `order`, `limit`, `after` | — | Supplier[]; `meta.payable_total` **(rev 2)** |
 | 8 | — | `name*`; optional: `phone`, `gst_number`, `manufacturer_ids`, `is_quick` | Supplier |
 | 9, 12 | — | — | Supplier |
 | 10 | — | `name`, `phone`, `gst_number`, `manufacturer_ids` (`null` clears phone and GST); `expected_updated_at` | Supplier |
@@ -7098,15 +7185,18 @@ None beyond 11.10.
 | # | Change |
 | --- | --- |
 | MDC7 | MD10: the unique name, the phone and GSTIN checks, `manufacturer_ids` on the link table; `payable`, `ageing_days`, `order_count`; the `has_payable` filter and `payable` sort; the pay route through the billing ledger; delete only with nothing owed |
+| MDC23 | **(rev 2)** MD30 (b): `meta.payable_total` on route 7 and `order_total` on the supplier |
 
 ---
 
-### 11.C Supplier credits — `medical/suppliers/supplier-credits/` — final
+### 11.C Supplier credits — `medical/suppliers/supplier-credits/` — final · rev 2 (MD32, MD34)
 
 #### 11.C.1 Decisions
 
 | # | Decision |
 | --- | --- |
+| MD34 | **(rev 2, D91) Under their supplier** (11.1 MD34): the flat list stays for every credit (14); a supplier's list (57), create (15), read (16), void (54) and undo (55) sit at `/suppliers/{supplier_id}/credits…`, as 7.C, 8.B and 9.B. |
+| MD32 | **(rev 2, D89) Void and undo** (11.1 MD32): `DELETE` (route 54) with why — `mistake` · `wrong_quantity` · `supplier_refused` · `other` (a note for `other`) — puts the credit's packs back into its batch and takes its applied amount off the orders it lowered (their `credited_amount`; they are due again), in one transaction; `restore` (route 55) takes the packs again (`409 not_enough_stock`) and re-applies the credit to the supplier's received orders still due, oldest first. A voided credit leaves `payable`, the open credits and the Account (as built: it is not read or listed again until undone — AS-BUILT #194). Supersedes MD11's "never changed or deleted" and "delete and restore go". |
 | MD11 | **"Return expiring stock" is a supplier credit**: `medicine_batch_id*`, `supplier_id*` (any live supplier; the picker offers the medicine's) and `quantity*` (up to the batch's) take the stock out of the batch and record what the supplier owes back — `amount` = quantity × the batch's purchase rate (design: "₹369 (qty × batch rate)"). The credit is **applied at once** to the supplier's received orders still due, oldest first (each order's `credited_amount`), and what is left is applied to orders received later; `status` `open` until fully applied, then `adjusted` (design: "Adjusted"). Never changed or deleted — a mistake is put right with a new order or batch edit. Today: credits are free-standing rows (delete and restore) that change neither stock nor what is owed. |
 
 #### 11.C.2 Open questions
@@ -7128,14 +7218,15 @@ None.
 | `applied_amount` | `numeric(12,2)` | no | `0` | `0 ≤ applied_amount ≤ amount` |
 | `created_by_membership_id` | `bigint` | yes | | → memberships `ON DELETE RESTRICT` (K2) |
 
-No soft delete, no `updated_*` beyond the applied amount. Indexes: unique `public_id`; `(organization_id, created_at, id)`; `(supplier_id) WHERE applied_amount < amount` — the open ones. RLS: organization policy, enabled and forced.
+No soft delete, no `updated_*` beyond the applied amount — **rev 2 (MD32): `deleted_at`, `delete_reason` (the four), `delete_note` with the three standard checks; the open-credits index adds `AND deleted_at IS NULL` (as built: rebuilt concurrently as `idx_supplier_credits_supplier_live_open` on `(supplier_id, created_at, id)`, AS-BUILT #194). A voided credit is kept, never purged.** Indexes: unique `public_id`; `(organization_id, created_at, id)`; `(supplier_id) WHERE applied_amount < amount` — the open ones. RLS: organization policy, enabled and forced.
 
 #### 11.C.4 Permissions
 
 | Code | Roles matrix | Allows | Routes | Held by default |
 | --- | --- | --- | --- | --- |
-| `medicine:read` | Medical · View | as 11.4 | 14, 16 | Owner, Admin, Pharmacist, Accountant |
+| `medicine:read` | Medical · View | as 11.4 | 14, 16, 57 **(rev 2)** | Owner, Admin, Pharmacist, Accountant |
 | `medicine:update` | Medical · Edit | return stock to a supplier | 15 | Owner, Admin, Pharmacist |
+| `medicine:delete` | Medical · Delete | void a credit and undo it **(rev 2)** | 54, 55 | Owner, Admin |
 
 #### 11.C.5 Common to every route
 
@@ -7143,31 +7234,39 @@ As 11.5.
 
 #### 11.C.6 Objects returned
 
-**Supplier credit**: `id` (`scr_…`), `supplier_id`, `supplier_name`, `medicine_id`, `medicine_name`, `medicine_batch_id`, `batch_number`, `quantity`, `rate`, `amount`, `applied_amount`, `status` (`open` · `adjusted`), `created_by_membership_id`, `created_at`.
+**Supplier credit**: `id` (`scr_…`), `supplier_id`, `supplier_name`, `medicine_id`, `medicine_name`, `medicine_batch_id`, `batch_number`, `quantity`, `rate`, `amount`, `applied_amount`, `status` (`open` · `adjusted`), `created_by_membership_id`, `created_at`; **(rev 2)** ~~a voided one's `deleted_at`, `delete_reason`, `delete_note`~~ — as built, a voided credit is not read (AS-BUILT #194).
 
-#### 11.C.7 Routes (14–16)
+#### 11.C.7 Routes (14–16, 54, 55, 57)
 
 | # | Method | Path | Purpose | Gate | Idem |
 | --- | --- | --- | --- | --- | --- |
-| 14 | GET | `/supplier-credits` | Every credit — a supplier's account | `medicine:read` | |
-| 15 | POST | `/supplier-credits` | Return expiring stock and take credit | `medicine:update` | req |
-| 16 | GET | `/supplier-credits/{supplier_credit_id}` | Get one | `medicine:read` | |
+| 14 | GET | `/supplier-credits` | Every credit — the Credits tab | `medicine:read` | |
+| 57 | GET | `/suppliers/{supplier_id}/credits` | A supplier's credits — its Account **(new, rev 2)** | `medicine:read` | |
+| 15 | POST | `/suppliers/{supplier_id}/credits` | Return expiring stock and take credit **(moved, rev 2)** | `medicine:update` | req |
+| 16 | GET | `/suppliers/{supplier_id}/credits/{supplier_credit_id}` | Get one **(moved, rev 2)** | `medicine:read` | |
+| 54 | DELETE | `/suppliers/{supplier_id}/credits/{supplier_credit_id}` | Void one — packs back, dues again **(rev 2)** | `medicine:delete` | |
+| 55 | POST | `/suppliers/{supplier_id}/credits/{supplier_credit_id}/restore` | Undo the void **(rev 2)** | `medicine:delete` | req |
 
 #### 11.C.8 Request details
 
 | # | Query | Body | Response |
 | --- | --- | --- | --- |
-| 14 | `supplier_id`, `medicine_id`, `status`, `sort` = `created_at` (default, newest first), `order`, `limit`, `after` | — | Supplier credit[] |
-| 15 | — | `medicine_batch_id*`, `supplier_id*`, `quantity*` (1–9999) | Supplier credit |
+| 14 | `supplier_id`, `medicine_id`, `status`, `created_from` / `created_to`, `sort` = `created_at` (default, newest first), `order`, `limit`, `after` | — | Supplier credit[] |
+| 57 | as 14, without `supplier_id` **(rev 2)** | — | Supplier credit[] |
+| 15 | — | `medicine_batch_id*`, `quantity*` (1–9999) — the supplier is the path's **(rev 2)** | Supplier credit |
 | 16 | — | — | Supplier credit |
+| 54 | `reason*` = `mistake` \| `wrong_quantity` \| `supplier_refused` \| `other`, `note` (required for `other`) **(rev 2)** | — | 204 |
+| 55 | — | — | Supplier credit **(rev 2)** |
 
 #### 11.C.9 Errors
 
 | Route | Status · reason | When |
 | --- | --- | --- |
 | 15 | `409` · `not_enough_stock` | more than the batch holds |
-| 15 | `400` · `medicine_batch_id` / `supplier_id` | not a batch or live supplier of the organization |
-| 16 | `404` | not in the organization |
+| 15 | `400` · `medicine_batch_id` | not a batch of the organization |
+| 15–16, 54, 55, 57 | `404` | the supplier (or the credit, or a credit of another supplier) is not in the organization |
+| 55 | `409` · `not_enough_stock` **(rev 2)** | the batch no longer holds the packs |
+| 55 | `409` · `record_not_deleted` **(rev 2)** | it is not voided |
 
 #### 11.C.10 Rules worth knowing
 
@@ -7178,10 +7277,12 @@ A credit lowers the supplier's `payable` at once (11.B); paying the supplier (ro
 | # | Change |
 | --- | --- |
 | MDC8 | MD11: the credit takes the stock out of the batch (guarded) and is applied to the supplier's dues in the same transaction; `applied_amount`, `status`; the open credits applied when an order is received (11.E); delete and restore go |
+| MDC28 | **(rev 2)** MD32: the delete columns (a migration); routes 54–55 with the stock and the dues moved in one transaction |
+| MDC30 | **(rev 2)** MD34: routes 15, 16, 54, 55 under `/suppliers/{supplier_id}/credits`; route 57 the supplier's list |
 
 ---
 
-### 11.D Medicines — `medical/medicines/` — final
+### 11.D Medicines — `medical/medicines/` — final · rev 2 (MD27)
 
 #### 11.D.1 Decisions
 
@@ -7257,7 +7358,7 @@ As 11.5.
 
 | # | Query | Body | Response |
 | --- | --- | --- | --- |
-| 17 | `q` (name, composition, `#458`), `manufacturer_id` (several), `stock_level` (several), `expiring_within_days` (30 · 60 · 90), `supplier_id`, `is_quick`, `sort` = `name` (default) \| `medicine_number` \| `quantity` \| `mrp` \| `nearest_expiry` \| `created_at`, `order`, `limit`, `after` | — | Medicine[] |
+| 17 | `q` (name, composition, `#458`), `manufacturer_id` (several), `stock_level` (several), `expiring_within_days` (30 · 60 · 90), `supplier_id`, `is_quick`, `created_from` / `created_to`, `sort` = `name` (default) \| `medicine_number` \| `quantity` \| `mrp` \| `nearest_expiry` \| `manufacturer_name` **(rev 2 — A–Z, none last)** \| `margin_percent` **(rev 2 — highest first, none last)** \| `created_at`, `order`, `limit`, `after` | — | Medicine[] |
 | 18 | as 17, without paging | — | Medicines export |
 | 19 | — | `name*`, `mrp*` (unless quick); optional: `manufacturer_id` (required unless quick), `composition`, `is_prescription_only`, `gst_percent`, `min_stock`, `max_stock`, `near_expiry_discount_percent`, `is_quick`, `batches`, `supplier_prices` | Medicine |
 | 20, 23 | — | — | Medicine |
@@ -7285,10 +7386,11 @@ None beyond 11.10.
 | --- | --- |
 | MDC9 | MD12, MD13: the batch and price tables replacing `jsonb`; the batch diff with the medicine's `quantity` kept in step; the quick rules; the unique name; the derived fields and their filters and sorts; delete at zero |
 | MDC10 | MD14: route 24 and the discount as the sale lines' default |
+| MDC22 | **(rev 2)** MD27: `sort=manufacturer_name` and `sort=margin_percent` (routes 17, 18) as SQL sort keys — the manufacturer's name, and (MRP − the lowest live supplier price) ÷ MRP — like `nearest_expiry`; no stored column |
 
 ---
 
-### 11.E Medical purchase orders — `medical/medical-purchase-orders/` — final
+### 11.E Medical purchase orders — `medical/medical-purchase-orders/` — final · rev 2 (MD26, MD30 (c))
 
 #### 11.E.1 Decisions
 
@@ -7343,7 +7445,7 @@ As 11.5.
 
 #### 11.E.6 Objects returned
 
-**Medical purchase order**: `id` (`mpo_…`), `purchase_order_number`, `supplier` (`id`, `name`), `supplier_bill_number`, `order_date`, `stage`, `received_at`, `items` (`id` `mpoi_…`, `line_number`, `medicine_id`, `medicine_name`, `quantity`, `free_quantity`, `rate`, `amount`, `is_received`, `batch_number`, `expiry_month`), `item_count`, `free_count`, `total`, `paid_amount`, `credited_amount`, `due_amount`, `payment_status`, `created_at`, `updated_at`; the cancel's `delete_reason` / `delete_note` on a cancelled one.
+**Medical purchase order**: `id` (`mpo_…`), `purchase_order_number`, `supplier` (`id`, `name`, `phone`, `gst_number` **(rev 2)** — a deleted supplier's too, for the print sheet), `supplier_bill_number`, `order_date`, `stage`, `received_at`, `items` (`id` `mpoi_…`, `line_number`, `medicine_id`, `medicine_name`, `quantity`, `free_quantity`, `rate`, `amount`, `is_received`, `batch_number`, `expiry_month`), `item_count`, `free_count`, `total`, `paid_amount`, `credited_amount`, `due_amount`, `payment_status`, `created_at`, `updated_at`; the cancel's `delete_reason` / `delete_note` on a cancelled one.
 
 **Medical purchase orders export** (route 26): as 11.D.6's export (`medical-purchase-orders-YYYY-MM-DD.csv`).
 
@@ -7370,7 +7472,7 @@ As 11.5.
 | 28, 31 | — | — | Medical purchase order |
 | 29 | — | `supplier_id`, `supplier_bill_number`, `order_date`, `items` (the whole list); `expected_updated_at` | Medical purchase order |
 | 30 | `reason*` = `mistake` \| `supplier_cant_deliver` \| `price_changed` \| `other`, `note` (required for `other`) | — | 204 |
-| 32 | — | optional: `items` (`id*`, `is_received`, `batch_number`, `expiry_month`), `supplier_bill_number` | Medical purchase order |
+| 32 | — | optional: `items` — an ordered line (`id*`, `is_received`, `batch_number`, `expiry_month`), or **(rev 2)** goods not ordered (no `id`: `medicine_id` or `new_medicine_name`, `quantity*` 1–9999, `free_quantity`, `rate*` > 0, `batch_number`, `expiry_month`), `supplier_bill_number` | Medical purchase order |
 
 #### 11.E.9 Errors
 
@@ -7378,7 +7480,7 @@ As 11.5.
 | --- | --- | --- |
 | 27, 29 | `400` · `items` / `supplier_id` / `order_date` | no lines or more than 50, a line with neither or both of `medicine_id` and `new_medicine_name`, a rate of 0; not a live supplier; a date after today |
 | 29, 30, 32 | `409` · `transition_not_allowed` | it is already received |
-| 32 | `400` · `items` | a line id not of this order, or nothing received |
+| 32 | `400` · `items` | a line id not of this order, or nothing received; **(rev 2)** a new line with neither or both of `medicine_id` and `new_medicine_name`, an unknown medicine, a rate of 0, or the order past 50 lines |
 | 32 | `409` · `record_already_exists` | a batch number the medicine already holds with another expiry |
 | 28–32 | `404` | not in the organization |
 
@@ -7392,6 +7494,7 @@ A received order is what the supplier is owed (11.B `payable`); its payments mov
 | --- | --- |
 | MDC11 | MD15: the line table, quick medicines from a line, the stages, the generated due and payment status, cancel as the delete (ordered only) and its undo; `cancel` and `paid` go |
 | MDC12 | MD16: receive — batches, the supplier price, the total, the open credits — in one transaction |
+| MDC21 | **(rev 2)** MD26, MD30 (c): receive's new lines (appended received, a quick medicine for a new name, the batch and price as an ordered line, the total); the order's supplier with `phone` and `gst_number`, read for a deleted supplier too |
 
 ---
 
@@ -7559,7 +7662,7 @@ None beyond 11.10.
 
 ---
 
-### 11.H Medical sales — `medical/medical-sales/` — final
+### 11.H Medical sales — `medical/medical-sales/` — final · rev 2 (MD23–MD25, MD27, MD30 (a), MD33)
 
 #### 11.H.1 Decisions
 
@@ -7589,7 +7692,7 @@ None.
 
 Delete reasons (the void): `billed_by_mistake` · `wrong_items` · `customer_changed_mind` · `other`. Dropped: `patient_id`, `medical_contact_id`, `lead_id` (the contact's), `status`, `voided_at` (the delete), `returns` (`jsonb`).
 
-`app.medical_sale_returns`: `medical_sale_id` → medical_sales `ON DELETE RESTRICT`, `reason varchar(14)` (the five), `refund_mode varchar(4)`, `note varchar(280)`, `amount numeric(12,2) > 0`, `invoice_credit_note_id` → invoice_credit_notes `ON DELETE RESTRICT` (unique), `returned_by_membership_id` → memberships `ON DELETE RESTRICT` (K2), `organization_id`, `public_id` (`msrt_…`), `created_at`; append-only. `app.medical_sale_return_items`: `medical_sale_return_id` → returns `ON DELETE CASCADE`, `invoice_item_id` → invoice_items `ON DELETE RESTRICT`, `quantity integer > 0`, `amount numeric(12,2) ≥ 0`, `is_restocked boolean`, `organization_id`; key (`medical_sale_return_id`, `invoice_item_id`).
+`app.medical_sale_returns`: `medical_sale_id` → medical_sales `ON DELETE RESTRICT`, `reason varchar(14)` (the five), `refund_mode varchar(4)` (**rev 2: `varchar(6)` — `credit`, MD33**), `note varchar(280)`, `amount numeric(12,2) > 0`, `invoice_credit_note_id` → invoice_credit_notes `ON DELETE RESTRICT` (unique), **rev 2 (as built, AS-BUILT #195): `pending_credit_id` → pending_credits `ON DELETE SET NULL` (unique; only on a store-credit return)**, `returned_by_membership_id` → memberships `ON DELETE RESTRICT` (K2), `organization_id`, `public_id` (`msrt_…`), `created_at`; append-only. `app.medical_sale_return_items`: `medical_sale_return_id` → returns `ON DELETE CASCADE`, `invoice_item_id` → invoice_items `ON DELETE RESTRICT`, `quantity integer > 0`, `amount numeric(12,2) ≥ 0`, `is_restocked boolean`, `organization_id`; key (`medical_sale_return_id`, `invoice_item_id`).
 
 Indexes: unique `public_id`; unique `(organization_id, sale_number)`; unique `(invoice_id)`; `WHERE deleted_at IS NULL`: `(organization_id, sold_at, id)`, `(contact_id)`, unique `(patient_prescription_id) WHERE patient_prescription_id IS NOT NULL`. RLS: organization policy, enabled and forced, on all three. Branch: the sale's (MD3).
 
@@ -7597,11 +7700,12 @@ Indexes: unique `public_id`; unique `(organization_id, sale_number)`; unique `(i
 
 | Code | Roles matrix | Allows | Routes | Held by default |
 | --- | --- | --- | --- | --- |
-| `medicine:read` | Medical · View | as 11.4 | 44, 47, 51 | Owner, Admin, Pharmacist, Accountant |
+| `medicine:read` | Medical · View | as 11.4 | 44, 47, 52 **(rev 2)** | Owner, Admin, Pharmacist, Accountant |
 | `medicine:create` | Medical · Create | a sale | 46 | Owner, Admin, Pharmacist |
 | `medicine:delete` | Medical · Delete | void and undo | 48, 49 | Owner, Admin |
 | `medicine:export` | Medical · Export | as 11.4 | 45 | Owner, Admin, Accountant |
-| `payment:create` | Payments · Create | a return's refund; a sale's `payment` (field) | 50, (46) | Owner, Admin, Accountant, Pharmacist |
+| `payment:create` | Payments · Create | a sale's `payment` (field) | (46) | Owner, Admin, Accountant, Pharmacist |
+| `payment:delete` | Payments · Delete | a return's refund **(rev 2, MD23 — was `payment:create`)** | 50 | Owner, Admin, Accountant |
 
 A caller who cannot see every branch sees the sales of their branches (as invoices, 8).
 
@@ -7611,11 +7715,13 @@ As 11.5.
 
 #### 11.H.6 Objects returned
 
-**Medical sale**: `id` (`msal_…`), `sale_number`, `status` (`unpaid` · `paid` · `returned` · `voided`), `contact` (the contact summary, 4), `patient_id` (the contact's file, or null), `branch_id`, `invoice` (`id`, `invoice_number`, `total`, `paid_amount`, `due_amount`, `payment_status`), `items` (`invoice_item_id`, `medicine_id`, `name`, `batch_number`, `expiry_month`, `quantity`, `rate`, `discount_percent`, `amount`, `returned_quantity`), `returned_amount`, `margin_amount`, `margin_percent`, `member_ids`, `patient_prescription_id`, `remark`, `returns` (`id` `msrt_…`, `reason`, `refund_mode`, `note`, `amount`, `invoice_credit_note_id`, `items` (`invoice_item_id`, `quantity`, `amount`, `is_restocked`), `returned_by_membership_id`, `created_at`), `sold_at`, `created_at`, `updated_at`; the void's `deleted_at`, `delete_reason`, `delete_note`.
+**Medical sale**: `id` (`msal_…`), `sale_number`, `status` (`unpaid` · `paid` · `returned` · `voided`), `contact` (the contact summary, 4), `patient_id` (the contact's file, or null), `branch_id`, `invoice` (`id`, `invoice_number`, `total`, `paid_amount`, `due_amount`, `payment_status`), `items` (`invoice_item_id`, `medicine_id`, `name`, `batch_number`, `expiry_month`, `quantity`, `rate`, `discount_percent`, `amount`, `returned_quantity`), `returned_amount`, `margin_amount`, `margin_percent`, `member_ids`, `patient_prescription_id`, `remark`, `returns` (`id` `msrt_…`, `reason`, `refund_mode`, `note`, `amount`, `invoice_credit_note_id`, **rev 2** `pending_credit_id` (a store-credit return's credit, else null), `items` (`invoice_item_id`, `quantity`, `amount`, `is_restocked`), `returned_by_membership_id`, `created_at`), `sold_at`, `created_at`, `updated_at`; the void's `deleted_at`, `delete_reason`, `delete_note`.
 
 **Medical sales export** (route 45): as 11.D.6's export (`medical-sales-YYYY-MM-DD.csv`).
 
-**Payment** (route 51): as 8.C.6.
+**Payment** (route 51): as 8.C.6 — **moved to 11.I (rev 2)**.
+
+**Medical sale dues** (route 52, **rev 2**): `contact` (`id`, `name`, `primary_phone`), `patient_id` (the contact's file, or null), `due_total`, `sale_count`, `sales` (`id`, `sale_number`, `due_amount`, `sold_at` — oldest first), `oldest_sold_at`. One row per contact with **unpaid** sales — the Sales tab's Unpaid: live, never returned, money still due (clarified at ROUTE #187: a refund lowers the invoice's paid amount, so a returned sale's invoice reads due again, yet it owes nothing) — on the branches you can see; largest `due_total` first.
 
 #### 11.H.7 Routes (44–51)
 
@@ -7627,20 +7733,22 @@ As 11.5.
 | 47 | GET | `/medical-sales/{medical_sale_id}` | Get one | `medicine:read` | |
 | 48 | DELETE | `/medical-sales/{medical_sale_id}` | Void an unpaid sale | `medicine:delete` | |
 | 49 | POST | `/medical-sales/{medical_sale_id}/restore` | Undo the void | `medicine:delete` | req |
-| 50 | POST | `/medical-sales/{medical_sale_id}/returns` | Return from patient | `payment:create` | req |
-| 51 | GET | `/medical-payments` | The store's Payments tab | `medicine:read` | |
+| 50 | POST | `/medical-sales/{medical_sale_id}/returns` | Return from patient | `payment:delete` **(rev 2)** | req |
+| 51 | GET | `/medical-payments` | The store's Payments tab — **moved to 11.I (rev 2)** | `medicine:read` | |
+| 52 | GET | `/medical-sales/dues` | Who owes on sales — "Send payment reminders" **(new, rev 2)** | `medicine:read` | |
 
 #### 11.H.8 Request details
 
 | # | Query | Body | Response |
 | --- | --- | --- | --- |
-| 44 | `q` (sale number, the contact's name or phone, a medicine's name), `status` (several), `contact_id`, `branch_id` (several), `medicine_id`, `patient_prescription_id`, `sort` = `sold_at` (default, newest first) \| `sale_number` \| `total`, `order`, `limit`, `after` | — | Medical sale[] |
+| 44 | `q` (sale number, the contact's name or phone, a medicine's name), `status` (several), `contact_id`, `branch_id` (several), `medicine_id`, `patient_prescription_id`, `created_from` / `created_to` **(rev 2)**, `sort` = `sold_at` (default, newest first) \| `sale_number` \| `total` \| `contact_name` **(rev 2 — A–Z)**, `order`, `limit`, `after` | — | Medical sale[] |
 | 45 | as 44, without paging | — | Medical sales export |
 | 46 | — | `branch_id*`, `contact_id*`, `items*`; optional: `overall_discount`, `member_ids`, `patient_prescription_id`, `remark`, `payment` (`splits*`, `paid_at`) | Medical sale |
 | 47, 49 | — | — | Medical sale |
 | 48 | `reason*` = `billed_by_mistake` \| `wrong_items` \| `customer_changed_mind` \| `other`, `note` (required for `other`) | — | 204 |
-| 50 | — | `items*` (1–50), `reason*`, `refund_mode*`; optional: `note` | Medical sale |
-| 51 | as 8.C.8 #12 (`q`, `kind`, `mode`, `branch_id`, the paid range, sort) | — | Payment[] |
+| 50 | — | `items*` (1–50), `reason*`, `refund_mode*` (`cash` · `upi` · `card`, **rev 2** `credit` — store credit, MD33); optional: `note` | Medical sale |
+| 51 | as 11.I.8 **(moved, rev 2)** | — | Payment[] |
+| 52 | **(rev 2)** `q` (the contact's name or phone, a sale number), `created_from` / `created_to` (the sales'), `branch_id` (several), `limit` (1–100, default 25) — one answer, no cursor (a collection read, as the appointments' day counts; built #187); sorted by `due_total`, largest first | — | Medical sale dues[] |
 
 #### 11.H.9 Errors
 
@@ -7653,7 +7761,9 @@ As 11.5.
 | 46, 50 | `409` · `day_closed` | the payment or refund falls on a closed day |
 | 48 | `409` · `sale_has_payments` / `sale_has_returns` | something is paid, or something was returned |
 | 49 | `409` · `not_enough_stock` | the batches no longer hold the quantity |
-| 50 | `409` · `sale_not_paid` | money is still due |
+| 50 | `409` · `sale_not_paid` | money is still due (kept — MD24) |
+| 50 | `403` · `missing_permission` **(rev 2)** | without `payment:delete` (MD23) |
+| 52 | `400` · `branch_id` **(rev 2)** | not one of your branches |
 | 50 | `400` · `items` | a line not of this sale, or more than is left of it |
 | 47–50 | `404` | not in the organization, or a branch you cannot see |
 
@@ -7669,12 +7779,83 @@ The invoice a sale writes is an ordinary `medical` invoice (8): collect with `PO
 | MDC16 | MD20: void as the delete (unpaid, no returns) with the invoice and the stock; restore takes the stock again; `/void` goes |
 | MDC17 | MD21: the return and its line table, the credit note and refund, the stock back or written off; the derived status |
 | MDC18 | MD22: `GET /medical-payments` through the payments service; `/invoices` refuses to change or delete a live sale's invoice |
+| MDC19 | **(rev 2)** MD23: route 50 gated by `payment:delete` |
+| MDC20 | **(rev 2)** MD25, MD27, MD30 (a): route 52 (the dues read); the sales' created range and `sort=contact_name` (routes 44, 45) |
+| MDC29 | **(rev 2, D89)** MD33: `refund_mode=credit` — the credit note without a refund payment and a `give` pending credit the return names (as built, AS-BUILT #195) |
+
+---
+
+### 11.I Medical payments — `medical/medical-payments/` — final · rev 2 (MD31, MD32, D90, new)
+
+#### 11.I.1 Decisions
+
+| # | Decision |
+| --- | --- |
+| MD31 | (11.1) The store's Payments tab manages its money: route 51 lists the store's slice of the ledger and route 53 exports it; recording, changing (with history), deleting, restoring and reversing are the ledger's own routes (8.C 14–20) on these rows, with their codes and rules. The folder holds routes and a controller only — the rows are `app.payments`, read through the payments service's store slice (`is_medical_store`, MD22). |
+| D90 | The store's customer credits (MD32) are read here too: route 56 `GET /medical-pending-credits` — 8.D's list limited to the credits naming a `medical` invoice; written through 8.D's routes (22–27). Named like route 51 (`medical-` + the billing collection it slices). The frontend gives credits their own tab, `/medical/credits`, beside `/medical/payments`. |
+
+#### 11.I.2 Open questions
+
+None.
+
+#### 11.I.3 Tables and relations
+
+None of its own — `app.payments` (8.C): a payment is the store's when it is money on a `medical` invoice (receipts, refunds and their reversals), a supplier bill of a medical order, or a `medicines` expense and its reversal (MD22 — a store-credit return moves no money, MD33); `app.pending_credits` (8.D): a credit is the store's when it names a `medical` invoice (D90) or a return kept as store credit names it (MD33, as built — AS-BUILT #195).
+
+#### 11.I.4 Permissions
+
+| Code | Roles matrix | Allows | Routes | Held by default |
+| --- | --- | --- | --- | --- |
+| `medicine:read` | Medical · View | the store's payments and customer credits | 51, 56 | Owner, Admin, Pharmacist, Accountant |
+| `medicine:export` | Medical · Export | the store's payments CSV | 53 | Owner, Admin, Accountant |
+| `payment:create` · `update` · `delete` (8) | Payments | record · change · delete, restore, reverse — on the ledger's routes (8.C 14, 16, 18–20) | — | as 8.C |
+
+#### 11.I.5 Common to every route
+
+As 11.5.
+
+#### 11.I.6 Objects returned
+
+**Payment**: as 8.C.6. **Pending credit** (route 56): as 8.D.6. **Medical payments export** (route 53): as 11.D.6's export (`medical-payments-YYYY-MM-DD.csv`), the payments CSV's columns (8.C, `payment:export`'s file) limited to the store.
+
+#### 11.I.7 Routes (51, 53, 56)
+
+| # | Method | Path | Purpose | Gate | Idem |
+| --- | --- | --- | --- | --- | --- |
+| 51 | GET | `/medical-payments` | The store's Payments tab (moved from 11.H) | `medicine:read` | |
+| 53 | GET | `/medical-payments/exports` | The store's payments CSV **(new)** | `medicine:export` | |
+| 56 | GET | `/medical-pending-credits` | The store's customer credits — the Credits tab **(new, D90)** | `medicine:read` | |
+
+#### 11.I.8 Request details
+
+| # | Query | Body | Response |
+| --- | --- | --- | --- |
+| 51 | as 8.C.8 #12 (`q`, `kind`, `mode`, `branch_id`, the paid range, `created_from` / `created_to`, sort) | — | Payment[] |
+| 53 | as 51, without paging | — | Medical payments export |
+| 56 | as 8.D.8 #21 (`q`, `direction`, `status`, `contact_id`, `invoice_id`, the settle-by and created ranges, sort) — ~~`branch_id`~~: 8.D's list has none (a pending credit is the organization's, B4 — AS-BUILT #195) | — | Pending credit[] |
+
+#### 11.I.9 Errors
+
+| Route | Status · reason | When |
+| --- | --- | --- |
+| 51, 53 | `400` · `branch_id` | not one of your branches |
+
+#### 11.I.10 Rules worth knowing
+
+The writes are the ledger's: a change only on an open day (its edits recorded, 8.C 17), a settled payment reversed, never edited (B20, B21). The frontend's Credits tab reads `GET /supplier-credits` (11.C) and `GET /medical-pending-credits` (route 56); a customer credit is added, settled, changed or deleted through 8.D's routes (MD32, D90).
+
+#### 11.I.11 Code changes
+
+| # | Change |
+| --- | --- |
+| MDC27 | MD31: the folder, its routes and controller; route 51 moved here from the sales controller; route 53 through the payments export limited to the store |
+| MDC29 | D90: route 56 through the pending-credits service, limited to credits naming a `medical` invoice |
 
 ---
 
 ---
 
-## 12. Frontend integration — revisions to the final reviews (D81, D82, 2026-10-10)
+## 12. Frontend integration — revisions to the final reviews (D81, D82, 2026-10-10; D88, 2026-10-13)
 
 The frontend's per-room research (clinozy-fe `plans/api-integration.md` §5.6–§5.11) asked for small changes to
 the reviews above before the rooms still to move were built on the API; the user approved them (D81, D82) and
@@ -7691,3 +7872,17 @@ changed on top of them. Route by route: `plans/route-changes.md` §12 (I1–I19)
 | 9 Stock | vendors `sort=payable`, `meta.payable_total`, `purchase_count`; movements' purchase number, bill number, a revert's original type and time; items `lasts_days_to`; `new_item` takes the purchase's vendor | #162 |
 | 10 Tasks & rules | `kind` a list and the derived `type`; the rules run after a message, a reply and a booking's status change; resolve checks the outcome; a lead's task needs `lead:update` | #154 |
 | — | The documents the research found wrong (9 S11 above: the purchase's "Paid" carries no category — STOCK-M1) | #163 |
+
+**Rev 2 of sub-domain 11 (D88, 2026-10-13)** — the medical room's findings, approved with §11's confirmation round.
+Two land in other sub-domains; the rest are in §11 (marked **(rev 2)**). Your note on the plan (D89) adds the store's
+payments and credits (MD31–MD33), two more of them in billing. Route by route: `plans/route-changes.md` §13
+(I35–I49).
+
+| Sub-domain | What changed | ROUTE |
+| --- | --- | --- |
+| 11 Medical store | the return's refund needs `payment:delete` (MD23); a return stays on a sale paid in full (MD24); `GET /medical-sales/dues` (MD25); receive takes goods not ordered (MD26); medicines sort by manufacturer and margin, sales by customer (MD27); the sales' Created filter, suppliers' `meta.payable_total` and `order_total`, the order's supplier phone and GSTIN (MD30) | #186–#190 |
+| 8 Billing | `POST` / `PATCH /invoices` and both previews refuse `type=medical` and `medicine_id` lines — `400` reason `sold_through_store` (MD28, M34); the `type` filter keeps `medical` for the sales' invoices | #191 |
+| 7 Patients | 7.C's prescription row and record name their patient: `patient` (`id`, `patient_number`, `contact_id`, `name`) — the pharmacy queue in one read (MD29) | #192 |
+| 11 Medical store (D89) | the store manages its payments (route 51 moved to 11.I, route 53 the CSV — writes through 8.C's routes, MD31) and its credits (supplier credits void and undo, routes 54–55; the customers' credits read at route 56, D90 — MD32); a return as store credit (MD33) | #193, #194, #195 |
+| 8 Billing (D89, D90) | 8.D: no route change — the store's customer credits are read at `/medical-pending-credits` (11.I, route 56) and written through 8.D's routes (MD32); 8.B / 8.D: a medical return kept as store credit writes its credit note without a refund payment and a `give` pending credit the return names (MD33, as built — AS-BUILT #195) | #195 |
+| — | The documents: the route catalogue, the OpenAPI document, the overviews and the frontend route map's medical section (M22, M23) | #196 |

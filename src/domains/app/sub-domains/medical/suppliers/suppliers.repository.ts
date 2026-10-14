@@ -3,6 +3,7 @@ import { getRequestDatabase } from '@/infrastructure/database/contexts/database-
 import {
   BaseRecordRepository,
   type BaseRecordLinkTable,
+  type BaseRecordListQuery,
 } from '@/domains/app/base-record.repository.js';
 import { manufacturers } from '@/domains/app/sub-domains/medical/manufacturers/manufacturers.schema.js';
 import { MEDICAL_PURCHASE_ORDER_STAGE } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.constants.js';
@@ -22,7 +23,7 @@ export const SUPPLIER_MANUFACTURERS_LINK: BaseRecordLinkTable = {
  * MD10: what the store owes a supplier — their live received orders' dues less their open
  * credits, never below 0.
  */
-const PAYABLE = sql`greatest(0, coalesce((select sum(${medical_purchase_orders.due_amount}) from ${medical_purchase_orders} where ${medical_purchase_orders.supplier_id} = ${suppliers.id} and ${medical_purchase_orders.deleted_at} is null and ${medical_purchase_orders.stage} = ${MEDICAL_PURCHASE_ORDER_STAGE.RECEIVED}), 0) - coalesce((select sum(${supplier_credits.amount} - ${supplier_credits.applied_amount}) from ${supplier_credits} where ${supplier_credits.supplier_id} = ${suppliers.id}), 0))`;
+const PAYABLE = sql`greatest(0, coalesce((select sum(${medical_purchase_orders.due_amount}) from ${medical_purchase_orders} where ${medical_purchase_orders.supplier_id} = ${suppliers.id} and ${medical_purchase_orders.deleted_at} is null and ${medical_purchase_orders.stage} = ${MEDICAL_PURCHASE_ORDER_STAGE.RECEIVED}), 0) - coalesce((select sum(${supplier_credits.amount} - ${supplier_credits.applied_amount}) from ${supplier_credits} where ${supplier_credits.supplier_id} = ${suppliers.id} and ${supplier_credits.deleted_at} is null), 0))`;
 
 /** A supplier's account as a page reads it (MD10). */
 export interface SupplierAccountRow {
@@ -30,6 +31,8 @@ export interface SupplierAccountRow {
   /** When the oldest received order still due arrived — null when nothing is due. */
   oldest_due_received_at: Date | null;
   order_count: number;
+  /** The live orders' totals — an ordered one at its lines, a received one at its received lines. */
+  order_total: number;
 }
 
 /**
@@ -59,7 +62,18 @@ export class SuppliersRepository extends BaseRecordRepository {
     });
   }
 
-  /** MD10: each supplier's payable, oldest due order and live order count. */
+  /**
+   * MD30 (b): what the store owes every supplier the list's filters match, over every page — the
+   * Suppliers footer's `meta.payable_total`.
+   */
+  async sumPayables(options: {
+    organizationId: number;
+    query: BaseRecordListQuery;
+  }): Promise<number> {
+    return this.sumOver({ ...options, column: PAYABLE });
+  }
+
+  /** MD10: each supplier's payable, oldest due order, live order count and their total. */
   async findAccounts(supplierIds: readonly number[]): Promise<Map<number, SupplierAccountRow>> {
     if (supplierIds.length === 0) return new Map();
     const database = getRequestDatabase();
@@ -71,6 +85,7 @@ export class SuppliersRepository extends BaseRecordRepository {
       .select({
         supplier_id: medical_purchase_orders.supplier_id,
         order_count: count(),
+        order_total: sql<string>`coalesce(sum(${medical_purchase_orders.total}), 0)`,
         oldest_due_received_at: sql<Date | null>`min(${medical_purchase_orders.received_at}) filter (where ${medical_purchase_orders.due_amount} > 0)`,
       })
       .from(medical_purchase_orders)
@@ -92,6 +107,7 @@ export class SuppliersRepository extends BaseRecordRepository {
             payable: Number(row.payable),
             oldest_due_received_at: oldest === null ? null : new Date(oldest),
             order_count: Number(order?.order_count ?? 0),
+            order_total: Number(order?.order_total ?? 0),
           },
         ];
       }),
@@ -112,18 +128,28 @@ export class SuppliersRepository extends BaseRecordRepository {
     return rows[0]?.id ?? null;
   }
 
-  /** Suppliers' names by public id (deleted ones too — an order keeps naming its supplier). */
-  async findNamesByPublicId(publicIds: readonly string[]): Promise<Map<string, string>> {
+  /**
+   * The suppliers an order names (11.E.6) — `name`, `phone`, `gst_number` by public id, a deleted
+   * supplier's too (the PO print sheet, MD30 (c)).
+   */
+  async findSummariesByPublicId(
+    publicIds: readonly string[],
+  ): Promise<Map<string, { name: string; phone: string | null; gst_number: string | null }>> {
     const unique = [...new Set(publicIds)];
     if (unique.length === 0) return new Map();
     const rows = await getRequestDatabase()
-      .select({ public_id: suppliers.public_id, name: suppliers.name })
+      .select({
+        public_id: suppliers.public_id,
+        name: suppliers.name,
+        phone: suppliers.phone,
+        gst_number: suppliers.gst_number,
+      })
       .from(suppliers)
       .where(inArray(suppliers.public_id, unique));
-    return new Map(rows.map((row) => [row.public_id, row.name]));
+    return new Map(rows.map(({ public_id: publicId, ...summary }) => [publicId, summary]));
   }
 
-  /** MD10: whether a supplier holds an open credit. */
+  /** MD10: whether a supplier holds a live open credit (a voided one counts for nothing, MD32). */
   async hasOpenCredit(supplierId: number): Promise<boolean> {
     const rows = await getRequestDatabase()
       .select({ id: supplier_credits.id })
@@ -131,6 +157,7 @@ export class SuppliersRepository extends BaseRecordRepository {
       .where(
         and(
           eq(supplier_credits.supplier_id, supplierId),
+          isNull(supplier_credits.deleted_at),
           sql`${supplier_credits.applied_amount} < ${supplier_credits.amount}`,
         ),
       )

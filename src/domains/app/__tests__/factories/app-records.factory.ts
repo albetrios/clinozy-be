@@ -296,9 +296,8 @@ export async function seedAppRecordOfEveryKind(options: {
     owner_role: 'front_desk',
   });
 
-  await make('supplier_credit_id', 'POST', '/app/supplier-credits', {
+  await make('supplier_credit_id', 'POST', `/app/suppliers/${supplier}/credits`, {
     medicine_batch_id: batch,
-    supplier_id: supplier,
     quantity: 1,
   });
   await make('medical_purchase_order_id', 'POST', '/app/medical-purchase-orders', {

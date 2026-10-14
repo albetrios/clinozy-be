@@ -1,3 +1,4 @@
+import type { PatientSummaryRow } from '@/domains/app/sub-domains/patients/patients.repository.js';
 import type { PatientPrescriptionLine } from './patient-prescriptions.dto.js';
 
 /**
@@ -9,6 +10,8 @@ export interface PatientPrescriptionOutput {
   /** The "RX-500" of the prescription list — per organization, never reused */
   prescription_number: number;
   patient_id: string;
+  /** The patient — number, contact and name (MD29; the rules' `decorate`) */
+  patient: PatientSummaryRow | null;
   appointment_id: string | null;
   doctor_membership_id: string;
   prescription_date: string;

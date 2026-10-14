@@ -1,5 +1,6 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
+import { queryInstantRange } from '@/shared/utils/validation/record-fields.util.js';
 import {
   CreateMedicalRepDto,
   type CreateMedicalRepInput,
@@ -7,11 +8,6 @@ import {
   UpdateMedicalRepDto,
   type UpdateMedicalRepInput,
 } from './medical-reps.dto.js';
-
-/** A query instant as a `Date` (undefined when absent). */
-function readInstant(value: string | undefined): Date | undefined {
-  return value === undefined ? undefined : new Date(value);
-}
 
 /** Parses an MR create body; throws `ValidationError` naming each bad field. */
 export function validateCreateMedicalRep(data: unknown): CreateMedicalRepInput {
@@ -38,7 +34,7 @@ export function validateListMedicalRepsQuery(data: unknown): BaseRecordListInput
         query.is_visit_overdue === undefined ? undefined : query.is_visit_overdue === 'true',
     },
     ranges: {
-      created_at: { from: readInstant(query.created_from), to: readInstant(query.created_to) },
+      created_at: queryInstantRange({ from: query.created_from, to: query.created_to }),
     },
   };
 }

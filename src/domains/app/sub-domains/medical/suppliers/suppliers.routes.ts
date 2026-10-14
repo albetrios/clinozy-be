@@ -32,7 +32,7 @@ export function suppliersRoutes(service: SuppliersService): FastifyPluginAsync {
         schema: {
           summary: 'List suppliers',
           description:
-            "Returns one page of the medical store's suppliers — the Suppliers tab and the picker — each with its manufacturers, `payable` (received orders' dues less open credits), `ageing_days` (since the oldest order still due) and `order_count`. `q` searches the name and phone; `manufacturer_id` and `has_payable` narrow; sort `name` (default, A–Z), `payable` (most owed first) or `created_at`. Requires medicine:read.",
+            "Returns one page of the medical store's suppliers — the Suppliers tab and the picker — each with its manufacturers, `payable` (received orders' dues less open credits), `ageing_days` (since the oldest order still due), `order_count` and `order_total` (the live orders' totals); `meta.payable_total` is what is owed to every supplier the filters match, over every page (the footer). `q` searches the name and phone; `manufacturer_id` and `has_payable` narrow; sort `name` (default, A–Z), `payable` (most owed first) or `created_at`. Requires medicine:read.",
           tags: ['Medical store'],
           querystring: listSuppliersQueryDto,
         },

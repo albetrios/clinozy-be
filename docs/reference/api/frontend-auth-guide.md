@@ -68,7 +68,7 @@ flowchart LR
 |--------|---------|-----------|-------|
 | `Authorization: Bearer <access_token>` | every authenticated request | **Yes** (authed routes) | The in-memory access token. Carries the active `org` claim. |
 | `Content-Type: application/json` | any request with a JSON body | **Yes** for JSON bodies | — |
-| `X-Idempotency-Key: <uuid>` | `POST`/`PUT`/`PATCH` writes | **Required on 13 routes**, optional elsewhere | `422` if missing on a required route. See [Idempotency keys](#idempotency-keys). |
+| `X-Idempotency-Key: <uuid>` | `POST`/`PUT`/`PATCH` writes | **Required** on the routes marked `req` in the [route catalog](../../routes.txt), optional elsewhere | `422` if missing on a required route. See [Idempotency keys](#idempotency-keys). |
 | `X-Captcha-Token: <widget token>` | public auth forms | **Required only when Turnstile is configured** (production) | From the Cloudflare Turnstile widget. Routes: `login`, `email/send-code`, `email/login`, `password/forgot`, `password/reset`, `mfa/login`, `webauthn/authenticate/options`. Not OAuth init (`GET /auth/oauth/:provider`) — the provider authenticates the user. |
 | `X-CSRF-Token: <csrf_token cookie value>` | `POST /auth/refresh` **only**, **only if you don't send `Origin`** | Browsers: **not needed** | Browsers always send `Origin`, which satisfies the refresh origin check. This is a fallback for non-browser clients. |
 
@@ -300,7 +300,7 @@ export async function apiFetch(path, opts = {}) {
         'Content-Type': 'application/json',
         ...opts.headers,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        // required on 13 write routes, ignored elsewhere; fresh key per call
+        // required on the `req` writes in docs/routes.txt, optional elsewhere; fresh key per call
         ...(isWrite ? { 'X-Idempotency-Key': crypto.randomUUID() } : {}),
       },
     });
@@ -639,22 +639,19 @@ export const landOnDashboard = {
 
 ## Idempotency keys
 
-The server **requires** `X-Idempotency-Key` on these **13 write routes** (returns `422
-idempotencyKeyRequired` / `idempotencyKeyInvalid` without it):
+The server **requires** `X-Idempotency-Key` on every write registered with `idempotencyRequired`
+(returns `422 idempotencyKeyRequired` / `idempotencyKeyInvalid` without it). The live set is the `I`
+column of the [route catalog](../../routes.txt): every route marked `req` there, also listed with its
+current count in the catalog's **IDEMPOTENCY-REQUIRED WRITES** footer. Each of those routes' OpenAPI
+operation marks the header as required too. A few examples:
 
-1. Create team organization — `POST /tenancy/organizations`
-2. Create membership — `POST /tenancy/organization/memberships`
-3. Transfer organization ownership — `POST /tenancy/organization/transfer-ownership`
-4. Create subscription — `POST /billing/subscriptions`
-5. Change subscription plan — `POST /billing/subscriptions/{subscription_id}/change-plan`
-6. Cancel subscription — `POST /billing/subscriptions/{subscription_id}/cancel`
-7. Resume subscription — `POST /billing/subscriptions/{subscription_id}/resume`
-8. Create payment method setup — `POST /billing/payment-methods/setup`
-9. Create webhook — `POST /notify/webhooks`
-10. Create organization API key — `POST /tenancy/organization/api-keys`
-11. Create notification policy — `POST /tenancy/organization/notification-policies`
-12. Create member role — `POST /tenancy/organization/roles`
-13. Create upload — `POST /uploads`
+- Create team organization — `POST /tenancy/organizations`
+- Create subscription — `POST /billing/subscriptions`
+- Create upload — `POST /uploads`
+- Create appointment — `POST /app/appointments`
+
+Don't hard-code the set in the client: the wrapper above sends a key on every write, so a route that
+becomes required needs no client change.
 
 On any other route, an `X-Idempotency-Key` is **optional**: if you send one, the response is cached and
 replayed for that key; if you don't, nothing happens. The wrapper above sends a **fresh** UUID on
