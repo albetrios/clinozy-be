@@ -206,6 +206,12 @@ Implementation lives under `src/domains/auth/sub-domains/auth-method/oauth/` —
 | `STRIPE_SECRET_KEY`     | Stripe secret key (test: `sk_test_...`).             |
 | `STRIPE_WEBHOOK_SECRET` | Webhook signing secret (for local: from Stripe CLI). |
 
+**Production requires both.** A production boot refuses to start unless `STRIPE_SECRET_KEY` is the
+live key (`sk_live_…`) and `STRIPE_WEBHOOK_SECRET` is the signing secret of the production webhook
+endpoint (Option B below, pointed at the production API) — set both as Secrets in the `production`
+GitHub Environment (`.env.production` + `pnpm github:sync production`). Locally and in development
+both may stay unset: subscriptions are then recorded locally and never charged.
+
 **Steps (Dashboard):**
 
 1. Sign up at [stripe.com](https://stripe.com) → **Developers** → **API keys**.
