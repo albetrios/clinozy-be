@@ -129,17 +129,20 @@ export class OrganizationSettingsService {
    * @remarks
    * - **Algorithm:** in the organization's context, reads the settings row's `setup_*` fields with
    *   the completer's public id; creates the row (all defaults) when the clinic has none, as `get`.
+   *   `lock` reads it `FOR UPDATE`, so a caller checking `expected_updated_at` before a change
+   *   holds the row until its transaction ends.
    * - **Failure modes:** `NotFoundError('Organization')` for a missing organization.
-   * - **Side effects:** may insert the clinic's settings row on first read.
+   * - **Side effects:** may insert the clinic's settings row on first read; `lock` holds a row lock.
    */
-  async getSetupProgress(
-    scope: OrganizationPrincipalDatabaseScope,
-  ): Promise<OrganizationSetupProgress> {
+  async getSetupProgress(options: {
+    scope: OrganizationPrincipalDatabaseScope;
+    lock?: boolean;
+  }): Promise<OrganizationSetupProgress> {
     return withAppDatabaseContext({
-      scope,
+      scope: options.scope,
       callback: async () => {
-        const organizationId = await this.requireOrganizationId(scope);
-        return this.readSetupProgress(organizationId);
+        const organizationId = await this.requireOrganizationId(options.scope);
+        return this.readSetupProgress({ organizationId, lock: options.lock === true });
       },
     });
   }
@@ -170,7 +173,7 @@ export class OrganizationSettingsService {
           ...options.change,
           updated_by_user_id: userId,
         });
-        return this.readSetupProgress(organizationId);
+        return this.readSetupProgress({ organizationId });
       },
     });
   }
@@ -193,9 +196,9 @@ export class OrganizationSettingsService {
       scope: options.scope,
       callback: async () => {
         const organizationId = await this.requireOrganizationId(options.scope);
-        await this.readSetupProgress(organizationId);
+        await this.readSetupProgress({ organizationId });
         await this.settingsRepository.completeSetup(organizationId, options.membershipId);
-        return this.readSetupProgress(organizationId);
+        return this.readSetupProgress({ organizationId });
       },
     });
   }
@@ -217,7 +220,7 @@ export class OrganizationSettingsService {
       callback: async () => {
         const organizationId = await this.requireOrganizationId(scope);
         await this.settingsRepository.markSetupGuideDone(organizationId);
-        return this.readSetupProgress(organizationId);
+        return this.readSetupProgress({ organizationId });
       },
     });
   }
@@ -232,11 +235,16 @@ export class OrganizationSettingsService {
   }
 
   /** The setup progress, creating the clinic's settings row first when it has none. */
-  private async readSetupProgress(organizationId: number): Promise<OrganizationSetupProgress> {
-    const progress = await this.settingsRepository.findSetupProgress(organizationId);
+  private async readSetupProgress(options: {
+    organizationId: number;
+    lock?: boolean;
+  }): Promise<OrganizationSetupProgress> {
+    const { organizationId } = options;
+    const lock = { lock: options.lock === true };
+    const progress = await this.settingsRepository.findSetupProgress(organizationId, lock);
     if (progress) return progress;
     await this.settingsRepository.ensureRow(organizationId);
-    const created = await this.settingsRepository.findSetupProgress(organizationId);
+    const created = await this.settingsRepository.findSetupProgress(organizationId, lock);
     if (!created) throw new NotFoundError('Organization');
     return created;
   }

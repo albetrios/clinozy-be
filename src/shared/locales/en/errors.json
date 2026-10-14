@@ -192,6 +192,7 @@
     "eachModeOnce": "Each mode once",
     "eachLineOnce": "Each line once",
     "eachValueOnce": "Each value once",
+    "skipAndUnskipSameItem": "An item cannot be skipped and un-skipped in one change",
     "eachMemberOnce": "Each member once",
     "eachAttachmentOnce": "Each attachment once",
     "eachMembershipOnce": "Each membership once",

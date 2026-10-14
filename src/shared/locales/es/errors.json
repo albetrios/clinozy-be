@@ -192,6 +192,7 @@
     "eachModeOnce": "Cada modo una sola vez",
     "eachLineOnce": "Cada línea una sola vez",
     "eachValueOnce": "Cada valor una sola vez",
+    "skipAndUnskipSameItem": "Un elemento no puede omitirse y recuperarse en el mismo cambio",
     "eachMemberOnce": "Cada miembro una sola vez",
     "eachAttachmentOnce": "Cada adjunto una sola vez",
     "eachMembershipOnce": "Cada membresía una sola vez",

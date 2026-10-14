@@ -146,8 +146,9 @@ export class OnboardingSetupService {
    * `PATCH /app/onboarding-setup`.
    *
    * @remarks
-   * - **Algorithm:** validates the body; refuses a stale `expected_updated_at`; merges the change in
-   *   one statement through the settings service (OS5); answers with the new status.
+   * - **Algorithm:** validates the body; with `expected_updated_at`, locks the settings row and
+   *   refuses a stale one (naming who changed it); merges the change in one statement through the
+   *   settings service (OS5); answers with the new status.
    * - **Failure modes:** 400 for a bad body; 409 `record_changed`; 422 for a personal workspace.
    * - **Side effects:** writes the setup fields of the clinic's settings row.
    */
@@ -161,9 +162,14 @@ export class OnboardingSetupService {
       scope: options.scope,
       callback: async () => {
         const organization = await this.requireTeamOrganization(options.scope);
-        const current = await this.organizationSettingsService.getSetupProgress(options.scope);
+        // Locked until this change commits: two changes sent with the same `expected_updated_at`
+        // cannot both pass the check.
+        const current = await this.organizationSettingsService.getSetupProgress({
+          scope: options.scope,
+          lock: parsed.expected_updated_at !== undefined,
+        });
         await assertRecordNotChangedSince({
-          row: { updated_at: current.updated_at, updated_by_user_id: null },
+          row: { updated_at: current.updated_at, updated_by_user_id: current.updated_by_user_id },
           expected: parsed.expected_updated_at,
           resolveUserPublicId: (userId) =>
             this.organizationService.resolveUserPublicIdByInternalId(userId),
@@ -206,7 +212,11 @@ export class OnboardingSetupService {
       scope: options.scope,
       callback: async () => {
         const status = await this.readStatus(options);
-        if (status.progress.completed_at !== null) return serializeOnboardingSetup(status);
+        if (status.progress.completed_at !== null) {
+          return serializeOnboardingSetup(
+            await this.withGuideDoneStored({ scope: options.scope, status }),
+          );
+        }
         const missing = ONBOARDING_SETUP_LIVE_CHECK_VALUES.filter(
           (check) => !status.liveChecks[check],
         );
@@ -251,7 +261,9 @@ export class OnboardingSetupService {
   }): Promise<OnboardingSetupStatus> {
     const organization =
       options.organization ?? (await this.requireTeamOrganization(options.scope));
-    const progress = await this.organizationSettingsService.getSetupProgress(options.scope);
+    const progress = await this.organizationSettingsService.getSetupProgress({
+      scope: options.scope,
+    });
     const team = await this.membershipService.summarizeTeamForSetup({
       scope: options.scope,
       bookableRoleNames: APP_BOOKABLE_ROLE_NAMES,

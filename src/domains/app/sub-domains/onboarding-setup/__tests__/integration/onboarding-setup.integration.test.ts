@@ -301,6 +301,10 @@ describe('Onboarding setup — Integration', () => {
       ['a step that is read from the records', { answered_steps_add: ['location'] }],
       ['a repeated value', { answered_steps_add: ['you', 'you'] }],
       ['skipping the first appointment', { skipped_items_add: ['first_appointment'] }],
+      [
+        'skipping and un-skipping one item at once',
+        { skipped_items_add: ['treatments'], skipped_items_remove: ['treatments'] },
+      ],
       ['deferred false', { deferred: false }],
       ['an unknown field', { step: 'you' }],
     ])('returns 400 for %s', async (_case, payload) => {
@@ -354,7 +358,25 @@ describe('Onboarding setup — Integration', () => {
         expected_updated_at: first.data.updated_at,
       });
       expect(response.statusCode).toBe(409);
-      expect((response.json() as ErrorBody).error.reason).toBe('record_changed');
+      const body = response.json() as ErrorBody;
+      expect(body.error.reason).toBe('record_changed');
+      expect(body.error.detail).toContain(clinic.owner.public_id);
+    });
+
+    it('lets one of two changes sent with the same expected_updated_at through, refusing the other', async () => {
+      const clinic = await newClinic();
+      const opened = (await getSetup(clinic.token)).json() as SetupBody;
+      const responses = await Promise.all([
+        changeSetup(clinic.token, {
+          guide_hidden: true,
+          expected_updated_at: opened.data.updated_at,
+        }),
+        changeSetup(clinic.token, {
+          guide_hidden: false,
+          expected_updated_at: opened.data.updated_at,
+        }),
+      ]);
+      expect(responses.map((response) => response.statusCode).sort()).toEqual([200, 409]);
     });
   });
 
@@ -392,6 +414,20 @@ describe('Onboarding setup — Integration', () => {
       expect(again.data.completed_by_membership_id).toBe(clinic.membership.public_id);
     });
 
+    it('keeps the first go-live when two admins go live at once', async () => {
+      const clinic = await newClinic();
+      await changeSetup(clinic.token, { answered_steps_add: ['clinic_type'] });
+      await createTestBranch({ organizationId: clinic.organization.id, isMain: true });
+      await addService(clinic, 'Consultation');
+
+      const [first, second] = await Promise.all([goLive(clinic.token), goLive(clinic.token)]);
+      expect([first.statusCode, second.statusCode]).toEqual([200, 200]);
+      const firstLive = (first.json() as SetupBody).data;
+      const secondLive = (second.json() as SetupBody).data;
+      expect(firstLive.completed_at).not.toBeNull();
+      expect(secondLive.completed_at).toBe(firstLive.completed_at);
+    });
+
     it('stores "all done" once, when the live clinic first has every guide item done or skipped', async () => {
       const clinic = await newClinic();
       await changeSetup(clinic.token, { answered_steps_add: ['clinic_type'] });
@@ -409,7 +445,11 @@ describe('Onboarding setup — Integration', () => {
       expect(notYet.data.guide_done_at).toBeNull();
 
       await addAppointment(clinic, branch.id);
+      // A repeat go-live answers like the read, "all done" included.
+      const repeat = (await goLive(clinic.token)).json() as SetupBody;
+      expect(repeat.data.guide_done_at).not.toBeNull();
       const done = (await getSetup(clinic.token)).json() as SetupBody;
+      expect(done.data.guide_done_at).toBe(repeat.data.guide_done_at);
       expect(done.data.guide_done_count).toBe(3);
       expect(done.data.guide_done_at).not.toBeNull();
 

@@ -22,8 +22,9 @@ function valueList<T extends readonly [string, ...string[]]>(values: T) {
 /**
  * Body of `PATCH /app/onboarding-setup` (routes-final §2.A.8, route 2): at least one of
  * `answered_steps_add` (`clinic_type`, `you`), `skipped_items_add` / `skipped_items_remove`
- * (`treatments`, `invite_team` — the first appointment cannot be skipped), `deferred` (`true` only:
- * "Explore first") and `guide_hidden` (hide or reopen the guide); optional `expected_updated_at`.
+ * (`treatments`, `invite_team` — the first appointment cannot be skipped; never one item in both),
+ * `deferred` (`true` only: "Explore first") and `guide_hidden` (hide or reopen the guide); optional
+ * `expected_updated_at`.
  */
 export const ChangeOnboardingSetupDto = z
   .object({
@@ -43,6 +44,10 @@ export const ChangeOnboardingSetupDto = z
       body.deferred !== undefined ||
       body.guide_hidden !== undefined,
     { message: 'errors:validation.sendAtLeastOneField' },
+  )
+  .refine(
+    (body) => !body.skipped_items_remove?.some((item) => body.skipped_items_add?.includes(item)),
+    { message: 'errors:validation.skipAndUnskipSameItem', path: ['skipped_items_remove'] },
   );
 
 /** Parsed {@link ChangeOnboardingSetupDto}. */

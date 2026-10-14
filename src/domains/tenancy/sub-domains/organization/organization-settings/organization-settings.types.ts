@@ -45,6 +45,8 @@ export interface OrganizationSetupProgress {
   guide_done_at: Date | null;
   /** The settings row's last change — for `expected_updated_at`. */
   updated_at: Date;
+  /** Who made that change (a user's internal id) — named by a 409 `record_changed`. */
+  updated_by_user_id: number | null;
 }
 
 /** One merge into the setup progress: single values added or removed, a time set or cleared. */

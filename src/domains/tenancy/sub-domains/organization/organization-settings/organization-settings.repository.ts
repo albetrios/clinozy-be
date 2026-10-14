@@ -108,9 +108,22 @@ export class OrganizationSettingsRepository {
 
   /**
    * The clinic's setup progress (feat-clinic-setup), with the public id of the member who took it
-   * live; null when the clinic has no settings row yet.
+   * live; null when the clinic has no settings row yet. `lock` holds the row until the transaction
+   * ends, so a change checked against `updated_at` cannot pass alongside another one.
    */
-  async findSetupProgress(organization_id: number): Promise<OrganizationSetupProgress | null> {
+  async findSetupProgress(
+    organization_id: number,
+    options: { lock?: boolean } = {},
+  ): Promise<OrganizationSetupProgress | null> {
+    // The lock is its own read: Drizzle writes `FOR UPDATE OF` schema-qualified, which Postgres
+    // refuses, and a plain `FOR UPDATE` cannot lock the nullable side of the join below.
+    if (options.lock) {
+      await getRequestDatabase()
+        .select({ organization_id: organization_settings.organization_id })
+        .from(organization_settings)
+        .where(eq(organization_settings.organization_id, organization_id))
+        .for('update');
+    }
     const rows = await getRequestDatabase()
       .select({
         answered_steps: organization_settings.setup_answered_steps,
@@ -121,6 +134,7 @@ export class OrganizationSettingsRepository {
         guide_hidden_at: organization_settings.setup_guide_hidden_at,
         guide_done_at: organization_settings.setup_guide_done_at,
         updated_at: organization_settings.updated_at,
+        updated_by_user_id: organization_settings.updated_by_user_id,
       })
       .from(organization_settings)
       .leftJoin(

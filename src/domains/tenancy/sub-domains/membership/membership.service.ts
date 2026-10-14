@@ -1943,19 +1943,6 @@ export class MembershipService {
   }
 
   /**
-   * Counts the seat-occupying memberships (ACTIVE + INVITED) in an organization (REQ-4).
-   *
-   * @remarks
-   * - **Algorithm:** runs {@link MembershipRepository.countActiveByOrganization} inside
-   *   {@link withAppDatabaseContext} so the `memberships` RLS policy resolves the
-   *   org's rows. Resolves the org's internal id from its public id first.
-   * - **Failure modes:** `NotFoundError('Organization')` when the public id does not resolve.
-   * - **Side effects:** one read-only COUNT query under the organization GUC.
-   * - **Notes:** this is the cross-domain SERVICE entry point billing's `SubscriptionService`
-   *   calls to compute `seats_used` — billing never reaches the membership repository/schema
-   *   directly (cross-domain reads go service→service).
-   */
-  /**
    * The team facts a clinic's setup reads (feat-clinic-setup, routes-final §2.A.10), and the caller's
    * own membership — who takes the clinic live.
    *
@@ -2005,6 +1992,19 @@ export class MembershipService {
     });
   }
 
+  /**
+   * Counts the seat-occupying memberships (ACTIVE + INVITED) in an organization (REQ-4).
+   *
+   * @remarks
+   * - **Algorithm:** runs {@link MembershipRepository.countActiveByOrganization} inside
+   *   {@link withAppDatabaseContext} so the `memberships` RLS policy resolves the
+   *   org's rows. Resolves the org's internal id from its public id first.
+   * - **Failure modes:** `NotFoundError('Organization')` when the public id does not resolve.
+   * - **Side effects:** one read-only COUNT query under the organization GUC.
+   * - **Notes:** this is the cross-domain SERVICE entry point billing's `SubscriptionService`
+   *   calls to compute `seats_used` — billing never reaches the membership repository/schema
+   *   directly (cross-domain reads go service→service).
+   */
   async countActiveMembers(options: { organizationPublicId: string }): Promise<number> {
     return withAppDatabaseContext({
       scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: options.organizationPublicId }),

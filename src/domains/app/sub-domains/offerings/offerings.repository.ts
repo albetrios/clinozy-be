@@ -42,10 +42,6 @@ export class OfferingsRepository extends BaseRecordRepository {
   }
 
   /**
-   * The name and prices of offerings by public id — deleted and inactive ones too, since a record
-   * keeps naming what it pointed at (a patient offering, a plan row).
-   */
-  /**
    * How many active offerings the organization has, counted up to `cap` (feat-clinic-setup: one
    * service to go live, two for the guide's "Add your treatments").
    */
@@ -64,6 +60,10 @@ export class OfferingsRepository extends BaseRecordRepository {
     return rows.length;
   }
 
+  /**
+   * The name and prices of offerings by public id — deleted and inactive ones too, since a record
+   * keeps naming what it pointed at (a patient offering, a plan row).
+   */
   async findSummaries(publicIds: readonly string[]): Promise<Map<string, OfferingSummary>> {
     const unique = [...new Set(publicIds)];
     if (unique.length === 0) return new Map();

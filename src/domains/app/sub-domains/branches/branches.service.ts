@@ -36,10 +36,10 @@ type DefaultStaffField = (typeof DEFAULT_STAFF_FIELDS)[number];
 /** D10: a default-staff member who does not work at the branch. */
 const DEFAULT_STAFF_NOT_MEMBER_KEY = 'errors:validation.defaultStaffNotBranchMember';
 
-/** Unique indexes whose violation is a client conflict, with the message each one gives. */
 /** The partial unique index that allows one main branch per organization. */
 const ONE_MAIN_BRANCH_INDEX = 'idx_branches_one_main_per_organization';
 
+/** Unique indexes whose violation is a client conflict, with the message each one gives. */
 const UNIQUE_CONFLICT_KEYS: Record<string, string> = {
   idx_branches_organization_name_unique: 'errors:branchNameExists',
   [ONE_MAIN_BRANCH_INDEX]: 'errors:branchMainExists',
@@ -345,7 +345,6 @@ export class BranchesService {
     }
   }
 
-  /** Runs a write; a taken name or a second main branch becomes a 409. */
   /**
    * Writes a clinic's first branch as its main branch (feat-clinic-setup BR1). When another first
    * branch was written as main at the same moment, the one-main index refuses this one inside its
@@ -365,6 +364,7 @@ export class BranchesService {
     }
   }
 
+  /** Runs a write; a taken name or a second main branch becomes a 409. */
   private async mapConflicts<T>({
     name,
     write,

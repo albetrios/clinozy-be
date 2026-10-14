@@ -12,8 +12,9 @@
 --
 -- Seven columns: the two lists NOT NULL with an empty default, the rest nullable — no table rewrite. The
 -- CHECKs and the member key (K2, K8: who took the clinic live stays, inside the clinic) are added NOT VALID
--- and validated after, so writers are never locked out for a scan. The key's index is the next migration
--- (CREATE INDEX CONCURRENTLY).
+-- and validated after. The file runs in one transaction, so ADD COLUMN and the NO FORCE / FORCE statements
+-- hold their ACCESS EXCLUSIVE locks until it commits — milliseconds at today's row counts. The key's index is
+-- the next migration (CREATE INDEX CONCURRENTLY, outside a transaction).
 --
 -- The one-time fill (OS8, D7): a clinic that, when this ships, already has an active main branch and an
 -- active service counts as live — `setup_completed_at` = now, no completer — and is never offered setup.
@@ -91,7 +92,8 @@ SELECT o.id, now()
           WHERE f.organization_id = o.id AND f.is_active AND f.deleted_at IS NULL
        )
 ON CONFLICT (organization_id) DO UPDATE
-   SET setup_completed_at = coalesce(tenancy.organization_settings.setup_completed_at, excluded.setup_completed_at);
+   SET setup_completed_at = coalesce(tenancy.organization_settings.setup_completed_at, excluded.setup_completed_at),
+       updated_at = greatest(now(), tenancy.organization_settings.created_at);
 --> statement-breakpoint
 
 ALTER TABLE tenancy.organization_settings FORCE ROW LEVEL SECURITY;
