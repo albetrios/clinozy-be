@@ -19,7 +19,7 @@ export const SYSTEM_PERMISSIONS = [
   { code: 'organization:read', name: 'View Organization', category: 'tenancy' },
   { code: 'organization:update', name: 'Update Organization', category: 'tenancy' },
   { code: 'organization:delete', name: 'Delete Organization', category: 'tenancy' },
-  // The team (launch T8): the Users row of the Roles matrix, with the branches.
+  // The team (launch T8): the Users row of the Roles matrix.
   { code: 'membership:read', name: 'View Members', category: 'users' },
   { code: 'membership:create', name: 'Create Members', category: 'users' },
   { code: 'membership:update', name: 'Update Members', category: 'users' },
@@ -51,10 +51,11 @@ export const SYSTEM_PERMISSIONS = [
   // Upload
   { code: 'upload:manage', name: 'Manage Uploads', category: 'upload' },
   // App (the app's own records)
-  { code: 'branch:read', name: 'View Branches', category: 'users' },
-  { code: 'branch:create', name: 'Create Branches', category: 'users' },
-  { code: 'branch:update', name: 'Update Branches', category: 'users' },
-  { code: 'branch:delete', name: 'Delete Branches', category: 'users' },
+  // The Branches row of the Roles matrix (change-branches-in-navbar).
+  { code: 'branch:read', name: 'View Branches', category: 'branches' },
+  { code: 'branch:create', name: 'Create Branches', category: 'branches' },
+  { code: 'branch:update', name: 'Update Branches', category: 'branches' },
+  { code: 'branch:delete', name: 'Delete Branches', category: 'branches' },
   { code: 'task:export', name: 'Export Tasks', category: 'tasks' },
   { code: 'task:delete', name: 'Delete Tasks', category: 'tasks' },
   { code: 'task:update', name: 'Update Tasks', category: 'tasks' },
