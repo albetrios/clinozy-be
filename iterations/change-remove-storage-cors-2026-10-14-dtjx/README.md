@@ -8,7 +8,7 @@
 | Opened | 2026-10-14 |
 | Branch | refactor/remove-storage-cors |
 | Baseline | none |
-| Status | done |
+| Status | frozen |
 | Summary | Remove `pnpm ops:storage:cors` and the bucket-CORS code behind it — clinozy-infra owns the upload bucket's CORS; the runbook keeps what the rule must admit and names its owner |
 | Drop placed | — |
 | Drop source | — |
@@ -24,3 +24,4 @@
 - 2026-10-14 · ready-for-approval → approved · — · Claude
 - 2026-10-14 · approved → implementing · — · Claude
 - 2026-10-14 · implementing → done · — · Claude
+- 2026-10-14 · done → frozen · — · Claude
