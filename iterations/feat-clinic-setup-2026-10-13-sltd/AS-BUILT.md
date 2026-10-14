@@ -29,13 +29,17 @@ None yet.
   budget on the frontend (its row 14) to be lowered again once a route group leaves the entry chunk; the count of
   idempotency-required routes in `be-idempotency-guard` and `docs/reference/api/frontend-auth-guide.md` ("13",
   stale on main already — the catalog's `I` column is the list).
-- Intake trimmed (user, 2026-10-14): `intake-files/` keeps only `BRIEF.md` (received this iteration) and the two
-  mandatory files, `PRD.md` and `schema-routes.md`. The 20 files the brief mode carried forward from
-  `launch-2026-09-30-jxmr` (the prototype `Clinozy.dc.html`, `support.js` and the screen specs) were removed; they
-  were byte-identical to the launch's, so every citation of them here (`users.md:…`, `shell.md:…`) reads
-  `iterations/launch-2026-09-30-jxmr/intake-files/`. The README's Intake note and Intake hash still describe the full
-  snapshot, so `pnpm iteration:intake feat-clinic-setup-2026-10-13-sltd --check` reports the change; a later iteration
-  takes `launch-2026-09-30-jxmr` (or a later full snapshot) as its Baseline, not this one.
+- Intake and plans trimmed (user, 2026-10-14): the iteration keeps only its own files. `intake-files/` holds
+  `BRIEF.md`, the one file received; the 22 files the brief mode carried forward from `launch-2026-09-30-jxmr`
+  (`PRD.md`, `schema-routes.md`, the prototype `Clinozy.dc.html`, `support.js` and the screen specs) were removed —
+  byte-identical to the launch's, so every citation of them here (`schema-routes.md:…`, `users.md:…`) reads
+  `iterations/launch-2026-09-30-jxmr/intake-files/`. `plans/` drops the files with nothing in them for this
+  iteration: `worker-changes.md` (no background work, D21) and `requirements/` `background.md`, `files.md`,
+  `integrations.md`, `notifications.md`, `realtime.md` (all n/a); KICKOFF §6's two rows that linked them now say so
+  in words. The README's Intake note and Intake hash still describe the full snapshot, so
+  `pnpm iteration:intake feat-clinic-setup-2026-10-13-sltd --check` reports the change; a later iteration takes
+  `launch-2026-09-30-jxmr` (or a later full snapshot) as its Baseline, not this one. This trim landed after the
+  `frozen` commit, at the user's request.
 
 ## Standing deviations
 

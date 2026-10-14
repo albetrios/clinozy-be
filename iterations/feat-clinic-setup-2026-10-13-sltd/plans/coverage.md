@@ -163,7 +163,7 @@ verdicts stand where not superseded; the brief's line numbers above are from the
 | Q6 | The starter services per specialty | the drafted list | [D18](decisions.md) | F1, F11, F12 |
 | Q7 | Who may read the setup progress? | managers only (`organization:update`) | [D19](decisions.md) | db-changes |
 | Q8 | The 7-day "✓ Set up" moment | stored (`setup_guide_done_at`) | [D20](decisions.md) | db-changes |
-| Q9 | A "finish setting up" reminder email? | not in this iteration | [D21](decisions.md) | worker-changes |
+| Q9 | A "finish setting up" reminder email? | not in this iteration | [D21](decisions.md) | — (no background work) |
 | Q10 | Where do the setup routes live? | "app-onboarding-setup" — the app domain, sub-domain `onboarding-setup` | [D22](decisions.md) | route-changes |
 | Q11 | The safe defaults, together | all confirmed (and D10) | [D23](decisions.md) | F10, F11, F20, F23 |
 

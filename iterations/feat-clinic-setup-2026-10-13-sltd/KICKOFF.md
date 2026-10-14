@@ -88,8 +88,8 @@ The ordered ledger — schema change first, then the changed and new sub-domains
 | `data.setup-progress`, `data.ticks-from-records`, `data.first-branch-main`, `data.existing-clinics-live`, `data.live-by-kept`, `data.no-day-float` | [requirements/data.md](plans/requirements/data.md) |
 | `access.setup-managers-only`, `access.setup-team-only`, `access.writes-keep-own-gates`, `access.owner-extra-role` | [requirements/access.md](plans/requirements/access.md) |
 | `operations.read-setup`, `operations.change-setup`, `operations.go-live`, `operations.guide-items`, `operations.guide-done-once`, `operations.first-branch-main` | [requirements/operations.md](plans/requirements/operations.md) |
-| `background.none` | [requirements/background.md](plans/requirements/background.md) |
-| — (n/a) | [notifications](plans/requirements/notifications.md) · [realtime](plans/requirements/realtime.md) · [integrations](plans/requirements/integrations.md) · [files](plans/requirements/files.md) |
+| `background.none` | none — no background work (D21); its file was removed with the empty requirement files (AS-BUILT › Summary) |
+| — (n/a) | notifications · realtime · integrations · files — none in this iteration (their empty files were removed) |
 | `quality.safe-to-repeat`, `quality.no-lost-answers`, `quality.tenant-isolation`, `quality.status-read-cost`, `quality.errors-translated` | [requirements/quality.md](plans/requirements/quality.md) |
 
 ## 7. Open AMBER items
