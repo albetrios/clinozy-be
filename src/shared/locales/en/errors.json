@@ -417,6 +417,7 @@
   "paymentMoreThanDue": "That is more than the bill's due",
   "paymentMoreThanPaid": "That is more than the bill has paid",
   "pendingCreditClosed": "This pending credit is settled in full",
+  "pendingCreditOfReturn": "This credit was left by a medical return — only its note and settle-by date can change, and it can't be deleted",
   "pendingCreditNothingDue": "Nothing due for this party to adjust against on that invoice",
   "pendingCreditSettled": "Part of this pending credit is settled — it can't change or be deleted",
   "stockNotEnough": "Only {{quantity}} {{unit}} in stock — that would take it below zero",

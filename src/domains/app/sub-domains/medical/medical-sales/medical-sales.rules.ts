@@ -274,6 +274,8 @@ async function returnSale(input: BaseRecordActionInput): Promise<BaseRecordRow> 
   const { existing: sale, context } = input;
   const repository = input.repository as MedicalSalesRepository;
   const body = parseWithSchema({ schema: ReturnMedicalSaleDto, data: input.input });
+  // One return at a time per sale: what is left of each line is read under the invoice's lock.
+  await invoicesRepository.lockPaidAmount(sale.invoice_id as number);
   const invoice = await invoicesRepository.findById(sale.invoice_id as number);
   // Paid in full: nothing due — what an earlier return refunded no longer counts as owed (B16).
   if (!invoice || paiseOf(invoice.due_amount) > 0) {

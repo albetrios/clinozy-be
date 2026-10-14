@@ -1876,4 +1876,80 @@ describe('Medical store — integration (routes-final §11)', () => {
       'paid,0',
     );
   });
+
+  it("a return's store credit stays the return's; one return at a time; giving it back is the store's money (MD33)", async () => {
+    flow.as('owner');
+    await flow.expect(200, 'Bela buys one, paid now', 'POST', '/app/medical-sales', {
+      branch_id: vesu,
+      contact_id: bela,
+      items: [{ medicine_id: glycolac, quantity: 1 }],
+      payment: { splits: [{ mode: 'cash', amount: 369 }] },
+    });
+    const sale = flow.last('.data.id');
+    const line = flow.last('.data.items[0].invoice_item_id');
+    const returned = {
+      items: [{ invoice_item_id: line, quantity: 1 }],
+      reason: 'unused',
+      refund_mode: 'credit',
+    };
+    // Two counters return the same pack at once: the invoice's lock lets one through.
+    const answers = await Promise.all([
+      flow.call('POST', `/app/medical-sales/${sale}/returns`, returned),
+      flow.call('POST', `/app/medical-sales/${sale}/returns`, returned),
+    ]);
+    const statuses = answers.map((answer) => answer.status).sort();
+    flow.expectEqual('one return, the other refused', String(statuses[0]), '200');
+    flow.expectEqual('the second is a 4xx', String(Math.floor((statuses[1] ?? 0) / 100)), '4');
+    await flow.expect(200, 'the sale', 'GET', `/app/medical-sales/${sale}`);
+    flow.expectValue('one return only', '.data.returns | length', 1);
+    const credit = flow.last('.data.returns[0].pending_credit_id');
+    await flow.expect(
+      409,
+      "the credit's amount is the return's",
+      'PATCH',
+      `/app/pending-credits/${credit}`,
+      { amount: 3690 },
+    );
+    flow.expectValue('why', '.error.reason', 'credit_of_return');
+    await flow.expect(
+      409,
+      'nor is it moved onto the sale’s bill',
+      'PATCH',
+      `/app/pending-credits/${credit}`,
+      { note: 'Call her', direction: 'take' },
+    );
+    await flow.expect(
+      200,
+      'its note and settle-by do change',
+      'PATCH',
+      `/app/pending-credits/${credit}`,
+      {
+        note: 'Call her',
+      },
+    );
+    await flow.expect(
+      409,
+      'and it is not deleted',
+      'DELETE',
+      `/app/pending-credits/${credit}?reason=mistake`,
+    );
+    flow.expectValue('why', '.error.reason', 'credit_of_return');
+    await flow.expect(200, 'given back in cash', 'POST', `/app/pending-credits/${credit}/settle`, {
+      amount: 369,
+      method: 'money',
+      branch_id: vesu,
+      splits: [{ mode: 'cash', amount: 369 }],
+    });
+    await flow.expect(
+      200,
+      "the store's payments",
+      'GET',
+      `/app/medical-payments?contact_id=${bela}&kind=refund&limit=100`,
+    );
+    flow.expectValue(
+      'the money given back for the return is there',
+      `[.data[] | select(.pending_credit_id == "${credit}")] | length`,
+      1,
+    );
+  });
 });

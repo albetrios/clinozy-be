@@ -55,6 +55,16 @@ export class PendingCreditsRepository extends BaseRecordRepository {
     });
   }
 
+  /** MD33: whether a medical sale's return, kept as store credit, left this credit. */
+  async isReturnStoreCredit(id: number): Promise<boolean> {
+    const rows = await getRequestDatabase()
+      .select({ id: medical_sale_returns.id })
+      .from(medical_sale_returns)
+      .where(eq(medical_sale_returns.pending_credit_id, id))
+      .limit(1);
+    return rows.length > 0;
+  }
+
   /**
    * B24: moves a live credit's settled amount by `delta` — `open` while some is left, else
    * `settledStatus`; null when the credit is gone or the move would leave 0–amount.

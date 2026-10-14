@@ -24,6 +24,7 @@ import { DAY_CLOSE_STATUS } from '@/domains/app/sub-domains/billing/day-closes/d
 import { stock_purchases } from '@/domains/app/sub-domains/stock/stock-purchases/stock-purchases.schema.js';
 import { MEDICAL_PURCHASE_ORDER_STAGE } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.constants.js';
 import { medical_purchase_orders } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.schema.js';
+import { medical_sale_returns } from '@/domains/app/sub-domains/medical/medical-sales/medical-sales.schema.js';
 import { INVOICE_TYPE } from '@/domains/app/sub-domains/billing/invoices/invoices.constants.js';
 import {
   PAYMENT_EXPENSE_CATEGORY,
@@ -177,10 +178,12 @@ export type PaymentEditPageRow = Omit<PaymentEditRow, 'id'> & {
 /**
  * MD22, MD31: a payment of the medical store — money on a `medical` invoice (receipts, refunds and
  * their reversals), a supplier bill of a medical order, or a `medicines` expense — and the reversal
- * of a `medicines` expense, which carries the expense's links but not its category.
+ * of a `medicines` expense, which carries the expense's links but not its category; and, MD33, the
+ * money settling the store credit a return left (given back, or a reversal of that — a reversal
+ * keeps the credit's link).
  */
 function medicalStorePayment(): SQL {
-  return sql`(${payments.medical_purchase_order_id} is not null or ${payments.expense_category} = ${PAYMENT_EXPENSE_CATEGORY.MEDICINES} or exists (select 1 from ${invoices} where ${invoices.id} = ${payments.invoice_id} and ${invoices.type} = ${INVOICE_TYPE.MEDICAL}) or exists (select 1 from ${payments} as reversed where reversed.id = ${payments.reverses_payment_id} and reversed.expense_category = ${PAYMENT_EXPENSE_CATEGORY.MEDICINES}))`;
+  return sql`(${payments.medical_purchase_order_id} is not null or ${payments.expense_category} = ${PAYMENT_EXPENSE_CATEGORY.MEDICINES} or exists (select 1 from ${invoices} where ${invoices.id} = ${payments.invoice_id} and ${invoices.type} = ${INVOICE_TYPE.MEDICAL}) or exists (select 1 from ${payments} as reversed where reversed.id = ${payments.reverses_payment_id} and reversed.expense_category = ${PAYMENT_EXPENSE_CATEGORY.MEDICINES}) or exists (select 1 from ${medical_sale_returns} where ${medical_sale_returns.pending_credit_id} = ${payments.pending_credit_id}))`;
 }
 
 /**

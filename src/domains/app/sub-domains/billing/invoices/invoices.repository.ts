@@ -354,6 +354,19 @@ export class InvoicesRepository extends BaseRecordRepository {
     return rows[0]?.deleted_at === null ? 'live' : 'voided';
   }
 
+  /**
+   * B16, MD33: takes the invoice `FOR UPDATE` and reads its paid amount — two refunds or returns
+   * on one bill then run one after the other, the second seeing what the first wrote.
+   */
+  async lockPaidAmount(invoiceId: number): Promise<string | null> {
+    const rows = await getRequestDatabase()
+      .select({ paid_amount: invoices.paid_amount })
+      .from(invoices)
+      .where(eq(invoices.id, invoiceId))
+      .for('update');
+    return rows[0]?.paid_amount ?? null;
+  }
+
   /** Whether an invoice has a live credit note (B14 — then it can't be deleted). */
   async hasLiveCreditNote(invoiceId: number): Promise<boolean> {
     const rows = await getRequestDatabase()

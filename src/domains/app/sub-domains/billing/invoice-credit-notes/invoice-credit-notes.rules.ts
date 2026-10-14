@@ -38,16 +38,20 @@ const pendingRefunds = new WeakMap<BaseRecordWriteContext, PendingRefund>();
  * less what earlier store-credit returns already hold as the customer's credit.
  *
  * @remarks
- * - **Algorithm:** `amount` against the invoice's `paid_amount` less its live store-credit notes
- *   (the notes no refund payment carries), in paise.
+ * - **Algorithm:** takes the invoice `FOR UPDATE` first, so two refunds or returns on one bill
+ *   (two counters, two tabs) run one after the other; then `amount` against its locked
+ *   `paid_amount` less its live store-credit notes (the notes no refund payment carries), in paise.
+ *   A store credit moves no money, so without the lock nothing else would stop a second one.
  * - **Failure modes:** `ConflictError` `more_than_paid`.
  */
 export async function assertCreditNoteRefundable(options: {
   invoice: BaseRecordRow;
   amount: unknown;
 }): Promise<void> {
+  const paid =
+    (await invoicesRepository.lockPaidAmount(options.invoice.id)) ?? options.invoice.paid_amount;
   const held = await creditNotesRepository.findStoreCreditedAmount(options.invoice.id);
-  if (paiseOf(options.amount) > paiseOf(options.invoice.paid_amount) - paiseOf(held)) {
+  if (paiseOf(options.amount) > paiseOf(paid) - paiseOf(held)) {
     throw new ConflictError('errors:paymentMoreThanPaid').withReason('more_than_paid');
   }
 }

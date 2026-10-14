@@ -66,6 +66,23 @@ async function assertParty(values: Readonly<Record<string, unknown>>): Promise<v
   }
 }
 
+/** MD33: what may change on the store credit a medical return left — its note and settle-by. */
+const RETURN_CREDIT_EDITABLE: ReadonlySet<string> = new Set(['note', 'settle_by']);
+
+/**
+ * MD33: the store credit a medical return left is the return's — its amount, way, party and bill
+ * stay as the return wrote them, and it is not deleted (only its note and settle-by change):
+ * otherwise a second credit note for the same goods, or a credit larger than the goods returned.
+ */
+async function assertNotReturnCredit(options: {
+  existing: BaseRecordRow;
+  changed: readonly string[] | null;
+}): Promise<void> {
+  if (options.changed?.every((field) => RETURN_CREDIT_EDITABLE.has(field))) return;
+  if (!(await pendingCreditsRepository.isReturnStoreCredit(options.existing.id))) return;
+  throw new ConflictError('errors:pendingCreditOfReturn').withReason('credit_of_return');
+}
+
 /** B24: change and delete only while nothing is settled. */
 function assertNothingSettled(existing: BaseRecordRow): void {
   if (paiseOf(existing.settled_amount) > 0) {
@@ -283,14 +300,14 @@ export async function recordStoreCredit(options: {
  *
  * @remarks
  * - **Algorithm:** a contact or a typed name (B23); a change or a delete only while nothing is
- *   settled. The settle action writes one payment pointing at the credit — a refund (with a credit
+ *   settled, and on a medical return's store credit only its note and settle-by change (MD33). The settle action writes one payment pointing at the credit — a refund (with a credit
  *   note on the credit's invoice), a `money_back` receipt, or a receipt paid by `credit_amount` on
  *   one of the party's invoices — and the payment's write moves the settled amount and the status
  *   ({@link recordPayment}, B24). A page reads the contact's summary, the settlements and who
  *   recorded each credit (D81).
  * - **Failure modes:** `ValidationError` on `party_name`, `invoice_id`, `amount`, `method`,
  *   `branch_id`; `ForbiddenError` `missing_permission` (settling a `give` credit without
- *   `payment:delete`, D83 (1)); `ConflictError` `credit_settled`, `credit_closed`, `nothing_due`,
+ *   `payment:delete`, D83 (1)); `ConflictError` `credit_settled`, `credit_of_return`, `credit_closed`, `nothing_due`,
  *   `more_than_paid`, `more_than_due`, `day_closed`.
  */
 export function createPendingCreditsRules(): BaseRecordRules {
@@ -301,10 +318,12 @@ export function createPendingCreditsRules(): BaseRecordRules {
     },
     prepareUpdate: async (values, existing) => {
       assertNothingSettled(existing);
+      await assertNotReturnCredit({ existing, changed: Object.keys(values) });
       await assertParty({ ...existing, ...values });
     },
-    prepareRemove: (existing) => {
+    prepareRemove: async (existing) => {
       assertNothingSettled(existing);
+      await assertNotReturnCredit({ existing, changed: null });
     },
     actions: { settle: settlePendingCredit },
     decorate: async (outputs, context) => {

@@ -82,7 +82,7 @@ export function pendingCreditsRoutes(service: PendingCreditsService): FastifyPlu
         schema: {
           summary: 'Change a pending credit',
           description:
-            'Changes a pending credit while nothing of it is settled (a 409 `credit_settled`): any field of the create, checked the same way (null clears an optional one). Send `expected_updated_at` and a save over a newer change is a 409 `record_changed`. Requires payment:update.',
+            'Changes a pending credit while nothing of it is settled (a 409 `credit_settled`) — on the store credit a medical return left, only `note` and `settle_by` (a 409 `credit_of_return`): any field of the create, checked the same way (null clears an optional one). Send `expected_updated_at` and a save over a newer change is a 409 `record_changed`. Requires payment:update.',
           tags: ['Payment'],
           params: pendingCreditsIdParamsDto,
           body: UpdatePendingCreditDto,
@@ -99,7 +99,7 @@ export function pendingCreditsRoutes(service: PendingCreditsService): FastifyPlu
         schema: {
           summary: 'Delete a pending credit',
           description:
-            'Deletes a pending credit while nothing of it is settled (a 409 `credit_settled`), with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Requires payment:delete.',
+            'Deletes a pending credit while nothing of it is settled (a 409 `credit_settled`) and no medical return left it as store credit (a 409 `credit_of_return`), with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Requires payment:delete.',
           tags: ['Payment'],
           params: pendingCreditsIdParamsDto,
           querystring: recordDeleteQuerySchema,
