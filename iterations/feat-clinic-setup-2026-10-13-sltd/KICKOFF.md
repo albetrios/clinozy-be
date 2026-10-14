@@ -79,7 +79,7 @@ The ordered ledger — schema change first, then the changed and new sub-domains
 | 4 | Sub-domain 2 — `onboarding-setup` routes, controller, service, DTO, validator, serializer (OSC4, OSC5; routes-final §2) | sub-domain | 2, 3 | `/be-build-requirement` (NEW sub-domain, no table) · be-domain-generator · be-route-schema-doc-guard · be-openapi-multilingual · be-i18n-message-guard · be-route-catalog | A4–A10, A14 | Claude | done |
 | 5 | Tests, seeds and docs (OSC6–OSC8) | flow | 4 | be-test-generator · be-seed-maintainer · be-system-narrative-maintainer | A15; `pnpm validate:route-success-coverage`; the demo seed is live | Claude | done |
 | 6 | Flow — a clinic goes live end to end (branch → owner role → Consultation → complete → status) | flow | 4, 5 | `/be-build-requirement` (flow) · be-test-generator | A13 + an e2e flow test from a new clinic to `is_live` and a first appointment | Claude | done |
-| 7 | Acceptance and close — gates, `/be-pre-merge-review`, `plans/acceptance.md`, `AS-BUILT.md` summary, `plans/frontend-route-map.md`, `pnpm iteration:status … done` | flow | 1–6 | be-kickoff-iteration › Close | every row of `plans/acceptance.md` filled | — | open |
+| 7 | Acceptance and close — gates, `/be-pre-merge-review`, `plans/acceptance.md`, `AS-BUILT.md` summary, `plans/frontend-route-map.md`, `pnpm iteration:status … done` | flow | 1–6 | be-kickoff-iteration › Close | every row of `plans/acceptance.md` filled | Claude | done |
 
 ## 6. Requirements index
 
