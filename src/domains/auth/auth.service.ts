@@ -448,8 +448,15 @@ export class AuthService {
 
   /**
    * Switch the active organization to a TEAM (or any) organization the caller is an active
-   * member of: validate membership, re-mint the access token with the new `org` claim, and
-   * re-bind the session to it. Rejects with 403 when the caller is not an active member.
+   * member of: validate membership, re-mint the access token with the new `org` claim, re-bind
+   * the session to it, then remember it as the caller's login default. Rejects with 403 when the
+   * caller is not an active member.
+   *
+   * @remarks
+   * Remembering (`auth.users.last_active_organization_id`, read back by
+   * `resolveDefaultActiveOrganizationPublicId`) runs after the session is re-bound and is
+   * best-effort: the old token is already retired, so failing the response here would strand the
+   * client without its new one. A failure is logged and the next switch writes it again.
    */
   async switchToOrganization({
     userPublicId,
@@ -482,7 +489,20 @@ export class AuthService {
         return { user: record, resolved: organization };
       },
     });
-    return this.mintForActiveOrganization({ user, sessionPublicId, organization: resolved });
+    const switched = await this.mintForActiveOrganization({
+      user,
+      sessionPublicId,
+      organization: resolved,
+    });
+    await this.userService
+      .rememberLastActiveOrganization({ userPublicId, organizationId: resolved.id })
+      .catch((error: unknown) => {
+        logger.warn(
+          { err: error, userPublicId, organizationPublicId: resolved.public_id },
+          'auth.switch_to_organization.remember_failed',
+        );
+      });
+    return switched;
   }
 
   /**

@@ -59,14 +59,10 @@ describe('refresh preserves the switched active organization (audit-#3)', () => 
 
   it('refresh keeps the organization claim on the organization the caller switched to', async () => {
     const { user, password } = await createTestUserWithPassword();
-    // Default active organization at login is the personal organization; the caller then switches to TEAM organization B.
+    // The personal organization is the only one at login, so it is the login default; the caller
+    // then joins TEAM organization B and switches to it. (A clinic that exists at login would be
+    // the default itself — a clinic beats the personal workspace.)
     const personal = await provisionPersonalOrganization({ ownerUserId: user.id });
-    const organizationB = await provisionOrganizationWithOwner({
-      name: 'Refresh Org B',
-      slug: `refresh-organization-b-${generatePublicId('organization').slice(4, 14)}`,
-      type: 'TEAM',
-      ownerUserId: user.id,
-    });
 
     const loginResponse = await injectUnauthenticated(app, {
       method: 'POST',
@@ -78,6 +74,12 @@ describe('refresh preserves the switched active organization (audit-#3)', () => 
       .access_token;
     expect(decodeOrgClaim(loginToken)).toBe(personal.organization.public_id);
     const cookie = sessionCookie(loginResponse.headers);
+    const organizationB = await provisionOrganizationWithOwner({
+      name: 'Refresh Org B',
+      slug: `refresh-organization-b-${generatePublicId('organization').slice(4, 14)}`,
+      type: 'TEAM',
+      ownerUserId: user.id,
+    });
 
     const switchResponse = await app.inject({
       method: 'POST',
@@ -112,13 +114,8 @@ describe('refresh preserves the switched active organization (audit-#3)', () => 
    */
   it('a switch that commits while a refresh is running leaves the refresh on the switched organization', async () => {
     const { user, password } = await createTestUserWithPassword();
+    // Personal is the only organization at login (the login default); B is joined afterwards.
     const personal = await provisionPersonalOrganization({ ownerUserId: user.id });
-    const organizationB = await provisionOrganizationWithOwner({
-      name: 'Racing Switch Team',
-      slug: `racing-switch-team-${generatePublicId('organization').slice(4, 14)}`,
-      type: 'TEAM',
-      ownerUserId: user.id,
-    });
 
     const loginResponse = await injectUnauthenticated(app, {
       method: 'POST',
@@ -130,6 +127,12 @@ describe('refresh preserves the switched active organization (audit-#3)', () => 
       .access_token;
     expect(decodeOrgClaim(loginToken)).toBe(personal.organization.public_id);
     const cookie = sessionCookie(loginResponse.headers);
+    const organizationB = await provisionOrganizationWithOwner({
+      name: 'Racing Switch Team',
+      slug: `racing-switch-team-${generatePublicId('organization').slice(4, 14)}`,
+      type: 'TEAM',
+      ownerUserId: user.id,
+    });
 
     // The switch lands after the refresh has read the session (and signed for the personal
     // organization) and before its rotation runs.

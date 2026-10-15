@@ -261,7 +261,7 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Get my settings',
         description:
-          "Returns the authenticated user's personal settings (dark mode, language, notification preferences).",
+          "Returns the authenticated user's personal settings (dark mode, language, notification preferences) and `default_organization_id` — the clinic pinned to open at sign-in, or `null` for the clinic used last (also while a pinned clinic is no longer one the caller actively belongs to).",
         tags: ['User Settings'],
       },
     },
@@ -276,7 +276,8 @@ export const userRoutesPlugin: FastifyPluginAsync = async (app) => {
       ...MODERATE_AUTHED_RATE_LIMIT,
       schema: {
         summary: 'Update my settings',
-        description: "Updates the authenticated user's personal settings.",
+        description:
+          "Updates the authenticated user's personal settings. `default_organization_id` pins the clinic that opens at sign-in — an active clinic the caller is an active member of, else 422 with reason `default_organization_unavailable` — or `null` returns to the clinic used last.",
         tags: ['User Settings'],
         body: UpdateUserSettingsDto,
       },

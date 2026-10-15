@@ -34,6 +34,10 @@ export const user_settings = authSchema
       analytics_consent: varchar('analytics_consent', { length: 10 }),
       analytics_consent_version: integer('analytics_consent_version'),
       analytics_consent_at: timestamp('analytics_consent_at', { withTimezone: true }),
+      // The clinic the person pinned to open at sign-in; NULL = automatic (the clinic used last).
+      // Soft pointer, no FK (like auth.users.last_active_organization_id): writes are validated and
+      // reads honour it only through an active membership in an active clinic.
+      default_organization_id: bigint('default_organization_id', { mode: 'number' }),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     },

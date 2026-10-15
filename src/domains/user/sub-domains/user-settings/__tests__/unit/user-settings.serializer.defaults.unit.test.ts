@@ -11,7 +11,22 @@ describe('user-settings.serializer defaults', () => {
       analytics_consent: null,
       analytics_consent_version: null,
       analytics_consent_at: null,
+      default_organization_id: null,
     });
+  });
+
+  it('serializeUserSettings returns the pinned clinic the service resolved', () => {
+    const result = serializeUserSettings({
+      is_dark_mode_enabled: false,
+      is_notifications_enabled: true,
+      language: 'en',
+      preferred_locales: ['en'],
+      analytics_consent: null,
+      analytics_consent_version: null,
+      analytics_consent_at: null,
+      default_organization_public_id: 'org_clinic',
+    });
+    expect(result.default_organization_id).toBe('org_clinic');
   });
 
   it('serializeUserSettings preserves explicit false toggles', () => {

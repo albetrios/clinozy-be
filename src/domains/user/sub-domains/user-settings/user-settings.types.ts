@@ -15,4 +15,10 @@ export interface UserSettingsOutput {
   analytics_consent_version: number | null;
   /** When it was given (ISO 8601, the server's time); `null` with `analytics_consent`. */
   analytics_consent_at: string | null;
+  /**
+   * The clinic pinned to open at sign-in (`org_…`); `null` for the automatic default — the clinic
+   * used last — and also while a pinned clinic is not usable (membership ended or suspended, clinic
+   * suspended or deleted; feat-choose-default-clinic CD7).
+   */
+  default_organization_id: string | null;
 }

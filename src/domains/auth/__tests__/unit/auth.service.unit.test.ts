@@ -114,6 +114,7 @@ describe('AuthService', () => {
     updateLoginAttempt: vi.fn().mockResolvedValue(undefined),
     registerFailedLoginAttempt: vi.fn().mockResolvedValue(undefined),
     updatePassword: vi.fn().mockResolvedValue(user),
+    rememberLastActiveOrganization: vi.fn().mockResolvedValue(true),
   } as unknown as UserService;
 
   const authSessionService = {
@@ -576,6 +577,7 @@ describe('AuthService', () => {
     vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
       id: 9,
       public_id: 'org_team',
+      type: 'TEAM',
     });
 
     const result = await service.switchToOrganization({
@@ -591,6 +593,59 @@ describe('AuthService', () => {
         activeOrganizationId: 9,
       }),
     );
+  });
+
+  it('switchToOrganization remembers the organization as the login default after re-binding the session', async () => {
+    const resolve = await import(
+      '@/domains/tenancy/sub-domains/organization/resolve-active-organization.js'
+    );
+    vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
+      id: 9,
+      public_id: 'org_team',
+      type: 'TEAM',
+    });
+    vi.mocked(userService.rememberLastActiveOrganization).mockClear();
+
+    await service.switchToOrganization({
+      userPublicId: user.public_id,
+      sessionPublicId: 'session_public',
+      organizationPublicId: 'org_team',
+    });
+
+    expect(userService.rememberLastActiveOrganization).toHaveBeenCalledWith({
+      userPublicId: user.public_id,
+      organizationId: 9,
+    });
+    expect(
+      vi.mocked(userService.rememberLastActiveOrganization).mock.invocationCallOrder[0],
+    ).toBeGreaterThan(
+      vi.mocked(authSessionService.rebindAccessToken).mock.invocationCallOrder.at(-1)!,
+    );
+  });
+
+  it('switchToOrganization still returns the new token when remembering the organization fails', async () => {
+    const resolve = await import(
+      '@/domains/tenancy/sub-domains/organization/resolve-active-organization.js'
+    );
+    vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
+      id: 9,
+      public_id: 'org_team',
+      type: 'TEAM',
+    });
+    vi.mocked(userService.rememberLastActiveOrganization).mockRejectedValueOnce(
+      new Error('database unavailable'),
+    );
+
+    const result = await service.switchToOrganization({
+      userPublicId: user.public_id,
+      sessionPublicId: 'session_public',
+      organizationPublicId: 'org_team',
+    });
+
+    expect(result).toEqual({
+      access_token: 'jwt-access-token',
+      organization_public_id: 'org_team',
+    });
   });
 
   describe('organizations whose security policy requires MFA', () => {
@@ -612,10 +667,12 @@ describe('AuthService', () => {
       vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
         id: 9,
         public_id: 'org_mfa',
+        type: 'TEAM',
       });
       vi.mocked(organizationRequiresMfa).mockResolvedValueOnce(true);
       sessionMfa(false);
       vi.mocked(authSessionService.rebindAccessToken).mockClear();
+      vi.mocked(userService.rememberLastActiveOrganization).mockClear();
 
       const switching = service.switchToOrganization({
         userPublicId: user.public_id,
@@ -626,6 +683,7 @@ describe('AuthService', () => {
       await expect(switching).rejects.toBeInstanceOf(ForbiddenError);
       await expect(switching).rejects.toMatchObject({ reason: 'mfa_required' });
       expect(authSessionService.rebindAccessToken).not.toHaveBeenCalled();
+      expect(userService.rememberLastActiveOrganization).not.toHaveBeenCalled();
     });
 
     it('lets an MFA-verified session switch in and mints amr: [mfa]', async () => {
@@ -633,6 +691,7 @@ describe('AuthService', () => {
       vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
         id: 9,
         public_id: 'org_mfa',
+        type: 'TEAM',
       });
       vi.mocked(organizationRequiresMfa).mockResolvedValue(true);
       sessionMfa(true);
@@ -751,6 +810,7 @@ describe('AuthService', () => {
     vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
       id: 9,
       public_id: 'org_team',
+      type: 'TEAM',
     });
 
     const order: string[] = [];

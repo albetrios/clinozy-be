@@ -495,6 +495,31 @@ export class UserService {
     });
   }
 
+  /**
+   * Remembers the organization the user just switched to as their login default.
+   *
+   * @remarks
+   * - **Algorithm:** one owner-scoped update of `auth.users.last_active_organization_id`, skipped
+   *   by the repository when the value is already that organization.
+   * - **Failure modes:** throws on a database error; the caller (`AuthService.switchToOrganization`)
+   *   treats remembering as best-effort and never fails a switch on it.
+   * - **Side effects:** writes the caller's own `auth.users` row under the verified user context
+   *   (the `users_self_or_admin_access` WITH CHECK).
+   * - **Notes:** read back by `resolveDefaultActiveOrganizationPublicId` at login.
+   */
+  async rememberLastActiveOrganization({
+    userPublicId,
+    organizationId,
+  }: {
+    userPublicId: string;
+    organizationId: number;
+  }): Promise<boolean> {
+    return withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId }),
+      callback: () => this.repository.rememberLastActiveOrganization(userPublicId, organizationId),
+    });
+  }
+
   async updateMfaEnabled({
     public_id,
     enabled,

@@ -25,6 +25,17 @@ Per-user feature toggles and presentation preferences (locale override, theme, d
   row, `user.settings.analytics_consent.update`, with the decision, version and time — the proof of
   consent. Nothing reads the receipt back to decide what runs, and `POST /auth/logout` leaves it as
   it was (pinned by `consent-receipt-survives-logout.integration.test.ts`).
+- **The clinic at sign-in** (iteration `feat-choose-default-clinic-2026-10-15-yizz`):
+  `default_organization_id` pins the clinic the login opens; `null` (the default) keeps the
+  automatic choice — the clinic last switched to, else the newest clinic. Stored as the clinic's
+  internal id (a soft pointer, no foreign key); a `PATCH` accepts only an ACTIVE clinic (TEAM) the
+  caller has an ACTIVE membership in — anything else is `422` with
+  `reason: default_organization_unavailable`, one answer for every miss so the route never confirms
+  a clinic exists. Reads resolve it through the tenancy membership lookups, inside the same user
+  context, and report `null` while the pin is not usable (left, suspended, clinic suspended or
+  deleted); the stored id stays, so rejoining restores the choice. The login side is
+  `resolveDefaultActiveOrganizationPublicId` (tenancy). No audit row: a preference, not a security
+  event.
 
 ## Lifecycle
 
@@ -41,3 +52,6 @@ stateDiagram-v2
 - **Unknown setting key** → 400 Validation error.
 - **A consent decision without its policy version, or the reverse** → 400 on `analytics_consent_version`.
 - **Locale value not in supported list** → 400.
+- **A `default_organization_id` that is not an active clinic the caller actively belongs to** → 422
+  `errors:defaultOrganizationUnavailable` (`reason: default_organization_unavailable`); a blank or
+  over-long one → 400.
