@@ -8,7 +8,7 @@
 | Opened | 2026-10-14 |
 | Branch | feat/default-clinic-at-login |
 | Baseline | none |
-| Status | done |
+| Status | frozen |
 | Summary | Sign-in opens the clinic you last worked in — the backend remembers each clinic you switch to and restores it at login (else your newest clinic, before the personal workspace), so the clinic picker no longer appears after every login |
 | Drop placed | — |
 | Drop source | — |
@@ -24,3 +24,4 @@
 - 2026-10-14 · ready-for-approval → approved · — · Claude
 - 2026-10-14 · approved → implementing · — · Claude
 - 2026-10-14 · implementing → done · — · Claude
+- 2026-10-15 · done → frozen · — · Claude
