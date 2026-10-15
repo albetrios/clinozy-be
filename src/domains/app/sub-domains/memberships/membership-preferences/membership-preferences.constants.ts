@@ -29,7 +29,7 @@ export const MEMBERSHIP_PREFERENCE_PATIENT_FILE_PINS_VALUES = [
 
 /** What a member has before their first save (the table's column defaults, launch U4). */
 export const MEMBERSHIP_PREFERENCE_DEFAULTS = {
-  pinned_sections: ['appointments', 'leads', 'patients', 'payments'],
+  pinned_sections: ['appointments', 'leads', 'patients', 'payments', 'branches'],
   theme: 'light',
   patient_file_pins: ['clinical_notes', 'appointments', 'prescriptions', 'invoices'],
 } as const;

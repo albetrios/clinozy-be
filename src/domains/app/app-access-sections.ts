@@ -1,8 +1,8 @@
 /**
  * The access sections of the Users › Roles matrix (D10, D12): each section is the resources whose
  * `<resource>:read|create|update|delete` codes it holds — the permission catalog's `category`.
- * A branch's rooms, machines and holidays carry no codes of their own — the branch's (`users` section)
- * gate them (D12). A member's own preferences and saved views carry none either: every member reaches
+ * A branch's rooms, machines and holidays carry no codes of their own — the branch's (`branches`
+ * section) gate them (D12). A member's own preferences and saved views carry none either: every member reaches
  * their own with `organization:read` (launch U2). Offerings have no View code — every member reads
  * them (launch O2); their row adds Lowest price (`offering:lower_price:read`) and Export
  * (`offering:export`). The Leads and Appointments rows add Export (`lead:export`, `appointment:export` — launch #131
@@ -35,7 +35,10 @@ export const APP_ACCESS_SECTION_RESOURCES = {
   // member reads them.
   offerings: ['offering'],
   // The team's codes are tenancy's (membership, role — launch T8); they sit in the Users row.
-  users: ['branch', 'membership', 'role'],
+  users: ['membership', 'role'],
+  // The Branches room — its own section in the navbar and its own row, after Users
+  // (change-branches-in-navbar).
+  branches: ['branch'],
 } as const;
 
 /** A section key of {@link APP_ACCESS_SECTION_RESOURCES}. */
@@ -54,4 +57,5 @@ export const APP_MATRIX_SECTIONS = [
   'tasks',
   'offerings',
   'users',
+  'branches',
 ] as const satisfies readonly AppAccessSection[];

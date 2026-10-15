@@ -205,6 +205,7 @@ export const membershipPreferencesSchema = {
           'tasks',
           'offerings',
           'users',
+          'branches',
         ],
       },
     },
@@ -239,7 +240,7 @@ export const membershipPreferencesSchema = {
 /** Example `MembershipPreferencesOutput`. */
 export const membershipPreferencesExample = {
   id: 'upref_k7x9m2pqr4w8n1v3a1b2c',
-  pinned_sections: ['appointments', 'leads', 'patients', 'payments'],
+  pinned_sections: ['appointments', 'leads', 'patients', 'payments', 'branches'],
   theme: 'light',
   branch_ids: ['brn_k7x9m2pqr4w8n1v3a1b2c'],
   patient_file_pins: ['clinical_notes', 'appointments', 'prescriptions', 'invoices'],

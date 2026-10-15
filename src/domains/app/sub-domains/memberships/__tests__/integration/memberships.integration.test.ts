@@ -231,10 +231,10 @@ describe('App memberships — integration (routes-final §2)', () => {
     flow.expectValue(
       'nothing saved yet: the launch defaults',
       '[.data.id, (.data.pinned_sections | join("+")), .data.theme, (.data.patient_file_pins | join("+")), (.data.branch_ids | length)] | map(tostring) | join(",")',
-      'null,appointments+leads+patients+payments,light,clinical_notes+appointments+prescriptions+invoices,0',
+      'null,appointments+leads+patients+payments+branches,light,clinical_notes+appointments+prescriptions+invoices,0',
     );
     await flow.expect(200, 'pin sections and go dark', 'PATCH', PREFERENCES, {
-      pinned_sections: ['today', 'patients'],
+      pinned_sections: ['today', 'patients', 'branches'],
       theme: 'dark',
       branch_ids: [fixture.branches.vesu],
       patient_file_pins: ['overview', 'images'],
@@ -243,7 +243,7 @@ describe('App memberships — integration (routes-final §2)', () => {
     flow.expectValue(
       'saved: an id, the new values',
       '[(.data.id | startswith("upref_")), (.data.pinned_sections | join("+")), .data.theme, (.data.branch_ids | join("+")), (.data.patient_file_pins | join("+")), (.data.recent_picks | length)] | map(tostring) | join(",")',
-      `true,today+patients,dark,${fixture.branches.vesu},overview+images,1`,
+      `true,today+patients+branches,dark,${fixture.branches.vesu},overview+images,1`,
     );
     const updatedAt = flow.last('.data.updated_at');
     await flow.expect(200, 'read them back', 'GET', PREFERENCES);
