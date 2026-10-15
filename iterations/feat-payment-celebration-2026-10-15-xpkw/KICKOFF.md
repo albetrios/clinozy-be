@@ -52,9 +52,9 @@ delivering WhatsApp messages, a review summary on patient or payment responses (
 
 | # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Branches — `GET /app/branches/my` returns `review_link`: [`routes-final.md` § 1](plans/routes-final.md#1-branches--the-review-link-for-every-member--final-rev-1-confirmed-2026-10-15), code changes BRC1–BRC3 | sub-domain | — | `/be-build-requirement` (CHANGE, route-change chain: `be-api-contract-guard`, `be-route-schema-doc-guard`, `be-route-catalog`, `be-test-generator`, `be-tsdoc-export-guard`, `be-overview-doc-maintainer`) | A-1, A-2 | Claude | open |
-| 2 | The demo clinic's review link: BRC4 | feature | 1 | `/be-build-requirement` (`be-seed-maintainer`, `be-test-generator`) | A-3 | Claude | open |
-| 3 | Acceptance, the frontend route map and the gates | flow | 1, 2 | `be-kickoff-iteration` › Close | A-1 – A-3 | Claude | open |
+| 1 | Branches — `GET /app/branches/my` returns `review_link`: [`routes-final.md` § 1](plans/routes-final.md#1-branches--the-review-link-for-every-member--final-rev-1-confirmed-2026-10-15), code changes BRC1–BRC3 | sub-domain | — | `/be-build-requirement` (CHANGE, route-change chain: `be-api-contract-guard`, `be-route-schema-doc-guard`, `be-route-catalog`, `be-test-generator`, `be-tsdoc-export-guard`, `be-overview-doc-maintainer`) | A-1, A-2 | Claude | done |
+| 2 | The demo clinic's review link: BRC4 | feature | 1 | `/be-build-requirement` (`be-seed-maintainer`, `be-test-generator`) | A-3 | Claude | done |
+| 3 | Acceptance, the frontend route map and the gates | flow | 1, 2 | `be-kickoff-iteration` › Close | A-1 – A-3 | Claude | done |
 
 ## 6. Requirements index
 

@@ -12,9 +12,9 @@ request body or idempotency rule moves ([PC6](decisions.md)). `docs/routes.txt` 
 
 ## Branches
 
-| # | Change | Method | Path | Access | Operation | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| RC-1 | CHANGED — each branch gains `review_link` | GET | `/api/v1/app/branches/my` | organization · read (every member; a `branch:read` holder gets every active branch) | list my branches | `schema-routes.md:27`; `PRD.md:21–25`; `BRIEF.md:39–41` |
+| # | Change | Method | Path | Access | Operation | Source | Built |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RC-1 | CHANGED — each branch gains `review_link` | GET | `/api/v1/app/branches/my` | organization · read (every member; a `branch:read` holder gets every active branch) | list my branches | `schema-routes.md:27`; `PRD.md:21–25`; `BRIEF.md:39–41` | as proposed — `8dcb2f1` ([AS-BUILT #1](../AS-BUILT.md)) |
 
 ## Relied on, unchanged
 
