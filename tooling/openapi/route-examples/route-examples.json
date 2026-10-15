@@ -3640,7 +3640,8 @@
             "gst_number": null,
             "opens_at": "10:00",
             "closes_at": "20:00",
-            "working_days": ["mon", "tue"]
+            "working_days": ["mon", "tue"],
+            "review_link": null
           }
         ],
         "meta": {

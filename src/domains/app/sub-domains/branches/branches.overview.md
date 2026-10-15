@@ -18,7 +18,7 @@ at the folder root.
 | `branches.schema.ts` | `app.branches` — columns, CHECKs, indexes, the default-staff keys, `branches_tenant_isolation` RLS |
 | `branches.constants.ts` | defaults (tone, state, hours, working days), the format patterns the CHECKs use, `BRANCH_MEMBERSHIP_IDS_MAX` |
 | `branches.{dto,validator,serializer,types}.ts` | request shapes, parsing, the typed response allow-list |
-| `branches.repository.ts` | reads (full rows with default staff as `mem_` ids; summaries for `/my`), writes, and the default-staff clean-up |
+| `branches.repository.ts` | reads (full rows with default staff as `mem_` ids; summaries for `/my` — the allow-list in `branchSummaryColumns`), writes, and the default-staff clean-up |
 | `branches.service.ts` | `listMine`, `list`, `get`, `create`, `update` — the rules below |
 | `branches.controller.ts` / `branches.routes.ts` | the five `/app/branches` routes |
 | [`branch-members/`](branch-members/) | `app.branch_members` + `GET`/`PUT /app/branches/{branch_id}/members`; `resolveMembershipIds` (`memberships/memberships.rules.ts`) resolves `membership_ids` for both writers |
@@ -33,7 +33,7 @@ One set of permission codes for the whole sub-domain (D12): `branch:read|create|
 
 | Route | Gate | Note |
 | --- | --- | --- |
-| `GET /app/branches/my` | `organization:read` (every member) | my active branches; a `branch:read` holder gets all (D1) — each with its hours and the address, phone and GSTIN a printed bill carries (D81) |
+| `GET /app/branches/my` | `organization:read` (every member) | my active branches; a `branch:read` holder gets all (D1) — each with its hours, the address, phone and GSTIN a printed bill carries (D81), and its Google `review_link` (or `null`) for the payment received view's review ask (feat-payment-celebration BR1) |
 | `GET /app/branches` | `branch:read` | all active, `include_inactive=true` for retired ones too |
 | `GET /app/branches/{branch_id}` | `branch:read` | |
 | `POST /app/branches` | `branch:create` | `membership_ids` = who works there (D13); without it the creator does |

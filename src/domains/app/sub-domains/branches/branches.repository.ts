@@ -36,7 +36,10 @@ function inOrganization(organization_id: number): SQL {
 /** Main branch first, then by name. */
 const BRANCH_ORDER = [desc(branches.is_main), asc(branches.name)] as const;
 
-/** What `GET /app/branches/my` reads — a picker's, the booking rules' and a printed bill's header (D81). */
+/**
+ * What `GET /app/branches/my` reads — a picker's, the booking rules' and a printed bill's header
+ * (D81), and the Google review link the payment received view sends (feat-payment-celebration BR1).
+ */
 const branchSummaryColumns = {
   public_id: branches.public_id,
   name: branches.name,
@@ -53,6 +56,7 @@ const branchSummaryColumns = {
   opens_at: branches.opens_at,
   closes_at: branches.closes_at,
   working_days: branches.working_days,
+  review_link: branches.review_link,
 };
 
 /**

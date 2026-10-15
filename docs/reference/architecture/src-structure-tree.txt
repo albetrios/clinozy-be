@@ -186,6 +186,7 @@ src/
     │   │   │   │   │   ├── branches-schema.integration.test.ts
     │   │   │   │   │   └── branches.integration.test.ts
     │   │   │   │   └── unit/
+    │   │   │   │   │   ├── branches.serializer.unit.test.ts
     │   │   │   │   │   └── branches.service.unit.test.ts
     │   │   │   ├── branch-holidays/
     │   │   │   │   ├── __tests__/

@@ -131,11 +131,50 @@ describe('Branches — Integration', () => {
           'opens_at',
           'phone',
           'postal_code',
+          'review_link',
           'state',
           'tone',
           'working_days',
         ].sort(),
       );
+    });
+
+    it("gives every member the branch's Google review link — null until it has one (feat-payment-celebration BR1)", async () => {
+      const { organization, token } = await adminContext();
+      const staff = await memberWith([], organization);
+      const branch = await createTestBranch({ organizationId: organization.id, name: 'Vesu' });
+      await grantTestBranchMember({
+        branchId: branch.id,
+        membershipId: staff.membership.id,
+        organizationId: organization.id,
+      });
+      const readMine = async () => {
+        const response = await injectAuthenticated(app, {
+          method: 'GET',
+          url: testApiPath('/app/branches/my'),
+          token: staff.token,
+        });
+        expect(response.statusCode).toBe(200);
+        return (response.json() as BranchListBody).data[0];
+      };
+      const saveReviewLink = async (review_link: string | null) => {
+        const response = await injectAuthenticated(app, {
+          method: 'PATCH',
+          url: testApiPath(`/app/branches/${branch.public_id}`),
+          token,
+          payload: { review_link },
+        });
+        expect(response.statusCode).toBe(200);
+      };
+      const reviewLink = 'https://g.page/r/CQvesubranchEAE/review';
+
+      expect(await readMine()).toMatchObject({ id: branch.public_id, review_link: null });
+
+      await saveReviewLink(reviewLink);
+      expect(await readMine()).toMatchObject({ id: branch.public_id, review_link: reviewLink });
+
+      await saveReviewLink(null);
+      expect(await readMine()).toMatchObject({ id: branch.public_id, review_link: null });
     });
 
     it("gives every member the branch's address, phone and GSTIN — a printed bill's header (D81)", async () => {

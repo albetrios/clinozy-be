@@ -31,8 +31,9 @@ interface BranchRecord {
 }
 
 /**
- * The fields `GET /app/branches/my` returns — what a picker and the booking rules need, and the
- * address, phone and GSTIN a printed GST invoice carries (D81).
+ * The fields `GET /app/branches/my` returns — what a picker and the booking rules need, the
+ * address, phone and GSTIN a printed GST invoice carries (D81), and the Google review link the
+ * payment received view and the chat's Review template send (feat-payment-celebration BR1).
  */
 interface BranchSummaryRecord {
   public_id: string;
@@ -50,6 +51,7 @@ interface BranchSummaryRecord {
   opens_at: string;
   closes_at: string;
   working_days: string[];
+  review_link: string | null;
 }
 
 function toIsoString(value: SerializableTimestamp): string {
@@ -103,6 +105,7 @@ function serializeSummary(row: BranchSummaryRecord) {
     opens_at: toHourMinute(row.opens_at),
     closes_at: toHourMinute(row.closes_at),
     working_days: row.working_days,
+    review_link: row.review_link,
   };
 }
 
