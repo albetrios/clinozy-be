@@ -384,6 +384,36 @@ describe('Contacts — integration (routes-final §4.A–4.B)', () => {
     flow.expectValue('email: Riya', NAMES, 'Riya');
     await flow.expect(
       200,
+      'every word, in any order: the last name, then the first',
+      'GET',
+      `/app/contacts?q=${lastName}%20meera`,
+    );
+    flow.expectValue('reversed: Meera', NAMES, 'Meera');
+    await flow.expect(
+      200,
+      'every word, each a part',
+      'GET',
+      `/app/contacts?q=mee%20${lastName.slice(0, 6)}`,
+    );
+    flow.expectValue('parts: Meera', NAMES, 'Meera');
+    await flow.expect(
+      200,
+      'a name and part of the number',
+      'GET',
+      `/app/contacts?q=Meera%20${digits.slice(0, 5)}`,
+    );
+    flow.expectValue('name + number: Meera', NAMES, 'Meera');
+    await flow.expect(
+      200,
+      'a number as typed (+91, a dash), then the name',
+      'GET',
+      `/app/contacts?q=%2B91%20${digits.slice(0, 5)}-${digits.slice(5)}03%20meera`,
+    );
+    flow.expectValue('typed number + name: Meera', NAMES, 'Meera');
+    await flow.expect(200, 'a word that is not hers', 'GET', `/app/contacts?q=meera%20nobody${S}`);
+    flow.expectValue('one word missing: nobody', NAMES, '');
+    await flow.expect(
+      200,
       'phone filter: the household sharing it',
       'GET',
       `/app/contacts?phone=%2B91${digits}01`,

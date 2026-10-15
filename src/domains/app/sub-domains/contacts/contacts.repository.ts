@@ -6,7 +6,12 @@ import {
   type BaseRecordChildTable,
   type BaseRecordListQuery,
 } from '@/domains/app/base-record.repository.js';
-import { buildContainsLikePattern, escapeLikeTerm } from '@/shared/utils/http/list-query.util.js';
+import {
+  buildContainsLikePattern,
+  buildSearchCondition,
+  escapeLikeTerm,
+  searchWords,
+} from '@/shared/utils/http/list-query.util.js';
 import { contacts, contact_phones } from './contacts.schema.js';
 import type { ContactLinkedSearch } from './contacts.validator.js';
 import type { ContactSummaryRow } from './contacts.types.js';
@@ -39,17 +44,21 @@ const OR_SEPARATOR = sql` or `;
 const lastNameKey = sql`coalesce(${contacts.last_name}, '')`;
 
 /**
- * How well a contact matches `q` (CT9): 0 when the name starts with it or the primary number holds
- * it, 1 when a word of the search text starts with it, else 2 — the `match` sort's first key.
+ * How well a contact matches `q` (CT9, NS7): 0 when the name starts with the whole of it or the
+ * primary number holds it, 1 when the name or a word of the search text starts with its first word,
+ * else 2 — the `match` sort's first key. A one-word `q` ranks as it always did.
  */
 function matchRank(_organizationId: number, query: BaseRecordListQuery): SQL {
   if (!query.q) return sql`0`;
   const term = query.q.toLowerCase();
   const prefix = `${escapeLikeTerm(term)}%`;
+  const firstWordPrefix = `${escapeLikeTerm(searchWords(term)[0] ?? term)}%`;
+  const name = sql`lower(${contacts.first_name} || ' ' || ${lastNameKey})`;
   return sql`(case
-    when lower(${contacts.first_name} || ' ' || ${lastNameKey}) like ${prefix} then 0
+    when ${name} like ${prefix} then 0
     when ${contacts.primary_phone} like ${buildContainsLikePattern(term)} then 0
-    when ${contacts.search_text} like ${`% ${prefix}`} then 1
+    when ${name} like ${firstWordPrefix} then 1
+    when ${contacts.search_text} like ${`% ${firstWordPrefix}`} then 1
     else 2
   end)`;
 }
@@ -72,9 +81,9 @@ function leadNumberCondition(leadNumber: number, organizationId: number): SQL {
 
 /**
  * The condition of a list about a contact for its `q` (leads L7, appointments 6.8 —
- * `readContactLinkedSearch`): the contact's trigram-indexed search text or its contact number (an
- * `IN` over the organization's contacts), or the record's own number — any of them; `false` when
- * the search reads as none.
+ * `readContactLinkedSearch`): the contact's trigram-indexed search text holding every word of it
+ * (NS5), or its contact number (an `IN` over the organization's contacts), or the record's own
+ * number — any of them; `false` when the search reads as none.
  */
 export function contactLinkedSearchCondition(options: {
   search: ContactLinkedSearch;
@@ -86,9 +95,14 @@ export function contactLinkedSearchCondition(options: {
 }): SQL {
   const { search, contactIdColumn, organizationId } = options;
   const conditions: SQL[] = [];
-  if (search.text !== undefined) {
+  const text = buildSearchCondition({
+    columns: [contacts.search_text],
+    q: search.text,
+    everyWord: true,
+  });
+  if (text !== undefined) {
     conditions.push(
-      sql`${contactIdColumn} in (select ${contacts.id} from ${contacts} where ${contacts.organization_id} = ${organizationId} and ${contacts.search_text} ilike ${buildContainsLikePattern(search.text)})`,
+      sql`${contactIdColumn} in (select ${contacts.id} from ${contacts} where ${contacts.organization_id} = ${organizationId} and ${text})`,
     );
   }
   if (search.contactNumber !== undefined) {
@@ -107,8 +121,9 @@ export function contactLinkedSearchCondition(options: {
  * reads and writes on its table, plus the number checks of the household rule (CT3).
  *
  * @remarks
- * - **Algorithm:** `q` matches the trigger-kept `search_text` (names, email, Instagram, every live
- *   number's 10 digits, `c-<number>`) behind its trigram index, or the contact number. Sorts: `name`
+ * - **Algorithm:** every word of `q` (NS5) matches the trigger-kept `search_text` (names, email,
+ *   Instagram, every live number's 10 digits, `c-<number>`) behind its trigram index, or `q` is the
+ *   contact number. Sorts: `name`
  *   (first, then last name — the name index), `match` (the best match for `q` first, then the name),
  *   `created_at` and `last_activity_at` (newest first; a contact with no activity last). The
  *   derived filters read the record numbers `q` names (`record_number` — the live patient file's or
@@ -123,6 +138,7 @@ export class ContactsRepository extends BaseRecordRepository {
       table: contacts,
       entity: 'contact',
       searchColumns: ['search_text'],
+      searchEveryWord: true,
       numberColumn: 'contact_number',
       sortColumns: { created_at: 'created_at' },
       sortKeys: {

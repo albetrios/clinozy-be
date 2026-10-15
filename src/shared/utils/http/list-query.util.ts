@@ -17,7 +17,7 @@
  *   repository's query supplies the join and selects the sort value.
  */
 import { createHash } from 'node:crypto';
-import { type AnyColumn, asc, desc, ilike, type SQL, or } from 'drizzle-orm';
+import { type AnyColumn, and, asc, desc, ilike, type SQL, or } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   buildAscendingCreatedAtIdCursorCondition,
@@ -69,24 +69,51 @@ export function buildContainsLikePattern(term: string): string {
   return `%${escapeLikeTerm(term)}%`;
 }
 
+/** The words of a search, split on whitespace, empty ones dropped. */
+export function searchWords(q: string): string[] {
+  return q.split(/\s+/).filter((word) => word !== '');
+}
+
+/** `ILIKE '%term%'` across `columns`, OR-combined. */
+function containsInAnyColumn({
+  columns,
+  term,
+}: {
+  columns: readonly (AnyColumn | SQL)[];
+  term: string;
+}): SQL {
+  const pattern = buildContainsLikePattern(term);
+  const conditions = columns.map((column) => ilike(column, pattern));
+  return (conditions.length === 1 ? conditions[0] : or(...conditions)) as SQL;
+}
+
 /**
  * Case-insensitive `ILIKE '%term%'` across `columns` (OR-combined) — columns, or SQL text
  * expressions such as a text array joined into one string. Returns `undefined` when `q` is empty so
  * callers can spread it into `and(...)` unconditionally.
+ *
+ * @remarks
+ * With `everyWord`, each whitespace-separated word of `q` must be in some column, in any order
+ * (AND of the per-word ORs) — "iyer meera" finds Meera Iyer. A phrase that matches as a whole still
+ * matches, so it only widens the result; a one-word `q` is the same condition either way.
  */
 export function buildSearchCondition({
   columns,
   q,
+  everyWord = false,
 }: {
   columns: readonly (AnyColumn | SQL)[];
   q: string | undefined;
+  /** Match every word of `q` anywhere, instead of `q` as one phrase. */
+  everyWord?: boolean;
 }): SQL | undefined {
   if (!q || columns.length === 0) {
     return undefined;
   }
-  const pattern = buildContainsLikePattern(q);
-  const conditions = columns.map((column) => ilike(column, pattern));
-  return conditions.length === 1 ? conditions[0] : or(...conditions);
+  const words = everyWord ? searchWords(q) : [q];
+  if (words.length === 0) return undefined;
+  const conditions = words.map((term) => containsInAnyColumn({ columns, term }));
+  return conditions.length === 1 ? conditions[0] : and(...conditions);
 }
 
 /**
