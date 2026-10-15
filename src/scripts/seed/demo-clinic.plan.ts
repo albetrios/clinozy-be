@@ -623,10 +623,7 @@ class DemoClinicPlanner {
       : `${faker.helpers.arrayElement(CLINIC_NAME_STEMS)} ${faker.helpers.arrayElement(CLINIC_NAME_SUFFIXES)}`;
   }
 
-  /**
-   * The two branches in the city's two areas: an address, a landline and the one GSTIN; the main
-   * branch also has the Google review link (no Faker draw, so the rest of the plan is unchanged).
-   */
+  /** The two branches in the city's two areas: an address, a landline and the one GSTIN. */
   planBranches(options: {
     city: DemoCity;
     slug: string;
@@ -650,6 +647,7 @@ class DemoClinicPlanner {
         phone: landline,
         email: `${emailPart(area.area)}@${slug}.example.com`,
         gstNumber: gst,
+        // The main branch has the Google review link — no Faker draw, so the rest of the plan stays.
         reviewLink: key === 'main' ? DEMO_REVIEW_LINK : null,
         doctor: index === 0 ? 'owner' : 'doctor',
         therapist: index === 0 ? 'mainTherapist' : 'secondTherapist',
