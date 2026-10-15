@@ -67,4 +67,4 @@ One set of permission codes for the whole sub-domain (D12): `branch:read|create|
 
 ## Lifecycle
 
-Created and edited by Owner and Admin (Users › Branches); retired, never deleted.
+Created and edited by Owner and Admin (the Branches room); retired, never deleted.
