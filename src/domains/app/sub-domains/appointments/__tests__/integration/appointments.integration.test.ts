@@ -389,6 +389,13 @@ describe('Appointments — integration (routes-final §6)', () => {
     flow.expectValue('date, then start', NAMES, 'Asha,Bela,Chirag');
     await flow.expect(
       200,
+      'q: every word, the last name first',
+      'GET',
+      `/app/appointments?q=${lastName}%20bela&status=scheduled,confirmed`,
+    );
+    flow.expectValue('reversed name: Bela', NAMES, 'Bela');
+    await flow.expect(
+      200,
       'the floor (checked in)',
       'GET',
       `/app/appointments?q=${lastName}&status=checked_in&sort=visit_stage_changed_at`,

@@ -53,6 +53,17 @@ describe('contacts.validator — the contact search', () => {
     expect(validateListContactsQuery({ q: 'pta' }).q).toBe('pta');
   });
 
+  it('reads a number inside a text as its digits, the words as typed (NS6)', () => {
+    expect(validateListContactsQuery({ q: 'Meera +91 98250-11241' }).q).toBe('Meera 9825011241');
+    expect(validateListContactsQuery({ q: '98250 11241 meera iyer' }).q).toBe(
+      '9825011241 meera iyer',
+    );
+    expect(validateListContactsQuery({ q: 'Meera 98250' }).q).toBe('Meera 98250');
+    expect(validateListContactsQuery({ q: 'iyer meera' }).q).toBe('iyer meera');
+    expect(validateListContactsQuery({ q: 'meera 098250 11241' }).q).toBe('meera 9825011241');
+    expect(validateListContactsQuery({ q: 'Meera iyer' }).sort).toBe('match');
+  });
+
   it('refuses a search too short to read (400 q)', () => {
     for (const q of ['ri', '981', '#']) {
       expect(() => validateListContactsQuery({ q }), q).toThrow(ValidationError);
@@ -79,5 +90,12 @@ describe('contacts.validator — a list about a contact (leads L7, patients P9)'
       recordNumber: 412,
     });
     expect(readContactLinkedSearch({ q: 'PT-0412' })).toEqual({ text: 'PT-0412' });
+  });
+
+  it('reads a number inside a text as its digits (NS6)', () => {
+    expect(readContactLinkedSearch({ q: 'Meera +91 98250-11241' })).toEqual({
+      text: 'Meera 9825011241',
+    });
+    expect(readContactLinkedSearch({ q: 'iyer meera' })).toEqual({ text: 'iyer meera' });
   });
 });

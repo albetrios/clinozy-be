@@ -364,6 +364,13 @@ describe('Patients — integration (routes-final §7)', () => {
     flow.expectValue("the first is Asha's", '.data[0].id', ashaFile);
     await flow.expect(
       200,
+      'q: every word, the last name first',
+      'GET',
+      `/app/patients?q=${lastName}%20asha`,
+    );
+    flow.expectValue('reversed name: Asha', '[.data[].id] | join(",")', ashaFile);
+    await flow.expect(
+      200,
       'q: PT-number',
       'GET',
       `/app/patients?q=PT-${ashaNumber.padStart(4, '0')}`,
