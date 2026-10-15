@@ -15,6 +15,8 @@ import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js'
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { invoices } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { organization_settings } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.schema.js';
+import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js';
+import { DEMO_REVIEW_LINK } from '@/scripts/seed/demo-clinic.catalog.js';
 
 /** 15:30 in Kolkata — the afternoon every Today lane is planned around. */
 const NOW = new Date('2026-10-13T10:00:00Z');
@@ -85,6 +87,15 @@ describe.runIf(runAsApplicationBehaviour)('Demo clinic seed — integration', ()
     expect(new Set(bills.map((bill) => bill.status))).toEqual(
       new Set(['paid', 'partial', 'unpaid']),
     );
+
+    // The main branch has a Google review link, the second none (feat-payment-celebration BR5).
+    const branchLinks = await getRequestDatabase()
+      .select({ isMain: branches.is_main, reviewLink: branches.review_link })
+      .from(branches)
+      .where(eq(branches.organization_id, clinic!.id));
+    expect(branchLinks).toHaveLength(2);
+    expect(branchLinks.find((branch) => branch.isMain)?.reviewLink).toBe(DEMO_REVIEW_LINK);
+    expect(branchLinks.find((branch) => !branch.isMain)?.reviewLink).toBeNull();
 
     // Its setup is complete (feat-clinic-setup OSC7): the staff never meet the setup drawer.
     const [setup] = await getRequestDatabase()

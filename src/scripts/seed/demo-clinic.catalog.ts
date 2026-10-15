@@ -133,6 +133,13 @@ export const DEMO_BUILDINGS = [
   'Laxmi Towers',
 ] as const;
 
+/**
+ * The main branch's Google review link (`https://g.page/r/<place code>/review`, the short link
+ * Google Business gives a clinic) — what the payment received view and the chat's Review message
+ * send. A made-up place code; the second branch has no link, so the app shows both states.
+ */
+export const DEMO_REVIEW_LINK = 'https://g.page/r/CQdemoclinicEAE/review';
+
 /** The rooms every branch has. */
 export const DEMO_ROOMS = ['Consultation room', 'Procedure room', 'Laser room'] as const;
 

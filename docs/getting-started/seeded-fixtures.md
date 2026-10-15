@@ -38,7 +38,7 @@ the emails, which stay on `example.com`.
 
 | What | Seeded |
 | ---- | ------ |
-| Clinic | A clinic name, two branches in one Indian city (real areas, PIN codes, landlines, one GSTIN), rooms and lasers, an 11-item price list |
+| Clinic | A clinic name, two branches in one Indian city (real areas, PIN codes, landlines, one GSTIN), rooms and lasers, an 11-item price list. The main branch has a Google review link (`https://g.page/r/CQdemoclinicEAE/review`, a made-up place code) for the review ask; the second has none |
 | Staff | Owner (also a Doctor), Doctor, two Therapists, Front desk. All can sign in with an email code; onboarding is done, and the clinic setup is complete, so nobody meets the setup drawer |
 | `demo@example.com` | Admin in the clinic and member of both branches (when the user exists) |
 | Patients | 24, with first consultations and their notes, treatment sessions every two to four weeks, check-ins and reviews |

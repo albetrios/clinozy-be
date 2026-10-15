@@ -23,6 +23,7 @@ import {
   DEMO_ENQUIRY_REPLIES,
   type DEMO_MACHINES,
   DEMO_OFFERINGS,
+  DEMO_REVIEW_LINK,
   DEMO_REVIEW_TEXTS,
   DEMO_UNLIKELY_NAMES,
   DEMO_UNLIKELY_SPELLING,
@@ -58,6 +59,8 @@ export interface DemoBranchPlan {
   phone: string;
   email: string;
   gstNumber: string;
+  /** The branch's Google review link — the main branch's, none on the second. */
+  reviewLink: string | null;
   doctor: DemoStaffKey;
   therapist: DemoStaffKey;
 }
@@ -620,7 +623,10 @@ class DemoClinicPlanner {
       : `${faker.helpers.arrayElement(CLINIC_NAME_STEMS)} ${faker.helpers.arrayElement(CLINIC_NAME_SUFFIXES)}`;
   }
 
-  /** The two branches in the city's two areas: an address, a landline and the one GSTIN. */
+  /**
+   * The two branches in the city's two areas: an address, a landline and the one GSTIN; the main
+   * branch also has the Google review link (no Faker draw, so the rest of the plan is unchanged).
+   */
   planBranches(options: {
     city: DemoCity;
     slug: string;
@@ -644,6 +650,7 @@ class DemoClinicPlanner {
         phone: landline,
         email: `${emailPart(area.area)}@${slug}.example.com`,
         gstNumber: gst,
+        reviewLink: key === 'main' ? DEMO_REVIEW_LINK : null,
         doctor: index === 0 ? 'owner' : 'doctor',
         therapist: index === 0 ? 'mainTherapist' : 'secondTherapist',
       };

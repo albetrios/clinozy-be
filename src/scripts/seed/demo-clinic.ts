@@ -343,6 +343,7 @@ class DemoClinicWriter {
           closes_at: '20:00',
           working_days: [...WEEKDAY_VALUES],
           maps_link: `https://maps.google.com/?q=${encodeURIComponent(`${plan.name}, ${branch.area}, ${branch.city}`)}`,
+          review_link: branch.reviewLink,
           default_doctor_membership_id: staff.memberships[branch.doctor],
           default_therapist_membership_id: staff.memberships[branch.therapist],
           default_front_desk_membership_id: staff.memberships.frontDesk,
