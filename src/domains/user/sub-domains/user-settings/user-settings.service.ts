@@ -1,9 +1,14 @@
-import { NotFoundError } from '@/shared/errors/index.js';
+import { NotFoundError, UnprocessableEntityError } from '@/shared/errors/index.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
 import type { UserService } from '@/domains/user/user.service.js';
+import {
+  findUserActiveOrganizationByPublicId,
+  findUserActiveOrganizationPublicIdByInternalId,
+} from '@/domains/tenancy/sub-domains/organization/resolve-active-organization.js';
 import type { UserSettingsRepository } from './user-settings.repository.js';
-import { serializeUserSettings } from './user-settings.serializer.js';
+import { serializeUserSettings, type UserSettingsRow } from './user-settings.serializer.js';
 import type { UserSettingsOutput } from './user-settings.types.js';
+import type { UpdateUserSettingsInput } from './user-settings.dto.js';
 import { validateUpdateUserSettings } from './user-settings.validator.js';
 import {
   PRINCIPAL_SCOPE,
@@ -21,10 +26,14 @@ import {
  *   returns the serialized row (or platform defaults if no row exists); `update` validates the
  *   patch, drops `undefined` fields, and asks the repository to upsert-merge over the existing row.
  * - **Failure modes:** unknown user → {@link NotFoundError}; invalid body →
- *   {@link ValidationError} from the validator.
+ *   {@link ValidationError} from the validator; a `default_organization_id` that is not an active
+ *   clinic the caller actively belongs to → {@link UnprocessableEntityError}
+ *   (`reason: default_organization_unavailable`).
  * - **Side effects:** writes to `auth.user_settings`. No event emission today.
  * - **Notes:** the repository handles defaulting on first write so this service stays patch-only;
- *   `omitUndefined` avoids accidentally clearing fields the client did not send.
+ *   `omitUndefined` avoids accidentally clearing fields the client did not send. The pinned clinic
+ *   (feat-choose-default-clinic) is checked and resolved through the tenancy membership lookups,
+ *   inside the same user context (nested contexts reuse the transaction).
  */
 export class UserSettingsService {
   constructor(
@@ -44,13 +53,68 @@ export class UserSettingsService {
     return userId;
   }
 
+  /**
+   * Turns the validated body into the repository's patch. A `default_organization_id` is checked
+   * against the caller's memberships: only an ACTIVE membership in an ACTIVE clinic (TEAM) may be
+   * pinned, and it is stored by internal id; `null` clears the pin. Every other miss — an unknown
+   * id, someone else's clinic, a suspended membership, a personal workspace — is the same 422, so
+   * the route never confirms that a clinic exists (feat-choose-default-clinic CD6).
+   */
+  private async toRepositoryPatch({
+    parsed,
+    userId,
+  }: {
+    parsed: UpdateUserSettingsInput;
+    userId: number;
+  }) {
+    const { default_organization_id: defaultOrganizationPublicId, ...rest } = parsed;
+    const patch = omitUndefined(rest);
+    if (defaultOrganizationPublicId === undefined) return patch;
+    if (defaultOrganizationPublicId === null) return { ...patch, default_organization_id: null };
+    const organization = await findUserActiveOrganizationByPublicId({
+      userInternalId: userId,
+      organizationPublicId: defaultOrganizationPublicId,
+    });
+    if (organization?.type !== 'TEAM') {
+      throw new UnprocessableEntityError('errors:defaultOrganizationUnavailable').withReason(
+        'default_organization_unavailable',
+      );
+    }
+    return { ...patch, default_organization_id: organization.id };
+  }
+
+  /**
+   * Adds the pinned clinic's public id to the row while the pin is usable — an ACTIVE membership in
+   * an ACTIVE clinic — and `null` otherwise, so a clinic the caller has left reads as automatic
+   * while the stored id waits for a rejoin (feat-choose-default-clinic CD7).
+   */
+  private async withDefaultOrganization({
+    row,
+    userId,
+  }: {
+    row: (UserSettingsRow & { default_organization_id: number | null }) | null;
+    userId: number;
+  }): Promise<UserSettingsRow | null> {
+    if (row?.default_organization_id == null) return row;
+    const publicId = await findUserActiveOrganizationPublicIdByInternalId({
+      userInternalId: userId,
+      organizationInternalId: row.default_organization_id,
+    });
+    return { ...row, default_organization_public_id: publicId ?? null };
+  }
+
   async get(scope: UserPrincipalDatabaseScope): Promise<UserSettingsOutput> {
     const user_public_id = scope.userPublicId;
     // auth.user_settings is FORCE RLS keyed on app.current_user_public_id — read inside the user context.
     const settings = await withAppDatabaseContext({
       scope,
-      callback: async () =>
-        this.repository.getByUserId(await this.requireUserIdInContext(user_public_id)),
+      callback: async () => {
+        const userId = await this.requireUserIdInContext(user_public_id);
+        return this.withDefaultOrganization({
+          row: await this.repository.getByUserId(userId),
+          userId,
+        });
+      },
     });
     return serializeUserSettings(settings);
   }
@@ -67,11 +131,14 @@ export class UserSettingsService {
     // auth.user_settings is FORCE RLS keyed on app.current_user_public_id — upsert inside the user context.
     const result = await withAppDatabaseContext({
       scope,
-      callback: async () =>
-        this.repository.upsert(
-          await this.requireUserIdInContext(user_public_id),
-          omitUndefined(parsed),
-        ),
+      callback: async () => {
+        const userId = await this.requireUserIdInContext(user_public_id);
+        const row = await this.repository.upsert(
+          userId,
+          await this.toRepositoryPatch({ parsed, userId }),
+        );
+        return this.withDefaultOrganization({ row, userId });
+      },
     });
     return serializeUserSettings(result);
   }
@@ -86,8 +153,13 @@ export class UserSettingsService {
   async getForInvitedUser(user_public_id: string): Promise<UserSettingsOutput> {
     const settings = await withAppDatabaseContext({
       scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
-      callback: async () =>
-        this.repository.getByUserId(await this.requireUserIdInContext(user_public_id)),
+      callback: async () => {
+        const userId = await this.requireUserIdInContext(user_public_id);
+        return this.withDefaultOrganization({
+          row: await this.repository.getByUserId(userId),
+          userId,
+        });
+      },
     });
     return serializeUserSettings(settings);
   }
@@ -107,11 +179,14 @@ export class UserSettingsService {
     const parsed = validateUpdateUserSettings(body);
     const result = await withAppDatabaseContext({
       scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user_public_id }),
-      callback: async () =>
-        this.repository.upsert(
-          await this.requireUserIdInContext(user_public_id),
-          omitUndefined(parsed),
-        ),
+      callback: async () => {
+        const userId = await this.requireUserIdInContext(user_public_id);
+        const row = await this.repository.upsert(
+          userId,
+          await this.toRepositoryPatch({ parsed, userId }),
+        );
+        return this.withDefaultOrganization({ row, userId });
+      },
     });
     return serializeUserSettings(result);
   }

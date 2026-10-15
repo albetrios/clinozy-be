@@ -354,6 +354,7 @@
   "subscriptionCreateInProgress": "Ya se está creando una suscripción para esta organización; vuelve a intentarlo en breve.",
   "seatLimitReached": "Se alcanzó el límite de asientos de tu plan ({{limit}}). Mejora tu plan o elimina un miembro antes de agregar otro.",
   "subscriptionNotMutable": "Esta suscripción está en estado terminal y ya no puede modificarse; crea una nueva suscripción en su lugar",
+  "defaultOrganizationUnavailable": "Elige como clínica de inicio una clínica de la que seas miembro activo",
   "planNotAvailableForBillingCycle": "Este plan no está disponible para el ciclo de facturación de tu suscripción",
   "paymentProviderUnavailable": "El proveedor de pagos no está disponible temporalmente. Vuelve a intentarlo.",
   "paymentDeclined": "El método de pago fue rechazado. Use otro método de pago e inténtelo de nuevo.",

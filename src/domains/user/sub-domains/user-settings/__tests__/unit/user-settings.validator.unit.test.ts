@@ -9,6 +9,23 @@ describe('user-settings.validator', () => {
     });
   });
 
+  it('validateUpdateUserSettings takes a clinic id or null for default_organization_id', () => {
+    expect(validateUpdateUserSettings({ default_organization_id: 'org_clinic' })).toEqual({
+      default_organization_id: 'org_clinic',
+    });
+    expect(validateUpdateUserSettings({ default_organization_id: null })).toEqual({
+      default_organization_id: null,
+    });
+  });
+
+  it('validateUpdateUserSettings refuses a blank or over-long default_organization_id', () => {
+    for (const value of ['', '   ', 'x'.repeat(29), 7]) {
+      expect(() => validateUpdateUserSettings({ default_organization_id: value })).toThrow(
+        ValidationError,
+      );
+    }
+  });
+
   it('validateUpdateUserSettings rejects unknown fields', () => {
     expect(() => validateUpdateUserSettings({ unknownField: true })).toThrow(ValidationError);
   });

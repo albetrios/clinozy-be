@@ -354,6 +354,7 @@
   "subscriptionCreateInProgress": "A subscription is already being created for this organization; please retry shortly.",
   "seatLimitReached": "Your plan's seat limit ({{limit}}) has been reached. Upgrade your plan or remove a member before adding another.",
   "subscriptionNotMutable": "This subscription is in a terminal state and can no longer be modified; create a new subscription instead",
+  "defaultOrganizationUnavailable": "Choose a clinic you're an active member of as your sign-in clinic",
   "planNotAvailableForBillingCycle": "This plan is not available for your subscription's billing cycle",
   "paymentProviderUnavailable": "The payment provider is temporarily unavailable. Please try again.",
   "paymentDeclined": "The payment method was declined. Use another payment method and try again.",

@@ -25,6 +25,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { users as authUsers } from '@/domains/user/user.schema.js';
+import { user_settings } from '@/domains/user/sub-domains/user-settings/user-settings.schema.js';
 import {
   RESOURCE_QUOTA_LOCK_NAMESPACE,
   acquireResourceQuotaLock,
@@ -279,19 +280,37 @@ export class OrganizationRepository {
   }
 
   /**
-   * Resolve the login-default organization `public_id` for a user: the PERSONAL organization
-   * first (when {@link includePersonalOrganizations}), otherwise the most-recently-joined ACTIVE
-   * TEAM membership. Returns `null` when the user has no eligible active membership. One indexed
-   * memberships → organizations join, ordered personal-first then most-recent join.
+   * Resolve the login-default organization `public_id` for a user among their ACTIVE memberships
+   * in active organizations: with {@link preferTeamOrganizations}, the pinned clinic
+   * (`auth.user_settings.default_organization_id`, chosen by the user), else the remembered one
+   * (`auth.users.last_active_organization_id`, the last one switched to), else the
+   * most-recently-joined TEAM, else the PERSONAL organization; without it, the PERSONAL
+   * organization first, then the pinned, the remembered and the most recent join. PERSONAL rows
+   * take part only when {@link includePersonalOrganizations}. Returns `null` when the user has no
+   * eligible active membership. One indexed memberships → organizations join plus the caller's
+   * own `auth.users` and `auth.user_settings` rows (visible under the verified user context the
+   * caller runs in).
    */
   async findDefaultActiveOrganizationPublicId(
     user_id: number,
     includePersonalOrganizations: boolean,
+    preferTeamOrganizations: boolean,
   ): Promise<string | null> {
+    // `IS NOT DISTINCT FROM`, not `=`: with nothing pinned or remembered `=` yields NULL, which
+    // DESC sorts first — every row would tie with "the chosen one" and the order would fall to
+    // joined_at only by luck of the tie-break.
+    const isPinned = sql`(${organizations.id} IS NOT DISTINCT FROM ${user_settings.default_organization_id})`;
+    const isRemembered = sql`(${organizations.id} IS NOT DISTINCT FROM ${authUsers.last_active_organization_id})`;
+    const isPersonal = sql`(${organizations.type} = 'PERSONAL')`;
     const rows = await getRequestDatabase()
       .select({ public_id: organizations.public_id })
       .from(memberships)
       .innerJoin(organizations, eq(organizations.id, memberships.organization_id))
+      // LEFT, not INNER: should the caller's own rows ever be hidden by their RLS policies (or no
+      // settings row exist yet), nothing counts as pinned or remembered and the default degrades
+      // to the newest membership — never to none.
+      .leftJoin(authUsers, eq(authUsers.id, memberships.user_id))
+      .leftJoin(user_settings, eq(user_settings.user_id, memberships.user_id))
       .where(
         and(
           eq(memberships.user_id, user_id),
@@ -301,7 +320,12 @@ export class OrganizationRepository {
           includePersonalOrganizations ? undefined : sql`${organizations.type} <> 'PERSONAL'`,
         ),
       )
-      .orderBy(desc(sql`(${organizations.type} = 'PERSONAL')`), desc(memberships.joined_at))
+      .orderBy(
+        preferTeamOrganizations ? asc(isPersonal) : desc(isPersonal),
+        desc(isPinned),
+        desc(isRemembered),
+        desc(memberships.joined_at),
+      )
       .limit(1);
     return rows[0]?.public_id ?? null;
   }
@@ -353,16 +377,21 @@ export class OrganizationRepository {
 
   /**
    * Confirm the user holds an ACTIVE membership in the given (active, non-deleted) organization
-   * and return both its internal `id` and `public_id`, or `null` when no such active membership
+   * and return its internal `id`, `public_id` and `type`, or `null` when no such active membership
    * exists. Used when the caller needs the internal id (e.g. persisting it on the session row at
-   * switch time — audit-#3). Constrained to the caller's own `user_id`.
+   * switch time — audit-#3) or the type (a pinned default clinic must be a TEAM). Constrained to
+   * the caller's own `user_id`.
    */
   async findActiveMembershipOrganizationByPublicId(
     user_id: number,
     organization_public_id: string,
-  ): Promise<{ id: number; public_id: string } | null> {
+  ): Promise<{ id: number; public_id: string; type: string } | null> {
     const rows = await getRequestDatabase()
-      .select({ id: organizations.id, public_id: organizations.public_id })
+      .select({
+        id: organizations.id,
+        public_id: organizations.public_id,
+        type: organizations.type,
+      })
       .from(memberships)
       .innerJoin(organizations, eq(organizations.id, memberships.organization_id))
       .where(

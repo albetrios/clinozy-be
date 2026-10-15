@@ -242,7 +242,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Switch active organization',
         description:
-          "Re-mints the access token scoped to the given organization after validating the caller's active membership (403 if not a member). When the organization's security policy requires MFA and this session has not proved a second factor, returns 403 with reason `mfa_required` — complete `POST /auth/me/mfa/verify` (or enroll MFA) and switch again; the re-minted token then carries `amr: ['mfa']`. Returns a new access token; the client swaps its Bearer to it.",
+          "Re-mints the access token scoped to the given organization after validating the caller's active membership (403 if not a member). When the organization's security policy requires MFA and this session has not proved a second factor, returns 403 with reason `mfa_required` — complete `POST /auth/me/mfa/verify` (or enroll MFA) and switch again; the re-minted token then carries `amr: ['mfa']`. Returns a new access token; the client swaps its Bearer to it. The organization is also remembered as the caller's login default: the next sign-in opens it while the membership stays active.",
         tags: ['Organization'],
         body: z.object({
           organization_id: z
