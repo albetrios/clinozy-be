@@ -10,6 +10,11 @@ export interface UserSettingsRow {
   analytics_consent: string | null;
   analytics_consent_version: number | null;
   analytics_consent_at: Date | null;
+  /**
+   * The pinned clinic's public id, resolved by the service only while the pin is usable; absent or
+   * `null` reads as automatic.
+   */
+  default_organization_public_id?: string | null;
 }
 
 const DEFAULT_USER_SETTINGS: UserSettingsOutput = {
@@ -20,6 +25,7 @@ const DEFAULT_USER_SETTINGS: UserSettingsOutput = {
   analytics_consent: null,
   analytics_consent_version: null,
   analytics_consent_at: null,
+  default_organization_id: null,
 };
 
 /**
@@ -43,5 +49,6 @@ export function serializeUserSettings(row: UserSettingsRow | null): UserSettings
     analytics_consent: (row.analytics_consent as AnalyticsConsent | null) ?? null,
     analytics_consent_version: row.analytics_consent_version ?? null,
     analytics_consent_at: row.analytics_consent_at?.toISOString() ?? null,
+    default_organization_id: row.default_organization_public_id ?? null,
   };
 }

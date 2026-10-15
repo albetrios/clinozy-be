@@ -10,6 +10,13 @@ import { memberships } from '@/domains/tenancy/sub-domains/membership/membership
 import { users } from '@/domains/user/user.schema.js';
 import { UserRepository } from '@/domains/user/user.repository.js';
 import { UserService } from '@/domains/user/user.service.js';
+import { UserSettingsRepository } from '@/domains/user/sub-domains/user-settings/user-settings.repository.js';
+import { UserSettingsService } from '@/domains/user/sub-domains/user-settings/user-settings.service.js';
+import { UnprocessableEntityError } from '@/shared/errors/index.js';
+import {
+  PRINCIPAL_SCOPE,
+  type UserPrincipalDatabaseScope,
+} from '@/infrastructure/database/contexts/database-context.js';
 import type { ObjectStoragePort } from '@/infrastructure/storage/object-storage.port.js';
 import {
   provisionOrganizationWithOwner,
@@ -26,6 +33,18 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 describe('resolveDefaultActiveOrganizationPublicId — the remembered clinic (database)', () => {
   // Remembering only needs the repository; object storage is never touched.
   const userService = new UserService(new UserRepository(), {} as ObjectStoragePort);
+  const settingsService = new UserSettingsService(userService, new UserSettingsRepository());
+  const pin = ({
+    userPublicId,
+    organizationPublicId,
+  }: {
+    userPublicId: string;
+    organizationPublicId: string | null;
+  }) =>
+    settingsService.update({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId }) as UserPrincipalDatabaseScope,
+      body: { default_organization_id: organizationPublicId },
+    });
   const originalTeamEnabled = env.TEAM_ORGANIZATION_ENABLED;
   const originalPersonalEnabled = env.PERSONAL_ORGANIZATION_ENABLED;
 
@@ -156,5 +175,85 @@ describe('resolveDefaultActiveOrganizationPublicId — the remembered clinic (da
     expect(await rememberedId(user.id)).toBe(first.id);
     expect(await remember(second.id)).toBe(true);
     expect(await rememberedId(user.id)).toBe(second.id);
+  });
+  describe('a pinned clinic (feat-choose-default-clinic)', () => {
+    it('opens the pinned clinic over the remembered one, a newer one and the personal workspace', async () => {
+      const user = await createTestUser();
+      await provisionPersonalOrganization({ ownerUserId: user.id });
+      const pinned = await clinic({ ownerUserId: user.id, name: 'Pinned' });
+      const remembered = await clinic({ ownerUserId: user.id, name: 'Remembered' });
+      const newest = await clinic({ ownerUserId: user.id, name: 'Newest' });
+      await joinedAt({ userId: user.id, organizationId: pinned.id, at: '2026-01-01T00:00:00Z' });
+      await joinedAt({
+        userId: user.id,
+        organizationId: remembered.id,
+        at: '2026-02-01T00:00:00Z',
+      });
+      await joinedAt({ userId: user.id, organizationId: newest.id, at: '2026-06-01T00:00:00Z' });
+      await userService.rememberLastActiveOrganization({
+        userPublicId: user.public_id,
+        organizationId: remembered.id,
+      });
+
+      const saved = await pin({
+        userPublicId: user.public_id,
+        organizationPublicId: pinned.public_id,
+      });
+
+      expect(saved.default_organization_id).toBe(pinned.public_id);
+      expect(await resolveDefaultActiveOrganizationPublicId(user.id)).toBe(pinned.public_id);
+
+      const cleared = await pin({ userPublicId: user.public_id, organizationPublicId: null });
+      expect(cleared.default_organization_id).toBeNull();
+      expect(await resolveDefaultActiveOrganizationPublicId(user.id)).toBe(remembered.public_id);
+    });
+
+    it('skips a pinned clinic once the membership is suspended, and reports the pin as null', async () => {
+      const user = await createTestUser();
+      const pinned = await clinic({ ownerUserId: user.id, name: 'Pinned' });
+      const other = await clinic({ ownerUserId: user.id, name: 'Other' });
+      await pin({ userPublicId: user.public_id, organizationPublicId: pinned.public_id });
+
+      await getOperatorDatabase()
+        .update(memberships)
+        .set({ status: MEMBERSHIP_STATUS.SUSPENDED })
+        .where(and(eq(memberships.user_id, user.id), eq(memberships.organization_id, pinned.id)));
+
+      expect(await resolveDefaultActiveOrganizationPublicId(user.id)).toBe(other.public_id);
+      const settings = await settingsService.get(
+        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }) as UserPrincipalDatabaseScope,
+      );
+      expect(settings.default_organization_id).toBeNull();
+    });
+
+    it("refuses another person's clinic and the personal workspace, storing nothing", async () => {
+      const user = await createTestUser();
+      const stranger = await createTestUser();
+      const personal = await provisionPersonalOrganization({ ownerUserId: user.id });
+      const theirs = await clinic({ ownerUserId: stranger.id, name: 'Theirs' });
+
+      for (const organizationPublicId of [theirs.public_id, personal.organization.public_id]) {
+        await expect(
+          pin({ userPublicId: user.public_id, organizationPublicId }),
+        ).rejects.toBeInstanceOf(UnprocessableEntityError);
+      }
+      const settings = await settingsService.get(
+        PRINCIPAL_SCOPE.VERIFIED({ userPublicId: user.public_id }) as UserPrincipalDatabaseScope,
+      );
+      expect(settings.default_organization_id).toBeNull();
+    });
+
+    it('keeps the personal workspace first when team organizations are disabled', async () => {
+      const user = await createTestUser();
+      const personal = await provisionPersonalOrganization({ ownerUserId: user.id });
+      const pinned = await clinic({ ownerUserId: user.id, name: 'Pinned' });
+      await pin({ userPublicId: user.public_id, organizationPublicId: pinned.public_id });
+
+      env.TEAM_ORGANIZATION_ENABLED = false;
+
+      expect(await resolveDefaultActiveOrganizationPublicId(user.id)).toBe(
+        personal.organization.public_id,
+      );
+    });
   });
 });

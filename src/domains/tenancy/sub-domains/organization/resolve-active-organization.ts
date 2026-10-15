@@ -60,10 +60,11 @@ async function withUserContextForInternalId<T>({
 /**
  * Resolve the default active organization for a user at login (every login path, and the
  * refresh fallback when a session's organization is no longer valid). When TEAM organizations
- * are enabled: the clinic the user last switched to (`auth.users.last_active_organization_id`,
- * stamped by `switch-to-organization`) while that membership is still active, else the
- * most-recently-joined active TEAM membership, else the PERSONAL organization (when
- * `PERSONAL_ORGANIZATION_ENABLED`). With TEAM organizations disabled the PERSONAL organization
+ * are enabled: the clinic the user pinned (`auth.user_settings.default_organization_id`, set
+ * through `PATCH /users/me/settings`), else the clinic they last switched to
+ * (`auth.users.last_active_organization_id`, stamped by `switch-to-organization`) — each only while
+ * that membership is still active — else the most-recently-joined active TEAM membership, else the
+ * PERSONAL organization (when `PERSONAL_ORGANIZATION_ENABLED`). With TEAM organizations disabled the PERSONAL organization
  * stays first. Returns the organization `public_id`, or `undefined` when the user belongs to no
  * eligible organization (team-only mode, no team yet → the frontend redirects to onboarding).
  *
@@ -72,8 +73,8 @@ async function withUserContextForInternalId<T>({
  *   {@link OrganizationRepository.findDefaultActiveOrganizationPublicId}.
  * - **Notes:** a clinic is preferred over the personal workspace because a personal workspace has
  *   no clinic of its own and the frontend answers it with the organization picker — the login
- *   would otherwise stop there every time. A remembered clinic the user has left, or that is no
- *   longer active, fails the membership filter and is skipped; it never needs clearing.
+ *   would otherwise stop there every time. A pinned or remembered clinic the user has left, or
+ *   that is no longer active, fails the membership filter and is skipped; it never needs clearing.
  * - **Side effects:** none (read-only).
  */
 export async function resolveDefaultActiveOrganizationPublicId(
@@ -93,7 +94,7 @@ export async function resolveDefaultActiveOrganizationPublicId(
 
 /**
  * Confirm the user holds an ACTIVE membership in the given organization (and the organization is
- * active/not-deleted), returning both the internal `id` and `public_id`. Runs under the caller's own
+ * active/not-deleted), returning its internal `id`, `public_id` and `type`. Runs under the caller's own
  * user RLS context (no organization context at switch time) so the tenancy discovery policies match,
  * and the query is additionally constrained to the caller's own `user_id`.
  *
@@ -109,7 +110,7 @@ export async function findUserActiveOrganizationByPublicId({
 }: {
   userInternalId: number;
   organizationPublicId: string;
-}): Promise<{ id: number; public_id: string } | undefined> {
+}): Promise<{ id: number; public_id: string; type: string } | undefined> {
   const resolved = await withUserContextForInternalId({
     userInternalId,
     callback: () =>

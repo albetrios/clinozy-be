@@ -577,6 +577,7 @@ describe('AuthService', () => {
     vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
       id: 9,
       public_id: 'org_team',
+      type: 'TEAM',
     });
 
     const result = await service.switchToOrganization({
@@ -601,6 +602,7 @@ describe('AuthService', () => {
     vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
       id: 9,
       public_id: 'org_team',
+      type: 'TEAM',
     });
     vi.mocked(userService.rememberLastActiveOrganization).mockClear();
 
@@ -628,6 +630,7 @@ describe('AuthService', () => {
     vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
       id: 9,
       public_id: 'org_team',
+      type: 'TEAM',
     });
     vi.mocked(userService.rememberLastActiveOrganization).mockRejectedValueOnce(
       new Error('database unavailable'),
@@ -664,6 +667,7 @@ describe('AuthService', () => {
       vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
         id: 9,
         public_id: 'org_mfa',
+        type: 'TEAM',
       });
       vi.mocked(organizationRequiresMfa).mockResolvedValueOnce(true);
       sessionMfa(false);
@@ -687,6 +691,7 @@ describe('AuthService', () => {
       vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
         id: 9,
         public_id: 'org_mfa',
+        type: 'TEAM',
       });
       vi.mocked(organizationRequiresMfa).mockResolvedValue(true);
       sessionMfa(true);
@@ -805,6 +810,7 @@ describe('AuthService', () => {
     vi.mocked(resolve.findUserActiveOrganizationByPublicId).mockResolvedValue({
       id: 9,
       public_id: 'org_team',
+      type: 'TEAM',
     });
 
     const order: string[] = [];

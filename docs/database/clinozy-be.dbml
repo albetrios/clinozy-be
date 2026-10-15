@@ -1952,6 +1952,7 @@ Note auth.user_notification_preferences {
 Table auth.user_settings {
   analytics_consent varchar(10)
   created_at timestamptz [not null]
+  default_organization_id bigint
   is_dark_mode_enabled boolean [not null]
   is_notifications_enabled boolean [not null]
   language varchar(10) [not null]

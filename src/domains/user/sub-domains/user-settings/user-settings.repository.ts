@@ -7,7 +7,7 @@ import { user_settings } from '@/domains/user/sub-domains/user-settings/user-set
  * Drizzle data-access for `auth.user_settings`. Implements an upsert-merge for the singleton
  * row keyed by `user_id`: missing fields fall back to the existing row, then to the platform
  * factory defaults (light mode, notifications on, `en` language, `['en']` preferred locales, no
- * analytics consent receipt). A consent receipt writes its three columns together, stamped by the
+ * analytics consent receipt, no pinned clinic). A consent receipt writes its three columns together, stamped by the
  * database.
  */
 export class UserSettingsRepository {
@@ -29,6 +29,7 @@ export class UserSettingsRepository {
       preferred_locales?: unknown;
       analytics_consent?: string;
       analytics_consent_version?: number;
+      default_organization_id?: number | null;
     },
   ) {
     // A consent decision is stamped by the database clock, never the client's (launch D85).
@@ -54,6 +55,7 @@ export class UserSettingsRepository {
         is_notifications_enabled: data.is_notifications_enabled ?? true,
         language: data.language ?? 'en',
         preferred_locales: (data.preferred_locales as string[] | undefined) ?? ['en'],
+        default_organization_id: data.default_organization_id ?? null,
         ...consent,
       })
       .onConflictDoUpdate({
@@ -68,6 +70,9 @@ export class UserSettingsRepository {
           ...(data.language !== undefined && { language: data.language }),
           ...(data.preferred_locales !== undefined && {
             preferred_locales: data.preferred_locales as string[],
+          }),
+          ...(data.default_organization_id !== undefined && {
+            default_organization_id: data.default_organization_id,
           }),
           ...consent,
           updated_at: databaseNowTimestamp,

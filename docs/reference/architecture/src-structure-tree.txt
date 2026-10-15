@@ -2022,6 +2022,7 @@ src/
     │   │   │   ├── consent-receipt-survives-logout.integration.test.ts
     │   │   │   ├── user-admin.integration.test.ts
     │   │   │   ├── user-route-smoke.integration.test.ts
+    │   │   │   ├── user-settings-default-organization.integration.test.ts
     │   │   │   └── user.integration.test.ts
     │   │   ├── unit/
     │   │   │   ├── events/

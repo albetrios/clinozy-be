@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NotFoundError } from '@/shared/errors/index.js';
+import { NotFoundError, UnprocessableEntityError } from '@/shared/errors/index.js';
+import {
+  findUserActiveOrganizationByPublicId,
+  findUserActiveOrganizationPublicIdByInternalId,
+} from '@/domains/tenancy/sub-domains/organization/resolve-active-organization.js';
 import { UserSettingsService } from '@/domains/user/sub-domains/user-settings/user-settings.service.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import type { UserSettingsRepository } from '@/domains/user/sub-domains/user-settings/user-settings.repository.js';
@@ -29,6 +33,12 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
     ),
   };
 });
+
+// The pinned clinic is checked and resolved through the tenancy membership lookups (real queries).
+vi.mock('@/domains/tenancy/sub-domains/organization/resolve-active-organization.js', () => ({
+  findUserActiveOrganizationByPublicId: vi.fn(),
+  findUserActiveOrganizationPublicIdByInternalId: vi.fn(),
+}));
 
 const user = { id: 1, public_id: 'user_public' };
 const settingsRow = {
@@ -80,6 +90,7 @@ describe('UserSettingsService', () => {
       analytics_consent: null,
       analytics_consent_version: null,
       analytics_consent_at: null,
+      default_organization_id: null,
     });
   });
 
@@ -102,5 +113,78 @@ describe('UserSettingsService', () => {
     await expect(
       service.update({ scope: asUserScope('missing'), body: { language: 'de' } }),
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+  describe('default_organization_id (the clinic at sign-in)', () => {
+    it('pins an active clinic the caller actively belongs to, stored by internal id', async () => {
+      vi.mocked(findUserActiveOrganizationByPublicId).mockResolvedValue({
+        id: 7,
+        public_id: 'org_clinic',
+        type: 'TEAM',
+      });
+      vi.mocked(settingsRepository.upsert).mockResolvedValueOnce({
+        ...settingsRow,
+        default_organization_id: 7,
+      } as never);
+      vi.mocked(findUserActiveOrganizationPublicIdByInternalId).mockResolvedValue('org_clinic');
+
+      const result = await service.update({
+        scope: asUserScope('user_public'),
+        body: { default_organization_id: 'org_clinic' },
+      });
+
+      expect(findUserActiveOrganizationByPublicId).toHaveBeenCalledWith({
+        userInternalId: 1,
+        organizationPublicId: 'org_clinic',
+      });
+      expect(settingsRepository.upsert).toHaveBeenCalledWith(1, { default_organization_id: 7 });
+      expect(result.default_organization_id).toBe('org_clinic');
+    });
+
+    it('null clears the pin without a membership lookup', async () => {
+      await service.update({
+        scope: asUserScope('user_public'),
+        body: { default_organization_id: null },
+      });
+
+      expect(findUserActiveOrganizationByPublicId).not.toHaveBeenCalled();
+      expect(settingsRepository.upsert).toHaveBeenCalledWith(1, { default_organization_id: null });
+    });
+
+    it.each([
+      ['not a membership the caller holds', undefined],
+      ['a personal workspace', { id: 3, public_id: 'org_personal', type: 'PERSONAL' }],
+    ])(
+      'refuses %s with 422 default_organization_unavailable and stores nothing',
+      async (_label, found) => {
+        vi.mocked(findUserActiveOrganizationByPublicId).mockResolvedValue(found);
+
+        const updating = service.update({
+          scope: asUserScope('user_public'),
+          body: { default_organization_id: 'org_somewhere', language: 'fr' },
+        });
+
+        await expect(updating).rejects.toBeInstanceOf(UnprocessableEntityError);
+        await expect(updating).rejects.toMatchObject({
+          reason: 'default_organization_unavailable',
+        });
+        expect(settingsRepository.upsert).not.toHaveBeenCalled();
+      },
+    );
+
+    it('reports a pin that is no longer usable as null (automatic)', async () => {
+      vi.mocked(settingsRepository.getByUserId).mockResolvedValueOnce({
+        ...settingsRow,
+        default_organization_id: 7,
+      } as never);
+      vi.mocked(findUserActiveOrganizationPublicIdByInternalId).mockResolvedValue(undefined);
+
+      const result = await service.get(asUserScope('user_public'));
+
+      expect(findUserActiveOrganizationPublicIdByInternalId).toHaveBeenCalledWith({
+        userInternalId: 1,
+        organizationInternalId: 7,
+      });
+      expect(result.default_organization_id).toBeNull();
+    });
   });
 });

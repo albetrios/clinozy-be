@@ -133,6 +133,12 @@ clinic, and only then for the personal organization. So a returning user lands s
 they last worked in — route on `active_organization` from `GET /auth/me/context` as usual; there is
 nothing to store on the client. `switch-to-personal` leaves the remembered clinic alone.
 
+To let someone **choose** the clinic that opens at sign-in, read and write `default_organization_id`
+on `GET` / `PATCH /users/me/settings`: an `org_…` id pins that clinic (it then wins over the clinic
+last switched to), `null` returns to automatic. Only a clinic they actively belong to can be pinned —
+anything else is `422` with `error.reason: "default_organization_unavailable"`. `GET` reports `null`
+while a pinned clinic is not usable (they left it, or it was suspended).
+
 **One authoritative call — `GET /auth/me/context`.** Instead of stitching several endpoints, this returns everything a permission-aware UI needs in one request:
 
 ```json
