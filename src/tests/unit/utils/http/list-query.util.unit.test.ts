@@ -1,3 +1,5 @@
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
 import { roles } from '@/domains/tenancy/sub-domains/member-roles/member-role.schema.js';
 import {
@@ -7,6 +9,7 @@ import {
   finishKeysetPage,
   listSearchSortSchema,
   resolveKeysetSort,
+  searchWords,
 } from '@/shared/utils/http/list-query.util.js';
 import { parseListCursor } from '@/shared/utils/http/pagination.util.js';
 
@@ -66,6 +69,31 @@ describe('list-query.util', () => {
     });
     it('builds a condition when q + columns are present', () => {
       expect(buildSearchCondition({ columns: [roles.name], q: 'ann' })).toBeDefined();
+    });
+    it('keeps q as one phrase unless every word must match', () => {
+      const dialect = new PgDialect();
+      const phrase = buildSearchCondition({ columns: [roles.name], q: 'iyer  meera' });
+      const words = buildSearchCondition({
+        columns: [roles.name],
+        q: ' iyer  meera ',
+        everyWord: true,
+      });
+      expect(dialect.sqlToQuery(phrase as SQL).params).toEqual(['%iyer  meera%']);
+      const everyWord = dialect.sqlToQuery(words as SQL);
+      expect(everyWord.params).toEqual(['%iyer%', '%meera%']);
+      expect(everyWord.sql).toMatch(/ilike .* and .* ilike/i);
+    });
+    it('is the same single condition for one word either way', () => {
+      const dialect = new PgDialect();
+      const one = buildSearchCondition({ columns: [roles.name], q: 'meera', everyWord: true });
+      expect(dialect.sqlToQuery(one as SQL).params).toEqual(['%meera%']);
+    });
+  });
+
+  describe('searchWords', () => {
+    it('splits on any whitespace and drops empty words', () => {
+      expect(searchWords('  Meera\t iyer  9825 ')).toEqual(['Meera', 'iyer', '9825']);
+      expect(searchWords('   ')).toEqual([]);
     });
   });
 

@@ -128,6 +128,11 @@ export interface BaseRecordTableConfig {
    * order's supplier name, a sale's buyer and medicines).
    */
   searchExpressions?: readonly SQL[];
+  /**
+   * `q` matches when every word of it is in some search column, in any order (the contact search,
+   * CT9 — "iyer meera"); otherwise `q` is one phrase.
+   */
+  searchEveryWord?: boolean;
   /** The running-number column a numeric `q` (`2841`, `#2841`, `PT-0412`) also matches. */
   numberColumn?: string;
   /** Sortable fields → `text` or `created_at` keyset (a `created_at` entry is always present). */
@@ -708,6 +713,7 @@ export class BaseRecordRepository {
         ...(this.config.searchExpressions ?? []),
       ],
       q,
+      everyWord: this.config.searchEveryWord ?? false,
     });
     const digits = q?.match(/^\s*(?:#|[a-z]{1,4}-)?0*(\d{1,9})\s*$/i)?.[1];
     if (!this.config.numberColumn || digits === undefined) return text;

@@ -350,6 +350,13 @@ describe('Leads — integration (routes-final §5)', () => {
       `/app/leads?q=%2B91%20${digits.slice(0, 5)}%20${digits.slice(5)}02`,
     );
     flow.expectValue("number: Meera's lead", NAMES, 'Meera');
+    await flow.expect(
+      200,
+      'q: every word, the last name first',
+      'GET',
+      `/app/leads?q=${lastName}%20meera`,
+    );
+    flow.expectValue("reversed name: Meera's lead", NAMES, 'Meera');
     await flow.expect(200, 'q: part of a name', 'GET', '/app/leads?q=Kabi');
     flow.expectValue(
       "name part: Kabir's lead among them",

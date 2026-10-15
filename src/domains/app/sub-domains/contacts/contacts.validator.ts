@@ -74,6 +74,18 @@ function phoneQueryDigits(q: string): string | undefined {
   return digits;
 }
 
+/** A typed number inside a text: digits with the separators people type, maybe a leading `+`. */
+const NUMBER_RUN = /\+?\d[\d\s().-]*\d|\d/g;
+
+/**
+ * A text search with each typed number in it read as a number (NS6) — `Meera +91 98250-11241` →
+ * `Meera 9825011241` — so its words match the ten digits the search text holds; letters and the
+ * spaces between words stay as typed.
+ */
+function searchTextOf(q: string): string {
+  return q.replace(NUMBER_RUN, (run) => phoneQueryDigits(run) ?? run);
+}
+
 /** A bare number short enough to be a record number. */
 const BARE_NUMBER_QUERY = /^\s*0*(\d{1,9})\s*$/;
 
@@ -93,7 +105,8 @@ export interface ContactLinkedSearch {
  * Reads a `q` of a list about a contact (L7, 6.8, P9): `#2371` is the record's number — and so is
  * `PT-0412` when the record shows one with a `recordPrefix` (`PT`); `C-12345` the contact number; a
  * typed number is the contact's digits (4 or more) and — when it could be one — the record number
- * too; anything else is the contact's text, 3 or more characters (400 `q` otherwise).
+ * too; anything else is the contact's text, 3 or more characters (400 `q` otherwise), every word of
+ * which the contact's search text must hold — a number in it read as its digits.
  */
 export function readContactLinkedSearch({
   q,
@@ -122,14 +135,15 @@ export function readContactLinkedSearch({
     };
   }
   if (q.length < NAME_QUERY_MIN_LENGTH) throw searchTooShortError();
-  return { text: q };
+  return { text: searchTextOf(q) };
 }
 
 /**
  * Reads a contact search (CT9, SHELL-M1): a whole contact number (`C-12345`) is an exact match;
  * `#2371` is the number of the person's patient file or of their lead, and `PT-0412` the patient
  * number; a typed number keeps its digits (a leading `91` or `0` dropped from a full number), 4 or
- * more; anything else is text, 3 or more characters.
+ * more; anything else is text, 3 or more characters, a number in it read as its digits — the
+ * repository matches each of its words (NS5).
  */
 function readContactSearch(q: string | undefined): ContactSearch {
   if (q === undefined) return { kind: 'none' };
@@ -148,7 +162,7 @@ function readContactSearch(q: string | undefined): ContactSearch {
     return { kind: 'text', q: digits };
   }
   if (q.length < NAME_QUERY_MIN_LENGTH) throw searchTooShortError();
-  return { kind: 'text', q };
+  return { kind: 'text', q: searchTextOf(q) };
 }
 
 /** Parses a contact create body; throws `ValidationError` naming each bad field. */
