@@ -58,14 +58,12 @@ export interface DemoArea {
   road: string;
 }
 
-/** A city the clinic can be in: its state, GST state code, landline STD code and two areas. */
+/** A city the clinic can be in: its state, GST state code and two areas. */
 export interface DemoCity {
   city: string;
   state: string;
   /** The first two digits of a GSTIN registered in the state. */
   gstStateCode: string;
-  /** The landline STD code without its leading 0 (`20` for Pune). */
-  stdCode: string;
   areas: readonly [DemoArea, DemoArea];
 }
 
@@ -75,7 +73,6 @@ export const DEMO_CITIES: readonly DemoCity[] = [
     city: 'Pune',
     state: 'Maharashtra',
     gstStateCode: '27',
-    stdCode: '20',
     areas: [
       { area: 'Baner', postalCode: '411045', road: 'Baner Road' },
       { area: 'Koregaon Park', postalCode: '411001', road: 'North Main Road' },
@@ -85,7 +82,6 @@ export const DEMO_CITIES: readonly DemoCity[] = [
     city: 'Bengaluru',
     state: 'Karnataka',
     gstStateCode: '29',
-    stdCode: '80',
     areas: [
       { area: 'Indiranagar', postalCode: '560038', road: '100 Feet Road' },
       { area: 'Koramangala', postalCode: '560034', road: '80 Feet Road' },
@@ -95,7 +91,6 @@ export const DEMO_CITIES: readonly DemoCity[] = [
     city: 'Ahmedabad',
     state: 'Gujarat',
     gstStateCode: '24',
-    stdCode: '79',
     areas: [
       { area: 'Bodakdev', postalCode: '380054', road: 'Judges Bungalow Road' },
       { area: 'Navrangpura', postalCode: '380009', road: 'CG Road' },
@@ -105,7 +100,6 @@ export const DEMO_CITIES: readonly DemoCity[] = [
     city: 'Hyderabad',
     state: 'Telangana',
     gstStateCode: '36',
-    stdCode: '40',
     areas: [
       { area: 'Jubilee Hills', postalCode: '500033', road: 'Road No. 36' },
       { area: 'Gachibowli', postalCode: '500032', road: 'Old Mumbai Highway' },
@@ -115,7 +109,6 @@ export const DEMO_CITIES: readonly DemoCity[] = [
     city: 'Surat',
     state: 'Gujarat',
     gstStateCode: '24',
-    stdCode: '261',
     areas: [
       { area: 'Adajan', postalCode: '395009', road: 'Honey Park Road' },
       { area: 'Vesu', postalCode: '395007', road: 'VIP Road' },

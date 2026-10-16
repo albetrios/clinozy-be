@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const invalidatePermissionsMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+/** Whether an organization database context is open — the stub below opens and closes it. */
+const databaseContext = vi.hoisted(() => ({ open: false }));
 vi.mock('@/domains/tenancy/sub-domains/permission/permission-cache.service.js', () => ({
   invalidatePermissions: invalidatePermissionsMock,
   invalidateOrganizationPermissions: vi.fn().mockResolvedValue(undefined),
@@ -18,8 +20,14 @@ vi.mock('@/infrastructure/database/contexts/database-context.js', async (importO
         callback(),
     ),
     withAppDatabaseContext: vi.fn(
-      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) =>
-        callback(),
+      async ({ scope: _scope, callback }: { scope: unknown; callback: () => Promise<unknown> }) => {
+        databaseContext.open = true;
+        try {
+          return await callback();
+        } finally {
+          databaseContext.open = false;
+        }
+      },
     ),
   };
 });
@@ -137,6 +145,30 @@ describe('MembershipService.suspendExcessActiveMembersToFitCeiling (F2 downgrade
     // suspend an unbounded number of members, so a per-member resolve scaled round trips with it.
     expect(resolveUserPublicIdsByInternalIds).toHaveBeenCalledTimes(1);
     expect(resolveUserPublicIdsByInternalIds).toHaveBeenCalledWith([11, 12]);
+  });
+
+  it('reads the suspended users inside the organization context and purges their caches after it closes', async () => {
+    // The worker process refuses database access outside a context: a lookup after the commit
+    // threw there (the hourly seat reconcile) and left the suspended members' permissions cached.
+    const lookups: boolean[] = [];
+    const purges: boolean[] = [];
+    resolveUserPublicIdsByInternalIds.mockImplementation(async (ids: readonly number[]) => {
+      lookups.push(databaseContext.open);
+      return new Map(ids.map((id) => [id, `user_${id}`]));
+    });
+    invalidatePermissionsMock.mockImplementation(async () => {
+      purges.push(databaseContext.open);
+    });
+    countActiveByOrganization.mockResolvedValue(5);
+    suspendExcessActiveMembers.mockResolvedValue([suspendedRow(1, 11)]);
+
+    await service.suspendExcessActiveMembersToFitCeiling({
+      organizationPublicId: 'org_public',
+      ceiling: 4,
+    });
+
+    expect(lookups).toEqual([true]);
+    expect(purges).toEqual([false]);
   });
 
   it('emits one membership.updated event per suspended member, with its public JSON', async () => {

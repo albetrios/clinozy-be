@@ -623,7 +623,7 @@ class DemoClinicPlanner {
       : `${faker.helpers.arrayElement(CLINIC_NAME_STEMS)} ${faker.helpers.arrayElement(CLINIC_NAME_SUFFIXES)}`;
   }
 
-  /** The two branches in the city's two areas: an address, a landline and the one GSTIN. */
+  /** The two branches in the city's two areas: an address, a mobile and the one GSTIN. */
   planBranches(options: {
     city: DemoCity;
     slug: string;
@@ -634,7 +634,6 @@ class DemoClinicPlanner {
     const branchPlan = (options: { key: DemoBranchKey; index: 0 | 1 }): DemoBranchPlan => {
       const { key, index } = options;
       const area = city.areas[index];
-      const landline = `+91${city.stdCode}${faker.string.numeric(10 - city.stdCode.length)}`;
       return {
         key,
         name: area.area,
@@ -644,7 +643,8 @@ class DemoClinicPlanner {
         city: city.city,
         state: city.state,
         postalCode: area.postalCode,
-        phone: landline,
+        // A branch's phone is a mobile, never a landline (`MOBILE_NUMBER_PATTERN`).
+        phone: mobile({ faker, used: this.phones }),
         email: `${emailPart(area.area)}@${slug}.example.com`,
         gstNumber: gst,
         // The main branch has the Google review link — no Faker draw, so the rest of the plan stays.

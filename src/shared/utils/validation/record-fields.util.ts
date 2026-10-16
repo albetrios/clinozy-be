@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   GST_NUMBER_PATTERN,
+  MOBILE_NUMBER_PATTERN,
   PHONE_NUMBER_PATTERN,
   CHIP_TONE_VALUES,
   type ChipTone,
@@ -40,6 +41,12 @@ export const workingDaysSchema = z
 export const phoneNumberSchema = trimmedString().regex(
   new RegExp(PHONE_NUMBER_PATTERN),
   'errors:validation.indianPhoneFormat',
+);
+
+/** An Indian mobile, no landline: `+91` and ten digits starting 6–9 ({@link MOBILE_NUMBER_PATTERN}). */
+export const mobileNumberSchema = trimmedString().regex(
+  new RegExp(MOBILE_NUMBER_PATTERN),
+  'errors:validation.indianMobileFormat',
 );
 
 /** A GSTIN ({@link GST_NUMBER_PATTERN}) — a branch's, a supplier's. */
