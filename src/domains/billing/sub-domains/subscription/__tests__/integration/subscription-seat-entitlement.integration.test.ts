@@ -18,6 +18,7 @@ import { memberships } from '@/domains/tenancy/sub-domains/membership/membership
 import { subscriptions } from '@/domains/billing/sub-domains/subscription/subscription.schema.js';
 import { runSubscriptionSeatReconcileJob } from '@/domains/billing/sub-domains/subscription/workers/subscription-seat-reconcile.processor.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 const FREE_PLAN_SEATS = 2;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -181,5 +182,32 @@ describe('Subscription seats follow the paid entitlement', () => {
     expect(await suspendedMembershipIds(lapsed.organization.id)).toEqual([lapsed.memberIds[1]!]);
     expect(await suspendedMembershipIds(drifted.organization.id)).toEqual([]);
     enqueueSeatQuantitySync.mockRestore();
+  });
+
+  it('runs whole in the worker process: suspends and purges the suspended members’ cached permissions', async () => {
+    // The worker refuses database access outside a context. The reconcile used to suspend, commit,
+    // then look the suspended users up after the commit with no context — the lookup threw in the
+    // worker, the error was logged, and the suspended members kept their cached permissions.
+    const lapsed = await teamWithMembers(2);
+    await createTestSubscription({
+      organizationId: lapsed.organization.id,
+      planId: paidPlanId,
+      status: 'CANCELED',
+    });
+    const errors = vi.spyOn(logger, 'error');
+    const previousRuntime = process.env.CLINOZY_BE_RUNTIME;
+    process.env.CLINOZY_BE_RUNTIME = 'worker';
+    try {
+      const result = await runSubscriptionSeatReconcileJob(
+        containers.billingDomain.subscriptionService,
+      );
+      expect(result.entitlementLapsedCount).toBe(1);
+    } finally {
+      if (previousRuntime === undefined) delete process.env.CLINOZY_BE_RUNTIME;
+      else process.env.CLINOZY_BE_RUNTIME = previousRuntime;
+    }
+    expect(await suspendedMembershipIds(lapsed.organization.id)).toEqual([lapsed.memberIds[1]!]);
+    expect(errors).not.toHaveBeenCalledWith(expect.anything(), 'billing.suspend_excess_failed');
+    errors.mockRestore();
   });
 });
