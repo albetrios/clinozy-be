@@ -247,6 +247,7 @@
     "noteWhenReasonIsOther": "Add a note when the reason is other",
     "linkMustUseHttps": "Link must use HTTPS",
     "indianPhoneFormat": "Use +91 and ten digits",
+    "indianMobileFormat": "Use +91 and a ten-digit mobile number",
     "invalidGstin": "Not a valid GSTIN",
     "requiredForRecount": "Required for a recount",
     "onlyForRecount": "Only for a recount",

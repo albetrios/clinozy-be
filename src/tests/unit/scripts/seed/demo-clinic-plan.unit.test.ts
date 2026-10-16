@@ -5,6 +5,7 @@ import {
   addDaysToCalendarDate,
   minutesOfClockTime,
 } from '@/shared/utils/validation/record-fields.util.js';
+import { MOBILE_NUMBER_PATTERN } from '@/shared/constants/record-fields.constants.js';
 
 /** A plan from its own Faker, so suites running side by side never share a generator. */
 function planFor(options: { seed: number; today: string; now: string }): DemoClinicPlan {
@@ -136,5 +137,15 @@ describe('buildDemoClinicPlan', () => {
     const phones = everyone.map((person) => person.phone);
     expect(new Set(phones).size).toBe(phones.length);
     for (const phone of phones) expect(phone).toMatch(/^\+91[6-9]\d{9}$/);
+  });
+
+  it.each(CASES)('gives each branch a mobile of its own, never a landline ($today)', (options) => {
+    const plan = planFor(options);
+    const branchPhones = plan.branches.map((branch) => branch.phone);
+    for (const phone of branchPhones) expect(phone).toMatch(new RegExp(MOBILE_NUMBER_PATTERN));
+    const everyone = [...plan.staff, ...plan.people].map((person) => person.phone);
+    expect(new Set([...branchPhones, ...everyone]).size).toBe(
+      branchPhones.length + everyone.length,
+    );
   });
 });

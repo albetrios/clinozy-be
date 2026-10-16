@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { trimmedString, trimmedStringMinMax } from '@/shared/utils/validation/validation.util.js';
 import {
   addEndAfterStartIssue,
-  phoneNumberSchema,
+  mobileNumberSchema,
   chipToneSchema,
   expectedUpdatedAtSchema,
   gstNumberSchema,
@@ -28,7 +28,7 @@ const branchCreateFields = {
     new RegExp(BRANCH_POSTAL_CODE_PATTERN),
     'errors:validation.sixDigits',
   ),
-  phone: phoneNumberSchema,
+  phone: mobileNumberSchema,
   email: trimmedStringMinMax({ min: 3, max: 120 }).pipe(z.email()),
   gst_number: gstNumberSchema.nullable().optional(),
   opens_at: hourMinuteSchema.optional(),

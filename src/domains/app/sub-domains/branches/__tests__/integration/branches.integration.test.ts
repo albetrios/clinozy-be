@@ -320,6 +320,7 @@ describe('Branches — Integration', () => {
     it.each([
       ['a five-digit postal code', { postal_code: '39500' }],
       ['a phone without +91', { phone: '9825012345' }],
+      ['a landline (a branch phone is a mobile)', { phone: '+912613423637' }],
       ['closing before opening', { opens_at: '20:00', closes_at: '10:00' }],
       ['an unknown field', { colour: 'red' }],
     ])('returns 400 for %s', async (_case, change) => {
@@ -332,6 +333,25 @@ describe('Branches — Integration', () => {
         payload: { ...VALID_BRANCH, ...change },
       });
       expect(response.statusCode).toBe(400);
+    });
+
+    it('says a branch phone must be a mobile when a landline is sent', async () => {
+      const { token } = await adminContext();
+      const response = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/app/branches'),
+        token,
+        headers: { 'x-idempotency-key': `branch-${randomUUID()}` },
+        payload: { ...VALID_BRANCH, phone: '+912613423637' },
+      });
+      expect(response.statusCode).toBe(400);
+      const body = response.json() as { error: { errors: { field: string; message: string }[] } };
+      expect(body.error.errors).toEqual([
+        expect.objectContaining({
+          field: 'body.phone',
+          message: 'Use +91 and a ten-digit mobile number',
+        }),
+      ]);
     });
 
     it('returns 422 without X-Idempotency-Key', async () => {

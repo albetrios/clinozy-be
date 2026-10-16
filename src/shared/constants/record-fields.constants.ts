@@ -57,6 +57,13 @@ export const DEFAULT_WORKING_DAYS: readonly Weekday[] = [
 /** A phone number: `+91` and ten digits (`chk_<table>_phone`). */
 export const PHONE_NUMBER_PATTERN = '^\\+91\\d{10}$';
 
+/**
+ * An Indian mobile number: `+91` and ten digits starting 6–9. A branch's phone is a mobile, never a
+ * landline — the product's rule, which the app's Branch drawer applies too. Narrower than
+ * {@link PHONE_NUMBER_PATTERN}, the column's own check (`chk_branches_phone`).
+ */
+export const MOBILE_NUMBER_PATTERN = '^\\+91[6-9]\\d{9}$';
+
 /** GSTIN: state code, PAN, entity number, `Z`, check character (`chk_<table>_gst_number` — branches, suppliers). */
 export const GST_NUMBER_PATTERN = '^\\d{2}[A-Z]{5}\\d{4}[A-Z]\\d[Z][A-Z\\d]$';
 
