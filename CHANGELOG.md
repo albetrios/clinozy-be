@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.2.0](https://github.com/albetrios/clinozy-be/compare/v9.1.0...v9.2.0) (2026-10-16)
+
+
+### Added
+
+* **app:** a branches section, so Branches is its own room in the navbar ([#74](https://github.com/albetrios/clinozy-be/issues/74)) ([2a7e9a1](https://github.com/albetrios/clinozy-be/commit/2a7e9a1006d42f29dd985e042e480d97d24f46d3))
+* **auth:** sign-in opens the clinic you used last, or the one you pin ([#76](https://github.com/albetrios/clinozy-be/issues/76)) ([9ed7f2a](https://github.com/albetrios/clinozy-be/commit/9ed7f2ab65d9c3c9aa58add3959bd9e72d65b633))
+* **branches:** every member reads the branch's google review link ([#81](https://github.com/albetrios/clinozy-be/issues/81)) ([a8c6ff1](https://github.com/albetrios/clinozy-be/commit/a8c6ff1079b0e67fed6b640b2920fb416e1dff1d))
+* **contacts:** find a person by every typed word, in any order ([#77](https://github.com/albetrios/clinozy-be/issues/77)) ([aae4db8](https://github.com/albetrios/clinozy-be/commit/aae4db8323b400001b1cc3d1d5c4a33961699871))
+
+
+### Fixed
+
+* **billing:** the seat reconcile purges suspended members' permissions in the worker ([#79](https://github.com/albetrios/clinozy-be/issues/79)) ([707fd9c](https://github.com/albetrios/clinozy-be/commit/707fd9cbf99409566c18a1f74569d8e7e186a86f))
+* **branches:** a branch phone is a mobile, never a landline ([#80](https://github.com/albetrios/clinozy-be/issues/80)) ([f1d97bb](https://github.com/albetrios/clinozy-be/commit/f1d97bb67c9635d2673f28c29df4e6d5abe1ee0d))
+
 ## [9.1.0](https://github.com/albetrios/clinozy-be/compare/v9.0.1...v9.1.0) (2026-10-14)
 
 
