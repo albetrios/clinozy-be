@@ -41,6 +41,14 @@ describe('buildDemoClinicPlan', () => {
     expect(plan.branches[0].gstNumber).toMatch(/^\d{2}[A-Z]{3}F[A-Z]\d{4}[A-Z]1Z[A-Z0-9]$/);
   });
 
+  it('gives the main branch a Google review link and the second none (feat-payment-celebration BR5)', () => {
+    const plan = planFor({ seed: 12_345, today: '2026-10-13', now: '15:40' });
+    const [main, second] = plan.branches;
+    expect(main.key).toBe('main');
+    expect(main.reviewLink).toMatch(/^https:\/\/g\.page\/r\/[A-Za-z0-9]+\/review$/);
+    expect(second.reviewLink).toBeNull();
+  });
+
   it.each(CASES)('books no doctor twice and keeps the day $today at $now valid', (options) => {
     const plan = planFor(options);
     const byDoctorDay = new Map<string, [number, number][]>();

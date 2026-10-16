@@ -23,6 +23,7 @@ import {
   DEMO_ENQUIRY_REPLIES,
   type DEMO_MACHINES,
   DEMO_OFFERINGS,
+  DEMO_REVIEW_LINK,
   DEMO_REVIEW_TEXTS,
   DEMO_UNLIKELY_NAMES,
   DEMO_UNLIKELY_SPELLING,
@@ -58,6 +59,8 @@ export interface DemoBranchPlan {
   phone: string;
   email: string;
   gstNumber: string;
+  /** The branch's Google review link — the main branch's, none on the second. */
+  reviewLink: string | null;
   doctor: DemoStaffKey;
   therapist: DemoStaffKey;
 }
@@ -644,6 +647,8 @@ class DemoClinicPlanner {
         phone: mobile({ faker, used: this.phones }),
         email: `${emailPart(area.area)}@${slug}.example.com`,
         gstNumber: gst,
+        // The main branch has the Google review link — no Faker draw, so the rest of the plan stays.
+        reviewLink: key === 'main' ? DEMO_REVIEW_LINK : null,
         doctor: index === 0 ? 'owner' : 'doctor',
         therapist: index === 0 ? 'mainTherapist' : 'secondTherapist',
       };

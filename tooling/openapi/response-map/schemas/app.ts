@@ -67,7 +67,8 @@ export const branchExample = {
   updated_at: '2026-10-07T09:00:00.000Z',
 };
 
-// ── Branch summary (GET /app/branches/my) — with the address, phone and GSTIN a bill prints (D81) ──
+// ── Branch summary (GET /app/branches/my) — with the address, phone and GSTIN a bill prints (D81)
+// and the Google review link the payment received view sends (feat-payment-celebration BR1) ──
 export const branchSummarySchema = {
   type: 'object',
   properties: {
@@ -86,6 +87,10 @@ export const branchSummarySchema = {
     opens_at: hourMinute,
     closes_at: hourMinute,
     working_days: workingDays,
+    review_link: {
+      ...nullableString,
+      description: "The branch's Google review link (`https://…`); null when the branch has none",
+    },
   },
 };
 
@@ -105,6 +110,7 @@ export const branchSummaryExample = {
   opens_at: '10:00',
   closes_at: '20:00',
   working_days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
+  review_link: 'https://g.page/r/CQdemoclinicEAE/review',
 };
 
 // ── Branch user access ──
