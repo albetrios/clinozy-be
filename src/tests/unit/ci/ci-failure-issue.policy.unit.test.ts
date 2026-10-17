@@ -152,6 +152,25 @@ describe('ci-failure issue alert', () => {
     expect(offenders).toEqual([]);
   });
 
+  // A job past its timeout-minutes ends `cancelled`, not `failure`: an alert that only asked
+  // for `failure` stayed silent while the RLS parity canary timed out four nights running.
+  it('every job that opens an issue also fires when a job it checks timed out', () => {
+    const offenders: string[] = [];
+    for (const name of workflowFiles) {
+      for (const [job, block] of jobBlocks(workflowText(name))) {
+        const opensIssue = block.includes(ACTION_USE) && block.includes('mode: open');
+        if (!opensIssue) continue;
+        const condition = block.match(/^ {4}if: (.+)$/m)?.[1] ?? '';
+        const onFailure =
+          condition.includes("contains(needs.*.result, 'failure')") ||
+          condition.startsWith('failure()');
+        const onTimeout = condition.includes("contains(needs.*.result, 'cancelled')");
+        if (!(onFailure && onTimeout)) offenders.push(`${name} → ${job}: ${condition}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('no workflow inlines its own ci-failure issue logic', () => {
     const inlined = workflowFiles.filter((name) => /--label ci-failure/.test(workflowText(name)));
     expect(inlined).toEqual([]);

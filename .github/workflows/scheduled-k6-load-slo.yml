@@ -355,7 +355,7 @@ jobs:
   notify-failure:
     name: Notify failure
     needs: [k6]
-    if: always() && github.event_name == 'schedule' && needs.k6.result == 'failure'
+    if: always() && github.event_name == 'schedule' && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

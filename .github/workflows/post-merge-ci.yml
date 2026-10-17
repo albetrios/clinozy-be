@@ -533,14 +533,7 @@ jobs:
       - matrix-tests
       - deploy
       - release-please
-    if: |
-      always() &&
-      (
-        needs.docker-build-push.result == 'failure' ||
-        needs.matrix-tests.result == 'failure' ||
-        needs.deploy.result == 'failure' ||
-        needs.release-please.result == 'failure'
-      )
+    if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

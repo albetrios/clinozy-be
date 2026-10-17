@@ -186,9 +186,7 @@ jobs:
   notify-failure:
     name: Notify failure
     needs: [ruleset-liveness-drift, release-token, repo-settings-drift]
-    if: |
-      always() &&
-      (needs.ruleset-liveness-drift.result == 'failure' || needs.release-token.result == 'failure' || needs.repo-settings-drift.result == 'failure')
+    if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

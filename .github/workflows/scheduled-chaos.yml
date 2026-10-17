@@ -77,7 +77,7 @@ jobs:
     name: Notify failure
     needs: [resolve-target, run-chaos]
     # Every run tests main (resolve-target pins it), whichever ref dispatched it.
-    if: always() && (needs.resolve-target.result == 'failure' || needs.run-chaos.result == 'failure')
+    if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

@@ -308,7 +308,7 @@ jobs:
   alert-on-failure:
     name: Alert on drill failure
     needs: [checklist, restore-integration, record-rto]
-    if: failure()
+    if: failure() || contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

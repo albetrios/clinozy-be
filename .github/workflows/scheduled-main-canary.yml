@@ -87,7 +87,7 @@ jobs:
   notify-failure:
     name: Notify failure
     needs: [quality]
-    if: always() && needs.quality.result == 'failure'
+    if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

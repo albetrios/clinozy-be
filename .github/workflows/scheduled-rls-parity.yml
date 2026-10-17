@@ -203,7 +203,7 @@ jobs:
   notify-failure:
     name: Notify failure
     needs: [parity]
-    if: always() && needs.parity.result == 'failure'
+    if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

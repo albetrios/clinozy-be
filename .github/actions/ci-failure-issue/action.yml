@@ -7,7 +7,9 @@ description: |
   post-merge check uses this one action; clinozy-fe reuses it from here.
 
   The job needs `issues: write`, and a checkout of this folder (a local action is read from the
-  workspace): `sparse-checkout: .github/actions/ci-failure-issue`.
+  workspace): `sparse-checkout: .github/actions/ci-failure-issue`. The `open` job runs on a failed
+  or a cancelled job — one past its timeout-minutes ends cancelled, not failed:
+  `if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))`.
 
 inputs:
   mode:
