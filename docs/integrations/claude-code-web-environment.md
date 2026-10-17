@@ -215,7 +215,7 @@ The session-start hook runs this for you in every web session (below). To run it
 bash tooling/setup/agent/bootstrap.sh        # setup → Postgres + Redis → migrate → demo seed → API + worker, left running
 ```
 
-A re-run is safe: a lock stops a second bring-up from racing the first, and an API or worker that already answers is kept. To verify health on its own, run [`healthcheck.sh`](../../tooling/setup/agent/healthcheck.sh): it polls `GET /livez` then `GET /readyz` (set `HEALTHCHECK_URL=http://127.0.0.1:9090` for the worker) and exits non-zero unless Postgres + Redis + BullMQ are all reachable. Only `--install-only` belongs in the Setup-script *field* (that runs before any service can be running).
+A re-run is safe: a lock stops a second bring-up from racing the first, and an API or worker that already answers is kept. A lock whose bring-up is gone — or that came from another boot inside a cached environment — is stale: `pnpm dev:stack:status` says so and the next run clears it ([`stack-lock.lib.sh`](../../tooling/setup/agent/stack-lock.lib.sh)). A live run after an install with the same inputs (the Setup script, or an earlier run in this container) skips steps 2–8, so it neither redoes the installs nor restarts dockerd; `AGENT_REINSTALL=1` runs them anyway. Measured on 17 Oct on a resumed container (API and worker stopped, containers down, volumes kept): 82 s before these changes, 41 s on the first run after them (installs run, stamp written; warmer caches), 18 s once the stamp matches — with a stale lock planted whose pid named another process, which the old code waited on forever. To verify health on its own, run [`healthcheck.sh`](../../tooling/setup/agent/healthcheck.sh): it polls `GET /livez` then `GET /readyz` (set `HEALTHCHECK_URL=http://127.0.0.1:9090` for the worker) and exits non-zero unless Postgres + Redis + BullMQ are all reachable. Only `--install-only` belongs in the Setup-script *field* (that runs before any service can be running).
 
 ## Tiers — what to enable for which goal
 
@@ -236,8 +236,9 @@ and the `pnpm agent-os:check` gate, then launches `bootstrap.sh` **detached** an
 
 ```text
 session starts → session-start hook (returns at once) → bootstrap.sh, detached
-  [1–8] tools at their pins, deps, `.env.local`        (seconds — the Setup script cached them)
-  [9] Postgres + Redis  [10] migrate + database logins  [11] full demo seed
+  [1] Node   [2–8] skipped when the install stamp matches (the Setup script ran them)
+  [9] Postgres + Redis  [10] migrate + database logins
+  [11] full demo seed, with the API and worker already starting alongside
   [12] API on :3000 — kept running   [13] worker, health on :9090 — kept running
   → "live" + the playground card (API, /reference, /admin/queues, worker, logs)
 ```
@@ -254,7 +255,8 @@ session starts → session-start hook (returns at once) → bootstrap.sh, detach
 
 The banner shows `Stack: starting…` / `live` and tells the agent to wait for `live` before any
 database or API work. A resumed session whose API already answers, or a bring-up already
-running, is left alone. Local sessions are unchanged (`Stack: on demand`).
+running, is left alone; a stale lock does not count as one, so a resumed container goes live
+with no manual step. Local sessions are unchanged (`Stack: on demand`).
 
 ## How to tell a session is provisioned
 

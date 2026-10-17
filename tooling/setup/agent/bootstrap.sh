@@ -80,21 +80,24 @@ start_detached() {
   echo $! > "${STACK_DIR}/${name}.pid"
 }
 
-# One bring-up at a time (a session resume, or a manual run while the hook's runs).
+# One bring-up at a time (a session resume, or a manual run while the hook's runs). A lock
+# whose holder is gone — or from another boot, carried in by a cached environment — is stale.
+# shellcheck source=tooling/setup/agent/stack-lock.lib.sh
+source "${AGENT_DIR}/stack-lock.lib.sh"
 if [ "${live}" = 1 ]; then
   mkdir -p "${STACK_DIR}"
   if ! mkdir "${STACK_DIR}/lock" 2>/dev/null; then
-    lock_holder="$(cat "${STACK_DIR}/lock/pid" 2>/dev/null || true)"
-    if [ -n "${lock_holder}" ] && kill -0 "${lock_holder}" 2>/dev/null; then
+    if lock_holder="$(stack_lock_holder "${STACK_DIR}")"; then
       echo "bootstrap: a live bring-up is already running (pid ${lock_holder}) — follow ${STACK_DIR}/bootstrap.log" >&2
       exit 0
     fi
-    rm -f "${STACK_DIR}/lock/pid"
+    echo "bootstrap: clearing a stale bring-up lock (pid $(cat "${STACK_DIR}/lock/pid" 2>/dev/null || echo '?') is no bring-up running in this boot)." >&2
+    rm -f "${STACK_DIR}/lock/pid" "${STACK_DIR}/lock/boot_id"
     rmdir "${STACK_DIR}/lock" 2>/dev/null
     mkdir "${STACK_DIR}/lock" || die "cannot take the bring-up lock ${STACK_DIR}/lock"
   fi
-  echo $$ > "${STACK_DIR}/lock/pid"
-  trap 'rm -f "${STACK_DIR}/lock/pid"; rmdir "${STACK_DIR}/lock" 2>/dev/null' EXIT
+  stack_lock_write "${STACK_DIR}"
+  trap 'rm -f "${STACK_DIR}/lock/pid" "${STACK_DIR}/lock/boot_id"; rmdir "${STACK_DIR}/lock" 2>/dev/null' EXIT
 fi
 
 echo "cloud bring-up — $(date -u '+%Y-%m-%d %H:%M:%SZ')$([ "${install_only}" = 1 ] && echo ' (install only)')"
@@ -146,8 +149,24 @@ else
 fi
 
 # 2-8) The installs — skipped by --reset-database, which only brings the stack up again on a
-# fresh database (the tools, the dependencies and the local env file are already in place).
-if [ "${reset_database}" = 0 ]; then
+# fresh database (the tools, the dependencies and the local env file are already in place), and
+# by a live run after an install that finished with the same inputs: the cached Setup script, or
+# an earlier bring-up in this container. Redoing them costs minutes, and step 4 restarts dockerd,
+# which stops every running container. The stamp hashes what the installs depend on (the Node
+# version, .nvmrc, the lockfile, .env.example and every script in this directory, pins
+# included), so a changed input runs them again; AGENT_REINSTALL=1 forces them.
+install_stamp_file="node_modules/.agent-install-stamp"
+install_stamp() {
+  { node -v; cat .nvmrc pnpm-lock.yaml .env.example "${AGENT_DIR}"/*.sh 2>/dev/null; } \
+    | { sha256sum 2>/dev/null || shasum -a 256; } | cut -d' ' -f1
+}
+installs_cached=0
+if [ "${live}" = 1 ] && [ "${reset_database}" = 0 ] && [ "${AGENT_REINSTALL:-0}" != 1 ] \
+  && [ -f "${install_stamp_file}" ] && [ "$(cat "${install_stamp_file}")" = "$(install_stamp)" ]; then
+  installs_cached=1
+fi
+
+if [ "${reset_database}" = 0 ] && [ "${installs_cached}" = 0 ]; then
   # 2) Dependencies ------------------------------------------------------------
   step "[2/${TOTAL}] Dependencies (pnpm install)"
   # A fresh image may have Node without pnpm: corepack provides the version package.json pins.
@@ -207,11 +226,18 @@ if [ "${reset_database}" = 0 ]; then
   step "[8/${TOTAL}] Environment (.env.local)"
   pnpm setup:local --only-env >&2 || die "env scaffold failed (pnpm setup:local --only-env)"
   ok "[8/${TOTAL}] .env.local ready"
+  install_stamp > "${install_stamp_file}" 2>/dev/null || true
 
   if [ "${install_only}" = 1 ]; then
     echo ""
     echo "✓ install complete in $(( $(date +%s) - start_ts ))s — in the session, run \`bash tooling/setup/agent/bootstrap.sh\` to bring up Postgres + Redis and the app."
     exit 0
+  fi
+elif [ "${installs_cached}" = 1 ]; then
+  skip "[2-8/${TOTAL}] installs skipped — done with the same inputs (${install_stamp_file}); AGENT_REINSTALL=1 runs them"
+  # Step 5's index refresh is the one part that follows the code, not the inputs.
+  if command -v codegraph >/dev/null 2>&1 && [ -d .codegraph ]; then
+    codegraph sync >&2 2>&1 || skip "codegraph sync failed (non-fatal)"
   fi
 else
   skip "[2-8/${TOTAL}] installs skipped (--reset-database)"
@@ -269,18 +295,32 @@ pnpm db:migrate >&2 || die "db:migrate failed"
 pnpm setup:local --only-env >&2 || die "database logins failed (pnpm setup:local --only-env)"
 ok "[10/${TOTAL}] migrations applied, database logins enabled"
 
-# 11) Seed -------------------------------------------------------------------
+# 11) Seed, with the API and worker already starting -------------------------
+# Neither needs the demo data to boot, so both start before the seed and their start-up
+# overlaps it. "live" still waits for the seed and both health checks (steps 12 and 13).
+worker_url="http://127.0.0.1:${WORKER_HEALTH_PORT:-9090}"
+api_was_live=0; worker_was_live=0
+if HEALTHCHECK_RETRIES=1 bash "${AGENT_DIR}/healthcheck.sh" >/dev/null 2>&1; then
+  api_was_live=1
+else
+  start_detached api pnpm dev
+fi
+if HEALTHCHECK_URL="${worker_url}" HEALTHCHECK_RETRIES=1 bash "${AGENT_DIR}/healthcheck.sh" >/dev/null 2>&1; then
+  worker_was_live=1
+else
+  start_detached worker pnpm dev:worker
+fi
+
 # The full demo set — it includes the minimal reference data and upserts, so a re-run is safe.
-step "[11/${TOTAL}] Seed (full demo data)"
+step "[11/${TOTAL}] Seed (full demo data; API + worker starting alongside)"
 pnpm db:seed:full >&2 || die "db:seed:full failed"
 ok "[11/${TOTAL}] seed complete"
 
-# 12) API — started in its own session and left running --------------------
+# 12) API — started in its own session above and left running -----------------
 step "[12/${TOTAL}] API live (/livez + /readyz)"
-if HEALTHCHECK_RETRIES=1 bash "${AGENT_DIR}/healthcheck.sh" >/dev/null 2>&1; then
+if [ "${api_was_live}" = 1 ]; then
   ok "[12/${TOTAL}] API already live on :${PORT:-3000}"
 else
-  start_detached api pnpm dev
   if ! bash "${AGENT_DIR}/healthcheck.sh"; then
     echo "---- pnpm dev log (tail) ----" >&2
     tail -20 "${STACK_DIR}/api.log" >&2
@@ -290,12 +330,10 @@ else
 fi
 
 # 13) Worker (BullMQ) — its own /livez + /readyz on WORKER_HEALTH_PORT ---------
-worker_url="http://127.0.0.1:${WORKER_HEALTH_PORT:-9090}"
 step "[13/${TOTAL}] Worker live (${worker_url}/readyz)"
-if HEALTHCHECK_URL="${worker_url}" HEALTHCHECK_RETRIES=1 bash "${AGENT_DIR}/healthcheck.sh" >/dev/null 2>&1; then
+if [ "${worker_was_live}" = 1 ]; then
   ok "[13/${TOTAL}] worker already live"
 else
-  start_detached worker pnpm dev:worker
   if ! HEALTHCHECK_URL="${worker_url}" bash "${AGENT_DIR}/healthcheck.sh"; then
     echo "---- pnpm dev:worker log (tail) ----" >&2
     tail -20 "${STACK_DIR}/worker.log" >&2

@@ -36,7 +36,7 @@ describe('live playground stack policy', () => {
     expect(sessionStart).toContain(`"\${AGENT_AUTO_STACK:-1}" = "0"`);
     // An API that already answers (a resumed session) or a bring-up holding the lock is left alone.
     expect(sessionStart).toContain('/livez');
-    expect(sessionStart).toContain(`kill -0 "\${stack_lock_pid}"`);
+    expect(sessionStart).toContain(`stack_lock_holder "\${stack_directory}"`);
   });
 
   it('the banner tells the agent to wait for "live" before database/API work', () => {
@@ -60,8 +60,29 @@ describe('live playground stack policy', () => {
     expect(bootstrap).not.toContain('KEEP_APP');
   });
 
+  it('the API and the worker start before the seed, and "live" still waits for all three', () => {
+    const apiStart = bootstrap.indexOf('start_detached api pnpm dev');
+    const workerStart = bootstrap.indexOf('start_detached worker pnpm dev:worker');
+    const seed = bootstrap.indexOf('pnpm db:seed:full >&2');
+    expect(apiStart).toBeGreaterThan(bootstrap.indexOf('pnpm db:migrate >&2'));
+    expect(apiStart).toBeLessThan(seed);
+    expect(workerStart).toBeLessThan(seed);
+    expect(seed).toBeLessThan(bootstrap.indexOf(`if ! bash "\${AGENT_DIR}/healthcheck.sh"; then`));
+    expect(seed).toBeLessThan(bootstrap.indexOf('record_status "live'));
+  });
+
+  it('a live run after an install with the same inputs skips the installs', () => {
+    expect(bootstrap).toContain('install_stamp_file="node_modules/.agent-install-stamp"');
+    expect(bootstrap).toContain(`install_stamp > "\${install_stamp_file}"`);
+    expect(bootstrap).toContain(
+      `if [ "\${reset_database}" = 0 ] && [ "\${installs_cached}" = 0 ]; then`,
+    );
+    expect(bootstrap).toContain(`[ "\${AGENT_REINSTALL:-0}" != 1 ]`);
+  });
+
   it('one bring-up at a time, and each step is recorded as it runs', () => {
     expect(bootstrap).toContain(`mkdir "\${STACK_DIR}/lock"`);
+    expect(bootstrap).toContain(`stack_lock_holder "\${STACK_DIR}"`);
     expect(bootstrap).toContain(`record_status "running \${*}"`);
     expect(bootstrap).toContain(`record_status "failed — \${*}"`);
   });

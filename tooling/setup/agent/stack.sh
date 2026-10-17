@@ -13,6 +13,8 @@
 # Works from the files bootstrap.sh writes to $AGENT_STACK_DIR (default /tmp/agent-stack):
 # `status`, `bootstrap.log`, and `<api|worker>.{log,pid}`. Linux and macOS (`ps`, no /proc).
 set -uo pipefail
+# shellcheck source=tooling/setup/agent/stack-lock.lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/stack-lock.lib.sh"
 
 readonly STACK_DIR="${AGENT_STACK_DIR:-/tmp/agent-stack}"
 readonly API_URL="http://127.0.0.1:${PORT:-3000}"
@@ -43,14 +45,23 @@ stop_process_tree() {
 }
 
 show_status() {
+  local holder="" status_line note=""
+  holder="$(stack_lock_holder "${STACK_DIR}")"
   echo "Playground stack ($STACK_DIR)"
   if [ -f "${STACK_DIR}/status" ]; then
-    echo "  bring-up   $(cat "${STACK_DIR}/status")"
+    status_line="$(cat "${STACK_DIR}/status")"
+    # A "running" step with no live bring-up behind it was left by a run that is gone.
+    case "${status_line}" in
+      *"  running "*) [ -n "${holder}" ] || note="  (stale — no bring-up is running)" ;;
+    esac
+    echo "  bring-up   ${status_line}${note}"
   else
     echo "  bring-up   not started — bash tooling/setup/agent/bootstrap.sh"
   fi
-  if [ -d "${STACK_DIR}/lock" ]; then
-    echo "  running    bring-up in progress (pid $(cat "${STACK_DIR}/lock/pid" 2>/dev/null || echo '?')) — tail -f ${STACK_DIR}/bootstrap.log"
+  if [ -n "${holder}" ]; then
+    echo "  running    bring-up in progress (pid ${holder}) — tail -f ${STACK_DIR}/bootstrap.log"
+  elif [ -d "${STACK_DIR}/lock" ]; then
+    echo "  lock       stale (pid $(cat "${STACK_DIR}/lock/pid" 2>/dev/null || echo '?') is no bring-up running in this boot) — the next bootstrap.sh run clears it"
   fi
   echo "  API        ${API_URL}  livez $(http_code "${API_URL}/livez") · readyz $(http_code "${API_URL}/readyz")"
   echo "  worker     ${WORKER_URL}  livez $(http_code "${WORKER_URL}/livez") · readyz $(http_code "${WORKER_URL}/readyz")"

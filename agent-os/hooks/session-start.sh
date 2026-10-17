@@ -225,12 +225,15 @@ fi
 stack_directory="${AGENT_STACK_DIR:-/tmp/agent-stack}"
 stack_status="on demand (local session) — bash tooling/setup/agent/bootstrap.sh"
 if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
-  stack_lock_pid="$(cat "${stack_directory}/lock/pid" 2>/dev/null || true)"
+  # A lock left by a run that is gone (or carried in from another boot) is stale, so a resumed
+  # container launches a fresh bring-up instead of waiting on it forever.
+  # shellcheck source=../../tooling/setup/agent/stack-lock.lib.sh
+  source tooling/setup/agent/stack-lock.lib.sh 2>/dev/null || stack_lock_holder() { return 1; }
   if [ "${AGENT_AUTO_STACK:-1}" = "0" ]; then
     stack_status="off (AGENT_AUTO_STACK=0) — bash tooling/setup/agent/bootstrap.sh"
   elif [ "$(curl -s -o /dev/null -m 2 -w '%{http_code}' "http://127.0.0.1:${PORT:-3000}/livez" 2>/dev/null)" = "200" ]; then
     stack_status="live — pnpm dev:stack:status"
-  elif [ -n "${stack_lock_pid}" ] && kill -0 "${stack_lock_pid}" 2>/dev/null; then
+  elif stack_lock_holder "${stack_directory}" >/dev/null; then
     stack_status="starting (bring-up already running) — tail -f ${stack_directory}/bootstrap.log"
   elif [ ! -x node_modules/.bin/biome ]; then
     stack_status="not started (dependencies missing) — bash tooling/setup/agent/bootstrap.sh"
