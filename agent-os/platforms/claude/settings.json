@@ -23,7 +23,31 @@
       "Bash(git branch*)",
       "Bash(gh pr*)",
       "mcp__codegraph__codegraph_explore",
-      "mcp__codegraph__codegraph_files"
+      "mcp__codegraph__codegraph_files",
+      "Bash(pnpm iteration*)",
+      "Bash(pnpm db*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git switch *)",
+      "Bash(gh run *)",
+      "mcp__headroom__*",
+      "mcp__github__get_*",
+      "mcp__github__list_*",
+      "mcp__github__search_*",
+      "mcp__github__pull_request_read",
+      "mcp__github__issue_read",
+      "mcp__github__actions_get",
+      "mcp__github__actions_list"
+    ],
+    "ask": [
+      "Bash(gh pr create *)"
+    ],
+    "deny": [
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(rm -rf *)",
+      "mcp__github__delete_file"
     ]
   },
   "hooks": {

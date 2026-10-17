@@ -102,8 +102,14 @@ describe('tooling/agent-os/session-hooks.ts', () => {
       expect(command).not.toContain('$CLAUDE_PROJECT_DIR');
     }
     expect(commands.filter((command) => command.includes('/own/'))).toHaveLength(ownCount);
-    // Hooks only: a repository's permissions stay its own.
-    expect(readSessionSettings(sessionRoot).permissions).toBeUndefined();
+    // Permission rules are merged too: every repository's, each once.
+    const permissions = readSessionSettings(sessionRoot).permissions as Record<string, string[]>;
+    const own = (JSON.parse(REAL_SETTINGS) as { permissions: Record<string, string[]> })
+      .permissions;
+    for (const list of ['allow', 'ask', 'deny']) {
+      for (const rule of own[list] ?? []) expect(permissions[list]).toContain(rule);
+    }
+    expect((permissions.allow ?? []).filter((rule) => rule === 'Bash(pnpm test*)')).toHaveLength(1);
   });
 
   it('is idempotent', () => {

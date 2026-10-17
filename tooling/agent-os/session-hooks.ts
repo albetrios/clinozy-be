@@ -5,12 +5,14 @@
  *
  * A cloud session that holds several repositories runs from their parent directory
  * (`/home/user`), so Claude Code takes its hooks from `<parent>/.claude/settings.json`; a
- * repository's own `.claude/settings.json` then contributes its plugins, never its hooks.
- * This script writes that parent file: every hook of every agent-os repository found in
- * the parent, read from the repository's generated `agent-os/platforms/claude/settings.json`,
- * with `$CLAUDE_PROJECT_DIR` replaced by the repository's absolute path and the command
- * prefixed with `CLAUDE_PROJECT_DIR="<repository>"`, so each hook still resolves its own
- * repository root.
+ * repository's own `.claude/settings.json` then contributes its plugins, never its hooks or
+ * permission rules. This script writes that parent file: every hook of every agent-os
+ * repository found in the parent, read from its generated
+ * `agent-os/platforms/claude/settings.json`, with `$CLAUDE_PROJECT_DIR` replaced by the
+ * repository's absolute path and the command prefixed with `CLAUDE_PROJECT_DIR="<repository>"`,
+ * so each hook still resolves its own repository root. Each repository's `permissions.allow` /
+ * `ask` / `deny` lists are merged in too (a union without duplicates; deny still beats ask and
+ * allow).
  *
  * Idempotent: the commands it writes (`CLAUDE_PROJECT_DIR="…" <runtime> "…/agent-os/hooks/…"`)
  * are rebuilt on every run, while any other hook and every non-hook key in the file are kept.
@@ -59,10 +61,17 @@ type HookMap = Record<string, HookGroup[]>;
 /** One matcher group of one event: `[event, group]`. */
 type HookEntry = [event: string, group: HookGroup];
 
+type PermissionList = 'allow' | 'ask' | 'deny';
+
+type Permissions = Partial<Record<PermissionList, string[]>> & Record<string, unknown>;
+
 interface ClaudeSettings {
   hooks?: HookMap;
+  permissions?: Permissions;
   [key: string]: unknown;
 }
+
+const permissionLists: PermissionList[] = ['allow', 'ask', 'deny'];
 
 function log(message: string): void {
   console.log(`session-hooks: ${message}`);
@@ -156,6 +165,28 @@ function buildHooks({ existing, repositories }: { existing: HookMap; repositorie
   return { hooks, counts };
 }
 
+/** The session root's permission rules plus every repository's, each list without duplicates. */
+function mergePermissions({
+  existing,
+  repositories,
+}: {
+  existing: Permissions;
+  repositories: string[];
+}): Permissions {
+  const sources = [
+    existing,
+    ...repositories.map(
+      (repository) => readSettings(join(repository, claudeSettingsPath)).permissions ?? {},
+    ),
+  ];
+  const merged: Permissions = { ...existing };
+  for (const list of permissionLists) {
+    const rules = [...new Set(sources.flatMap((source) => source[list] ?? []))];
+    if (rules.length > 0) merged[list] = rules;
+  }
+  return merged;
+}
+
 function main(): void {
   const options = process.argv.slice(2);
   const dryRun = options.includes('--dry-run');
@@ -201,7 +232,8 @@ function main(): void {
     process.exit(1);
   }
   const { hooks, counts } = buildHooks({ existing: current.hooks ?? {}, repositories });
-  const next = `${JSON.stringify({ ...current, hooks }, null, 2)}\n`;
+  const permissions = mergePermissions({ existing: current.permissions ?? {}, repositories });
+  const next = `${JSON.stringify({ ...current, permissions, hooks }, null, 2)}\n`;
   const summary = repositories
     .map((repository) => `${repository} (${counts.get(repository) ?? 0})`)
     .join(', ');

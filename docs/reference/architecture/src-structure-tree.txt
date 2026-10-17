@@ -3468,6 +3468,7 @@ src/
     │   │   ├── agent-docker-daemon-script.unit.test.ts
     │   │   ├── agent-install-node.unit.test.ts
     │   │   ├── agent-live-stack.policy.unit.test.ts
+    │   │   ├── agent-permissions.policy.unit.test.ts
     │   │   ├── agent-session-hooks.unit.test.ts
     │   │   ├── agent-sonar-docker.policy.unit.test.ts
     │   │   ├── agent-stack-lock.unit.test.ts

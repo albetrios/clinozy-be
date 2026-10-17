@@ -96,7 +96,8 @@ Both scripts also register the session's hooks (`pnpm agent-os:session-hooks`,
 [`tooling/agent-os/session-hooks.ts`](../../tooling/agent-os/session-hooks.ts)). A session that holds
 both repos runs from `/home/user`, so it takes hooks from `/home/user/.claude/settings.json`, never from
 a repo's own `.claude/settings.json`. The script writes there every hook of both repos, with absolute
-paths and `CLAUDE_PROJECT_DIR` set to the hook's own repo. It keeps any other hook in that file and
+paths and `CLAUDE_PROJECT_DIR` set to the hook's own repo, and both repos' permission rules (a
+repo's own settings contribute none in that layout either). It keeps any other hook in that file and
 backs the file up to `settings.json.bak` before a change. `AGENT_SESSION_HOOKS=0` turns it off, and
 `--dry-run` prints the file without writing it. In a single-repo checkout it writes nothing.
 
