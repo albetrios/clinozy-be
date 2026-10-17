@@ -8,7 +8,7 @@
  * Prints a summary (files, screens, PRD / schema-routes / prototype changed, schema-routes
  * entities, fields, enums, routes and operations added, removed or changed), then the raw
  * `git diff --no-index`. `--json` prints the summary only, for skills. Without a Baseline it
- * prints the recorded and suggested Baselines and exits 2, so the user can confirm one.
+ * prints the recorded one (if any) and exits 2, so the user can confirm one.
  */
 import { resolve } from 'node:path';
 import {

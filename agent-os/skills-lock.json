@@ -131,7 +131,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-iteration-planning/SKILL.md",
-      "computedHash": "4ce7b311bc893699aa4782500dd36854ff6de5741550e87b9a65c87d24c75308"
+      "computedHash": "07d3121fefaf9e4728bf6e41057aecffcee6b24f360c47f911a0e8525fe40a80"
     },
     "be-kickoff-iteration": {
       "source": "local",

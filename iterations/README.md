@@ -66,7 +66,7 @@ change touches; `pnpm iteration:new <type> <topic> --both` creates it in both.
 | Owner | the person driving it (`git config user.name`) |
 | Opened | `YYYY-MM-DD` |
 | Branch | the branch it is built on |
-| Baseline | `none` (initial), an earlier iteration (incremental), or `—` until the user confirms it |
+| Baseline | `none` — from scratch, the default for every iteration — or an earlier iteration the user named (incremental) |
 | Status | `planning`, `ready-for-approval`, `approved`, `implementing`, `done` or `frozen` |
 | Summary | one line on what it changes — the one field you write by hand |
 | Drop placed | the day `iteration:intake` placed the drop |
@@ -83,10 +83,10 @@ hand — except **Summary**, the one line you write yourself after `pnpm iterati
 
 ## Mode and Baseline
 
-- **Baseline `none` → MODE initial** — the first iteration in this repository: everything is new.
-- **Otherwise MODE incremental**, against a Baseline **the user confirms** at planning Step 0 (saved
-  with `pnpm iteration:baseline`). The suggestion is the latest `done` / `frozen` iteration in this
-  repository.
+- **Baseline `none` → MODE initial** — the default: every iteration opens from scratch and takes
+  no earlier iteration or its files into account.
+- **MODE incremental** only when the user names a Baseline ("build on <iteration>"), recorded with
+  `pnpm iteration:baseline`. Nothing suggests or asks for one.
 - The incremental delta is the designer's "What changed" notes **plus**
   `pnpm iteration:diff <baseline> <iteration>`, which compares the two iterations' `intake-files/`
   **only** (never the README, `KICKOFF.md`, `plans/` or `AS-BUILT.md`). The Baseline's

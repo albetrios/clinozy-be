@@ -86,9 +86,8 @@ credentials out of records. The user review contains the same concise informatio
   longer matches goes back to whoever placed the drop.
 - **Deviations are carried forward.** `AS-BUILT.md` › Standing deviations lists where the code
   differs from the drop; the next iteration copies it and plans against what was actually built.
-- **The user confirms the Baseline.** Planning Step 0 suggests the latest `done` / `frozen`
-  iteration in this repository; the user confirms it or picks another
-  (`pnpm iteration:baseline`).
+- **Baseline `none` unless the user names one.** Nothing suggests or asks for a Baseline; when the
+  user says "build on <iteration>", it is recorded with `pnpm iteration:baseline`.
 - **Confirm the iteration first.** Both skills start with a `pnpm iteration:list` table of which
   iterations are eligible and why, recommend the earliest-opened one (the launch always first), and
   wait for your confirmation — never pick silently.

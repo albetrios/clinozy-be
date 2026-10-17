@@ -53,7 +53,6 @@ import {
   schemaRoutesHash,
   setReadmeField,
   siblingPackageName,
-  suggestBaseline,
   validateStatusTransition,
   validateTypeAndTopic,
   writePlannedFiles,
@@ -226,58 +225,6 @@ describe('schemaRoutesHash', () => {
   });
 });
 
-describe('suggestBaseline', () => {
-  it('suggests the done or frozen iteration that finished last, never an unfinished one', () => {
-    const repositoryRoot = createIterationRepository();
-    addTestIteration({
-      repositoryRoot,
-      name: 'launch-2026-09-30-jxmr',
-      intake: COMPLETE_INTAKE,
-      fields: { status: 'frozen' },
-    });
-    addTestIteration({
-      repositoryRoot,
-      name: 'feat-alpha-2026-10-02-aaaa',
-      intake: COMPLETE_INTAKE,
-      fields: { type: 'feat', opened: '2026-10-02', status: 'done' },
-      history: ['- 2026-10-09 · implementing → done · — · Test Owner'],
-    });
-    addTestIteration({
-      repositoryRoot,
-      name: 'feat-beta-2026-10-03-bbbb',
-      intake: COMPLETE_INTAKE,
-      fields: { type: 'feat', opened: '2026-10-03', status: 'done' },
-      history: ['- 2026-10-05 · implementing → done · — · Test Owner'],
-    });
-    addTestIteration({
-      repositoryRoot,
-      name: 'feat-gamma-2026-10-04-cccc',
-      fields: { type: 'feat', opened: '2026-10-04', status: 'implementing' },
-    });
-    expect(suggestBaseline({ repositoryRoot })).toBe('feat-alpha-2026-10-02-aaaa');
-    expect(suggestBaseline({ repositoryRoot, excluding: 'feat-alpha-2026-10-02-aaaa' })).toBe(
-      'feat-beta-2026-10-03-bbbb',
-    );
-  });
-
-  it('skips a done iteration whose intake-files/ lacks the required set', () => {
-    const repositoryRoot = createIterationRepository();
-    addTestIteration({
-      repositoryRoot,
-      name: 'launch-2026-09-30-jxmr',
-      fields: { status: 'done' },
-      intake: { 'PRD.md': '# PRD\n' },
-    });
-    expect(suggestBaseline({ repositoryRoot })).toBeUndefined();
-  });
-
-  it('suggests nothing while no iteration is done or frozen', () => {
-    const repositoryRoot = createIterationRepository();
-    addTestIteration({ repositoryRoot, name: 'launch-2026-09-30-jxmr' });
-    expect(suggestBaseline({ repositoryRoot })).toBeUndefined();
-  });
-});
-
 describe('planNewIteration', () => {
   const request = (repositoryRoot: string) => ({
     repositoryRoot,
@@ -340,7 +287,7 @@ describe('planNewIteration', () => {
     expect(() => writePlannedFiles(plan.files)).toThrow(/already exists/);
   });
 
-  it('suggests the latest done iteration as Baseline and records the current branch', () => {
+  it('opens from scratch (Baseline none) even after a done iteration, on the current branch', () => {
     const repositoryRoot = createIterationRepository();
     addTestIteration({
       repositoryRoot,
@@ -350,12 +297,12 @@ describe('planNewIteration', () => {
     });
     runTestGit({ repositoryRoot, gitArguments: ['switch', '-q', '-c', WORK_BRANCH] });
     const plan = planNewIteration({ ...request(repositoryRoot), type: 'fix', topic: 'rounding' });
-    expect(plan.fields.baseline).toBe('launch-2026-09-30-jxmr');
+    expect(plan.fields.baseline).toBe('none');
     expect(plan.fields.branch).toBe(WORK_BRANCH);
     expect(plan.name).toMatch(new RegExp(`^fix-rounding-${ITERATION_TEST_TODAY}-[a-z]{4}$`));
   });
 
-  it('leaves the Baseline unconfirmed (—) while nothing is done or frozen', () => {
+  it('opens from scratch while nothing is done or frozen too', () => {
     const repositoryRoot = createIterationRepository();
     addTestIteration({ repositoryRoot, name: 'launch-2026-09-30-jxmr' });
     const plan = planNewIteration({
@@ -363,7 +310,7 @@ describe('planNewIteration', () => {
       type: 'feat',
       topic: 'demo-check',
     });
-    expect(plan.fields.baseline).toBe('—');
+    expect(plan.fields.baseline).toBe('none');
   });
 
   it('draws a new suffix while the name is taken here or in the sibling, then gives up', () => {
@@ -398,7 +345,7 @@ describe('planNewIteration', () => {
     ).toThrow(new RegExp(`after ${MAXIMUM_NAME_ATTEMPTS} attempts`));
   });
 
-  it("opens the sibling folder too under --both, with the sibling's own Baseline suggestion", () => {
+  it('opens the sibling folder too under --both, from scratch as well', () => {
     const repositoryRoot = createIterationRepository();
     const siblingRoot = createIterationRepository('demo-fe');
     addTestIteration({
@@ -414,12 +361,12 @@ describe('planNewIteration', () => {
       type: 'feat',
       topic: 'returns',
     });
-    expect(plan.fields.baseline).toBe('launch-2026-09-30-jxmr');
-    expect(plan.siblingBaseline).toBe('—');
+    expect(plan.fields.baseline).toBe('none');
+    expect(plan.siblingBaseline).toBe('none');
     const siblingReadme = plan.files.find(
       (file) => file.path === join(siblingRoot, 'iterations', plan.name, 'README.md'),
     );
-    expect(parseIterationReadme(siblingReadme?.content ?? '').get('Baseline')).toBe('—');
+    expect(parseIterationReadme(siblingReadme?.content ?? '').get('Baseline')).toBe('none');
   });
 
   it('refuses a detached HEAD', () => {

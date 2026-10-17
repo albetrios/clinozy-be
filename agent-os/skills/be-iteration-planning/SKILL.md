@@ -1,7 +1,7 @@
 ---
 name: be-iteration-planning
 description: >
-  Plan an iteration under iterations/<iteration>/ — NO CODE: confirm the iteration and its Baseline,
+  Plan an iteration under iterations/<iteration>/ — NO CODE: confirm the iteration (Baseline none unless the user names one),
   pass the intake gate (iteration:intake --check — stop on failure), take the delta by Intake mode
   (iteration:diff + notes, or BRIEF.md) and the Baseline's Standing deviations, reconcile
   PRD ↔ schema-routes, ask the blocking questions, review the routes sub-domain by sub-domain
@@ -80,8 +80,8 @@ README's **Intake mode** says how it was built: `full` — the drop as received 
 `overlay` — only the changed files arrived, laid over the Baseline's snapshot; `brief` — no design
 files, only a written change: the Baseline's snapshot plus `BRIEF.md`.
 
-- **Baseline `none` → MODE initial** — the first iteration in this repository: plan everything.
-- **Baseline `<iteration>` → MODE incremental** — the Baseline the user confirms at Step 0. The delta
+- **Baseline `none` → MODE initial** — the default for every iteration: plan everything.
+- **Baseline `<iteration>` → MODE incremental** — only when the user named it. The delta
   depends on the Intake mode: `full` / `overlay` — the designer's "What changed" notes **plus**
   `pnpm iteration:diff <baseline> <iteration>`, which compares the two `intake-files/` folders and
   nothing else (anything the diff shows that the notes omit is a finding); `brief` — `BRIEF.md` is
@@ -405,9 +405,9 @@ Run `pnpm iteration:list` and show:
 
 - Eligible = Status `planning`. Recommend the earliest-opened eligible iteration (the launch always
   comes first). If the user named one, check it against the rule.
-- **Incremental:** suggest the Baseline — the latest `done` / `frozen` iteration in this repository
-  with a complete `intake-files/` (`pnpm iteration:diff <iteration>` prints the suggestion). The user
-  confirms it or picks another; save it with `pnpm iteration:baseline <iteration> <baseline|none>`.
+- **Incremental — only when the user names a Baseline** ("build on <iteration>"): record it with
+  `pnpm iteration:baseline <iteration> <baseline>` (it needs a complete `intake-files/`). Never
+  suggest or ask for one: without one the iteration is from scratch (MODE initial).
   An `overlay` or `brief` snapshot was built on the Baseline recorded at intake; picking another
   means rebuilding it (the gate fails until
   `pnpm iteration:intake <iteration> <source> --mode <mode> --replace` has run).
@@ -575,7 +575,7 @@ markers change, and `intake-files/` is locked.
 
 | Failure | Prevention here |
 | --- | --- |
-| The wrong iteration planned, or against an unconfirmed Baseline | Step 0 table + AskUserQuestion + `iteration:baseline` |
+| The wrong iteration planned, or against a Baseline nobody named | Step 0 table + AskUserQuestion; Baseline `none` unless named (`iteration:baseline`) |
 | A plan built on an incomplete or edited intake | Step 0 gate (`iteration:intake --check`) |
 | A plan against the design where the build already differs | Step 2 — the Baseline's Standing deviations |
 | A change in the drop the designer didn't mention | Step 2 diff vs notes → findings |

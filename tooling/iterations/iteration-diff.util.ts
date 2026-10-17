@@ -18,7 +18,6 @@ import {
   ITERATIONS_DIRECTORY,
   NO_BASELINE,
   readIterationReadme,
-  suggestBaseline,
 } from './iteration.util.js';
 
 /** Added, removed and changed names — sorted. */
@@ -374,8 +373,11 @@ export function parseDiffArguments(commandLine: readonly string[]): {
 }
 
 /**
- * Explains what to compare against when no Baseline is given — the recorded Baseline and the
- * suggestion — so the caller can ask the user. Returns the message.
+ * Explains what to compare against when no Baseline is given — the recorded Baseline, if any —
+ * so the caller can ask the user. Returns the message.
+ *
+ * @remarks
+ * Nothing is suggested: an iteration is from scratch until the user names its Baseline.
  */
 export function missingBaselineMessage(request: {
   readonly repositoryRoot: string;
@@ -386,24 +388,15 @@ export function missingBaselineMessage(request: {
     iteration: request.current,
   });
   const recorded = readme.fields.get('Baseline');
-  const suggested = suggestBaseline({
-    repositoryRoot: request.repositoryRoot,
-    excluding: request.current,
-  });
-  const lines = ['No Baseline given.'];
   if (recorded !== undefined && recorded !== NO_BASELINE && recorded !== EMPTY_FIELD) {
-    lines.push(`  Recorded in ${request.current}/README.md: ${recorded}`);
+    return [
+      'No Baseline given.',
+      `  Recorded in ${request.current}/README.md: ${recorded}`,
+      `Confirm and re-run: pnpm iteration:diff ${recorded} ${request.current}`,
+    ].join('\n');
   }
-  lines.push(
-    suggested === undefined
-      ? '  Suggested: none — no iteration in this repository is done or frozen yet.'
-      : `  Suggested (latest done/frozen in this repository): ${suggested}`,
-  );
-  const pick =
-    recorded !== undefined && recorded !== NO_BASELINE && recorded !== EMPTY_FIELD
-      ? recorded
-      : suggested;
-  if (pick !== undefined)
-    lines.push(`Confirm and re-run: pnpm iteration:diff ${pick} ${request.current}`);
-  return lines.join('\n');
+  return [
+    'No Baseline given, and none is recorded — the iteration is from scratch.',
+    `To build on an earlier iteration the user names: pnpm iteration:baseline ${request.current} <baseline>`,
+  ].join('\n');
 }

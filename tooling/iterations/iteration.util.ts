@@ -1,6 +1,6 @@
 /**
  * Design-iteration model behind the `pnpm iteration:*` commands: naming, the README field table and
- * its History, the Status lifecycle, the Baseline suggestion, the generator and the listing.
+ * its History, the Status lifecycle, the generator and the listing.
  *
  * An iteration is a folder `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/`; the rules live in
  * `iterations/README.md`. The sibling (frontend) repository ships the same commands, names and
@@ -59,9 +59,6 @@ export const LOCKED_INTAKE_STATUSES: ReadonlySet<IterationStatus> = new Set([
   'done',
   'frozen',
 ]);
-
-/** Statuses an iteration must have to be suggested as another iteration's Baseline. */
-const BASELINE_STATUSES: ReadonlySet<string> = new Set(['done', 'frozen']);
 
 /** Baseline of an initial iteration — the first one in a repository. */
 export const NO_BASELINE = 'none';
@@ -248,7 +245,7 @@ export interface NewIterationPlan {
   readonly fields: IterationReadmeFields;
   readonly localFolder: string;
   readonly siblingFolder: string | undefined;
-  /** The sibling README's Baseline — suggested from the sibling's own iterations. */
+  /** The sibling README's Baseline — `none`, like this one's. */
   readonly siblingBaseline: string | undefined;
   readonly files: readonly PlannedFile[];
 }
@@ -660,58 +657,6 @@ export function missingIntakeFiles(location: {
   return REQUIRED_INTAKE_FILES.filter((name) => !existsSync(join(folder, name)));
 }
 
-/** The date of the last History line that moved an iteration to `done` (or `frozen`), if any. */
-function finishedDate(readme: string): string {
-  let finished = '';
-  for (const line of readme.split('\n')) {
-    const match = /^- (\d{4}-\d{2}-\d{2}) · \S+ → (done|frozen) · /.exec(line.trim());
-    if (match?.[1] && match[1] > finished) finished = match[1];
-  }
-  return finished;
-}
-
-/**
- * Suggests a Baseline: the latest `done` or `frozen` iteration in this repository.
- *
- * @remarks
- * Algorithm: among working-tree iterations whose Status is `done` or `frozen` and whose
- * `intake-files/` holds the required set (excluding `excluding`), the one that finished last — the latest History date moving it to `done` or
- * `frozen`, then the latest Opened, then the name. The user confirms or picks another at planning
- * Step 0 (`pnpm iteration:baseline`).
- *
- * Failure modes: returns `undefined` when no iteration is done or frozen.
- */
-export function suggestBaseline(location: {
-  readonly repositoryRoot: string;
-  readonly excluding?: string;
-}): string | undefined {
-  const candidates: Array<{ name: string; finished: string; opened: string }> = [];
-  for (const [name, fields] of readAllIterationFields(location.repositoryRoot)) {
-    if (name === location.excluding || !BASELINE_STATUSES.has(fields.get('Status') ?? '')) continue;
-    if (
-      missingIntakeFiles({ repositoryRoot: location.repositoryRoot, iteration: name }).length > 0
-    ) {
-      continue;
-    }
-    const readme = readFileSync(
-      iterationReadmePath({ repositoryRoot: location.repositoryRoot, iteration: name }),
-      'utf-8',
-    );
-    candidates.push({
-      name,
-      finished: finishedDate(readme),
-      opened: fields.get('Opened') ?? parseIterationName(name)?.opened ?? '',
-    });
-  }
-  candidates.sort(
-    (left, right) =>
-      right.finished.localeCompare(left.finished) ||
-      right.opened.localeCompare(left.opened) ||
-      right.name.localeCompare(left.name),
-  );
-  return candidates[0]?.name;
-}
-
 /**
  * Fingerprints a `schema-routes.md`: the first {@link FINGERPRINT_LENGTH} hex characters of the
  * sha256 of its bytes, or {@link EMPTY_FIELD} when the file is missing.
@@ -877,14 +822,6 @@ function pickUniqueName(choice: {
   throw new Error(`No free iteration name after ${MAXIMUM_NAME_ATTEMPTS} attempts — run it again.`);
 }
 
-function suggestedBaselineFor(location: {
-  readonly repositoryRoot: string;
-  readonly type: IterationType;
-}): string {
-  if (location.type === 'launch') return NO_BASELINE;
-  return suggestBaseline({ repositoryRoot: location.repositoryRoot }) ?? EMPTY_FIELD;
-}
-
 /**
  * Decides everything `pnpm iteration:new` will do, without writing anything.
  *
@@ -892,8 +829,8 @@ function suggestedBaselineFor(location: {
  * Algorithm: validate type + topic; collect existing iterations (this working tree, the base
  * branch, and the sibling's working tree under `--both`); refuse a second launch and refuse any
  * non-launch before an iteration exists; pick a name with a fresh random suffix, retrying while it
- * is taken; suggest each repository's Baseline from its own iterations ({@link suggestBaseline};
- * `none` for the launch, `—` when nothing is done yet — the user confirms it at planning Step 0);
+ * is taken; record Baseline `none` in each repository — every iteration starts from scratch, and
+ * builds on another only when the user names it (`pnpm iteration:baseline`);
  * read Owner and Branch from git; render the README for this repository and, under `--both`, the
  * sibling. An iteration starts with its README only — `iteration:intake` fills `intake-files/`.
  *
@@ -951,7 +888,7 @@ export function planNewIteration(request: NewIterationRequest): NewIterationPlan
     owner,
     opened,
     branch,
-    baseline: suggestedBaselineFor({ repositoryRoot, type }),
+    baseline: NO_BASELINE,
     status: INITIAL_ITERATION_STATUS,
     summary: EMPTY_FIELD,
     dropPlaced: EMPTY_FIELD,
@@ -964,10 +901,7 @@ export function planNewIteration(request: NewIterationRequest): NewIterationPlan
   const localFolder = join(repositoryRoot, ITERATIONS_DIRECTORY, name);
   const siblingFolder =
     siblingRoot === undefined ? undefined : join(siblingRoot, ITERATIONS_DIRECTORY, name);
-  const siblingBaseline =
-    siblingRoot === undefined
-      ? undefined
-      : suggestedBaselineFor({ repositoryRoot: siblingRoot, type });
+  const siblingBaseline = siblingRoot === undefined ? undefined : NO_BASELINE;
   return {
     name,
     fields,

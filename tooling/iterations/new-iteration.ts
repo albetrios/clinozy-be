@@ -7,11 +7,12 @@
  *   pnpm iteration:new <feat|change|fix> <topic> [--both] [--sibling <path>] [--dry-run]
  *   pnpm iteration:new fix <topic> --lite
  *
- * Creates `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/README.md` (Owner, Opened, Branch, the
- * suggested Baseline, Process and Status planning filled in). `--lite` (a fix only) records Process
- * lite: planned in one step, then planning → implementing → done → frozen. `--both` also creates the same folder in the
- * sibling repository, with its own suggested Baseline. The drop goes in next with
- * `pnpm iteration:intake`. The model: iterations/README.md.
+ * Creates `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/README.md` (Owner, Opened, Branch,
+ * Baseline `none`, Process and Status planning filled in). Every iteration starts from scratch; it
+ * builds on an earlier one only when the user names it (`pnpm iteration:baseline`). `--lite` (a
+ * fix only) records Process lite: planned in one step, then planning → implementing → done →
+ * frozen. `--both` also creates the same folder in the sibling repository. The drop goes in next
+ * with `pnpm iteration:intake`. The model: iterations/README.md.
  */
 import { relative, resolve } from 'node:path';
 import { resolveGitMetadata } from '@tooling/setup/codegen/project-identity.util.js';
@@ -38,10 +39,10 @@ const USAGE = `Usage:
   --dry-run         print what would be created; write nothing`;
 
 function baselineNote(baseline: string): string {
-  if (baseline === NO_BASELINE) return 'none (initial)';
-  if (baseline === EMPTY_FIELD)
-    return '— (nothing done or frozen yet — confirm at planning Step 0)';
-  return `${baseline} (suggested — confirm at planning Step 0)`;
+  if (baseline === NO_BASELINE) {
+    return 'none — from scratch (to build on an earlier iteration the user names: pnpm iteration:baseline)';
+  }
+  return baseline;
 }
 
 function describePlan(plan: NewIterationPlan): string[] {
@@ -75,9 +76,9 @@ function nextSteps(plan: NewIterationPlan): string[] {
     ...(plan.fields.type === 'launch'
       ? []
       : [
-          `     Only the changed files: --mode overlay · only a BRIEF.md (template: tooling/iterations/templates/BRIEF.md): --mode brief — both build on the README's Baseline (${plan.fields.baseline}); for another one, first: pnpm iteration:baseline ${plan.name} <baseline>`,
+          `     Only the changed files: --mode overlay · only a BRIEF.md (template: tooling/iterations/templates/BRIEF.md): --mode brief — both build on a Baseline the user names, recorded first: pnpm iteration:baseline ${plan.name} <baseline>`,
         ]),
-    `  3. Plan it: "plan iteration ${plan.name}" (be-iteration-planning runs the gate, confirms the Baseline and writes KICKOFF.md + plans/).`,
+    `  3. Plan it: "plan iteration ${plan.name}" (be-iteration-planning runs the gate and writes KICKOFF.md + plans/).`,
     `  4. Implement it: "kickoff iteration ${plan.name}" (be-kickoff-iteration — one ledger row at a time, AS-BUILT.md).`,
     '  The steps in full: docs/design-workflow/process/iteration-guide.md',
   ];

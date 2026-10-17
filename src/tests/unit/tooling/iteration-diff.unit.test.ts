@@ -210,7 +210,7 @@ describe('summarizeIntakeDiff', () => {
     ).toThrow(/feat-empty-2026-10-07-eeee has no intake-files\//);
   });
 
-  it('explains the recorded and suggested Baseline when none is given', () => {
+  it('explains the recorded Baseline when none is given, and suggests none', () => {
     const repositoryRoot = repository();
     const message = missingBaselineMessage({
       repositoryRoot,
@@ -219,9 +219,7 @@ describe('summarizeIntakeDiff', () => {
     expect(message).toContain(
       'Recorded in feat-returns-2026-10-06-kqzx/README.md: launch-2026-09-30-jxmr',
     );
-    expect(message).toContain(
-      'Suggested (latest done/frozen in this repository): launch-2026-09-30-jxmr',
-    );
+    expect(message).not.toContain('Suggested');
     expect(message).toContain(
       'pnpm iteration:diff launch-2026-09-30-jxmr feat-returns-2026-10-06-kqzx',
     );

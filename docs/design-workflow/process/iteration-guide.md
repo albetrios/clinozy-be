@@ -40,8 +40,8 @@ pnpm iteration:new feat pharmacy-returns --both
 - The launch takes no topic: `pnpm iteration:new launch`.
 - Result: `iterations/<iteration>/README.md` (`Status: planning`) — nothing else yet. Write its
   **Summary** line.
-- The printed Baseline is a suggestion (the latest `done` / `frozen` iteration in this repository);
-  you confirm it at planning Step 0.
+- The Baseline is `none`: the iteration is from scratch. Only when the user names an earlier
+  iteration to build on is it recorded: `pnpm iteration:baseline <iteration> <baseline>`.
 
 ### Step 3 — Place the drop
 
