@@ -21,6 +21,13 @@ name: Post-merge CI
 # are NOT here — they run in release-deploy.yml on `release: published`, pinned to
 # the release tag SHA (D7). release-please only opens/refreshes ONE Release PR and
 # is NOT auto-merged (D1); merging that Release PR is the manual ship button.
+#
+# Release PR on demand: an ordinary merge no longer refreshes the Release PR (each refresh
+# re-ran its PR CI). release-please runs when a Release PR is merged (the push's head commit
+# is `chore(main): release …`, so the tag and GitHub Release are cut as before) or when this
+# workflow is dispatched with `release_pr: true` — to open or refresh the Release PR, and as
+# the fallback that also cuts a release whose commit was not the head of its push:
+#   gh workflow run post-merge-ci.yml -f release_pr=true -f skip_docker=true -f skip_docs=true
 
 on:
   push:
@@ -54,6 +61,11 @@ on:
         default: false
       skip_docs:
         description: Skip API docs generation and publish
+        required: false
+        type: boolean
+        default: false
+      release_pr:
+        description: Open or refresh the Release PR (release-please) — ordinary merges no longer do
         required: false
         type: boolean
         default: false
@@ -272,13 +284,17 @@ jobs:
 
   release-please:
     name: Release Please
-    # Runs every merge (both lanes) to keep the single Release PR current. In the
-    # FAST lane the matrix is skipped (the PR already proved it); in the FULL lane
-    # the matrix must be green before a release can be cut.
+    # On demand (see the header): when a Release PR merges, or when dispatched with
+    # release_pr. In the FAST lane the matrix is skipped (the PR already proved it); in the
+    # FULL lane the matrix must be green before a release can be cut.
     needs: [matrix-tests]
     if: |
       always() &&
-      (needs.matrix-tests.result == 'success' || needs.matrix-tests.result == 'skipped')
+      (needs.matrix-tests.result == 'success' || needs.matrix-tests.result == 'skipped') &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.release_pr) ||
+        startsWith(github.event.head_commit.message, 'chore(main): release ')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # release-please creates GitHub Releases with RELEASE_PLEASE_TOKEN (a PAT with

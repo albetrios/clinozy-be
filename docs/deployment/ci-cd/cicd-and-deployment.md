@@ -144,7 +144,7 @@ Both environments run the **same scanned image**, promoted by SHA (build-once-pr
 
 ## 4. Release and versioning (release-please)
 
-Release-please turns **conventional commits** into a standing **Release PR** (`chore: release X.Y.Z` — CHANGELOG + version bump in `package.json`). **Merging that Release PR is the ship button**: it creates the **GitHub Release** and tag `vX.Y.Z`, which fires [release-deploy.yml](../../../.github/workflows/release-deploy.yml) to deploy production. No npm publish (the package is private). We use the maintained [googleapis/release-please](https://github.com/googleapis/release-please) action.
+Release-please turns **conventional commits** into a **Release PR** (`chore(main): release X.Y.Z` — CHANGELOG + version bump in `package.json`), **on demand**: dispatch post-merge CI with `release_pr: true` (`gh workflow run post-merge-ci.yml -f release_pr=true -f skip_docker=true -f skip_docs=true`) to open or refresh it — an ordinary merge no longer does, so its PR CI does not re-run on every merge. **Merging that Release PR is the ship button**: it creates the **GitHub Release** and tag `vX.Y.Z`, which fires [release-deploy.yml](../../../.github/workflows/release-deploy.yml) to deploy production. No npm publish (the package is private). We use the maintained [googleapis/release-please](https://github.com/googleapis/release-please) action.
 
 **Single stable channel** — one config + one manifest, no prerelease channel:
 
@@ -160,7 +160,7 @@ Local commits are validated by **commitlint** via [.husky/commit-msg](../../../.
 
 | What | Where |
 | --- | --- |
-| **Runs on** | Push to **main** — `Release Please` job inside [post-merge-ci.yml](../../../.github/workflows/post-merge-ci.yml) |
+| **Runs on** | A push to **main** whose head commit is a merged Release PR (cuts the tag + GitHub Release), or a dispatch of [post-merge-ci.yml](../../../.github/workflows/post-merge-ci.yml) with `release_pr: true` (opens or refreshes the Release PR; also cuts a release whose commit was not the head of its push) |
 | **Token** | **`RELEASE_PLEASE_TOKEN`** (PAT), read from the **development** GitHub Environment — a `github.token`-created release would not trigger `release-deploy.yml` |
 
 ### 4.1 Release and deploy cycle
@@ -171,15 +171,16 @@ flowchart TB
   PR --> Gate[Quality gate + Checks]
   Gate --> Merge[Squash-merge to main]
   Merge --> DevDeploy[post-merge-ci: build image + deploy development]
-  Merge --> ReleasePR[release-please refreshes the standing Release PR]
+  Merge --> Dispatch[on demand: dispatch post-merge-ci with release_pr]
+  Dispatch --> ReleasePR[release-please opens or refreshes the Release PR]
   ReleasePR -->|human merges = ship| Tag[Tag vX.Y.Z + publish GitHub Release]
   Tag --> ProdDeploy[release-deploy.yml: deploy production reviewer-gated]
 ```
 
 1. **Feature → PR → gate:** every PR runs the `Quality gate` aggregate + `Checks`; the PR title must follow conventional commits.
-2. **Squash-merge to `main`:** post-merge CI builds + pushes the SHA-tagged image and deploys the **development** environment; release-please refreshes the standing Release PR (`chore: release X.Y.Z`).
+2. **Squash-merge to `main`:** post-merge CI builds + pushes the SHA-tagged image and deploys the **development** environment. When you are ready to ship, dispatch post-merge CI with `release_pr: true`: release-please opens or refreshes the Release PR (`chore(main): release X.Y.Z`).
 3. **Merge the Release PR (ship):** tags `vX.Y.Z` + publishes the GitHub Release, which fires [release-deploy.yml](../../../.github/workflows/release-deploy.yml) to deploy **production** — pinned to the tag SHA, behind the environment reviewer approval, promoting the exact scanned image (build-once-promote). That **one approval** covers the production API docs too: they are generated in a job with no environment and published by the deploy job once production is live (GitHub asks for a separate approval for every job that names a protected environment). The release SBOM is attached on publish.
-4. **Hotfix:** an ordinary `fix/*` PR to `main`, released immediately by merging the Release PR — **fix-forward** (see [hotfix-release.md](../runbooks/hotfix-release.md)). There is no promotion PR or back-merge.
+4. **Hotfix:** an ordinary `fix/*` PR to `main`, released immediately by dispatching `release_pr` and merging the Release PR — **fix-forward** (see [hotfix-release.md](../runbooks/hotfix-release.md)). There is no promotion PR or back-merge.
 
 ### Verify release-please
 

@@ -50,8 +50,9 @@ Name the branch after the change: `<type>` is its conventional-commit type, `<sl
 
 ## Releasing
 
-`release-please` keeps exactly one **`chore: release X.Y.Z` Release PR** open on `main`, updated on
-every merge. **Merging that Release PR is the ship button** — it tags `vX.Y.Z` + a GitHub Release, which
+`release-please` opens one **`chore(main): release X.Y.Z` Release PR** on `main` on demand — dispatch
+post-merge CI with `release_pr: true` (`gh workflow run post-merge-ci.yml -f release_pr=true -f skip_docker=true -f skip_docs=true`);
+an ordinary merge no longer refreshes it. **Merging that Release PR is the ship button** — it tags `vX.Y.Z` + a GitHub Release, which
 fires [`release-deploy.yml`](../../.github/workflows/release-deploy.yml) to deploy production (behind the
 environment reviewer approval). See [release-versioning.md](release-versioning.md).
 

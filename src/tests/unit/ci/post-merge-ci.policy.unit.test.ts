@@ -67,6 +67,16 @@ describe('post-merge CI trigger policy', () => {
     expect(workflow).not.toMatch(/^\s+resolve-environment:/m);
   });
 
+  it('runs release-please on demand: a merged Release PR, or a dispatch with release_pr', () => {
+    const workflow = readFileSync(POST_MERGE_WORKFLOW, 'utf8');
+    const block = workflow.match(/^ {2}release-please:\n([\s\S]*?)\n {4}runs-on:/m)?.[1] ?? '';
+    expect(block).toContain("(github.event_name == 'workflow_dispatch' && inputs.release_pr) ||");
+    expect(block).toContain(
+      "startsWith(github.event.head_commit.message, 'chore(main): release ')",
+    );
+    expect(workflow).toMatch(/release_pr:\n\s+description: Open or refresh the Release PR/);
+  });
+
   it('publishes API docs independently of release-please (a release-please failure must not skip Scalar/Postman publishing)', () => {
     const workflow = readFileSync(POST_MERGE_WORKFLOW, 'utf8');
     const apiDocsBlock =

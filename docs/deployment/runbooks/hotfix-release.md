@@ -12,7 +12,9 @@ protected `release/*` branch** and no off-trunk patching.
 2. CI runs the authoritative gate — the single **`Quality gate`** required check rolls up lint,
    typecheck, unit, the DB **matrix**, security, and the non-superuser RLS suite (plus **`Checks`**).
    When green, **squash-merge** it (0 approvals required — D8).
-3. The post-merge run refreshes the **`chore: release X.Y.Z` Release PR**. **Merge that Release PR** —
+3. Open or refresh the **`chore(main): release X.Y.Z` Release PR** — ordinary merges no longer do:
+   `gh workflow run post-merge-ci.yml -f release_pr=true -f skip_docker=true -f skip_docs=true`.
+   **Merge that Release PR** —
    that is the ship button: it tags the release, which fires `release-deploy.yml` to deploy production
    (behind the environment reviewer approval), promoting the exact scanned image built for the merge
    (build-once-promote — see [deploy-artifact-and-secret-decisions.md](../ci-cd/deploy-artifact-and-secret-decisions.md)).
