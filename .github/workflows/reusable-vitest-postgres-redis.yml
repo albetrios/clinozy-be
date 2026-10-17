@@ -137,7 +137,7 @@ jobs:
       - name: Cache Vitest
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
-          path: node_modules/.vitest
+          path: node_modules/.vite/vitest
           key: vitest-integration-${{ runner.os }}-${{ matrix.shard.id }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
             vitest-integration-${{ runner.os }}-${{ matrix.shard.id }}-
@@ -253,7 +253,7 @@ jobs:
       - name: Cache Vitest
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
-          path: node_modules/.vitest
+          path: node_modules/.vite/vitest
           key: vitest-unit-cov-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'tooling/vitest/**') }}
           restore-keys: |
             vitest-unit-cov-${{ runner.os }}-
