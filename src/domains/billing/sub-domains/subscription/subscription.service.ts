@@ -1045,50 +1045,19 @@ export class SubscriptionService {
   }
 
   /**
-   * Brings an organization without a paid entitlement — subscription cancelled, expired, paused,
-   * never paid, or in dunning past its grace — within the Free plan's seat allowance: the most
-   * recently joined non-owner ACTIVE members are suspended (suspended, never removed;
-   * reactivating one re-checks the ceiling).
+   * After a Stripe event leaves a subscription without its paid entitlement (cancelled, expired,
+   * paused, never paid), logs the loss once the event's unit of work commits. Nobody is
+   * suspended: a clinic that stops paying keeps its whole team (owner decision, 2026-10-17).
    *
    * @remarks
-   * - **Algorithm:** re-reads the entitlement first (the organization may have re-subscribed since
-   *   the event or sweep that asked) and does nothing while it holds one.
-   * - **Failure modes:** best-effort — logged, never thrown; an organization that is gone is a no-op.
-   * - **Side effects:** flips excess memberships to `SUSPENDED`.
+   * - **Algorithm:** returns at once for a status that keeps the entitlement; otherwise resolves
+   *   the organization from the event's context and logs `billing.entitlement_lost` after commit,
+   *   so a rolled-back event never reports a loss.
+   * - **Failure modes:** none of its own; an organization that is gone is a no-op.
+   * - **Side effects:** one warning log line. Only an owner's own plan downgrade still suspends
+   *   members ({@link changePlan}).
    */
-  async enforceFreeSeatCeiling(organizationPublicId: string): Promise<void> {
-    let ceiling: number | null;
-    try {
-      ceiling = await withAppDatabaseContext({
-        scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: organizationPublicId }),
-        callback: async () => {
-          const organization =
-            await this.organizationService.findOrganizationByPublicId(organizationPublicId);
-          if (!organization) return null;
-          const seatState = await this.repository.findActiveSeatStateByOrganizationForUpdate(
-            organization.id,
-          );
-          if (!this.requiresFreeSeatCeiling(seatState)) return null;
-          return this.planService.getFreePlanSeatCeiling();
-        },
-      });
-    } catch (error) {
-      logger.error({ organizationPublicId, error }, 'billing.free_ceiling.resolve_failed');
-      return;
-    }
-    await this.suspendExcessMembersToCeiling({
-      organizationPublicId,
-      ceiling,
-      logEvent: 'billing.entitlement_lost.members_suspended',
-    });
-  }
-
-  /**
-   * After a Stripe event leaves a subscription without its paid entitlement (cancelled, expired,
-   * paused, never paid), schedules {@link enforceFreeSeatCeiling} for once the event's unit of work
-   * commits — outside its transaction, so a suspension problem never fails the event.
-   */
-  async enforceFreeSeatCeilingAfterCommitIfEntitlementLost(options: {
+  async logEntitlementLossAfterCommit(options: {
     status: string;
     repositoryOverride: SubscriptionRepository;
   }): Promise<void> {
@@ -1099,7 +1068,10 @@ export class SubscriptionService {
     }
     const organization = await options.repositoryOverride.findOrganizationFromCurrentContext();
     if (!organization) return;
-    await runEnqueueAfterCommit(() => this.enforceFreeSeatCeiling(organization.public_id));
+    const organizationPublicId = organization.public_id;
+    await runEnqueueAfterCommit(async () => {
+      logger.warn({ organizationPublicId, status: options.status }, 'billing.entitlement_lost');
+    });
   }
 
   async changePlan({

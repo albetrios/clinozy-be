@@ -529,8 +529,8 @@ export class StripeWebhookService {
         previous,
         propagateFailure: true,
       });
-      // Cancelled, expired or paused: back on the Free allowance once this commits.
-      await this.subscriptionService.enforceFreeSeatCeilingAfterCommitIfEntitlementLost({
+      // Cancelled, expired or paused: the entitlement is lost; logged once this commits.
+      await this.subscriptionService.logEntitlementLossAfterCommit({
         status: row.status,
         repositoryOverride: subscriptionRepository,
       });
@@ -791,8 +791,8 @@ export class StripeWebhookService {
         repositoryOverride: subscriptionRepository,
         propagateFailure: true,
       });
-      // Back on the Free allowance: excess members are suspended once this commits.
-      await this.subscriptionService.enforceFreeSeatCeilingAfterCommitIfEntitlementLost({
+      // The entitlement is lost; logged once this commits (members are kept).
+      await this.subscriptionService.logEntitlementLossAfterCommit({
         status: row.status,
         repositoryOverride: subscriptionRepository,
       });

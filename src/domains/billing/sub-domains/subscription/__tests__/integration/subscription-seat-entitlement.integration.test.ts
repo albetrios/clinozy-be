@@ -24,13 +24,14 @@ const FREE_PLAN_SEATS = 2;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
- * Members follow the paid entitlement: when an organization loses it — Stripe cancels the
- * subscription, or a dunning one's grace ends with no event at all — the most recently joined
- * members beyond the Free allowance are suspended (never removed, never the owner). The hourly
- * reconcile also re-enqueues a seat sync where Stripe bills a quantity other than the seats in use.
+ * Losing the paid entitlement keeps the team (owner decision, 2026-10-17): when Stripe cancels the
+ * subscription, or a dunning one's grace ends with no event at all, the loss is logged and no member
+ * is suspended — suspending everyone past the Free allowance locked a clinic's staff out mid-day.
+ * The hourly reconcile also re-enqueues a seat sync where Stripe bills a quantity other than the
+ * seats in use.
  * Built from the worker's own composition root, so the membership port is wired as in production.
  */
-describe('Subscription seats follow the paid entitlement', () => {
+describe('Losing the paid entitlement keeps the team', () => {
   let containers: DomainContainers;
   const stripePriceId = `price_seats_${generatePublicId('plan')}`;
   let paidPlanId: number;
@@ -104,8 +105,9 @@ describe('Subscription seats follow the paid entitlement', () => {
     return rows.map((row) => row.id).sort((left, right) => left - right);
   }
 
-  it('suspends the most recently joined members down to the Free allowance when Stripe cancels', async () => {
-    const { organization, memberIds } = await teamWithMembers(3);
+  it('keeps every member and logs the loss when Stripe cancels', async () => {
+    const { organization } = await teamWithMembers(3);
+    const warnings = vi.spyOn(logger, 'warn');
     const providerSubscriptionId = `sub_seats_${generatePublicId('subscription')}`;
     await createTestSubscription({
       organizationId: organization.id,
@@ -132,15 +134,18 @@ describe('Subscription seats follow the paid entitlement', () => {
       } as unknown as Stripe.Event,
     });
 
-    // Owner + 3 members against an allowance of 2: the two most recently joined members go.
-    await vi.waitFor(async () => {
-      expect(await suspendedMembershipIds(organization.id)).toEqual(
-        [memberIds[1]!, memberIds[2]!].sort((left, right) => left - right),
+    // Owner + 3 members against an allowance of 2: the loss is logged after commit, nobody goes.
+    await vi.waitFor(() => {
+      expect(warnings).toHaveBeenCalledWith(
+        { organizationPublicId: organization.public_id, status: 'CANCELED' },
+        'billing.entitlement_lost',
       );
     });
+    expect(await suspendedMembershipIds(organization.id)).toEqual([]);
+    warnings.mockRestore();
   });
 
-  it('the hourly reconcile suspends after a dunning grace ends and re-syncs a drifted quantity', async () => {
+  it('the hourly reconcile reports an ended dunning grace without suspending, and re-syncs a drifted quantity', async () => {
     const lapsed = await teamWithMembers(2);
     const lapsedSubscription = await createTestSubscription({
       organizationId: lapsed.organization.id,
@@ -178,16 +183,15 @@ describe('Subscription seats follow the paid entitlement', () => {
     expect(enqueueSeatQuantitySync).toHaveBeenCalledWith({
       organization_public_id: drifted.organization.public_id,
     });
-    // Owner + 2 members against an allowance of 2: the most recently joined member goes.
-    expect(await suspendedMembershipIds(lapsed.organization.id)).toEqual([lapsed.memberIds[1]!]);
+    // Owner + 2 members against an allowance of 2: reported as lapsed, nobody suspended.
+    expect(await suspendedMembershipIds(lapsed.organization.id)).toEqual([]);
     expect(await suspendedMembershipIds(drifted.organization.id)).toEqual([]);
     enqueueSeatQuantitySync.mockRestore();
   });
 
-  it('runs whole in the worker process: suspends and purges the suspended members’ cached permissions', async () => {
-    // The worker refuses database access outside a context. The reconcile used to suspend, commit,
-    // then look the suspended users up after the commit with no context — the lookup threw in the
-    // worker, the error was logged, and the suspended members kept their cached permissions.
+  it('runs whole in the worker process without suspending anyone', async () => {
+    // The worker refuses database access outside a context, so the pass must stay inside one: it
+    // once suspended members and then looked them up after the commit with no context, which threw.
     const lapsed = await teamWithMembers(2);
     await createTestSubscription({
       organizationId: lapsed.organization.id,
@@ -206,8 +210,8 @@ describe('Subscription seats follow the paid entitlement', () => {
       if (previousRuntime === undefined) delete process.env.CLINOZY_BE_RUNTIME;
       else process.env.CLINOZY_BE_RUNTIME = previousRuntime;
     }
-    expect(await suspendedMembershipIds(lapsed.organization.id)).toEqual([lapsed.memberIds[1]!]);
-    expect(errors).not.toHaveBeenCalledWith(expect.anything(), 'billing.suspend_excess_failed');
+    expect(await suspendedMembershipIds(lapsed.organization.id)).toEqual([]);
+    expect(errors).not.toHaveBeenCalled();
     errors.mockRestore();
   });
 });
