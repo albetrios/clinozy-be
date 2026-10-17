@@ -19,6 +19,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { checkSelectorFixtures } from "../../tooling/vitest/selector-fixtures.check.ts";
 
 const repositoryRoot = process.cwd();
 const agentOsDirectory = join(repositoryRoot, "agent-os");
@@ -818,6 +819,13 @@ if (existsSync(commandsDirectory))
 for (const file of listFilesWithExtension(join(agentOsDirectory, "rules"), ".mdc"))
   requirePrefix("rule", basename(file, ".mdc"));
 
+// ── Check 20: the test selection (pnpm test:select) holds its fixtures ──
+// One generated fixture per sub-domain (its main file selects every test in its folder), the
+// core domains running everything, the misses recorded in tooling/vitest/selector-fixtures.json,
+// and the unreachable tests (no single source change selects them) always run.
+const selectorFixtures = checkSelectorFixtures(repositoryRoot);
+for (const problem of selectorFixtures.problems) error("selector-fixtures", problem);
+
 // ── Report ──
 const errors = findings.filter((finding) => finding.level === "error");
 const warnings = findings.filter((finding) => finding.level === "warn");
@@ -845,11 +853,12 @@ const checkLabels: Record<string, string> = {
   "plugin-refs": "Plugin manifest refs exist",
   "name-prefix": "Repo name prefix (be-)",
   "requirement-form": "Requirement form sections",
+  "selector-fixtures": "Test selection fixtures",
 };
 
 console.log("\nagent-os integrity evals (Tier 1)\n");
 console.log(
-  `  skills: ${skillNames.length}   sync-rules: ${syncRuleCount}   agents: ${agentFiles.length}\n`,
+  `  skills: ${skillNames.length}   sync-rules: ${syncRuleCount}   agents: ${agentFiles.length}   selector fixtures: ${selectorFixtures.fixtures} (${selectorFixtures.unreachable} unreachable tests always run)\n`,
 );
 
 const group = (level: Level) => {

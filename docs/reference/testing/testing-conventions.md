@@ -239,7 +239,7 @@ All tiers share one root **`vitest.config.ts`**. Named projects live in **`tooli
 | Imports | a test whose imports reach the changed file — not through the test harness (`src/tests/helpers/`) or a wiring file (outside every app sub-domain, importing three or more areas: `app.container.ts`, `worker-containers.ts`) |
 | Domain map | a test that boots the app (reaches `src/app.ts`), by its area: the changed file's (`app/<sub-domain>`, or `<domain>`) and every area whose code imports it; plus app tests that name a reached sub-domain (`/app/leads`) |
 | Mentions | a test that names the changed path, its file name, a folder above it (also as `join('agent-os', 'hooks')`) or a glob over it |
-| Always run | on any source change under `src/`: the security project (RLS, the permission matrix), `src/tests/e2e/`, the global scans, and every test that imports nothing from the repository |
+| Always run | on any source change under `src/`: the security project (RLS, the permission matrix), `src/tests/e2e/`, the global scans, every test that imports nothing from the repository, and every **unreachable** test — one a change it depends on would not select: an app-booting test outside every domain (the API contract and OpenAPI response suites, the cross-cutting integration and performance suites), or one that reaches non-escalating code only through the harness or a wiring file (62 today) |
 
 Everything runs when a change touches the escalation list (dependencies, Vitest config and
 `tooling/vitest/`, the test harness, tenancy, user, auth, audit, `src/shared/`, `src/core/`,
@@ -251,7 +251,10 @@ The selection is checked against the full suite: when a PR's unit job or databas
 the `Selector miss check` job (`pnpm test:selector-misses`, not a gate) lists every failed file the
 selection would have skipped — a miss, or a flake. A real miss becomes an entry in
 `tooling/vitest/selector-fixtures.json` (its fixture line is printed), so the next selection
-includes it.
+includes it. `pnpm agent-os:check` holds the selection to those entries and to one generated
+fixture per sub-domain and nested sub-domain (its main file selects every test in its folder),
+checks that the core domains run everything and that every unreachable test is always run
+(`tooling/vitest/selector-fixtures.check.ts`).
 
 ### Run one database suite at a time
 

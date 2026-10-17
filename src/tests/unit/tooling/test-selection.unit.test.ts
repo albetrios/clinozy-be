@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { checkSelectorFixtures } from '@tooling/vitest/selector-fixtures.check.js';
 import { selectTests } from '@tooling/vitest/test-selection.util.js';
 
 const APP = 'src/domains/app';
@@ -54,6 +55,11 @@ const FIXTURE: Record<string, string> = {
     "import { stockService } from '@/domains/app/sub-domains/stock/stock.service.js';\nconst dtos = 'src/domains/**/*.dto.ts';",
   'src/tests/security/tenant.security.test.ts': "import { appRoutes } from '@/app.js';",
   'src/tests/global/layers.global.test.ts': "const roots = ['src'];",
+  'src/tests/helpers/fake.helper.ts':
+    "import { stockService } from '@/domains/app/sub-domains/stock/stock.service.js';\nexport const fake = stockService;",
+  'src/tests/integration/api-contract.integration.test.ts': "import { appRoutes } from '@/app.js';",
+  'src/tests/unit/harness-only.unit.test.ts':
+    "import { fake } from '@/tests/helpers/fake.helper.js';",
 };
 
 let repositoryRoot = '';
@@ -96,10 +102,12 @@ describe('selectTests', () => {
       integration: [
         `${LEADS}/__tests__/integration/leads.integration.test.ts`,
         `${PATIENTS}/__tests__/integration/patients.integration.test.ts`,
+        'src/tests/integration/api-contract.integration.test.ts',
       ],
       security: ['src/tests/security/tenant.security.test.ts'],
       unit: [
         `${LEADS}/__tests__/unit/leads.service.unit.test.ts`,
+        'src/tests/unit/harness-only.unit.test.ts',
         'src/tests/unit/hooks-policy.unit.test.ts',
       ],
     });
@@ -109,6 +117,24 @@ describe('selectTests', () => {
     expect(selection.why['src/tests/unit/hooks-policy.unit.test.ts']).toEqual([
       'always run (imports nothing from the repository)',
     ]);
+  });
+
+  it('always runs the tests no single source change selects', () => {
+    const { why } = select(`${STOCK}/stock.service.ts`);
+    for (const test of [
+      'src/tests/integration/api-contract.integration.test.ts',
+      'src/tests/unit/harness-only.unit.test.ts',
+    ]) {
+      expect(why[test], test).toEqual(['always run (no single source change selects it)']);
+    }
+  });
+
+  it('holds its generated fixtures: each sub-domain file selects every test in its folder', () => {
+    expect(checkSelectorFixtures(repositoryRoot)).toEqual({
+      problems: [],
+      fixtures: 3,
+      unreachable: 2,
+    });
   });
 
   it('does not follow a change through a wiring file', () => {

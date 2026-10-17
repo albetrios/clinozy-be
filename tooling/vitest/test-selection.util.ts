@@ -24,8 +24,9 @@
  *   read files instead of importing them.
  *
  * Any changed source under `src/` also runs the always-run set: the security project (RLS,
- * permission matrix), the cross-domain flows under `src/tests/e2e/`, the global policy scans
- * and every test that imports nothing from the repository (a scanner). The escalation list
+ * permission matrix), the cross-domain flows under `src/tests/e2e/`, the global policy scans,
+ * every test that imports nothing from the repository (a scanner) and every test no single
+ * source change would select ({@link findUnreachableTests}). The escalation list
  * runs everything: dependencies, Vitest config, the test harness, the core domains (tenancy,
  * user, auth, audit), shared, core, infrastructure and migrations — a change there reaches
  * nearly every test by design. It fails closed: a path outside the known roots, a deleted
@@ -150,6 +151,20 @@ export interface ImportGraph {
   imports: Map<string, Set<string>>;
   /** File → the repository files that import it. */
   importers: Map<string, Set<string>>;
+  /** Computed once per graph and reused by every selection on it (see {@link analyzeGraph}). */
+  analysis?: GraphAnalysis;
+}
+
+/** What every selection on a graph shares: booting tests, wiring files, unreachable tests, texts. */
+export interface GraphAnalysis {
+  /** Files that reach `src/app.ts` through imports — their tests boot the whole app. */
+  booting: Set<string>;
+  /** Wiring files ({@link findAggregators}). */
+  aggregators: Set<string>;
+  /** Tests no single source change selects ({@link findUnreachableTests}) — always run. */
+  unreachable: Set<string>;
+  /** Test file → its text and the paths it names, read once. */
+  texts: Map<string, { source: string; named: string[] }>;
 }
 
 function toPosix(path: string): string {
@@ -297,6 +312,94 @@ export function findAggregators(graph: ImportGraph): Set<string> {
   return aggregators;
 }
 
+/** The test that owns a folder of tests: `<folder>/__tests__/…` → `<folder>`, else null. */
+function testOwner(test: string): string | null {
+  const parts = test.split('/');
+  const index = parts.lastIndexOf('__tests__');
+  return index > 0 ? parts.slice(0, index).join('/') : null;
+}
+
+/**
+ * The files that reach a non-escalating source (a change the selection judges file by file)
+ * through imports: every importer of one, transitively. With `stopped`, the walk follows the
+ * selection's own rules — it never passes through the harness, nor through a wiring file it did
+ * not start from (a wiring file's own change does select its importers).
+ */
+function reachingNonEscalatingSource(options: {
+  graph: ImportGraph;
+  aggregators: Set<string>;
+  stopped: boolean;
+}): Set<string> {
+  const { graph, aggregators, stopped } = options;
+  const isEscalating = (file: string) => matchesAny({ path: file, globs: ESCALATION_GLOBS });
+  const starts = graph.files.filter((file) => !(isTestFile(file) || isEscalating(file)));
+  const reached = new Set<string>(starts);
+  const queue = [...starts];
+  const startSet = new Set(starts);
+  while (queue.length > 0) {
+    const file = queue.shift() as string;
+    const blocked =
+      stopped &&
+      !startSet.has(file) &&
+      (aggregators.has(file) || matchesAny({ path: file, globs: HARNESS_GLOBS }));
+    if (blocked) continue;
+    for (const importer of graph.importers.get(file) ?? []) {
+      if (reached.has(importer)) continue;
+      reached.add(importer);
+      queue.push(importer);
+    }
+  }
+  return reached;
+}
+
+/**
+ * The tests a change they depend on would not select: an app-booting test outside every domain
+ * (it has no area for the domain map), or a test that reaches non-escalating code only through
+ * the harness or a wiring file (the selection's import walk stops there) — in neither case under
+ * a folder that owns it. They join the always-run set: the API contract and OpenAPI response
+ * suites, the cross-cutting integration and performance suites, the composition-root test.
+ *
+ * @remarks
+ * A test whose code is all on the escalation list is not one: any change to that code runs
+ * everything. A test that imports nothing is always run already.
+ */
+export function findUnreachableTests(options: {
+  graph: ImportGraph;
+  booting: Set<string>;
+  aggregators: Set<string>;
+}): Set<string> {
+  const { graph, booting, aggregators } = options;
+  const anyPath = reachingNonEscalatingSource({ graph, aggregators, stopped: false });
+  const selectionPath = reachingNonEscalatingSource({ graph, aggregators, stopped: true });
+  const unreachable = new Set<string>();
+  for (const test of graph.tests) {
+    if (testOwner(test) || matchesAny({ path: test, globs: ALWAYS_RUN_GLOBS })) continue;
+    const imports = [...(graph.imports.get(test) ?? [])];
+    if (imports.every((target) => isTestFile(target))) continue;
+    if (booting.has(test)) {
+      if (!areaOf(test)) unreachable.add(test);
+    } else if (anyPath.has(test) && !selectionPath.has(test)) {
+      unreachable.add(test);
+    }
+  }
+  return unreachable;
+}
+
+/** The graph's shared analysis, computed on first use. */
+export function analyzeGraph(graph: ImportGraph): GraphAnalysis {
+  if (!graph.analysis) {
+    const booting = importersClosure({ graph, start: APP_ENTRY });
+    const aggregators = findAggregators(graph);
+    graph.analysis = {
+      booting,
+      aggregators,
+      unreachable: findUnreachableTests({ graph, booting, aggregators }),
+      texts: new Map(),
+    };
+  }
+  return graph.analysis;
+}
+
 /** The Vitest project a test file belongs to, from `tooling/vitest/projects.ts`; null if none. */
 export function projectOf(testFile: string): string | null {
   for (const project of vitestProjects) {
@@ -342,6 +445,24 @@ function mentions(options: { changed: string; source: string; named: string[] })
 
 function matchesAny(options: { path: string; globs: string[] }): boolean {
   return options.globs.some((glob) => matchesGlob(options.path, glob));
+}
+
+/** The always-run tests of a source change under `src/`, each with its reason. */
+function alwaysRun(options: { graph: ImportGraph; unreachable: Set<string> }): [string, string][] {
+  const tests: [string, string][] = [];
+  for (const test of options.graph.tests) {
+    if (matchesAny({ path: test, globs: ALWAYS_RUN_GLOBS })) tests.push([test, 'always run']);
+    const reachesRepository = [...(options.graph.imports.get(test) ?? [])].some(
+      (target) => !isTestFile(target),
+    );
+    if (!reachesRepository) {
+      tests.push([test, 'always run (imports nothing from the repository)']);
+    }
+    if (options.unreachable.has(test)) {
+      tests.push([test, 'always run (no single source change selects it)']);
+    }
+  }
+  return tests;
 }
 
 function all(reason: string): TestSelection {
@@ -390,8 +511,7 @@ function selectTestsOrThrow(options: {
   }
 
   const graph = options.graph ?? buildImportGraph(repositoryRoot);
-  const booting = importersClosure({ graph, start: APP_ENTRY });
-  const aggregators = findAggregators(graph);
+  const { booting, aggregators, unreachable, texts } = analyzeGraph(graph);
   const why = new Map<string, Set<string>>();
   const select = (test: string, reason: string) => {
     const reasons = why.get(test) ?? new Set<string>();
@@ -399,13 +519,12 @@ function selectTestsOrThrow(options: {
     why.set(test, reasons);
   };
 
-  const sources = new Map<string, { source: string; named: string[] }>();
   const testText = (test: string) => {
-    let entry = sources.get(test);
+    let entry = texts.get(test);
     if (!entry) {
       const source = readFileSync(join(repositoryRoot, test), 'utf8');
       entry = { source, named: namedPaths({ test, source }) };
-      sources.set(test, entry);
+      texts.set(test, entry);
     }
     return entry;
   };
@@ -472,13 +591,7 @@ function selectTestsOrThrow(options: {
   }
 
   if (sourceChanged) {
-    for (const test of graph.tests) {
-      if (matchesAny({ path: test, globs: ALWAYS_RUN_GLOBS })) select(test, 'always run');
-      const reachesRepository = [...(graph.imports.get(test) ?? [])].some(
-        (target) => !isTestFile(target),
-      );
-      if (!reachesRepository) select(test, 'always run (imports nothing from the repository)');
-    }
+    for (const [test, reason] of alwaysRun({ graph, unreachable })) select(test, reason);
   }
 
   const projects: Record<string, string[]> = {};
