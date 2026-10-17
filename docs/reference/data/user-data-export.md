@@ -6,13 +6,13 @@ Async export of personal data to S3 with time-limited presigned download URLs.
 
 1. `POST /api/v1/users/me/data-export` — creates `auth.user_data_exports` row (`pending`), enqueues BullMQ job, returns **200** with the export's `id` and `status` (the method-status policy answers every successful POST with 200).
 2. Worker aggregates cross-domain data (memberships, sessions, notifications, audit activity) and the person's own bug reports (`bug_reports`, iteration feat-bug-report-2026-10-13-dgnx), writes `user-data-export/{userPublicId}/{data_export_id}.json.gz` to S3.
-3. `GET /api/v1/users/me/data-export/{data_export_id}` — returns status; when `completed`, includes presigned GET URL (≤24h).
+3. `GET /api/v1/users/me/data-export/{data_export_id}` — returns status; when `completed`, includes a presigned GET URL valid for 15 minutes, minted fresh on every read until the row's `expires_at` (each mint is audited as `user.data_export.url_minted`).
 
 ## Retention and privacy
 
 | Control | Value |
 | ------- | ----- |
-| Presigned download URL | ≤24h (`USER_DATA_EXPORT_PRESIGNED_DOWNLOAD_EXPIRY_SECONDS`) |
+| Presigned download URL | 15 minutes — 900 s (`USER_DATA_EXPORT_PRESIGNED_DOWNLOAD_EXPIRY_SECONDS`, sec-U6) |
 | Row `expires_at` | 7 days (`USER_DATA_EXPORT_ARTIFACT_TTL_DAYS`) |
 | S3 lifecycle | Bucket rule on prefix `user-data-export/` — expire objects after **7 days** (applied at bucket provisioning time via `PutBucketLifecycleConfiguration`) |
 | Expired row purge | Daily BullMQ `user-data-export-retention` worker deletes S3 objects + DB rows where `expires_at` has passed |
