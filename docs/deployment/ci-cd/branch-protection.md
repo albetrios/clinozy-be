@@ -61,9 +61,12 @@ Lanes currently rolled up (**authoritative source: `quality-gate.needs` in pr-ci
 | `lint` | Lint |
 | `typecheck` | Typecheck |
 | `static-sync` | Static sync |
+| `agent-os-gate` | agent-os evals |
 | `unit` | Unit + global (via `reusable-unit-gate.yml`) |
 | `matrix` | Integration (via `reusable-matrix-gate.yml`) |
 | `migration-lint` | Migration lint |
+| `knip` | Knip (dead code) |
+| `sonarqube` | SonarQube (the pre-commit gate's server and rules; source changes only) |
 | `build-verify` | Build verify |
 | `security-audit` | Security audit |
 | `security-secrets` | Security secrets |

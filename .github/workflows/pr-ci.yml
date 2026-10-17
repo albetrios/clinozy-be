@@ -252,6 +252,26 @@ jobs:
       # exports/types analysis is deferred (see knip.jsonc).
       - run: pnpm knip
 
+  sonarqube:
+    name: SonarQube
+    needs: [changes]
+    # The SonarQube Community Build and rules the pre-commit gate uses: the same
+    # docker-compose.sonar.yml server and the same `pnpm sonar:scan` (tooling/sonar/sonar-gate.ts),
+    # which fails on any open issue or hotspot on the deployed-app surface. Free on a private
+    # repository, unlike SonarQube Cloud. Only on source changes: the server takes 1-2 min to start.
+    # The Elasticsearch index sits on tmpfs (docker-compose.sonar.yml), so no runner sysctl or disk
+    # headroom is needed.
+    if: needs.changes.outputs.src-code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: SonarQube gate (start the server, scan, fail on any issue)
+        run: pnpm sonar:scan
+
   rls-security:
     name: RLS security (non-superuser)
     needs: [changes]
@@ -696,6 +716,7 @@ jobs:
       - matrix
       - migration-lint
       - knip
+      - sonarqube
       - build-verify
       - security-audit
       - security-secrets

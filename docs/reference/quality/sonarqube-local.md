@@ -3,8 +3,10 @@
 SonarQube runs **locally** (Docker) and is enforced as a **pre-commit gate**: when you commit
 changes that touch deployed-surface code (`src/` runtime), the hook scans the project and **blocks
 the commit if SonarQube reports any unresolved issue or hotspot**. The gate is **mandatory — there
-is no bypass**; every finding must be resolved. Everything is local — there is no hosted SonarQube
-and no CI dependency.
+is no bypass**; every finding must be resolved. There is no hosted SonarQube: PR CI runs the same
+server and the same `pnpm sonar:scan` in its `SonarQube` lane (part of the `Quality gate`, on
+source changes only), so a finding that reaches a PR — a commit made where the hook did not run —
+turns it red under the same rules.
 
 ## TL;DR
 

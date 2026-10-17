@@ -456,7 +456,7 @@ Already pushed as `claude/*`? Leave it — it auto-deletes when the PR squash-me
 
 Script namespaces: `ci:*`, `compose:*`, `test:*`, `validate:*`, `db:*`, `docs:*`, `routes:*`, `load:*`, `chaos:*`, `tool:*`, `setup:*`, `mcp:*`, `security:*`, `sonar:*`, `deps:*`, `agent-os:*`, `github:*`, `tsdoc:*`, `docker:*`, `dashboards:*`, `ops:*`, `sbom:*`, `guard:*`, `dev:*`, `build:*`, `lint:*`, `format:*`, `health:*`, `coverage:*`, `env:*`, `start:*`, `verify:*`, `iteration:*`. List all: `pnpm run`.
 
-Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `sonar:down` / `sonar:reset`. The pre-commit hook (`pnpm guard:pre-commit`, step 17) blocks a commit when SonarQube has any open issue on the deployed-app surface; the gate is mandatory — there is no bypass, every issue must be resolved. See **`docs/reference/quality/sonarqube-local.md`**.
+Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `sonar:down` / `sonar:reset`. The pre-commit hook (`pnpm guard:pre-commit`, step 17) blocks a commit when SonarQube has any open issue on the deployed-app surface; the gate is mandatory — there is no bypass, every issue must be resolved. PR CI runs the same gate in its `SonarQube` lane (in the `Quality gate`, source changes only). See **`docs/reference/quality/sonarqube-local.md`**.
 
 - `pnpm build` — compile to `dist/` (`tsc` + `tsc-alias`, plus the circuit breaker's Redis Lua scripts, so `dist/` runs as-is); `pnpm build:check` fails if `@/` aliases remain
 - `pnpm dev` — run Fastify server (tsx watch)
