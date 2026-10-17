@@ -182,7 +182,7 @@ while a pinned clinic is not usable (they left it, or it was suspended).
 
 This works **identically for personal and team organizations** — there is one route surface, and the organization `type` (not different URLs) tells the UI what to show. See [route-consistency-and-organization-model.md](route-consistency-and-organization-model.md).
 
-`GET /users/me` (profile + deployment `capabilities`) and `GET /users/me/organizations` (paginated organization list) remain available if you need them individually.
+`GET /users/me` (profile + `personal_organization_id`) and `GET /users/me/organizations` (paginated organization list) remain available if you need them individually.
 
 > The organization-scoped resources are **flat**: `/api/v1/tenancy/organization` (singular — settings, logo,
 > audit-logs, api-keys, notification-policies, memberships, roles, invitations live under it),
@@ -473,28 +473,30 @@ export type FirstFactorResponse = AccessTokenResponse | MfaRequiredResponse;
 // source: src/domains/auth/auth.serializer.ts → AuthSerializer.verificationCodeSent
 export interface VerificationCodeSentResponse { message: string; expires_in_minutes: number }
 
-// source: src/domains/tenancy/sub-domains/organization/organization-capability.ts → OrganizationCapabilities
-export interface OrganizationCapabilities {
-  can_invite_members: boolean;
-  can_manage_members: boolean;
-  can_manage_roles: boolean;
-  can_transfer_ownership: boolean;
-  can_delete: boolean;
-  can_manage_billing: boolean;
-}
 // source: src/domains/tenancy/sub-domains/organization/organization.types.ts → OrganizationOutput
+// There is no `capabilities` object: a team-only action needs `type === 'TEAM'` AND its permission
+// in `my_permissions`.
 export interface Organization {
   id: string;                   // org_…
   name: string;
   slug: string | null;          // null for a PERSONAL organization
-  type: 'PERSONAL' | 'TEAM';
+  type: 'PERSONAL' | 'TEAM';    // the only "is this available here?" signal
   status: string;
   owner_user_id: string | null; // usr_… — the owner; compare with user.id (null only if the login is gone)
   logo_url: string | null;
-  capabilities: OrganizationCapabilities;
+  specialties: string[];        // 1 to 6 of `skin`, `hair`, …
+  timezone: string;             // IANA time zone
+  currency: string;             // always `INR` at launch
   created_at: string;           // ISO-8601
   updated_at: string;
 }
+// source: src/domains/billing/sub-domains/subscription/subscription.types.ts → PlanAccessOutput
+export interface PlanAccess {
+  state: 'active' | 'grace' | 'read_only';
+  grace_ends_at: string | null; // ISO-8601; null when `active`
+}
+// source: src/domains/auth/auth-me-context.types.ts → AuthMeContextActiveOrganizationOutput
+export type ActiveOrganization = Organization & { plan_access: PlanAccess };
 // source: src/shared/constants/roles.constants.ts → GlobalRole
 export type GlobalRole = 'super_admin' | 'user';
 
@@ -508,17 +510,17 @@ export interface MeUser {
   last_name: string | null;
   job_title: string | null;
   avatar_url: string | null;
+  presence: string;                // `online`, `busy` or `away`
   status: string;
   onboarding_completed: boolean;   // false → route to /onboarding (every mode; see below)
   created_at: string;
   updated_at: string;
-  capabilities?: { personal_organizations: boolean; team_organizations: boolean };
   personal_organization_id?: string | null;   // null when personal organizations are disabled (team-only deployment)
 }
 // source: src/domains/auth/auth-me-context.types.ts → AuthMeContextOutput
 export interface MeContext {
   user: MeUser;
-  active_organization: Organization | null;             // the active organization (may be an auto-provisioned personal organization)
+  active_organization: ActiveOrganization | null;       // the active organization (may be an auto-provisioned personal organization)
   membership_id: string | null;                          // the caller's own membership ("mem_…"); null without one
   my_permissions: string[];                              // e.g. ["organization:read", "membership:create"]
   my_role_ids: string[];                                 // "rol_…", the main role first
@@ -535,7 +537,7 @@ export interface MeContext {
 // source: src/domains/auth/auth.serializer.ts → AuthSerializer.accessTokenWithActiveOrganization
 export interface SwitchResponse {
   access_token: string;
-  active_organization: Organization;
+  active_organization: ActiveOrganization;
   my_permissions: string[];
   global_role: GlobalRole | null;
 }
@@ -543,7 +545,7 @@ export interface SwitchResponse {
 
 ### The one paint call + a helper per flow
 
-`getMeContext()` is the single dashboard read; each `landOnDashboard.*` composes an entry flow with it. Gate UI on the **intersection** of `my_permissions` and `active_organization.capabilities` (see [Active organization & switching](#active-organization--switching)).
+`getMeContext()` is the single dashboard read; each `landOnDashboard.*` composes an entry flow with it. Show a team-only action only when `active_organization.type === 'TEAM'` **and** `my_permissions` holds its permission (see [Active organization & switching](#active-organization--switching)).
 
 ```ts
 // auth.ts (same module as the reference client) ------------------------------

@@ -19,7 +19,7 @@ import type {
 
 /**
  * Aggregates the authenticated caller's "effective context" in one read: their
- * self profile, the active organization (with type-derived capabilities), their
+ * self profile, the active organization (with its `type` and `plan_access`), their
  * membership there and the roles it holds, the permission codes they hold in that
  * organization, and their global role.
  *
@@ -124,8 +124,8 @@ export class AuthMeContextService {
 
   /**
    * Resolves the active-organization slice of the context for one organization — the
-   * `active_organization` (with capabilities) and the caller's `my_permissions`
-   * in it — without the heavier `user` / `organizations[]` payload.
+   * `active_organization` (with its `type` and `plan_access`) and the caller's
+   * `my_permissions` in it — without the heavier `user` payload.
    *
    * @remarks
    * - **Algorithm:** the same reads `getContext` performs for the active organization —
@@ -138,8 +138,8 @@ export class AuthMeContextService {
    * - **Notes:** returned inline by `POST /auth/switch-to-organization` and
    *   `POST /auth/switch-to-personal` so the client repaints the dashboard for the
    *   newly active organization without a follow-up `GET /auth/me/context`. The omitted
-   *   `user` and `organizations[]` are stable across a switch, so the client reuses
-   *   the values from its initial `/me/context` and only flips `is_active` locally.
+   *   `user` is stable across a switch, so the client reuses the one from its initial
+   *   `/me/context`.
    */
   async getActiveOrganizationContext(options: {
     userPublicId: string;
