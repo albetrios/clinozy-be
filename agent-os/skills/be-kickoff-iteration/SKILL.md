@@ -7,7 +7,7 @@ description: >
   deviations → check the impact on upcoming rows → stop for the user's review → next — and close
   with the gates, plans/acceptance.md and Status done. Use when the user says 'kickoff', 'kickoff
   iteration <name>', 'kickoff <iteration>' or 'start implementing <iteration>'. Requires README
-  Status approved.
+  Status approved, or a lite fix (Process lite) in planning once the user gave the go.
 indexNote: implement an approved iteration — follow the KICKOFF.md ROUTE row by row, record AS-BUILT.md, stop for review after each row
 trigger: iterations/*/AS-BUILT.md
 triggerNote: Iteration implementation — one ROUTE row at a time; every row's technical decisions go into AS-BUILT.md
