@@ -561,7 +561,13 @@ function runGit(command: {
   }).trim();
 }
 
-function tryGit(command: {
+/**
+ * Runs git in `repositoryRoot` (inherited git variables shed) and returns its trimmed output.
+ *
+ * @remarks
+ * Failure modes: never throws — a failed git command returns undefined.
+ */
+export function tryGit(command: {
   readonly repositoryRoot: string;
   readonly gitArguments: readonly string[];
 }): string | undefined {

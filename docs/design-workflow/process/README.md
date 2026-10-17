@@ -30,7 +30,7 @@ flowchart TB
 | Kick off | **be-kickoff-iteration**, [prompt](../prompts/kickoff-iteration-prompt.md) | `Status: implementing` | which iteration (Step 0) |
 | Build | one ROUTE row at a time | code, migrations, tests; one `AS-BUILT.md` row each | your review after every row; any scope change |
 | Close | the gates, `/be-pre-merge-review` (review only) | `plans/acceptance.md` filled, `AS-BUILT.md` summary, `plans/frontend-route-map.md` (`pnpm iteration:frontend-map`); `Status: done` | — |
-| Freeze | the last commit before the merge | `Status: frozen`; never edited again | — |
+| Freeze | the last commit before the merge | `Status: frozen`; never edited again | PR CI's Iteration freeze lane (`pnpm iteration:freeze-check`): an iteration the PR changes that is not `frozen`; an edit to a merged frozen one |
 
 ## Document ownership — write once, reference elsewhere
 

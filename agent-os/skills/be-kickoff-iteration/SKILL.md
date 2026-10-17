@@ -182,7 +182,8 @@ authorize changing either.
   of where the code now differs from the drop (the Baseline's list, minus what this iteration
   resolved, plus its new ones). The next iteration plans against it.
 - Run `pnpm iteration:status <iteration> done`. `pnpm iteration:status <iteration> frozen` goes in
-  the last commit before the merge.
+  the last commit before the merge — PR CI's Iteration freeze lane (`pnpm iteration:freeze-check`)
+  fails until it does.
 - **Never push, open a PR or merge** — the user raises PRs.
 
 ## AS-BUILT.md — the shape

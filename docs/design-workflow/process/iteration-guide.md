@@ -157,6 +157,9 @@ pnpm iteration:status <iteration> done
   pnpm iteration:status <iteration> frozen
   ```
 
+- PR CI's **Iteration freeze** lane fails while an iteration the PR changes is not `frozen`, and on
+  any edit to a merged frozen iteration other than a hash-keeping `--compact`. Run it before raising
+  the PR: `pnpm iteration:freeze-check`.
 - Raise the PR yourself — agents never push, open a PR or merge. After the merge the folder is never
   edited; a correction is a new `fix` iteration.
 

@@ -32,6 +32,7 @@ jobs:
       docker: ${{ steps.filter.outputs.docker }}
       ci-config: ${{ steps.filter.outputs.ci-config }}
       agent-os: ${{ steps.filter.outputs.agent-os }}
+      iterations: ${{ steps.filter.outputs.iterations }}
       docs-only-md: ${{ steps.filter.outputs.docs-only-md == 'true' && steps.filter.outputs.src-code == 'false' && steps.filter.outputs.docker == 'false' && steps.filter.outputs.ci-config == 'false' }}
 
     steps:
@@ -69,6 +70,9 @@ jobs:
               - 'agent-os/**'
               - '.claude/**'
               - 'tooling/agent-os/**'
+            iterations:
+              - 'iterations/**'
+              - 'tooling/iterations/**'
             docs-only-md:
               - '**/*.md'
               - 'docs/**'
@@ -97,6 +101,26 @@ jobs:
         run: pnpm agent-os:outcomes
       - name: Guard evals (hook decisions + fail-open smokes)
         run: pnpm agent-os:guards
+
+  iteration-freeze:
+    name: Iteration freeze
+    # Merge-time half of the iteration lifecycle: every iteration this PR changes merges frozen,
+    # and a merged frozen iteration takes no edit but a hash-keeping --compact
+    # (tooling/iterations/iteration-freeze.util.ts). Skipped — a pass — when no iteration changed.
+    needs: [changes]
+    if: needs.changes.outputs.iterations == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Every changed iteration merges frozen
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: pnpm iteration:freeze-check --base "$BASE_SHA"
 
   lint:
     name: Lint
@@ -854,6 +878,7 @@ jobs:
       - typecheck
       - static-sync
       - agent-os-gate
+      - iteration-freeze
       - unit
       - matrix
       - migration-lint

@@ -160,7 +160,7 @@ Status moves one step at a time with `pnpm iteration:status <iteration> <status>
 | `approved` | the user's go-ahead | logged in `plans/decisions.md`; `KICKOFF.md` and `intake-files/` freeze |
 | `implementing` | be-kickoff-iteration | the user confirms the iteration to kick off |
 | `done` | be-kickoff-iteration | every ROUTE row is closed, `plans/acceptance.md` filled, `AS-BUILT.md` summarized |
-| `frozen` | the last commit before the merge | the iteration merges to `main` |
+| `frozen` | the last commit before the merge | the iteration merges to `main` — PR CI's **Iteration freeze** lane (`pnpm iteration:freeze-check`) fails while any iteration the PR changes is not `frozen`, and on any edit to a merged frozen iteration other than a hash-keeping `--compact` |
 
 A **lite** fix (Process `lite`) moves `planning → implementing → done → frozen`: be-iteration-planning
 writes `KICKOFF.md`, `plans/decisions.md` and `plans/acceptance.md` in one step and stops once for the
@@ -184,6 +184,7 @@ pnpm iteration:baseline <iteration> <baseline|none>      # record the confirmed 
 pnpm iteration:diff <baseline> <iteration> [--json]      # the delta: the two resolved intakes only
 pnpm iteration:frontend-map <iteration> [--check]        # plans/frontend-route-map.md section 3: every route
 pnpm iteration:status <iteration> <status> [--reason "<text>"]
+pnpm iteration:freeze-check [--base <ref>]               # every changed iteration frozen (PR CI's Iteration freeze lane)
 pnpm iteration:list   # Name · Type · Owner · Opened · Baseline · Status · Intake mode · Schema-routes · Intake hash · Drop placed
 ```
 

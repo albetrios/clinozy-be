@@ -38,6 +38,7 @@ const REQUIRED_LANES = [
   'typecheck',
   'static-sync',
   'agent-os-gate',
+  'iteration-freeze',
   'unit',
   'matrix',
   'migration-lint',

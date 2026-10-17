@@ -62,6 +62,7 @@ Lanes currently rolled up (**authoritative source: `quality-gate.needs` in pr-ci
 | `typecheck` | Typecheck |
 | `static-sync` | Static sync |
 | `agent-os-gate` | agent-os evals |
+| `iteration-freeze` | Iteration freeze (on `iterations/` or `tooling/iterations/` changes) |
 | `unit` | Unit + global (via `reusable-unit-gate.yml`) |
 | `matrix` | Integration (via `reusable-matrix-gate.yml`) |
 | `migration-lint` | Migration lint |
