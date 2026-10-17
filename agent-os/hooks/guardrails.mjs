@@ -4,12 +4,15 @@
 // BLOCK (deny): reading or writing secret files, secret content, destructive shell commands,
 //   skipping the git hooks (--no-verify, `git commit -n`, HUSKY=0).
 // ASK: `gh pr create` — a PR only when the user asked (no-unrequested-pr.sh covers the MCP tool).
+//   `git push` of auth, RLS, billing, migration or route changes with no clean
+//   /be-pre-merge-review recorded for HEAD (`pnpm agent-os:review-clean` records it).
 // WARN (systemMessage): edits to protected paths, cross-domain imports in a service.
 //
 // Reads the PreToolUse payload on stdin. Fail-open by design: any parse/read
 // error allows the tool (exit 0) so a guardrail bug can never brick the agent.
-import { readFileSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recordTelemetry } from "./_telemetry.mjs";
 
@@ -59,6 +62,57 @@ const SECRET_READ_DENIAL =
   "is not allowed for the agent — they hold provisioned secrets. App config goes in .env.<environment> " +
   "(editable), setup creds in .setup-credentials (off-limits). If a human needs a value, read it from " +
   ".env.<environment> directly.";
+
+/** Pushed paths where a missed check leaks a tenant's data, money or access. */
+const REVIEWED_PUSH_PATHS = [
+  /^src\/domains\/(?:auth|billing)\//,
+  /^src\/domains\/app\/sub-domains\/billing\//,
+  /^src\/domains\/tenancy\/sub-domains\/permission\//,
+  /^src\/infrastructure\/database\/(?:contexts\/|utils\/force-rls-tables)/,
+  /^src\/shared\/middlewares\/core\/auth\.middleware\.ts$/,
+  /^migrations\//,
+  /\.routes\.ts$/,
+  /^docs\/routes\.txt$/,
+];
+
+function gitIn(directory, args) {
+  const result = spawnSync("git", args, { cwd: directory, encoding: "utf8" });
+  return result.status === 0 ? result.stdout.trim() : "";
+}
+
+/** The directory a `git push` runs in: its `git -C <dir>`, else its last `cd <dir>`, else the session's. */
+function pushDirectory(scan) {
+  const base = payload.cwd || repositoryRoot;
+  const flag = /\bgit\s+-C\s+(\S+)[^;&|]*\bpush\b/.exec(scan)?.[1];
+  const changes = [...scan.matchAll(/(?:^|[;&|]\s*)cd\s+(\S+)/g)].map((match) => match[1]);
+  const target = flag ?? changes.pop();
+  return target ? resolve(base, target) : base;
+}
+
+/**
+ * Why a push needs the user's yes: it changes auth, RLS, billing, migrations or routes and no
+ * clean /be-pre-merge-review is recorded for HEAD — or "" when it does not. Fails open.
+ */
+function unreviewedSensitivePush(scan) {
+  const directory = pushDirectory(scan);
+  if (!(directory === repositoryRoot || directory.startsWith(`${repositoryRoot}/`))) return "";
+  const head = gitIn(repositoryRoot, ["rev-parse", "HEAD"]);
+  const gitDirectory = gitIn(repositoryRoot, ["rev-parse", "--absolute-git-dir"]);
+  if (!(head && gitDirectory)) return "";
+  if (existsSync(join(gitDirectory, "be-pre-merge-review", `${head}.clean`))) return "";
+  const upstream = gitIn(repositoryRoot, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+  const base = [upstream, "origin/main", "main"].find((ref) => ref && gitIn(repositoryRoot, ["merge-base", "HEAD", ref]));
+  if (!base) return "";
+  const changed = gitIn(repositoryRoot, ["diff", "--name-only", `${base}...HEAD`]).split("\n").filter(Boolean);
+  const sensitive = changed.filter((path) => REVIEWED_PUSH_PATHS.some((pattern) => pattern.test(path)));
+  if (sensitive.length === 0) return "";
+  const examples = sensitive.slice(0, 3).join(", ");
+  return (
+    `clinozy-be review gate: this push changes auth, RLS, billing, migrations or routes (${sensitive.length} file(s): ${examples}` +
+    `${sensitive.length > 3 ? ", …" : ""}) and /be-pre-merge-review has no clean result for HEAD ${head.slice(0, 7)}. ` +
+    "Run /be-pre-merge-review first (a clean review records itself with pnpm agent-os:review-clean), or confirm to push anyway."
+  );
+}
 
 function ask(reason) {
   recordTelemetry("guardrails", "PreToolUse", "fired");
@@ -127,6 +181,15 @@ if (tool === "Bash" && command) {
     deny(
       `Blocked by clinozy-be guardrail: ${why}. Command: "${command.slice(0, 160)}". If you truly intend this, run it yourself in a terminal.`,
     );
+  }
+  if (/\bgit\s+(?:-C\s+\S+\s+)?push\b/i.test(scan)) {
+    let reason = "";
+    try {
+      reason = unreviewedSensitivePush(scan);
+    } catch {
+      /* fail-open */
+    }
+    if (reason) ask(reason);
   }
   if (/\bgh\s+pr\s+create\b/.test(scan)) {
     ask(
