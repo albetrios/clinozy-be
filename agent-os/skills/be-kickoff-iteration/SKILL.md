@@ -66,7 +66,8 @@ pnpm iteration:intake <iteration> --check
 
 **Gate rule:** if it exits non-zero, stop now — write nothing, change no status, ask nothing else;
 print the command's output and end the turn. The intake has to be fixed (and the plan re-approved
-if it changed) before any build.
+if it changed) before any build. A lite fix with no drop placed (Drop placed `—`) has no intake to
+gate — the gate would only say "no intake yet" — so it is skipped; with a drop it runs.
 
 When it passes: `pnpm iteration:status <iteration> implementing` (a lite fix moves there straight
 from `planning`), and start `AS-BUILT.md` from the

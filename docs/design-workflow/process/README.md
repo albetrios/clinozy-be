@@ -83,7 +83,8 @@ credentials out of records. The user review contains the same concise informatio
   that the notes omit is a finding.
 - **The gate comes first.** Planning and kickoff run `pnpm iteration:intake <iteration> --check`
   before anything else and stop when it fails: a missing mandatory file or an Intake hash that no
-  longer matches goes back to whoever placed the drop.
+  longer matches goes back to whoever placed the drop. A lite fix with no drop has nothing to gate,
+  so both skip it there.
 - **Deviations are carried forward.** `AS-BUILT.md` › Standing deviations lists where the code
   differs from the drop; the next iteration copies it and plans against what was actually built.
 - **Baseline `none` unless the user names one.** Nothing suggests or asks for a Baseline; when the
