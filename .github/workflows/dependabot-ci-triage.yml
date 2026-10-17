@@ -4,7 +4,9 @@
 
 name: Dependabot CI triage
 
-on:
+# workflow_run never checks out or runs PR code here — it only opens an issue, with the run's
+# fields passed through env.
+on: # zizmor: ignore[dangerous-triggers]
   workflow_run:
     # Must match the `name:` of pr-ci.yml exactly — a stale name here means this
     # workflow never fires (it silently listens for a name that no longer exists).

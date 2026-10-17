@@ -68,7 +68,9 @@ describe('supply-chain attestations', () => {
       '--certificate-oidc-issuer https://token.actions.githubusercontent.com',
     );
     const deploy = releaseDeploy.slice(releaseDeploy.indexOf('\n  deploy:'));
-    expect(deploy).toContain('needs: [resolve, build-if-missing, docs, verify-supply-chain]');
+    expect(deploy).toContain(
+      'needs: [resolve, build-if-missing, docs, verify-supply-chain, probe-development-api]',
+    );
     expect(deploy).toContain("needs.verify-supply-chain.result == 'success'");
   });
 });

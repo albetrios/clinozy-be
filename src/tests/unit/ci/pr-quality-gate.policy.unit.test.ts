@@ -53,6 +53,7 @@ const REQUIRED_LANES = [
   'rls-security',
   'rls-application-role',
   'actionlint',
+  'workflow-security',
 ] as const;
 
 const EXPECTED_REQUIRED_CONTEXTS = ['Checks', 'Quality gate'];

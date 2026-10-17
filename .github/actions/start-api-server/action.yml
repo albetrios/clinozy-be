@@ -28,19 +28,28 @@ runs:
         DATABASE_CONNECTION_BUDGET_ENFORCED: 'false'
         REDIS_TLS_ENFORCED: 'false'
         TRUST_PROXY_REQUIRED: 'false'
+        # Inputs reach the script through env, never expanded into it (zizmor template-injection).
+        RATE_LIMIT_MAX: ${{ inputs.rate-limit-max }}
+        SERVER_LOG_FILE: ${{ inputs.log-file }}
       run: |
-        RATE_LIMIT_MAX=${{ inputs.rate-limit-max }} pnpm exec tsx src/server.ts > "${{ inputs.log-file }}" 2>&1 &
+        pnpm exec tsx src/server.ts > "$SERVER_LOG_FILE" 2>&1 &
         echo $! > server.pid
       shell: bash
 
     - name: Wait for server readiness
+      env:
+        READY_TIMEOUT_SECONDS: ${{ inputs.ready-timeout-seconds }}
+        SERVER_LOG_FILE: ${{ inputs.log-file }}
       run: |
-        deadline=$((SECONDS + ${{ inputs.ready-timeout-seconds }}))
+        case "$READY_TIMEOUT_SECONDS" in
+          '' | *[!0-9]*) echo "::error::ready-timeout-seconds must be a whole number"; exit 1 ;;
+        esac
+        deadline=$((SECONDS + READY_TIMEOUT_SECONDS))
         while [ "$SECONDS" -lt "$deadline" ]; do
           if [ -f server.pid ] && ! kill -0 "$(tr -d '\n' < server.pid)" 2>/dev/null; then
             echo "API server exited before readiness."
-            echo "--- ${{ inputs.log-file }} (tail 200) ---"
-            tail -n 200 "${{ inputs.log-file }}" || true
+            echo "--- ${SERVER_LOG_FILE} (tail 200) ---"
+            tail -n 200 "$SERVER_LOG_FILE" || true
             exit 1
           fi
 
@@ -57,8 +66,8 @@ runs:
           sleep 1
         done
 
-        echo "API server did not become ready within ${{ inputs.ready-timeout-seconds }} seconds."
-        echo "--- ${{ inputs.log-file }} (tail 200) ---"
-        tail -n 200 "${{ inputs.log-file }}" || true
+        echo "API server did not become ready within ${READY_TIMEOUT_SECONDS} seconds."
+        echo "--- ${SERVER_LOG_FILE} (tail 200) ---"
+        tail -n 200 "$SERVER_LOG_FILE" || true
         exit 1
       shell: bash

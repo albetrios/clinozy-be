@@ -219,9 +219,35 @@ jobs:
             echo "::notice title=Supply chain verified::${ref} — signature, CycloneDX SBOM and SLSA provenance"
           done
 
+  # Before the production deploy: the development API — the same image, deployed at merge —
+  # still answers with the right headers, CORS and TLS. Runs when the repository variable
+  # DEVELOPMENT_API_URL is set (the development API's public base URL); skipped otherwise.
+  probe-development-api:
+    name: Probe the development API
+    needs: [resolve]
+    if: vars.DEVELOPMENT_API_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Probe the development API (headers, CORS, TLS)
+        uses: ./.github/actions/probe-live-api
+        with:
+          base-url: ${{ vars.DEVELOPMENT_API_URL }}
+
   deploy:
     name: Deploy production
-    needs: [resolve, build-if-missing, docs, verify-supply-chain]
+    needs: [resolve, build-if-missing, docs, verify-supply-chain, probe-development-api]
     # Matches reusable-railway-deploy's `deploy` job (it pulls the GHCR image).
     # Same startup-failure rule as build-if-missing above.
     permissions:
@@ -231,7 +257,8 @@ jobs:
       always() &&
       (needs.build-if-missing.result == 'success' || needs.build-if-missing.result == 'skipped') &&
       needs.docs.result == 'success' &&
-      needs.verify-supply-chain.result == 'success'
+      needs.verify-supply-chain.result == 'success' &&
+      (needs.probe-development-api.result == 'success' || needs.probe-development-api.result == 'skipped')
     uses: ./.github/workflows/reusable-railway-deploy.yml
     secrets: inherit
     with:

@@ -1,8 +1,9 @@
 /**
  * The warn-only window of the early checks — the RLS policy lint, the route access diff, the
- * lockfile dependency audit at commit and Semgrep at push. Each starts warn-only and blocks from
- * {@link EARLY_CHECKS_BLOCK_FROM}; a finding judged wrong in the meantime goes into
- * {@link EARLY_CHECKS_FALSE_POSITIVE_LOG}, so the rule is tuned before it blocks.
+ * lockfile dependency audit at commit, Semgrep at push and the live API probe after a deploy.
+ * Each starts warn-only and blocks from {@link EARLY_CHECKS_BLOCK_FROM}; a finding judged wrong
+ * in the meantime goes into {@link EARLY_CHECKS_FALSE_POSITIVE_LOG}, so the rule is tuned before
+ * it blocks.
  */
 
 /** The first day (Asia/Calcutta) the early checks block instead of warning. */

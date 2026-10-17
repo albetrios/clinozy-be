@@ -77,6 +77,7 @@ Lanes currently rolled up (**authoritative source: `quality-gate.needs` in pr-ci
 | `rls-security` | RLS security (non-superuser) |
 | `rls-application-role` | RLS application role (whole connection) |
 | `actionlint` | Actionlint |
+| `workflow-security` | Workflow security (zizmor) |
 
 Post-merge Docker (Trivy + GHCR), SBOM, API docs, deploy, and release automation run from [post-merge-ci.yml](../../../.github/workflows/post-merge-ci.yml) when a PR merges (not required PR checks).
 

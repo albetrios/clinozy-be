@@ -31,9 +31,11 @@ jobs:
 
       - name: Resolve merge SHA
         id: target
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          branch="${{ github.ref_name }}"
+          branch="${REF_NAME}"
           case "$branch" in
             main) ;;
             *) branch="main" ;;

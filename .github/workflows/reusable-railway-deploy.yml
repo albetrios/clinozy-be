@@ -770,16 +770,28 @@ jobs:
           deploy_service_from_image "$RAILWAY_WORKER_SERVICE_ID" "$WORKER_IMAGE" "worker" "Worker started" "Worker failed to start"
           echo "Worker deployment reached terminal SUCCESS and its boot was verified (\"Worker started\" logged, no crash marker, status held SUCCESS through the boot window)."
 
+      # /readyz and the surface probe above prove the API boots and answers; this checks what a
+      # browser sees from outside — HSTS, CSP, nosniff, CORS for an untrusted and an allowed
+      # origin, TLS protocol and certificate.
+      - name: Probe the live API (headers, CORS, TLS)
+        if: success()
+        uses: ./.github/actions/probe-live-api
+        with:
+          base-url: ${{ steps.api_health.outputs.api_base_url }}
+          allowed-origins: ${{ vars.ALLOWED_ORIGINS }}
+
       - name: Rotate production live-image tags (:current / :previous)
         if: success() && needs.resolve-environment.outputs.environment == 'production'
         env:
           API_IMAGE: ${{ steps.ghcr_images.outputs.api_image }}
           WORKER_IMAGE: ${{ steps.ghcr_images.outputs.worker_image }}
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_ACTOR: ${{ github.actor }}
         # :previous must be the release BEFORE the live one — rollback-deploy.yml redeploys it.
         # Tagging the just-deployed image as :previous made a rollback redeploy the bad release.
         run: |
           set -euo pipefail
-          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_ACTOR" --password-stdin
           bash tooling/ci/rotate-live-image-tags.sh "${API_IMAGE}" "${WORKER_IMAGE}"
 
       - name: Download the API docs generated for this release
@@ -806,9 +818,11 @@ jobs:
         env:
           API_IMAGE: ${{ steps.ghcr_images.outputs.api_image }}
           WORKER_IMAGE: ${{ steps.ghcr_images.outputs.worker_image }}
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_ACTOR: ${{ github.actor }}
         run: |
           set -euo pipefail
-          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin || exit 0
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_ACTOR" --password-stdin || exit 0
           API_BASE="${API_IMAGE%:*}"
           WORKER_BASE="${WORKER_IMAGE%:*}"
           SHA_TAG="${API_IMAGE##*:}"

@@ -31,7 +31,9 @@ runs:
         ALLOWED_ORIGINS_INPUT: ${{ inputs.allowed-origins }}
         RATE_LIMIT_MAX_INPUT: ${{ inputs.rate-limit-max }}
         RATE_LIMIT_WINDOW_MS_INPUT: ${{ inputs.rate-limit-window-ms }}
-      run: |
+      # Writing GITHUB_ENV is this action's job (the shared test env); the inputs are fixed values
+      # from this repository's workflows, never PR data.
+      run: | # zizmor: ignore[github-env]
         set -euo pipefail
 
         {

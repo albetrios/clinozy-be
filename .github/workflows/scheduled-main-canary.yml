@@ -57,10 +57,32 @@ jobs:
       - name: Run static quality slice
         run: pnpm ci:quality
 
+  # The daily dependency audit in its own lane: a new advisory against the production tree reads as
+  # what it is, not as merge skew inside ci:quality (which also starts with it).
+  dependency-audit:
+    name: Dependency audit (production tree)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Audit the production tree (blocking)
+        run: pnpm deps:audit:prod
+
+      - name: Audit the full tree (report-only)
+        if: always()
+        run: pnpm deps:audit:report
+
   resolve-success:
     name: Close ci-failure issue
-    needs: [quality]
-    if: always() && needs.quality.result == 'success'
+    needs: [quality, dependency-audit]
+    if: always() && needs.quality.result == 'success' && needs.dependency-audit.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -86,7 +108,7 @@ jobs:
 
   notify-failure:
     name: Notify failure
-    needs: [quality]
+    needs: [quality, dependency-audit]
     if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -108,9 +130,12 @@ jobs:
           mode: open
           title: Main quality canary failing
           body: |
-            `pnpm ci:quality` is red on the current main tree — usually merge skew:
-            two green PRs whose combined tree was never tested together (strict
-            up-to-date is intentionally off).
+            A nightly lane is red on the current main tree (the run's summary names it):
+
+            - **ci:quality** — usually merge skew: two green PRs whose combined tree was never
+              tested together (strict up-to-date is intentionally off).
+            - **Dependency audit (production tree)** — `pnpm deps:audit:prod` found an advisory:
+              fix it with an `overrides` entry in `pnpm-workspace.yaml` (be-dependency-security).
 
             Reproduce locally on main: `pnpm ci:quality` (or `pnpm health` for a full PASS/FAIL table).
             Fix forward with a short-lived branch + PR; close this issue once the canary is green.

@@ -2524,6 +2524,7 @@ src/
     │   ├── db-sequences-advance.ts
     │   ├── memory-soak.ts
     │   ├── next-migration-prefix.ts
+    │   ├── probe-live-api.ts
     │   ├── process-tree.util.ts
     │   ├── route-coverage-audit.ts
     │   ├── secrets-key-rotate.ts
@@ -3450,6 +3451,7 @@ src/
     │   │   ├── lint-migrations-rollback.unit.test.ts
     │   │   ├── lint-migrations-row-security-guc.unit.test.ts
     │   │   ├── lint-migrations-timestamp.unit.test.ts
+    │   │   ├── probe-live-api.unit.test.ts
     │   │   ├── process-tree.util.unit.test.ts
     │   │   ├── route-catalog-registry.unit.test.ts
     │   │   ├── route-http-coverage-validation.unit.test.ts

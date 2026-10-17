@@ -89,6 +89,7 @@ All jobs run **in parallel** (~2–3 min target). Caching: `actions/setup-node` 
 | **Security secrets** | gitleaks full-history scan |
 | **Security SAST** | semgrep |
 | **Contract + property** | `pnpm test:contract`, `pnpm test:property` |
+| **Workflow security** | on `.github/**` changes: zizmor 1.30.1 (`--min-severity high`) — template injection, dangerous triggers, `GITHUB_ENV` writes, broad permissions; a meant finding carries `# zizmor: ignore[<audit>]` with its reason |
 
 ### Post-merge lane ([post-merge-ci.yml](../../../.github/workflows/post-merge-ci.yml))
 
@@ -102,7 +103,7 @@ Runs when a PR **merges** into `main` (or manual dispatch). Does **not** re-run 
 | **API docs** | parallel | `src-code` or openapi paths | `pnpm docs:all`, Postman + Scalar publish |
 | **Release Please** | after Docker | Every merge | Opens/updates release PR; may publish GitHub Release |
 | **Release SBOM** | after SBOM + Release Please | Release Please published a release | Downloads `sbom` artifact and attaches it to the GitHub Release |
-| **Deploy** | last | Docker green + gates green | Reusable [reusable-railway-deploy.yml](../../../.github/workflows/reusable-railway-deploy.yml) → resolve env → migrate → seed reference data → **pin Railway service to fresh GHCR image + new deployment** (`pnpm tool:railway-deploy-image`: terminal SUCCESS **+ boot verification** from the container logs) → API `/readyz` → worker deployment SUCCESS + boot verification (`Worker started` logged, no crash marker) → **`pnpm test:api-smoke`** → **fully live** |
+| **Deploy** | last | Docker green + gates green | Reusable [reusable-railway-deploy.yml](../../../.github/workflows/reusable-railway-deploy.yml) → resolve env → migrate → seed reference data → **pin Railway service to fresh GHCR image + new deployment** (`pnpm tool:railway-deploy-image`: terminal SUCCESS **+ boot verification** from the container logs) → API `/readyz` + surface probe → **live probe** (`.github/actions/probe-live-api`: HSTS, CSP, nosniff, CORS for an untrusted and the allowed origin, TLS protocol and certificate days; warn-only until 2026-10-31) → worker deployment SUCCESS + boot verification (`Worker started` logged, no crash marker) → **`pnpm test:api-smoke`** → **fully live** |
 
 **Local-only (not in CI):** `pnpm test:integration`, `pnpm test:chaos` — run before pushing when touching DB/worker paths.
 

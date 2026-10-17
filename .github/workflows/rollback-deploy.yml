@@ -33,9 +33,9 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
 
+# Least privilege: only the rollback job (it pulls and retags GHCR images) writes packages.
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: rollback-deploy-${{ inputs.target }}
@@ -64,6 +64,9 @@ jobs:
   rollback:
     name: Rollback (${{ inputs.target }})
     needs: resolve-image
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/reusable-railway-deploy.yml
     secrets: inherit
     with:
