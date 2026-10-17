@@ -41,6 +41,14 @@ referenced `.sh` script exists and that hook commands use `$CLAUDE_PROJECT_DIR`
   sessions (web-only work like tool installs is gated on `CLAUDE_CODE_REMOTE`). (The
   formatter, the gate hint, the PR guard, the prompt router, the stop reminder, and
   the subagent reminder are Claude-only.)
+- **Claude Code, several repositories in one session** — a web session that holds
+  clinozy-be and clinozy-fe runs from their parent (`/home/user`) and takes hooks only
+  from `/home/user/.claude/settings.json`. `pnpm agent-os:session-hooks`
+  ([`tooling/agent-os/session-hooks.ts`](../../tooling/agent-os/session-hooks.ts), run by
+  the cloud bootstrap) writes every repository's hooks there with absolute paths and
+  `CLAUDE_PROJECT_DIR="<repository>"` in front of each command; it is a no-op in a
+  single-repository checkout. Canary: the SessionStart context names the root the hooks
+  ran from (`clinozy-be session ready (hooks from …)`).
 - **Cursor** — `.cursor/hooks.json` (symlink to the generated
   `agent-os/platforms/cursor/hooks.json`) → `beforeShellExecution` (shell guard),
   `afterFileEdit` (edit guard, advisory), `beforeReadFile` (secrets-read block),
@@ -69,6 +77,11 @@ referenced `.sh` script exists and that hook commands use `$CLAUDE_PROJECT_DIR`
   high-confidence violations.
 - **Portable.** Commands use `$CLAUDE_PROJECT_DIR`, never an absolute home path
   (enforced by `pnpm agent-os:check`).
+- **Own files only.** In a session that holds several repositories every repository's
+  hooks see every edit, so the convention rules (`guard-edits.sh` R1–R4, the
+  `guardrails.mjs` warnings, `skill-reminder.sh`, `large-read-nudge.sh` reads,
+  `format-edits.sh`) act only on files under `$CLAUDE_PROJECT_DIR`. The safety rules —
+  secrets, destructive shell, the R5 ask on hook wiring — cover every path.
 - **Reminder vs fix vs escalate vs block.** `skill-reminder.sh` /
   `gate-failure-hint.sh` / `prompt-skill-router.sh` / `stop-gate-reminder.sh` nudge
   (context only, never block); `format-edits.sh` silently fixes formatting

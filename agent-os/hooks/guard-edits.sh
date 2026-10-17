@@ -47,12 +47,6 @@ ask() {
   exit 0
 }
 
-# R3 — generated / do-not-edit files (change the source + run the generator instead).
-case "$FILE" in
-  *pnpm-lock.yaml | *docs/routes.txt | *docs/openapi/openapi*.json | *docs/postman-collection.json | *project-identity.constants.ts | *docs/database/clinozy-be.dbml | *.codex/hooks.json | *agent-os/platforms/codex/hooks.json)
-    deny "'$base' is generated — do not hand-edit it. Change the source and run the generator (see agent-os/docs/skill-triggers.md / CLAUDE.md)." ;;
-esac
-
 # R5 — config self-protection: the enforcement wiring (hook manifest, platform
 # hook configs, capability registry, guard scripts) must not be silently
 # rewritten by a session — a compromised or confused agent could disarm every
@@ -61,6 +55,21 @@ esac
 case "$FILE" in
   *agent-os/hooks/hooks.json | *agent-os/platforms/targets.json | *agent-os/platforms/claude/settings.json | *.claude/settings.json | *.claude/settings.local.json | *.cursor/hooks.json | *agent-os/platforms/cursor/hooks.json | *agent-os/hooks/guard-edits.sh | *agent-os/hooks/guardrails.mjs | *agent-os/hooks/cursor-shell-guard.mjs | *agent-os/hooks/cursor-edit-guard.mjs | *agent-os/hooks/cursor-read-guard.mjs | *agent-os/hooks/cursor-mcp-guard.mjs | *agent-os/hooks/injection-scan.mjs)
     ask "'$base' is part of the agent-guard enforcement wiring. Confirm this change is user-requested — hooks/guards must never be weakened or disabled without explicit approval (agent-os/hooks/README.md)." ;;
+esac
+
+# The rules below are clinozy-be's conventions, so they judge only files in this repository.
+# A session that holds several repositories runs every repository's hooks on every edit
+# (tooling/agent-os/session-hooks.ts); another repository's files are its own hooks' to judge.
+ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+case "$FILE" in
+  "$ROOT"/* | [!/]*) ;; # under this repository, or relative to it
+  *) exit 0 ;;
+esac
+
+# R3 — generated / do-not-edit files (change the source + run the generator instead).
+case "$FILE" in
+  *pnpm-lock.yaml | *docs/routes.txt | *docs/openapi/openapi*.json | *docs/postman-collection.json | *project-identity.constants.ts | *docs/database/clinozy-be.dbml | *.codex/hooks.json | *agent-os/platforms/codex/hooks.json)
+    deny "'$base' is generated — do not hand-edit it. Change the source and run the generator (see agent-os/docs/skill-triggers.md / CLAUDE.md)." ;;
 esac
 
 # R1 — workers/processors must not call getRequestDatabase() (it returns the GUC-less pool and

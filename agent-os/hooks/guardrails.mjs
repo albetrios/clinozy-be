@@ -7,6 +7,8 @@
 // Reads the PreToolUse payload on stdin. Fail-open by design: any parse/read
 // error allows the tool (exit 0) so a guardrail bug can never brick the agent.
 import { readFileSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { recordTelemetry } from "./_telemetry.mjs";
 
 let raw = "";
@@ -28,6 +30,12 @@ const input = payload.tool_input || {};
 const filePath = input.file_path || input.path || "";
 const command = input.command || "";
 const content = [input.content, input.new_string].filter(Boolean).join("\n");
+
+// The WARN rules are clinozy-be's conventions, so they judge only files in this repository; the
+// BLOCK rules (destructive shell, secrets) guard every path. A session that holds several
+// repositories runs every repository's hooks on every call (tooling/agent-os/session-hooks.ts).
+const repositoryRoot = process.env.CLAUDE_PROJECT_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const inRepository = !isAbsolute(filePath) || filePath.startsWith(`${repositoryRoot}/`);
 
 const warnings = [];
 
@@ -127,7 +135,7 @@ if ((tool === "Write" || tool === "Edit") && content && secretPatterns.some((re)
 }
 
 // --- WARN: protected paths ---------------------------------------------------
-if ((tool === "Write" || tool === "Edit") && filePath) {
+if ((tool === "Write" || tool === "Edit") && filePath && inRepository) {
   if (/(^|\/)migrations\/.+\.sql$/.test(filePath)) {
     warnings.push(
       `editing a migration (${filePath}) — applied migrations are immutable; add a NEW migration instead. Run pnpm db:migrate:lint.`,
@@ -143,6 +151,7 @@ if ((tool === "Write" || tool === "Edit") && filePath) {
 // e.g. an example backup — and steers local backups into the gitignored .backups/.)
 if (
   (tool === "Write" || tool === "Edit") &&
+  inRepository &&
   /(^|\/)\.?env[\w.-]*(bak|backup)[\w.-]*$/i.test(filePath) &&
   !filePath.includes("/.backups/")
 ) {
@@ -152,7 +161,7 @@ if (
 }
 
 // --- WARN: cross-domain imports in a service ---------------------------------
-if ((tool === "Write" || tool === "Edit") && /src\/domains\/[^/]+\/.*\.service\.ts$/.test(filePath) && content) {
+if ((tool === "Write" || tool === "Edit") && inRepository && /src\/domains\/[^/]+\/.*\.service\.ts$/.test(filePath) && content) {
   const own = (filePath.match(/src\/domains\/([^/]+)\//) || [])[1] || "";
   const importRe = /@\/domains\/([^/]+)\/[^'"]*\.(repository|schema)(?:\.js)?['"]/g;
   const offenders = new Set();

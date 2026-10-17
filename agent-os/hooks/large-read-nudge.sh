@@ -27,7 +27,9 @@ case "$TOOL" in
   Read)
     file=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || echo "")
     has_limit=$(printf '%s' "$INPUT" | jq -r '.tool_input | (has("limit") or has("offset"))' 2>/dev/null || echo "true")
-    # Whole-file read (no offset/limit) of a large file → nudge.
+    # Whole-file read (no offset/limit) of a large file in this repository → nudge. Another
+    # repository in the same session (tooling/agent-os/session-hooks.ts) runs its own hooks.
+    case "$file" in "$ROOT"/* | [!/]*) ;; *) file="" ;; esac
     if [[ -n "$file" && "$has_limit" == "false" && -f "$file" ]]; then
       size=$(wc -c <"$file" 2>/dev/null | tr -d ' ' || echo 0)
       if [[ "$size" -gt "$LARGE_FILE_BYTES" ]]; then

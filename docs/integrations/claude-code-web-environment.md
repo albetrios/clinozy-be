@@ -92,6 +92,25 @@ bash /home/user/clinozy-fe/agent-os/cloud-environment/install.sh
 clinozy-fe's script also builds its codegraph index; the first build takes about 2–3 minutes, later
 runs only sync it.
 
+Both scripts also register the session's hooks (`pnpm agent-os:session-hooks`,
+[`tooling/agent-os/session-hooks.ts`](../../tooling/agent-os/session-hooks.ts)). A session that holds
+both repos runs from `/home/user`, so it takes hooks from `/home/user/.claude/settings.json`, never from
+a repo's own `.claude/settings.json`. The script writes there every hook of both repos, with absolute
+paths and `CLAUDE_PROJECT_DIR` set to the hook's own repo. It keeps any other hook in that file and
+backs the file up to `settings.json.bak` before a change. `AGENT_SESSION_HOOKS=0` turns it off, and
+`--dry-run` prints the file without writing it. In a single-repo checkout it writes nothing.
+
+- **Each repo's hooks judge only its own files.** clinozy-be's import, `NODE_ENV` and generated-file
+  rules and clinozy-fe's Prettier pass never touch the other repo. The secret and destructive-command
+  guards, and the ask on edits to hook wiring, still cover every path.
+- **Check it in a new session (canary).** The session context has one "session ready" line per repo,
+  each naming the root its hooks ran from (`clinozy-be session ready (hooks from /home/user/clinozy-be)`).
+  `grep session-start /home/user/clinozy-*/agent-os/hooks/.telemetry.log` shows one row per repo.
+  Whether a cloud session reads `/home/user/.claude/settings.json` is not documented, which is why
+  the canary exists.
+- **The live stack starts too.** Once hooks load, a two-repo session brings the stack up in the
+  background like a single-repo one; `AGENT_AUTO_STACK=0` turns that off.
+
 On the first session the cached Node 24 is already on disk, [`session-start.sh`](../../agent-os/hooks/session-start.sh) switches `PATH` to `/opt/node24`, and runs `pnpm install`. Do **not** start Postgres / Redis here — setup-script processes do not persist; start them per session (below).
 
 **GitHub CLI (optional).** [`install-gh.sh`](../../tooling/setup/agent/install-gh.sh) adds `gh` as an in-session fallback for reading Actions logs, checking CI, and merging (the GitHub MCP tools already cover this). It belongs in the cached **setup script**, not `session-start.sh` — a per-session `apt install` would not cache and would slow every startup. Set `GH_TOKEN` in the environment's **Variables** (least-privilege: `contents` + `pull_requests` + `actions:read`; env vars are not a secrets store). The script first installs the **github.com release binary** (reachable on the default Trusted allowlist, so no extra allowlist entry is normally needed); its `cli.github.com` apt-repo path is only a last resort.

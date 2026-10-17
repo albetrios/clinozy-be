@@ -177,10 +177,14 @@ if [ "${reset_database}" = 0 ]; then
   bash "${AGENT_DIR}/install-codegraph.sh" || true
   if command -v codegraph >/dev/null 2>&1; then ok "[5/${TOTAL}] codegraph $(codegraph --version 2>/dev/null)"; else skip "[5/${TOTAL}] codegraph unavailable (non-fatal)"; fi
 
-  # 6) Headroom CLI + the default MCP pair (context compression) --------------
-  step "[6/${TOTAL}] Headroom CLI + default MCP pair"
+  # 6) Headroom CLI + the default MCP pair (context compression) + session hooks -----
+  # A session that holds several repositories reads hooks only from the parent directory's
+  # .claude/settings.json; agent-os:session-hooks writes every repository's there (a no-op in
+  # a single-repository checkout).
+  step "[6/${TOTAL}] Headroom CLI + default MCP pair + session hooks"
   bash "${AGENT_DIR}/install-headroom.sh" || true
   pnpm mcp:setup:default >&2 || skip "mcp:setup:default failed (non-fatal)"
+  pnpm agent-os:session-hooks >&2 || skip "agent-os:session-hooks failed (non-fatal)"
   if command -v headroom >/dev/null 2>&1; then ok "[6/${TOTAL}] headroom $(headroom --version 2>/dev/null)"; else skip "[6/${TOTAL}] headroom unavailable (non-fatal)"; fi
 
   # 7) gitleaks (pre-commit secret scan) + semgrep (security:sast) + k6 (load:*) --

@@ -44,6 +44,8 @@ interface GuardCase {
 const removedNodeEnvAssignment = ['NODE_ENV', "'test'"].join(' = ');
 const fakeAwsAccessKeyId = ['AKIA', 'ABCDEFGHIJKLMNOP'].join('');
 const secretEnvPath = ['.env', 'production'].join('.');
+// A file in another repository of the same session (a sibling of the scratch root, not under it).
+const siblingPath = (relativePath: string) => join(`${scratchRoot}-sibling`, relativePath);
 
 const cases: GuardCase[] = [
   // ── guard-edits.sh (Claude PreToolUse: Edit|Write) ──
@@ -111,6 +113,21 @@ const cases: GuardCase[] = [
     expect: 'silent',
   },
 
+  {
+    name: "repository scope: another repository's file is not judged",
+    script: 'guard-edits.sh',
+    runtime: 'bash',
+    payload: { tool_input: { file_path: siblingPath('src/pages/x/X.tsx'), new_string: "import { a } from '../a.ts'" } },
+    expect: 'silent',
+  },
+  {
+    name: 'repository scope: an absolute path in this repository is still judged',
+    script: 'guard-edits.sh',
+    runtime: 'bash',
+    payload: { tool_input: { file_path: join(scratchRoot, 'src/domains/x/x.service.ts'), new_string: "import { a } from '../a.js'" } },
+    expect: 'deny',
+  },
+
   // ── guardrails.mjs (Claude PreToolUse: Bash|Edit|Write) ──
   {
     name: 'destructive shell rm -rf is denied',
@@ -173,6 +190,37 @@ const cases: GuardCase[] = [
       },
     },
     expect: 'warn',
+  },
+
+  {
+    name: "repository scope: another repository's migration gets no warning",
+    script: 'guardrails.mjs',
+    runtime: 'node',
+    payload: { tool_name: 'Edit', tool_input: { file_path: siblingPath('migrations/x.sql'), new_string: 'ALTER TABLE x' } },
+    expect: 'silent',
+  },
+  {
+    name: 'repository scope: live-credential content is denied in another repository too',
+    script: 'guardrails.mjs',
+    runtime: 'node',
+    payload: { tool_name: 'Write', tool_input: { file_path: siblingPath('src/config.ts'), content: `const key = "${fakeAwsAccessKeyId}";` } },
+    expect: 'deny',
+  },
+
+  // ── skill-reminder.sh (Claude PostToolUse: Edit|Write) ──
+  {
+    name: 'skill reminder names the skills for a routes file',
+    script: 'skill-reminder.sh',
+    runtime: 'bash',
+    payload: { tool_input: { file_path: 'src/domains/x/x.routes.ts' } },
+    expect: 'context',
+  },
+  {
+    name: "repository scope: no skill reminder for another repository's file",
+    script: 'skill-reminder.sh',
+    runtime: 'bash',
+    payload: { tool_input: { file_path: siblingPath('src/domains/x/x.routes.ts') } },
+    expect: 'silent',
   },
 
   // ── injection-scan.mjs (Claude PostToolUse: WebFetch|WebSearch|mcp__*) ──

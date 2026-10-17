@@ -243,6 +243,9 @@ if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
 fi
 
 # --- Build session context: skill routing map + env/commands summary --------
+# The first line names the repository root the hooks ran from: the canary that shows this
+# repository's hooks loaded (with telemetry's `session-start` row in agent-os/hooks/.telemetry.log),
+# including in a session that holds several repositories (tooling/agent-os/session-hooks.ts).
 node_version="$(node -v 2>/dev/null || echo unknown)"
 deps="missing"; [ -x node_modules/.bin/biome ] && deps="installed"
 codegraph="absent"; [ -f .codegraph/codegraph.db ] && codegraph="present"
@@ -256,8 +259,8 @@ map_file="$ROOT/agent-os/docs/skill-triggers.md"
 map_section=""
 [ -f "$map_file" ] && map_section="$(cat "$map_file")"
 
-context="$(printf 'clinozy-be session ready — environment provisioned: %s.\n- Node %s (need >=%s) · deps %s · gh %s · codegraph %s · mcp %s · gitleaks %s · tools %s · agent-os %s · docker %s%s%s\n- Stack: %s\n- Web sessions go fully live on their own: bootstrap.sh (setup → Postgres + Redis → migrate → demo seed → API :3000 + worker :9090, kept running). Before any database/API work, wait until pnpm dev:stack:status says live. Opt out per environment: AGENT_AUTO_STACK=0.\n- Gates: pnpm validate · pnpm ci:local   (pre-commit: pnpm guard:pre-commit)\n- Custom commands: /be-validate · /be-ci-local · /be-new-domain · /be-routes-sync\n\nagent-os skill routing — consult be-skill-index FIRST, then run the listed skill(s) for the files you change:\n\n%s' \
-  "$provisioned" "$node_version" "$required_major" "$deps" "$gh_cli" "$codegraph" "$mcp_status" "$gitleaks_status" "$tools_status" "$agent_os_status" "$docker_status" "$node_note" "$hook_health" "$stack_status" "$map_section")"
+context="$(printf 'clinozy-be session ready (hooks from %s) — environment provisioned: %s.\n- Node %s (need >=%s) · deps %s · gh %s · codegraph %s · mcp %s · gitleaks %s · tools %s · agent-os %s · docker %s%s%s\n- Stack: %s\n- Web sessions go fully live on their own: bootstrap.sh (setup → Postgres + Redis → migrate → demo seed → API :3000 + worker :9090, kept running). Before any database/API work, wait until pnpm dev:stack:status says live. Opt out per environment: AGENT_AUTO_STACK=0.\n- Gates: pnpm validate · pnpm ci:local   (pre-commit: pnpm guard:pre-commit)\n- Custom commands: /be-validate · /be-ci-local · /be-new-domain · /be-routes-sync\n\nagent-os skill routing — consult be-skill-index FIRST, then run the listed skill(s) for the files you change:\n\n%s' \
+  "$ROOT" "$provisioned" "$node_version" "$required_major" "$deps" "$gh_cli" "$codegraph" "$mcp_status" "$gitleaks_status" "$tools_status" "$agent_os_status" "$docker_status" "$node_note" "$hook_health" "$stack_status" "$map_section")"
 
 # Prefer the structured additionalContext envelope; fall back to plain stdout
 # (also injected as context) when jq is unavailable. Fail-open either way.

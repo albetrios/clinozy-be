@@ -171,6 +171,7 @@
     "agent-os:lock": "tsx tooling/agent-os/skills-lock.ts --write",
     "agent-os:lock:check": "tsx tooling/agent-os/skills-lock.ts --check",
     "agent-os:hooks:report": "tsx tooling/agent-os/hooks-telemetry.ts",
+    "agent-os:session-hooks": "tsx tooling/agent-os/session-hooks.ts",
     "agent-os:outcomes": "tsx agent-os/evals/outcome-eval.ts",
     "agent-os:outcomes:live": "tsx agent-os/evals/outcome-eval.ts --live",
     "agent-os:guards": "tsx agent-os/evals/guard-eval.ts",
