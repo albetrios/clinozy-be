@@ -215,9 +215,9 @@ export interface IterationListing {
   readonly baseline: string;
   readonly status: string;
   readonly intakeMode: string;
-  /** Live fingerprint of `intake-files/schema-routes.md` ({@link schemaRoutesHash}). */
+  /** Live fingerprint of the resolved snapshot's `schema-routes.md` ({@link schemaRoutesHash}). */
   readonly schemaRoutes: string;
-  /** Live {@link intakeHash}; `<live> ≠ README <recorded>` when it differs from the README's. */
+  /** Live hash of the resolved snapshot; `<live> ≠ README <recorded>` when it differs from the README's. */
   readonly intakeHash: string;
   readonly dropPlaced: string;
 }
@@ -638,23 +638,18 @@ export function readAllIterationFields(
 }
 
 /**
- * Lists the required intake files an iteration's `intake-files/` lacks — empty when complete.
+ * Lists the required intake files an iteration's resolved snapshot lacks — empty when complete.
  *
  * @remarks
- * An incremental iteration's delta is a diff of `intake-files/` against its Baseline's, so a
- * Baseline is usable only when this is empty.
+ * An incremental iteration's delta is a diff of its snapshot against its Baseline's, so a
+ * Baseline is usable only when this is empty ({@link resolveIntakeSnapshot}).
  */
 export function missingIntakeFiles(location: {
   readonly repositoryRoot: string;
   readonly iteration: string;
 }): string[] {
-  const folder = join(
-    location.repositoryRoot,
-    ITERATIONS_DIRECTORY,
-    location.iteration,
-    INTAKE_DIRECTORY,
-  );
-  return REQUIRED_INTAKE_FILES.filter((name) => !existsSync(join(folder, name)));
+  const { files } = resolveIntakeSnapshot(location);
+  return REQUIRED_INTAKE_FILES.filter((name) => !files.has(name));
 }
 
 /**
@@ -738,19 +733,148 @@ export function recordedIntakeMode(fields: ReadonlyMap<string, string>): IntakeM
 }
 
 /**
+ * Intake modes whose `intake-files/` stores only what arrived — an overlay's received files, a
+ * brief's `BRIEF.md` — and takes everything else from the Baseline ({@link resolveIntakeSnapshot}).
+ */
+export const LAYERED_INTAKE_MODES: ReadonlySet<IntakeMode> = new Set<IntakeMode>([
+  'overlay',
+  'brief',
+]);
+
+/** An iteration's snapshot, resolved up its Baseline chain ({@link resolveIntakeSnapshot}). */
+export interface ResolvedIntake {
+  /** File name → the path that holds it: the iteration's own file, or a Baseline's. */
+  readonly files: ReadonlyMap<string, string>;
+  /** The files in the iteration's own `intake-files/`. */
+  readonly stored: readonly string[];
+  readonly mode: IntakeMode;
+  /** The iteration the files it does not store come from; undefined for `full` or from scratch. */
+  readonly baseline: string | undefined;
+  /** A brief from scratch (Baseline `none`): its own files are the whole snapshot. */
+  readonly standalone: boolean;
+  /** Why the chain cannot be resolved — then `files` holds the stored files only. */
+  readonly problem: string | undefined;
+}
+
+function intakeFolderOf(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): string {
+  return join(location.repositoryRoot, ITERATIONS_DIRECTORY, location.iteration, INTAKE_DIRECTORY);
+}
+
+/**
+ * Resolves an iteration's snapshot: file name → the path that holds it.
+ *
+ * @remarks
+ * A `full` intake is its own `intake-files/`, and so is a `brief` from scratch (Baseline `none`).
+ * An `overlay`, or a `brief` on a named Baseline, stores only what arrived, so its snapshot is its
+ * Baseline's resolved snapshot (up the Baseline chain) with its own files laid over it. An intake
+ * that still stores copies of its Baseline's files resolves to the same snapshot (`--compact`
+ * removes the copies). Every reader of a snapshot — the gate, the Intake hash, `iteration:diff`,
+ * `iteration:list`, the Baseline checks — goes through here, as in clinozy-fe.
+ *
+ * Failure modes: never throws; a chain that loops, reaches an iteration without a README or an
+ * intake, or a layered intake without a Baseline is reported in `problem`.
+ */
+export function resolveIntakeSnapshot(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): ResolvedIntake {
+  const { repositoryRoot } = location;
+  const visited: string[] = [];
+  const layers: { folder: string; stored: string[]; mode: IntakeMode; baseline: string }[] = [];
+  let current: string | undefined = location.iteration;
+  let problem: string | undefined;
+  while (current !== undefined) {
+    const folder = intakeFolderOf({ repositoryRoot, iteration: current });
+    const stored = flatFileNames(folder);
+    const readmePath = join(repositoryRoot, ITERATIONS_DIRECTORY, current, 'README.md');
+    const fields = existsSync(readmePath)
+      ? parseIterationReadme(readFileSync(readmePath, 'utf-8'))
+      : new Map<string, string>();
+    const mode = recordedIntakeMode(fields);
+    if (visited.length > 0 && stored.length === 0) {
+      problem = `its Baseline chain reaches ${current}, which has no intake`;
+      break;
+    }
+    visited.push(current);
+    const baseline = fields.get('Baseline') ?? EMPTY_FIELD;
+    layers.push({ folder, stored, mode, baseline });
+    if (!LAYERED_INTAKE_MODES.has(mode) || stored.length === 0) break;
+    if (mode === 'brief' && baseline === NO_BASELINE) break;
+    if (baseline === NO_BASELINE || baseline === EMPTY_FIELD) {
+      problem = `${current} is a ${mode} intake with Baseline ${baseline}, so the files it does not store have nowhere to come from`;
+      break;
+    }
+    if (visited.includes(baseline)) {
+      problem = `its Baseline chain loops: ${[...visited, baseline].join(' → ')}`;
+      break;
+    }
+    if (
+      parseIterationName(baseline) === undefined ||
+      !existsSync(join(repositoryRoot, ITERATIONS_DIRECTORY, baseline, 'README.md'))
+    ) {
+      problem = `its Baseline chain reaches ${baseline}, which is not an iteration with a README`;
+      break;
+    }
+    current = baseline;
+  }
+  const own = layers[0] ?? {
+    folder: '',
+    stored: [],
+    mode: DEFAULT_INTAKE_MODE,
+    baseline: EMPTY_FIELD,
+  };
+  const standalone = own.mode === 'brief' && own.baseline === NO_BASELINE;
+  const files = new Map<string, string>();
+  for (const layer of problem === undefined ? [...layers].reverse() : [own]) {
+    for (const name of layer.stored) files.set(name, join(layer.folder, name));
+  }
+  return {
+    files,
+    stored: own.stored,
+    mode: own.mode,
+    baseline: LAYERED_INTAKE_MODES.has(own.mode) && !standalone ? own.baseline : undefined,
+    standalone,
+    problem,
+  };
+}
+
+/** An iteration's resolved snapshot ({@link resolveIntakeSnapshot}) read into file name → bytes. */
+export function readResolvedSnapshot(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): ReadonlyMap<string, Buffer> {
+  return new Map(
+    [...resolveIntakeSnapshot(location).files].map(([name, path]) => [name, readFileSync(path)]),
+  );
+}
+
+/** The Intake hash of an iteration's resolved snapshot ({@link snapshotFingerprint}). */
+export function resolvedIntakeHash(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): string {
+  return snapshotFingerprint(readResolvedSnapshot(location));
+}
+
+/**
  * Checks a backend snapshot against the mandatory set: {@link REQUIRED_INTAKE_FILES}, plus
- * `BRIEF.md` in `brief` mode. {@link OPTIONAL_INTAKE_FILES} are allowed; anything else is an extra.
+ * `BRIEF.md` in `brief` mode — or `BRIEF.md` alone for a brief from scratch (`standalone`).
+ * {@link OPTIONAL_INTAKE_FILES} are allowed; anything else is an extra.
  */
 export function checkIntakeSet(snapshot: {
   readonly names: readonly string[];
   readonly mode?: IntakeMode;
+  readonly standalone?: boolean;
 }): { readonly missing: string[]; readonly extras: string[] } {
   const present = new Set(snapshot.names);
-  const required: string[] = [
-    ...REQUIRED_INTAKE_FILES,
-    ...(snapshot.mode === 'brief' ? [BRIEF_FILE] : []),
-  ];
-  const known = new Set<string>([...required, ...OPTIONAL_INTAKE_FILES]);
+  const standalone = snapshot.mode === 'brief' && snapshot.standalone === true;
+  const required: string[] = standalone
+    ? [BRIEF_FILE]
+    : [...REQUIRED_INTAKE_FILES, ...(snapshot.mode === 'brief' ? [BRIEF_FILE] : [])];
+  const known = new Set<string>([...required, ...REQUIRED_INTAKE_FILES, ...OPTIONAL_INTAKE_FILES]);
   return {
     missing: required
       .filter((name) => !present.has(name))
@@ -949,8 +1073,8 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
   return [...readAllIterationFields(repositoryRoot)]
     .map(([name, fields]) => {
       const field = (label: ReadmeFieldLabel): string => fields.get(label) ?? EMPTY_FIELD;
-      const folder = join(repositoryRoot, ITERATIONS_DIRECTORY, name, INTAKE_DIRECTORY);
-      const liveHash = intakeHash(folder);
+      const resolved = resolveIntakeSnapshot({ repositoryRoot, iteration: name });
+      const liveHash = resolvedIntakeHash({ repositoryRoot, iteration: name });
       return {
         name,
         type: field('Type'),
@@ -959,7 +1083,7 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
         baseline: field('Baseline'),
         status: field('Status'),
         intakeMode: field('Intake mode'),
-        schemaRoutes: schemaRoutesHash(join(folder, 'schema-routes.md')),
+        schemaRoutes: schemaRoutesHash(resolved.files.get('schema-routes.md')),
         intakeHash:
           liveHash === field('Intake hash')
             ? liveHash

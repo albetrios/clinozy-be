@@ -24,13 +24,18 @@ import {
   planIntake,
   readReceived,
   renderIntakeNote,
+  runCompaction,
   runGate,
   runIntake,
 } from '@tooling/iterations/iteration-intake.util.js';
+import { summarizeIntakeDiff } from '@tooling/iterations/iteration-diff.util.js';
 import {
   BRIEF_SECTIONS,
   intakeHash,
   parseIterationReadme,
+  readIterationListings,
+  resolvedIntakeHash,
+  resolveIntakeSnapshot,
 } from '@tooling/iterations/iteration.util.js';
 
 const LAUNCH = 'launch-2026-09-30-jxmr';
@@ -309,9 +314,17 @@ describe('overlay and brief intake', () => {
     applyIntake(plan);
     const intake = intakeOf({ repositoryRoot, iteration: FEATURE });
     expect(readFileSync(join(intake, 'PRD.md'), 'utf-8')).toBe('# PRD v2\n');
-    expect(readFileSync(join(intake, 'schema-routes.md'), 'utf-8')).toBe(SCHEMA_ROUTES);
+    // Only what arrived is stored; schema-routes.md resolves from the Baseline.
+    expect(existsSync(join(intake, 'schema-routes.md'))).toBe(false);
+    const resolved = resolveIntakeSnapshot({ repositoryRoot, iteration: FEATURE });
+    expect(resolved.stored).toEqual(['PRD.md']);
+    expect(resolved.baseline).toBe(LAUNCH);
+    expect(readFileSync(resolved.files.get('schema-routes.md') ?? '', 'utf-8')).toBe(SCHEMA_ROUTES);
     expect(fieldsOf({ repositoryRoot, iteration: FEATURE }).get('Intake note')).toBe(
       `1 received (PRD.md) · 1 carried forward from ${LAUNCH}`,
+    );
+    expect(fieldsOf({ repositoryRoot, iteration: FEATURE }).get('Intake hash')).toBe(
+      resolvedIntakeHash({ repositoryRoot, iteration: FEATURE }),
     );
     expect(runGate({ repositoryRoot, iteration: FEATURE, baseline: LAUNCH }).exitCode).toBe(0);
   });
@@ -337,9 +350,21 @@ describe('overlay and brief intake', () => {
       siblingRoot: undefined,
       replace: false,
     });
-    expect(unconfirmed.problems.join()).toMatch(
-      /has Baseline — — confirm it first: pnpm iteration:baseline/,
-    );
+    expect(unconfirmed.problems.join()).toMatch(/has no Baseline \(—\) — record none, the default/);
+    addTestIteration({
+      repositoryRoot,
+      name: FEATURE,
+      fields: { type: 'feat', opened: '2026-10-06', baseline: 'none' },
+    });
+    const fromScratch = planIntake({
+      repositoryRoot,
+      iteration: FEATURE,
+      source: drop({ 'PRD.md': PRD }),
+      mode: 'overlay',
+      siblingRoot: undefined,
+      replace: false,
+    });
+    expect(fromScratch.problems.join()).toMatch(/starts from scratch \(Baseline none\)/);
     addTestIteration({
       repositoryRoot,
       name: FEATURE,
@@ -374,6 +399,40 @@ describe('overlay and brief intake', () => {
       `1 received (BRIEF.md) · 2 carried forward from ${LAUNCH}`,
     );
     expect(runGate({ repositoryRoot, iteration: FEATURE, baseline: LAUNCH }).exitCode).toBe(0);
+  });
+
+  it('brief from scratch (Baseline none) stores what arrived and needs only BRIEF.md', () => {
+    const repositoryRoot = createIterationRepository();
+    addTestIteration({
+      repositoryRoot,
+      name: LAUNCH,
+      fields: { status: 'done' },
+      intake: COMPLETE,
+    });
+    addTestIteration({
+      repositoryRoot,
+      name: FEATURE,
+      fields: { type: 'feat', opened: '2026-10-06', baseline: 'none' },
+    });
+    const plan = planIntake({
+      repositoryRoot,
+      iteration: FEATURE,
+      source: drop({ 'BRIEF.md': BRIEF }),
+      mode: 'brief',
+      siblingRoot: undefined,
+      replace: false,
+    });
+    expect(plan.problems).toEqual([]);
+    applyIntake(plan);
+    expect(fieldsOf({ repositoryRoot, iteration: FEATURE }).get('Intake note')).toBe(
+      '1 received (BRIEF.md) · from scratch',
+    );
+    expect(resolveIntakeSnapshot({ repositoryRoot, iteration: FEATURE })).toMatchObject({
+      stored: ['BRIEF.md'],
+      standalone: true,
+      baseline: undefined,
+    });
+    expect(runGate({ repositoryRoot, iteration: FEATURE, baseline: undefined }).exitCode).toBe(0);
   });
 
   it('brief refuses a missing BRIEF.md, missing sections and any other changed file', () => {
@@ -588,5 +647,98 @@ describe('runIntake', () => {
       `Next: say "plan iteration ${LAUNCH}" — planning runs the gate first: pnpm iteration:intake ${LAUNCH} --check`,
     );
     expect(run([LAUNCH, '--check']).exitCode).toBe(0);
+  });
+});
+
+describe('the Baseline chain and --compact', () => {
+  const SECOND = 'feat-refunds-2026-10-08-zzzz';
+
+  /** launch (full) → FEATURE (overlay: PRD v2) → SECOND (overlay: schema-routes v2). */
+  function chainRepository(): string {
+    const repositoryRoot = incrementalRepository();
+    applyIntake(
+      planIntake({
+        repositoryRoot,
+        iteration: FEATURE,
+        source: drop({ 'PRD.md': '# PRD v2\n' }),
+        mode: 'overlay',
+        siblingRoot: undefined,
+        replace: false,
+      }),
+    );
+    addTestIteration({
+      repositoryRoot,
+      name: SECOND,
+      fields: { type: 'feat', opened: '2026-10-08', baseline: FEATURE },
+    });
+    const plan = planIntake({
+      repositoryRoot,
+      iteration: SECOND,
+      source: drop({ 'schema-routes.md': `${SCHEMA_ROUTES}\n## Entity: Refund\n` }),
+      mode: 'overlay',
+      siblingRoot: undefined,
+      replace: false,
+    });
+    expect(plan.problems).toEqual([]);
+    applyIntake(plan);
+    return repositoryRoot;
+  }
+
+  it('resolves up the chain: each layer stores what arrived, the snapshot holds them all', () => {
+    const repositoryRoot = chainRepository();
+    const resolved = resolveIntakeSnapshot({ repositoryRoot, iteration: SECOND });
+    expect(resolved.stored).toEqual(['schema-routes.md']);
+    expect(readFileSync(resolved.files.get('PRD.md') ?? '', 'utf-8')).toBe('# PRD v2\n');
+    expect(runGate({ repositoryRoot, iteration: SECOND, baseline: FEATURE }).exitCode).toBe(0);
+    const listing = readIterationListings(repositoryRoot).find((row) => row.name === SECOND);
+    expect(listing?.intakeHash).toBe(
+      fieldsOf({ repositoryRoot, iteration: SECOND }).get('Intake hash'),
+    );
+    const diff = summarizeIntakeDiff({ repositoryRoot, baseline: FEATURE, current: SECOND });
+    expect(diff.files).toMatchObject({ added: [], removed: [], changed: ['schema-routes.md'] });
+  });
+
+  it('reports a chain that loops or reaches an iteration without an intake', () => {
+    const repositoryRoot = chainRepository();
+    const readme = join(repositoryRoot, 'iterations', FEATURE, 'README.md');
+    writeFileSync(
+      readme,
+      readFileSync(readme, 'utf-8').replace(`| Baseline | ${LAUNCH} |`, `| Baseline | ${SECOND} |`),
+    );
+    expect(resolveIntakeSnapshot({ repositoryRoot, iteration: SECOND }).problem).toMatch(
+      /Baseline chain loops/,
+    );
+    expect(
+      runGate({ repositoryRoot, iteration: SECOND, baseline: undefined }).lines.join('\n'),
+    ).toMatch(/its snapshot cannot be resolved/);
+  });
+
+  it("--compact removes the stored copies of the Baseline's files and keeps the hash", () => {
+    const repositoryRoot = chainRepository();
+    // An intake from before the chain resolved: it also stores a copy of the Baseline's PRD.md.
+    const intake = intakeOf({ repositoryRoot, iteration: SECOND });
+    writeFileSync(join(intake, 'PRD.md'), '# PRD v2\n');
+    const hash = resolvedIntakeHash({ repositoryRoot, iteration: SECOND });
+    expect(hash).toBe(fieldsOf({ repositoryRoot, iteration: SECOND }).get('Intake hash'));
+    const dryRun = runCompaction({ repositoryRoot, iteration: SECOND, dryRun: true });
+    expect(dryRun.lines.join()).toMatch(/would remove 1 copy identical to .* \(PRD\.md\)/);
+    expect(existsSync(join(intake, 'PRD.md'))).toBe(true);
+    const result = runCompaction({ repositoryRoot, iteration: SECOND, dryRun: false });
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(join(intake, 'PRD.md'))).toBe(false);
+    expect(resolvedIntakeHash({ repositoryRoot, iteration: SECOND })).toBe(hash);
+    expect(
+      runCompaction({ repositoryRoot, iteration: SECOND, dryRun: false }).lines.join(),
+    ).toMatch(/already stores only what arrived/);
+    const full = runCompaction({ repositoryRoot, iteration: LAUNCH, dryRun: false });
+    expect(full.exitCode).toBe(1);
+    expect(full.lines.join()).toMatch(/full intake — it stores the whole drop/);
+    expect(parseIntakeArguments([SECOND, '--compact', '--dry-run'])).toMatchObject({
+      compact: true,
+      dryRun: true,
+    });
+    expect(() => parseIntakeArguments([SECOND, '--compact', '--check'])).toThrow(
+      /--compact takes only/,
+    );
   });
 });

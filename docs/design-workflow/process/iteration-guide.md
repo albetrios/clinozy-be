@@ -52,12 +52,15 @@ pnpm iteration:intake <iteration> BRIEF.md --mode brief --both --dry-run     # o
 pnpm iteration:intake <iteration> <source> [--mode …] --both                 # then for real
 ```
 
-- Every mode leaves a **full snapshot** in `intake-files/`: `full` is the drop as received (always the
-  launch); `overlay` lays the received files over the Baseline's snapshot; `brief` adds `BRIEF.md`
-  (start from `tooling/iterations/templates/BRIEF.md`; all six sections required) to the Baseline's
-  snapshot and refuses any other changed file.
-- `overlay` and `brief` build on the README's Baseline — confirm it first if it is `—`
-  (`pnpm iteration:baseline <iteration> <baseline>`); its own intake must pass the gate.
+- Every mode stores **what arrived** in `intake-files/`, and the snapshot is resolved from it: `full`
+  is the drop as received (always the launch); `overlay` stores the received files, laid over the
+  Baseline's snapshot; `brief` stores `BRIEF.md` (start from `tooling/iterations/templates/BRIEF.md`;
+  all six sections required) — from scratch on Baseline `none`, or added to a named Baseline's
+  snapshot, refusing any other changed file.
+- `overlay`, and a `brief` on a named Baseline, build on the README's Baseline — record it first
+  only when the user names one (`pnpm iteration:baseline <iteration> <baseline>`); its own intake
+  must pass the gate. An older intake that still stores copies of its Baseline's files is trimmed
+  with `pnpm iteration:intake <iteration> --compact`, which never changes the snapshot or its hash.
 - The README's Drop placed, Drop source, Intake mode, Intake note, Schema-routes and Intake hash rows
   are filled. It stops when `PRD.md` or `schema-routes.md` is missing, and when a different snapshot
   is already there — re-run with `--replace` while the iteration is still `planning`.

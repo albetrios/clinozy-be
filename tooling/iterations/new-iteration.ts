@@ -18,7 +18,6 @@ import { relative, resolve } from 'node:path';
 import { resolveGitMetadata } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
 import {
-  EMPTY_FIELD,
   NO_BASELINE,
   type NewIterationPlan,
   parseNewIterationArguments,

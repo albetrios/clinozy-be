@@ -83,15 +83,18 @@ user (`be-kickoff-iteration` › Each ROUTE row).
 | `iterations/<iteration>/intake-files/BRIEF.md` | brief mode — the written change (what, why, affected screens / entities / routes, rules, acceptance criteria, out of scope) |
 | the Baseline's `AS-BUILT.md` › Standing deviations | where the build already differs from the drop — plan against what was actually built |
 
-`intake-files/` always holds a **full snapshot**, exactly as placed by `pnpm iteration:intake`. The
-README's **Intake mode** says how it was built: `full` — the drop as received (always the launch);
-`overlay` — only the changed files arrived, laid over the Baseline's snapshot; `brief` — no design
-files, only a written change: the Baseline's snapshot plus `BRIEF.md`.
+`intake-files/` stores **what arrived**, exactly as placed by `pnpm iteration:intake`; the snapshot
+is resolved from it. The README's **Intake mode** says how: `full` — the drop as received (always
+the launch); `overlay` — only the changed files arrived and are stored, laid over the Baseline's
+snapshot; `brief` — no design files, only a written change: `BRIEF.md` is stored — from scratch it
+is the whole snapshot, on a named Baseline the snapshot is the Baseline's plus it. A file
+`intake-files/` does not store is read from the Baseline's intake (and, when that one is layered
+too, from its Baseline's) — the gate's ✓ line counts what is stored and what comes from where.
 
 - **Baseline `none` → MODE initial** — the default for every iteration: plan everything.
 - **Baseline `<iteration>` → MODE incremental** — only when the user named it. The delta
   depends on the Intake mode: `full` / `overlay` — the designer's "What changed" notes **plus**
-  `pnpm iteration:diff <baseline> <iteration>`, which compares the two `intake-files/` folders and
+  `pnpm iteration:diff <baseline> <iteration>`, which compares the two resolved intakes and
   nothing else (anything the diff shows that the notes omit is a finding); `brief` — `BRIEF.md` is
   the change list, and the diff must show nothing but `BRIEF.md` added. The Baseline's
   `intake-files/` is therefore mandatory (`iteration:baseline` refuses a Baseline without it).

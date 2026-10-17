@@ -9,7 +9,7 @@ every step with its questions is in the [step-by-step guide](iteration-guide.md)
 
 ```mermaid
 flowchart TB
-  NEW["pnpm iteration:new<br/>Status: planning"] --> INTAKE["pnpm iteration:intake --mode full|overlay|brief<br/>full snapshot → intake-files/ · --check gate"]
+  NEW["pnpm iteration:new<br/>Status: planning"] --> INTAKE["pnpm iteration:intake --mode full|overlay|brief<br/>what arrived → intake-files/ · --check gate"]
   INTAKE --> PLAN["be-iteration-planning — no code<br/>Steps 0–7 → routes-final.md (sub-domain by sub-domain)<br/>+ KICKOFF.md + plans/"]
   PLAN --> READY["Status: ready-for-approval"]
   READY -->|your go-ahead| APPROVED["Status: approved<br/>KICKOFF.md + intake-files/ freeze"]
@@ -24,7 +24,7 @@ flowchart TB
 | Step | Who / what | Output | Stops for |
 | --- | --- | --- | --- |
 | Open | `pnpm iteration:new <type> [topic]` | the folder + README (`Status: planning`) | the opening questions ([guide](iteration-guide.md)) |
-| Intake | `pnpm iteration:intake <iteration> <source> [--mode full\|overlay\|brief]` | a full snapshot in `intake-files/`; the README's Drop, Intake and Schema-routes rows | a missing mandatory file; a different snapshot already there |
+| Intake | `pnpm iteration:intake <iteration> <source> [--mode full\|overlay\|brief]` | what arrived in `intake-files/` (the snapshot resolves from it); the README's Drop, Intake and Schema-routes rows | a missing mandatory file; a different snapshot already there |
 | Plan | **be-iteration-planning**, [prompt](../prompts/iteration-planning-prompt.md) | `plans/routes-final.md` (the route review, [template](routes-final-template.md)), `KICKOFF.md` (plan + ROUTE ledger) and `plans/`; `Status: ready-for-approval` | which iteration and Baseline (Step 0); every step; RED questions; your OK on each sub-domain of the route review |
 | Approve | you — `pnpm iteration:status <iteration> approved` | `Status: approved`, logged in `plans/decisions.md` | — |
 | Kick off | **be-kickoff-iteration**, [prompt](../prompts/kickoff-iteration-prompt.md) | `Status: implementing` | which iteration (Step 0) |

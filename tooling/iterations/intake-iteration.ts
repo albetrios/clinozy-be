@@ -1,15 +1,18 @@
 #!/usr/bin/env tsx
 /**
- * pnpm iteration:intake — write an iteration's full snapshot into intake-files/, or check it.
+ * pnpm iteration:intake — store what arrived in an iteration's intake-files/, check it, or compact it.
  *
  * Usage:
  *   pnpm iteration:intake <iteration> <source> [--mode full|overlay|brief] [--both] [--sibling <path>] [--replace] [--dry-run]
  *   pnpm iteration:intake <iteration> --check [--baseline <iteration>]
+ *   pnpm iteration:intake <iteration> --compact [--dry-run]
  *
- * `full` (the default; always the launch): the drop as received. `overlay`: the Baseline's snapshot
- * with the received files laid over it. `brief`: the Baseline's snapshot plus the received BRIEF.md
- * (template: tooling/iterations/templates/BRIEF.md). `--check` is the gate the iteration skills run
- * before planning and building. The model: iterations/README.md.
+ * `full` (the default; always the launch): the drop as received. `overlay`: the received files,
+ * resolved over the Baseline's snapshot. `brief`: the received BRIEF.md (template:
+ * tooling/iterations/templates/BRIEF.md) — the whole snapshot from scratch, or added to a named
+ * Baseline's. `--check` is the gate the iteration skills run before planning and building;
+ * `--compact` removes an older intake's stored copies of its Baseline's files. The model:
+ * iterations/README.md.
  */
 import { resolve } from 'node:path';
 import { runIntake } from './iteration-intake.util.js';
