@@ -231,8 +231,10 @@ A re-run is safe: a lock stops a second bring-up from racing the first, and an A
 ## Session startup — the live playground
 
 A web session is a playground: it brings itself **fully live** before the work starts, without
-delaying the session. [`session-start.sh`](../../agent-os/hooks/session-start.sh) runs `pnpm install`
-and the `pnpm agent-os:check` gate, then launches `bootstrap.sh` **detached** and returns at once:
+delaying the session. [`session-start.sh`](../../agent-os/hooks/session-start.sh) runs on startup
+and resume (not after `/clear` or a compact), runs `pnpm install` when dependencies are missing,
+starts the `pnpm agent-os:check` gate and the tool-pin probes in the background (the banner shows
+their last result), then launches `bootstrap.sh` **detached** and returns at once:
 
 ```text
 session starts → session-start hook (returns at once) → bootstrap.sh, detached

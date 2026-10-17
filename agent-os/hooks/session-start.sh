@@ -73,17 +73,26 @@ if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
   fi
 fi
 
-# --- Readiness check: agent-os integrity only (fast, no DB) ------------------
+# --- Slow probes run in the background ---------------------------------------
+# agent-os:check and the five tool `--version` probes cost seconds (tens on a cold
+# container), so they run detached: the banner shows the last finished result, and this
+# run's result is there for the next session start. Their output never reaches this
+# hook's stdout, so the session does not wait for them. CI still runs agent-os:check.
+probe_directory="${TMPDIR:-/tmp}/clinozy-be-hooks/probes"
+mkdir -p "${probe_directory}" 2>/dev/null || true
+last_probe() { cat "${probe_directory}/$1" 2>/dev/null || echo "$2"; }
+
+# --- Readiness check: agent-os integrity only (no DB) ------------------------
 # The ONLY gate at startup. Heavy work (compose:up, db:migrate, db:seed, tests,
 # pnpm dev) is intentionally left to run on demand per prompt — not bootstrapped
-# here. Fail-open: never blocks the session; output goes to stderr (diagnostics).
+# here. Fail-open: never blocks the session.
 agent_os_status="skipped"
 if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] && [ -x node_modules/.bin/biome ]; then
-  if pnpm agent-os:check >&2; then
-    agent_os_status="passed"
-  else
-    agent_os_status="see: pnpm agent-os:check"
-  fi
+  agent_os_status="$(last_probe agent-os-check 'first check running') — re-checking in the background (${probe_directory}/agent-os-check.log)"
+  (
+    if pnpm agent-os:check >"${probe_directory}/agent-os-check.log" 2>&1; then result="passed"; else result="failed — see ${probe_directory}/agent-os-check.log"; fi
+    printf '%s at %s\n' "${result}" "$(date -u +%H:%M:%SZ)" >"${probe_directory}/agent-os-check"
+  ) </dev/null >/dev/null 2>&1 &
 fi
 
 # --- Best-effort: ensure the Docker daemon is up on remote (web) sessions ----
@@ -188,32 +197,36 @@ fi
 # says when to re-run bootstrap. Local `--version` calls only — no network.
 tools_status="n/a"
 if [ -f tooling/setup/agent/tool-install.lib.sh ]; then
-  # shellcheck source=../../tooling/setup/agent/tool-install.lib.sh
-  source tooling/setup/agent/tool-install.lib.sh
-  # The five `--version` calls run in parallel (Python CLIs start slowly), one line each.
-  tools_report="$(
-    for tool_entry in codegraph:CODEGRAPH_VERSION:--version headroom:HEADROOM_VERSION:--version \
-      semgrep:SEMGREP_VERSION:--version gitleaks:GITLEAKS_VERSION:version k6:K6_VERSION:version; do
-      {
-        IFS=: read -r tool_name tool_key tool_flag <<<"${tool_entry}"
-        tool_current="$(installed_version "${tool_name}" "${tool_flag}")"
-        printf '%s %s %s\n' "${tool_name}" "${tool_current:-missing}" "$(pinned_version "${tool_key}")"
-      } &
-    done
-    wait
-  )"
-  tools_drifted=""; tools_at_pin=0; tools_total=0
-  while read -r tool_name tool_current tool_pinned; do
-    [ -n "${tool_name}" ] || continue
-    tools_total=$((tools_total + 1))
-    if [ "${tool_current}" = "${tool_pinned}" ]; then
-      tools_at_pin=$((tools_at_pin + 1))
-    else
-      tools_drifted="${tools_drifted} ${tool_name} ${tool_current}≠${tool_pinned}"
-    fi
-  done <<<"${tools_report}"
-  tools_status="${tools_at_pin}/${tools_total} at pin"
-  [ -n "${tools_drifted}" ] && tools_status="${tools_status} (${tools_drifted# } — run bash tooling/setup/agent/bootstrap.sh)"
+  tools_status="$(last_probe tool-pins 'first check running') — re-checking in the background"
+  (
+    # shellcheck source=../../tooling/setup/agent/tool-install.lib.sh
+    source tooling/setup/agent/tool-install.lib.sh
+    # The five `--version` calls run in parallel (Python CLIs start slowly), one line each.
+    tools_report="$(
+      for tool_entry in codegraph:CODEGRAPH_VERSION:--version headroom:HEADROOM_VERSION:--version \
+        semgrep:SEMGREP_VERSION:--version gitleaks:GITLEAKS_VERSION:version k6:K6_VERSION:version; do
+        {
+          IFS=: read -r tool_name tool_key tool_flag <<<"${tool_entry}"
+          tool_current="$(installed_version "${tool_name}" "${tool_flag}")"
+          printf '%s %s %s\n' "${tool_name}" "${tool_current:-missing}" "$(pinned_version "${tool_key}")"
+        } &
+      done
+      wait
+    )"
+    tools_drifted=""; tools_at_pin=0; tools_total=0
+    while read -r tool_name tool_current tool_pinned; do
+      [ -n "${tool_name}" ] || continue
+      tools_total=$((tools_total + 1))
+      if [ "${tool_current}" = "${tool_pinned}" ]; then
+        tools_at_pin=$((tools_at_pin + 1))
+      else
+        tools_drifted="${tools_drifted} ${tool_name} ${tool_current}≠${tool_pinned}"
+      fi
+    done <<<"${tools_report}"
+    result="${tools_at_pin}/${tools_total} at pin"
+    [ -n "${tools_drifted}" ] && result="${result} (${tools_drifted# } — run bash tooling/setup/agent/bootstrap.sh)"
+    printf '%s\n' "${result}" >"${probe_directory}/tool-pins"
+  ) </dev/null >/dev/null 2>&1 &
 fi
 
 # --- Live playground: bring the full stack up in the background (web) --------

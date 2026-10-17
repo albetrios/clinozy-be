@@ -39,6 +39,18 @@ describe('live playground stack policy', () => {
     expect(sessionStart).toContain(`stack_lock_holder "\${stack_directory}"`);
   });
 
+  it('session start runs on startup and resume only, with the slow probes in the background', () => {
+    const manifest = JSON.parse(readFileSync('agent-os/hooks/hooks.json', 'utf8')) as {
+      hooks: Array<{ id: string; claude?: { matcher?: string } }>;
+    };
+    // A resumed cloud session can be a new container (deps, stack); clear and compact cannot.
+    expect(manifest.hooks.find((hook) => hook.id === 'session-start')?.claude?.matcher).toBe(
+      'startup|resume',
+    );
+    expect(sessionStart).toContain(`pnpm agent-os:check >"\${probe_directory}/agent-os-check.log"`);
+    expect(sessionStart.match(/\) <\/dev\/null >\/dev\/null 2>&1 &/g)).toHaveLength(2);
+  });
+
   it('the banner tells the agent to wait for "live" before database/API work', () => {
     expect(sessionStart).toContain('- Stack: %s');
     expect(sessionStart).toContain('wait until pnpm dev:stack:status says live');
