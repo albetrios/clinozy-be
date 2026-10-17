@@ -143,6 +143,18 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/subagent-verify.sh\""
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/push-ci-watch.mjs\"",
+            "if": "Bash(git push*)",
+            "asyncRewake": true,
+            "timeout": 2700
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [

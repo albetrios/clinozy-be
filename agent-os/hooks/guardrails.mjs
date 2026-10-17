@@ -14,6 +14,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isInRepository, pushDirectory } from "./_push-target.mjs";
 import { recordTelemetry } from "./_telemetry.mjs";
 
 let raw = "";
@@ -80,22 +81,13 @@ function gitIn(directory, args) {
   return result.status === 0 ? result.stdout.trim() : "";
 }
 
-/** The directory a `git push` runs in: its `git -C <dir>`, else its last `cd <dir>`, else the session's. */
-function pushDirectory(scan) {
-  const base = payload.cwd || repositoryRoot;
-  const flag = /\bgit\s+-C\s+(\S+)[^;&|]*\bpush\b/.exec(scan)?.[1];
-  const changes = [...scan.matchAll(/(?:^|[;&|]\s*)cd\s+(\S+)/g)].map((match) => match[1]);
-  const target = flag ?? changes.pop();
-  return target ? resolve(base, target) : base;
-}
-
 /**
  * Why a push needs the user's yes: it changes auth, RLS, billing, migrations or routes and no
  * clean /be-pre-merge-review is recorded for HEAD — or "" when it does not. Fails open.
  */
 function unreviewedSensitivePush(scan) {
-  const directory = pushDirectory(scan);
-  if (!(directory === repositoryRoot || directory.startsWith(`${repositoryRoot}/`))) return "";
+  const directory = pushDirectory({ command: scan, cwd: payload.cwd || repositoryRoot });
+  if (!isInRepository({ directory, repositoryRoot })) return "";
   const head = gitIn(repositoryRoot, ["rev-parse", "HEAD"]);
   const gitDirectory = gitIn(repositoryRoot, ["rev-parse", "--absolute-git-dir"]);
   if (!(head && gitDirectory)) return "";
