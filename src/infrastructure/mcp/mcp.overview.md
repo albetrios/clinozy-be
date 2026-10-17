@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Optional MCP server endpoint that lets a developer's coding agent introspect this backend through MCP — listing routes, fetching the current OpenAPI document, and invoking the `call_api` tool to call this platform's HTTP API in-process. Mounted at `/api/v1/mcp` (GET + POST) when `ENABLE_MCP_SERVER=true`. Requires a global admin JWT.
+Optional MCP server endpoint that lets a developer's coding agent introspect this backend through MCP — listing routes, fetching the current OpenAPI document, and invoking the `call_api` tool to call this platform's HTTP API in-process. Mounted at `/api/v1/mcp` (GET + POST) when `ENABLE_MCP_SERVER=true`. Requires a JWT with the global `super_admin` role.
 
 ## Design decisions
 
@@ -12,7 +12,7 @@ Optional MCP server endpoint that lets a developer's coding agent introspect thi
 - **Dynamic import**: the SDK is imported only when the feature flag is on, so the dependency cost (in cold start time and bundle size) is paid only by deploys that enable it.
 - **Two resources**: `clinozy-be://openapi` (the generated OpenAPI document) and `clinozy-be://routes` (the route catalog). Both are read-only.
 - **One tool**: `call_api` invokes the local HTTP API through `fastify.inject()` — no extra TCP hop, no extra auth dance, scoped to the calling JWT's permissions.
-- **Strict admin gating**: the auth preHandler requires a global `admin` or `super_admin` role. There is no per-organization MCP today.
+- **Strict admin gating**: the auth preHandler requires the global `super_admin` role (`requireRole(GLOBAL_ROLES.SUPER_ADMIN)`) — a plain `user` JWT is refused. There is no per-organization MCP today.
 - **`call_api` blast radius & R14 gating**: because `call_api` is an admin-authority in-process proxy into the *entire* `/api/v1/` surface, it is gated by `evaluateCallApiPolicy` (in `mcp-capabilities.ts`): (1) the path must start with `/api/v1/`, `/livez`, or `/readyz`; (2) caller-supplied `BLOCKED_HEADERS` (authorization/cookie/x-csrf-token/forwarding headers) are stripped so the sub-request can't pivot principal or session; (3) **read-only by default** — only `GET` is allowed unless `MCP_CALL_API_ALLOW_MUTATIONS=true`; (4) an optional operator allowlist `MCP_CALL_API_ALLOWED_PATH_PREFIXES` (CSV) further narrows reachable paths. Errors from the proxied call are logged server-side and returned to the client as a generic message (MCP responses bypass the global error masker via `reply.hijack()`).
 
 ## Operational concerns
@@ -27,7 +27,7 @@ Optional MCP server endpoint that lets a developer's coding agent introspect thi
 ## Failure modes
 
 - **SDK package missing while flag is on** → server logs an error and the route returns 503. The rest of the platform is unaffected.
-- **Non-admin JWT** → 403.
+- **JWT without the `super_admin` role** → 403.
 - **Tool call exceeds the per-call timeout** → standard Fastify timeout error class.
 
 ## Related docs

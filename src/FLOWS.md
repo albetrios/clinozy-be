@@ -40,7 +40,7 @@ sequenceDiagram
   EL->>Bus: emit AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED {email, verification_code, expires_in_minutes}
   Bus->>Mail: recordOutboxEmail (via event handler)
   EL-->>Auth: {messageKey: success:verificationCodeSent, expires_in_minutes: 15}
-  Auth-->>Client: 201 (uniform — no account enumeration)
+  Auth-->>Client: 200 (uniform — no account enumeration)
   Mail->>Resend: POST /emails (signed, alphanumeric code)
   Resend-->>Mail: 200
   Client->>Auth: POST /auth/email/login {email, code}
@@ -52,7 +52,7 @@ sequenceDiagram
   EL->>DB: INSERT auth_sessions (or, when MFA enrolled, mint mfa_session_token instead — see /auth/mfa/login)
   Note over EL: post-commit best-effort provisionPersonalOrganization on FIRST login (claims a bare invited placeholder created without one; idempotent no-op for a brand-new user already provisioned at send)
   EL-->>Auth: {access_token, session_public_id} | {mfa_required, mfa_session_token}
-  Auth-->>Client: 201 + Set-Cookie session_id
+  Auth-->>Client: 200 + Set-Cookie session_id
 ```
 
 ### Side effects
@@ -96,14 +96,14 @@ sequenceDiagram
   alt MFA enabled
     Login->>MFA: createMfaSession → mfa_session_token (Redis, 5m)
     Login-->>Auth: {mfa_required: true, mfa_session_token}
-    Auth-->>Client: 201
+    Auth-->>Client: 200
     Client->>Auth: POST /auth/mfa/login {mfa_session_token, totp_code|recovery_code}
     Auth->>MFA: verifyLoginMfa (validate session token, then TOTP/recovery)
     MFA->>Login: issue access token + session
   end
   Login->>DB: INSERT auth_sessions
   Login-->>Auth: {access_token, session_public_id}
-  Auth-->>Client: 201 + Set-Cookie session_id
+  Auth-->>Client: 200 + Set-Cookie session_id
 ```
 
 ### Side effects
@@ -117,7 +117,7 @@ sequenceDiagram
 - **Wrong password** → 401, generic message; failed-attempt counter incremented.
 - **Too many failed logins from one IP** (50 within 15 minutes of its first failure) → 429 `rate_limited` with `Retry-After` for the rest of that window, for every login from the IP; fails open when Redis errors.
 - **Account locked + wrong password** → `errors:accountLocked` until the lockout window passes; a correct password during the window authenticates and lifts the lock.
-- **MFA challenge expired** → 401 `errors:mfaSessionExpired`; client must re-login.
+- **MFA challenge expired, already used, or burned by a wrong code** → 401 `errors:mfaInvalidOrExpiredSession`; client must re-login.
 - **Disabled or unverified user** → 401 with the appropriate message key; behavior identical to wrong-password from the client's perspective for non-existent emails (anti-enumeration).
 
 ## organization-switch-and-capability-discovery-flow
@@ -139,7 +139,7 @@ sequenceDiagram
   Client->>Auth: POST /auth/switch-to-organization {organization_id}
   Auth->>Sess: re-check membership, re-mint access token with `org` claim
   Sess-->>Auth: {access_token} (`org` claim = target organization)
-  Auth-->>Client: 201 + new access token
+  Auth-->>Client: 200 + new access token
   Client->>Tenancy: GET /api/v1/tenancy/organization (Bearer new token)
   Tenancy->>Org: get active organization (from `org` claim)
   Org->>DB: SELECT organization
@@ -159,7 +159,7 @@ sequenceDiagram
 ### Failure modes
 
 - **Not a member of the target organization** → switch is rejected (the token is not re-minted); the active organization is unchanged.
-- **Client calls a team-only route on a personal organization** → the centralized guard `assertTeamOrganization` rejects with **422** (`unprocessable_entity`), not 409, because the organization `type` is immutable and retrying is futile. Clients hide/disable those actions up front from the organization `type` + permissions instead of probing for the 422. The team-only routes: `DELETE /api/v1/tenancy/organization`, `POST .../organization/invitations`, `POST .../organization/memberships`, `POST .../organization/transfer-ownership`, `POST .../organization/roles`, and the four subscription mutations `POST /api/v1/billing/subscriptions` (+ `/{subscription_id}/change-plan`, `/cancel`, `/resume`).
+- **Client calls a team-only route on a personal organization** → the centralized guard `assertTeamOrganization` rejects with **422** (`unprocessable_entity`), not 409, because the organization `type` is immutable and retrying is futile. Clients hide/disable those actions up front from the organization `type` + permissions instead of probing for the 422. The team-only routes are the ones marked `team` in the `O` column of [docs/routes.txt](docs/routes.txt); the two that answer without the guard — `GET /api/v1/app/onboarding-setup` (404 `team_organization_required`) and membership restore — are noted under [ORGANIZATION_TYPE_CAPABILITY_MATRIX](src/POLICIES.md#organization_type_capability_matrix).
 
 ## organization-invitation-flow
 

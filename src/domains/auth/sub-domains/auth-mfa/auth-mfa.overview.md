@@ -30,9 +30,9 @@ stateDiagram-v2
 
 ## Failure modes
 
-- **TOTP code outside drift window** → 401; client retries.
+- **TOTP code outside drift window** → 401; at login the ticket is already consumed, so the client restarts login.
 - **Backup code reuse** → 401 (atomic consume returned no row).
-- **MFA ticket expired** (5 min) → 401 `errors:mfaSessionExpired`; client must restart login.
+- **MFA ticket expired** (5 min) or already consumed → 401 `errors:mfaInvalidOrExpiredSession`; client must restart login.
 - **Disable MFA without recent primary credential** → 403; user must re-authenticate first.
 
 ## Policy constants

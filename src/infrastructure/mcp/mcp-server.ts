@@ -411,7 +411,7 @@ export async function registerMcpRouteHandlers({
       ...STRICT_AUTHED_RATE_LIMIT,
       schema: {
         summary: 'MCP streamable HTTP (GET)',
-        description: `Model Context Protocol endpoint when \`ENABLE_MCP_SERVER=true\`. Exposes resources \`${MCP_OPENAPI_RESOURCE_URI}\` and \`${MCP_ROUTES_RESOURCE_URI}\`, plus the \`call_api\` tool for in-process API invocation. Requires JWT with global \`admin\` or \`super_admin\` role. See docs/integrations/cursor-backend-mcp.md.`,
+        description: `Model Context Protocol endpoint when \`ENABLE_MCP_SERVER=true\`. Exposes resources \`${MCP_OPENAPI_RESOURCE_URI}\` and \`${MCP_ROUTES_RESOURCE_URI}\`, plus the \`call_api\` tool for in-process API invocation. Requires a JWT with the global \`super_admin\` role. See docs/integrations/cursor-backend-mcp.md.`,
         tags: ['MCP'],
       },
     },
@@ -450,7 +450,7 @@ export async function registerMcpRouteHandlers({
 }
 
 /**
- * Registers the MCP endpoint with JWT authentication and admin role required.
+ * Registers the MCP endpoint with JWT authentication and the global `super_admin` role required.
  * MCP can proxy arbitrary API calls — must not be exposed without authentication.
  */
 export async function registerMcpRoute({

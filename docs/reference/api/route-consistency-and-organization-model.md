@@ -13,7 +13,7 @@ An organization has an **immutable** `type`:
 
 There is **one** set of routes for both. The API never forks into personal-only or team-only URLs, and there is no per-organization path segment — the active organization rides the signed `org` token claim, and organization-scoped sub-resources hang off the singular `/api/v1/tenancy/organization` resource. Switch the active organization with `POST /api/v1/auth/switch-to-personal` or `POST /api/v1/auth/switch-to-organization { organization_id }` (both re-mint the access token).
 
-Nine routes are structurally unavailable to a personal organization. The API does **not** advertise them as a per-response object; clients derive availability from the organization `type`, and a centralized guard backstops every team-only route so a mis-targeted request is rejected consistently.
+The routes marked `team` in the `O` column of [`docs/routes.txt`](../../routes.txt) are structurally unavailable to a personal organization. The API does **not** advertise them as a per-response object; clients derive availability from the organization `type`, and a centralized guard backstops every team-only route so a mis-targeted request is rejected consistently.
 
 ### 1.1 Deriving team-only availability from `type`
 
@@ -29,16 +29,19 @@ Every serialized organization response — get, list, create, patch — carries 
 }
 ```
 
-- `type === 'TEAM'` ⇒ the nine team-only routes are available for the organization; `type === 'PERSONAL'` ⇒ none are. This is a property of the organization **type**, not the caller's permission — permissions and roles govern what the caller may do, separately.
+- `type === 'TEAM'` ⇒ the team-only routes are available for the organization; `type === 'PERSONAL'` ⇒ none are. This is a property of the organization **type**, not the caller's permission — permissions and roles govern what the caller may do, separately.
 - A client gates a team-only action on **both**: `type === 'TEAM'` (the action exists for this organization) **and** the caller holding the relevant permission (e.g. `subscription:manage`). Never probe for a 422 to discover availability.
 - There is no `capabilities` object on the response — `type` is the signal. The personal-vs-team rule lives only in the server-side guard (§1.2).
 
-### 1.2 The 9 team-only routes and the `assertTeamOrganization` backstop
+### 1.2 The team-only routes and the `assertTeamOrganization` backstop
+
+The catalog's `O` column (backed by [`route-organization-scope.json`](../../../tooling/openapi/route-catalog/route-organization-scope.json), §3.2) is the list of record; this table adds the guard each route uses.
 
 | Capability | Route | Guard capability |
 | ---------- | ----- | ---------------- |
 | Delete | `DELETE /api/v1/tenancy/organization` | `MUTATION` |
 | Add members | `POST /api/v1/tenancy/organization/memberships` | `MEMBERS` |
+| Restore a removed member | `POST /api/v1/tenancy/organization/memberships/{membership_id}/restore` | none — a personal workspace has no removed member, so it ends in 404 (or 409 `membership_not_deleted` for the owner's live membership) |
 | Transfer ownership | `POST /api/v1/tenancy/organization/transfer-ownership` | `MUTATION` |
 | Manage roles | `POST /api/v1/tenancy/organization/roles` | `ROLES` |
 | Set up payment method | `POST /api/v1/billing/payment-methods/setup` | `BILLING` |
@@ -46,8 +49,11 @@ Every serialized organization response — get, list, create, patch — carries 
 | Change plan | `POST /api/v1/billing/subscriptions/{subscription_id}/change-plan` | `BILLING` |
 | Cancel subscription | `POST /api/v1/billing/subscriptions/{subscription_id}/cancel` | `BILLING` |
 | Resume subscription | `POST /api/v1/billing/subscriptions/{subscription_id}/resume` | `BILLING` |
+| Read the clinic setup | `GET /api/v1/app/onboarding-setup` | none — 404 with reason `team_organization_required` (a read is never a 422) |
+| Change the clinic setup | `PATCH /api/v1/app/onboarding-setup` | `SETUP` |
+| Take the clinic live | `POST /api/v1/app/onboarding-setup/complete` | `SETUP` |
 
-The single point of enforcement is `assertTeamOrganization({ organization, capability })` (capability buckets `MEMBERS | ROLES | MUTATION | BILLING`). On a personal organization it throws `UnprocessableEntityError` → **HTTP 422** `unprocessable_entity`. Clients hide or disable these actions up front from the organization `type` + the caller's permissions, so a well-behaved client never triggers the 422.
+The single point of enforcement for the 422 is `assertTeamOrganization({ organization, capability })` (capability buckets `MEMBERS | ROLES | MUTATION | BILLING | SETUP`). On a personal organization it throws `UnprocessableEntityError` → **HTTP 422** `unprocessable_entity`. Clients hide or disable these actions up front from the organization `type` + the caller's permissions, so a well-behaved client never triggers the 422.
 
 ---
 

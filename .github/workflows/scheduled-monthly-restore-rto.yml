@@ -1,7 +1,7 @@
 # Monthly disaster-recovery drill — fully automated RTO measurement.
 # Creates a throwaway Neon PITR branch in the GitHub Environment's own Neon project
-# (main → production → project <slug>-production, branch production), runs migrate + integration
-# smoke, asserts RTO, then deletes the branch. See docs/process/backup-drills.md.
+# (main → production → project <slug>-production, branch production), runs migrate + the
+# non-destructive restore smoke, asserts RTO, then deletes the branch. See docs/process/backup-drills.md.
 
 name: Monthly backup restore & RTO drill
 
@@ -57,7 +57,7 @@ jobs:
           test -f docs/process/dr-runbook.md
 
   restore-integration:
-    name: Restore branch — migrate and integration smoke
+    name: Restore branch — migrate and restore smoke
     needs: [checklist, resolve-environment]
     runs-on: ubuntu-latest
     environment: ${{ needs.resolve-environment.outputs.environment }}
@@ -130,12 +130,19 @@ jobs:
           set -euo pipefail
           pnpm --silent db:sequences:advance | tail -n 1
 
-      - name: Integration smoke on restored database
+      # Reads every table, checks every id sequence is past its column's ids, then boots the app and
+      # signs a new user in and out (src/scripts/ops/db-restore-smoke.ts). Never a test suite: their
+      # setup truncates every table, and this branch is a copy of production. TEST_MODE makes
+      # send-code return the sign-in code (no CAPTCHA in front of it); the drill user goes when
+      # the branch is deleted.
+      - name: Restore smoke on restored database
         env:
           DATABASE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
           DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
           DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.direct_database_url }}
-        run: pnpm test:integration src/domains/auth/__tests__/integration/auth.integration.test.ts
+          TEST_MODE: 'true'
+          CAPTCHA_PROVIDER: disabled
+        run: pnpm db:restore:smoke
 
       - name: Record restore duration and assert RTO
         if: success()
@@ -214,7 +221,7 @@ jobs:
       - name: Fail when automated restore did not complete
         if: needs.restore-integration.result != 'success'
         run: |
-          echo "::error title=Restore drill not measured::Configure MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY, ensure the Neon project clinozy-be-production (branch production) exists, and verify migrate + integration smoke pass."
+          echo "::error title=Restore drill not measured::Configure MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY, ensure the Neon project clinozy-be-production (branch production) exists, and verify migrate + the restore smoke pass."
           exit 1
 
       - name: Download automated RTO report

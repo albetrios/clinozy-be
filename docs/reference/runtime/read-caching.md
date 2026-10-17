@@ -171,7 +171,7 @@ trade: not a pool checkout removed, but a public route that stops touching Postg
 | Session token validity | `session:tok:<hash>` | 60 s | logout, revoke, offboarding (tombstone) |
 | Organization permissions | `perm:…` | MFA-session window | membership / role / permission writes (+ Sentry on failure) |
 | Organization locale | i18n locale cache | short | organization-settings write |
-| Unread notification count | `notify:unread-count:<userPublicId>` | 60 s | mark-read, mark-all-read, delete (only when a row went), invite-accepted fan-out — all post-commit, 15 s tombstone |
+| Unread notification count | `notify:unread-count:<userPublicId>` | 60 s | mark-read, mark-all-read, delete (only when a row went), invitation accepted / declined fan-outs — all post-commit, 15 s tombstone |
 
 Memoized in process (not Redis, per the section above): the public plan catalog
 (`plan-catalog-memo.ts`) and the permission catalog (`permission-catalog-memo.ts`), 60 s each.

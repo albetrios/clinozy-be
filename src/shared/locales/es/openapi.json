@@ -8,7 +8,7 @@
   },
   "tags": {
     "Health": "Comprobaciones de estado y preparación del servidor",
-    "MCP": "Protocolo de contexto de modelo — herramientas y recursos para agentes (requiere JWT admin cuando ENABLE_MCP_SERVER=true)",
+    "MCP": "Protocolo de contexto de modelo — herramientas y recursos para agentes (requiere un JWT super_admin cuando ENABLE_MCP_SERVER=true)",
     "Auth": "Autenticación — inicio de sesión, cierre, gestión de contraseñas",
     "Email Login": "Inicio de sesión sin contraseña con un código de verificación enviado por correo",
     "OAuth": "Flujos de inicio de sesión social OAuth 2.0",

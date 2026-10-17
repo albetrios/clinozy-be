@@ -68,11 +68,11 @@ additive, surfaced on 4xx only (masked on 5xx), and is the ONLY dependable branc
 - Register every new slug in the list in [`docs/reference/api/response-codes.md`](../../../docs/reference/api/response-codes.md).
 - Tests for that cause assert `body.error.reason === '<slug>'` — never a `detail`/message substring or a raw `errors:*` key.
 
-## Personal vs team organizations (one route surface, discoverable capabilities)
+## Personal vs team organizations (one route surface, availability from `type`)
 
 - The route surface is identical for personal and team organizations — there are **no** personal-only or team-only paths.
-- Team-only capabilities (invite/manage members, manage roles, transfer ownership, delete the organization, manage billing) reject a **personal** organization with **422** via `assertTeamOrganization({ organization, capability })` (`src/domains/tenancy/sub-domains/organization/organization-capability.ts`).
-- Every serialized organization carries a `capabilities` object (`can_invite_members`, `can_manage_members`, `can_manage_roles`, `can_transfer_ownership`, `can_delete`, `can_manage_billing`) describing the **organization type's** capability (not the caller's permission), so clients discover this without probing for a 422.
+- Team-only capabilities (add or invite members, manage roles, transfer ownership, delete the organization, manage billing, set up the clinic) reject a **personal** organization with **422** via `assertTeamOrganization({ organization, capability })` (`src/domains/tenancy/sub-domains/organization/organization-capability.ts`, capability buckets `MEMBERS | ROLES | MUTATION | BILLING | SETUP`). A read never answers 422: `GET /api/v1/app/onboarding-setup` checks `isPersonalOrganization` and answers **404** with reason `team_organization_required`.
+- There is **no** `capabilities` object on the API response — the organization `type` (`PERSONAL` / `TEAM`) is the signal, describing the organization type rather than the caller's permission. Clients gate a team-only action on `type === 'TEAM'` **and** the caller's permission (e.g. `subscription:manage`), never by probing for a 422. See `ORGANIZATION_TYPE_CAPABILITY_MATRIX` in [`src/POLICIES.md`](../../../src/POLICIES.md) and §1.1 of [`docs/reference/api/route-consistency-and-organization-model.md`](../../../docs/reference/api/route-consistency-and-organization-model.md).
 - The route catalog encodes this as the `O` column (`both` | `team`), kept in sync with `tooling/openapi/route-catalog/route-organization-scope.json` by `pnpm validate:route-organization-scope`.
 
 ## List endpoints — common search / sort / pagination method

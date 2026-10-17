@@ -38,8 +38,8 @@ export interface AuthMeContextOutput {
   /** The authenticated caller's own profile (same shape as `GET /users/me`). */
   user: UserOutput;
   /**
-   * The active organization (with type-derived `capabilities`) and its `plan_access`, or `null` when
-   * no organization is in scope.
+   * The active organization (with its `type`) and its `plan_access`, or `null` when no organization
+   * is in scope.
    */
   active_organization: AuthMeContextActiveOrganizationOutput | null;
   /**
