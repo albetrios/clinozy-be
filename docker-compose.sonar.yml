@@ -18,6 +18,12 @@ services:
       - sonarqube_data:/opt/sonarqube/data
       - sonarqube_logs:/opt/sonarqube/logs
       - sonarqube_extensions:/opt/sonarqube/extensions
+    # The Elasticsearch index lives in RAM. On a disk where under 10% of the size is free — a cloud
+    # session's disk allowance (22 GB free of 252 GB) — Elasticsearch's high watermark refuses to
+    # place the index, the cluster goes RED and SonarQube stops during start-up. The index is
+    # rebuilt from the database (the volume above) at every start, so nothing is lost.
+    tmpfs:
+      - /opt/sonarqube/data/es8:size=2g,uid=1000,gid=0,mode=0770
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:9000/api/system/status | grep -q "UP"']
       interval: 15s

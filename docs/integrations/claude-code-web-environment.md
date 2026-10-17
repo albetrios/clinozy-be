@@ -287,7 +287,7 @@ flowchart TD
 
 - **Node 24 is not pre-installed** — the setup script is mandatory; without it the session is stuck on Node 22 and `engines` rejects it.
 - **`nodejs.org` is not in the default Trusted allowlist** — the most common miss.
-- **Husky activates after `pnpm install`** (its `prepare` step), so a properly configured session gets the **same** pre-commit / pre-push gates as local — including the pre-commit SonarQube gate (mandatory, no bypass), which needs Docker for `pnpm sonar:up` (the gate auto-starts it on first use). Before deps install (e.g. a session still on Node 22) Husky is inactive and commits skip the hooks.
+- **Husky activates after `pnpm install`** (its `prepare` step), so a properly configured session gets the **same** pre-commit / pre-push gates as local — including the pre-commit SonarQube gate (mandatory, no bypass), which needs Docker for `pnpm sonar:up`: the gate starts SonarQube on first use, and starts the Docker daemon first when it is down; the Setup script pre-pulls the SonarQube and scanner images (about 1 GB) so the first commit that touches `src/` does not wait on the download. Before deps install (e.g. a session still on Node 22) Husky is inactive and commits skip the hooks.
 - **Branch creates are allowed; branch deletes are not.** The git proxy accepts a push to any branch name, but refuses every form of branch delete. Rename the session's `claude/*` branch **before the first push** — see [be-git-branch-naming.mdc](../../agent-os/rules/be-git-branch-naming.mdc).
 
 ---

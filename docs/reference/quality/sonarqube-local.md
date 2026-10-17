@@ -87,7 +87,16 @@ So a clean gate means **zero issues in the code that ships to production**.
 
 ## Troubleshooting
 
-- **"failed to start SonarQube (is Docker running?)"** — start Docker Desktop, then retry.
+- **"failed to start SonarQube (is Docker running?)"** — start Docker Desktop, then retry. In a
+  Linux cloud session the gate first starts the daemon itself
+  ([`ensure-docker-daemon.sh`](../../../tooling/setup/agent/ensure-docker-daemon.sh)), and the
+  environment's Setup script pre-pulls the SonarQube and scanner images, so this only shows when
+  the session may not run Docker at all.
+- **"SonarQube did not become ready in time"** with `high disk watermark [90%] exceeded` in
+  `docker compose -f docker-compose.sonar.yml logs sonarqube` — Elasticsearch refuses to place its
+  index on a disk under 10% free. `docker-compose.sonar.yml` keeps that index on a 2 GB tmpfs for
+  this reason (a cloud session's disk is 252 GB with about 22 GB free); the database stays on the
+  volume and the index is rebuilt at each start.
 - **"admin password is unknown"** — the instance was provisioned outside this flow. Run
   `pnpm sonar:reset` to start fresh, or set `SONAR_ADMIN_PASSWORD` in `.env.local`.
 - **Server slow / stuck after an upgrade** — `pnpm sonar:reset`.

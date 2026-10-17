@@ -20,6 +20,7 @@ const DERIVED_NAMES = resolveDerivedNames(loadConfig());
 const SONAR_URL = process.env.SONAR_HOST_URL ?? 'http://localhost:9000';
 const PROJECT_KEY = DERIVED_NAMES.sonarProjectKey;
 const COMPOSE_FILE = 'docker-compose.sonar.yml';
+const DOCKER_DAEMON_SCRIPT = 'tooling/setup/agent/ensure-docker-daemon.sh';
 const ENV_LOCAL = '.env.local';
 const TOKEN_NAME = DERIVED_NAMES.sonarTokenName;
 const ADMIN_LOGIN = 'admin';
@@ -92,6 +93,22 @@ function dockerCompose(args: string[], extraEnv: Record<string, string> = {}): n
   return result.status ?? 1;
 }
 
+/**
+ * Starts the Docker daemon when it is not reachable, so the gate never blocks a commit on
+ * "is Docker running?" in a cloud session whose session-start hook did not start it.
+ *
+ * @remarks
+ * Linux only, through the shared `tooling/setup/agent/ensure-docker-daemon.sh` (passwordless
+ * sudo, restricted-network fallback). Elsewhere Docker Desktop or OrbStack owns the daemon, so
+ * the gate leaves it to the developer.
+ */
+function ensureDockerDaemon(): void {
+  if (spawnSync('docker', ['info'], { stdio: 'ignore' }).status === 0) return;
+  if (process.platform !== 'linux' || !existsSync(DOCKER_DAEMON_SCRIPT)) return;
+  log('Docker daemon not reachable — starting it (tooling/setup/agent/ensure-docker-daemon.sh)…');
+  spawnSync('/bin/bash', [DOCKER_DAEMON_SCRIPT], { stdio: 'inherit' });
+}
+
 /** Starts the SonarQube container if it is not already accepting requests, then waits for UP. */
 async function ensureServerUp(): Promise<void> {
   const status = await sonarApi('/api/system/status');
@@ -101,6 +118,7 @@ async function ensureServerUp(): Promise<void> {
   }
 
   log('SonarQube not ready — starting it (first boot can take ~2 min)…');
+  ensureDockerDaemon();
   if (dockerCompose(['up', '-d', 'sonarqube']) !== 0) {
     die('failed to start SonarQube (is Docker running?). Start it with `pnpm sonar:up`.');
   }
