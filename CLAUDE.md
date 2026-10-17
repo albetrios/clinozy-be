@@ -129,7 +129,7 @@ When **code or architecture changes**, consult **`.cursor/skills/be-skill-index/
 
 **Human docs** (when layout changes): `CLAUDE.md`, `README.md`, `.cursor/rules/`, skills — via **be-structure-maintainer**. Hand-written `docs/**/*.md` — via **be-docs-maintainer**.
 
-All skills live under `.cursor/skills/`; the be-skill-index trigger map and auto-trigger rules table are the canonical list.
+All skills live under `.cursor/skills/`; the file → skill map is `agent-os/docs/skill-triggers.md`, generated from `agent-os/skills/chains.json` and each skill's `trigger` frontmatter (`pnpm agent-os:generate`).
 
 ### In-source documentation system
 

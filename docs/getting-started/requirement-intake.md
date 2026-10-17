@@ -344,7 +344,7 @@ When the requirement comes from a design iteration ([iterations/README.md](../..
 - **If domain/structure changes:** **be-structure-maintainer**, **be-domain-generator** (if new scaffold).
 
 **Rules that will apply:**  
-All `.cursor/rules/*.mdc` whose globs match the files you change (see skill index "Auto-trigger rules" table).
+All `.cursor/rules/*.mdc` whose globs match the files you change (see the skill index "Rules" table).
 
 ---
 
@@ -390,7 +390,7 @@ flowchart LR
 
 | Skill                          | Path                                                     | When to invoke                                            |
 | ------------------------------ | -------------------------------------------------------- | --------------------------------------------------------- |
-| **be-skill-index**                | `.cursor/skills/be-skill-index/SKILL.md`                    | **First** — full catalog and triggers (47 project skills) |
+| **be-skill-index**                | `.cursor/skills/be-skill-index/SKILL.md`                    | **First** — full catalog and triggers (46 project skills) |
 | be-domain-generator               | `.cursor/skills/be-domain-generator/SKILL.md`               | New domain/sub-domain scaffold                            |
 | be-route-catalog                  | `.cursor/skills/be-route-catalog/SKILL.md`                  | Any change to `*.routes.ts`                               |
 | be-route-schema-doc-guard         | `.cursor/skills/be-route-schema-doc-guard/SKILL.md`         | Route `schema: { summary, description, tags }`          |
@@ -433,7 +433,7 @@ flowchart LR
 
 ## Quick reference: rules
 
-**Canonical inventory:** [be-skill-index → Always-applied rules, Policy rules, and Auto-trigger rules](../../.cursor/skills/be-skill-index/SKILL.md#auto-trigger-rules).
+**Canonical inventory:** [be-skill-index → Rules](../../.cursor/skills/be-skill-index/SKILL.md#rules) (generated from each rule's frontmatter).
 
 Rules auto-attach by file glob when you edit matching paths. Ten rules are always on and the other 37 are scoped — 47 in all; be-skill-index lists every one.
 

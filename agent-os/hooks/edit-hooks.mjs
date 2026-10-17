@@ -30,24 +30,35 @@ const SKILL_MAP = "Full map: agent-os/docs/skill-triggers.md";
 const FORMATTED_DIRECTORIES = ["src/", "tooling/"];
 const FORMATTED_EXTENSIONS = /\.(ts|tsx|js|jsx|mjs|cjs|json|jsonc)$/;
 
-/** Skill reminders by edited path. */
-const SKILL_REMINDERS = [
-  [(file) => file.endsWith(".routes.ts"), "routes → be-route-schema-doc-guard + be-route-catalog + be-seed-maintainer"],
-  [
-    (file) => file.endsWith(".schema.ts"),
-    "schema → be-schema-generator + be-sql-design-guard + be-db-migration-maintainer + be-rls-tenant-isolation-guard",
-  ],
-  [(file) => file.includes("env-schema.ts") || file.includes(".env.example"), "env → be-env-schema-add"],
-  [(file) => /\/locales\/.*\.json$/.test(file), "i18n → be-i18n-message-guard"],
-  [(file) => file.endsWith(".validator.ts") || file.endsWith(".serializer.ts"), "validator/serializer → be-test-generator"],
-  [(file) => /\/(events|workers|queues)\/.*\.ts$/.test(file), "events/workers/queues → be-workers-events skill"],
-  [
-    (file) => /\/database\/contexts\/.*\.ts$/.test(file) || file.endsWith(".worker.ts") || file.endsWith(".processor.ts"),
-    "tenant data path → be-rls-tenant-isolation-guard (RLS + GUC + context wrappers)",
-  ],
-  [(file) => file.includes("idempotency") || file.endsWith("stripe.client.ts"), "idempotency / stripe writes → be-idempotency-guard"],
-  [(file) => file.endsWith(".container.ts"), "container → be-domain-generator (check DI wiring)"],
-];
+/**
+ * Skill reminders by edited path: the routing map, generated from agent-os/skills/chains.json and
+ * each skill's `trigger` frontmatter (`pnpm agent-os:generate` → skill-routing.json, the rows of
+ * agent-os/docs/skill-triggers.md). Read once per process; a missing or broken file gives none.
+ */
+function skillRoutes() {
+  try {
+    const routing = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "skill-routing.json"), "utf8"));
+    return routing.routes.map((route) => ({ ...route, patterns: route.globs.map(globPattern) }));
+  } catch {
+    return [];
+  }
+}
+
+/** A trigger glob as a RegExp over a repository-relative path: `**` any depth, `*` one segment. */
+function globPattern(glob) {
+  let source = "";
+  for (let index = 0; index < glob.length; index += 1) {
+    const character = glob[index];
+    if (character === "*" && glob[index + 1] === "*") {
+      const slash = glob[index + 2] === "/";
+      source += slash ? "(?:.*/)?" : ".*";
+      index += slash ? 2 : 1;
+    } else if (character === "*") source += "[^/]*";
+    else if (character === "?") source += "[^/]";
+    else source += character.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`^${source}$`);
+}
 
 /** Gates by uncommitted path (the Codex Stop checklist uses the same map). */
 const GATE_REMINDERS = [
@@ -137,8 +148,12 @@ function afterEdit(payload, session) {
   }
 
   const sections = [];
-  const skills = SKILL_REMINDERS.filter(([applies]) => applies(file))
-    .map(([, reminder]) => reminder)
+  const skills = skillRoutes()
+    .filter((route) => route.patterns.some((pattern) => pattern.test(relative)))
+    .map((route) => {
+      const optional = route.optional?.length ? ` (+ ${route.optional.join(", ")})` : "";
+      return `${route.skills.join(" → ")}${optional}${route.chain ? ` — the ${route.chain} chain` : ""}`;
+    })
     .filter((reminder) => turnOnce(session, `skill-reminder:${reminder}`));
   if (skills.length > 0) {
     sections.push([`⚡ Skill reminders for ${basename(file)}:`, ...skills.map((reminder) => `  • ${reminder}`), `  ${SKILL_MAP}`].join("\n"));

@@ -44,7 +44,7 @@ Common chains:
 
 Two **always-on** rules: [be-engineering-principles.mdc](../../agent-os/rules/be-engineering-principles.mdc), [be-project-identity.mdc](../../agent-os/rules/be-project-identity.mdc).
 
-All others are **glob-scoped** — they auto-attach when matching files are edited. Full table: [be-skill-index → Auto-trigger rules](../../agent-os/skills/be-skill-index/SKILL.md#auto-trigger-rules).
+All others are **glob-scoped** — they auto-attach when matching files are edited. Full table: [be-skill-index → Rules](../../agent-os/skills/be-skill-index/SKILL.md#rules).
 
 Policy rules (architecture, import paths, naming, object params) attach on `src/**/*.ts` without invoking a skill — they hold non-negotiable detail.
 

@@ -69,7 +69,7 @@ instead of reading files to answer "where / who / what". It complements `codegra
 
 ---
 
-## Project skills (43)
+## Project skills (46)
 
 All project skills live under [`agent-os/skills/`](../../agent-os/skills/). **Consult
 [`be-skill-index`](../../agent-os/skills/be-skill-index/SKILL.md) first** — it maps file patterns

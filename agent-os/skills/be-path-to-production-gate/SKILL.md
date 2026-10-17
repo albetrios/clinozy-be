@@ -1,6 +1,8 @@
 ---
 name: be-path-to-production-gate
 description: Run a full codebase review for production readiness, produce a plan, and require user review of that plan before any path-to-production action (release, deploy). Invoke this skill before executing path-to-production steps.
+trigger: docs/deployment/runbooks/production-go-live.md
+triggerNote: Or the user asks for path to production / ready for production — a plan the user approves before any production action
 indexNote: pre-release/deploy review + plan; user must approve before prod actions
 ---
 

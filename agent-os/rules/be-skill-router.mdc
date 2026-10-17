@@ -32,6 +32,13 @@ Behaviour: infer sensible defaults from the codebase rather than asking, and run
 | Dependency add/update or `pnpm audit` failure | be-dependency-security | `agent-os/skills/be-dependency-security/SKILL.md` |
 | Hand-written docs under `docs/**` | be-docs-maintainer | `agent-os/skills/be-docs-maintainer/SKILL.md` |
 | Directory/naming/structure changes, MCP template mirrors | be-structure-maintainer | `agent-os/skills/be-structure-maintainer/SKILL.md` |
+| Code under `src/` — fix Biome issues while implementing | be-code-smells-and-best-practices | `agent-os/skills/be-code-smells-and-best-practices/SKILL.md` |
+| Middleware, infra or security config | be-production-hardening-guard | `agent-os/skills/be-production-hardening-guard/SKILL.md` |
+| **Before a release, a deploy, or "ready for production"** — plan first, the user approves | be-path-to-production-gate | `agent-os/skills/be-path-to-production-gate/SKILL.md` |
+| "Review docs" / "audit documentation", or after a large docs reorganization | be-docs-audit | `agent-os/skills/be-docs-audit/SKILL.md` |
+| Port a Supabase Edge Function (manual only: `/be-supabase-porting`) | be-supabase-porting | `agent-os/skills/be-supabase-porting/SKILL.md` |
+| Merge / production-deploy review posture (`.github/rulesets/*.json`, `.github/environments/production.json`) | `pnpm github:tool:governance-mode` (no skill) | `docs/deployment/ci-cd/branch-protection.md` |
+| Product slug, image names, branches, hosted env mapping (no new `clinozy-be` literals) | `be-project-identity.mdc` + `pnpm tool:generate-project-identity` | `agent-os/rules/be-project-identity.mdc` |
 | "Which skill applies?" / full catalog | be-skill-index | `agent-os/skills/be-skill-index/SKILL.md` |
 | Broad read-heavy exploration across many files | be-delegate-search | `agent-os/skills/be-delegate-search/SKILL.md` |
 | PR CI failing — diagnose one check | be-ci-investigation | `agent-os/skills/be-ci-investigation/SKILL.md` |

@@ -17,7 +17,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-before-commit-guard/SKILL.md",
-      "computedHash": "80a519a081df6444f32049bd78507a00d45b09f8434b04c757e823b87dd98402"
+      "computedHash": "6d2563083a2d484d0756697cd204ea0c6354e961c516c60e83b5bd80dce2ce08"
     },
     "be-change-completeness-guard": {
       "source": "local",
@@ -41,7 +41,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-code-quality-guard/SKILL.md",
-      "computedHash": "4af79a02aed2fe95b509a073e149bf63104ff320e1063e42093fc48526e3de2e"
+      "computedHash": "206582e2292accab68ac8890853f102deddaee7cbff1431a76ac9a0938ec26ba"
     },
     "be-code-smells-and-best-practices": {
       "source": "local",
@@ -77,7 +77,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-dependency-security/SKILL.md",
-      "computedHash": "1be38d1287165369141aad6f6f35bbe2a79d7adb8785abe27a2b13aa965073ef"
+      "computedHash": "218a00f21dbf4c56dbaba6d8e3eef74e32aecb95dc22e047a5b0e1bb09e76f62"
     },
     "be-docs-audit": {
       "source": "local",
@@ -89,7 +89,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-docs-maintainer/SKILL.md",
-      "computedHash": "bc66a33273135808001be508a25d34331bd68eaf881be4f95b6cf921f6e950e1"
+      "computedHash": "44c1677d6460655b1e17bc8e1615e2ca5e32fb64f1f0755eaf515e14fe17776e"
     },
     "be-domain-generator": {
       "source": "local",
@@ -113,7 +113,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-i18n-message-guard/SKILL.md",
-      "computedHash": "f9933cb04aa00336097d5a2e175ff566cbaa9cfb26aff35b9db436e443cc756d"
+      "computedHash": "758b28dcd8d2ecb072890e0c756a286401de91c865083f8833fdd1e96532bb7b"
     },
     "be-ide-productivity-guard": {
       "source": "local",
@@ -161,7 +161,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-path-to-production-gate/SKILL.md",
-      "computedHash": "30df7dc2412a937ed57bf0711b1739dd0bf0012225a2e3dcc1a7262e377ddc8f"
+      "computedHash": "e0f9f87e04e24252e04f98b2b4f2e5f07955b6c9bee593d9c204ccbb621c18af"
     },
     "be-pr-babysit": {
       "source": "local",
@@ -173,7 +173,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-production-hardening-guard/SKILL.md",
-      "computedHash": "e7b9334e6176950000e44550302828065aec6b26420bb1fb0b3820192b4e3e15"
+      "computedHash": "632b48445276aac6d0263f0ef190b86d6685e7dbc3ad096b658cfa957dc09d6e"
     },
     "be-read-cache-guard": {
       "source": "local",
@@ -197,7 +197,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-route-schema-doc-guard/SKILL.md",
-      "computedHash": "3b8ad615c9802523202b8e9dd6b81c730262a6d61c8cf7e65e3bdfb9a7933755"
+      "computedHash": "203534f15c9dada233b714946e8b808b2c10b24399602376127de6a6c184466a"
     },
     "be-schema-generator": {
       "source": "local",
@@ -215,7 +215,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-skill-index/SKILL.md",
-      "computedHash": "44d2f7bfaec77e4330fec1e6d4871ebbd24b5cc1ab8f0d8528fdbdf008ea7507"
+      "computedHash": "9880a4feeede9138582e8a63c9f9015cd792bd119fc52460f68641c275b32f14"
     },
     "be-split-to-prs": {
       "source": "local",
@@ -233,7 +233,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-structure-maintainer/SKILL.md",
-      "computedHash": "0a6eb44e2c590e88704cf82095965a63f2e7687e1f9427cb86bb64c138f7493b"
+      "computedHash": "49576ac0000d0d2f00907dbcd76804c5babc3059f3a02c228bf608c32abdbaeb"
     },
     "be-supabase-porting": {
       "source": "local",
@@ -251,19 +251,19 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-test-generator/SKILL.md",
-      "computedHash": "d160d1acc5c9434cad791960fa324e4033bc920f2d8390ddfd0567533130496c"
+      "computedHash": "d747f5dbcaa2f71a6070473f1df808c91d37498fe6a75d1d1f4b059f59f142df"
     },
     "be-tsdoc-export-guard": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-tsdoc-export-guard/SKILL.md",
-      "computedHash": "5630dc06379420ba9f11e7a8ae9aa42596d218f4d63a7ba34230f32297785326"
+      "computedHash": "000dfa6c618733823b7ddb64d21c25ac9184d37e79522ccf8e90a23357c8ef2e"
     },
     "be-workers-events": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-workers-events/SKILL.md",
-      "computedHash": "fdfbade4de2d72bd8d41f462f1086d729b944e43e116f9df0e0e7a9349574e46"
+      "computedHash": "d7f8bc925f24c1abec24ba9919d2614ae53e0cf2436ddaaadee73ac137d7e28b"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",

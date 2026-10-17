@@ -1,7 +1,7 @@
 ---
 name: be-structure-maintainer
 description: Keeps clinozy-be project structure standards up to date. Use after any directory/file naming changes, new layers, or moving code across domains/infrastructure/shared/tooling/tests.
-trigger: CLAUDE.md, AGENTS.md, agent-os/rules/**, agent-os/skills/**, agent-os/agents/**, agent-os/mcp/**, .mcp.example.json, .mcp.default.json
+trigger: CLAUDE.md, AGENTS.md, agent-os/rules/**, agent-os/skills/**, agent-os/agents/**, agent-os/mcp/**, .mcp.example.json, .mcp.default.json, src/tests/load/k6/**
 triggerNote: Structure/naming; MCP template mirrors must stay identical (mcp-config test)
 indexNote: keep project structure/naming standards + docs/rules in sync
 ---
@@ -208,7 +208,7 @@ src/scripts/    # Build-time + operational scripts (may import @/, unlike toolin
 
 When any of the above conventions change, update these files so they remain accurate:
 
-- `agent-os/skills/be-skill-index/SKILL.md` (master skill trigger map and enforcement layers — update when adding skills or changing pre-commit/CI checks)
+- `agent-os/skills/be-skill-index/SKILL.md` (master skill index — its routing and rules tables are generated; enforcement layers — update when adding skills or changing pre-commit/CI checks)
 - `CLAUDE.md` (human-facing architecture rules) and the nested `CLAUDE.md` of the folder that changed (`src/domains/`, `src/infrastructure/`, `src/shared/`)
 - `README.md` (high-level structure overview + Architecture Diagrams: API Request Flow, Event-Bus and BullMQ Flow)
 - `agent-os/rules/be-src-architecture.mdc` (Cursor rule enforcement hints)

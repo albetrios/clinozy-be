@@ -425,16 +425,24 @@ for (const rootDoc of ["CLAUDE.md", "AGENTS.md"])
   if (existsSync(join(repositoryRoot, rootDoc)))
     scanOneFile(join(repositoryRoot, rootDoc));
 
-// ── Check 10: root docs (CLAUDE.md, AGENTS.md) state counts that match disk ──
+// ── Check 10: root docs (CLAUDE.md, AGENTS.md) and the docs that list the skills state counts that match disk ──
 // These root files sit outside the per-component scans above (be-skill-index,
 // skill-triggers, agents-catalog), so a stale count there ("22 sync rules",
 // "All 8 agents", "36 project skills") drifts unseen. Same patterns, applied
 // at the repo root so the canonical entry-point docs cannot silently diverge.
-for (const rootDoc of ["CLAUDE.md", "AGENTS.md"]) {
+for (const rootDoc of [
+  "CLAUDE.md",
+  "AGENTS.md",
+  "docs/getting-started/requirement-intake.md",
+  "agent-os/cloud-environment/skills-and-mcps.md",
+]) {
   const rootDocFile = join(repositoryRoot, rootDoc);
   if (!existsSync(rootDocFile)) continue;
   const rootText = readText(rootDocFile);
-  for (const count of new Set(allNumbers(rootText, /(\d+)\s+project skills/g)))
+  for (const count of new Set([
+    ...allNumbers(rootText, /(\d+)\s+project skills/g),
+    ...allNumbers(rootText, /[Pp]roject skills \((\d+)\)/g),
+  ]))
     if (count !== skillNames.length)
       error(
         "root-doc-count",
