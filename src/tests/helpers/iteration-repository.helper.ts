@@ -80,6 +80,7 @@ export function addTestIteration(iteration: {
   mkdirSync(folder, { recursive: true });
   const fields: IterationReadmeFields = {
     type: 'launch',
+    process: 'full',
     topic: '—',
     owner: ITERATION_TEST_OWNER,
     opened: '2026-09-30',

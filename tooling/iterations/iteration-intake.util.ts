@@ -42,6 +42,7 @@ import {
   missingBriefSections,
   NO_BASELINE,
   parseIterationName,
+  OPTIONAL_README_FIELDS,
   README_FIELD_LABELS,
   readIterationReadme,
   recordedIntakeMode,
@@ -652,7 +653,9 @@ function planSide(request: {
 }): IntakeSide {
   const { repositoryRoot, iteration, readme, snapshot, mode, label, problems, diffs } = request;
   const status = readme.fields.get('Status') ?? '';
-  const missingRows = README_FIELD_LABELS.filter((field) => !readme.fields.has(field));
+  const missingRows = README_FIELD_LABELS.filter(
+    (field) => !(OPTIONAL_README_FIELDS.has(field) || readme.fields.has(field)),
+  );
   if (missingRows.length > 0) {
     problems.push(
       `${label}: README.md has no ${missingRows.join(', ')} row — it predates the field; add the rows from tooling/iterations/templates/README.md.`,

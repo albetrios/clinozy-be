@@ -379,6 +379,21 @@ change before the next step:
    decision is a new `plans/decisions.md` row that supersedes the old one — and the step review is
    shown again before moving on.
 
+## Lite mode — a fix planned in one step
+
+When the README's Process is `lite` (a `fix` opened with `pnpm iteration:new fix <topic> --lite`):
+
+1. **Step 0** as below — confirm the iteration (Baseline `none` unless the user names one), and run
+   the gate when a drop was placed.
+2. **One step, then one stop:** read the current code the fix touches; write `KICKOFF.md` with its
+   ROUTE rows, `plans/decisions.md` (what is decided and why) and `plans/acceptance.md` (what proves
+   the fix — a failing test turned green, at least); keep `plans/db-changes.md`,
+   `plans/route-changes.md` and `plans/worker-changes.md` when the fix changes tables, routes or
+   background work. Show it all in one step review and ask the user's go with **AskUserQuestion**.
+3. No `ready-for-approval` and no `approved`: on the go, be-kickoff-iteration moves it
+   `planning → implementing` and builds the rows. If the fix turns out bigger than a fix (a new
+   table, a new route surface), stop and say so — it becomes a `change` with the full procedure.
+
 ## Procedure — stop after every step, with its step review, and wait
 
 ### Step 0 — Confirm the iteration, then stop until confirmed

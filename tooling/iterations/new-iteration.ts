@@ -5,9 +5,11 @@
  * Usage:
  *   pnpm iteration:new launch
  *   pnpm iteration:new <feat|change|fix> <topic> [--both] [--sibling <path>] [--dry-run]
+ *   pnpm iteration:new fix <topic> --lite
  *
  * Creates `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/README.md` (Owner, Opened, Branch, the
- * suggested Baseline and Status planning filled in). `--both` also creates the same folder in the
+ * suggested Baseline, Process and Status planning filled in). `--lite` (a fix only) records Process
+ * lite: planned in one step, then planning → implementing → done → frozen. `--both` also creates the same folder in the
  * sibling repository, with its own suggested Baseline. The drop goes in next with
  * `pnpm iteration:intake`. The model: iterations/README.md.
  */
@@ -28,9 +30,10 @@ const REPOSITORY_ROOT = resolve(import.meta.dirname, '../..');
 
 const USAGE = `Usage:
   pnpm iteration:new launch
-  pnpm iteration:new <feat|change|fix> <topic> [--both] [--sibling <path>] [--dry-run]
+  pnpm iteration:new <feat|change|fix> <topic> [--both] [--sibling <path>] [--lite] [--dry-run]
 
   --both            also create the folder in the sibling repository
+  --lite            a fix planned in one step: planning → implementing → done → frozen
   --sibling <path>  sibling repository path (default: ../<package name with -be ↔ -fe>)
   --dry-run         print what would be created; write nothing`;
 
@@ -48,7 +51,7 @@ function describePlan(plan: NewIterationPlan): string[] {
     ...(plan.siblingBaseline === undefined
       ? []
       : [`Sibling Baseline: ${baselineNote(plan.siblingBaseline)}`]),
-    `Owner:     ${plan.fields.owner} · Branch: ${plan.fields.branch} · Opened: ${plan.fields.opened}`,
+    `Owner:     ${plan.fields.owner} · Branch: ${plan.fields.branch} · Opened: ${plan.fields.opened} · Process: ${plan.fields.process}`,
     'Files:',
     ...plan.files.map((file) => `  ${relative(resolve(REPOSITORY_ROOT, '..'), file.path)}`),
   ];
@@ -56,6 +59,15 @@ function describePlan(plan: NewIterationPlan): string[] {
 
 function nextSteps(plan: NewIterationPlan): string[] {
   const folder = `iterations/${plan.name}`;
+  if (plan.fields.process === 'lite') {
+    return [
+      'Next (a lite fix):',
+      `  1. Write the Summary line in ${folder}/README.md.`,
+      `  2. Plan it in one step: "plan iteration ${plan.name}" (be-iteration-planning, lite: KICKOFF.md, plans/decisions.md and plans/acceptance.md, one stop for the user's go).`,
+      `  3. On the go: pnpm iteration:status ${plan.name} implementing, then "kickoff iteration ${plan.name}".`,
+      '  The steps in full: docs/design-workflow/process/iteration-guide.md',
+    ];
+  }
   return [
     'Next:',
     `  1. Write the Summary line in ${folder}/README.md.`,
@@ -82,6 +94,7 @@ function main(): void {
     baseBranch: resolveGitMetadata(loadConfig()).defaultBranch,
     type: options.type,
     topic: options.topic,
+    lite: options.lite,
     siblingRoot: options.createInSibling
       ? resolveSiblingRoot({ repositoryRoot: REPOSITORY_ROOT, siblingPath: options.siblingPath })
       : undefined,

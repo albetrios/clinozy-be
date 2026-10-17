@@ -7,6 +7,8 @@
  *
  * Allowed: one step forward along planning → ready-for-approval → approved → implementing →
  * done → frozen; ready-for-approval, approved, implementing or done back to planning with --reason.
+ * A lite fix (README Process lite): planning → implementing → done → frozen; implementing or done
+ * back to planning with --reason.
  * Writes the README's Status row and appends a History entry (date · from → to · reason · who).
  * The model: iterations/README.md.
  */
@@ -20,7 +22,8 @@ const USAGE = `Usage:
   pnpm iteration:status <iteration> <status> [--reason "<text>"]
 
   status: planning → ready-for-approval → approved → implementing → done → frozen (one step forward)
-          or back to planning from ready-for-approval, approved, implementing or done (needs --reason)`;
+          or back to planning from ready-for-approval, approved, implementing or done (needs --reason)
+  lite fix (Process lite): planning → implementing → done → frozen; back from implementing or done`;
 
 function main(): void {
   const options = parseStatusArguments(process.argv.slice(2));

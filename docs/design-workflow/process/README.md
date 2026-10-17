@@ -2,7 +2,7 @@
 
 How a design iteration becomes built, verified backend work — two phases: **planning** writes the
 plan (no code), **kickoff** implements it one ROUTE row at a time. The iteration rules (naming,
-folder, Baseline, lifecycle, commands) are in [iterations/README.md](../../../iterations/README.md);
+folder, Baseline, lifecycle — the lite one for a small `fix` included — commands) are in [iterations/README.md](../../../iterations/README.md);
 every step with its questions is in the [step-by-step guide](iteration-guide.md).
 
 ## The flow

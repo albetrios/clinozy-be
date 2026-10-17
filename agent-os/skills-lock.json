@@ -131,13 +131,13 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-iteration-planning/SKILL.md",
-      "computedHash": "8b106b73ff5eb52c728bc3e0bae5a71765abd2f59748a2eda3b8a8efa479e126"
+      "computedHash": "4ce7b311bc893699aa4782500dd36854ff6de5741550e87b9a65c87d24c75308"
     },
     "be-kickoff-iteration": {
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-kickoff-iteration/SKILL.md",
-      "computedHash": "8a35cb2807c77c2200d62b248ea96bfbf43f5f7a4844ea22b2c3f9d9e5dcf465"
+      "computedHash": "38f49222c771467a59e9781263da3f0b870b109aa83aa27eea902722c81aa573"
     },
     "be-lint-warnings-handler": {
       "source": "local",

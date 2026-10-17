@@ -16,7 +16,8 @@ needs the user, then continue or change.
    - No argument and the user wants a new iteration → step 2.
    - An iteration is named (or picked) → read its README and jump to the matching step of the
      guide: `planning` without `intake-files/` → place the drop (Step 3); `planning` with it →
-     plan (Step 4); `ready-for-approval` → approve (Step 5); `approved` → kick off (Step 6);
+     plan (Step 4; a lite fix — README Process `lite` — plans in one step, then kicks off
+     straight from `planning`); `ready-for-approval` → approve (Step 5); `approved` → kick off (Step 6);
      `implementing` → the next open ROUTE row, or close (Step 7); `done` → freeze (Step 8);
      `frozen` → nothing to do — a correction is a new `fix` iteration.
 2. **Opening questions** — ask with **AskUserQuestion** (at most 4 per call, one recommended

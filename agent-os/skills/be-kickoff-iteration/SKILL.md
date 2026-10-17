@@ -52,7 +52,8 @@ Run `pnpm iteration:list` and show:
 | --- | --- | --- | --- | --- | --- |
 
 - Eligible = Status `approved`, not yet `implementing`, and Baseline `none` or an iteration that is
-  `done` / `frozen`.
+  `done` / `frozen` — or a **lite** fix (README Process `lite`) in `planning` whose `KICKOFF.md` the
+  user gave the go on (be-iteration-planning › Lite mode).
 - Recommend the earliest-opened eligible iteration (the launch always comes first). If the user
   named one, check it against the rule.
 - Always ask with **AskUserQuestion** — never pick silently.
@@ -67,7 +68,8 @@ pnpm iteration:intake <iteration> --check
 print the command's output and end the turn. The intake has to be fixed (and the plan re-approved
 if it changed) before any build.
 
-When it passes: `pnpm iteration:status <iteration> implementing`, and start `AS-BUILT.md` from the
+When it passes: `pnpm iteration:status <iteration> implementing` (a lite fix moves there straight
+from `planning`), and start `AS-BUILT.md` from the
 shape below, dated today, with the Baseline's Standing deviations copied in as the starting list
 (empty for an initial iteration).
 

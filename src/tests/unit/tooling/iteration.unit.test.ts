@@ -27,6 +27,7 @@ import {
   intakeHash,
   missingBriefSections,
   recordedIntakeMode,
+  recordedProcess,
   snapshotFingerprint,
   buildIterationName,
   formatIterationTable,
@@ -79,10 +80,12 @@ describe('parseNewIterationArguments', () => {
         topic: 'pharmacy-returns',
         createInSibling: true,
         siblingPath: undefined,
+        lite: false,
         dryRun: true,
         help: false,
       },
     );
+    expect(parseNewIterationArguments(['fix', 'rounding', '--lite']).lite).toBe(true);
     const parsed = parseNewIterationArguments(['fix', 'rounding', '--sibling', '../other-fe']);
     expect(parsed.createInSibling).toBe(true);
     expect(parsed.siblingPath).toBe('../other-fe');
@@ -138,6 +141,7 @@ describe('names', () => {
 describe('README', () => {
   const fields = {
     type: 'feat',
+    process: 'full',
     topic: 'pharmacy-returns',
     owner: ITERATION_TEST_OWNER,
     opened: '2026-10-06',
@@ -291,6 +295,25 @@ describe('planNewIteration', () => {
     expect(() =>
       planNewIteration({ ...request(repositoryRoot), type: 'launch', topic: undefined }),
     ).toThrow(/only ever one launch/);
+  });
+
+  it('opens a lite fix with Process lite, and refuses --lite on anything but a fix', () => {
+    const repositoryRoot = createIterationRepository();
+    addTestIteration({ repositoryRoot, name: 'launch-2026-09-30-jxmr' });
+    const plan = planNewIteration({
+      ...request(repositoryRoot),
+      type: 'fix',
+      topic: 'rounding',
+      lite: true,
+    });
+    expect(plan.fields.process).toBe('lite');
+    expect(
+      planNewIteration({ ...request(repositoryRoot), type: 'fix', topic: 'rounding' }).fields
+        .process,
+    ).toBe('full');
+    expect(() =>
+      planNewIteration({ ...request(repositoryRoot), type: 'feat', topic: 'returns', lite: true }),
+    ).toThrow(/--lite is for a fix only/);
   });
 
   it('opens a launch with its README only — Baseline none, the drop rows empty', () => {
@@ -489,6 +512,66 @@ describe('iteration:status', () => {
       );
       expect(() => validateStatusTransition({ from, to: 'planning', reason: 'why' })).not.toThrow();
     }
+  });
+
+  it('moves a lite fix planning → implementing → done → frozen, and back only with a reason', () => {
+    const lite = { process: 'lite' } as const;
+    for (const [from, to] of [
+      ['planning', 'implementing'],
+      ['implementing', 'done'],
+      ['done', 'frozen'],
+    ] as const) {
+      expect(() =>
+        validateStatusTransition({ from, to, reason: undefined, ...lite }),
+      ).not.toThrow();
+    }
+    expect(() =>
+      validateStatusTransition({
+        from: 'planning',
+        to: 'ready-for-approval',
+        reason: undefined,
+        ...lite,
+      }),
+    ).toThrow(/a lite fix\). From planning the allowed next status is implementing/);
+    expect(() =>
+      validateStatusTransition({
+        from: 'implementing',
+        to: 'planning',
+        reason: undefined,
+        ...lite,
+      }),
+    ).toThrow(/needs --reason/);
+    expect(() =>
+      validateStatusTransition({ from: 'done', to: 'planning', reason: 'reopened', ...lite }),
+    ).not.toThrow();
+    expect(() =>
+      validateStatusTransition({ from: 'planning', to: 'implementing', reason: undefined }),
+    ).toThrow(/allowed next status is ready-for-approval/);
+  });
+
+  it('reads a README without a Process row as full, and a lite one as lite', () => {
+    const repositoryRoot = createIterationRepository();
+    addTestIteration({
+      repositoryRoot,
+      name: 'launch-2026-09-30-jxmr',
+      fields: { status: 'done' },
+    });
+    addTestIteration({
+      repositoryRoot,
+      name: 'fix-rounding-2026-10-06-kqzx',
+      fields: { type: 'fix', process: 'lite', topic: 'rounding' },
+    });
+    const lite = planStatusChange({
+      repositoryRoot,
+      iteration: 'fix-rounding-2026-10-06-kqzx',
+      status: 'implementing',
+      reason: undefined,
+      today: ITERATION_TEST_TODAY,
+    });
+    expect(parseIterationReadme(lite.content).get('Status')).toBe('implementing');
+    const readmePath = join(repositoryRoot, 'iterations', 'launch-2026-09-30-jxmr', 'README.md');
+    writeFileSync(readmePath, readFileSync(readmePath, 'utf-8').replace(/^\| Process \|.*\n/m, ''));
+    expect(recordedProcess(parseIterationReadme(readFileSync(readmePath, 'utf-8')))).toBe('full');
   });
 
   it('refuses skipped, backward and post-freeze moves', () => {

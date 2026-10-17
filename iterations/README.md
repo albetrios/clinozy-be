@@ -61,6 +61,7 @@ change touches; `pnpm iteration:new <type> <topic> --both` creates it in both.
 | Field | Value |
 | --- | --- |
 | Type | `launch`, `feat`, `change` or `fix` |
+| Process | `full`, or `lite` — a `fix` planned in one step (`iteration:new fix <topic> --lite`); a README without the row is `full` |
 | Topic | the kebab-case topic; `—` for launch |
 | Owner | the person driving it (`git config user.name`) |
 | Opened | `YYYY-MM-DD` |
@@ -138,6 +139,11 @@ Status moves one step at a time with `pnpm iteration:status <iteration> <status>
 | `done` | be-kickoff-iteration | every ROUTE row is closed, `plans/acceptance.md` filled, `AS-BUILT.md` summarized |
 | `frozen` | the last commit before the merge | the iteration merges to `main` |
 
+A **lite** fix (Process `lite`) moves `planning → implementing → done → frozen`: be-iteration-planning
+writes `KICKOFF.md`, `plans/decisions.md` and `plans/acceptance.md` in one step and stops once for the
+user's go, and be-kickoff-iteration then moves it to `implementing`, where its intake locks; it may go
+back to `planning` from `implementing` or `done`, with a reason.
+
 `ready-for-approval`, `approved`, `implementing` or `done` may go back to `planning` with
 `--reason "<why>"` — `done` when work the user finds still open goes back into the same iteration
 before it is frozen; nothing else is allowed. Never edit a frozen iteration — a correction is a new
@@ -147,6 +153,7 @@ before it is frozen; nothing else is allowed. Never edit a frozen iteration — 
 
 ```bash
 pnpm iteration:new feat pharmacy-returns --both          # open (README only)
+pnpm iteration:new fix rounding --lite                   # a fix planned in one step
 pnpm iteration:intake <iteration> <source> [--mode full|overlay|brief] --both   # place the snapshot
 pnpm iteration:intake <iteration> --check [--baseline <baseline>]                 # the gate
 pnpm iteration:baseline <iteration> <baseline|none>      # record the confirmed Baseline

@@ -40,6 +40,18 @@ export type IterationStatus = (typeof ITERATION_STATUSES)[number];
 /** Status a freshly opened iteration starts in. */
 export const INITIAL_ITERATION_STATUS: IterationStatus = 'planning';
 
+/**
+ * How an iteration is run: `full`, the whole planning procedure with its approval; or `lite`, for a
+ * `fix` only — planned in one step, then `planning → implementing → done → frozen`.
+ */
+export const ITERATION_PROCESSES = ['full', 'lite'] as const;
+
+/** One of {@link ITERATION_PROCESSES}. */
+export type IterationProcess = (typeof ITERATION_PROCESSES)[number];
+
+/** The process a README without a Process row runs — every iteration opened before lite mode. */
+export const DEFAULT_ITERATION_PROCESS: IterationProcess = 'full';
+
 /** Statuses from which the intake is locked (the approved plan rests on it). */
 export const LOCKED_INTAKE_STATUSES: ReadonlySet<IterationStatus> = new Set([
   'approved',
@@ -97,6 +109,7 @@ export const FINGERPRINT_LENGTH = 12;
 /** README field labels, in table order — the template must list exactly these rows. */
 export const README_FIELD_LABELS = [
   'Type',
+  'Process',
   'Topic',
   'Owner',
   'Opened',
@@ -115,6 +128,12 @@ export const README_FIELD_LABELS = [
 /** One of {@link README_FIELD_LABELS}. */
 export type ReadmeFieldLabel = (typeof README_FIELD_LABELS)[number];
 
+/**
+ * Rows a README written before them may lack — they read as their default (`Process` → `full`),
+ * so a frozen iteration, which is never edited, still checks clean.
+ */
+export const OPTIONAL_README_FIELDS: ReadonlySet<ReadmeFieldLabel> = new Set(['Process']);
+
 const TEMPLATES_DIRECTORY = join(import.meta.dirname, 'templates');
 const TOPIC_PATTERN = /^[a-z]+(?:-[a-z]+)*$/;
 const ITERATION_NAME_PATTERN =
@@ -127,7 +146,7 @@ const HISTORY_HEADING = '## History';
 const SIBLING_SUFFIXES: Readonly<Record<string, string>> = { '-be': '-fe', '-fe': '-be' };
 
 /** Forward Status moves: one step along the lifecycle at a time. */
-const FORWARD_TRANSITIONS: ReadonlyMap<IterationStatus, IterationStatus> = new Map([
+const FULL_FORWARD_TRANSITIONS: ReadonlyMap<IterationStatus, IterationStatus> = new Map([
   ['planning', 'ready-for-approval'],
   ['ready-for-approval', 'approved'],
   ['approved', 'implementing'],
@@ -140,16 +159,41 @@ const FORWARD_TRANSITIONS: ReadonlyMap<IterationStatus, IterationStatus> = new M
  * user finds still open goes back into the same iteration until it is `frozen` (merged); a frozen
  * iteration is never edited.
  */
-const BACK_TO_PLANNING: ReadonlySet<IterationStatus> = new Set([
+const FULL_BACK_TO_PLANNING: ReadonlySet<IterationStatus> = new Set([
   'ready-for-approval',
   'approved',
   'implementing',
   'done',
 ]);
 
+/**
+ * A lite fix's lifecycle: the user's go on the one-step plan moves `planning` straight to
+ * `implementing` (where the intake locks); there is no `ready-for-approval` or `approved`.
+ */
+const LITE_FORWARD_TRANSITIONS: ReadonlyMap<IterationStatus, IterationStatus> = new Map([
+  ['planning', 'implementing'],
+  ['implementing', 'done'],
+  ['done', 'frozen'],
+]);
+
+/** The statuses a lite fix may take back to `planning`, with a reason. */
+const LITE_BACK_TO_PLANNING: ReadonlySet<IterationStatus> = new Set(['implementing', 'done']);
+
+/** Returns whether `value` is one of {@link ITERATION_PROCESSES}. */
+export function isIterationProcess(value: string): value is IterationProcess {
+  return (ITERATION_PROCESSES as readonly string[]).includes(value);
+}
+
+/** The process a README records — {@link DEFAULT_ITERATION_PROCESS} when the row is missing. */
+export function recordedProcess(fields: ReadonlyMap<string, string>): IterationProcess {
+  const process = fields.get('Process') ?? '';
+  return isIterationProcess(process) ? process : DEFAULT_ITERATION_PROCESS;
+}
+
 /** The values of an iteration's `README.md` field table, keyed for the template. */
 export interface IterationReadmeFields {
   readonly type: string;
+  readonly process: string;
   readonly topic: string;
   readonly owner: string;
   readonly opened: string;
@@ -187,6 +231,7 @@ export interface NewIterationArguments {
   readonly topic: string | undefined;
   readonly createInSibling: boolean;
   readonly siblingPath: string | undefined;
+  readonly lite: boolean;
   readonly dryRun: boolean;
   readonly help: boolean;
 }
@@ -216,6 +261,8 @@ export interface NewIterationRequest {
   readonly topic: string | undefined;
   /** Absolute path of the sibling repository when `--both` is passed. */
   readonly siblingRoot: string | undefined;
+  /** `--lite`: a fix planned in one step ({@link ITERATION_PROCESSES}). */
+  readonly lite?: boolean;
   /** `YYYY-MM-DD`; defaults to today's local date. */
   readonly today?: string;
   /** Source of random suffixes; injectable so tests can force a collision. */
@@ -234,7 +281,8 @@ export interface ReadmeChangePlan {
 // ── arguments ────────────────────────────────────────────────────────────────
 
 /**
- * Parses `pnpm iteration:new` arguments: `<type> [topic] [--both] [--sibling <path>] [--dry-run]`.
+ * Parses `pnpm iteration:new` arguments: `<type> [topic] [--both] [--sibling <path>] [--lite]
+ * [--dry-run]`.
  *
  * @remarks
  * Failure modes: throws on an unknown flag, a `--sibling` without a path, or a third positional.
@@ -244,11 +292,13 @@ export function parseNewIterationArguments(commandLine: readonly string[]): NewI
   const positionals: string[] = [];
   let createInSibling = false;
   let siblingPath: string | undefined;
+  let lite = false;
   let dryRun = false;
   let help = false;
   for (let index = 0; index < commandLine.length; index += 1) {
     const token = commandLine[index] ?? '';
     if (token === '--both') createInSibling = true;
+    else if (token === '--lite') lite = true;
     else if (token === '--dry-run') dryRun = true;
     else if (token === '--help' || token === '-h') help = true;
     else if (token === '--sibling') {
@@ -269,6 +319,7 @@ export function parseNewIterationArguments(commandLine: readonly string[]): NewI
     topic: positionals[1],
     createInSibling,
     siblingPath,
+    lite,
     dryRun,
     help,
   };
@@ -854,6 +905,9 @@ function suggestedBaselineFor(location: {
 export function planNewIteration(request: NewIterationRequest): NewIterationPlan {
   const { repositoryRoot, baseBranch, siblingRoot } = request;
   const { type, topic } = validateTypeAndTopic(request);
+  if (request.lite === true && type !== 'fix') {
+    throw new Error(`--lite is for a fix only; a ${type} runs the full planning procedure.`);
+  }
 
   const localNames = workingTreeIterationNames(repositoryRoot);
   const baseNames = baseBranchIterationNames({ repositoryRoot, baseBranch });
@@ -892,6 +946,7 @@ export function planNewIteration(request: NewIterationRequest): NewIterationPlan
 
   const fields: IterationReadmeFields = {
     type,
+    process: request.lite === true ? 'lite' : DEFAULT_ITERATION_PROCESS,
     topic: topic ?? EMPTY_FIELD,
     owner,
     opened,
@@ -1073,7 +1128,8 @@ export function parseStatusArguments(commandLine: readonly string[]): {
  * @remarks
  * Allowed: one step forward along `planning → ready-for-approval → approved → implementing →
  * done → frozen`, and `ready-for-approval`, `approved`, `implementing` or `done` back to `planning`
- * with a reason.
+ * with a reason. A `lite` fix moves `planning → implementing → done → frozen`, and `implementing`
+ * or `done` back to `planning` with a reason.
  *
  * Failure modes: throws with the allowed next statuses on any other move, and when a move back to
  * `planning` has no reason.
@@ -1082,21 +1138,25 @@ export function validateStatusTransition(move: {
   readonly from: IterationStatus;
   readonly to: IterationStatus;
   readonly reason: string | undefined;
+  readonly process?: IterationProcess;
 }): void {
   const { from, to, reason } = move;
-  if (FORWARD_TRANSITIONS.get(from) === to) return;
-  if (to === 'planning' && BACK_TO_PLANNING.has(from)) {
+  const lite = move.process === 'lite';
+  const forward = lite ? LITE_FORWARD_TRANSITIONS : FULL_FORWARD_TRANSITIONS;
+  const backToPlanning = lite ? LITE_BACK_TO_PLANNING : FULL_BACK_TO_PLANNING;
+  if (forward.get(from) === to) return;
+  if (to === 'planning' && backToPlanning.has(from)) {
     if (reason === undefined) {
       throw new Error(`Moving ${from} → planning needs --reason "<why it goes back>".`);
     }
     return;
   }
   const allowed = [
-    ...(FORWARD_TRANSITIONS.has(from) ? [FORWARD_TRANSITIONS.get(from)] : []),
-    ...(BACK_TO_PLANNING.has(from) ? ['planning (with --reason)'] : []),
+    ...(forward.has(from) ? [forward.get(from)] : []),
+    ...(backToPlanning.has(from) ? ['planning (with --reason)'] : []),
   ];
   throw new Error(
-    `Cannot move ${from} → ${to}. From ${from} the allowed next status is ${
+    `Cannot move ${from} → ${to}${lite ? ' (a lite fix)' : ''}. From ${from} the allowed next status is ${
       allowed.length === 0 ? 'none — a frozen iteration is never edited' : allowed.join(' or ')
     }.`,
   );
@@ -1133,7 +1193,12 @@ export function planStatusChange(request: {
   if (!isIterationStatus(current)) {
     throw new Error(`${iteration}/README.md has Status "${current}", which is not a known status.`);
   }
-  validateStatusTransition({ from: current, to: status, reason });
+  validateStatusTransition({
+    from: current,
+    to: status,
+    reason,
+    process: recordedProcess(readme.fields),
+  });
   const historyEntry = renderHistoryEntry({
     date: request.today ?? localDate(new Date()),
     change: `${current} → ${status}`,
