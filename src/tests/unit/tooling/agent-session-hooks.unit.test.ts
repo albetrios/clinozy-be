@@ -190,7 +190,7 @@ describe('tooling/agent-os/session-hooks.ts', () => {
     expect(existsSync(sessionSettingsPath(sessionRoot))).toBe(false);
   });
 
-  it('anchors a relative if rule to its repository, so another repository edits spawn nothing', () => {
+  it('anchors a relative file rule to its repository and keeps a command rule as it is', () => {
     const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other: OTHER_SETTINGS });
     expect(runScript({ sessionRoot }).status).toBe(0);
     const repository = join(sessionRoot, 'own');
@@ -199,6 +199,11 @@ describe('tooling/agent-os/session-hooks.ts', () => {
         group.hooks.flatMap((hook) => (hook.if === undefined ? [] : [hook.if])),
       ),
     );
-    expect(rules).toEqual([`Edit(/${repository}/**)`, `Write(/${repository}/**)`]);
+    // `Bash(git push*)` names a command, not a path: push-ci-watch.mjs checks the repository itself.
+    expect(rules).toEqual([
+      `Edit(/${repository}/**)`,
+      `Write(/${repository}/**)`,
+      'Bash(git push*)',
+    ]);
   });
 });
