@@ -21,6 +21,11 @@ import type { TestProjectConfiguration } from 'vitest/config';
  *   Used by `.github/workflows/reusable-vitest-postgres-redis.yml` to split the db-bound suite
  *   across multiple runners (tenancy+billing, auth+user, notify+audit+upload+rest).
  *   Empty/unset → run everything (default).
+ *
+ * Security slicing (CI db-bound shards):
+ *   Set `VITEST_SECURITY_SLICE=matrix` to narrow the `security` project to the permission route
+ *   matrix (one file, about 9 minutes) or `rest` to everything else, so the matrix gets a shard of
+ *   its own. Empty/unset → the whole project (default).
  */
 
 const ALL_DOMAIN_NAMES = [
@@ -57,6 +62,16 @@ function parseDomainFilter(): DomainFilter | null {
     return null;
   }
   return { domains, includeRest };
+}
+
+const PERMISSION_ROUTE_MATRIX =
+  'src/tests/security/infrastructure/permission-route-matrix.security.test.ts';
+
+function buildSecurityFiles(): { include: string[]; exclude: string[] } {
+  const slice = process.env.VITEST_SECURITY_SLICE?.trim();
+  if (slice === 'matrix') return { include: [PERMISSION_ROUTE_MATRIX], exclude: [] };
+  const include = ['src/tests/security/**/*.security.test.ts'];
+  return { include, exclude: slice === 'rest' ? [PERMISSION_ROUTE_MATRIX] : [] };
 }
 
 function buildE2eIncludes(): string[] {
@@ -237,7 +252,7 @@ export const vitestProjects = [
     extends: true,
     test: {
       name: 'security',
-      include: ['src/tests/security/**/*.security.test.ts'],
+      ...buildSecurityFiles(),
       pool: 'forks',
       fileParallelism: false,
       maxWorkers: 1,

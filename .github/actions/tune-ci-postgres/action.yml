@@ -1,0 +1,33 @@
+name: Tune CI Postgres
+description: |
+  Turns off durability on a CI job's throwaway Postgres service container: fsync,
+  synchronous_commit and full_page_writes. Every DB-bound test lane writes heavily and its data
+  is gone when the job ends, so crash safety buys nothing there. Service containers take no
+  command arguments, so the settings go in with ALTER SYSTEM and a reload. CI only — never point
+  this at a database that holds data.
+
+inputs:
+  container:
+    description: The Postgres service container id (`job.services.postgres.id`)
+    required: true
+  user:
+    description: The superuser the service was created with (POSTGRES_USER)
+    required: false
+    default: clinozy
+
+runs:
+  using: composite
+  steps:
+    - name: Turn off Postgres durability for the test run
+      shell: bash
+      env:
+        POSTGRES_CONTAINER: ${{ inputs.container }}
+        POSTGRES_SUPERUSER: ${{ inputs.user }}
+      run: |
+        set -euo pipefail
+        docker exec "${POSTGRES_CONTAINER}" psql -U "${POSTGRES_SUPERUSER}" -d postgres -v ON_ERROR_STOP=1 \
+          -c "ALTER SYSTEM SET fsync = off" \
+          -c "ALTER SYSTEM SET synchronous_commit = off" \
+          -c "ALTER SYSTEM SET full_page_writes = off" \
+          -c "SELECT pg_reload_conf()"
+        echo "fsync=$(docker exec "${POSTGRES_CONTAINER}" psql -U "${POSTGRES_SUPERUSER}" -d postgres -Atc 'SHOW fsync')"

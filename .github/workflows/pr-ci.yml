@@ -335,6 +335,10 @@ jobs:
       - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
         uses: ./.github/actions/test-env
 
+      - uses: ./.github/actions/tune-ci-postgres
+        with:
+          container: ${{ job.services.postgres.id }}
+
       - name: Run migrations
         run: pnpm db:migrate
 
@@ -344,7 +348,7 @@ jobs:
           pnpm exec vitest run --project security src/tests/security/rls
 
   rls-application-role:
-    name: RLS application role (whole connection) ${{ matrix.shard }}/4
+    name: RLS application role (whole connection) ${{ matrix.shard }}/4 (${{ matrix.domains }})
     needs: [changes]
     if: |
       needs.changes.outputs.docs-only-md != 'true' &&
@@ -352,13 +356,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # The whole e2e + integration suite no longer fits one runner's budget, so it runs in four
-    # even by-file-count shards (vitest `--shard`, as the cross-cutting integration shards do).
-    # Every shard migrates its own database and runs as the application role; the aggregate
-    # result is red if any shard is.
+    # shards of domain groups (`VITEST_DOMAIN_FILTER`), balanced by recorded test time (CI run
+    # 39035942120, 17 Oct: 17.8 min; the even by-file-count `--shard` split ran 2.8-5.7 min).
+    # The groups must cover every domain plus `rest` exactly once — pinned by
+    # src/tests/unit/ci/db-shard-balance.policy.unit.test.ts. Every shard migrates its own
+    # database and runs as the application role; the aggregate result is red if any shard is.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        include:
+          - shard: 1
+            domains: app
+          - shard: 2
+            domains: tenancy,upload,audit
+          - shard: 3
+            domains: auth,billing
+          - shard: 4
+            domains: rest,user,notify
     # The job above proves the POLICIES are right. This one proves the APPLICATION obeys them.
     # The pool under test is opened as `clinozy_be_app` via libpq's `options=-c role=...`, so the
     # role applies to every statement — including ones inside the app's own transactions —
@@ -415,15 +429,21 @@ jobs:
 
       # Migrations run on the superuser URL above, BEFORE the role is applied — the application
       # role is deliberately not a schema owner.
+      - uses: ./.github/actions/tune-ci-postgres
+        with:
+          container: ${{ job.services.postgres.id }}
+
       - name: Run migrations
         run: pnpm db:migrate
 
       # The harness opens the pool under test as clinozy_be_app and the maintenance pool as
       # clinozy_be_maintenance (`-c role=` on each URL), so both run the production RLS posture.
       - name: Run e2e + integration as the RLS-subject application role
+        env:
+          VITEST_DOMAIN_FILTER: ${{ matrix.domains }}
         run: |
           set -euo pipefail
-          pnpm test:rls-role --project e2e --project integration --shard=${{ matrix.shard }}/4
+          pnpm test:rls-role --project e2e --project integration
 
   build-verify:
     name: Build verify
