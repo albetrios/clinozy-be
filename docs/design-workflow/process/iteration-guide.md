@@ -72,14 +72,12 @@ the gate pass? Do the Schema-routes values match in both repositories?
 
 Say **"plan iteration `<iteration>`"** (or paste the
 [iteration-planning prompt](../prompts/iteration-planning-prompt.md)). The **be-iteration-planning**
-skill runs Steps 0–7 and stops after each:
+skill runs Steps 0–7 and stops after each — Steps 1–3 run back to back with one stop:
 
 | Skill step | What you answer or check |
 | --- | --- |
-| 0 — Confirm + gate | pick the iteration from the eligibility table; incremental: confirm the Baseline (saved with `pnpm iteration:baseline`); then `pnpm iteration:intake <iteration> --check` — a failure stops everything |
-| 1 — Inventory | are the counts right — screens, flows, entities, operations? |
-| 2 — Delta (incremental) | full / overlay: `pnpm iteration:diff <baseline> <iteration>` vs the designer's notes — are the findings intended? brief: `BRIEF.md` is the change list, and nothing else changed. Always: the Baseline's Standing deviations |
-| 3 — Reconcile | for each PRD ↔ schema-routes mismatch: which source wins? Anything only the screens or the prototype say (not in the PRD or schema-routes, nor an accepted frontend request): what do you want? — the plan never decides it |
+| 0 — Confirm + gate | pick the iteration from the eligibility table; a Baseline only if you name one (`pnpm iteration:baseline`); then `pnpm iteration:intake <iteration> --check` — a failure stops everything |
+| 1–3 — Read the drop (one stop) | **Inventory:** are the counts right — screens, flows, entities, operations? **Delta** (incremental): full / overlay: `pnpm iteration:diff <baseline> <iteration>` vs the designer's notes — are the findings intended? brief: `BRIEF.md` is the change list, and nothing else changed; always the Baseline's Standing deviations. **Reconcile:** for each PRD ↔ schema-routes mismatch: which source wins? Anything only the screens or the prototype say (not in the PRD or schema-routes, nor an accepted frontend request) becomes a Step 4 question — the plan never decides it |
 | 4 — Blocking questions | the RED questions — ownership, scope (organization or narrower), lifecycle and delete policy, who may do what, background timing, notification channels, realtime, outside systems, and where new tables live (the domain for each group, and their plural snake_case names) |
 | 5 — Route review | one sub-domain at a time in `plans/routes-final.md` ([template](routes-final-template.md)): its tables and connections, routes, permissions, errors and decisions with a recommendation — is it right? Your OK makes the sub-domain final; a change reopens it |
 | 6 — KICKOFF.md + plans/ | the plan, the ROUTE ledger (one row per sub-domain of the route review, or per table, background piece, flow), the requirements, the stories |

@@ -420,7 +420,13 @@ pnpm iteration:intake <iteration> --check                         # MODE initial
 pnpm iteration:intake <iteration> --check --baseline <baseline>   # MODE incremental
 ```
 
-### Step 1 — Inventory, then stop
+### Steps 1–3 — Read the drop: inventory, delta, reconcile — then one stop
+
+The three run back to back and end with **one** step review: they read the drop and write the
+same three files, and nothing in them needs the user's answer before the next part (questions wait
+for Step 4).
+
+#### Step 1 — Inventory
 
 - The gate passed, so the snapshot is complete and unedited; extras the intake warned about are
   findings.
@@ -433,9 +439,9 @@ pnpm iteration:intake <iteration> --check --baseline <baseline>   # MODE increme
   proposed route per operation row (initial: all `NEW`) — and `plans/worker-changes.md` — one row per
   piece of background work the intake names (rules, reminders, automatic tasks, schedules).
 
-Report the counts in the step review. **Stop.**
+Keep the counts for the step review at the end of Step 3.
 
-### Step 2 — Delta (MODE incremental only), then stop
+#### Step 2 — Delta (MODE incremental only)
 
 MODE initial: write `n/a — initial` and continue. MODE incremental — by the README's Intake mode:
 
@@ -452,7 +458,7 @@ MODE initial: write `n/a — initial` and continue. MODE incremental — by the 
   differs from the drop, plan against what was actually built. List the ones this change touches
   in `KICKOFF.md` (section 8).
 
-### Step 3 — Reconcile, then stop
+#### Step 3 — Reconcile
 
 List every `PRD.md` ↔ `schema-routes.md` mismatch in `plans/coverage.md` › Reconciliation:
 
@@ -469,6 +475,9 @@ for scope and behaviour, `schema-routes.md` for data, value lists, limits and UR
 request the user accepted, or a decision in `plans/decisions.md`. **Anything only the screens or the
 prototype say gets no verdict — it is a question for the user** (Step 4), with a proposed default,
 and every change-file entry that rests on it is marked *pending your answer* until it is answered.
+
+**Stop** — one step review for Steps 1–3: the inventory counts, the delta and its findings, the
+reconciliation rows and the questions they raise for Step 4.
 
 ### Step 4 — Blocking questions, then stop when every RED is answered
 
