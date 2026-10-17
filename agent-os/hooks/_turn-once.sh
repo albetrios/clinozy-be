@@ -24,6 +24,19 @@ turn_once() {
   return 0
 }
 
+# turn_mark SESSION_ID KEY — records KEY for the rest of this turn (e.g. the user ran /be-ship).
+turn_mark() {
+  local directory
+  directory="$(turn_state_dir "$1")"
+  mkdir -p "${directory}" 2>/dev/null || return 0
+  : >"${directory}/$(printf '%s' "$2" | cksum | cut -d' ' -f1)" 2>/dev/null || true
+}
+
+# turn_marked SESSION_ID KEY — succeeds when KEY was recorded in this turn.
+turn_marked() {
+  [ -e "$(turn_state_dir "$1")/$(printf '%s' "$2" | cksum | cut -d' ' -f1)" ]
+}
+
 # turn_reset SESSION_ID — a new prompt starts a new turn.
 turn_reset() {
   local directory

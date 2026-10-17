@@ -21,9 +21,17 @@ command -v jq >/dev/null 2>&1 || exit 0
 INPUT=$(cat)
 # A new prompt is a new turn: the reminder hooks may speak once more (_turn-once.sh).
 source "$(dirname "${BASH_SOURCE[0]}")/_turn-once.sh"
-turn_reset "$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || echo "")"
+SESSION=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || echo "")
+turn_reset "$SESSION"
 PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // empty' 2>/dev/null || echo "")
 [[ -z "$PROMPT" ]] && exit 0
+
+# /be-ship and /be-open-pr are the user asking for a PR in so many words: no-unrequested-pr.sh lets
+# this turn's PR creation through without a second confirmation. (The hook sees the prompt as
+# typed — `/be-ship <title>` — checked on Claude Code 2.1.302.)
+if printf '%s' "$PROMPT" | grep -Eq '^[[:space:]]*/be-(ship|open-pr)([[:space:]]|$)'; then
+  turn_mark "$SESSION" "pr-requested"
+fi
 
 lower=$(printf '%s' "$PROMPT" | tr '[:upper:]' '[:lower:]')
 
