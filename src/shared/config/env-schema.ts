@@ -278,6 +278,24 @@ const EXTERNAL_SERVICE_VARS = {
   }),
 } satisfies Record<string, EnvVarSpec>;
 
+/**
+ * Billing behaviour switches. `BILLING_READ_ONLY_ENFORCED` turns on read-only mode for unpaid clinics
+ * (owner decision D3, 2026-10-17): a TEAM organization without a paid entitlement keeps writing
+ * through its grace, then every write under `/api/v1/app/` answers 403 `organization_read_only`.
+ * Category-A: the static default `false` is the production-safe value until clinics can pay in ₹ —
+ * on, a clinic would be locked with no way out — so no refine pins it.
+ */
+const BILLING_POLICY_VARS = {
+  BILLING_READ_ONLY_ENFORCED: envVar({
+    schema: booleanString('false'),
+    meta: {
+      allowed: 'true | false (or 1 | 0)',
+      description:
+        'Read-only mode for unpaid clinics: a TEAM organization without a paid plan may not write under /api/v1/app/ once its grace ends (14 days after creation, or BILLING_DUNNING_GRACE_DAYS after a lapsed subscription period). Off, every clinic reports plan_access active.',
+    },
+  }),
+} satisfies Record<string, EnvVarSpec>;
+
 const envSchemaBase = z.object({
   // Server & process — declared in the SERVER_VARS registry above (allowed values + description).
   ...toSchemaShape(SERVER_VARS),
@@ -703,6 +721,8 @@ const envSchemaBase = z.object({
    * revoke collaborators) while preventing indefinite premium headcount on an unpaid subscription.
    */
   BILLING_DUNNING_GRACE_DAYS: z.coerce.number().int().min(0).max(120).default(14),
+  // Read-only mode for unpaid clinics — the BILLING_POLICY_VARS registry.
+  ...toSchemaShape(BILLING_POLICY_VARS),
 
   /**
    * Category-B. Removes a patient photo's location (its EXIF GPS block and XMP) from the stored
@@ -2067,6 +2087,7 @@ export const envSchema = envSchemaBase
 export const ENV_VAR_REGISTRY: Readonly<Record<string, EnvVarSpec>> = {
   ...SERVER_VARS,
   ...EXTERNAL_SERVICE_VARS,
+  ...BILLING_POLICY_VARS,
 };
 
 /** Ordered list of env var names from the schema (for .env.example sync and scripts). */

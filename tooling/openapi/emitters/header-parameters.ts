@@ -1,4 +1,5 @@
 import { collectAllParsedRoutes } from '@tooling/openapi/route-catalog/route-parser.js';
+import { WRITE_HTTP_METHODS } from '@/shared/constants/index.js';
 
 /**
  * Per-operation request-header documentation. Mirrors the runtime middleware
@@ -43,14 +44,12 @@ const CAPTCHA_ROUTE_KEYS = new Set([
 
 const WEBHOOK_ROUTE_KEYS = new Set(['POST /api/v1/billing/webhook']);
 
-const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-
 /** Builds the documented request-header parameters for one operation. */
 export function buildHeaderParameters(method: string, routeKey: string): object[] {
   const headers: object[] = [];
 
   if (
-    MUTATING_METHODS.has(method) &&
+    WRITE_HTTP_METHODS.has(method) &&
     !WEBHOOK_ROUTE_KEYS.has(routeKey) &&
     !routeKey.includes('/api/v1/mcp')
   ) {

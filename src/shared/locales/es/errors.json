@@ -327,6 +327,7 @@
   "organizationContextRequired": "Contexto de organización requerido",
   "insufficientOrganizationPermissions": "Permisos de organización insuficientes",
   "organizationRequiresMfa": "Esta organización requiere autenticación multifactor. Verifica con tu segundo factor y vuelve a intentarlo.",
+  "organizationReadOnly": "Esta clínica está en modo de solo lectura: no tiene un plan de pago y su periodo de gracia terminó. Elige un plan para volver a hacer cambios.",
   "invalidField": "{{label}} no válido",
   "missingAuthorizationHeader": "Falta el encabezado Authorization",
   "invalidAuthorizationHeaderFormat": "Formato de encabezado Authorization no válido",

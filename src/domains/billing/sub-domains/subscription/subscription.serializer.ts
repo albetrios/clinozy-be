@@ -1,3 +1,5 @@
+import type { PlanAccess, PlanAccessOutput } from './subscription.types.js';
+
 /**
  * Subscription row fields exposed to API consumers. Mirrors the live Drizzle row but with
  * the public-id rename baked in and every leak-class field excluded — see sec-T finding #17
@@ -89,3 +91,15 @@ export const SubscriptionSerializer = {
     return rows.map((row) => serializeOne(row));
   },
 };
+
+/**
+ * Serializes a clinic's {@link PlanAccess} into the public `plan_access` body
+ * (`active_organization.plan_access` on `GET /auth/me/context`): snake_case keys and an ISO 8601
+ * `grace_ends_at`, `null` when the clinic is `active`.
+ */
+export function serializePlanAccess(access: PlanAccess): PlanAccessOutput {
+  return {
+    state: access.state,
+    grace_ends_at: toIsoString(access.graceEndsAt),
+  };
+}

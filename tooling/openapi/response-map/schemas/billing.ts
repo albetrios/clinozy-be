@@ -72,6 +72,34 @@ export const subscriptionExample = {
 };
 
 // ── Stripe webhook acknowledgement (protocol-owned 200) ──
+// ── Plan access (owner decision D3: read-only mode for unpaid clinics) ──
+export const planAccessSchema = {
+  type: 'object',
+  description:
+    'Whether the clinic may still write in the clinic rooms. `active`: a paid plan (always for a personal organization, and for every organization while read-only mode is off). `grace`: no paid plan, writes allowed until `grace_ends_at`. `read_only`: no paid plan since `grace_ends_at` — every POST / PUT / PATCH / DELETE under /api/v1/app/ answers 403 with `error.reason` `organization_read_only`; reads, billing, auth, user, tenancy and upload stay open.',
+  properties: {
+    state: {
+      type: 'string',
+      enum: ['active', 'grace', 'read_only'],
+      description: 'Possible values: active | grace | read_only',
+      example: 'grace',
+    },
+    grace_ends_at: {
+      type: 'string',
+      format: 'date-time',
+      nullable: true,
+      description:
+        'When the grace ends (`grace`) or ended, i.e. when read-only began (`read_only`); null when `active`.',
+    },
+  },
+  required: ['state', 'grace_ends_at'],
+};
+
+export const planAccessExample = {
+  state: 'grace',
+  grace_ends_at: '2026-10-31T09:30:00.000Z',
+};
+
 export const webhookReceivedSchema = {
   type: 'object',
   properties: { received: { type: 'boolean' } },

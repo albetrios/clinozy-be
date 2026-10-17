@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotFoundError } from '@/shared/errors/index.js';
 import { resetPlanCatalogMemoForTests } from '@/domains/billing/sub-domains/plan/plan-catalog-memo.js';
-import { PlanService } from '@/domains/billing/sub-domains/plan/plan.service.js';
+import {
+  PlanService,
+  isPaidPlan,
+  supportsPlanBillingCycle,
+} from '@/domains/billing/sub-domains/plan/plan.service.js';
 import type { PlanRepository } from '@/domains/billing/sub-domains/plan/plan.repository.js';
 
 const planRow = {
@@ -154,5 +158,20 @@ describe('PlanService', () => {
   it('requirePlanRecordByInternalId throws when plan is missing', async () => {
     vi.mocked(repository.findById).mockResolvedValue(null);
     await expect(service.requirePlanRecordByInternalId(999)).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe('isPaidPlan — the one definition of a paid plan', () => {
+  it('is a price above zero on either cycle; zero on both is the Free plan', () => {
+    expect(isPaidPlan({ plan: { price_monthly: '1999.00', price_yearly: '0.00' } })).toBe(true);
+    expect(isPaidPlan({ plan: { price_monthly: '0.00', price_yearly: '19990.00' } })).toBe(true);
+    expect(isPaidPlan({ plan: { price_monthly: '0.00', price_yearly: '0.00' } })).toBe(false);
+  });
+
+  it('decides annual billing: the Free plan renews monthly only', () => {
+    const free = { price_monthly: '0', price_yearly: '0' };
+    expect(supportsPlanBillingCycle({ plan: free, billingCycle: 'yearly' })).toBe(false);
+    expect(supportsPlanBillingCycle({ plan: free, billingCycle: 'monthly' })).toBe(true);
+    expect(supportsPlanBillingCycle({ plan: planRow, billingCycle: 'yearly' })).toBe(true);
   });
 });

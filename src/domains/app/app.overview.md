@@ -19,6 +19,11 @@ as the launch's ROUTE builds them.
   management routes by the resource's codes.
 - A person's branches are `app.branch_members` rows on their membership (D9) — an ended
   membership's rows stay but drop out of every list (D57); a restore brings them back.
+- Every write (POST / PUT / PATCH / DELETE) passes one guard registered on the routes plugin
+  (`app-plan-access.ts`): a clinic without a paid plan past its grace answers 403
+  `organization_read_only`, reads stay open (owner decision D3; only while
+  `BILLING_READ_ONLY_ENFORCED` is on). The check is billing's `SubscriptionService`, reached through
+  the `planAccess` port the composition root wires.
 
 ## Sub-domains
 
@@ -48,6 +53,8 @@ as the launch's ROUTE builds them.
 
 - [organization-switch-and-capability-discovery-flow](../../FLOWS.md#organization-switch-and-capability-discovery-flow) — the active organization (the `org` claim) scopes every app route.
 - Reads tenancy through `OrganizationService`, `MembershipService` and `MemberRoleService` only (never their repositories).
+- [unpaid-clinic-read-only-flow](../../FLOWS.md#unpaid-clinic-read-only-flow) — every app write is
+  refused for a read-only clinic (billing's plan access, through the `planAccess` port).
 - [clinic-setup-flow](../../FLOWS.md#clinic-setup-flow) — a new clinic's setup drawer, its first branch
   (made the main branch) and going live (feat-clinic-setup); end to end in
   `__tests__/e2e/flow-clinic-goes-live`.

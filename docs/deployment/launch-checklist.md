@@ -4,7 +4,7 @@
 release with a manual approval) and the clinic rooms are served by this API, but the items below
 block a paid launch. This is the live list: tick an item in the PR that closes it. The dated files
 in [`docs/reviews/`](../reviews/) stay point-in-time snapshots; the frontend's half of this list is
-clinozy-fe's `docs/deployment/production-readiness.md`.
+[clinozy-fe's production readiness](https://github.com/albetrios/clinozy-fe/blob/main/docs/deployment/production-readiness.md).
 
 ## Blockers
 
@@ -17,7 +17,14 @@ clinozy-fe's `docs/deployment/production-readiness.md`.
       billing service. Needs the owner's Razorpay KYC and live keys.
 - [ ] **A lapsed plan turns read-only after a grace period.** Decided 2026-10-17 (D3): 14 days of
       grace, then read-only; the owner and admins are never suspended and no data is deleted.
-      Until it is built, a lapse is only logged (see Done).
+      **Built, switched off:** behind `BILLING_READ_ONLY_ENFORCED` (default `false`) — a TEAM clinic
+      without a paid plan gets 14 days from its creation (or `BILLING_DUNNING_GRACE_DAYS` after a
+      lapsed subscription's period), then every write under `/api/v1/app/` answers 403
+      `organization_read_only`; `GET /auth/me/context` reports `active_organization.plan_access`
+      ([unpaid-clinic-read-only-flow](../../src/FLOWS.md#unpaid-clinic-read-only-flow)). It stays off
+      until clinics can pay in ₹ (the blocker above) — on now, an unpaid clinic would have no way
+      out. Tick this when the flag is on in production. Switching it on turns every unpaid clinic
+      already past its grace read-only at once.
 - [ ] **Patient data in India.** `S3_REGION` defaults to `us-east-1`, and the Neon region is not
       recorded in this repository. Decided 2026-10-17 (D4): Mumbai (`ap-south-1`) for files and the
       database, before the first real clinic.

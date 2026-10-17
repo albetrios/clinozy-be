@@ -98,12 +98,27 @@ export class PlanService {
 }
 
 /**
+ * Whether `plan` costs money — a price above zero on either cycle. A plan priced zero on both is the
+ * Free plan.
+ *
+ * @remarks
+ * The one definition of "paid plan": annual billing ({@link supportsPlanBillingCycle}) and a clinic's
+ * paid entitlement (`holdsPaidEntitlement` in the subscription sub-domain) both read it. Catalog
+ * prices are never negative (`chk_plans_price_m` / `chk_plans_price_y`).
+ */
+export function isPaidPlan(input: {
+  plan: { price_monthly: string; price_yearly: string };
+}): boolean {
+  return Number(input.plan.price_monthly) > 0 || Number(input.plan.price_yearly) > 0;
+}
+
+/**
  * Free plans renew monthly; paid plans may be purchased monthly or annually.
  * Missing provider configuration is separate from product cycle availability.
  *
  * @remarks
  * Monthly billing is available for every plan. Annual billing is unavailable only
- * when both catalog prices are zero, so Free has no annual zero-price offer.
+ * when both catalog prices are zero ({@link isPaidPlan}), so Free has no annual zero-price offer.
  * This pure policy is shared by catalog serialization and subscription validation;
  * it does not inspect provider price mappings or perform any external mutation.
  */
@@ -111,11 +126,7 @@ export function supportsPlanBillingCycle(input: {
   plan: { price_monthly: string; price_yearly: string };
   billingCycle: 'monthly' | 'yearly';
 }): boolean {
-  return (
-    input.billingCycle === 'monthly' ||
-    Number(input.plan.price_monthly) !== 0 ||
-    Number(input.plan.price_yearly) !== 0
-  );
+  return input.billingCycle === 'monthly' || isPaidPlan({ plan: input.plan });
 }
 
 function toOutput(row: {

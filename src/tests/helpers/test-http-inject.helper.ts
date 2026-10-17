@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { InjectOptions } from 'light-my-request';
 import type { FastifyInstance } from 'fastify';
 import { waitForResponseSettlement } from '@/tests/helpers/response-settlement.helper.js';
-
-const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+import { WRITE_HTTP_METHODS } from '@/shared/constants/index.js';
 
 /**
  * Path suffixes of the `idempotencyRequired` CREATE routes added in EX-06. Their missing-key 422 is
@@ -26,7 +25,7 @@ function shouldAutoAddIdempotencyKey(
   url: string,
   headers: Record<string, string>,
 ): boolean {
-  if (!WRITE_METHODS.has(method.toUpperCase())) return false;
+  if (!WRITE_HTTP_METHODS.has(method.toUpperCase())) return false;
   const path = (url.split('?')[0] ?? '').replace(/\/+$/, '');
   if (!IDEMPOTENCY_REQUIRED_CREATE_PATH_SUFFIXES.some((suffix) => path.endsWith(suffix))) {
     return false;

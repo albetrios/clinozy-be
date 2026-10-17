@@ -145,7 +145,11 @@ while a pinned clinic is not usable (they left it, or it was suspended).
 {
   "data": {
     "user": { "id": "usr_…", "email": "…", "is_mfa_enabled": false, "onboarding_completed": true },
-    "active_organization": { "id": "org_…", "type": "TEAM" },
+    "active_organization": {
+      "id": "org_…",
+      "type": "TEAM",
+      "plan_access": { "state": "grace", "grace_ends_at": "2026-10-31T09:30:00.000Z" }
+    },
     "membership_id": "mem_…",
     "my_permissions": ["organization:read", "membership:create"],
     "my_role_ids": ["rol_…"],
@@ -161,9 +165,17 @@ while a pinned clinic is not usable (they left it, or it was suspended).
   member without `role:read` can show their own role. A system role's name never changes. Without an
   active organization or a live membership, `membership_id` is `null` and both lists are empty.
 
+- **Can this clinic still write — `active_organization.plan_access`.** `state` is `active` (a paid
+  plan; always for a personal organization, and for every organization while the server's read-only
+  mode is off), `grace` (no paid plan — everything works until `grace_ends_at`, so show the
+  countdown and the way to pay) or `read_only` (no paid plan since `grace_ends_at`). In `read_only`
+  every POST / PUT / PATCH / DELETE under `/api/v1/app/` answers **403 with `error.reason`
+  `organization_read_only`** — disable the clinic rooms' write actions up front; reads, billing
+  (so the clinic can pay), auth, user, tenancy and upload stay open. `grace_ends_at` is ISO 8601,
+  `null` when `active`. Paying lifts it on the next request — re-fetch this context after checkout.
 - **`type` vs `my_permissions` — render on the intersection.** The organization `type` says what the organization **kind** allows (only a `TEAM` organization can invite members); `my_permissions` is what **this caller** may do in the active organization (resolved permission codes). Show a team-only action only when `type === 'TEAM'` **and** the caller holds the permission.
 - **The organization-switcher list is NOT here.** It lives at `GET /users/me/organizations`, which is **paginated** — follow the cursor to the end before rendering, or a user in more than one page of organizations silently loses the rest from their switcher. It was embedded in this response once, as a flat array with no cursor filled by a default-limit read, which is exactly the truncation this split fixes. Derive each row's "is this the active one?" by comparing its `id` to `active_organization.id`.
-- **Switch flow (one call):** `POST /auth/switch-to-organization` (or `…-personal`) re-mints the token **and returns the active-organization delta** — `{ access_token, active_organization, my_permissions, global_role }`. Swap your in-memory Bearer for the new `access_token` and repaint from `active_organization` + `my_permissions`. The `user` is stable across a switch, so **no follow-up `GET /auth/me/context` is needed** — re-fetch the full context only on a cold reload. Your cached organization list is stable too: switching changes which organization is active, not which ones you belong to, so re-derive the active row from the new `active_organization.id` rather than re-fetching the list.
+- **Switch flow (one call):** `POST /auth/switch-to-organization` (or `…-personal`) re-mints the token **and returns the active-organization delta** — `{ access_token, active_organization, my_permissions, global_role }`, `active_organization` carrying its `plan_access` as here. Swap your in-memory Bearer for the new `access_token` and repaint from `active_organization` + `my_permissions`. The `user` is stable across a switch, so **no follow-up `GET /auth/me/context` is needed** — re-fetch the full context only on a cold reload. Your cached organization list is stable too: switching changes which organization is active, not which ones you belong to, so re-derive the active row from the new `active_organization.id` rather than re-fetching the list.
 - **Join flow:** `POST /tenancy/membership-invitations/{membership_invitation_id}/accept` returns the joined `organization_id`; pass it straight to `POST /auth/switch-to-organization` (above) to land on the new team's dashboard — no lookup in between If the team requires MFA and the session hasn't proved it, the switch answers `403` `mfa_required` — see [Organizations that require MFA](#organizations-that-require-mfa).
   - **Invited user with no account (first time):** the invite already created a passwordless, unverified **placeholder** for that email, and `accept` requires a **verified** email (else `403 errors:invitationRequiresVerifiedEmail` — a forwarded invite must not be claimable by the wrong person). So the new user first authenticates in a way that proves email control: **email verification-code** (`/auth/email/send-code` → `/auth/email/login`) or **OAuth** both claim the placeholder, verify the email, and provision their personal organization in one step. After that, the same `accept` → (`organization_id`) → `switch-to-organization` tail applies. Don't hard-block the UI when `is_email_verified` is false — route the user through the email-code login, then call `accept`.
   - **Invitations found after sign-in (launch D84):** `GET /users/me/membership-invitations` lists the signed-in person's pending invitations on their **verified** email — the clinic (`id`, `name`, `slug`, `logo_url`), `role_names`, `inviter_name`, `expires_at` (none for an unverified email). Ask it after every sign-in, before onboarding or the organization picker: someone with no clinic yet who has invitations should see them, not "create an organization". `accept` takes **no token** for that signed-in owner of the email (send `{}`; a token from the link must still match), then the same `switch-to-organization` tail. `POST /tenancy/membership-invitations/{membership_invitation_id}/decline` turns one down (expired or not): the invited membership ends (`end_reason` `declined`, its seat freed) and the inviter is told in the app. An invite left 7 days past its expiry is ended by a daily sweep (`end_reason` `invitation_expired`).

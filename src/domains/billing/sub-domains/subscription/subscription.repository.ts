@@ -1,5 +1,5 @@
 import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
-import { and, desc, eq, isNull, lt, lte, notInArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt, lte, notInArray, or, sql } from 'drizzle-orm';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { plans } from '@/domains/billing/sub-domains/plan/plan.schema.js';
@@ -16,6 +16,7 @@ import { subscriptions } from '@/domains/billing/sub-domains/subscription/subscr
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { runInsertWithPublicIdentifierRetry } from '@/shared/utils/infrastructure/postgres-error.util.js';
 import type {
+  PlanAccessSubject,
   SubscriptionPublicState,
   SubscriptionCreateData,
   SubscriptionUpdateData,
@@ -231,6 +232,58 @@ export class SubscriptionRepository {
       plan_included_seats: planRows[0]?.included_seats ?? null,
       status: locked.status,
       current_period_end: locked.current_period_end,
+    };
+  }
+
+  /**
+   * What a clinic's plan access is decided from (owner decision D3): the organization's type and
+   * `created_at`, and its current subscription — the live (non-terminal) row when it has one, else
+   * its most recent — with that subscription plan's prices.
+   *
+   * @remarks
+   * - **Algorithm:** one query: the organization row LEFT JOIN its subscriptions (served by
+   *   `idx_subscriptions_org_status`) LEFT JOIN the plan, ordered live-first then newest, `LIMIT 1`.
+   *   An organization has one live row at most (`idx_subscriptions_org`) and a short history.
+   * - **Failure modes:** returns `null` when the organization is not visible in the current context
+   *   (RLS) or does not exist; `subscription` is `null` when it never had one.
+   * - **Side effects:** none — read-only, under the caller's organization context.
+   */
+  async findPlanAccessSubject(organization_public_id: string): Promise<PlanAccessSubject | null> {
+    const rows = await this.db()
+      .select({
+        organization_type: organizations.type,
+        organization_created_at: organizations.created_at,
+        subscription_status: subscriptions.status,
+        subscription_current_period_end: subscriptions.current_period_end,
+        plan_price_monthly: plans.price_monthly,
+        plan_price_yearly: plans.price_yearly,
+      })
+      .from(organizations)
+      .leftJoin(subscriptions, eq(subscriptions.organization_id, organizations.id))
+      .leftJoin(plans, eq(plans.id, subscriptions.plan_id))
+      .where(eq(organizations.public_id, organization_public_id))
+      .orderBy(
+        // false (live) sorts before true (terminal); an organization without rows has one NULL row.
+        asc(inArray(subscriptions.status, [...INACTIVE_SUBSCRIPTION_STATUSES])),
+        desc(subscriptions.created_at),
+        desc(subscriptions.id),
+      )
+      .limit(1);
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      organization: { type: row.organization_type, created_at: row.organization_created_at },
+      subscription:
+        row.subscription_status === null || row.subscription_current_period_end === null
+          ? null
+          : {
+              status: row.subscription_status,
+              current_period_end: row.subscription_current_period_end,
+              plan:
+                row.plan_price_monthly === null || row.plan_price_yearly === null
+                  ? null
+                  : { price_monthly: row.plan_price_monthly, price_yearly: row.plan_price_yearly },
+            },
     };
   }
 

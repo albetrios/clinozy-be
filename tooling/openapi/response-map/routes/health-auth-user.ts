@@ -6,6 +6,23 @@ import {
 } from '@tooling/openapi/response-map/building-blocks.js';
 import * as schemas from '@tooling/openapi/response-map/resource-schemas.js';
 
+/**
+ * The active organization in `GET /auth/me/context` and the organization switches: the organization
+ * plus its plan access (owner decision D3 — read-only mode for unpaid clinics).
+ */
+const activeOrganizationSchema = {
+  ...schemas.organizationSchema,
+  properties: {
+    ...schemas.organizationSchema.properties,
+    plan_access: schemas.planAccessSchema,
+  },
+};
+
+const activeOrganizationExample = {
+  ...schemas.organizationExample,
+  plan_access: schemas.planAccessExample,
+};
+
 export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = {
   // ── Health ──
   'GET /livez': {
@@ -183,14 +200,14 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
         type: 'object',
         properties: {
           ...schemas.accessTokenSchema.properties,
-          active_organization: schemas.organizationSchema,
+          active_organization: activeOrganizationSchema,
           my_permissions: { type: 'array', items: { type: 'string' } },
           global_role: { type: 'string', nullable: true },
         },
       },
       {
         access_token: schemas.accessTokenExample.access_token,
-        active_organization: schemas.organizationExample,
+        active_organization: activeOrganizationExample,
         my_permissions: ['organization:read', 'membership:create'],
         global_role: null,
       },
@@ -206,14 +223,17 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
         type: 'object',
         properties: {
           ...schemas.accessTokenSchema.properties,
-          active_organization: schemas.organizationSchema,
+          active_organization: activeOrganizationSchema,
           my_permissions: { type: 'array', items: { type: 'string' } },
           global_role: { type: 'string', nullable: true },
         },
       },
       {
         access_token: schemas.accessTokenExample.access_token,
-        active_organization: schemas.organizationExample,
+        active_organization: {
+          ...activeOrganizationExample,
+          plan_access: { state: 'active', grace_ends_at: null },
+        },
         my_permissions: ['organization:read'],
         global_role: null,
       },
@@ -227,7 +247,7 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
         type: 'object',
         properties: {
           user: schemas.userSchema,
-          active_organization: { ...schemas.organizationSchema, nullable: true },
+          active_organization: { ...activeOrganizationSchema, nullable: true },
           membership_id: {
             type: 'string',
             nullable: true,
@@ -264,7 +284,7 @@ export const healthAuthUserRouteResponses: Record<string, ResponseDefinition> = 
       },
       {
         user: schemas.userExample,
-        active_organization: schemas.organizationExample,
+        active_organization: activeOrganizationExample,
         membership_id: 'mem_q8w3n7p2m5k1r4t6a1b2c',
         my_permissions: ['organization:read', 'membership:read'],
         my_role_ids: ['rol_m3n7p2q8w5k1r4t6a1b2c'],

@@ -29,9 +29,8 @@ import {
   IDEMPOTENCY_PLACEHOLDER_TTL_SECONDS,
   IDEMPOTENCY_RESPONSE_CACHE_TTL_SECONDS,
   IDEMPOTENCY_STORE_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  WRITE_HTTP_METHODS,
 } from '@/shared/constants/index.js';
-
-const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 /** Throttle window for the degraded-mode Sentry alert so a Redis outage cannot flood Sentry. */
 const IDEMPOTENCY_STORE_UNAVAILABLE_ALERT_INTERVAL_MS = 30_000;
@@ -219,7 +218,7 @@ function parseIdempotencyEntry(raw: string): IdempotencyEntry {
 function isWriteRouteMethod(method: RouteOptions['method']): boolean {
   if (method === undefined) return false;
   const methods = Array.isArray(method) ? method : [method];
-  return methods.some((item) => WRITE_METHODS.has(item));
+  return methods.some((item) => WRITE_HTTP_METHODS.has(item));
 }
 
 function resolveIdempotencyScope(request: FastifyRequest): {
@@ -656,7 +655,7 @@ async function handleIdempotencyClaimRace({
 }
 
 async function idempotencyOnRequest(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
-  if (!WRITE_METHODS.has(request.method)) return;
+  if (!WRITE_HTTP_METHODS.has(request.method)) return;
 
   // Fastify runs GLOBAL onRequest hooks before a route's own `onRequest: [authenticate]`,
   // so rejecting here tells an anonymous caller about the route's idempotency contract
