@@ -44,6 +44,28 @@ are enforced by gates — do not re-litigate what a gate already proves.
   `tsdoc:check`, `db:migrate:lint`) **unless** the diff shows the gate being
   weakened (budget raised, test deleted, rule disabled) — that is **major**.
 
+## Findings format
+
+Every reviewer — the `/be-pre-merge-review` agents, `/code-review`, a review subagent — reports
+each finding on one line, in this shape, so one report can merge them:
+
+```markdown
+- **major** · `src/domains/billing/sub-domains/invoices/invoices.repository.ts:142` · RLS — the refund
+  update runs on the GUC-less pool, so another organization's invoice can be refunded → fix: be-rls-tenant-isolation-guard
+```
+
+- **Severity** — one of this file's four: `critical`, `major`, `minor`, `nit`. No other scale
+  (no P0/P1, high/medium/low, blocking/optional).
+- **Location** — `file:line` in the diff (or the closest line it breaks).
+- **Check** — the repo-specific check above (or the reviewer's own rule) it fails.
+- **Failure scenario** — the concrete input or state that goes wrong.
+- **Fix** — the skill that fixes it (agent finds, skill fixes) or the exact change.
+
+A reviewer may add a `Satisfied` list (check — reference) after its findings. The aggregate
+report sorts findings by severity (critical first), merges the same `file:line` and check from
+two reviewers into one line naming both, drops anything under **Skip**, and keeps at most two
+`nit`s.
+
 ## Review posture
 
 - Verify claims against the diff, not the PR description.

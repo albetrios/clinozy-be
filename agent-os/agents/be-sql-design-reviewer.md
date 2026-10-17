@@ -39,7 +39,7 @@ When the user specifies a particular schema file or domain, scope the sweep to t
 [Files / domains reviewed]
 
 ## Issues
-- **[rule]** — `[src/domains/.../file.schema.ts]`: [what is wrong and what to change]
+- **[severity]** · `[src/domains/.../file.schema.ts:line]` · [rule] — [what goes wrong] → fix: [what to change, or the skill]
 
 ## Satisfied
 - [check] — [reference]
@@ -48,7 +48,7 @@ When the user specifies a particular schema file or domain, scope the sweep to t
 [Which be-db-migration-maintainer or be-schema-generator steps to run, if any]
 ```
 
-Return only this report. Do not generate migrations or edit files.
+Each issue is one line in `REVIEW.md` → Findings format (its severity ladder: critical, major, minor, nit). Return only this report. Do not generate migrations or edit files.
 
 ## Platform access
 

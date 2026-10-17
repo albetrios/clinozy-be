@@ -25,7 +25,7 @@ Start here — map your intent to the skill or **chain** to run (chains are name
 - **Write or reorganize `docs/**`** → **be-docs-maintainer** (audit-only pass → **be-docs-audit**)
 - **Bump or add a dependency, or an agent tool pin** (`tooling/setup/agent/tool-versions.sh`) → **be-dependency-security**
 - **Finish any code change (definition-of-done)** → **be-change-completeness-guard**
-- **Review before merge** → **pre-merge-review** pipeline (be-sql-design-reviewer → be-production-hardening-reviewer → verifier)
+- **Review before merge** → **pre-merge-review** pipeline (`/be-pre-merge-review`: be-sql-design-reviewer, be-rls-reviewer, be-idempotency-reviewer, be-production-hardening-reviewer and be-verifier, the ones the diff needs, at once in the background; findings in `REVIEW.md` → Findings format)
 - **Release / production readiness** → **be-path-to-production-gate** (then **prod-readiness** pipeline)
 - **Start or continue a design iteration, step by step** → **`/be-iteration`** (asks the opening questions; walks `docs/design-workflow/process/iteration-guide.md` — open, `pnpm iteration:intake`, plan, approve, kick off, close, freeze)
 - **Plan a design iteration** ("plan iteration <name>") → **iteration** chain, first half: **be-iteration-planning** (no code — `KICKOFF.md` with its ROUTE ledger + `plans/`; stops after every step)
@@ -383,6 +383,8 @@ Project-defined subagents in [`agent-os/agents/`](../../agents/) run in isolatio
 | **be-docs-auditor** | `agent-os/agents/be-docs-auditor.md` | Full audit of `docs/` — index completeness, naming, Mermaid, cross-links |
 | **be-production-hardening-reviewer** | `agent-os/agents/be-production-hardening-reviewer.md` | Sweep infra/middleware/config for hardening gaps |
 | **be-sql-design-reviewer** | `agent-os/agents/be-sql-design-reviewer.md` | Review Drizzle schema files for PostgreSQL design conventions |
+| **be-rls-reviewer** | `agent-os/agents/be-rls-reviewer.md` | Pre-merge: tenant isolation on the diff — FORCE RLS, policy arms, GUC-armed query paths |
+| **be-idempotency-reviewer** | `agent-os/agents/be-idempotency-reviewer.md` | Pre-merge: the idempotency contract on the diff's write routes and Stripe calls |
 | **be-tsdoc-coverage-reviewer** | `agent-os/agents/be-tsdoc-coverage-reviewer.md` | Run `pnpm tsdoc:check`, identify exports missing TSDoc |
 
 To add a subagent, use global **create-subagent** (`~/.cursor/skills-cursor/`) and name it

@@ -25,7 +25,7 @@ Claude Code reads `agent-os/` directly via `.claude/` symlinks (`agents`, `skill
 | [`REVIEW.md`](REVIEW.md)                                               | Review-time severity + skip-path instructions for `/code-review`, `/be-pre-merge-review`, and review agents              |
 | [`agent-os/docs/principles.md`](agent-os/docs/principles.md)           | Engineering principles + project identity (full detail)                                                               |
 | [`agent-os/docs/skill-triggers.md`](agent-os/docs/skill-triggers.md)   | File pattern → skill map (replaces reading 25 sync rules)                                                             |
-| [`agent-os/docs/agents-catalog.md`](agent-os/docs/agents-catalog.md)   | All 11 agents with descriptions and use-when                                                                          |
+| [`agent-os/docs/agents-catalog.md`](agent-os/docs/agents-catalog.md)   | All 13 agents with descriptions and use-when                                                                          |
 | [`agent-os/docs/platform-access.md`](agent-os/docs/platform-access.md) | How to invoke agents on Cursor, Claude Code, Codex                                                                    |
 | [`agent-os/agents/`](agent-os/agents/)                                 | Agent definition files                                                                                                |
 | [`agent-os/skills/`](agent-os/skills/)                                 | Skill definition files                                                                                                |

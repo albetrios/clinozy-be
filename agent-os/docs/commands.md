@@ -66,7 +66,7 @@ Granular procedures live in **skills** (invoked by name); these commands are **w
 
 | Command | Purpose |
 | ------- | ------- |
-| `/be-pre-merge-review` | Read-only pipeline (sql-design → production-hardening → verifier, from `agent-os/agents/pipelines.json`); one aggregated report. |
+| `/be-pre-merge-review` | Read-only pipeline from `agent-os/agents/pipelines.json`: the reviewers the diff needs (sql-design, RLS, idempotency, production-hardening; the verifier always) at once in the background; one report in `REVIEW.md` → Findings format. |
 
 **PR lifecycle**
 

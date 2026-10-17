@@ -39,12 +39,12 @@ Read and follow `agent-os/skills/be-production-hardening-guard/SKILL.md` exactly
 ## Satisfied
 - [check] — [src/... reference]
 
-## Gaps (address before production)
-- **[title]** — [file]: [what to do]
-
-## Optional improvements
-- [item] — [file]: [what to do]
+## Gaps
+- **[severity]** · `[file:line]` · [check] — [what goes wrong] → fix: [what to do, or the skill]
 ```
+
+Each gap is one line in `REVIEW.md` → Findings format: `critical` / `major` must be addressed
+before production, `minor` / `nit` are the optional improvements.
 
 Return only this report. Do not apply fixes.
 

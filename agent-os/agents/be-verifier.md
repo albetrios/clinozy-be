@@ -45,13 +45,13 @@ You run in read-only mode: diagnose and report, never edit files or push. If a f
 - <check> — <evidence: command + result>
 
 **Incomplete or broken:**
-- <issue> — <evidence> — <precise fix the parent should apply>
+- **<severity>** · `<file:line>` · <check> — <what fails, with the evidence> → fix: <precise fix the parent should apply>
 
 **Untested / out of scope:**
 - <item> — <why>
 ```
 
-Be thorough and concrete. Cite the exact command output as evidence. A green test file that does not actually exercise the code is not a pass.
+Each broken item is one line in `REVIEW.md` → Findings format (its severity ladder: critical, major, minor, nit). Be thorough and concrete. Cite the exact command output as evidence. A green test file that does not actually exercise the code is not a pass.
 
 ## Platform access
 

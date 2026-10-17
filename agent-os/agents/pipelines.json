@@ -2,11 +2,26 @@
   "description": "Read-only agent review pipelines — named sequences of diagnostic agents that fan out and aggregate into one report. pre-merge-review is run by the /be-pre-merge-review command; prod-readiness runs after the be-path-to-production-gate skill. Every step references a real agent in agent-os/agents/ (eval-enforced). Diagnostic→procedural handoff: each finding names the procedural skill that fixes it (agent finds, skill fixes).",
   "pipelines": {
     "pre-merge-review": {
-      "description": "Read-only review of the current diff before merge.",
-      "steps": ["be-sql-design-reviewer", "be-production-hardening-reviewer", "be-verifier"],
-      "aggregate": "one prioritized report — blocking gaps first, then optional improvements",
+      "description": "Read-only review of the current diff before merge. The steps whose `when` matches the diff run at once, in the background; each returns findings in REVIEW.md → Findings format.",
+      "steps": [
+        "be-sql-design-reviewer",
+        "be-rls-reviewer",
+        "be-idempotency-reviewer",
+        "be-production-hardening-reviewer",
+        "be-verifier"
+      ],
+      "when": {
+        "be-sql-design-reviewer": "a *.schema.ts file or migrations/*.sql changed",
+        "be-rls-reviewer": "a *.schema.ts, migrations/*.sql, *.repository.ts, worker, processor, queue or src/infrastructure/database/ file changed",
+        "be-idempotency-reviewer": "a *.routes.ts, *.controller.ts, billing or Stripe file changed",
+        "be-production-hardening-reviewer": "a src/infrastructure/, src/shared/middlewares/ or src/shared/config/ file changed",
+        "be-verifier": "always"
+      },
+      "aggregate": "one report in REVIEW.md → Findings format — sorted by severity (critical first), duplicates merged, Skip paths dropped, at most two nits",
       "handoff": {
         "be-sql-design-reviewer": "be-sql-design-guard",
+        "be-rls-reviewer": "be-rls-tenant-isolation-guard",
+        "be-idempotency-reviewer": "be-idempotency-guard",
         "be-production-hardening-reviewer": "be-production-hardening-guard",
         "be-verifier": "be-test-generator"
       }

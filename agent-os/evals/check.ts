@@ -236,7 +236,7 @@ if (existsSync(catalogFile)) {
 
 // ── Check 7: every agent file has valid frontmatter and a model fit for its job ──
 // Models are set by job (17 Oct): the agents whose output is a judgment call — the verifier
-// and the production reviewers — run on Opus (or `inherit`); auditors and investigators on
+// the production reviewers and the RLS reviewer — run on Opus (or `inherit`); auditors and investigators on
 // Sonnet; mechanical scanners on Haiku. A judgment agent pinned to anything smaller fails.
 // Claude Code silently ignores a frontmatter field it does not recognize, so the routing
 // fields are validated here: a misspelled or out-of-range value would just be dropped.
@@ -244,6 +244,7 @@ const judgmentAgents = new Set([
   "be-verifier",
   "be-production-hardening-reviewer",
   "be-production-reviewer",
+  "be-rls-reviewer",
 ]);
 const agentModels = /^(inherit|opus|sonnet|haiku|fable|claude-[a-z0-9-]+)$/;
 const agentEfforts = new Set(["low", "medium", "high", "xhigh", "max"]);
