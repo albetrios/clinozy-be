@@ -135,12 +135,55 @@ jobs:
           MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY: ${{ secrets.MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY }}
         run: bash tooling/ci/restore-drill-neon.sh delete
 
+  resolve-success:
+    name: Close ci-failure issue
+    needs: [resolve-environment, restore-smoke]
+    if: always() && needs.restore-smoke.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
+      - name: Close the open ci-failure issue
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: close
+          title: Weekly restore smoke failing
+          close-comment: The weekly restore smoke is green again — closing automatically.
+
   alert-on-failure:
     name: Alert on drill failure
     needs: [resolve-environment, restore-smoke]
     if: failure()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Emit workflow failure notice
         run: |
           echo "::error title=Weekly restore smoke failed::Review docs/process/backup-drills.md — weekly drill validates migrate + the restore smoke on a restored Neon PITR branch."
+
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
+      - name: Open or update ci-failure issue
+        # The annotation above reaches only someone already on the Actions tab; an issue sends a
+        # real notification, and the next green drill closes it.
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: open
+          title: Weekly restore smoke failing
+          body: |
+            The weekly restore drill failed: migrate or the restore smoke (`pnpm db:restore:smoke`) on a
+            restored Neon point-in-time branch did not pass. Runbook: docs/process/backup-drills.md.
+            The next green drill closes this issue.

@@ -142,23 +142,17 @@ jobs:
       contents: read
       issues: write
     steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
       - name: Close the open ci-failure issue
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          title="RLS parity canary failing"
-          existing="$(gh issue list --repo "$GH_REPOSITORY" --state open --label ci-failure \
-            --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
-          if [ -z "$existing" ]; then
-            echo "No open ci-failure issue to close."
-            exit 0
-          fi
-          gh issue close "$existing" --repo "$GH_REPOSITORY" \
-            --comment "RLS parity canary is green again — closing automatically. Run: ${WORKFLOW_URL}"
-          echo "Closed ci-failure issue #${existing}."
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: close
+          title: RLS parity canary failing
+          close-comment: RLS parity canary is green again — closing automatically.
 
   notify-failure:
     name: Notify failure
@@ -170,35 +164,24 @@ jobs:
       contents: read
       issues: write
     steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
       - name: Open or update ci-failure issue
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          gh label create ci-failure --repo "$GH_REPOSITORY" \
-            --color FFAB91 --description "Automated post-merge/guard failure notification" \
-            2>/dev/null || true
-          title="RLS parity canary failing"
-          body="$(printf '%s\n' \
-            "Run: ${WORKFLOW_URL}" \
-            "" \
-            "The DB suites are red under the PRODUCTION role posture (operator fixtures +" \
-            "RLS-subject maintenance pool + SET LOCAL ROLE clinozy_be_app) while the superuser" \
-            "PR lanes may still be green — this is the RLS-masking bug class." \
-            "" \
-            "Reproduce locally (parity is already provisioned per the" \
-            "maintenance-database-role runbook): run the DB suites normally — the local" \
-            "harness uses the same operator/maintenance roles." \
-            "Check first: NEW-row SELECT visibility, RETURNING visibility, missing" \
-            "WITH CHECK bypass arms, MATERIALIZED locking CTEs (the be-rls-tenant-isolation-guard" \
-            "skill checklist).")"
-          existing="$(gh issue list --repo "$GH_REPOSITORY" --state open --label ci-failure \
-            --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
-          if [ -n "$existing" ]; then
-            gh issue comment "$existing" --repo "$GH_REPOSITORY" --body "$body"
-            echo "Commented on existing ci-failure issue #${existing}."
-          else
-            gh issue create --repo "$GH_REPOSITORY" --title "$title" --label ci-failure --body "$body"
-          fi
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: open
+          title: RLS parity canary failing
+          body: |
+            The DB suites are red under the PRODUCTION role posture (operator fixtures +
+            RLS-subject maintenance pool + SET LOCAL ROLE clinozy_be_app) while the superuser
+            PR lanes may still be green — this is the RLS-masking bug class.
+
+            Reproduce locally (parity is already provisioned per the
+            maintenance-database-role runbook): run the DB suites normally — the local
+            harness uses the same operator/maintenance roles.
+            Check first: NEW-row SELECT visibility, RETURNING visibility, missing
+            WITH CHECK bypass arms, MATERIALIZED locking CTEs (the be-rls-tenant-isolation-guard
+            skill checklist).

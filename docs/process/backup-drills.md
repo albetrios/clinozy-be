@@ -76,6 +76,6 @@ Each JSON file includes `restore_seconds`, `rto_minutes`, `rto_target_seconds`, 
 
 - Monthly scheduled run produces a measured RTO artifact using automated Neon PITR branch creation.
 - Restore time is **recorded** in the workflow job summary and uploaded as JSON.
-- Failed runs emit a workflow error notice for follow-up.
+- Failed runs emit a workflow error notice and open (or comment on) a `ci-failure` issue — *Monthly restore drill failing* or *Weekly restore smoke failing*; the next green run of the same drill closes it.
 
 Related: [restore-drill.md](../deployment/restore-drill.md), [dr-runbook.md](dr-runbook.md), [credentials-and-env.md](../integrations/credentials-and-env.md).

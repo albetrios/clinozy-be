@@ -40,6 +40,7 @@ Workflow: [.github/workflows/scheduled-stryker-mutation.yml](../../../.github/wo
 - **Services:** ephemeral Postgres + Redis — Stryker's dry run boots the mutated files' unit tests through the app stack (e.g. `i18n.middleware` locale cache), so the job provisions the same services + `test-env` action as the vitest lanes.
 - **Artifacts:** `reports/mutation/mutation-report.html` and `mutation-report.json` (14-day retention)
 - **Failure:** exit code 1 when mutation score &lt; 70%
+- **Alert:** a red run opens (or comments on) a `ci-failure` issue titled *Weekly mutation tests (Stryker) failing*; the next green run closes it.
 
 ---
 

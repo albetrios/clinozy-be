@@ -88,3 +88,51 @@ jobs:
             reports/mutation/mutation-report.html
             reports/mutation/mutation-report.json
           retention-days: 14
+
+  resolve-success:
+    name: Close ci-failure issue
+    needs: [stryker]
+    if: always() && needs.stryker.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
+      - name: Close the open ci-failure issue
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: close
+          title: Weekly mutation tests (Stryker) failing
+          close-comment: The weekly Stryker run is green again — closing automatically.
+
+  notify-failure:
+    name: Notify failure
+    needs: [stryker]
+    if: always() && needs.stryker.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
+      - name: Open or update ci-failure issue
+        # A red weekly run is invisible on a schedule; an issue sends a real notification.
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: open
+          title: Weekly mutation tests (Stryker) failing
+          body: |
+            The weekly Stryker mutation run failed: the mutation score fell below its threshold, or the
+            run broke before scoring (read the step list first). Reproduce: pnpm test:mutation.
+            The next green run closes this issue.

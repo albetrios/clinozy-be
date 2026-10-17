@@ -283,12 +283,54 @@ jobs:
           path: restore-drill-rto-report.json
           if-no-files-found: error
 
+  resolve-success:
+    name: Close ci-failure issue
+    needs: [checklist, restore-integration, record-rto]
+    if: always() && needs.restore-integration.result == 'success' && needs.record-rto.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
+      - name: Close the open ci-failure issue
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: close
+          title: Monthly restore drill failing
+          close-comment: The monthly restore drill is green again — closing automatically.
+
   alert-on-failure:
     name: Alert on drill failure
     needs: [checklist, restore-integration, record-rto]
     if: failure()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Emit workflow failure notice
         run: |
           echo "::error title=Restore drill failed::Review docs/process/backup-drills.md — RTO target is ${RTO_MINUTES} minutes."
+
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
+      - name: Open or update ci-failure issue
+        # The annotation above reaches only someone already on the Actions tab; an issue sends a
+        # real notification, and the next green drill closes it.
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: open
+          title: Monthly restore drill failing
+          body: |
+            The monthly restore drill failed, or missed its RTO target (RTO_MINUTES in this workflow).
+            Runbook: docs/process/backup-drills.md. The next green drill closes this issue.

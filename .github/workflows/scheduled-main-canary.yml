@@ -67,28 +67,22 @@ jobs:
       contents: read
       issues: write
     steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
       - name: Close the open ci-failure issue
         # `notify-failure` opens one issue and comments repeats onto it, but nothing
         # ever closed it: a canary that went green left the issue open until a human
         # noticed, so the tracker accumulated failures that had already been fixed
         # forward. Closing on the first green run makes an open ci-failure issue mean
         # "main is red right now" instead of "main was red at some point".
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          title="Main quality canary failing"
-          existing="$(gh issue list --repo "$GH_REPOSITORY" --state open --label ci-failure \
-            --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
-          if [ -z "$existing" ]; then
-            echo "No open ci-failure issue to close."
-            exit 0
-          fi
-          gh issue close "$existing" --repo "$GH_REPOSITORY" \
-            --comment "Canary is green again on main — closing automatically. Run: ${WORKFLOW_URL}"
-          echo "Closed ci-failure issue #${existing}."
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: close
+          title: Main quality canary failing
+          close-comment: Canary is green again on main — closing automatically.
 
   notify-failure:
     name: Notify failure
@@ -100,34 +94,23 @@ jobs:
       contents: read
       issues: write
     steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
       - name: Open or update ci-failure issue
         # A failed canary on a schedule is invisible unless someone checks the
         # Actions tab; an issue produces a real notification. One open issue
         # collects repeats as comments; closing it acknowledges the fix.
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          gh label create ci-failure --repo "$GH_REPOSITORY" \
-            --color FFAB91 --description "Automated post-merge/guard failure notification" \
-            2>/dev/null || true
-          title="Main quality canary failing"
-          body="$(printf '%s\n' \
-            "Run: ${WORKFLOW_URL}" \
-            "" \
-            "\`pnpm ci:quality\` is red on the current main tree — usually merge skew:" \
-            "two green PRs whose combined tree was never tested together (strict" \
-            "up-to-date is intentionally off)." \
-            "" \
-            "Reproduce locally on main: \`pnpm ci:quality\` (or \`pnpm health\` for a full PASS/FAIL table)." \
-            "Fix forward with a short-lived branch + PR; close this issue once the canary is green.")"
-          existing="$(gh issue list --repo "$GH_REPOSITORY" --state open --label ci-failure \
-            --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
-          if [ -n "$existing" ]; then
-            gh issue comment "$existing" --repo "$GH_REPOSITORY" --body "$body"
-            echo "Commented on existing ci-failure issue #${existing}."
-          else
-            gh issue create --repo "$GH_REPOSITORY" --title "$title" --label ci-failure --body "$body"
-          fi
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: open
+          title: Main quality canary failing
+          body: |
+            `pnpm ci:quality` is red on the current main tree — usually merge skew:
+            two green PRs whose combined tree was never tested together (strict
+            up-to-date is intentionally off).
+
+            Reproduce locally on main: `pnpm ci:quality` (or `pnpm health` for a full PASS/FAIL table).
+            Fix forward with a short-lived branch + PR; close this issue once the canary is green.

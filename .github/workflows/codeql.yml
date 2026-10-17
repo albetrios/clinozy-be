@@ -57,3 +57,51 @@ jobs:
         uses: github/codeql-action/analyze@84498526a009a99c875e83ef4821a8ba52de7c22 # codeql-bundle-v2.25.5
         with:
           category: '/language:javascript-typescript'
+
+  resolve-success:
+    name: Close ci-failure issue
+    needs: [analyze]
+    if: always() && github.event_name != 'pull_request' && needs.analyze.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
+      - name: Close the open ci-failure issue
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: close
+          title: CodeQL analysis failing
+          close-comment: CodeQL is green again on main — closing automatically.
+
+  notify-failure:
+    name: Notify failure
+    needs: [analyze]
+    if: always() && github.event_name != 'pull_request' && needs.analyze.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
+      - name: Open or update ci-failure issue
+        # A red weekly scan is invisible on a schedule; an issue sends a real notification.
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: open
+          title: CodeQL analysis failing
+          body: |
+            The scheduled (or manually run) CodeQL analysis of main failed. Read the Analyze job log;
+            a new finding shows under Security → Code scanning. PR runs never open this issue (the PR
+            shows its own result). The next green run closes it.
