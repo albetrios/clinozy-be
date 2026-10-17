@@ -22,6 +22,8 @@ Ensure every **git commit** on this repo passes a fixed set of checks. The guard
 
 The hook in `.husky/pre-commit` delegates to **`pnpm guard:pre-commit`** (labeled steps). If any step fails, the commit is aborted — read the **`✗ FAILED at step N/M:`** line for the failing check. List all steps: **`pnpm guard:pre-commit:list`**.
 
+How it runs: the steps that change the working tree, the index or `node_modules` (lint-staged, the lockfile check, the route catalog, source tree and DBML regenerations) run first, one at a time; the read-only checks then run in parallel, up to four at a time, output captured (`pnpm test:global` and `pnpm docs:check` never together — both touch `docs/openapi/`). A check that fails in parallel runs again alone with its output, and that run decides; the in-process checks (secret/state files, conflict markers, large files) run last. If the parallel runner itself fails, every step runs one at a time; **`pnpm guard:pre-commit --serial`** does that from the start. `pnpm typecheck` is incremental (`node_modules/.cache/typecheck/`).
+
 | Step | Command / check | What to do if it fails |
 | ---- | --------------- | ---------------------- |
 | 1 | `pnpm lint-staged` | Biome on staged `src/**/*.ts` and `tooling/**/*.{ts,mjs,js}`; Biome format on `*.{json,yaml,yml}`; `markdownlint-cli2 --fix` on `*.md`. Run `pnpm lint` / `pnpm format`; for markdown run `pnpm docs:lint:fix`. Fix per **be-code-smells-and-best-practices**. |
@@ -73,6 +75,7 @@ Before committing, the user (or AI) can run:
 
 ```bash
 pnpm guard:pre-commit          # same labeled steps as the hook
+pnpm guard:pre-commit --serial # the same steps, one at a time
 pnpm guard:pre-commit:list     # print step table without running
 pnpm validate                  # biome check + typecheck
 pnpm validate:domain:strict    # domain structure (warnings fail; hook step 3)
@@ -95,7 +98,7 @@ These one-time or ongoing practices are part of keeping the repo commit-clean:
 
 1. **Format + lint** — Biome on `src/` and `tooling/`; `pnpm format` / `pnpm lint` to fix; `pnpm validate` runs `biome check` + typecheck.
 2. **Lint warnings** — Resolve per **be-code-smells-and-best-practices** / **be-lint-warnings-handler**.
-3. **Typecheck** — `tsc --noEmit`; fix all type errors.
+3. **Typecheck** — `tsc --noEmit --incremental` (`pnpm typecheck`); fix all type errors.
 4. **Domain structure** — `pnpm validate:domain`; domains and sub-domains must match CLAUDE.md layout.
 5. **Dependency audit** — `pnpm audit`; use `pnpm.overrides` for transitive vulns when safe; see **be-dependency-security**.
 6. **Runtime/test warnings (resolved in code):**

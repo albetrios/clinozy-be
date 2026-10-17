@@ -1,9 +1,15 @@
 /**
- * Labeled pre-commit guard — same steps as `.husky/pre-commit`, fail-fast with step names.
- * Run: `pnpm guard:pre-commit` or `pnpm guard:pre-commit:list`
+ * Labeled pre-commit guard — same steps as `.husky/pre-commit`, with step names.
+ * Run: `pnpm guard:pre-commit`, `pnpm guard:pre-commit:list`, or `pnpm guard:pre-commit --serial`.
+ *
+ * The steps that change the working tree, the index or `node_modules` run first, one at a time;
+ * the read-only checks then run in parallel with their output captured. A check that fails there
+ * runs again alone, with its output, and that run decides; if the parallel runner itself fails,
+ * every step runs one at a time (`--serial` does that from the start).
  */
-import { execSync, spawnSync } from 'node:child_process';
+import { execSync, spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DBML_OUTPUT_PATH } from '@/shared/constants/project-identity.constants.js';
@@ -34,6 +40,8 @@ export interface RunGuardOptions {
   stagedFiles?: string[];
   packageScripts?: Record<string, string>;
   skipShellSteps?: boolean;
+  /** Every step one at a time, output on the terminal — the runner before the parallel one. */
+  serial?: boolean;
 }
 
 function readPackageScripts(): Record<string, string> {
@@ -431,6 +439,220 @@ function printStepTable(steps: GuardStep[]): void {
   }
 }
 
+/** A child process the parallel phase spawns: `file` with `args`, no shell. */
+export interface StepCommand {
+  file: string;
+  args: string[];
+}
+
+/** One step the guard executes — its serial form, and the process it runs as in parallel. */
+export interface RunnableStep {
+  label: string;
+  /**
+   * `write` changes the working tree, the index or `node_modules`, so it runs serially, before
+   * every check; `check` only reads them.
+   */
+  phase: 'write' | 'check';
+  /** Checks that share a lock never run at the same time (they write or read the same files). */
+  lock?: string;
+  /** Started first in the parallel phase, so the longest checks do not finish last. */
+  slow?: boolean;
+  /** Runs the step with its output on the terminal; returns the exit code (0 when it does not apply). */
+  run: () => number;
+  /**
+   * The process the parallel phase spawns, its output captured; `null` when the step does not
+   * apply to the staged files. Absent: the step runs in-process, after the processes.
+   */
+  command?: StepCommand | null;
+}
+
+/** How a step of the parallel phase ended. */
+export interface StepOutcome {
+  exitCode: number;
+  durationMs: number;
+  output: string;
+}
+
+/** At most four checks at once: the heavy ones (tsc, Vitest, the TSDoc walk) each want a core. */
+const MAXIMUM_PARALLEL_CHECKS = 4;
+/** Lines of a parallel run's output shown when the step then passes on its own. */
+const PARALLEL_OUTPUT_TAIL_LINES = 20;
+
+function pnpmStep(options: {
+  label: string;
+  scriptName: string;
+  applies?: boolean;
+  lock?: string;
+  slow?: boolean;
+}): RunnableStep {
+  const { label, scriptName, applies = true } = options;
+  return {
+    label,
+    phase: 'check',
+    ...(options.lock === undefined ? {} : { lock: options.lock }),
+    ...(options.slow === undefined ? {} : { slow: options.slow }),
+    run: () => (applies ? runPnpm({ scriptName }) : 0),
+    command: applies ? { file: 'pnpm', args: [scriptName] } : null,
+  };
+}
+
+/** Builds the steps the guard executes, in the order the serial runner runs them. */
+export function buildRunnableSteps(options: {
+  stagedFiles: string[];
+  scripts: Record<string, string>;
+  skipShellSteps?: boolean | undefined;
+}): RunnableStep[] {
+  const { stagedFiles, scripts } = options;
+  // `pnpm test:global` writes docs/openapi/openapi.json when it is missing and reads it;
+  // `pnpm docs:check` regenerates it. Never both at once.
+  const apiDocsLock = 'docs/openapi';
+  const steps: RunnableStep[] = [
+    {
+      label: 'lint-staged (Biome + markdownlint)',
+      phase: 'write',
+      run: () => runPnpm({ scriptName: 'lint-staged', scriptArgs: ['--no-stash'] }),
+    },
+    {
+      // `pnpm install --frozen-lockfile` rewrites node_modules under every other check.
+      label: 'Lockfile in sync',
+      phase: 'write',
+      run: () =>
+        shouldRunLockfileCheck(stagedFiles) ? runPnpm({ scriptName: 'validate:lockfile' }) : 0,
+    },
+    pnpmStep({ label: 'TypeScript typecheck', scriptName: 'typecheck', slow: true }),
+    pnpmStep({ label: 'Domain structure (strict)', scriptName: 'validate:domain:strict' }),
+    pnpmStep({
+      label: 'Architecture policy tests',
+      scriptName: 'test:global',
+      applies: shouldRunGlobalTests(stagedFiles),
+      lock: apiDocsLock,
+      slow: true,
+    }),
+    pnpmStep({ label: 'Scripts layout', scriptName: 'validate:scripts-layout' }),
+    {
+      label: 'Route catalog regenerate',
+      phase: 'write',
+      run: () => {
+        const code = runPnpm({ scriptName: 'routes:catalog' });
+        if (code !== 0) return code;
+        gitAdd([ROUTES_CATALOG_PATH]);
+        return 0;
+      },
+    },
+    pnpmStep({ label: 'Route catalog drift check', scriptName: 'routes:catalog:check' }),
+  ];
+
+  if (hasPackageScript({ scripts, scriptName: 'tool:project-structure-tree' })) {
+    steps.push({
+      label: 'Source tree regenerate',
+      phase: 'write',
+      run: () => {
+        if (!shouldRunStructureTreeCheck(stagedFiles)) return 0;
+        const code = runPnpm({ scriptName: 'tool:project-structure-tree' });
+        if (code !== 0) return code;
+        gitAdd([SRC_STRUCTURE_TREE_PATH]);
+        return 0;
+      },
+    });
+  }
+
+  if (hasPackageScript({ scripts, scriptName: 'tool:project-structure-tree:check' })) {
+    steps.push(
+      pnpmStep({
+        label: 'Source tree drift check',
+        scriptName: 'tool:project-structure-tree:check',
+        applies: shouldRunStructureTreeCheck(stagedFiles),
+      }),
+    );
+  }
+
+  steps.push(
+    pnpmStep({
+      label: 'OpenAPI / Postman drift',
+      scriptName: 'docs:check',
+      applies: shouldRunOpenApiCheck(stagedFiles),
+      lock: apiDocsLock,
+      slow: true,
+    }),
+    pnpmStep({ label: 'TSDoc coverage gate', scriptName: 'tsdoc:check', slow: true }),
+  );
+
+  if (hasPackageScript({ scripts, scriptName: 'validate:test-naming' })) {
+    steps.push(pnpmStep({ label: 'Test filename suffixes', scriptName: 'validate:test-naming' }));
+  }
+
+  steps.push(
+    pnpmStep({
+      label: 'Migration SQL safety',
+      scriptName: 'db:migrate:lint',
+      applies: shouldRunMigrationCheck(stagedFiles),
+    }),
+    {
+      label: 'DBML regenerate',
+      phase: 'write',
+      run: () => {
+        if (!shouldRunMigrationCheck(stagedFiles)) return 0;
+        const code = runPnpm({ scriptName: 'tool:generate-dbdiagram' });
+        if (code !== 0) return code;
+        gitAdd([DBML_PATH]);
+        return 0;
+      },
+    },
+    pnpmStep({
+      label: 'Project identity drift',
+      scriptName: 'tool:generate-project-identity:check',
+    }),
+    {
+      label: 'Env example sync',
+      phase: 'check',
+      run: () => checkEnvExampleSync(),
+      command: { file: 'pnpm', args: ['tool:sync-env-example'] },
+    },
+  );
+
+  if (!options.skipShellSteps) {
+    steps.push(
+      {
+        label: 'Staged secrets scan',
+        phase: 'check',
+        run: () => {
+          if (!gitleaksInstalled()) {
+            console.error(
+              'ERROR: gitleaks is not installed. Install it (e.g. brew install gitleaks; pnpm setup:local auto-installs it on macOS).',
+            );
+            return 1;
+          }
+          return runShell('gitleaks protect --staged --verbose --redact');
+        },
+        command: { file: 'gitleaks', args: ['protect', '--staged', '--verbose', '--redact'] },
+      },
+      {
+        label: 'No secret/state files staged',
+        phase: 'check',
+        run: () => checkSecretFilesStaged(stagedFiles),
+      },
+      {
+        label: 'Merge conflict markers',
+        phase: 'check',
+        run: () => checkConflictMarkers(stagedFiles),
+      },
+      {
+        label: 'Large staged files (>3MB; iterations/ exempt)',
+        phase: 'check',
+        run: () => checkLargeStagedFiles(stagedFiles),
+      },
+      pnpmStep({
+        label: 'SonarQube quality gate',
+        scriptName: 'sonar:scan',
+        applies: shouldRunSonarScan(stagedFiles),
+        slow: true,
+      }),
+    );
+  }
+
+  return steps;
+}
+
 function runStep(options: {
   stepNumber: number;
   stepTotal: number;
@@ -448,152 +670,11 @@ function runStep(options: {
   return exitCode;
 }
 
-/** Runs the labeled pre-commit guard; returns process exit code (0 = success). */
-export function runPreCommitGuard(options: RunGuardOptions = {}): number {
-  const scripts = options.packageScripts ?? readPackageScripts();
-  const stagedFiles = options.stagedFiles ?? getStagedFiles();
-  const steps = buildGuardSteps({ stagedFiles, scripts });
-
-  if (options.listOnly) {
-    printStepTable(steps);
-    return 0;
-  }
-
-  const runnableSteps: Array<{ label: string; run: () => number }> = [
-    {
-      label: 'lint-staged (Biome + markdownlint)',
-      run: () => runPnpm({ scriptName: 'lint-staged', scriptArgs: ['--no-stash'] }),
-    },
-    {
-      label: 'Lockfile in sync',
-      run: () =>
-        shouldRunLockfileCheck(stagedFiles) ? runPnpm({ scriptName: 'validate:lockfile' }) : 0,
-    },
-    { label: 'TypeScript typecheck', run: () => runPnpm({ scriptName: 'typecheck' }) },
-    {
-      label: 'Domain structure (strict)',
-      run: () => runPnpm({ scriptName: 'validate:domain:strict' }),
-    },
-    {
-      label: 'Architecture policy tests',
-      run: () => (shouldRunGlobalTests(stagedFiles) ? runPnpm({ scriptName: 'test:global' }) : 0),
-    },
-    { label: 'Scripts layout', run: () => runPnpm({ scriptName: 'validate:scripts-layout' }) },
-    {
-      label: 'Route catalog regenerate',
-      run: () => {
-        const code = runPnpm({ scriptName: 'routes:catalog' });
-        if (code !== 0) return code;
-        gitAdd([ROUTES_CATALOG_PATH]);
-        return 0;
-      },
-    },
-    {
-      label: 'Route catalog drift check',
-      run: () => runPnpm({ scriptName: 'routes:catalog:check' }),
-    },
-  ];
-
-  if (hasPackageScript({ scripts, scriptName: 'tool:project-structure-tree' })) {
-    runnableSteps.push({
-      label: 'Source tree regenerate',
-      run: () => {
-        if (!shouldRunStructureTreeCheck(stagedFiles)) return 0;
-        const code = runPnpm({ scriptName: 'tool:project-structure-tree' });
-        if (code !== 0) return code;
-        gitAdd([SRC_STRUCTURE_TREE_PATH]);
-        return 0;
-      },
-    });
-  }
-
-  if (hasPackageScript({ scripts, scriptName: 'tool:project-structure-tree:check' })) {
-    runnableSteps.push({
-      label: 'Source tree drift check',
-      run: () => {
-        if (!shouldRunStructureTreeCheck(stagedFiles)) return 0;
-        return runPnpm({ scriptName: 'tool:project-structure-tree:check' });
-      },
-    });
-  }
-
-  runnableSteps.push(
-    {
-      label: 'OpenAPI / Postman drift',
-      run: () => (shouldRunOpenApiCheck(stagedFiles) ? runPnpm({ scriptName: 'docs:check' }) : 0),
-    },
-    { label: 'TSDoc coverage gate', run: () => runPnpm({ scriptName: 'tsdoc:check' }) },
-  );
-
-  if (hasPackageScript({ scripts, scriptName: 'validate:test-naming' })) {
-    runnableSteps.push({
-      label: 'Test filename suffixes',
-      run: () => runPnpm({ scriptName: 'validate:test-naming' }),
-    });
-  }
-
-  runnableSteps.push(
-    {
-      label: 'Migration SQL safety',
-      run: () =>
-        shouldRunMigrationCheck(stagedFiles) ? runPnpm({ scriptName: 'db:migrate:lint' }) : 0,
-    },
-    {
-      label: 'DBML regenerate',
-      run: () => {
-        if (!shouldRunMigrationCheck(stagedFiles)) return 0;
-        const code = runPnpm({ scriptName: 'tool:generate-dbdiagram' });
-        if (code !== 0) return code;
-        gitAdd([DBML_PATH]);
-        return 0;
-      },
-    },
-    {
-      label: 'Project identity drift',
-      run: () => runPnpm({ scriptName: 'tool:generate-project-identity:check' }),
-    },
-    {
-      label: 'Env example sync',
-      run: () => checkEnvExampleSync(),
-    },
-  );
-
-  if (!options.skipShellSteps) {
-    runnableSteps.push(
-      {
-        label: 'Staged secrets scan',
-        run: () => {
-          if (!gitleaksInstalled()) {
-            console.error(
-              'ERROR: gitleaks is not installed. Install it (e.g. brew install gitleaks; pnpm setup:local auto-installs it on macOS).',
-            );
-            return 1;
-          }
-          return runShell('gitleaks protect --staged --verbose --redact');
-        },
-      },
-      {
-        label: 'No secret/state files staged',
-        run: () => checkSecretFilesStaged(stagedFiles),
-      },
-      {
-        label: 'Merge conflict markers',
-        run: () => checkConflictMarkers(stagedFiles),
-      },
-      {
-        label: 'Large staged files (>3MB; iterations/ exempt)',
-        run: () => checkLargeStagedFiles(stagedFiles),
-      },
-      {
-        label: 'SonarQube quality gate',
-        run: () => (shouldRunSonarScan(stagedFiles) ? runPnpm({ scriptName: 'sonar:scan' }) : 0),
-      },
-    );
-  }
-
-  const stepTotal = runnableSteps.length;
-  for (let index = 0; index < runnableSteps.length; index += 1) {
-    const step = runnableSteps[index]!;
+/** Runs every step one after another, output on the terminal; stops at the first failure. */
+export function runStepsSerially(steps: readonly RunnableStep[]): number {
+  const stepTotal = steps.length;
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index]!;
     const exitCode = runStep({
       stepNumber: index + 1,
       stepTotal,
@@ -602,18 +683,212 @@ export function runPreCommitGuard(options: RunGuardOptions = {}): number {
     });
     if (exitCode !== 0) return exitCode;
   }
-
   return 0;
+}
+
+/**
+ * Runs `steps` through `start`, at most `concurrency` at once and never two that share a lock;
+ * resolves with each step's outcome, in the order of `steps`.
+ */
+export function runStepPool<Step extends { lock?: string | undefined }>(options: {
+  steps: readonly Step[];
+  concurrency: number;
+  start: (step: Step) => Promise<StepOutcome>;
+}): Promise<StepOutcome[]> {
+  const { steps, start } = options;
+  const concurrency = Math.max(1, options.concurrency);
+  const outcomes = new Array<StepOutcome>(steps.length);
+  const waiting = steps.map((_, index) => index);
+  const heldLocks = new Set<string>();
+  let running = 0;
+  return new Promise((resolvePool, rejectPool) => {
+    const launchNext = (): void => {
+      if (waiting.length === 0 && running === 0) {
+        resolvePool(outcomes);
+        return;
+      }
+      while (running < concurrency) {
+        const position = waiting.findIndex((index) => {
+          const lock = steps[index]!.lock;
+          return lock === undefined || !heldLocks.has(lock);
+        });
+        if (position < 0) return;
+        const index = waiting.splice(position, 1)[0]!;
+        const step = steps[index]!;
+        if (step.lock !== undefined) heldLocks.add(step.lock);
+        running += 1;
+        start(step).then((outcome) => {
+          outcomes[index] = outcome;
+          running -= 1;
+          if (step.lock !== undefined) heldLocks.delete(step.lock);
+          launchNext();
+        }, rejectPool);
+      }
+    };
+    launchNext();
+  });
+}
+
+/** Spawns a step's process with its output captured; a process that cannot start fails the step. */
+function spawnCommand(command: StepCommand): Promise<StepOutcome> {
+  const startedAt = Date.now();
+  return new Promise((resolveStep) => {
+    const chunks: Buffer[] = [];
+    let settled = false;
+    const finish = (exitCode: number): void => {
+      if (settled) return;
+      settled = true;
+      resolveStep({
+        exitCode,
+        durationMs: Date.now() - startedAt,
+        output: Buffer.concat(chunks).toString('utf8'),
+      });
+    };
+    const child = spawn(command.file, command.args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: false,
+    });
+    child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
+    child.stderr.on('data', (chunk: Buffer) => chunks.push(chunk));
+    child.on('error', (error) => {
+      chunks.push(Buffer.from(`${error.message}\n`));
+      finish(1);
+    });
+    child.on('close', (code) => finish(code ?? 1));
+  });
+}
+
+function seconds(durationMs: number): string {
+  return `${(durationMs / 1000).toFixed(1)}s`;
+}
+
+function outputTail(output: string): string {
+  return output.trimEnd().split('\n').slice(-PARALLEL_OUTPUT_TAIL_LINES).join('\n');
+}
+
+/**
+ * Runs the steps in three phases: the writers one at a time, in order; the process checks in
+ * parallel with their output captured; then the in-process checks. A check that fails in
+ * parallel runs again alone with its output on the terminal, and that run decides.
+ */
+export async function runStepsInParallel(options: {
+  steps: readonly RunnableStep[];
+  concurrency: number;
+  start?: (command: StepCommand) => Promise<StepOutcome>;
+}): Promise<number> {
+  const { steps, concurrency, start = spawnCommand } = options;
+  const stepTotal = steps.length;
+  const numbered = steps.map((step, index) => ({ step, stepNumber: index + 1 }));
+  const runNumbered = ({ step, stepNumber }: (typeof numbered)[number]): number =>
+    runStep({ stepNumber, stepTotal, label: step.label, run: step.run });
+
+  for (const entry of numbered.filter(({ step }) => step.phase === 'write')) {
+    const exitCode = runNumbered(entry);
+    if (exitCode !== 0) return exitCode;
+  }
+
+  const checks = numbered.filter(({ step }) => step.phase === 'check');
+  const processChecks = checks
+    .filter(({ step }) => step.command !== undefined)
+    .sort((left, right) => Number(right.step.slow === true) - Number(left.step.slow === true));
+  const applicable = processChecks.filter(({ step }) => step.command !== null);
+  console.log(
+    `▶ ${applicable.length} checks in parallel, up to ${Math.max(1, concurrency)} at a time`,
+  );
+  const outcomes = await runStepPool({
+    steps: processChecks.map((entry) => ({ ...entry, lock: entry.step.lock })),
+    concurrency,
+    start: ({ step }) =>
+      step.command === null || step.command === undefined
+        ? Promise.resolve({ exitCode: 0, durationMs: 0, output: '' })
+        : start(step.command),
+  });
+
+  const failed: Array<{ entry: (typeof numbered)[number]; outcome: StepOutcome }> = [];
+  processChecks.forEach((entry, index) => {
+    const outcome = outcomes[index]!;
+    if (entry.step.command === null) {
+      console.log(`○ ${entry.step.label} (not needed for the staged files)`);
+    } else if (outcome.exitCode === 0) {
+      console.log(`✓ ${entry.step.label} (${seconds(outcome.durationMs)})`);
+    } else {
+      console.error(
+        `✗ ${entry.step.label} failed in parallel (exit ${outcome.exitCode}, ${seconds(outcome.durationMs)}) — running it again alone`,
+      );
+      failed.push({ entry, outcome });
+    }
+  });
+
+  for (const entry of checks.filter(({ step }) => step.command === undefined)) {
+    const exitCode = runNumbered(entry);
+    if (exitCode !== 0) return exitCode;
+  }
+
+  failed.sort((left, right) => left.entry.stepNumber - right.entry.stepNumber);
+  for (const { entry, outcome } of failed) {
+    const exitCode = runNumbered(entry);
+    if (exitCode !== 0) return exitCode;
+    console.log(
+      `  ${entry.step.label} passed alone after failing in parallel; the parallel run's output ended:\n${outputTail(outcome.output)}`,
+    );
+  }
+  return 0;
+}
+
+/** Runs the labeled pre-commit guard; resolves with the process exit code (0 = success). */
+export async function runPreCommitGuard(options: RunGuardOptions = {}): Promise<number> {
+  const scripts = options.packageScripts ?? readPackageScripts();
+  const stagedFiles = options.stagedFiles ?? getStagedFiles();
+
+  if (options.listOnly) {
+    printStepTable(buildGuardSteps({ stagedFiles, scripts }));
+    return 0;
+  }
+
+  const steps = buildRunnableSteps({
+    stagedFiles,
+    scripts,
+    skipShellSteps: options.skipShellSteps,
+  });
+  if (options.serial) return runStepsSerially(steps);
+  return runWithSerialFallback({
+    parallel: () =>
+      runStepsInParallel({
+        steps,
+        concurrency: Math.min(MAXIMUM_PARALLEL_CHECKS, availableParallelism()),
+      }),
+    serial: () => runStepsSerially(steps),
+  });
+}
+
+/** Resolves with the parallel run's exit code, or, when the runner itself throws, the serial run's. */
+export async function runWithSerialFallback(options: {
+  parallel: () => Promise<number>;
+  serial: () => number;
+}): Promise<number> {
+  try {
+    return await options.parallel();
+  } catch (error) {
+    console.error(
+      `The parallel guard failed (${error instanceof Error ? error.message : String(error)}); running every step one at a time.`,
+    );
+    return options.serial();
+  }
 }
 
 const currentScriptPath = resolve(fileURLToPath(import.meta.url));
 
-function main(): void {
-  const listOnly = process.argv.includes('--list');
-  const exitCode = runPreCommitGuard({ listOnly });
+async function main(): Promise<void> {
+  const exitCode = await runPreCommitGuard({
+    listOnly: process.argv.includes('--list'),
+    serial: process.argv.includes('--serial'),
+  });
   process.exit(exitCode);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === currentScriptPath) {
-  main();
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exit(1);
+  });
 }

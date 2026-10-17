@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildGuardSteps,
+  buildRunnableSteps,
   findOversizedStagedFiles,
   hasPackageScript,
   shouldRunGlobalTests,
@@ -9,6 +10,11 @@ import {
   shouldRunOpenApiCheck,
   shouldRunSonarScan,
   shouldRunStructureTreeCheck,
+  type RunnableStep,
+  runStepPool,
+  runStepsInParallel,
+  runWithSerialFallback,
+  type StepOutcome,
 } from '@/scripts/tooling/run-pre-commit-guard.js';
 
 describe('run-pre-commit-guard conditionals', () => {
@@ -185,4 +191,186 @@ describe('run-pre-commit-guard staged-file size limit (parity with clinozy-fe)',
       expect(findOversizedStagedFiles([{ path, sizeBytes: LIMIT_BYTES + 1 }])).toHaveLength(1);
     },
   );
+});
+
+describe('run-pre-commit-guard parallel runner', () => {
+  const scripts = {
+    'tool:project-structure-tree': 'tsx src/scripts/codegen/generate-project-structure-tree.ts',
+    'tool:project-structure-tree:check':
+      'tsx src/scripts/codegen/generate-project-structure-tree.ts --check',
+    'validate:test-naming': 'tsx src/scripts/validators/tests/validate-test-naming.ts',
+  };
+  const passed: StepOutcome = { exitCode: 0, durationMs: 1, output: '' };
+
+  /** A check whose serial run records itself in `calls` and returns `exitCode`. */
+  function check(options: {
+    label: string;
+    calls: string[];
+    exitCode?: number;
+    lock?: string;
+    command?: RunnableStep['command'];
+  }): RunnableStep {
+    const { label, calls, exitCode = 0, lock } = options;
+    return {
+      label,
+      phase: 'check',
+      ...(lock === undefined ? {} : { lock }),
+      run: () => {
+        calls.push(`serial ${label}`);
+        return exitCode;
+      },
+      command: options.command === undefined ? { file: label, args: [] } : options.command,
+    };
+  }
+
+  it('keeps the step list: the same steps, in the order --list prints them', () => {
+    const stagedFiles = ['src/domains/auth/auth.routes.ts', 'migrations/20260531000001_test.sql'];
+    const listed = buildGuardSteps({ stagedFiles, scripts }).map((step) => step.label);
+    const runnable = buildRunnableSteps({ stagedFiles, scripts }).map((step) => step.label);
+    expect(runnable).toEqual(listed);
+  });
+
+  it('runs the steps that write the tree, the index or node_modules one at a time', () => {
+    const steps = buildRunnableSteps({ stagedFiles: [], scripts });
+    expect(steps.filter((step) => step.phase === 'write').map((step) => step.label)).toEqual([
+      'lint-staged (Biome + markdownlint)',
+      'Lockfile in sync',
+      'Route catalog regenerate',
+      'Source tree regenerate',
+      'DBML regenerate',
+    ]);
+    const lockOf = (label: string) => steps.find((step) => step.label === label)?.lock;
+    expect(lockOf('Architecture policy tests')).toBe('docs/openapi');
+    expect(lockOf('OpenAPI / Postman drift')).toBe('docs/openapi');
+  });
+
+  it('skips the processes of conditional checks the staged files do not need', () => {
+    const steps = buildRunnableSteps({ stagedFiles: ['docs/README.md'], scripts });
+    const commandOf = (label: string) => steps.find((step) => step.label === label)?.command;
+    expect(commandOf('Architecture policy tests')).toBeNull();
+    expect(commandOf('SonarQube quality gate')).toBeNull();
+    expect(commandOf('TypeScript typecheck')).toEqual({ file: 'pnpm', args: ['typecheck'] });
+  });
+
+  it('starts at most `concurrency` steps at once and never two that share a lock', async () => {
+    const steps = ['a', 'b', 'c', 'd', 'e', 'f'].map((name) => ({
+      name,
+      ...(name === 'b' || name === 'c' ? { lock: 'shared' } : {}),
+    }));
+    let running = 0;
+    let peak = 0;
+    const lockHolders = new Set<string>();
+    const outcomes = await runStepPool({
+      steps,
+      concurrency: 3,
+      start: async (step) => {
+        running += 1;
+        peak = Math.max(peak, running);
+        if (step.lock !== undefined) {
+          expect(lockHolders.has(step.lock)).toBe(false);
+          lockHolders.add(step.lock);
+        }
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 5));
+        if (step.lock !== undefined) lockHolders.delete(step.lock);
+        running -= 1;
+        return { exitCode: step.name === 'e' ? 1 : 0, durationMs: 5, output: step.name };
+      },
+    });
+    expect(peak).toBe(3);
+    expect(outcomes.map((outcome) => outcome.output)).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+    expect(outcomes[4]?.exitCode).toBe(1);
+  });
+
+  it('runs the writers first, then the checks; an applicable check is not run serially', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const calls: string[] = [];
+    const steps: RunnableStep[] = [
+      check({ label: 'typecheck', calls }),
+      {
+        label: 'regenerate',
+        phase: 'write',
+        run: () => {
+          calls.push('serial regenerate');
+          return 0;
+        },
+      },
+      check({ label: 'not needed', calls, command: null }),
+    ];
+    const started: string[] = [];
+    const exitCode = await runStepsInParallel({
+      steps,
+      concurrency: 2,
+      start: async (command) => {
+        started.push(command.file);
+        calls.push(`parallel ${command.file}`);
+        return passed;
+      },
+    });
+    expect(exitCode).toBe(0);
+    expect(calls).toEqual(['serial regenerate', 'parallel typecheck']);
+    expect(started).toEqual(['typecheck']);
+  });
+
+  it('runs a check that failed in parallel again alone, and the run alone decides', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const failInParallel = async (): Promise<StepOutcome> => ({
+      exitCode: 1,
+      durationMs: 1,
+      output: 'contention',
+    });
+
+    const flakyCalls: string[] = [];
+    const flaky = await runStepsInParallel({
+      steps: [check({ label: 'flaky', calls: flakyCalls })],
+      concurrency: 2,
+      start: failInParallel,
+    });
+    expect(flaky).toBe(0);
+    expect(flakyCalls).toEqual(['serial flaky']);
+
+    const brokenCalls: string[] = [];
+    const broken = await runStepsInParallel({
+      steps: [
+        check({ label: 'broken', calls: brokenCalls, exitCode: 2 }),
+        check({ label: 'later', calls: brokenCalls, exitCode: 3 }),
+      ],
+      concurrency: 2,
+      start: failInParallel,
+    });
+    expect(broken).toBe(2);
+    expect(brokenCalls).toEqual(['serial broken']);
+  });
+
+  it('stops at a failing writer before any check starts', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const started: string[] = [];
+    const exitCode = await runStepsInParallel({
+      steps: [
+        { label: 'lint-staged', phase: 'write', run: () => 1 },
+        check({ label: 'typecheck', calls: [] }),
+      ],
+      concurrency: 2,
+      start: async (command) => {
+        started.push(command.file);
+        return passed;
+      },
+    });
+    expect(exitCode).toBe(1);
+    expect(started).toEqual([]);
+  });
+
+  it('falls back to the serial runner when the parallel runner throws', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const serial = vi.fn(() => 4);
+    const exitCode = await runWithSerialFallback({
+      parallel: () => Promise.reject(new Error('spawn EAGAIN')),
+      serial,
+    });
+    expect(exitCode).toBe(4);
+    expect(serial).toHaveBeenCalledTimes(1);
+    expect(await runWithSerialFallback({ parallel: async () => 0, serial })).toBe(0);
+    expect(serial).toHaveBeenCalledTimes(1);
+  });
 });

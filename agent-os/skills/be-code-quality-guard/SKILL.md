@@ -72,7 +72,7 @@ Extension: `biomejs.biome` (see `.vscode/extensions.json`).
 
 ## Layer 2: Pre-commit (`.husky/pre-commit` → `pnpm guard:pre-commit`)
 
-The hook runs **`pnpm guard:pre-commit`** — labeled sequential checks. If any fail, the commit is rejected. See **be-before-commit-guard** when the user reports a failed commit. List steps: **`pnpm guard:pre-commit:list`**.
+The hook runs **`pnpm guard:pre-commit`** — labeled checks: the steps that write run one at a time, then the read-only checks in parallel (`--serial` runs all one at a time). If any fail, the commit is rejected. See **be-before-commit-guard** when the user reports a failed commit. List steps: **`pnpm guard:pre-commit:list`**.
 
 Pre-commit mirrors a **subset** of the static checks in [`.github/workflows/pr-ci.yml`](../../../.github/workflows/pr-ci.yml). CI additionally runs `deps:audit`, full-repo `pnpm validate`, `validate:domain:coverage`, always-on `db:migrate:lint`, `test:contract`, Semgrep, and full-repo Gitleaks.
 
@@ -187,6 +187,6 @@ one-line PR there (owner: **be-dependency-security**); never a version in the wo
 
 When adding a new pre-commit check:
 
-1. Add the check to `.husky/pre-commit` (sequential, fail-fast)
+1. Add the check to `src/scripts/tooling/run-pre-commit-guard.ts`: `buildGuardSteps` (the `--list` table) and `buildRunnableSteps` (the run) — `phase: 'write'` when it changes the working tree, the index or `node_modules`, a `lock` when it shares files with another check
 2. Update this skill's Layer 2 table above
 3. Test with a manual commit

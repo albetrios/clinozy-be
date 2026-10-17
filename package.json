@@ -24,7 +24,7 @@
     "lint:fix": "biome check --write src tooling",
     "format": "biome format --write src tooling",
     "format:check": "biome format src tooling",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/typecheck/tsconfig.tsbuildinfo",
     "knip": "DATABASE_URL=\"${DATABASE_URL:-postgresql://knip:knip@localhost:5432/knip}\" knip",
     "health": "./tooling/validate/health-check.sh",
     "health:fix": "./tooling/validate/health-check.sh --fix",
