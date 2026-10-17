@@ -107,7 +107,7 @@ export function buildSrcStructureTree(options: BuildSrcStructureTreeOptions): st
   lines.push('');
   lines.push(`# Skipped directories: ${skipped}/, ${[...SKIP_FILE_NAMES].join(', ')}`);
   lines.push(
-    '# Canonical layout: CLAUDE.md, docs/reference/architecture/domains-and-public-api-design.md',
+    '# Canonical layout: src/domains/CLAUDE.md, docs/reference/architecture/domains-and-public-api-design.md',
   );
 
   if (options.includeTests) {

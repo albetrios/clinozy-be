@@ -31,6 +31,7 @@ const SCAN_ROOTS = [
   join(REPO_ROOT, 'docs'),
   join(REPO_ROOT, 'README.md'),
   join(REPO_ROOT, 'CLAUDE.md'),
+  join(REPO_ROOT, 'iterations', 'CLAUDE.md'),
   join(REPO_ROOT, 'AGENTS.md'),
   join(REPO_ROOT, 'CONTRIBUTING.md'),
   join(REPO_ROOT, 'agent-os'),

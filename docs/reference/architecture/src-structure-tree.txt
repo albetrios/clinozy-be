@@ -1019,6 +1019,7 @@ src/
     │   │   ├── app-record-purge.constants.ts
     │   │   ├── app-record-purge.processor.ts
     │   │   └── app-record-purge.worker.ts
+    │   ├── CLAUDE.md
     │   ├── app-access-sections.ts
     │   ├── app-member-reference.ts
     │   ├── app-membership-leave.ts
@@ -2222,6 +2223,7 @@ src/
     │   ├── user.service.ts
     │   ├── user.types.ts
     │   └── user.validator.ts
+    ├── CLAUDE.md
     └── domain-containers.plugin.ts
 ├── infrastructure/
     ├── api-reference/
@@ -2472,14 +2474,14 @@ src/
     │   ├── circuit-breaker.ts
     │   ├── resilience.overview.md
     │   └── retry-with-backoff.util.ts
-    └── storage/
+    ├── storage/
     │   ├── __tests__/
-    │       └── unit/
-    │       │   ├── content-disposition.util.unit.test.ts
-    │       │   ├── s3-adapter.unit.test.ts
-    │       │   ├── s3-client-config.unit.test.ts
-    │       │   ├── s3-error.util.unit.test.ts
-    │       │   └── stored-object-purge.util.unit.test.ts
+    │   │   └── unit/
+    │   │   │   ├── content-disposition.util.unit.test.ts
+    │   │   │   ├── s3-adapter.unit.test.ts
+    │   │   │   ├── s3-client-config.unit.test.ts
+    │   │   │   ├── s3-error.util.unit.test.ts
+    │   │   │   └── stored-object-purge.util.unit.test.ts
     │   ├── content-disposition.util.ts
     │   ├── object-storage.port.ts
     │   ├── s3-adapter.ts
@@ -2487,6 +2489,7 @@ src/
     │   ├── s3-error.util.ts
     │   ├── storage.overview.md
     │   └── stored-object-purge.util.ts
+    └── CLAUDE.md
 ├── scripts/
     ├── admin/
     │   ├── admin-token.ts
@@ -2768,6 +2771,7 @@ src/
     │   │   ├── record-fields.util.ts
     │   │   ├── validation.util.ts
     │   │   └── zod-issue-messages.util.ts
+    ├── CLAUDE.md
     └── shared.overview.md
 ├── tests/
     ├── bench/
@@ -3588,4 +3592,4 @@ src/
 └── worker.ts
 
 # Skipped directories: node_modules, .vite, dist, coverage/, .gitkeep, credential-pool.json
-# Canonical layout: CLAUDE.md, docs/reference/architecture/domains-and-public-api-design.md
+# Canonical layout: src/domains/CLAUDE.md, docs/reference/architecture/domains-and-public-api-design.md

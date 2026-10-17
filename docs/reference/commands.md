@@ -1,0 +1,46 @@
+# Commands
+
+Every `pnpm` script beyond the everyday ones in the root [`CLAUDE.md`](../../CLAUDE.md) → Commands (moved from there); the design-iteration commands are in [`iterations/CLAUDE.md`](../../iterations/CLAUDE.md). List all scripts: `pnpm run`.
+
+- `pnpm dev:stack:status` / `pnpm dev:stack:stop` — the live playground stack `tooling/setup/agent/bootstrap.sh` brings up (the session-start hook launches it in every Claude Code web session; `AGENT_AUTO_STACK=0` opts out): the running step or `live`, API + worker health, logs / stop the API + worker
+- `pnpm dev:stack:reset-db` — a scratch database again (`bootstrap.sh --reset-database`): skips the installs, stops the API + worker, drops and recreates the **local Compose** database (its own `POSTGRES_DB`), then migrate → logins → full seed → API → worker; the step after editing an existing migration in place
+- `pnpm knip` — dead-code gate (unused files / dependencies / binaries; config `knip.jsonc`). Blocking on those high-signal categories; the noisy `exports`/`types` analysis is deferred. Own PR-CI lane, folded into the `quality-gate` aggregate.
+- `pnpm health` / `pnpm health:fix` — phased local health orchestrator (`tooling/validate/health-check.sh`): runs every gate, **continues through failures**, prints a PASS/FAIL table; `--fix` auto-repairs lint + format first. Complements the fail-fast `pnpm ci:local`. `pnpm quality` = `health` + `sonar:scan`.
+- `pnpm compose:up` / `pnpm compose:down` — start/stop Postgres + Redis (Docker Compose)
+- `pnpm compose:wait` — wait until Compose Postgres accepts connections (fails fast if service not running)
+- `pnpm db:migrate:lint` — scan `migrations/*.sql` for migration-safety violations (blocking DDL, missing IF NOT EXISTS, etc.)
+- `pnpm docs:generate` — generate OpenAPI spec to `docs/openapi/openapi.json` (default locale en) or `docs/openapi/openapi.{locale}.json` when `OPENAPI_LOCALE` is set (gitignored)
+- `pnpm docs:generate:multilang` — generate OpenAPI specs for all locales (en, es) from `src/shared/locales/{locale}/openapi.json`; see **be-openapi-multilingual** skill
+- `pnpm docs:postman` — convert OpenAPI spec to Postman Collection at `docs/postman-collection.json`
+- `pnpm docs:upload` — upload Postman Collection to workspace (requires `POSTMAN_API_KEY` + `POSTMAN_WORKSPACE_ID`)
+- `pnpm docs:upload:scalar` — publish the OpenAPI document to the Scalar Registry (requires `SCALAR_API_KEY` + `SCALAR_NAMESPACE`; optional `SCALAR_SLUG`, default `clinozy-be`)
+- `pnpm docs:upload:hosted` — run both hosted uploads (Postman workspace + Scalar Registry)
+- `pnpm docs:all` — generate OpenAPI spec + Postman Collection in one step
+- `pnpm test:coverage` — all tests with V8 coverage (CI)
+- `pnpm test:performance` — performance tests
+- `pnpm test:security` — security test suite
+- `pnpm test:chaos` — Toxiproxy chaos / fault-injection suite (`tooling/vitest/chaos.config.ts`; see `docs/reference/reliability/chaos-testing.md`)
+- `pnpm test:contract` — outbound HTTP contracts for Stripe, Resend, S3 (`tooling/vitest/contract.config.ts`; see `docs/reference/testing/contract-tests.md`)
+- `pnpm test:contract:live` — opt-in, never in CI: the `*.live.contract.test.ts` specs against the Stripe sandbox, Resend, the configured S3 bucket, Turnstile test secrets, Sentry and PostHog, with the configured keys (refuses a live Stripe key)
+- `pnpm chaos:up` / `pnpm chaos:down` — start/stop the Toxiproxy sidecar (`docker compose --profile chaos`)
+- `pnpm chaos:provision` — register Postgres + Redis listener proxies (`src/tests/chaos/provision-proxies.ts`)
+- `pnpm test:api-smoke` — live API smoke (server running + seed)
+- `pnpm verify:base` — end-to-end gate: migrate → seed (minimal + full) → API smoke (auto-detects/launches server + worker) → validate
+- `pnpm validate:route-success-statuses` — verify `tooling/openapi/route-catalog/route-success-statuses.json` (declared happy-path status per route) stays in sync with `docs/routes.txt`
+- `pnpm validate:route-schema-docs` — verify every route registration (incl. `health.middleware.ts`, `mcp-server.ts`) declares `schema.summary`/`description`/`tags` (drives OpenAPI operation docs)
+- `pnpm validate:route-organization-scope` — verify `tooling/openapi/route-catalog/route-organization-scope.json` (the catalog `O` column: `both` or team-only `team`) stays in sync with `docs/routes.txt`
+- `pnpm validate:route-success-coverage` — observed-status gate after a full `pnpm test`: fails on declared-vs-observed drift; uncovered-routes count ratchets via `tooling/route-coverage/route-success-coverage-budget.json`; also verifies every observed sub-500 status is documented in the generated OpenAPI spec
+- `pnpm routes:examples` — refresh `tooling/openapi/route-examples/route-examples.json` (sanitized request/response samples per route+status, embedded in OpenAPI as `captured` examples) from a capture run: `ROUTE_EXAMPLE_CAPTURE=1 pnpm test && pnpm routes:examples`
+- `pnpm ci:quality` — static CI quality slice (audit, validate, domain, contract tests, routes, env example, migrate lint)
+- `pnpm test:bench` — autocannon single-endpoint benchmark
+- `pnpm deps:audit:prod` — `pnpm audit --prod`, the blocking gate (the production tree ships in the image). `pnpm deps:audit` — the full tree incl. devDependencies, **report-only** in CI and `ci:quality` (`deps:audit:report`), so a dev-only advisory with no published fix cannot wedge every PR (same policy as clinozy-fe). Fix an advisory with an `overrides` entry in `pnpm-workspace.yaml`; only when no fixed version exists, add its GHSA to `auditConfig.ignoreGhsas` there with its path and removal condition.
+- `pnpm deps:update` — safe patch/minor updates within ranges; run audit + validate + test after
+- `pnpm db:seed:demo-clinic [--fresh]` — one real-looking clinic (Faker `en_IN`, emails on `example.com`) with staff logins, patients, visits, bills, enquiries and the app's rule tasks; kept on a re-run, `--fresh` rebuilds it around today (local only). See `docs/getting-started/seeded-fixtures.md`
+- `pnpm db:seed:bulk` — scaled bulk seed via the orchestrator; `BULK_PROFILE` (`demo`/`edge`/`load`), `SCALE`, per-knob `BULK_*` overrides (e.g. `BULK_PROFILE=load SCALE=5 pnpm db:seed:bulk`)
+- `pnpm db:viewer` — local DB Viewer (`tooling/db-viewer/`): loopback-only ER board for Drizzle schemas + `migrations/*.sql` replay + plan mode (each non-frozen iteration's `plans/db-changes.md` drawn as Latest + its changes); per-boot session token in the printed URL
+- `pnpm init:project` — adopt this repo as a NEW project: rewrites the identity manifest, regenerates every identity artifact, resyncs the lockfile, and reports leftovers of the previous name. Identity-only by default; `--reset-history` additionally performs the destructive fork reset (confirmed by phrase), `--dry-run` previews, `--yes` + flags run non-interactively. Playbook: **`docs/getting-started/adopting-as-template.md`**
+- `pnpm github:sync` — consistency, scaffold, rulesets, GitHub Environments, push `.env.<environment>` values; `--check` read-only; `--dry-run` preview (single trunk: `main` is the repo default, so no branch is created)
+- `pnpm github:tool:governance-mode` — switch the merge + production-deploy review posture between `personal` and `team` (atomically flips the coupled review fields in `.github/rulesets/<branch>.json` + `.github/environments/production.json`; `team` derives reviewers from `.github/CODEOWNERS` and needs ≥2 owners, then run `pnpm github:sync`). `pnpm github:tool:governance-mode:check` guards the two files against an inconsistent/deadlocking combo. See **`docs/deployment/ci-cd/branch-protection.md`**
+- `pnpm tool:sync-env-example` — report env schema vs .env.example diff and PR snippet; use `--fix` to append missing vars
+- `pnpm tool:agent-tools` — agent tools (codegraph, headroom, semgrep, gitleaks, k6) vs their pins in `tooling/setup/agent/tool-versions.sh`; `--smoke` starts the default MCP servers and lists their tools, `--outdated` lists newer releases with paste-ready bump lines (the cloud bootstrap runs both). Bumps: **be-dependency-security**
+- `pnpm tool:project-structure-tree` — print `src/` directory tree to stdout (see `docs/reference/architecture/project-structure-guide.md`)
