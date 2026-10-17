@@ -83,7 +83,7 @@ describe('StripeWebhookService', () => {
     // stale-event from race-condition when sync returns null.
     existsByStripeProviderSubscriptionId: vi.fn().mockResolvedValue(false),
     // Entitlement loss → Free seat allowance once the event commits.
-    enforceFreeSeatCeilingAfterCommitIfEntitlementLost: vi.fn().mockResolvedValue(undefined),
+    logEntitlementLossAfterCommit: vi.fn().mockResolvedValue(undefined),
   } as unknown as SubscriptionService;
 
   const stripeWebhookEventRepository = {

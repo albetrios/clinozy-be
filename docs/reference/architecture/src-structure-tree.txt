@@ -363,6 +363,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── manufacturers.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── manufacturers.seed.ts
     │   │   │   │   ├── manufacturers.constants.ts
     │   │   │   │   ├── manufacturers.controller.ts
     │   │   │   │   ├── manufacturers.dto.ts
@@ -384,6 +386,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── medical-purchase-orders.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── medical-purchase-orders.seed.ts
     │   │   │   │   ├── medical-purchase-orders.constants.ts
     │   │   │   │   ├── medical-purchase-orders.controller.ts
     │   │   │   │   ├── medical-purchase-orders.dto.ts
@@ -404,6 +408,8 @@ src/
     │   │   │   │   │   ├── __tests__/
     │   │   │   │   │   │   └── unit/
     │   │   │   │   │   │   │   └── medical-rep-visits.service.unit.test.ts
+    │   │   │   │   │   ├── seed/
+    │   │   │   │   │   │   └── medical-rep-visits.seed.ts
     │   │   │   │   │   ├── medical-rep-visits.constants.ts
     │   │   │   │   │   ├── medical-rep-visits.controller.ts
     │   │   │   │   │   ├── medical-rep-visits.dto.ts
@@ -416,6 +422,8 @@ src/
     │   │   │   │   │   ├── medical-rep-visits.service.ts
     │   │   │   │   │   ├── medical-rep-visits.types.ts
     │   │   │   │   │   └── medical-rep-visits.validator.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── medical-reps.seed.ts
     │   │   │   │   ├── medical-reps.constants.ts
     │   │   │   │   ├── medical-reps.controller.ts
     │   │   │   │   ├── medical-reps.dto.ts
@@ -432,6 +440,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── medical-sales.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── medical-sales.seed.ts
     │   │   │   │   ├── medical-sales.constants.ts
     │   │   │   │   ├── medical-sales.controller.ts
     │   │   │   │   ├── medical-sales.dto.ts
@@ -449,6 +459,8 @@ src/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   ├── medicines.service.unit.test.ts
     │   │   │   │   │   │   └── medicines.stock.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── medicines.seed.ts
     │   │   │   │   ├── medicines.constants.ts
     │   │   │   │   ├── medicines.controller.ts
     │   │   │   │   ├── medicines.dto.ts
@@ -466,10 +478,14 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── suppliers.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── suppliers.seed.ts
     │   │   │   │   ├── supplier-credits/
     │   │   │   │   │   ├── __tests__/
     │   │   │   │   │   │   └── unit/
     │   │   │   │   │   │   │   └── supplier-credits.service.unit.test.ts
+    │   │   │   │   │   ├── seed/
+    │   │   │   │   │   │   └── supplier-credits.seed.ts
     │   │   │   │   │   ├── supplier-credits.constants.ts
     │   │   │   │   │   ├── supplier-credits.controller.ts
     │   │   │   │   │   ├── supplier-credits.dto.ts
@@ -598,8 +614,10 @@ src/
     │   │   │   └── offerings.validator.ts
     │   │   ├── onboarding-setup/
     │   │   │   ├── __tests__/
-    │   │   │   │   └── integration/
+    │   │   │   │   ├── integration/
     │   │   │   │   │   └── onboarding-setup.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── onboarding-setup.service.unit.test.ts
     │   │   │   ├── onboarding-setup.constants.ts
     │   │   │   ├── onboarding-setup.controller.ts
     │   │   │   ├── onboarding-setup.dto.ts
@@ -850,6 +868,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── stock-counts.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── stock-counts.seed.ts
     │   │   │   │   ├── stock-counts.constants.ts
     │   │   │   │   ├── stock-counts.controller.ts
     │   │   │   │   ├── stock-counts.dto.ts
@@ -866,6 +886,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── stock-item-movements.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── stock-item-movements.seed.ts
     │   │   │   │   ├── stock-item-movements.constants.ts
     │   │   │   │   ├── stock-item-movements.controller.ts
     │   │   │   │   ├── stock-item-movements.dto.ts
@@ -883,6 +905,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── stock-items.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── stock-items.seed.ts
     │   │   │   │   ├── stock-items.constants.ts
     │   │   │   │   ├── stock-items.controller.ts
     │   │   │   │   ├── stock-items.dto.ts
@@ -899,6 +923,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── stock-purchases.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── stock-purchases.seed.ts
     │   │   │   │   ├── stock-purchases.constants.ts
     │   │   │   │   ├── stock-purchases.controller.ts
     │   │   │   │   ├── stock-purchases.dto.ts
@@ -915,6 +941,8 @@ src/
     │   │   │   │   ├── __tests__/
     │   │   │   │   │   └── unit/
     │   │   │   │   │   │   └── stock-vendors.service.unit.test.ts
+    │   │   │   │   ├── seed/
+    │   │   │   │   │   └── stock-vendors.seed.ts
     │   │   │   │   ├── stock-vendors.controller.ts
     │   │   │   │   ├── stock-vendors.dto.ts
     │   │   │   │   ├── stock-vendors.overview.md
@@ -2502,6 +2530,7 @@ src/
     │   ├── bulk.ts
     │   ├── demo-clinic.catalog.ts
     │   ├── demo-clinic.plan.ts
+    │   ├── demo-clinic.stock.plan.ts
     │   ├── demo-clinic.ts
     │   ├── ensure-demo-admin.ts
     │   ├── faker-data.ts
@@ -3384,6 +3413,7 @@ src/
     │   │   ├── seed/
     │   │   │   ├── bulk-config.unit.test.ts
     │   │   │   ├── demo-clinic-plan.unit.test.ts
+    │   │   │   ├── demo-clinic-stock-plan.unit.test.ts
     │   │   │   ├── modules.unit.test.ts
     │   │   │   ├── production-guard.unit.test.ts
     │   │   │   ├── seed-contract.unit.test.ts

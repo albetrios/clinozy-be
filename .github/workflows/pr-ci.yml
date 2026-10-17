@@ -169,6 +169,14 @@ jobs:
       - name: Project identity artifacts in sync
         run: pnpm tool:generate-project-identity:check
 
+      # Same story: both ran only in `ci:quality`, so #69 (a second hard-coded 2048) and #70 (a
+      # sub-domain without its unit tests) each merged green and reddened the main canary (#72).
+      - name: Constants centralized
+        run: pnpm validate:constants
+
+      - name: Sub-domain unit-test matrix
+        run: pnpm validate:domain:unit-matrix
+
   unit-tests:
     needs: [changes]
     if: |

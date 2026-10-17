@@ -320,7 +320,7 @@ sequenceDiagram
 
 - `subscriptions.status` transitions: `active` → `past_due` (and back, or onward to `canceled`).
 - Each transition is a `subscription.updated` (the final one a `subscription.cancelled`) to the organization's subscribed webhooks.
-- **Losing the paid entitlement suspends the excess seats.** Once a cancel, expiry, pause or never-paid status commits, the most recently joined non-owner ACTIVE members are suspended until the organization fits the Free plan's allowance (suspended, never removed; reactivating one re-checks the ceiling). The end of a dunning grace (`current_period_end + BILLING_DUNNING_GRACE_DAYS`) has no Stripe event, so the hourly `subscription-seat-reconcile` job on the seat-sync queue applies it, and re-enqueues a seat sync wherever Stripe bills a quantity other than the seats in use.
+- **Losing the paid entitlement keeps the team.** Once a cancel, expiry, pause or never-paid status commits, `billing.entitlement_lost` is logged and no member is suspended (owner decision, 2026-10-17: suspending everyone past the Free allowance locked a clinic's staff out mid-day). The end of a dunning grace (`current_period_end + BILLING_DUNNING_GRACE_DAYS`) has no Stripe event, so the hourly `subscription-seat-reconcile` job on the seat-sync queue reports it (`subscription-seat-reconcile.entitlement_lapsed`), and re-enqueues a seat sync wherever Stripe bills a quantity other than the seats in use. Only an owner's own plan downgrade still suspends members past the new plan's ceiling.
 
 ### Failure modes
 

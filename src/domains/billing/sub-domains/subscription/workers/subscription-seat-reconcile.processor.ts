@@ -20,22 +20,23 @@ export interface SubscriptionSeatReconcileResult {
 }
 
 /**
- * The recovery for both seat obligations that ride on a best-effort trigger.
+ * The recovery for the seat sync that rides on a best-effort trigger, plus a report of the
+ * organizations whose paid entitlement has lapsed.
  *
  * @remarks
  * - **Algorithm:** one read across tenants under the retention maintenance context
  *   ({@link SubscriptionRepository.findSeatReconcileCandidates}); then, outside it, a seat sync is
- *   enqueued per drifted organization (deduplicated per organization by the seat-sync queue) and
- *   {@link SubscriptionService.enforceFreeSeatCeiling} runs per lapsed one.
+ *   enqueued per drifted organization (deduplicated per organization by the seat-sync queue), and
+ *   the lapsed organizations are logged by public id.
  * - **Why:** the seat sync is enqueued after the member change commits — an enqueue lost to a Redis
- *   blip left Stripe billing the old quantity until the next change; and a dunning subscription's
- *   grace ends with no event at all, so nothing else brings the organization back within the Free
- *   allowance.
- * - **Failure modes:** a database error propagates (the job retries); enqueue and enforcement are
- *   best-effort and logged.
+ *   blip left Stripe billing the old quantity until the next change. A lapsed organization keeps
+ *   its whole team (owner decision, 2026-10-17): this job used to suspend everyone past the Free
+ *   allowance, which locked a clinic's staff out mid-day with no explanation.
+ * - **Failure modes:** a database error propagates (the job retries); enqueue is best-effort and
+ *   logged.
  * - **Notes:** a repeatable job on the seat-sync queue, run by the seat-sync worker — no worker or
  *   connection budget of its own.
- * - **Side effects:** seat-sync jobs; suspended memberships.
+ * - **Side effects:** seat-sync jobs; a `subscription-seat-reconcile.entitlement_lapsed` warning.
  */
 export async function runSubscriptionSeatReconcileJob(
   subscriptionService: SubscriptionService,
@@ -49,8 +50,11 @@ export async function runSubscriptionSeatReconcileJob(
   for (const organizationPublicId of candidates.quantityDrift) {
     subscriptionService.enqueueSeatQuantitySync({ organization_public_id: organizationPublicId });
   }
-  for (const organizationPublicId of candidates.entitlementLapsed) {
-    await subscriptionService.enforceFreeSeatCeiling(organizationPublicId);
+  if (candidates.entitlementLapsed.length > 0) {
+    logger.warn(
+      { organizationPublicIds: candidates.entitlementLapsed },
+      'subscription-seat-reconcile.entitlement_lapsed',
+    );
   }
   const result = {
     quantityDriftCount: candidates.quantityDrift.length,

@@ -24,6 +24,7 @@ store's slice of the payments ledger — never sharing records with clinic stock
 | [`medical-reps/medical-rep-visits/`](medical-reps/medical-rep-visits/medical-rep-visits.overview.md) | 11.G — an MR's logged visits (routes 39–43) |
 | [`medical-sales/`](medical-sales/medical-sales.overview.md) | 11.H — sales, their void and returns, who owes on them (routes 44–50, 52) |
 | [`medical-payments/`](medical-payments/medical-payments.overview.md) | 11.I — the store's slice of the payments ledger and its CSV (routes 51, 53) — routes and controller only |
+| each resource's `seed/` | the one-row helpers the demo clinic seed writes the store through (`seedManufacturer`, `seedSupplier`, `seedSupplierCredit`, `seedMedicine` + its batches and prices, `seedMedicalPurchaseOrder` + its lines, `seedMedicalRep`, `seedMedicalRepVisit`, `seedMedicalSale` with its `medical` invoice) — `pnpm db:seed:demo-clinic` |
 | `medical.container.ts` | builds the eight services |
 | `medical.routes.ts` | registers the nine route sets (the store's payments on billing's payments service) |
 

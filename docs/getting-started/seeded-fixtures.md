@@ -46,7 +46,11 @@ the emails, which stay on `example.com`.
 | Today | Both branches have patients done, at checkout, with the doctor, waiting, confirmed and booked. The main branch also has one in treatment and a cancellation; the second has a no-show |
 | Money | Bills paid by UPI, card or cash; three part-paid; today's checkout visits unpaid |
 | Enquiries | 12 leads with WhatsApp threads: three new and unanswered, the rest contacted, following up, gone quiet, lost or converted |
-| Tasks | The app's own task rules, run once by the seed (aftercare calls, replies, arrivals, dues, rebookings, next visits), plus past aftercare calls and the demo user's own to-dos |
+| Tasks | The app's own task rules, run once by the seed (aftercare calls, replies, arrivals, dues, rebookings, next visits, the MR due today), plus past aftercare calls and the demo user's own to-dos |
+| Medical store | 7 brands, 3 agencies (each a mobile and a GSTIN) with their rates, 12 medicines at metro MRPs (medicines at 5% GST, skin care at 18%) and their batches. Five orders: two received and paid, one received and part-credited, one received and owed, one still on order. Two returns to agencies: one set against a later order, one still open. A dozen or more sales after recent visits (and one walk-in), each with its `medical` bill drawn from the earliest unexpired batch — paid, part-paid and unpaid. A courier expense, and three MRs with their visits |
+| Medical states | Retino-A has a batch expiring next month (sold at 20% off), Momate is out of stock and on order, Fixderma Shadow and Nizral sit at their reorder level |
+| Clinic stock | 3 vendors, 14 consumables and equipment items, 4 vendor bills (paid, part-paid, paid at the door, owed), two stock checks and over a hundred movements: opening balances, receipts, what each peel, laser, PRP and facial session used (linked to the session), the weekly procedure-room use, a damaged pack, a return, an entry made twice and reverted. The salicylic peel is used up; the gloves, carbon lotion and laser eye shields are low |
+| Reconciled | Every batch holds what arrived less what was sold and sent back, every medicine its batches' sum, every stock item its movements' sum; every bill, order and credit matches its lines and its payments |
 
 - **Same clinic every time:** a `SEED` (default 12345) always gives the same clinic. A re-run keeps it.
 - **Rebuild:** `pnpm db:seed:demo-clinic --fresh` deletes the clinic and seeds it again around today,

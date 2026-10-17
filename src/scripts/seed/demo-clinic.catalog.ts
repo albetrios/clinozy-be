@@ -3,8 +3,15 @@
  * Indian skin & hair clinic rather than lorem ipsum. Faker (`fakerEN_IN`) supplies the people; this
  * file supplies what Faker cannot: clinic names that are not a known chain's, real city areas with
  * their PIN codes and landmark roads, a typical metro price list, and the words a dermatologist
- * writes. Pure data — `demo-clinic.plan.ts` picks from it with a seeded Faker.
+ * writes, and the medical store's and the procedure room's shelves. Pure data —
+ * `demo-clinic.plan.ts` and `demo-clinic.stock.plan.ts` pick from it with a seeded Faker.
  */
+import type { ManufacturerTone } from '@/domains/app/sub-domains/medical/manufacturers/manufacturers.constants.js';
+import type {
+  STOCK_ITEM_CATEGORY_VALUES,
+  STOCK_ITEM_MEASURE_UNIT_VALUES,
+  STOCK_ITEM_UNIT_VALUES,
+} from '@/domains/app/sub-domains/stock/stock-items/stock-items.constants.js';
 
 /** A treatment area of `app.patient_treatments.body_parts`. */
 export type DemoBodyPart = 'face' | 'upper_lip' | 'chin' | 'underarm' | 'scalp';
@@ -496,3 +503,595 @@ export const DEMO_APPOINTMENT_REASONS = {
 
 /** Allergies a handful of patients have on file. */
 export const DEMO_ALLERGIES = ['Sulfa drugs', 'Penicillin', 'Lidocaine (mild)'] as const;
+
+/** A brand on the medical store's packs (`app.manufacturers`). */
+export type DemoManufacturerKey =
+  | 'sunPharma'
+  | 'fixderma'
+  | 'galderma'
+  | 'johnson'
+  | 'drReddys'
+  | 'cipla'
+  | 'glenmark';
+
+/** A manufacturer as the store keeps it — upper case, with its chip colour. */
+export interface DemoManufacturer {
+  key: DemoManufacturerKey;
+  name: string;
+  tone: ManufacturerTone;
+}
+
+/** The brands an Indian skin clinic's store stocks. */
+export const DEMO_MANUFACTURERS: readonly DemoManufacturer[] = [
+  { key: 'sunPharma', name: 'SUN PHARMA', tone: 'butter' },
+  { key: 'fixderma', name: 'FIXDERMA', tone: 'sky' },
+  { key: 'galderma', name: 'GALDERMA', tone: 'lav' },
+  { key: 'johnson', name: 'JOHNSON & JOHNSON', tone: 'blush' },
+  { key: 'drReddys', name: "DR. REDDY'S LABORATORIES", tone: 'sage' },
+  { key: 'cipla', name: 'CIPLA', tone: 'mint' },
+  { key: 'glenmark', name: 'GLENMARK', tone: 'sky' },
+];
+
+/** An agency the store buys from (`app.suppliers`). */
+export type DemoSupplierKey = 'ganesh' | 'omSai' | 'city';
+
+/** A supplier: its name (the city agency takes the clinic's city), the brands it carries and its rates. */
+export interface DemoSupplier {
+  key: DemoSupplierKey;
+  /** `{city}` is the clinic's city. */
+  name: string;
+  manufacturers: readonly DemoManufacturerKey[];
+  /** Its rate against a medicine's trade rate (the city agency is a little cheaper, and slower). */
+  rateFactor: number;
+  leadDays: number;
+}
+
+/** The three agencies — every brand has at least one. */
+export const DEMO_SUPPLIERS: readonly DemoSupplier[] = [
+  {
+    key: 'ganesh',
+    name: 'Shree Ganesh Pharma Distributors',
+    manufacturers: ['sunPharma', 'fixderma', 'galderma', 'johnson'],
+    rateFactor: 1,
+    leadDays: 1,
+  },
+  {
+    key: 'omSai',
+    name: 'Om Sai Medical Agencies',
+    manufacturers: ['drReddys', 'cipla', 'glenmark'],
+    rateFactor: 1,
+    leadDays: 2,
+  },
+  {
+    key: 'city',
+    name: '{city} Medico Distributors',
+    manufacturers: ['galderma', 'cipla', 'sunPharma'],
+    rateFactor: 0.97,
+    leadDays: 3,
+  },
+];
+
+/** A medicine the store sells. */
+export type DemoMedicineKey =
+  | 'suncros'
+  | 'shadow'
+  | 'adaferin'
+  | 'retinoA'
+  | 'mintop'
+  | 'tugain'
+  | 'isotroin'
+  | 'cleanser'
+  | 'moisturiser'
+  | 'candid'
+  | 'momate'
+  | 'nizral';
+
+/** A medicine on the store's shelf (`app.medicines`) and how much of it the store had to start with. */
+export interface DemoMedicine {
+  key: DemoMedicineKey;
+  name: string;
+  composition: string;
+  manufacturer: DemoManufacturerKey;
+  isPrescriptionOnly: boolean;
+  /** Rupees per pack, GST inside — what a sale bills. */
+  mrp: number;
+  /** Medicines carry 5% (the GST rates since September 2025); skin-care products 18%. */
+  gstPercent: 5 | 18;
+  minStock: number;
+  maxStock: number;
+  /** What an agency charges for a pack, in rupees, before its own rate factor. */
+  tradeRate: number;
+  /** Packs in hand when the store's records begin, and the month that batch expires (from this month). */
+  opening: { quantity: number; expiresInMonths: number };
+  /** The store's near-expiry discount on it, percent. */
+  nearExpiryDiscountPercent?: number;
+  /** How its maker's batch numbers start. */
+  batchPrefix: string;
+  /** Packs a sale usually takes. */
+  packsPerSale: number;
+}
+
+/**
+ * The store's medicines at metro MRPs. Their opening stock tells the store's story: Retino-A's old
+ * batch expires next month (sold at 20% off), Suncros' the month after; Momate's batch expired last
+ * month and goes back to its agency, so it is out and on order; Fixderma Shadow and Nizral sit at
+ * their reorder level.
+ */
+export const DEMO_MEDICINES: readonly DemoMedicine[] = [
+  {
+    key: 'suncros',
+    name: 'Suncros Aqualite SPF 50 Gel 50 g',
+    composition: 'Broad-spectrum sunscreen, SPF 50 PA+++',
+    manufacturer: 'sunPharma',
+    isPrescriptionOnly: false,
+    mrp: 695,
+    gstPercent: 18,
+    minStock: 4,
+    maxStock: 20,
+    tradeRate: 520,
+    opening: { quantity: 6, expiresInMonths: 2 },
+    batchPrefix: 'SAG',
+    packsPerSale: 1,
+  },
+  {
+    key: 'shadow',
+    name: 'Fixderma Shadow SPF 50+ Gel 75 g',
+    composition: 'Broad-spectrum sunscreen, SPF 50+',
+    manufacturer: 'fixderma',
+    isPrescriptionOnly: false,
+    mrp: 799,
+    gstPercent: 18,
+    minStock: 4,
+    maxStock: 16,
+    tradeRate: 600,
+    opening: { quantity: 4, expiresInMonths: 11 },
+    batchPrefix: 'FXS',
+    packsPerSale: 1,
+  },
+  {
+    key: 'adaferin',
+    name: 'Adaferin Gel 0.1% 15 g',
+    composition: 'Adapalene 0.1% w/w',
+    manufacturer: 'galderma',
+    isPrescriptionOnly: true,
+    mrp: 433,
+    gstPercent: 5,
+    minStock: 3,
+    maxStock: 15,
+    tradeRate: 325,
+    opening: { quantity: 5, expiresInMonths: 9 },
+    batchPrefix: 'ADF',
+    packsPerSale: 1,
+  },
+  {
+    key: 'retinoA',
+    name: 'Retino-A 0.025% Cream 20 g',
+    composition: 'Tretinoin 0.025% w/w',
+    manufacturer: 'johnson',
+    isPrescriptionOnly: true,
+    mrp: 365,
+    gstPercent: 5,
+    minStock: 3,
+    maxStock: 12,
+    tradeRate: 274,
+    opening: { quantity: 10, expiresInMonths: 1 },
+    nearExpiryDiscountPercent: 20,
+    batchPrefix: 'RTA',
+    packsPerSale: 1,
+  },
+  {
+    key: 'mintop',
+    name: 'Mintop 5% Solution 60 ml',
+    composition: 'Minoxidil 5% w/v',
+    manufacturer: 'drReddys',
+    isPrescriptionOnly: true,
+    mrp: 799,
+    gstPercent: 5,
+    minStock: 3,
+    maxStock: 12,
+    tradeRate: 599,
+    opening: { quantity: 4, expiresInMonths: 14 },
+    batchPrefix: 'MNT',
+    packsPerSale: 1,
+  },
+  {
+    key: 'tugain',
+    name: 'Tugain 5% Solution 60 ml',
+    composition: 'Minoxidil 5% w/v',
+    manufacturer: 'cipla',
+    isPrescriptionOnly: true,
+    mrp: 745,
+    gstPercent: 5,
+    minStock: 2,
+    maxStock: 10,
+    tradeRate: 559,
+    opening: { quantity: 3, expiresInMonths: 12 },
+    batchPrefix: 'TUG',
+    packsPerSale: 1,
+  },
+  {
+    key: 'isotroin',
+    name: 'Isotroin 20 mg Capsules (10)',
+    composition: 'Isotretinoin 20 mg',
+    manufacturer: 'cipla',
+    isPrescriptionOnly: true,
+    mrp: 285,
+    gstPercent: 5,
+    minStock: 4,
+    maxStock: 20,
+    tradeRate: 214,
+    opening: { quantity: 6, expiresInMonths: 16 },
+    batchPrefix: 'ISO',
+    packsPerSale: 2,
+  },
+  {
+    key: 'cleanser',
+    name: 'Cetaphil Gentle Skin Cleanser 125 ml',
+    composition: 'Soap-free cleanser for sensitive skin',
+    manufacturer: 'galderma',
+    isPrescriptionOnly: false,
+    mrp: 499,
+    gstPercent: 18,
+    minStock: 3,
+    maxStock: 12,
+    tradeRate: 374,
+    opening: { quantity: 4, expiresInMonths: 18 },
+    batchPrefix: 'CGC',
+    packsPerSale: 1,
+  },
+  {
+    key: 'moisturiser',
+    name: 'Cetaphil Moisturising Cream 80 g',
+    composition: 'Glycerin, petrolatum and sweet almond oil',
+    manufacturer: 'galderma',
+    isPrescriptionOnly: false,
+    mrp: 545,
+    gstPercent: 18,
+    minStock: 3,
+    maxStock: 12,
+    tradeRate: 409,
+    opening: { quantity: 5, expiresInMonths: 15 },
+    batchPrefix: 'CMC',
+    packsPerSale: 1,
+  },
+  {
+    key: 'candid',
+    name: 'Candid Dusting Powder 100 g',
+    composition: 'Clotrimazole 1% w/w',
+    manufacturer: 'glenmark',
+    isPrescriptionOnly: false,
+    mrp: 165,
+    gstPercent: 5,
+    minStock: 4,
+    maxStock: 20,
+    tradeRate: 124,
+    opening: { quantity: 6, expiresInMonths: 20 },
+    batchPrefix: 'CDP',
+    packsPerSale: 2,
+  },
+  {
+    key: 'momate',
+    name: 'Momate Cream 15 g',
+    composition: 'Mometasone furoate 0.1% w/w',
+    manufacturer: 'glenmark',
+    isPrescriptionOnly: true,
+    mrp: 232,
+    gstPercent: 5,
+    minStock: 3,
+    maxStock: 12,
+    tradeRate: 174,
+    opening: { quantity: 4, expiresInMonths: -1 },
+    batchPrefix: 'MOM',
+    packsPerSale: 1,
+  },
+  {
+    key: 'nizral',
+    name: 'Nizral 2% Shampoo 100 ml',
+    composition: 'Ketoconazole 2% w/v',
+    manufacturer: 'johnson',
+    isPrescriptionOnly: false,
+    mrp: 389,
+    gstPercent: 5,
+    minStock: 2,
+    maxStock: 10,
+    tradeRate: 292,
+    opening: { quantity: 2, expiresInMonths: 10 },
+    batchPrefix: 'NZS',
+    packsPerSale: 1,
+  },
+];
+
+/** What the doctor sends a patient to the store for, by case (`DEMO_CASES` keys). */
+export const DEMO_CASE_MEDICINES: Readonly<Record<string, readonly DemoMedicineKey[]>> = {
+  acne: ['adaferin', 'cleanser', 'suncros', 'isotroin'],
+  melasma: ['suncros', 'retinoA', 'moisturiser', 'shadow'],
+  hairLoss: ['mintop', 'tugain', 'nizral'],
+  facialHair: ['suncros', 'moisturiser'],
+  underarms: ['candid', 'moisturiser'],
+  scars: ['retinoA', 'suncros', 'moisturiser'],
+  dullSkin: ['cleanser', 'moisturiser', 'shadow'],
+  darkCircles: ['moisturiser', 'suncros'],
+};
+
+/** What a medical representative of each brand leaves and says on a visit. */
+export const DEMO_REP_VISITS: Readonly<
+  Partial<Record<DemoManufacturerKey, readonly { samples: string; notes: string }[]>>
+> = {
+  galderma: [
+    {
+      samples: 'Cetaphil cleanser minis ×10',
+      notes: 'Walked through the new Cetaphil hydrating range; left the clinic-pack price list.',
+    },
+    {
+      samples: 'Adaferin 5 g tubes ×6',
+      notes: 'Asked how the adapalene starters are doing; offered a 10 + 1 scheme on Adaferin.',
+    },
+  ],
+  sunPharma: [
+    {
+      samples: 'Suncros Aqualite sachets ×20',
+      notes: 'Introduced the tinted Suncros variant; sachets for patients after peels and lasers.',
+    },
+    {
+      samples: 'Suncros Aqualite sachets ×15',
+      notes:
+        'Checked our short-dated Suncros stock; will ask the agency to take back what expires.',
+    },
+  ],
+  drReddys: [
+    {
+      samples: 'Mintop 5% sample bottles ×4',
+      notes: 'Shared the minoxidil foam data for patients who find the solution sticky.',
+    },
+  ],
+};
+
+/** A vendor of the clinic's own consumables (`app.stock_vendors`) — never the store's agencies. */
+export type DemoStockVendorKey = 'medisafe' | 'dermaPro' | 'hygiene';
+
+/** The clinic's three consumables vendors. */
+export const DEMO_STOCK_VENDORS: readonly {
+  key: DemoStockVendorKey;
+  name: string;
+  billPrefix: string;
+}[] = [
+  { key: 'medisafe', name: 'Medisafe Surgicals', billPrefix: 'MS' },
+  { key: 'dermaPro', name: 'DermaPro Aesthetic Supplies', billPrefix: 'DPA' },
+  { key: 'hygiene', name: 'Hygiene Point Enterprises', billPrefix: 'HPE' },
+];
+
+/** One consumable or piece of equipment the clinic keeps. */
+export type DemoStockItemKey =
+  | 'gloves'
+  | 'gauze'
+  | 'masks'
+  | 'sheetRoll'
+  | 'alcoholPads'
+  | 'glycolicPeel'
+  | 'salicylicPeel'
+  | 'hydraSerum'
+  | 'carbonLotion'
+  | 'coolingGel'
+  | 'numbingCream'
+  | 'prpKit'
+  | 'sheetMasks'
+  | 'eyeShields';
+
+/** A clinic stock item (`app.stock_items`), what it starts with and what uses it. */
+export interface DemoStockItem {
+  key: DemoStockItemKey;
+  name: string;
+  category: Exclude<(typeof STOCK_ITEM_CATEGORY_VALUES)[number], 'other'>;
+  unit: (typeof STOCK_ITEM_UNIT_VALUES)[number];
+  /** "1 box = 100 pcs". */
+  size?: { perUnit: number; measure: (typeof STOCK_ITEM_MEASURE_UNIT_VALUES)[number] };
+  minQuantity: number;
+  maxQuantity: number;
+  usagePerWeek: number;
+  vendor: DemoStockVendorKey;
+  /** In hand when the records begin. */
+  opening: number;
+  /** Rupees per unit from its vendor. */
+  rate: number;
+  /** Taken out each week for the day-to-day procedures (gloves, gauze, sheets). */
+  isWeekly?: boolean;
+  /** What one treatment session uses, by the offering it is for. */
+  perSession?: Readonly<Partial<Record<DemoOfferingKey, number>>>;
+}
+
+/**
+ * The procedure room's shelf. The carbon lotion and the laser eye shields sit at their reorder
+ * level, and the last of the salicylic peel goes on an acne touch-up, so the low list shows all
+ * three.
+ */
+export const DEMO_STOCK_ITEMS: readonly DemoStockItem[] = [
+  {
+    key: 'gloves',
+    name: 'Nitrile examination gloves (medium)',
+    category: 'consumables',
+    unit: 'box',
+    size: { perUnit: 100, measure: 'pcs' },
+    minQuantity: 2,
+    maxQuantity: 12,
+    usagePerWeek: 1.5,
+    vendor: 'medisafe',
+    opening: 5,
+    rate: 450,
+    isWeekly: true,
+  },
+  {
+    key: 'gauze',
+    name: 'Sterile gauze swabs 10 × 10 cm',
+    category: 'consumables',
+    unit: 'pack',
+    size: { perUnit: 100, measure: 'pcs' },
+    minQuantity: 2,
+    maxQuantity: 10,
+    usagePerWeek: 1,
+    vendor: 'medisafe',
+    opening: 4,
+    rate: 180,
+    isWeekly: true,
+  },
+  {
+    key: 'masks',
+    name: 'Three-ply surgical masks',
+    category: 'consumables',
+    unit: 'box',
+    size: { perUnit: 50, measure: 'pcs' },
+    minQuantity: 2,
+    maxQuantity: 10,
+    usagePerWeek: 1,
+    vendor: 'hygiene',
+    opening: 4,
+    rate: 150,
+    isWeekly: true,
+  },
+  {
+    key: 'sheetRoll',
+    name: 'Disposable bed sheet roll',
+    category: 'consumables',
+    unit: 'roll',
+    minQuantity: 2,
+    maxQuantity: 8,
+    usagePerWeek: 1,
+    vendor: 'hygiene',
+    opening: 4,
+    rate: 320,
+    isWeekly: true,
+  },
+  {
+    key: 'alcoholPads',
+    name: 'Alcohol prep pads',
+    category: 'consumables',
+    unit: 'box',
+    size: { perUnit: 100, measure: 'pcs' },
+    minQuantity: 1,
+    maxQuantity: 6,
+    usagePerWeek: 0.5,
+    vendor: 'medisafe',
+    opening: 3,
+    rate: 120,
+    isWeekly: true,
+  },
+  {
+    key: 'glycolicPeel',
+    name: 'Glycolic acid peel 35%',
+    category: 'peels',
+    unit: 'bottle',
+    size: { perUnit: 30, measure: 'ml' },
+    minQuantity: 1,
+    maxQuantity: 4,
+    usagePerWeek: 0.3,
+    vendor: 'dermaPro',
+    opening: 1.5,
+    rate: 1850,
+    perSession: { glycolicPeel: 0.1 },
+  },
+  {
+    key: 'salicylicPeel',
+    name: 'Salicylic acid peel 20%',
+    category: 'peels',
+    unit: 'bottle',
+    size: { perUnit: 30, measure: 'ml' },
+    minQuantity: 1,
+    maxQuantity: 3,
+    usagePerWeek: 0.1,
+    vendor: 'dermaPro',
+    opening: 0.3,
+    rate: 1650,
+  },
+  {
+    key: 'hydraSerum',
+    name: 'Hyaluronic serum for hydra facials',
+    category: 'creams_serums',
+    unit: 'bottle',
+    size: { perUnit: 50, measure: 'ml' },
+    minQuantity: 1,
+    maxQuantity: 4,
+    usagePerWeek: 0.3,
+    vendor: 'dermaPro',
+    opening: 1,
+    rate: 2200,
+    perSession: { hydraFacial: 0.1 },
+  },
+  {
+    key: 'carbonLotion',
+    name: 'Carbon lotion for laser facials',
+    category: 'creams_serums',
+    unit: 'jar',
+    size: { perUnit: 50, measure: 'g' },
+    minQuantity: 1,
+    maxQuantity: 3,
+    usagePerWeek: 0.1,
+    vendor: 'dermaPro',
+    opening: 0.6,
+    rate: 1400,
+  },
+  {
+    key: 'coolingGel',
+    name: 'Cooling gel for laser',
+    category: 'consumables',
+    unit: 'bottle',
+    size: { perUnit: 250, measure: 'ml' },
+    minQuantity: 2,
+    maxQuantity: 8,
+    usagePerWeek: 1,
+    vendor: 'dermaPro',
+    opening: 3,
+    rate: 260,
+    perSession: { lhrFace: 0.08, lhrUnderarms: 0.06, co2Scars: 0.08 },
+  },
+  {
+    key: 'numbingCream',
+    name: 'Lidocaine–prilocaine numbing cream',
+    category: 'creams_serums',
+    unit: 'tube',
+    size: { perUnit: 30, measure: 'g' },
+    minQuantity: 2,
+    maxQuantity: 8,
+    usagePerWeek: 0.75,
+    vendor: 'medisafe',
+    opening: 2,
+    rate: 340,
+    perSession: { co2Scars: 0.25, underEyePrp: 0.1 },
+  },
+  {
+    key: 'prpKit',
+    name: 'PRP kit with separator gel tube',
+    category: 'consumables',
+    unit: 'kit',
+    minQuantity: 3,
+    maxQuantity: 12,
+    usagePerWeek: 1.5,
+    vendor: 'medisafe',
+    opening: 5,
+    rate: 950,
+    perSession: { prpHair: 1, underEyePrp: 1 },
+  },
+  {
+    key: 'sheetMasks',
+    name: 'Hydrating sheet mask',
+    category: 'masks',
+    unit: 'piece',
+    minQuantity: 10,
+    maxQuantity: 40,
+    usagePerWeek: 4,
+    vendor: 'dermaPro',
+    opening: 20,
+    rate: 85,
+    perSession: { glycolicPeel: 1, hydraFacial: 1 },
+  },
+  {
+    key: 'eyeShields',
+    name: 'Laser safety eye shields',
+    category: 'equipment',
+    unit: 'pair',
+    minQuantity: 2,
+    maxQuantity: 4,
+    usagePerWeek: 0,
+    vendor: 'medisafe',
+    opening: 2,
+    rate: 1200,
+  },
+];

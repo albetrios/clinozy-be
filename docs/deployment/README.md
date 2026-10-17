@@ -16,6 +16,7 @@ Hand-written guides grouped by **setup**, **CI/CD**, and **runbooks**.
 | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
 | Manual Railway + GitHub CLI         | [setup/railway-github-cli-setup.md](setup/railway-github-cli-setup.md)                              |
 | CI, deploy, tokens, release flow    | [ci-cd/cicd-and-deployment.md](ci-cd/cicd-and-deployment.md)                                        |
+| What blocks a paid launch (live)    | [launch-checklist.md](launch-checklist.md)                                                          |
 | Local → production runbook          | [runbooks/production-go-live.md](runbooks/production-go-live.md) (includes path-to-production gate) |
 | Roll back a bad release             | [runbooks/rollback-deploy.md](runbooks/rollback-deploy.md)                                          |
 | Observability                       | [runbooks/observability.md](runbooks/observability.md)                                              |

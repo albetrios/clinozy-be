@@ -7,10 +7,17 @@ import {
   invoices,
 } from '@/domains/app/sub-domains/billing/invoices/invoices.schema.js';
 import { computeInvoiceAmounts } from '@/domains/app/sub-domains/billing/invoices/invoices.amounts.js';
+import type { INVOICE_TYPE_VALUES } from '@/domains/app/sub-domains/billing/invoices/invoices.constants.js';
 
-/** One line of a seeded invoice: an offering at its rate, with its own discount and GST. */
+/**
+ * One line of a seeded invoice at its rate, with its own discount and GST: an offering on a
+ * clinic or consultation invoice, or packs of a medicine from one batch on a medical one (B8).
+ */
 export interface SeedInvoiceLine {
-  offering_id: number;
+  offering_id?: number;
+  medicine_id?: number;
+  medicine_batch_id?: number;
+  batch_number?: string;
   name: string;
   quantity: number;
   /** Per unit, in rupees. */
@@ -20,9 +27,11 @@ export interface SeedInvoiceLine {
   is_gst_inclusive: boolean;
 }
 
-/** A clinic invoice to seed: who it bills, where and when, its lines and who earned it. */
+/** An invoice to seed: its type, who it bills, where and when, its lines and who earned it. */
 export interface SeedInvoicePayload {
   organization_id: number;
+  /** Defaults to the column's default (`clinic`); a medical invoice is written by its sale. */
+  type?: (typeof INVOICE_TYPE_VALUES)[number];
   branch_id: number;
   contact_id: number;
   /** The local calendar date (`YYYY-MM-DD`); the database numbers the invoice for its financial year. */
@@ -53,18 +62,20 @@ export async function seedInvoice(
     })),
     overallDiscount: 0,
   });
+  const createdAt = payload.created_at
+    ? { created_at: payload.created_at, updated_at: payload.created_at }
+    : {};
   const audit = {
     created_by_user_id: payload.created_by_user_id,
     updated_by_user_id: payload.created_by_user_id,
-    ...(payload.created_at
-      ? { created_at: payload.created_at, updated_at: payload.created_at }
-      : {}),
+    ...createdAt,
   };
   const [invoice] = await database
     .insert(invoices)
     .values({
       public_id: generatePublicId('invoice'),
       organization_id: payload.organization_id,
+      ...(payload.type ? { type: payload.type } : {}),
       branch_id: payload.branch_id,
       contact_id: payload.contact_id,
       invoice_date: payload.invoice_date,
@@ -85,6 +96,9 @@ export async function seedInvoice(
         invoice_id: invoice!.id,
         line_number: index + 1,
         offering_id: line.offering_id,
+        medicine_id: line.medicine_id,
+        medicine_batch_id: line.medicine_batch_id,
+        batch_number: line.batch_number,
         name: line.name,
         quantity: line.quantity,
         rate: line.rate.toFixed(2),
@@ -106,6 +120,7 @@ export async function seedInvoice(
         membership_id,
         organization_id: payload.organization_id,
         created_by_user_id: payload.created_by_user_id,
+        ...(payload.created_at ? { created_at: payload.created_at } : {}),
       })),
     );
   }

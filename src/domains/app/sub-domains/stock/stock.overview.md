@@ -20,6 +20,7 @@ balance those movements leave (S5).
 | [`stock-counts/`](stock-counts/stock-counts.overview.md) | 9.C — stock checks that adjust what differs (routes 13–15) |
 | [`stock-purchases/`](stock-purchases/stock-purchases.overview.md) | 9.D — vendor bills that receive their lines, paid by supplier bills (routes 16–22) |
 | [`stock-vendors/`](stock-vendors/stock-vendors.overview.md) | 9.E — who the clinic buys from and what each is owed (routes 23–28) |
+| each resource's `seed/` | the one-row helpers the demo clinic seed writes the stock through (`seedStockVendor`, `seedStockItem`, `seedStockPurchase` with its lines, `seedStockCount` with its lines, `seedStockItemMovement`) — `pnpm db:seed:demo-clinic` |
 | `stock.container.ts` | builds the five services |
 | `stock.routes.ts` | registers the five route sets |
 
