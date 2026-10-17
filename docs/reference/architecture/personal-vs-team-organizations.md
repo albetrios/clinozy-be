@@ -37,7 +37,7 @@ organizations, and how the active organization is carried as a signed token clai
   `subscription.service.ts` calls `assertTeamOrganization({ organization, capability: 'BILLING' })` on every write path
   regardless, so a personal organization is refused with 422 even if the code were somehow held.
 - The `PERSONAL` organization has a **null slug** (never user-facing — its app URL is `/`) and is
-  **immutable**: it cannot be deleted or have its ownership transferred (`409
+  **immutable**: it cannot be deleted or have its ownership transferred (`422
 personalOrganizationImmutable`); it is removed only when the account is deleted (cascade).
 - Internal joins/FKs use the integer PK `organizations.id`; `public_id` (`org_…`) and `slug` are
   external-only identifiers.
@@ -131,6 +131,7 @@ not listed operates on the active organization regardless of type.
 | `GET /users/me/organizations` (list all)                    | 200 (personal)                      | 200                         | 200                       |
 | `DELETE /tenancy/organization`                              | **422**                             | 204 team · **422** personal | 204                       |
 | `POST /tenancy/organization/memberships`                    | **422**                             | 200 team · **422** personal | 200                       |
+| `POST /tenancy/organization/memberships/{membership_id}/restore` | **404**                        | 200 team · **404** personal | 200                       |
 | `POST /tenancy/organization/roles`                          | **422**                             | 200 team · **422** personal | 200                       |
 | `POST /tenancy/organization/transfer-ownership`             | **422**                             | 200 team · **422** personal | 200                       |
 | `POST /billing/payment-methods/setup`                       | **422**                             | 200 team · **422** personal | 200                       |
@@ -138,12 +139,19 @@ not listed operates on the active organization regardless of type.
 | `POST /billing/subscriptions/{subscription_id}/change-plan` | **422**                             | 200 team · **422** personal | 200                       |
 | `POST /billing/subscriptions/{subscription_id}/cancel`      | **422**                             | 200 team · **422** personal | 200                       |
 | `POST /billing/subscriptions/{subscription_id}/resume`      | **422**                             | 200 team · **422** personal | 200                       |
+| `GET /app/onboarding-setup`                                 | **404**                             | 200 team · **404** personal | 200                       |
+| `PATCH /app/onboarding-setup`                               | **422**                             | 200 team · **422** personal | 200                       |
+| `POST /app/onboarding-setup/complete`                       | **422**                             | 200 team · **422** personal | 200                       |
 
 The 422s come from the organization-type guard: `personalOrganizationNoMembers`
 (invitations / memberships), `personalOrganizationNoRoles` (roles),
-`personalOrganizationImmutable` (delete / transfer-ownership), and
-`personalOrganizationNoBilling` (subscription create / change-plan / cancel / resume —
-a personal organization cannot manage billing). All other routes — auth,
+`personalOrganizationImmutable` (delete / transfer-ownership),
+`personalOrganizationNoBilling` (payment-method setup and subscription create / change-plan /
+cancel / resume — a personal organization cannot manage billing), and
+`personalOrganizationNoSetup` (clinic setup change / complete). The two 404s are not the guard:
+`GET /app/onboarding-setup` answers a personal workspace 404 with reason
+`team_organization_required` (a read is never a 422), and a personal workspace has no removed
+member to restore. All other routes — auth,
 `/users/*`, the rest of `/tenancy/organization/*` (settings, logo, api-keys, audit-logs,
 notification-policies, membership / role reads, leave), the rest of `/billing/*` (plan
 catalog, subscription reads, Stripe webhook), `/notify/*`,

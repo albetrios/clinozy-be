@@ -6,7 +6,7 @@ Parent: [notify](../../notify.overview.md)
 
 ## Purpose
 
-In-app notification rows: the user-visible feed. Rows are created via `createAndDispatchNotification` (persist the row + enqueue channel dispatch); users mark them read or dismiss them via the API. There is no cross-domain event handler creating notifications today.
+In-app notification rows: the user-visible feed. Rows are created via `createAndDispatchNotification` (persist the row + enqueue channel dispatch); users mark them read or dismiss them via the API. Two cross-domain event handlers create notifications today — `MEMBERSHIP_INVITATION_EVENT.ACCEPTED` and `MEMBERSHIP_INVITATION_EVENT.DECLINED` (`events/membership-invitation.event-handlers.ts`, see Events below).
 
 ## Key invariants
 
@@ -18,7 +18,7 @@ In-app notification rows: the user-visible feed. Rows are created via `createAnd
 - **Tenant-scoped**: notifications belong to a `(user, organization)` pair. Reads are scoped through the standard tenant context.
 - **Read state is monotonic**: `unread → read → dismissed`. Marking a dismissed notification "unread" is not allowed.
 - **Best-effort fan-out**: a notification fan-out failure does not roll back the originating transaction (it's a downstream side effect).
-- **The unread count is cached, and the error only goes one way**: `GET /notify/notifications/unread-count` is served from Redis (`notify:unread-count:<userPublicId>`, 60 s) because every open tab polls it. Every write that names a user invalidates after commit — mark-read, mark-all-read, delete, the invite-accepted fan-out, and the enqueue-rollback delete (the post-commit task carries the recipient's public id). The one writer that cannot name a user — the retention sweep, which deletes by `created_at` — is bounded by the TTL alone, and only ever removes rows — so a stale badge reads **high**, never low. It can show a notification that is gone; it cannot hide one that arrived. Contract: [read-caching](src/PATTERNS.md).
+- **The unread count is cached, and the error only goes one way**: `GET /notify/notifications/unread-count` is served from Redis (`notify:unread-count:<userPublicId>`, 60 s) because every open tab polls it. Every write that names a user invalidates after commit — mark-read, mark-all-read, delete, the invitation accepted / declined fan-outs, and the enqueue-rollback delete (the post-commit task carries the recipient's public id). The one writer that cannot name a user — the retention sweep, which deletes by `created_at` — is bounded by the TTL alone, and only ever removes rows — so a stale badge reads **high**, never low. It can show a notification that is gone; it cannot hide one that arrived. Contract: [read-caching](src/PATTERNS.md).
 
 ## Lifecycle
 
@@ -34,7 +34,9 @@ stateDiagram-v2
 
 ## Events
 
-- Consumes: `MEMBERSHIP_INVITATION_EVENT.ACCEPTED` — the one cross-domain producer, fanning a notification out to the organization's `membership:create` holders and invalidating each recipient's cached unread count. Every other notification row is created directly via `createAndDispatchNotification` (persist + enqueue channel dispatch), then delivered asynchronously by the `notification` BullMQ worker.
+- Consumes: `MEMBERSHIP_INVITATION_EVENT.ACCEPTED` — a `membership.invite_accepted` notification (in-app + email) to each organization `membership:create` holder the tenancy accept path resolved.
+- Consumes: `MEMBERSHIP_INVITATION_EVENT.DECLINED` — a `membership.invite_declined` notification (in-app only) to the inviter, or to the `membership:create` holders when the inviter is gone.
+- Both handlers (registered by `registerMembershipInvitationNotificationHandlers`) run inside the tenancy write's database context, insert each recipient's row in its own savepoint so one failure neither drops the rest nor fails the accept or decline, and invalidate each recipient's cached unread count after commit. Every other notification row is created directly via `createAndDispatchNotification` (persist + enqueue channel dispatch); all rows are delivered asynchronously by the `notification` BullMQ worker.
 
 ## Failure modes
 

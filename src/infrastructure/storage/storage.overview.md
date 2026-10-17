@@ -35,7 +35,7 @@ S3-compatible object storage client. Owns the AWS SDK v3 client instance, presig
 - `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE` (for non-AWS endpoints).
 - `S3_MAX_ATTEMPTS` (SDK attempts per call) and `S3_REQUEST_TIMEOUT_MS` (bound on each attempt).
 - `PRESIGNED_URL_EXPIRY_SECONDS = 900`.
-- `USER_DATA_EXPORT_PRESIGNED_DOWNLOAD_EXPIRY_SECONDS = 86 400`.
+- `USER_DATA_EXPORT_PRESIGNED_DOWNLOAD_EXPIRY_SECONDS = 900`.
 
 ## Failure modes
 

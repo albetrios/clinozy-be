@@ -8,7 +8,7 @@
   },
   "tags": {
     "Health": "Server health and readiness probes",
-    "MCP": "Model Context Protocol — tools and resources for agents (requires admin JWT when ENABLE_MCP_SERVER=true)",
+    "MCP": "Model Context Protocol — tools and resources for agents (requires a super_admin JWT when ENABLE_MCP_SERVER=true)",
     "Auth": "Authentication — login, logout, password management",
     "Email Login": "Passwordless sign-in with an emailed verification code",
     "OAuth": "OAuth 2.0 social login flows",
