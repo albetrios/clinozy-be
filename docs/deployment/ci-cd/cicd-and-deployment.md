@@ -90,6 +90,7 @@ All jobs run **in parallel** (~2–3 min target). Caching: `actions/setup-node` 
 | **Security secrets** | gitleaks full-history scan |
 | **Security SAST** | semgrep |
 | **Contract + property** | `pnpm test:contract`, `pnpm test:property` |
+| **Affected database tests (early signal)** | not a gate; on source changes, beside the DB matrix: the database tests `pnpm test:select` picks for the changed and connected domains (`--changed-only --lane db-bound`, RLS tests excluded as in the matrix) — nothing when the change selects everything; red arrives before the matrix finishes |
 | **Selector miss check** | not a gate; when the unit job or the DB matrix fails: the failed files `pnpm test:select` would have skipped (`pnpm test:selector-misses`, from each job's JSON report) |
 | **Workflow security** | on `.github/**` changes: zizmor 1.30.1 (`--min-severity high`) — template injection, dangerous triggers, `GITHUB_ENV` writes, broad permissions; a meant finding carries `# zizmor: ignore[<audit>]` with its reason |
 

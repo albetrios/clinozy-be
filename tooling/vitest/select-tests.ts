@@ -12,6 +12,11 @@
  *   pnpm test:select --run              # run it: the `fast` lane in one Vitest process, then
  *                                       # the database projects one at a time (`pnpm test`
  *                                       # when everything is selected)
+ *   pnpm test:select --changed-only     # only the tests picked for the change: no always-run
+ *                                       # tests, and nothing when everything is selected (the
+ *                                       # full suite is the signal) — PR CI's early signal
+ *   pnpm test:select --lane db-bound    # with --run: only that lane of tooling/vitest/lanes.ts
+ *   pnpm test:select --exclude <glob>   # leave out the tests that match (repeatable)
  *
  * It fails closed: git that cannot name the changes, like any selector error, selects everything.
  */
@@ -19,13 +24,26 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 import { LANES } from '@tooling/vitest/lanes.js';
-import { selectTests, type TestSelection } from '@tooling/vitest/test-selection.util.js';
+import {
+  changedOnly,
+  selectTests,
+  type TestSelection,
+  withoutTests,
+} from '@tooling/vitest/test-selection.util.js';
 
 const REPOSITORY_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 function option(name: string): string | undefined {
   const index = process.argv.indexOf(name);
   return index === -1 ? undefined : process.argv[index + 1];
+}
+
+/** Every value of a repeatable option. */
+function options(name: string): string[] {
+  return process.argv.flatMap((argument, index) => {
+    const value = process.argv[index + 1];
+    return argument === name && value !== undefined ? [value] : [];
+  });
 }
 
 function git(args: string[]): string {
@@ -50,12 +68,15 @@ function changedFiles(): string[] {
 }
 
 function select(): TestSelection {
+  let selection: TestSelection;
   try {
-    return selectTests({ changedFiles: changedFiles(), repositoryRoot: REPOSITORY_ROOT });
+    selection = selectTests({ changedFiles: changedFiles(), repositoryRoot: REPOSITORY_ROOT });
   } catch (error) {
     const reason = `cannot list the changed files, so everything runs: ${(error as Error).message}`;
-    return { mode: 'all', reasons: [reason], projects: {}, why: {} };
+    selection = { mode: 'all', reasons: [reason], projects: {}, why: {} };
   }
+  if (process.argv.includes('--changed-only')) selection = changedOnly(selection);
+  return withoutTests({ selection, globs: options('--exclude') });
 }
 
 function print(selection: TestSelection): void {
@@ -83,8 +104,14 @@ function run(selection: TestSelection): number {
   if (selection.mode === 'all') {
     return spawnSync('pnpm', ['test'], { cwd: REPOSITORY_ROOT, stdio: 'inherit' }).status ?? 1;
   }
+  const onlyLane = option('--lane');
+  const lanes = onlyLane === undefined ? LANES : LANES.filter((lane) => lane.name === onlyLane);
+  if (lanes.length === 0) {
+    console.error(`No lane ${onlyLane} — one of ${LANES.map((lane) => lane.name).join(', ')}.`);
+    return 1;
+  }
   const laneProjects = new Set<string>();
-  for (const lane of LANES) {
+  for (const lane of lanes) {
     const projects = lane.args.filter((_, index) => lane.args[index - 1] === '--project');
     for (const project of projects) laneProjects.add(project);
     const selected = projects.filter((project) => selection.projects[project]?.length);
@@ -99,7 +126,7 @@ function run(selection: TestSelection): number {
   for (const [project, tests] of Object.entries(selection.projects)) {
     if (!laneProjects.has(project)) {
       console.log(
-        `Not run here: ${project} (${tests.length} files) — its own pnpm test:${project}`,
+        `Not run here: ${project} (${tests.length} files) — ${onlyLane === undefined ? `its own pnpm test:${project}` : `outside the ${onlyLane} lane`}`,
       );
     }
   }

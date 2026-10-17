@@ -13,7 +13,11 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pushSemgrepTargets } from '@/scripts/tooling/run-push-semgrep.js';
 import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
-import { selectTests, type TestSelection } from '@tooling/vitest/test-selection.util.js';
+import {
+  ALWAYS_RUN_REASON,
+  selectTests,
+  type TestSelection,
+} from '@tooling/vitest/test-selection.util.js';
 
 /** One pre-push step: the command, and whether the pushed files make it run. */
 export interface PushStep {
@@ -72,8 +76,6 @@ export function pushSteps(changedFiles: readonly string[]): PushStep[] {
   ];
 }
 
-const ALWAYS_RUN_REASON = /^always run/;
-
 /** The selection as Markdown: tests picked for a reason of their own, then the always-run counts. */
 export function selectionTable(selection: TestSelection): string[] {
   const lines = [`Selection: ${selection.mode} — ${selection.reasons.join('; ')}`];
@@ -83,7 +85,7 @@ export function selectionTable(selection: TestSelection): string[] {
   for (const [project, tests] of Object.entries(selection.projects)) {
     for (const test of tests) {
       const reasons = selection.why[test] ?? [];
-      const own = reasons.filter((reason) => !ALWAYS_RUN_REASON.test(reason));
+      const own = reasons.filter((reason) => !reason.startsWith(ALWAYS_RUN_REASON));
       if (own.length === 0) alwaysOnly.set(project, (alwaysOnly.get(project) ?? 0) + 1);
       else lines.push(`| ${project} | \`${test}\` | ${own.join('; ')} |`);
     }

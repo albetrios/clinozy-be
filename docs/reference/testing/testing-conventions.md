@@ -247,6 +247,14 @@ Everything runs when a change touches the escalation list (dependencies, Vitest 
 deleted file nothing imports any more, or when the selector fails. So an app sub-domain change
 gets a small selection and a core-domain change runs everything — by design.
 
+PR CI uses the selection as an **early signal**: the `Affected database tests (early signal)` job
+runs `pnpm test:select --changed-only --exclude 'src/tests/security/rls/**' --lane db-bound --run`
+beside the database matrix. `--changed-only` keeps only the tests picked for the change — the
+always-run set is the matrix's — and selects nothing when the change selects everything, so a
+core-domain change skips it. For an app sub-domain change it is a fraction of the matrix (a
+`leads` service change: 13 database files, about 3 minutes locally), so a red result arrives
+first. It is not a gate: the matrix still decides the merge.
+
 The selection is checked against the full suite: when a PR's unit job or database matrix fails,
 the `Selector miss check` job (`pnpm test:selector-misses`, not a gate) lists every failed file the
 selection would have skipped — a miss, or a flake. A real miss becomes an entry in

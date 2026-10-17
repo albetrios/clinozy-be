@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { checkSelectorFixtures } from '@tooling/vitest/selector-fixtures.check.js';
-import { selectTests } from '@tooling/vitest/test-selection.util.js';
+import {
+  changedOnly,
+  isAlwaysRunOnly,
+  selectTests,
+  withoutTests,
+} from '@tooling/vitest/test-selection.util.js';
 
 const APP = 'src/domains/app';
 const LEADS = `${APP}/sub-domains/leads`;
@@ -178,5 +183,68 @@ describe('selectTests', () => {
     });
     expect(broken.mode).toBe('all');
     expect(broken.reasons[0]).toContain('selector error');
+  });
+});
+
+/**
+ * Locks in the early-signal view of a selection (PR CI's affected database tests):
+ * `--changed-only` keeps the tests picked for the change and leaves the always-run set and a
+ * select-everything change to the full suite; `--exclude` drops the matching tests.
+ */
+describe('changedOnly and withoutTests', () => {
+  it('keeps only the tests picked for the change', () => {
+    const selection = changedOnly(select(`${LEADS}/leads.service.ts`));
+    expect(selection.mode).toBe('selected');
+    expect(selection.projects).toEqual({
+      e2e: [`${APP}/__tests__/e2e/flow-enquiry.e2e.test.ts`],
+      integration: [
+        `${LEADS}/__tests__/integration/leads.integration.test.ts`,
+        `${PATIENTS}/__tests__/integration/patients.integration.test.ts`,
+      ],
+      unit: [`${LEADS}/__tests__/unit/leads.service.unit.test.ts`],
+    });
+    expect(Object.keys(selection.why).sort()).toEqual(
+      Object.values(selection.projects).flat().sort(),
+    );
+    expect(selection.reasons.at(-1)).toBe(
+      `the always-run tests left to the full suite (${Object.keys(selection.why).length} test files left)`,
+    );
+    expect(
+      isAlwaysRunOnly(['always run', 'always run (imports nothing from the repository)']),
+    ).toBe(true);
+    expect(isAlwaysRunOnly(['always run', `next to the code (${LEADS}/leads.service.ts)`])).toBe(
+      false,
+    );
+  });
+
+  it('runs nothing early when everything is selected, or nothing is left', () => {
+    const everything = changedOnly(select('package.json'));
+    expect(everything.mode).toBe('none');
+    expect(everything.reasons.at(-1)).toBe(
+      'everything is selected, so the full suite is the signal',
+    );
+    const onlyAlwaysRun = changedOnly({
+      mode: 'selected',
+      reasons: ['1 of 1 test files'],
+      projects: { security: ['src/tests/security/tenant.security.test.ts'] },
+      why: { 'src/tests/security/tenant.security.test.ts': ['always run'] },
+    });
+    expect(onlyAlwaysRun).toMatchObject({ mode: 'none', projects: {}, why: {} });
+  });
+
+  it('drops the tests an --exclude glob matches', () => {
+    const selection = withoutTests({
+      selection: select(`${LEADS}/leads.service.ts`),
+      globs: [`${PATIENTS}/**`, 'src/tests/security/**'],
+    });
+    expect(Object.values(selection.projects).flat()).not.toContain(
+      `${PATIENTS}/__tests__/integration/patients.integration.test.ts`,
+    );
+    expect(selection.projects.security).toBeUndefined();
+    expect(selection.reasons.at(-1)).toBe(
+      `excluded ${PATIENTS}/**, src/tests/security/** (${Object.values(selection.projects).flat().length} test files left)`,
+    );
+    const all = select('package.json');
+    expect(withoutTests({ selection: all, globs: ['src/**'] })).toBe(all);
   });
 });

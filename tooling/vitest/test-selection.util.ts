@@ -447,22 +447,91 @@ function matchesAny(options: { path: string; globs: string[] }): boolean {
   return options.globs.some((glob) => matchesGlob(options.path, glob));
 }
 
+/** How every always-run reason starts — the tests a source change selects whatever it is. */
+export const ALWAYS_RUN_REASON = 'always run';
+
 /** The always-run tests of a source change under `src/`, each with its reason. */
 function alwaysRun(options: { graph: ImportGraph; unreachable: Set<string> }): [string, string][] {
   const tests: [string, string][] = [];
   for (const test of options.graph.tests) {
-    if (matchesAny({ path: test, globs: ALWAYS_RUN_GLOBS })) tests.push([test, 'always run']);
+    if (matchesAny({ path: test, globs: ALWAYS_RUN_GLOBS })) tests.push([test, ALWAYS_RUN_REASON]);
     const reachesRepository = [...(options.graph.imports.get(test) ?? [])].some(
       (target) => !isTestFile(target),
     );
     if (!reachesRepository) {
-      tests.push([test, 'always run (imports nothing from the repository)']);
+      tests.push([test, `${ALWAYS_RUN_REASON} (imports nothing from the repository)`]);
     }
     if (options.unreachable.has(test)) {
-      tests.push([test, 'always run (no single source change selects it)']);
+      tests.push([test, `${ALWAYS_RUN_REASON} (no single source change selects it)`]);
     }
   }
   return tests;
+}
+
+/** Whether a test was selected only because it always runs (every reason is an always-run one). */
+export function isAlwaysRunOnly(reasons: readonly string[]): boolean {
+  return reasons.every((reason) => reason.startsWith(ALWAYS_RUN_REASON));
+}
+
+/** Keeps the selected tests that `keep` accepts; a project left empty is dropped. */
+function filterSelection(options: {
+  selection: TestSelection;
+  keep: (test: string) => boolean;
+  reason: string;
+}): TestSelection {
+  const { selection, keep } = options;
+  if (selection.mode !== 'selected') return selection;
+  const projects = Object.fromEntries(
+    Object.entries(selection.projects)
+      .map(([project, tests]) => [project, tests.filter(keep)] as const)
+      .filter(([, tests]) => tests.length > 0),
+  );
+  const why = Object.fromEntries(Object.entries(selection.why).filter(([test]) => keep(test)));
+  const left = Object.values(projects).flat().length;
+  return {
+    mode: left === 0 ? 'none' : 'selected',
+    reasons: [...selection.reasons, `${options.reason} (${left} test files left)`],
+    projects,
+    why,
+  };
+}
+
+/**
+ * The part of a selection picked for the change itself — for an early signal next to a full suite.
+ *
+ * @remarks
+ * Drops the tests selected only because they always run, and turns a selection of everything
+ * into none: the full suite runs those anyway (PR CI's affected database tests run beside the
+ * database matrix).
+ */
+export function changedOnly(selection: TestSelection): TestSelection {
+  if (selection.mode === 'all') {
+    return {
+      mode: 'none',
+      reasons: [...selection.reasons, 'everything is selected, so the full suite is the signal'],
+      projects: {},
+      why: {},
+    };
+  }
+  return filterSelection({
+    selection,
+    keep: (test) => !isAlwaysRunOnly(selection.why[test] ?? []),
+    reason: 'the always-run tests left to the full suite',
+  });
+}
+
+/** The selection without the tests that match any of `globs` (`--exclude`). */
+export function withoutTests(options: {
+  selection: TestSelection;
+  globs: readonly string[];
+}): TestSelection {
+  const { selection, globs } = options;
+  if (globs.length === 0) return selection;
+  return filterSelection({
+    selection,
+    keep: (test) => !globs.some((glob) => matchesGlob(test, glob)),
+    reason: `excluded ${globs.join(', ')}`,
+  });
 }
 
 function all(reason: string): TestSelection {

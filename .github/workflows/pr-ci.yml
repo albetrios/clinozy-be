@@ -291,6 +291,75 @@ jobs:
     with:
       matrix-tests-result: ${{ needs.matrix-tests.result }}
 
+  # Not a gate — an early signal beside the matrix: the database tests pnpm test:select picks for
+  # this PR's changed and connected domains (--changed-only: no always-run tests; nothing when the
+  # change selects everything, as a core-domain one does). It starts with the matrix and runs a
+  # fraction of it, so a red result arrives first; the matrix above still decides the merge.
+  affected-db-tests:
+    name: Affected database tests (early signal)
+    needs: [changes]
+    if: |
+      needs.changes.outputs.docs-only-md != 'true' &&
+      needs.changes.outputs.src-code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.10-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: clinozy
+          POSTGRES_PASSWORD: clinozy
+          POSTGRES_DB: clinozy
+        options: >-
+          --health-cmd="pg_isready -U clinozy -d clinozy"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:8.6.3-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      NODE_ENV: development
+      LOG_LEVEL: warn
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      REDIS_URL: redis://localhost:6379
+      RATE_LIMIT_MAX: 1000
+      RATE_LIMIT_WINDOW_MS: 60000
+      RUN_DB_TESTS: 1
+      RUN_REDIS_TESTS: 1
+      ENABLE_MCP_SERVER: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
+        uses: ./.github/actions/test-env
+      - uses: ./.github/actions/tune-ci-postgres
+        with:
+          container: ${{ job.services.postgres.id }}
+      - name: Run migrations
+        run: pnpm db:migrate
+      # The RLS tests run in their own lanes (rls-security, rls-application-role), as in the matrix.
+      - name: The database tests this change selects
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: >-
+          pnpm test:select --base "$BASE_SHA" --changed-only --exclude 'src/tests/security/rls/**'
+          --lane db-bound --why --run
+
   # Not a gate: after the full suite, the failed test files pnpm test:select would have skipped for
   # this PR's changes — each is a selector miss (or a flake); its fixture line goes into
   # tooling/vitest/selector-fixtures.json so the selection includes it next time.
