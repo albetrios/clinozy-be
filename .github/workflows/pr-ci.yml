@@ -68,6 +68,7 @@ jobs:
             agent-os:
               - 'agent-os/**'
               - '.claude/**'
+              - 'tooling/agent-os/**'
             docs-only-md:
               - '**/*.md'
               - 'docs/**'
@@ -91,6 +92,11 @@ jobs:
         # A contributor who skips the local gate cannot land drifted
         # .cursor/.claude/.codex adapters — they must match agent-os/ source.
         run: pnpm agent-os:generate:check
+      # These two ran only in the nightly `ci:quality`.
+      - name: Outcome evals (expected skill routing per fixture)
+        run: pnpm agent-os:outcomes
+      - name: Guard evals (hook decisions + fail-open smokes)
+        run: pnpm agent-os:guards
 
   lint:
     name: Lint
@@ -176,6 +182,44 @@ jobs:
 
       - name: Sub-domain unit-test matrix
         run: pnpm validate:domain:unit-matrix
+
+      # The rest ran only in `ci:quality` (the nightly canary on main), so a PR that broke one
+      # merged green and reddened main the next night — validate:api-docs-hub did, after the
+      # docs steps moved into composite actions. About a second each.
+      - name: TSDoc coverage budget
+        run: pnpm tsdoc:check
+
+      - name: Locale keys (en ↔ es, every referenced key defined)
+        run: pnpm validate:locale-keys
+
+      - name: Test filename suffixes
+        run: pnpm validate:test-naming
+
+      - name: API version prefix in tests
+        run: pnpm validate:test-api-prefix
+
+      - name: API docs hub wiring
+        run: pnpm validate:api-docs-hub
+
+      - name: Route schema docs (summary, description, tags)
+        run: pnpm validate:route-schema-docs
+
+      - name: Route param schemas
+        run: pnpm validate:route-param-schemas
+
+      - name: Route organization-scope map in sync
+        run: pnpm validate:route-organization-scope
+
+      - name: Source tree doc in sync
+        run: pnpm tool:project-structure-tree:check
+
+      # After "OpenAPI specs in sync": docs:check generates the gitignored Postman collection
+      # the docs cite.
+      - name: Docs cite paths that exist
+        run: pnpm docs:links:check
+
+      - name: Third-party actions pinned to a full SHA
+        run: node tooling/ci/check-action-pins.mjs
 
   unit-tests:
     needs: [changes]

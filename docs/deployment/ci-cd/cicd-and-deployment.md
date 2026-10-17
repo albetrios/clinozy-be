@@ -80,7 +80,8 @@ All jobs run **in parallel** (~2–3 min target). Caching: `actions/setup-node` 
 | --- | ---- |
 | **Lint** | `pnpm lint` (Biome) |
 | **Typecheck** | `pnpm typecheck` |
-| **Static sync** | `pnpm validate:domain:strict`, `pnpm validate:domain:coverage`, `pnpm validate:scripts-layout`, route catalog, docs sync, env example sync |
+| **Static sync** | `pnpm validate:domain:strict`, `pnpm validate:domain:coverage`, `pnpm validate:scripts-layout`, route catalog, docs sync, env example sync, project identity, constants, the sub-domain unit-test matrix, `pnpm tsdoc:check`, locale keys, test naming and API prefix, the API docs hub, route schema docs / param schemas / organization scope, the source tree doc, `pnpm docs:links:check`, action pins — every static check of the nightly `ci:quality` but its two report-only ones (full-tree dependency audit, k6 coverage) |
+| **agent-os evals** | on `agent-os/`, `.claude/` or `tooling/agent-os/` changes: `pnpm agent-os:check`, `agent-os:triggers:strict`, `agent-os:generate:check`, `agent-os:outcomes`, `agent-os:guards` |
 | **Unit** | `vitest --project unit --project global --changed origin/{base}` (no DB) |
 | **Migration lint** | `pnpm db:migrate:lint` (static migration safety) |
 | **Build verify** | `pnpm build` + Docker API/worker build (`load: true`, no push, no Trivy) |

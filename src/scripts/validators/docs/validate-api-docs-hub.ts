@@ -13,14 +13,25 @@ interface RequiredFile {
 }
 
 const REQUIRED_FILES: RequiredFile[] = [
+  // The steps live in two composite actions, shared by the development docs after each merge and
+  // by a production release, where the deploy job publishes once production is live.
+  {
+    relativePath: '.github/actions/generate-api-docs/action.yml',
+    mustContain: ['pnpm docs:all', 'pnpm docs:check'],
+  },
+  {
+    relativePath: '.github/actions/upload-api-docs/action.yml',
+    mustContain: ['pnpm docs:upload', 'pnpm docs:upload:scalar', 'continue-on-error: true'],
+  },
+  {
+    relativePath: '.github/workflows/reusable-railway-deploy.yml',
+    mustContain: ['uses: ./.github/actions/upload-api-docs', 'secrets.SCALAR_API_KEY'],
+  },
   {
     relativePath: '.github/workflows/reusable-openapi-postman-publish.yml',
     mustContain: [
-      'pnpm docs:all',
-      'pnpm docs:check',
-      'pnpm docs:upload',
-      'pnpm docs:upload:scalar',
-      'continue-on-error: true',
+      'uses: ./.github/actions/generate-api-docs',
+      'uses: ./.github/actions/upload-api-docs',
       'github_environment',
       'development',
       'production',
