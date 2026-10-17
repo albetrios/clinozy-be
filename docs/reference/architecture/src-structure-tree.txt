@@ -598,8 +598,10 @@ src/
     │   │   │   └── offerings.validator.ts
     │   │   ├── onboarding-setup/
     │   │   │   ├── __tests__/
-    │   │   │   │   └── integration/
+    │   │   │   │   ├── integration/
     │   │   │   │   │   └── onboarding-setup.integration.test.ts
+    │   │   │   │   └── unit/
+    │   │   │   │   │   └── onboarding-setup.service.unit.test.ts
     │   │   │   ├── onboarding-setup.constants.ts
     │   │   │   ├── onboarding-setup.controller.ts
     │   │   │   ├── onboarding-setup.dto.ts

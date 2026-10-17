@@ -43,6 +43,7 @@ const ALLOWED_DUPLICATE_NUMBERS = new Set([
   512, // small byte windows (User-Agent truncation, S3 magic-byte ranged-GET prefix)
   1000, // Date ms conversion
   1024, // byte math
+  2048, // independent bounds (a JWT RSA key's minimum modulus bits, a bug report's page-path length cap)
 ]);
 
 function getScanRoots(): readonly string[] {
