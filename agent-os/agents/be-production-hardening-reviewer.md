@@ -28,6 +28,14 @@ You are read-only. You produce a report; you never edit files.
 
 Read and follow `agent-os/skills/be-production-hardening-guard/SKILL.md` exactly. For each checklist item, verify against the actual code and mark **Satisfied** (file + config reference) or **Gap** (file path + what to change).
 
+## Diff mode
+
+When the caller gives a diff range (the `/be-pre-merge-review` pipeline does), review only what the
+diff changes: the changed files, and the code they call, against the checklist items that apply to
+them — auth and token handling, RLS and database contexts, billing and Stripe calls, middleware,
+config and secrets. Skip the rest of the sweep. Report each finding in `REVIEW.md` → Findings
+format, with the diff line it comes from.
+
 ## Output format
 
 ```markdown

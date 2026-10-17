@@ -66,7 +66,7 @@ Granular procedures live in **skills** (invoked by name); these commands are **w
 
 | Command | Purpose |
 | ------- | ------- |
-| `/be-pre-merge-review` | Read-only pipeline from `agent-os/agents/pipelines.json`: the reviewers the diff needs (sql-design, RLS, idempotency, production-hardening; the verifier always) at once in the background; one report in `REVIEW.md` → Findings format. |
+| `/be-pre-merge-review [release]` | Read-only pipeline from `agent-os/agents/pipelines.json` (`release`: everything since the last release tag): the reviewers the diff needs (sql-design, RLS, idempotency, production-hardening; the verifier always) at once in the background; one report in `REVIEW.md` → Findings format. |
 
 **PR lifecycle**
 
@@ -75,7 +75,7 @@ Granular procedures live in **skills** (invoked by name); these commands are **w
 | `/be-open-pr [title]` | Push the branch + open a PR to `main` (the explicit PR opt-in). |
 | `/be-watch-pr <n>` | Subscribe to a PR; triage CI + review comments until green. |
 | `/be-merge-pr <n>` | Merge once CI is green and approvals are in. |
-| `/be-ship [title]` | The full flow: open-pr → watch-pr → merge-pr. |
+| `/be-ship [title]` | The full flow: pre-merge-review (warn-only until 2026-10-31, then a critical or major finding stops the push) → open-pr → watch-pr → merge-pr. |
 
 **Maintenance**
 

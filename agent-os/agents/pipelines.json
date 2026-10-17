@@ -14,7 +14,7 @@
         "be-sql-design-reviewer": "a *.schema.ts file or migrations/*.sql changed",
         "be-rls-reviewer": "a *.schema.ts, migrations/*.sql, *.repository.ts, worker, processor, queue or src/infrastructure/database/ file changed",
         "be-idempotency-reviewer": "a *.routes.ts, *.controller.ts, billing or Stripe file changed",
-        "be-production-hardening-reviewer": "a src/infrastructure/, src/shared/middlewares/ or src/shared/config/ file changed",
+        "be-production-hardening-reviewer": "diff mode — a src/infrastructure/, src/shared/middlewares/ or src/shared/config/ file changed, or auth, RLS, billing or token code: src/domains/auth/, src/domains/billing/, src/infrastructure/database/contexts/, migrations/*.sql, src/shared/utils/security/",
         "be-verifier": "always"
       },
       "aggregate": "one report in REVIEW.md → Findings format — sorted by severity (critical first), duplicates merged, Skip paths dropped, at most two nits",
