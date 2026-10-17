@@ -254,6 +254,24 @@ const cases: GuardCase[] = [
     payload: { tool_name: 'Bash', tool_input: { command: 'gh pr create --title "x" --body "y"' } },
     expect: 'ask',
   },
+  ...['git commit --no-verify -m wip', 'git commit -nm wip', 'git -C . commit -an -m wip', 'git push --no-verify origin x', 'HUSKY=0 git commit -m wip'].map(
+    (command): GuardCase => ({
+      name: `skipping the git hooks is denied: ${command}`,
+      script: 'guardrails.mjs',
+      runtime: 'node',
+      payload: { tool_name: 'Bash', tool_input: { command } },
+      expect: 'deny',
+    }),
+  ),
+  ...['git log --grep commit -n 3', 'git push -n origin x', 'git commit -m "never use --no-verify"'].map(
+    (command): GuardCase => ({
+      name: `a look-alike of a hook skip stays allowed: ${command}`,
+      script: 'guardrails.mjs',
+      runtime: 'node',
+      payload: { tool_name: 'Bash', tool_input: { command } },
+      expect: 'silent',
+    }),
+  ),
 
   // ── reminders: PostToolUse additionalContext, once per turn ──
   {
@@ -337,6 +355,13 @@ const cases: GuardCase[] = [
     script: 'cursor-shell-guard.mjs',
     runtime: 'node',
     payload: { command: 'git push --force origin main' },
+    expect: 'deny',
+  },
+  {
+    name: 'cursor: skipping the git hooks is denied',
+    script: 'cursor-shell-guard.mjs',
+    runtime: 'node',
+    payload: { command: 'git commit --no-verify -m wip' },
     expect: 'deny',
   },
   {

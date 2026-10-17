@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Claude Code PreToolUse guardrail for clinozy-be.
 //
-// BLOCK (deny): reading or writing secret files, secret content, destructive shell commands.
+// BLOCK (deny): reading or writing secret files, secret content, destructive shell commands,
+//   skipping the git hooks (--no-verify, `git commit -n`, HUSKY=0).
 // ASK: `gh pr create` — a PR only when the user asked (no-unrequested-pr.sh covers the MCP tool).
 // WARN (systemMessage): edits to protected paths, cross-domain imports in a service.
 //
@@ -115,6 +116,12 @@ if (tool === "Bash" && command) {
     why = "fork bomb";
   } else if (/\bmkfs\b|\bdd\s+if=/i.test(scan)) {
     why = "filesystem-destroying command";
+  } else if (
+    /\bgit(?:\s+-[cC]\s+\S+)*\s+(?:commit|push)\b[^;&|]*--no-verify\b/i.test(scan) ||
+    /\bgit(?:\s+-[cC]\s+\S+)*\s+commit\b[^;&|]*\s-[a-zA-Z]*n[a-zA-Z]*(?=\s|$)/.test(scan) ||
+    /(?:^|[\s;&|])HUSKY=0\b/.test(scan)
+  ) {
+    why = "skipping the git hooks (--no-verify, git commit -n, HUSKY=0) — the pre-commit and pre-push gates are mandatory; fix what they report";
   }
   if (why) {
     deny(

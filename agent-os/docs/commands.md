@@ -90,7 +90,8 @@ The session-start and guardrail follow-up is implemented — see
 
 - **SessionStart** (`agent-os/hooks/session-start.sh`) — on Claude Code on the web,
   verifies Node/deps/codegraph, installs deps, and prints the skill-trigger map.
-- **Guardrails** — block destructive shell + secret writes; warn on protected paths
+- **Guardrails** — block destructive shell, secret writes and skipping the git hooks
+  (`--no-verify`, `git commit -n`, `HUSKY=0`); warn on protected paths
   and cross-domain imports. Claude: `PreToolUse` (`guardrails.mjs`); Cursor:
   `beforeShellExecution` (`cursor-shell-guard.mjs`) + advisory rule; Codex: AGENTS.md
   policy + sandbox/approvals.
