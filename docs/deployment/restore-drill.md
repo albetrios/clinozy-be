@@ -12,7 +12,9 @@ This page covers deployment wiring only.
 | -------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------- | --------------------- |
 | **Monthly backup restore & RTO drill** | [scheduled-monthly-restore-rto.yml](../../.github/workflows/scheduled-monthly-restore-rto.yml) | 1st of month 06:00 UTC + `workflow_dispatch` | Yes (compliance gate) |
 
-Fully automated: install dependencies → Neon PITR child branch in the GitHub Environment's own Neon project (**`clinozy-be-production`**, branch `production`) → migrate → advance id sequences → auth integration smoke → RTO assert → branch delete (the branch also expires after 1 hour).
+Fully automated: install dependencies → Neon PITR child branch in the GitHub Environment's own Neon project (**`clinozy-be-production`**, branch `production`) → migrate → advance id sequences → restore smoke (`pnpm db:restore:smoke`) → RTO assert → branch delete (the branch also expires after 1 hour).
+
+The restore smoke never deletes anything: every migration applied, every table reads, every id sequence past the ids in its column, then the app boots on the copy and a new user signs in by email code, reads `/auth/me/context` and logs out. No test suite runs on the copy — their setup truncates every table — and the test harness refuses to wipe a database that is not on the runner itself.
 
 ---
 

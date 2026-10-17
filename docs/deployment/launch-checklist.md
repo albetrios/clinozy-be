@@ -38,8 +38,10 @@ in [`docs/reviews/`](../reviews/) stay point-in-time snapshots; the frontend's h
 - [ ] **Open frontend requests** — issue #34: 120 requests, 79 covered, 40 partial, 1 conflict
       (the Tasks "Everyone" view).
 - [ ] **Restore drills proven.** The weekly smoke and monthly RTO drills
-      ([restore-drill.md](restore-drill.md)) had three bugs, all fixed on `main`, but no drill has
-      passed since. They run in the `production` GitHub Environment, so each run waits for a
+      ([restore-drill.md](restore-drill.md)) restore and migrate fine; their smoke ran a test suite
+      that truncates every table, refused only by a missing privilege on the copy. It now runs the
+      non-destructive `pnpm db:restore:smoke`, and the test harness refuses to wipe a database off
+      the runner. Tick this when a drill passes. They run in the `production` GitHub Environment, so each run waits for a
       reviewer's approval — approve every run until a drill-only environment exists (decided
       2026-10-17; planned with alerting).
 - [ ] **Alerting and on-call.** Sentry alert rules are documented but not applied as code, and
