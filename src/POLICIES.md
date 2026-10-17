@@ -131,7 +131,7 @@ The canonical exports live under [src/shared/constants/](src/shared/constants/) 
 - **Rationale**: Backstop on the per-user unread-notification count in Redis — not the invalidation strategy. Every write that names a user (mark-read, mark-all-read, delete, the invitation accepted / declined fan-outs) invalidates immediately; the TTL exists for the two writers that cannot name one, the retention sweep (deletes by `created_at`) and the enqueue-rollback delete (holds only a row id). It is an independent literal, deliberately not an alias of `SESSION_TOKEN_CACHE_TTL_SECONDS`, so retuning one does not silently retune the other.
 - **Consequences of change**:
   - Decreasing → more Postgres counts on a route every open tab polls, which is the pool cost this cache exists to remove.
-  - Increasing → a badge stays wrong for longer after a sweep, always in the user's favour (it can show a notification that is gone; it cannot hide one that arrived).
+  - Increasing → a badge stays wrong for longer after a sweep, always in the user's favor (it can show a notification that is gone; it cannot hide one that arrived).
 - **Last reviewed**: 2026-09-21
 
 ## API_KEY_LAST_USED_THROTTLE_TTL_SECONDS

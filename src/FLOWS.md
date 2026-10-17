@@ -40,7 +40,7 @@ sequenceDiagram
   EL->>Bus: emit AUTH_EVENT.EMAIL_VERIFICATION_CODE_REQUESTED {email, verification_code, expires_in_minutes}
   Bus->>Mail: recordOutboxEmail (via event handler)
   EL-->>Auth: {messageKey: success:verificationCodeSent, expires_in_minutes: 15}
-  Auth-->>Client: 201 (uniform — no account enumeration)
+  Auth-->>Client: 200 (uniform — no account enumeration)
   Mail->>Resend: POST /emails (signed, alphanumeric code)
   Resend-->>Mail: 200
   Client->>Auth: POST /auth/email/login {email, code}
@@ -52,7 +52,7 @@ sequenceDiagram
   EL->>DB: INSERT auth_sessions (or, when MFA enrolled, mint mfa_session_token instead — see /auth/mfa/login)
   Note over EL: post-commit best-effort provisionPersonalOrganization on FIRST login (claims a bare invited placeholder created without one; idempotent no-op for a brand-new user already provisioned at send)
   EL-->>Auth: {access_token, session_public_id} | {mfa_required, mfa_session_token}
-  Auth-->>Client: 201 + Set-Cookie session_id
+  Auth-->>Client: 200 + Set-Cookie session_id
 ```
 
 ### Side effects
@@ -96,14 +96,14 @@ sequenceDiagram
   alt MFA enabled
     Login->>MFA: createMfaSession → mfa_session_token (Redis, 5m)
     Login-->>Auth: {mfa_required: true, mfa_session_token}
-    Auth-->>Client: 201
+    Auth-->>Client: 200
     Client->>Auth: POST /auth/mfa/login {mfa_session_token, totp_code|recovery_code}
     Auth->>MFA: verifyLoginMfa (validate session token, then TOTP/recovery)
     MFA->>Login: issue access token + session
   end
   Login->>DB: INSERT auth_sessions
   Login-->>Auth: {access_token, session_public_id}
-  Auth-->>Client: 201 + Set-Cookie session_id
+  Auth-->>Client: 200 + Set-Cookie session_id
 ```
 
 ### Side effects
@@ -139,7 +139,7 @@ sequenceDiagram
   Client->>Auth: POST /auth/switch-to-organization {organization_id}
   Auth->>Sess: re-check membership, re-mint access token with `org` claim
   Sess-->>Auth: {access_token} (`org` claim = target organization)
-  Auth-->>Client: 201 + new access token
+  Auth-->>Client: 200 + new access token
   Client->>Tenancy: GET /api/v1/tenancy/organization (Bearer new token)
   Tenancy->>Org: get active organization (from `org` claim)
   Org->>DB: SELECT organization
