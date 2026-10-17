@@ -61,7 +61,7 @@ describe('Worker readiness (global)', () => {
     expect(workflow).not.toMatch(/\b[a-z0-9]+-infra\b/);
   });
 
-  it('deploy workflow probes API health and relies on Railway terminal status for the worker', () => {
+  it('deploy workflow probes API health and verifies the worker boot from its container logs', () => {
     const workflowPath = resolve(ROOT, '.github/workflows/reusable-railway-deploy.yml');
     const workflow = readFileSync(workflowPath, 'utf8');
     expect(workflow).toContain('Deploy API and worker to Railway');
@@ -69,19 +69,22 @@ describe('Worker readiness (global)', () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: literal bash variable in the workflow YAML — not a TS template.
     expect(workflow).toContain('${base_url}/readyz');
     expect(workflow).toContain(
-      'deploy_service_from_image "$RAILWAY_SERVICE_ID" "$API_IMAGE" "api"',
+      'deploy_service_from_image "$RAILWAY_SERVICE_ID" "$API_IMAGE" "api" "Server listening" "Server failed to start"',
     );
     expect(workflow).toContain(
-      'deploy_service_from_image "$RAILWAY_WORKER_SERVICE_ID" "$WORKER_IMAGE" "worker"',
+      'deploy_service_from_image "$RAILWAY_WORKER_SERVICE_ID" "$WORKER_IMAGE" "worker" "Worker started" "Worker failed to start"',
     );
 
     // Worker readiness must NOT be probed from the GitHub runner. Railway's
     // private network (`*.railway.internal` Postgres + Redis) is unreachable
     // from public GitHub Actions hosts, and the worker service has no public
-    // Railway domain. The deployment terminal SUCCESS — driven by the in-pod
-    // HEALTHCHECK in `Dockerfile.worker` — is the only reliable post-deploy
-    // worker gate, complemented by the post-deploy API smoke that exercises
-    // worker-backed paths.
+    // Railway domain. Railway's terminal SUCCESS is not a gate either — it is
+    // set when the container starts, before the boot guards run, so a
+    // crash-looping worker reads SUCCESS. The gate is the deploy tool's boot
+    // verification: the worker's own container logs must show "Worker started"
+    // and no crash marker through the boot window (src/tests/unit/ci/
+    // railway-deploy-image.policy.unit.test.ts pins the markers), complemented
+    // by the post-deploy API smoke that exercises worker-backed paths.
     expect(workflow).not.toContain('Probe worker readiness');
     expect(workflow).not.toContain('Check worker readiness');
     expect(workflow).not.toContain('pnpm tool:worker-readiness');

@@ -49,6 +49,66 @@ describe('Railway deploy tooling (policy)', () => {
     expect(deployWorkflow).not.toContain('--skip-wait');
   });
 
+  it('verifies the container boot after SUCCESS instead of trusting Railway terminal status', () => {
+    // Railway flips a deployment to SUCCESS when the container STARTS — it runs no
+    // HEALTHCHECK and does not wait for the process to boot. A boot-guard failure
+    // (connection budget, RLS role, TLS) exits a few seconds later and restart-loops
+    // behind a green deploy; production did exactly that for five worker releases
+    // (2026-10-13 → 2026-10-17) while the workflow printed "fully live". The tool must
+    // therefore watch the deployment's own container logs after SUCCESS, and fail on a
+    // crash marker, on the status leaving SUCCESS, or on a missing ready marker.
+    expect(deployToolCode).toContain('deploymentLogs(deploymentId: $deploymentId');
+    expect(deployToolCode).toContain('verifyDeploymentBoot(');
+    expect(deployToolCode).toContain('the container logged a crash marker');
+    expect(deployToolCode).toContain('deployment status left SUCCESS');
+    expect(deployToolCode).toContain('never logged');
+    // Boot verification runs AFTER the terminal-status wait, never instead of it.
+    const waitAt = deployToolCode.indexOf('await waitForTerminalStatus(');
+    const verifyAt = deployToolCode.indexOf('await verifyDeploymentBoot(');
+    expect(waitAt).toBeGreaterThan(-1);
+    expect(verifyAt).toBeGreaterThan(waitAt);
+  });
+
+  it('a project token that cannot read deployments fails the gate when boot verification is on', () => {
+    // Without deployment reads the tool used to warn and return 0, leaving the workflow's
+    // probes as the gate — but the worker has no probe the runner can reach. A gate that
+    // cannot observe the container must not pass.
+    expect(deployToolCode).toContain(
+      'boot verification was requested but the project token cannot read deployment status',
+    );
+  });
+
+  it('CD passes the boot markers for BOTH services, matching the processes’ log lines', () => {
+    // The markers are the exact pino `msg` values in src/server.ts and src/worker.ts; if a
+    // process renames its ready/failure line the gate would wait the whole window and fail,
+    // so the two must move together.
+    const serverSource = readFileSync('src/server.ts', 'utf8');
+    const workerSource = readFileSync('src/worker.ts', 'utf8');
+    expect(serverSource).toContain("'Server listening'");
+    expect(serverSource).toContain("'Server failed to start'");
+    expect(workerSource).toContain("'Worker started'");
+    expect(workerSource).toContain("'Worker failed to start'");
+    expect(serverSource).toContain("'uncaughtException'");
+    expect(workerSource).toContain("'uncaughtException'");
+
+    expect(deployWorkflow).toContain('--boot-ready-marker "$boot_ready_marker"');
+    expect(deployWorkflow).toContain('--boot-crash-marker "$boot_crash_marker"');
+    expect(deployWorkflow).toContain('--boot-crash-marker "uncaughtException"');
+    expect(deployWorkflow).toContain(
+      'deploy_service_from_image "$RAILWAY_SERVICE_ID" "$API_IMAGE" "api" "Server listening" "Server failed to start"',
+    );
+    expect(deployWorkflow).toContain(
+      'deploy_service_from_image "$RAILWAY_WORKER_SERVICE_ID" "$WORKER_IMAGE" "worker" "Worker started" "Worker failed to start"',
+    );
+    // The retired claim must not come back: SUCCESS does not mean the HEALTHCHECK passed.
+    expect(deployWorkflow).not.toContain(
+      'Railway only flips to SUCCESS once the in-pod HEALTHCHECK passes',
+    );
+    expect(deployWorkflow).not.toContain(
+      'Railway only\n# reports SUCCESS once the container HEALTHCHECK',
+    );
+  });
+
   it('validates the GitHub Environment before deploying anything', () => {
     // A missing schema-required secret must fail the workflow, not crash-loop the
     // deployed container — so the pre-flight has to run BEFORE the deploy step.

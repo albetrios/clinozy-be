@@ -101,7 +101,7 @@ Runs when a PR **merges** into `main` (or manual dispatch). Does **not** re-run 
 | **API docs** | parallel | `src-code` or openapi paths | `pnpm docs:all`, Postman + Scalar publish |
 | **Release Please** | after Docker | Every merge | Opens/updates release PR; may publish GitHub Release |
 | **Release SBOM** | after SBOM + Release Please | Release Please published a release | Downloads `sbom` artifact and attaches it to the GitHub Release |
-| **Deploy** | last | Docker green + gates green | Reusable [reusable-railway-deploy.yml](../../../.github/workflows/reusable-railway-deploy.yml) → resolve env → migrate → seed reference data → **pin Railway service to fresh GHCR image + new deployment** (`pnpm tool:railway-deploy-image`) → API `/readyz` → worker deployment SUCCESS (in-pod `Dockerfile.worker` HEALTHCHECK on `9090/readyz`) → **`pnpm test:api-smoke`** → **fully live** |
+| **Deploy** | last | Docker green + gates green | Reusable [reusable-railway-deploy.yml](../../../.github/workflows/reusable-railway-deploy.yml) → resolve env → migrate → seed reference data → **pin Railway service to fresh GHCR image + new deployment** (`pnpm tool:railway-deploy-image`: terminal SUCCESS **+ boot verification** from the container logs) → API `/readyz` → worker deployment SUCCESS + boot verification (`Worker started` logged, no crash marker) → **`pnpm test:api-smoke`** → **fully live** |
 
 **Local-only (not in CI):** `pnpm test:integration`, `pnpm test:chaos` — run before pushing when touching DB/worker paths.
 
@@ -209,12 +209,14 @@ sequenceDiagram
   GH->>GH: Resolve GHCR image refs (commit SHA or secrets)
   GH->>GH: railway variable set (per-service runtime env vars)
   GH->>RailwayAPI: pnpm tool:railway-deploy-image (API)
-  Note over GH,RailwayAPI: serviceInstanceUpdate → serviceInstanceDeployV2 → poll
+  Note over GH,RailwayAPI: serviceInstanceUpdate → serviceInstanceDeployV2 → poll → boot verification
   RailwayAPI->>Railway: Apply pinned GHCR image and deploy
   Railway->>GHCR: Pull scanned image
-  RailwayAPI-->>GH: Deployment SUCCESS
+  RailwayAPI-->>GH: Deployment SUCCESS (container started)
+  RailwayAPI-->>GH: deploymentLogs: "Server listening", no crash marker (90 s)
   GH->>RailwayAPI: pnpm tool:railway-deploy-image (worker)
-  RailwayAPI-->>GH: Deployment SUCCESS
+  RailwayAPI-->>GH: Deployment SUCCESS (container started)
+  RailwayAPI-->>GH: deploymentLogs: "Worker started", no crash marker (90 s)
 ```
 
 Steps in each deploy workflow:
@@ -223,7 +225,7 @@ Steps in each deploy workflow:
 2. Run `pnpm validate:github-env-runtime` against the exported GitHub environment (schema-required keys present).
 3. **Log expected scanned CI image refs from GHCR** — default `ghcr.io/<owner>/<repo>/clinozy-be-api:<commit-sha>` and `clinozy-be-worker:<commit-sha>`; optional secrets **`GHCR_API_IMAGE`** / **`GHCR_WORKER_IMAGE`** override the logged ref. These are the exact refs the next step pins onto Railway.
 4. Run `pnpm db:migrate` + `pnpm db:seed` (reference data), install Railway CLI, sync app env vars with `railway variable set`.
-5. Deploy API + worker with **`pnpm tool:railway-deploy-image --service <id> --image <ghcr-ref> --label <api|worker>`** (`tooling/setup/railway/deploy-image.ts`). For each service the tool calls the Railway GraphQL API to (a) resolve the project-token scope with **`projectToken { projectId environmentId }`** using the `Project-Access-Token` header; (b) **`serviceInstanceUpdate`** with `{ source: { image } }` so the service is pinned to the freshly built, Trivy-scanned image; (c) **`serviceInstanceDeployV2(serviceId, environmentId)`** to create a brand-new deployment from the updated configuration; (d) poll `deployment(id)` until terminal status when token scope permits deployment reads. Railway project tokens can trigger the deployment but may not be allowed to read deployment status, so the workflow's API `/readyz` probe, the Railway-reported worker deployment SUCCESS (gated by the in-pod `Dockerfile.worker` HEALTHCHECK on `9090/readyz`), and the post-deploy API smoke remain the hard deploy gates. Worker readiness is **not** probed from the GitHub runner because Postgres/Redis sit on Railway's private network (`*.railway.internal`) which is unreachable from public CI hosts.
+5. Deploy API + worker with **`pnpm tool:railway-deploy-image --service <id> --image <ghcr-ref> --label <api|worker>`** (`tooling/setup/railway/deploy-image.ts`). For each service the tool calls the Railway GraphQL API to (a) resolve the project-token scope with **`projectToken { projectId environmentId }`** using the `Project-Access-Token` header; (b) **`serviceInstanceUpdate`** with `{ source: { image } }` so the service is pinned to the freshly built, Trivy-scanned image; (c) **`serviceInstanceDeployV2(serviceId, environmentId)`** to create a brand-new deployment from the updated configuration; (d) poll `deployment(id)` until terminal status; (e) **boot verification** — the workflow passes `--boot-ready-marker` / `--boot-crash-marker` for both services (`Server listening` / `Server failed to start` for the API, `Worker started` / `Worker failed to start` for the worker, plus `uncaughtException` for both), and after SUCCESS the tool polls `deployment(id)` and `deploymentLogs(id)` for a 90 s window, failing on a crash marker, on the status leaving SUCCESS, or on a missing ready marker. Railway's SUCCESS alone is **not** a gate: it is set when the container starts (Railway runs no Dockerfile `HEALTHCHECK`), before the boot guards have run, so a crash-looping process reads SUCCESS — production shipped five such worker releases in October 2026 before this check existed. The hard deploy gates are therefore boot verification for both services, the API `/readyz` + surface probe, and the post-deploy API smoke. A project token that cannot read deployments fails the deploy when boot verification is on (a gate that cannot observe must not pass). Worker readiness is **not** probed from the GitHub runner because Postgres/Redis sit on Railway's private network (`*.railway.internal`) which is unreachable from public CI hosts — its container logs are the one observable signal.
 
 > **Why not `railway redeploy` / `railway up`?** The Railway CLI's `redeploy` re-runs the previous deployment object with its existing image tag (community discussion confirms `serviceInstanceRedeploy` ignores configuration changes made between deployments), and the CLI has no `--image` flag. `railway up` uploads the runner's source for Railway to build, bypassing the scanned GHCR image entirely. The GraphQL-based tool is the only reliable way to deploy the image CI just built — and the same path handles both the initial bootstrap (no prior deployment) and steady-state redeploys, so no fallback branch is needed.
 >
