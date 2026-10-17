@@ -50,6 +50,14 @@ Each ROUTE row is a work item (one per sub-domain of the route review, or per ta
 flow); any detail the route review leaves open is decided during implementation and recorded in
 `AS-BUILT.md`.
 
+## Under `--both`: one shared plan, this one owns the contract
+
+When the iteration exists in both repositories, this plan is the only plan of the contract —
+`plans/routes-final.md`, `route-changes.md`, `db-changes.md`, `worker-changes.md` and the
+decisions behind them. The frontend's plan links to them and adds its screens; it never copies
+them. Its requests (a field, a filter, an error it needs) come here as Step 4 questions or decision
+rows, and the frontend builds against what is decided here.
+
 ## The plan proposes; agent-os decides
 
 The plan's tables, fields, routes and background work are **proposals at the requirement level**. The

@@ -26,6 +26,12 @@ launch. The date is a value (when the iteration was opened) and the only part th
 The same name is used in clinozy-fe and clinozy-be. Create the folder only in the repository the
 change touches; `pnpm iteration:new <type> <topic> --both` creates it in both.
 
+**One shared plan, the backend owns the contract.** Under `--both` there is one plan of the
+contract, here: `plans/routes-final.md`, `route-changes.md`, `db-changes.md`, `worker-changes.md`
+and the decisions that shape them. The frontend's plan links to them and adds only its own part
+(screens, states, copy) — never a second copy of a route, a field or a rule. A change the frontend
+needs in the contract is a request to this plan, decided here.
+
 ## The folder
 
 | Path | Holds | Written by |
