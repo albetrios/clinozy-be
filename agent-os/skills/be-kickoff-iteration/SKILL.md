@@ -73,6 +73,23 @@ from `planning`), and start `AS-BUILT.md` from the
 shape below, dated today, with the Baseline's Standing deviations copied in as the starting list
 (empty for an initial iteration).
 
+**Offer the goal.** Show the user one `/goal` line they can set to let the build run on without a
+stop after every row (Claude Code keeps working until its condition holds). Its condition is this
+iteration's Close, named concretely:
+
+```text
+/goal iteration <iteration> is done: every KICKOFF.md ROUTE row done (or deferred with my OK) with
+its AS-BUILT.md row; pnpm validate and pnpm ci:local green; plans/acceptance.md has a Result and
+Evidence for every item; pnpm iteration:frontend-map <iteration> --check passes; Status done.
+Stop and ask on a scope change or a RED question.
+```
+
+Setting it is the user's choice — never set it yourself. Under a goal: a row ends with its
+`AS-BUILT.md` row and a one-line report instead of a stop, its `Reviewed` cell stays `—` until
+Close; a decision the plan left open is taken as the recommendation and logged in
+`plans/decisions.md` as AMBER, sourced `user /goal <date>`; a scope change or a RED question still
+stops and asks — a goal never widens the scope.
+
 ## Before the first row — read
 
 - `KICKOFF.md` (the plan and its ROUTE) and every file under `plans/` — for each row, its sub-domain's
@@ -158,7 +175,7 @@ authorize changing either.
      `AS-BUILT.md` › Revisions to upcoming rows (the revised row text), and mark the affected
      `KICKOFF.md` row "revised → AS-BUILT #n". Never rewrite `KICKOFF.md` otherwise — it is frozen.
 5. **Stop** — mark the row `done`, show the user what was built and the AS-BUILT row, and wait for
-   their review before the next row. Use the review summary from the linked row execution guidance:
+   their review before the next row (under a `/goal`, a one-line report instead — Step 0). Use the review summary from the linked row execution guidance:
    changes and contracts, verification evidence, deviations or blockers, impact, and the next row.
    **This review is the row's review of record:** on the user's OK, fill the row's `Reviewed` cell
    (date · who · the commit reviewed). A change they ask for is made, verified and shown again
@@ -168,6 +185,10 @@ authorize changing either.
 
 - Run the repository's gates: `pnpm validate`, `pnpm ci:local`, and the route and domain gates.
 - Run `/be-pre-merge-review` as a review only — report its findings, change nothing on its say-so.
+- **The goal's condition.** When a `/goal` was set, check each of its criteria now, one line each
+  with its evidence (the command and its result, or the file and section), before
+  `pnpm iteration:status <iteration> done`. A criterion not met is work to finish, not a note; the
+  goal is met only when every line is. The rows built under it are reviewed now (next item).
 - **The per-row reviews are the review of record.** Every `AS-BUILT.md` row has its `Reviewed`
   cell; a row without one is reviewed now, before close. The PR's human review then covers what
   changed after each row's reviewed commit (and the close), not the rows again.

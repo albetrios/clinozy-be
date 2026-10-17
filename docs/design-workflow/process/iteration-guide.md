@@ -125,6 +125,11 @@ skill confirms the iteration (eligible: `approved`, Baseline `none` or `done`/`f
    changed, the order changed) stops and asks you first;
 5. stops for your review.
 
+At kickoff the skill also offers a `/goal` line whose condition is the iteration's Close. Set it to
+let the rows run on without a stop each: a row then ends with a one-line report, the plan's open
+decisions are taken as recommendations (logged AMBER in `plans/decisions.md`), the rows are
+reviewed at Close — and a scope change or a RED question still stops and asks.
+
 **The plan proposes; agent-os decides.** The backend's agent-os — its skills, rules and agents — is
 the expert: whenever the plan and agent-os disagree, or anything is unclear, agent-os wins, and it may
 change the plan's names, types, paths or job details on the way. Every such change lands in `AS-BUILT.md` and is synced back
@@ -138,7 +143,7 @@ where agent-os cannot, the row stops and asks before anything differs.
 ### Step 7 — Close
 
 The skill runs the repository's gates (`pnpm validate`, `pnpm ci:local`), `/be-pre-merge-review` as
-a review only, fills `plans/acceptance.md`, writes the `AS-BUILT.md` summary (planned-not-built,
+a review only, checks each criterion of the `/goal` (when one was set) with its evidence, fills `plans/acceptance.md`, writes the `AS-BUILT.md` summary (planned-not-built,
 built-not-planned, follow-ups) and the frontend's route map `plans/frontend-route-map.md` (sections 1, 2
 and 4 by hand), then:
 
