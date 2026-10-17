@@ -17,6 +17,7 @@ Every `pnpm` script beyond the everyday ones in the root [`CLAUDE.md`](../../CLA
 - `pnpm docs:upload:hosted` — run both hosted uploads (Postman workspace + Scalar Registry)
 - `pnpm docs:all` — generate OpenAPI spec + Postman Collection in one step
 - `pnpm test:coverage` — all tests with V8 coverage (CI)
+- `pnpm test:select` — the tests a change can affect, and why (`tooling/vitest/test-selection.util.ts`): changes since the merge base with `origin/main` plus the working tree (`--base <ref>`, `--files a,b`); `--why` lists each test with its reason, `--json` the whole selection, `--run` runs it lane by lane (`pnpm test` when everything is selected). Fails closed — see **Selecting the affected tests** in `docs/reference/testing/testing-conventions.md`
 - `pnpm test:performance` — performance tests
 - `pnpm test:security` — security test suite
 - `pnpm test:chaos` — Toxiproxy chaos / fault-injection suite (`tooling/vitest/chaos.config.ts`; see `docs/reference/reliability/chaos-testing.md`)

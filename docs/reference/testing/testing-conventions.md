@@ -228,6 +228,25 @@ See also [api-versioning.md](../api/api-versioning.md).
 
 All tiers share one root **`vitest.config.ts`**. Named projects live in **`tooling/vitest/projects.ts`**. Scripts filter with **`--project <name>`** (for example `default`, `unit`, `e2e`, `contract`, `chaos`). Default **`pnpm test`** runs the **`default`** project only (excludes contract, chaos, and smoke).
 
+### Selecting the affected tests
+
+`pnpm test:select` names the test files a change can affect (`--why` says why each was picked,
+`--run` runs them lane by lane). The rules live in `tooling/vitest/test-selection.util.ts`:
+
+| Rule | Selects |
+| --- | --- |
+| Next to the code | every test under the folder that owns the changed file's tests (the nearest folder above it with `__tests__/`) |
+| Imports | a test whose imports reach the changed file — not through the test harness (`src/tests/helpers/`) or a wiring file (outside every app sub-domain, importing three or more areas: `app.container.ts`, `worker-containers.ts`) |
+| Domain map | a test that boots the app (reaches `src/app.ts`), by its area: the changed file's (`app/<sub-domain>`, or `<domain>`) and every area whose code imports it; plus app tests that name a reached sub-domain (`/app/leads`) |
+| Mentions | a test that names the changed path, its file name, a folder above it (also as `join('agent-os', 'hooks')`) or a glob over it |
+| Always run | on any source change under `src/`: the security project (RLS, the permission matrix), `src/tests/e2e/`, the global scans, and every test that imports nothing from the repository |
+
+Everything runs when a change touches the escalation list (dependencies, Vitest config and
+`tooling/vitest/`, the test harness, tenancy, user, auth, audit, `src/shared/`, `src/core/`,
+`src/infrastructure/`, `migrations/`, the app entry files), a path outside the known roots, a
+deleted file nothing imports any more, or when the selector fails. So an app sub-domain change
+gets a small selection and a core-domain change runs everything — by design.
+
 ### Run one database suite at a time
 
 `fileParallelism: false` on the database-backed projects (`unit-db`, `e2e`, `integration`,
