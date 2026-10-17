@@ -10,7 +10,9 @@
  * repository found in the parent, read from its generated
  * `agent-os/platforms/claude/settings.json`, with `$CLAUDE_PROJECT_DIR` replaced by the
  * repository's absolute path and the command prefixed with `CLAUDE_PROJECT_DIR="<repository>"`,
- * so each hook still resolves its own repository root. Each repository's `permissions.allow` /
+ * so each hook still resolves its own repository root, and a relative `if` file rule anchored to
+ * the repository (`Edit(**)` → `Edit(//<repository>/**)`), so one repository's edits do not spawn
+ * another's hooks. Each repository's `permissions.allow` /
  * `ask` / `deny` lists are merged in too (a union without duplicates; deny still beats ask and
  * allow).
  *
@@ -114,6 +116,19 @@ function registerCommand({
   return registeredCommand.test(registered) ? registered : null;
 }
 
+/** A file-path rule (`Edit(**)`) whose pattern is relative: Claude Code reads it from the working directory. */
+const relativePathRule = /^(Edit|Write|Read|NotebookEdit)\((?![/~])(.+)\)$/;
+
+/**
+ * Anchors a hook's `if` rule to its repository: from the session root, `Edit(**)` would match
+ * every repository's files, so `Edit(**)` becomes `Edit(//<repository>/**)` (the `//` anchor is
+ * an absolute path). Any other rule is kept as it is.
+ */
+function registerRule({ rule, repository }: { rule: string; repository: string }): string {
+  const match = relativePathRule.exec(rule);
+  return match ? `${match[1]}(/${repository}/${match[2]})` : rule;
+}
+
 /** Every hook this script did not write (a hand-added one, another tool's), by event. */
 function unregisteredHooks(existing: HookMap): HookEntry[] {
   return Object.entries(existing).flatMap(([event, groups]) =>
@@ -134,6 +149,9 @@ function repositoryHooks(repository: string): HookEntry[] {
     groups.flatMap((group): HookEntry[] => {
       const registered = group.hooks.flatMap((hook) => {
         const command = registerCommand({ command: hook.command, repository });
+        if (command && typeof hook.if === 'string') {
+          return [{ ...hook, command, if: registerRule({ rule: hook.if, repository }) }];
+        }
         if (command) return [{ ...hook, command }];
         log(`skipped an unexpected command in ${repository} (${event}): ${hook.command}`);
         return [];

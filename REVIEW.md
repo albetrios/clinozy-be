@@ -39,7 +39,7 @@ are enforced by gates — do not re-litigate what a gate already proves.
 - Generated artifacts: `pnpm-lock.yaml`, `docs/routes.txt`, `docs/openapi/`,
   `docs/postman-collection.json`, `*project-identity.constants.ts`,
   `docs/database/clinozy-be.dbml`, `.codex/hooks.json`, `agent-os/skills-lock.json`.
-- Formatting/import order — Biome owns it (`format-edits.sh` + pre-commit).
+- Formatting/import order — Biome owns it (`edit-hooks.mjs` at the end of each turn + pre-commit).
 - Anything a required gate already enforces (typecheck, `validate:domain`,
   `tsdoc:check`, `db:migrate:lint`) **unless** the diff shows the gate being
   weakened (budget raised, test deleted, rule disabled) — that is **major**.

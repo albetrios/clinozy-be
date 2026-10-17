@@ -11,7 +11,10 @@ const REAL_SETTINGS = readFileSync(CLAUDE_SETTINGS, 'utf8');
 const REGISTERED = /^CLAUDE_PROJECT_DIR="([^"]+)" (?:bash|node) "([^"]+)\/agent-os\/hooks\/[^"]+"$/;
 
 interface Settings {
-  hooks?: Record<string, Array<{ matcher?: string; hooks: Array<{ command: string }> }>>;
+  hooks?: Record<
+    string,
+    Array<{ matcher?: string; hooks: Array<{ command: string; if?: string }> }>
+  >;
   [key: string]: unknown;
 }
 
@@ -185,5 +188,17 @@ describe('tooling/agent-os/session-hooks.ts', () => {
     expect(result.stdout).toContain('would write');
     expect(result.stdout).toContain('CLAUDE_PROJECT_DIR=');
     expect(existsSync(sessionSettingsPath(sessionRoot))).toBe(false);
+  });
+
+  it('anchors a relative if rule to its repository, so another repository edits spawn nothing', () => {
+    const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other: OTHER_SETTINGS });
+    expect(runScript({ sessionRoot }).status).toBe(0);
+    const repository = join(sessionRoot, 'own');
+    const rules = Object.values(readSessionSettings(sessionRoot).hooks ?? {}).flatMap((groups) =>
+      groups.flatMap((group) =>
+        group.hooks.flatMap((hook) => (hook.if === undefined ? [] : [hook.if])),
+      ),
+    );
+    expect(rules).toEqual([`Edit(/${repository}/**)`, `Write(/${repository}/**)`]);
   });
 });

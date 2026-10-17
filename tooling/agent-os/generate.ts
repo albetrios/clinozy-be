@@ -31,7 +31,12 @@ interface HookManifestEntry {
   id: string;
   runtime: 'bash' | 'node';
   script: string;
-  claude?: { event: string; matcher?: string };
+  /**
+   * `if`: permission rules (`Edit(**)`, `Write(**)`), one handler each — Claude Code spawns the
+   * hook only for a tool call that matches one. An `Edit(…)` rule matches Edit calls only, a
+   * `Write(…)` rule Write calls only (checked on Claude Code 2.1.302).
+   */
+  claude?: { event: string; matcher?: string; if?: string[] };
   cursor?: { event: string; matcher?: string };
   codex?: { event: string; matcher?: string; statusMessage?: string };
 }
@@ -71,8 +76,20 @@ const codexCommand = (entry: HookManifestEntry): string =>
 
 type ClaudeHookEntry = {
   matcher?: string;
-  hooks: Array<{ type: 'command'; command: string }>;
+  hooks: Array<{ type: 'command'; command: string; if?: string }>;
 };
+
+/**
+ * The events whose handlers may carry an `if` rule; on any other event Claude Code never runs a
+ * handler that has one (code.claude.com/docs/en/hooks, Common fields).
+ */
+const claudeIfEvents = new Set([
+  'PreToolUse',
+  'PostToolUse',
+  'PostToolUseFailure',
+  'PermissionRequest',
+  'PermissionDenied',
+]);
 type CodexHookEntry = {
   matcher?: string;
   hooks: Array<{ type: 'command'; command: string; statusMessage?: string }>;
@@ -90,10 +107,21 @@ function buildClaudeHooks(): Record<string, ClaudeHookEntry[]> {
       );
       continue;
     }
+    const rules = entry.claude.if ?? [];
+    if (rules.length > 0 && !claudeIfEvents.has(entry.claude.event)) {
+      report(
+        `claude: hook "${entry.id}" sets if on ${entry.claude.event}, where a handler with if never runs — skipped`,
+      );
+      continue;
+    }
     const command = claudeCommand(entry);
+    const handlers: ClaudeHookEntry['hooks'] =
+      rules.length > 0
+        ? rules.map((rule) => ({ type: 'command', command, if: rule }))
+        : [{ type: 'command', command }];
     const hookEntry: ClaudeHookEntry = entry.claude.matcher
-      ? { matcher: entry.claude.matcher, hooks: [{ type: 'command', command }] }
-      : { hooks: [{ type: 'command', command }] };
+      ? { matcher: entry.claude.matcher, hooks: handlers }
+      : { hooks: handlers };
     const event = entry.claude.event;
     const bucket = grouped[event] ?? [];
     bucket.push(hookEntry);

@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" bash \"$(git rev-parse --show-toplevel)/agent-os/hooks/stop-gate-reminder.sh\"",
+            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" node \"$(git rev-parse --show-toplevel)/agent-os/hooks/edit-hooks.mjs\"",
             "statusMessage": "Checking clinozy-be completion gates"
           }
         ]

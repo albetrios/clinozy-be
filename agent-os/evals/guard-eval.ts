@@ -207,19 +207,19 @@ const cases: GuardCase[] = [
     expect: 'deny',
   },
 
-  // ── skill-reminder.sh (Claude PostToolUse: Edit|Write) ──
+  // ── edit-hooks.mjs (Claude PostToolUse: Edit|Write) ──
   {
     name: 'skill reminder names the skills for a routes file',
-    script: 'skill-reminder.sh',
-    runtime: 'bash',
-    payload: { tool_input: { file_path: 'src/domains/x/x.routes.ts' } },
+    script: 'edit-hooks.mjs',
+    runtime: 'node',
+    payload: { hook_event_name: 'PostToolUse', tool_input: { file_path: 'src/domains/x/x.routes.ts' } },
     expect: 'context',
   },
   {
     name: "repository scope: no skill reminder for another repository's file",
-    script: 'skill-reminder.sh',
-    runtime: 'bash',
-    payload: { tool_input: { file_path: siblingPath('src/domains/x/x.routes.ts') } },
+    script: 'edit-hooks.mjs',
+    runtime: 'node',
+    payload: { hook_event_name: 'PostToolUse', tool_input: { file_path: siblingPath('src/domains/x/x.routes.ts') } },
     expect: 'silent',
   },
 
@@ -290,16 +290,16 @@ const cases: GuardCase[] = [
   },
   {
     name: 'skill reminder reaches the model through additionalContext',
-    script: 'skill-reminder.sh',
-    runtime: 'bash',
-    payload: { tool_name: 'Edit', session_id: 'eval-skill', tool_input: { file_path: 'src/domains/x/x.routes.ts' } },
+    script: 'edit-hooks.mjs',
+    runtime: 'node',
+    payload: { hook_event_name: 'PostToolUse', tool_name: 'Edit', session_id: 'eval-skill', tool_input: { file_path: 'src/domains/x/x.routes.ts' } },
     expect: 'context',
   },
   {
     name: 'skill reminder: the same file again in the same turn adds nothing',
-    script: 'skill-reminder.sh',
-    runtime: 'bash',
-    payload: { tool_name: 'Edit', session_id: 'eval-skill', tool_input: { file_path: 'src/domains/x/x.routes.ts' } },
+    script: 'edit-hooks.mjs',
+    runtime: 'node',
+    payload: { hook_event_name: 'PostToolUse', tool_name: 'Edit', session_id: 'eval-skill', tool_input: { file_path: 'src/domains/x/x.routes.ts' } },
     expect: 'silent',
   },
 

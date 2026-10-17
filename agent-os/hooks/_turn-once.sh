@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
-# Once-per-turn record for the reminder hooks (skill-reminder.sh, stop-gate-reminder.sh,
-# subagent-verify.sh): a reminder reaches the model through PostToolUse additionalContext the
-# first time it applies in a turn, and not again on every later edit of that turn.
+# Once-per-turn record for the reminder hooks (subagent-verify.sh here; edit-hooks.mjs keeps its
+# own markers in the same directory): a reminder reaches the model through PostToolUse
+# additionalContext the first time it applies in a turn, and not again on every later edit of
+# that turn.
 # prompt-skill-router.sh (UserPromptSubmit) starts each turn by clearing the record.
 #
 # The record is one empty file per reminder under $TMPDIR/clinozy-be-hooks/<session_id>/.

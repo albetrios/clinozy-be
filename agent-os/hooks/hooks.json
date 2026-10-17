@@ -60,21 +60,16 @@
       }
     },
     {
-      "id": "format-edits",
-      "runtime": "bash",
-      "script": "format-edits.sh",
+      "id": "edit-hooks",
+      "runtime": "node",
+      "script": "edit-hooks.mjs",
       "claude": {
         "event": "PostToolUse",
-        "matcher": "Edit|Write"
-      }
-    },
-    {
-      "id": "skill-reminder",
-      "runtime": "bash",
-      "script": "skill-reminder.sh",
-      "claude": {
-        "event": "PostToolUse",
-        "matcher": "Edit|Write|MultiEdit"
+        "matcher": "Edit|Write",
+        "if": [
+          "Edit(**)",
+          "Write(**)"
+        ]
       }
     },
     {
@@ -119,12 +114,11 @@
       }
     },
     {
-      "id": "stop-gate-reminder",
-      "runtime": "bash",
-      "script": "stop-gate-reminder.sh",
+      "id": "edit-hooks-stop",
+      "runtime": "node",
+      "script": "edit-hooks.mjs",
       "claude": {
-        "event": "PostToolUse",
-        "matcher": "Edit|Write|MultiEdit"
+        "event": "Stop"
       },
       "codex": {
         "event": "Stop",

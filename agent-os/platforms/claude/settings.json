@@ -107,16 +107,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/format-edits.sh\""
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/edit-hooks.mjs\"",
+            "if": "Edit(**)"
+          },
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/skill-reminder.sh\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/edit-hooks.mjs\"",
+            "if": "Write(**)"
           }
         ]
       },
@@ -146,15 +143,6 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/subagent-verify.sh\""
           }
         ]
-      },
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/stop-gate-reminder.sh\""
-          }
-        ]
       }
     ],
     "PostToolUseFailure": [
@@ -164,6 +152,16 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/gate-failure-hint.sh\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/edit-hooks.mjs\""
           }
         ]
       }
