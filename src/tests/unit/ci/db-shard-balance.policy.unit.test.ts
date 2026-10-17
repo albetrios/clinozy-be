@@ -7,6 +7,7 @@ const integrationWorkflow = readFileSync(
   'utf8',
 );
 const prCi = readFileSync('.github/workflows/pr-ci.yml', 'utf8');
+const rlsParity = readFileSync('.github/workflows/scheduled-rls-parity.yml', 'utf8');
 
 /** The domains `VITEST_DOMAIN_FILTER` knows, read from tooling/vitest/projects.ts, plus `rest`. */
 const domainTokens = [
@@ -76,8 +77,29 @@ describe('DB test shards', () => {
     expect(job).not.toContain('--shard=');
   });
 
+  it('the nightly RLS parity canary runs every suite once, in parallel jobs', () => {
+    const groups = [...rlsParity.matchAll(/^ {10}- group: ([\w-]+)\n((?: {12}.+\n)+)/gm)].map(
+      (match) => match[2] as string,
+    );
+    const field = (group: string, key: string) =>
+      group.match(new RegExp(`^ {12}${key}: (.+)$`, 'm'))?.[1] ?? '';
+    const covered = groups
+      .filter((group) => field(group, 'suite') === 'e2e-integration')
+      .flatMap((group) => tokens(field(group, 'domains')));
+    expect([...covered].sort()).toEqual([...domainTokens].sort());
+    const slices = groups
+      .filter((group) => field(group, 'suite') === 'security')
+      .map((group) => field(group, 'security_slice'))
+      .sort();
+    expect(slices).toEqual(['matrix', 'rest']);
+    expect(groups.filter((group) => field(group, 'suite') === 'unit-db')).toHaveLength(1);
+    expect(rlsParity).toContain(`VITEST_DOMAIN_FILTER: \${{ matrix.domains }}`);
+    expect(rlsParity).toContain(`VITEST_SECURITY_SLICE: \${{ matrix.security_slice }}`);
+    expect(rlsParity).toMatch(/^ {6}fail-fast: false$/m);
+  });
+
   it('every DB lane turns off Postgres durability before it migrates', () => {
-    for (const workflow of [integrationWorkflow, prCi]) {
+    for (const workflow of [integrationWorkflow, prCi, rlsParity]) {
       // `pnpm db:migrate` itself, not `pnpm db:migrate:lint` (a static check, no database).
       const migrations = workflow.match(/pnpm db:migrate$/gm)?.length ?? 0;
       expect(migrations).toBeGreaterThan(0);

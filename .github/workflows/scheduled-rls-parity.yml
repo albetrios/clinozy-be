@@ -32,9 +32,41 @@ concurrency:
 
 jobs:
   parity:
-    name: DB suites as RLS-subject roles
+    name: DB suites as RLS-subject roles (${{ matrix.group }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
+    # The four suites ran one after another in one job and outgrew its 45-minute budget (run
+    # 39008877908, 17 Oct: unit-db 4.9 min, e2e 4.8, integration 24.4, security cut off after
+    # 10.6), so they run as parallel jobs: unit-db; security as the PR DB lanes slice it
+    # (`VITEST_SECURITY_SLICE`: the permission route matrix, then the rest); and e2e +
+    # integration in the PR application-role lane's four domain groups (`VITEST_DOMAIN_FILTER`).
+    # The groups cover every domain plus `rest` exactly once — pinned by
+    # src/tests/unit/ci/db-shard-balance.policy.unit.test.ts. Each job migrates and provisions
+    # its own database; the canary is red if any job is.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: unit-db
+            suite: unit-db
+          - group: security-permission-matrix
+            suite: security
+            security_slice: matrix
+          - group: security-rest
+            suite: security
+            security_slice: rest
+          - group: app
+            suite: e2e-integration
+            domains: app
+          - group: tenancy-upload-audit
+            suite: e2e-integration
+            domains: tenancy,upload,audit
+          - group: auth-billing
+            suite: e2e-integration
+            domains: auth,billing
+          - group: rest-user-notify
+            suite: e2e-integration
+            domains: rest,user,notify
     services:
       postgres:
         image: postgres:17.10-alpine
@@ -86,22 +118,26 @@ jobs:
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup-node-pnpm
 
-      # Same transform cache as the PR vitest lanes. Cold Vite transforms stall the
-      # event loop during each suite's app boots; the overload-guard valve (250 ms
-      # p99) reads those stalls as saturation and sheds real test requests as 503s —
-      # verified locally with an instrumented guard on a cold cache (posture-
-      # independent: identical sheds as superuser). Warm transforms keep boot stalls
-      # under the valve, the way the green PR lanes run.
+      # Vitest's results cache, as in the PR vitest lanes: each file's last duration and
+      # result, so a run starts the slowest and the last-failed files first. It holds no
+      # transforms — each job transforms its files cold, the way every CI lane does. One key
+      # per group, so the seven jobs do not race to save one entry.
       - name: Cache Vitest
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: node_modules/.vite/vitest
-          key: vitest-rls-parity-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: vitest-rls-parity-${{ runner.os }}-${{ matrix.group }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
-            vitest-rls-parity-${{ runner.os }}-
+            vitest-rls-parity-${{ runner.os }}-${{ matrix.group }}-
 
       - name: Export shared CI test env (JWT keys + secrets-encryption + origins)
         uses: ./.github/actions/test-env
+
+      # Like every DB lane: no crash safety on a throwaway database. Durability is not part of
+      # the role posture this canary checks.
+      - uses: ./.github/actions/tune-ci-postgres
+        with:
+          container: ${{ job.services.postgres.id }}
 
       - name: Run migrations (bootstrap superuser — creates the role taxonomy)
         run: pnpm db:migrate
@@ -121,15 +157,25 @@ jobs:
           SQL
 
       - name: unit-db (RLS-subject maintenance pool + operator fixtures)
+        if: matrix.suite == 'unit-db'
         run: pnpm vitest run --project unit-db
 
       - name: e2e
+        if: matrix.suite == 'e2e-integration'
+        env:
+          VITEST_DOMAIN_FILTER: ${{ matrix.domains }}
         run: pnpm test:e2e
 
       - name: integration
+        if: matrix.suite == 'e2e-integration'
+        env:
+          VITEST_DOMAIN_FILTER: ${{ matrix.domains }}
         run: pnpm test:integration
 
       - name: security (SET LOCAL ROLE clinozy_be_app suites)
+        if: matrix.suite == 'security'
+        env:
+          VITEST_SECURITY_SLICE: ${{ matrix.security_slice }}
         run: pnpm test:security
 
   resolve-success:
