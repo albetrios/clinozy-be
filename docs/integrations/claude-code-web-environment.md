@@ -25,6 +25,8 @@ That makes `pnpm install` → `pnpm validate` / `pnpm test:unit` / `pnpm agent-o
 
 The cloud image ships **Node 20, 21, and 22**; clinozy-be's `engines` require **Node 24+** (pinned in [`.nvmrc`](../../.nvmrc)). Node 24 is **not** pre-installed, so a setup script must install it. [`tooling/setup/agent/install-node.sh`](../../tooling/setup/agent/install-node.sh) installs the `.nvmrc` version into `/opt/node24` — the same layout the image uses and exactly where the [`session-start.sh`](../../agent-os/hooks/session-start.sh) hook looks — so the hook switches `PATH` to it and runs `pnpm install` automatically. The repo's Node version is unchanged.
 
+The hook's switch reaches only the Bash tool, and only when the hook loads — a session that holds both repos loads none. So `install-node.sh` also links the pinned `node`, `npm`, `npx`, `corepack` and `pnpm` into `~/.local/bin`, which the image puts ahead of its own `/opt/node22/bin`: every shell runs Node 24, Claude Code's own process (the MCP servers) included. It links only when the `node` on `PATH` is the image's (`/opt/node<major>`), so a Node from nvm is left alone; `NODE_LINK_USER_BIN=0` turns it off.
+
 When no Node 24 is on disk at session start (the Setup script is not configured, or its cache predates the pin), the hook runs `install-node.sh` itself before the dependency install — one `nodejs.org` download per fresh container — so the session still comes up on the pinned Node. The cached Setup script stays the faster path: it does the download once per environment instead of once per session.
 
 ---
@@ -77,6 +79,18 @@ CLI + mirror + compose images, CodeGraph, Headroom + the default MCP pair, gitle
 then runs the same script **without** the flag in the background — those steps again (fast: each
 is idempotent and already at its pin), then the stack, fully live. See
 [Session startup — the live playground](#session-startup--the-live-playground).
+
+**Both repos in one environment.** The Setup script runs once for the environment, so name each repo's
+script by its path — the clones sit side by side (in this setup `/home/user/clinozy-be` and
+`/home/user/clinozy-fe`):
+
+```bash
+bash /home/user/clinozy-be/tooling/setup/agent/bootstrap.sh --install-only
+bash /home/user/clinozy-fe/agent-os/cloud-environment/install.sh
+```
+
+clinozy-fe's script also builds its codegraph index; the first build takes about 2–3 minutes, later
+runs only sync it.
 
 On the first session the cached Node 24 is already on disk, [`session-start.sh`](../../agent-os/hooks/session-start.sh) switches `PATH` to `/opt/node24`, and runs `pnpm install`. Do **not** start Postgres / Redis here — setup-script processes do not persist; start them per session (below).
 
