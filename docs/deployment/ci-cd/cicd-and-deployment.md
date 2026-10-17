@@ -232,7 +232,7 @@ Steps in each deploy workflow:
 >
 > **Railway token auth:** Deploy CI uses the Railway **project token** from the GitHub Environment's `RAILWAY_TOKEN`. Project tokens are scoped to one Railway environment and must be sent to GraphQL as `Project-Access-Token`, not `Authorization: Bearer`. Account/workspace tokens may be supplied as `RAILWAY_API_TOKEN` / `RAILWAY_GRAPHQL_TOKEN` for local diagnostics; those use Bearer auth and can usually poll deployment status directly.
 
-**GHCR images (CI):** On push to **`main`**, the reusable [reusable-docker-build-trivy.yml](../../../.github/workflows/reusable-docker-build-trivy.yml) job builds API + worker images, runs Trivy (CRITICAL/HIGH, `exit-code: 1`), then pushes to GHCR. PRs build and scan only (no push).
+**GHCR images (CI):** On push to **`main`**, the reusable [reusable-docker-build-trivy.yml](../../../.github/workflows/reusable-docker-build-trivy.yml) job builds API + worker images, runs Trivy (CRITICAL/HIGH, `exit-code: 1`), then pushes to GHCR. PRs build and scan only (no push). The images' `apk upgrade` layer is rebuilt once per UTC day (`SECURITY_PATCH_EPOCH` is the day), so later builds that day reuse it and every layer after it; Trivy still scans every build. When Trivy flags a fix published since that day's first build, dispatch post-merge CI with `fresh_security_patches: true` (`gh workflow run post-merge-ci.yml -f fresh_security_patches=true`), which passes the run id instead.
 
 **Railway pull access:** Each Railway service must be allowed to pull from `ghcr.io` (package visibility + deploy token or linked registry). Images are public within the organization or use Railway’s registry credentials for private GHCR packages.
 

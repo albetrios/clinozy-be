@@ -11,6 +11,13 @@ on:
         description: Protected branch that received the merge (main)
         required: true
         type: string
+      fresh_security_patches:
+        description: >-
+          Re-run the apk upgrade layer now (a fresh security patch epoch) instead of reusing
+          today's — for a fix published today that Trivy already flags.
+        required: false
+        type: boolean
+        default: false
     outputs:
       api_image:
         description: GHCR API image reference pushed for this commit
@@ -31,6 +38,11 @@ on:
         type: choice
         options:
           - main
+      fresh_security_patches:
+        description: Re-run the apk upgrade layer now instead of reusing today's
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -108,6 +120,25 @@ jobs:
       - name: Verify Dockerfile.worker sync
         run: node tooling/ci/check-dockerfile-sync.mjs
 
+      # One security patch epoch per UTC day: the apk upgrade layer (and every layer after it) is
+      # rebuilt on the first build of the day and reused after that, instead of on every build.
+      # Trivy still scans every build; fresh_security_patches forces a new epoch when a fix
+      # published today is already flagged.
+      - name: Security patch epoch (one per UTC day)
+        id: patch_epoch
+        env:
+          FRESH: ${{ inputs.fresh_security_patches }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ "${FRESH}" = "true" ]; then
+            epoch="run-${RUN_ID}"
+          else
+            epoch="$(date -u +%Y-%m-%d)"
+          fi
+          echo "epoch=${epoch}" >> "$GITHUB_OUTPUT"
+          echo "Security patch epoch: ${epoch}"
+
       - name: Build API Docker image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
@@ -116,7 +147,7 @@ jobs:
           load: true
           tags: ${{ env.DOCKER_LOCAL_API_TAG }}:ci
           build-args: |
-            SECURITY_PATCH_EPOCH=${{ github.run_id }}
+            SECURITY_PATCH_EPOCH=${{ steps.patch_epoch.outputs.epoch }}
             GENERATE_MCP_DOCS=true
             BUILD_REVISION=${{ env.MERGE_COMMIT_SHA }}
             IMAGE_SOURCE=${{ github.server_url }}/${{ github.repository }}
@@ -131,7 +162,7 @@ jobs:
           load: true
           tags: ${{ env.WORKER_IMAGE }}:ci
           build-args: |
-            SECURITY_PATCH_EPOCH=${{ github.run_id }}
+            SECURITY_PATCH_EPOCH=${{ steps.patch_epoch.outputs.epoch }}
             BUILD_REVISION=${{ env.MERGE_COMMIT_SHA }}
             IMAGE_SOURCE=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha,scope=${{ env.GHCR_CACHE_SCOPE_WORKER }}
@@ -160,6 +191,13 @@ jobs:
           version: v0.69.2
           scanners: vuln
           skip-files: /app/package.json,/app/pnpm-lock.yaml
+
+      - name: Point at a fresh patch epoch when Trivy fails
+        if: failure()
+        env:
+          EPOCH: ${{ steps.patch_epoch.outputs.epoch }}
+        run: |
+          echo "::error title=Trivy found a fixable HIGH/CRITICAL vulnerability::The apk layer was built for patch epoch ${EPOCH}. If the fix was published since, rebuild with a fresh epoch: dispatch post-merge-ci.yml with fresh_security_patches=true. Otherwise update the base image or the dependency."
 
       - name: Scan API image with Trivy (SARIF)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

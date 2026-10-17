@@ -70,7 +70,9 @@ ENV NODE_ENV=production
 # layer cache, an unchanged RUN line is reused forever, so patches published
 # AFTER the layer was first cached (e.g. openssl CVE-2026-14456, fixed upstream
 # hours before alpine shipped 3.5.8-r0) never install and Trivy keeps failing.
-# The workflow passes the run id, so every build re-runs the upgrade (~seconds).
+# The workflow passes the UTC day, so the first build of each day re-runs the upgrade and
+# the rest of the day reuses it (every later layer stays cached too); its
+# fresh_security_patches input passes the run id instead, for a fix published today.
 ARG SECURITY_PATCH_EPOCH=0
 RUN echo "security-patch-epoch: ${SECURITY_PATCH_EPOCH}" && apk update && apk upgrade --no-cache
 

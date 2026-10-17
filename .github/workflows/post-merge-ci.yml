@@ -69,6 +69,11 @@ on:
         required: false
         type: boolean
         default: false
+      fresh_security_patches:
+        description: Rebuild the image's apk upgrade layer now instead of reusing today's
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: post-merge-ci-${{ github.ref }}
@@ -190,6 +195,7 @@ jobs:
     with:
       merge_commit_sha: ${{ github.sha }}
       target_branch: main
+      fresh_security_patches: ${{ inputs.fresh_security_patches == true }}
 
   matrix-tests:
     name: Matrix Tests
