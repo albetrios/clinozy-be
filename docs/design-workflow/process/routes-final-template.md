@@ -60,6 +60,11 @@ each one is.
 The file starts with a title (`# <Product> API — final routes, sub-domain by sub-domain`), a line on where
 it started (branch, commit) and how to read its tables, then the parts below.
 
+Once every sub-domain in scope is final, a line under the title says so —
+`**Route review final — <date>.** Every sub-domain is confirmed; the frontend may kick off on these routes.`
+— the frontend's signal (under `--both`) that it can start building without waiting for the
+backend's plan approval. Reopening a sub-domain removes the line until it is final again.
+
 ### File header — legend
 
 How to read the tables: paths are under `/api/v1/app`; `{x_id}` is a public id; **Gate** is the

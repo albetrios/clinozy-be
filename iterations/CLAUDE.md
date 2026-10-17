@@ -21,7 +21,7 @@ The folder: `README.md` (field table + History, written by the commands — exce
 7. **Close** — the gates, `/be-pre-merge-review` (review only), `plans/acceptance.md` filled, the `AS-BUILT.md` summary, the frontend's route map (`plans/frontend-route-map.md` — sections 1, 2 and 4 by hand, section 3 by `pnpm iteration:frontend-map <iteration>`) → `pnpm iteration:status <iteration> done`.
 8. **Freeze** — resolve overlaps with iterations merged meanwhile → `pnpm iteration:status <iteration> frozen` in the last commit → the user raises the PR.
 
-Under `--both` there is **one shared plan**: this repository's `plans/` own the contract (routes-final, routes, tables, background work); the frontend's plan links to them and adds only its screens.
+Under `--both` there is **one shared plan**: this repository's `plans/` own the contract (routes-final, routes, tables, background work); the frontend's plan links to them and adds only its screens. The frontend kicks off as soon as `plans/routes-final.md` carries its **Route review final** line (every sub-domain confirmed), without waiting for this plan's approval.
 
 A small `fix` can run **lite** (`pnpm iteration:new fix <topic> --lite`, README Process `lite`): be-iteration-planning plans it in one step — `KICKOFF.md`, `plans/decisions.md` and `plans/acceptance.md`, one stop for the user's go — and be-kickoff-iteration moves it `planning → implementing → done → frozen`, with no `ready-for-approval` or `approved`.
 

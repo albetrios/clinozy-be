@@ -519,6 +519,12 @@ Write `plans/routes-final.md` from the template (Route review above), in the sub
 
 Continue to Step 6 only when every sub-domain in scope is final. **Stop after each sub-domain.**
 
+When the last sub-domain turns final, put the approval line under the file's title —
+`**Route review final — <date>.** …` (template › File header) — and say so in the step review:
+under `--both` it is the frontend's signal to kick off on these routes now, without waiting for
+this plan's approval. A later change reopens its sub-domain, removes the line until it is final
+again, and is a decision row the frontend's iteration is told about.
+
 ### Step 6 — Write KICKOFF.md and plans/, then stop
 
 Write every `plans/requirements/*.md` (dotted identifiers; `data.md` links to the per-table
