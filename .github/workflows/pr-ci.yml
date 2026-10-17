@@ -708,6 +708,29 @@ jobs:
           FAST_CHECK_NUM_RUNS: 50
         run: pnpm test:property
 
+  early-failure-alert:
+    name: Early failure alert
+    # Advisory, NOT in the Quality gate: starts with the run, watches its lanes, and the moment one
+    # fails posts a red `Early failure alert` commit status on the PR head (the lane's name and a
+    # link). Every lane still runs to the end, and `Quality gate` still decides the merge
+    # (tooling/ci/early-failure-alert.mjs). Posts nothing when every lane passes.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: tooling/ci
+      - name: Watch the lanes; post a status on the first failure
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node tooling/ci/early-failure-alert.mjs
+
   quality-gate:
     name: Quality gate
     # ── Single aggregate required check ──────────────────────────────────────

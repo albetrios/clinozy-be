@@ -84,7 +84,7 @@ Post-merge Docker (Trivy + GHCR), SBOM, API docs, deploy, and release automation
 
 ### Advisory PR jobs (run but not in the aggregate)
 
-These run on every non-docs-only PR and display on the PR, but are **not** in `quality-gate.needs`, so they do not block merge: `agent-os evals` (internal tooling gate, only runs on `agent-os/**` changes). Promote one to blocking by adding its job id to `quality-gate.needs` **and** to `REQUIRED_LANES` in [`pr-quality-gate.policy.unit.test.ts`](../../../src/tests/unit/ci/pr-quality-gate.policy.unit.test.ts).
+These run on the PR and display on it, but are **not** in `quality-gate.needs`, so they do not block merge: `Early failure alert` — it starts with the run, watches the lanes, and the moment one fails posts a red `Early failure alert` commit status naming the lane, while every lane still runs to the end and `Quality gate` still decides ([`early-failure-alert.mjs`](../../../tooling/ci/early-failure-alert.mjs); it needs `actions: read` + `statuses: write`). (`agent-os evals` is no longer advisory: `agent-os-gate` is in the aggregate.) Promote one to blocking by adding its job id to `quality-gate.needs` **and** to `REQUIRED_LANES` in [`pr-quality-gate.policy.unit.test.ts`](../../../src/tests/unit/ci/pr-quality-gate.policy.unit.test.ts).
 
 ### Skipped PR CI jobs on docs-only pull requests
 
