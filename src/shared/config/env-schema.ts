@@ -840,18 +840,23 @@ const envSchemaBase = z.object({
    */
   WORKER_QUEUE_FAMILIES: z.string().min(1).default('all'),
   /**
-   * Postgres pool size per Node process (node-postgres `max`). Not the cluster-wide total. Default 30.
+   * Postgres pool size per Node process (node-postgres `max`). Not the cluster-wide total. Default 70.
    *
    * Each HTTP request runs in its own RLS transaction holding one pooled connection for its
    * duration, so the pool size is the per-process in-flight DB concurrency ceiling. The default
-   * was raised 10 → 20 to lift that ceiling under burst, then 20 → 30 so the monolithic worker
-   * at concurrency 1 (peak demand 29) boots: 30 is also the largest pool three processes (2 API
-   * + 1 worker) fit on a 100-connection Postgres with 10 reserved ((100 − 10) / 3). The cluster-wide budget
-   * `(api + worker replicas) × DATABASE_POOL_MAX ≤ max_connections − reserved` is still enforced
-   * fail-closed at boot by `assertPostgresConnectionBudget`. Raise further on larger Postgres
-   * instances; see docs/deployment/runbooks/resource-limits.md.
+   * is the monolithic worker's demand with burst headroom: with every optional queue on, the 36
+   * Postgres-using queues peak at 54 connections at the default concurrency, 68 with the 25%
+   * burst margin, and `assertPostgresConnectionBudget` refuses to boot a worker whose pool is
+   * below its demand. The default used to be 30 (sized for a 100-connection Postgres), below
+   * that demand — a production worker configured at the old value restart-looped on 2026-10-13
+   * — so it now equals the committed template value (`.env.example`), and
+   * `worker-pool-budget.policy.unit.test.ts` fails when the registry outgrows it. The
+   * cluster-wide budget `(api + worker replicas) × (DATABASE_POOL_MAX +
+   * DATABASE_MAINTENANCE_POOL_MAX) ≤ max_connections − reserved` is still enforced fail-closed at
+   * boot (3 processes × 80 = 240 against Neon's 450); see
+   * docs/deployment/runbooks/resource-limits.md.
    */
-  DATABASE_POOL_MAX: z.coerce.number().int().min(1).default(30),
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).default(70),
   /**
    * Pool size per process for the maintenance role's pool (`DATABASE_MAINTENANCE_URL`) — mail
    * outbox and ledger workers, retention purges, system audit inserts. Its checkouts are short, so

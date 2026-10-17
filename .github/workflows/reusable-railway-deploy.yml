@@ -1,19 +1,29 @@
 # Reusable Railway deploy (called from post-merge-ci.yml) or manual workflow_dispatch.
-# Gate sequence: migrate → seed reference data → deploy API → API /readyz → deploy worker.
-# When the worker deploy reaches Railway terminal SUCCESS the environment is
-# fully live for traffic.
+# Gate sequence: migrate → seed reference data → deploy API (terminal SUCCESS +
+# boot verified) → API /readyz + surface probe → deploy worker (terminal
+# SUCCESS + boot verified). When the worker's boot is verified the environment
+# is fully live for traffic.
 #
-# Worker deploy gating: the worker service is internal-only on Railway (no
-# public domain) and DATABASE_URL / REDIS_URL in the GitHub Environment point
-# at `*.railway.internal`, which is reachable only from other Railway services
-# — not from the GitHub Actions runner. We therefore cannot probe worker
-# `/readyz` over public HTTP, and we cannot dial Postgres/Redis from the
-# runner either. Instead we rely on `pnpm tool:railway-deploy-image` polling
-# Railway until the deployment reaches a terminal status. Railway only
-# reports SUCCESS once the container HEALTHCHECK in `Dockerfile.worker`
-# (127.0.0.1:9090/readyz inside the pod) starts returning 200, which covers
-# process-up + dependency probes + queue heartbeats. DLQ growth on a stalled
-# worker is caught by the `dlq-depth` Sentry alert.
+# Railway terminal SUCCESS is NOT a health gate. Railway flips a deployment to
+# SUCCESS as soon as the container starts: it does not run the Dockerfile
+# HEALTHCHECK and it does not wait for the process to boot. The API and the
+# worker both run their boot guards (Postgres connection budget, RLS role, TLS)
+# BEFORE they listen — the worker's /livez server starts only after them — so a
+# guard failure exits with code 1 a few seconds after SUCCESS and restart-loops
+# behind a green deploy (production, 2026-10-13 → 2026-10-17: five worker
+# releases and one API release went "fully live" this way after
+# DATABASE_POOL_MAX was lowered under the worker's demand). Every deploy
+# therefore ends with BOOT VERIFICATION inside `pnpm tool:railway-deploy-image`:
+# after SUCCESS it watches the deployment's own container logs and status for a
+# 90 s window and fails the job when a crash marker ("Worker failed to start",
+# "Server failed to start", "uncaughtException") appears, when the status
+# leaves SUCCESS, or when the ready marker ("Worker started" / "Server
+# listening") never shows. The worker service is internal-only on Railway (no
+# public domain) and DATABASE_URL / REDIS_URL point at `*.railway.internal`,
+# reachable only from other Railway services — so its own logs are the one
+# signal the runner can observe; the API gets the same check so both gates are
+# identical, on top of the public /readyz probe. DLQ growth on a stalled worker
+# is caught by the `dlq-depth` Sentry alert.
 #
 # API and worker are deployed by `pnpm tool:railway-deploy-image`
 # (tooling/setup/railway/deploy-image.ts), which goes straight to the Railway
@@ -21,6 +31,8 @@
 #   1. serviceInstanceUpdate { source: { image: <ghcr-ref> } }
 #   2. serviceInstanceDeployV2(serviceId, environmentId)
 #   3. poll deployment(id) until terminal status (SUCCESS / FAILED / CRASHED)
+#   4. boot verification: poll deployment(id) + deploymentLogs(id) for the
+#      boot window; fail on a crash marker / non-SUCCESS, require the ready marker
 #
 # This is the only reliable way to deploy a freshly built GHCR image. The
 # Railway CLI's deploy paths are unsuitable: the in-place refresh command
@@ -631,16 +643,20 @@ jobs:
       - name: Deploy API and worker to Railway
         id: api_health
         # API and worker share `deploy_service_from_image` so retries and
-        # deployment behaviour stay identical. Health gating differs:
-        #   - API: public Railway domain, so we curl `/readyz` from the runner.
+        # deployment behaviour stay identical. Both deploys end with the tool's
+        # boot verification (see the header): Railway's terminal SUCCESS only
+        # means the container started, so after SUCCESS the tool watches the
+        # deployment's container logs and status for 90 s — it fails on the
+        # service's crash marker or a status change, and requires the service's
+        # ready marker. The markers are the exact `msg` values of src/server.ts
+        # ("Server listening" / "Server failed to start") and src/worker.ts
+        # ("Worker started" / "Worker failed to start"); both processes log
+        # "uncaughtException" before a fatal exit. Beyond that the gates differ:
+        #   - API: public Railway domain, so we also curl `/readyz` from the
+        #     runner and probe the HTTP surface.
         #   - Worker: no public domain, and Postgres/Redis sit on the Railway
         #     private network (`*.railway.internal`) which is unreachable from
-        #     the GitHub runner. Worker readiness is therefore gated only by
-        #     the Railway deployment terminal status — Railway flips a
-        #     deployment to SUCCESS once the in-pod container HEALTHCHECK in
-        #     `Dockerfile.worker` (127.0.0.1:9090/readyz) starts returning 200,
-        #     which already covers process up + dependency probes + queue
-        #     heartbeats.
+        #     the GitHub runner — its own container logs are the only signal.
         env:
           API_IMAGE: ${{ steps.ghcr_images.outputs.api_image }}
           WORKER_IMAGE: ${{ steps.ghcr_images.outputs.worker_image }}
@@ -663,12 +679,17 @@ jobs:
             local service="$1"
             local image="$2"
             local label="$3"
+            local boot_ready_marker="$4"
+            local boot_crash_marker="$5"
             railway variable set --service "$service" --skip-deploys "RAILWAY_GIT_COMMIT_SHA=${RAILWAY_GIT_COMMIT_SHA}"
             echo "Deploying ${label} service from GHCR image: ${image}"
             pnpm tool:railway-deploy-image \
               --service "$service" \
               --image "$image" \
-              --label "$label"
+              --label "$label" \
+              --boot-ready-marker "$boot_ready_marker" \
+              --boot-crash-marker "$boot_crash_marker" \
+              --boot-crash-marker "uncaughtException"
           }
 
           # On a readyz timeout the runner only ever sees the Railway edge (a 502
@@ -732,14 +753,14 @@ jobs:
             exit 1
           fi
 
-          deploy_service_from_image "$RAILWAY_SERVICE_ID" "$API_IMAGE" "api"
+          deploy_service_from_image "$RAILWAY_SERVICE_ID" "$API_IMAGE" "api" "Server listening" "Server failed to start"
           api_base_url="$(resolve_service_base_url "$RAILWAY_SERVICE_ID")"
           echo "api_base_url=${api_base_url}" >> "$GITHUB_OUTPUT"
           wait_for_service_health "$api_base_url" "API" "/tmp/api-health.json" "$RAILWAY_SERVICE_ID"
           verify_api_surface "$api_base_url"
 
-          deploy_service_from_image "$RAILWAY_WORKER_SERVICE_ID" "$WORKER_IMAGE" "worker"
-          echo "Worker deployment reached terminal SUCCESS (Railway only flips to SUCCESS once the in-pod HEALTHCHECK passes)."
+          deploy_service_from_image "$RAILWAY_WORKER_SERVICE_ID" "$WORKER_IMAGE" "worker" "Worker started" "Worker failed to start"
+          echo "Worker deployment reached terminal SUCCESS and its boot was verified (\"Worker started\" logged, no crash marker, status held SUCCESS through the boot window)."
 
       - name: Rotate production live-image tags (:current / :previous)
         if: success() && needs.resolve-environment.outputs.environment == 'production'
@@ -777,4 +798,4 @@ jobs:
           API_BASE_URL: ${{ steps.api_health.outputs.api_base_url }}
         run: |
           set -euo pipefail
-          echo "::notice title=Fully live::${ENVIRONMENT} is fully live at ${API_BASE_URL} (migrate, API /health, and worker terminal SUCCESS passed)."
+          echo "::notice title=Fully live::${ENVIRONMENT} is fully live at ${API_BASE_URL} (migrate, API /readyz, and API + worker boot verification passed)."

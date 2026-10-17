@@ -38,7 +38,7 @@ The worker process logs a warning when **RSS** exceeds **512 MiB** ([`src/infras
 
 ### Postgres connection budget
 
-Each **API** and **worker** process opens **two** node-postgres pools: the primary one (`DATABASE_POOL_MAX`, default **30**) and the maintenance role's (`DATABASE_MAINTENANCE_POOL_MAX`, default **10** — mail outbox and ledger workers, retention purges, system audit inserts, all short checkouts). Size deployments so:
+Each **API** and **worker** process opens **two** node-postgres pools: the primary one (`DATABASE_POOL_MAX`, default **70**) and the maintenance role's (`DATABASE_MAINTENANCE_POOL_MAX`, default **10** — mail outbox and ledger workers, retention purges, system audit inserts, all short checkouts). Size deployments so:
 
 ```text
 DEPLOYMENT_TOTAL_REPLICA_COUNT × (DATABASE_POOL_MAX + DATABASE_MAINTENANCE_POOL_MAX) ≤ max_connections − POSTGRES_RESERVED_CONNECTIONS
@@ -46,12 +46,14 @@ DEPLOYMENT_TOTAL_REPLICA_COUNT × (DATABASE_POOL_MAX + DATABASE_MAINTENANCE_POOL
 
 If you set split counts instead of `DEPLOYMENT_TOTAL_REPLICA_COUNT`, the API and worker counts are added together before applying the two pools. The budget once counted only the primary pool, so a process could hold up to twice what it checked.
 
+Worked example at the defaults — production (Neon, `max_connections` 450, `POSTGRES_MAX_CONNECTIONS` unset so the live value is read), 2 API + 1 worker: `3 × (70 + 10) = 240 ≤ 450 − 10 = 440`. Do **not** override `POSTGRES_MAX_CONNECTIONS` to a number smaller than the server's real `max_connections` (the 2026-10-13 incident set it to 100) — the guard then refuses a pool the database would actually accept.
+
 | Variable                          | Meaning                                                         | Default                                      |
 | --------------------------------- | --------------------------------------------------------------- | -------------------------------------------- |
 | `DEPLOYMENT_TOTAL_REPLICA_COUNT`  | Shorthand: `api_replicas + worker_replicas`                     | required in production (or use split counts) |
 | `DEPLOYMENT_API_REPLICA_COUNT`    | API service replica count                                       | optional split count                         |
 | `DEPLOYMENT_WORKER_REPLICA_COUNT` | Worker service replica count                                    | optional split count                         |
-| `DATABASE_POOL_MAX`               | primary pool `max`, per process                                 | `30`                                         |
+| `DATABASE_POOL_MAX`               | primary pool `max`, per process                                 | `70`                                         |
 | `DATABASE_MAINTENANCE_POOL_MAX`   | maintenance-role pool `max`, per process                        | `10`                                         |
 | `POSTGRES_RESERVED_CONNECTIONS`   | Admin, migrations, monitoring headroom                          | `10`                                         |
 | `POSTGRES_MAX_CONNECTIONS`        | Optional override when `SHOW max_connections` is wrong (pooler) | query Postgres                               |
@@ -59,6 +61,8 @@ If you set split counts instead of `DEPLOYMENT_TOTAL_REPLICA_COUNT`, the API and
 At startup, API and worker processes call `assertPostgresConnectionBudget()` ([`assert-connection-budget.ts`](../../../src/infrastructure/database/safety/assert-connection-budget.ts)): when `DATABASE_CONNECTION_BUDGET_ENFORCED=true` (the default when deployed — production; a local `development` laptop defaults it off) the check **fails fast** without deployment counts. With it off, the process defaults to **1 API + 1 worker** when counts are unset.
 
 The pre-deploy CI step (`pnpm validate:github-env-runtime` in [`reusable-railway-deploy.yml`](../../../.github/workflows/reusable-railway-deploy.yml)) fails the workflow when schema-required keys are missing from the GitHub Environment, and a missing replica count is caught at boot by `assertPostgresConnectionBudget()` (fails fast when `DATABASE_CONNECTION_BUDGET_ENFORCED=true`) — so a misconfigured environment surfaces before or at container start, never as silent pool pressure.
+
+**The deploy fails on that boot failure.** A budget guard that throws logs `Worker failed to start` (or `Server failed to start`) with the `Postgres connection budget exceeded` message and exits with code 1; Railway then restart-loops the container while the deployment still reads **SUCCESS** — Railway sets SUCCESS when the container starts and runs no `HEALTHCHECK`, and the worker's `/livez` server starts only after the guards. On 2026-10-13 production lowered `DATABASE_POOL_MAX` to 20 (and overrode `POSTGRES_MAX_CONNECTIONS` to 100) under the worker's demand; five worker releases and one API release were then reported "fully live" while crash-looping. Since then the deploy's **boot verification** (`pnpm tool:railway-deploy-image` in [`reusable-railway-deploy.yml`](../../../.github/workflows/reusable-railway-deploy.yml)) watches each deployment's container logs for 90 s after SUCCESS and fails the job on that crash marker, on the status leaving SUCCESS, or when `Worker started` / `Server listening` never appears — the failing guard's message is printed in the job's "Railway container logs" group. Fix the budget (raise `DATABASE_POOL_MAX`, remove a wrong `POSTGRES_MAX_CONNECTIONS` override, or split the worker) and redeploy; the previous deployment keeps serving meanwhile.
 
 ### Worker Postgres pool demand (per process)
 
@@ -111,7 +115,7 @@ registry outgrows the template pool, or the template budget no longer fits the C
 
 | Mode                                                 | Trigger                                | Enforcement                                                                                                                                                                                              |
 | ---------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Monolithic**                                       | `WORKER_QUEUE_FAMILIES` unset or `all` | **Fails fast** at startup when peak Postgres demand exceeds `DATABASE_POOL_MAX` (default 54 > pool 30), and warns (`database.connection_budget.worker_demand_no_burst_headroom`) when demand fits but demand + 25% burst headroom does not. Raise `DATABASE_POOL_MAX` on the worker service (90 covers the default with headroom) or split services. |
+| **Monolithic**                                       | `WORKER_QUEUE_FAMILIES` unset or `all` | **Fails fast** at startup when peak Postgres demand exceeds `DATABASE_POOL_MAX` (peak demand 54 with every optional queue on at the default concurrency; a pool lowered to 30 or 20 fails here — the 2026-10-13 production incident), and warns (`database.connection_budget.worker_demand_no_burst_headroom`) when demand fits but demand + 25% burst headroom (68) does not. The default pool of **70** covers both; raise `DATABASE_POOL_MAX` on the worker service if the registry grows, or split services. |
 | **Split** (e.g. `WORKER_QUEUE_FAMILIES=mail,notify`) | Explicit subset                        | **Fails fast** at startup when the subset's computed Postgres demand exceeds `DATABASE_POOL_MAX`; warns on missing burst headroom the same way. |
 
 #### Example Railway split (same image, different env per service)

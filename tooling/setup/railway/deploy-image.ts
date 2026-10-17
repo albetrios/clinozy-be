@@ -31,7 +31,23 @@
  *      allows deployment reads. Project tokens can trigger the deploy but may
  *      not be allowed to read deployments; in that case this tool skips the
  *      poll and the workflow's API / worker health checks remain the deploy
- *      gate.
+ *      gate — unless boot verification (step 5) was requested, which then
+ *      fails because a gate that cannot observe the container must not pass.
+ *   5. Boot verification (when `--boot-ready-marker` is set). Railway flips a
+ *      deployment to SUCCESS as soon as the container STARTS — it does not run
+ *      the Dockerfile HEALTHCHECK and it does not wait for the process to
+ *      finish booting. A process that fails a boot guard (connection budget,
+ *      RLS role, TLS) exits with code 1 a few seconds later and restart-loops
+ *      while the deployment still reads SUCCESS (production, 2026-10-13 →
+ *      2026-10-17: five worker releases and one API release went "fully live"
+ *      this way). So after SUCCESS this tool keeps watching the deployment's
+ *      own container logs (`deploymentLogs`) and status for a window
+ *      (`--boot-window-seconds`): it fails as soon as a crash marker
+ *      (`--boot-crash-marker`, e.g. "Worker failed to start") appears or the
+ *      status leaves SUCCESS, and at the end of the window it fails unless the
+ *      ready marker (e.g. "Worker started") was logged. The window runs to its
+ *      end even after the ready marker, so a process that boots and then dies
+ *      is caught too.
  *
  * Inputs (all CLI flags):
  *   --service <id>                Railway service id (required).
@@ -50,6 +66,17 @@
  *   --skip-wait                   Fire-and-forget mode for diagnostics; the
  *                                 workflow should NEVER pass this so deploy
  *                                 failures actually fail the job.
+ *   --boot-ready-marker <text>    Log line the process writes once it has
+ *                                 finished booting ("Server listening" /
+ *                                 "Worker started"). Turns on boot
+ *                                 verification after SUCCESS; the workflow
+ *                                 ALWAYS passes it for both services.
+ *   --boot-crash-marker <text>    Log line that proves the process died during
+ *                                 or after boot ("Worker failed to start",
+ *                                 "uncaughtException"). Repeatable.
+ *   --boot-window-seconds <n>     How long to watch the container after
+ *                                 SUCCESS (default 90; boot takes seconds, a
+ *                                 restart loop shows within the first minute).
  *
  * Environment:
  *   RAILWAY_TOKEN                 Railway project token. Inherited from the
@@ -62,8 +89,11 @@
  *                                 --environment-name.
  *
  * Exit codes:
- *   0   Deployment reached SUCCESS within the timeout (or --skip-wait was set).
- *   1   Any validation, GraphQL, polling, or terminal-failure error.
+ *   0   Deployment reached SUCCESS within the timeout (or --skip-wait was set)
+ *       and, when boot verification is on, the container logged the ready
+ *       marker and no crash marker within the boot window.
+ *   1   Any validation, GraphQL, polling, terminal-failure or boot-verification
+ *       error.
  */
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -95,6 +125,23 @@ interface RailwayDeployImageOptions {
   timeoutSeconds: number;
   pollIntervalSeconds: number;
   skipWait: boolean;
+  bootReadyMarker: string | null;
+  bootCrashMarkers: string[];
+  bootWindowSeconds: number;
+}
+
+interface RailwayDeploymentLogLine {
+  message: string;
+  severity: string | null;
+  timestamp: string;
+}
+
+/** Outcome of scanning a deployment's container logs for the boot markers. */
+export interface BootLogVerdict {
+  /** The ready marker was logged at least once. */
+  ready: boolean;
+  /** The first log line matching a crash marker, or null when none matched. */
+  crashLine: string | null;
 }
 
 interface RailwayGraphQLResult<T> {
@@ -516,6 +563,170 @@ async function fetchDeployment({
   return result.deployment;
 }
 
+const DEPLOYMENT_LOG_FETCH_LIMIT = 500;
+
+/** Fetches the last {@link DEPLOYMENT_LOG_FETCH_LIMIT} container log lines of a deployment. */
+async function fetchDeploymentLogs({
+  token,
+  authMode,
+  deploymentId,
+}: {
+  token: string;
+  authMode: RailwayAuthMode;
+  deploymentId: string;
+}): Promise<RailwayDeploymentLogLine[]> {
+  const result = await railwayGraphQL<{ deploymentLogs: RailwayDeploymentLogLine[] | null }>({
+    token,
+    authMode,
+    query: `
+      query($deploymentId: String!, $limit: Int!) {
+        deploymentLogs(deploymentId: $deploymentId, limit: $limit) {
+          message
+          severity
+          timestamp
+        }
+      }
+    `,
+    variables: { deploymentId, limit: DEPLOYMENT_LOG_FETCH_LIMIT },
+  });
+  return result.deploymentLogs ?? [];
+}
+
+function printDeploymentLogs({
+  lines,
+  deploymentId,
+  label,
+}: {
+  lines: RailwayDeploymentLogLine[];
+  deploymentId: string;
+  label: string;
+}): void {
+  console.log(
+    `::group::Railway container logs — ${label} deployment ${deploymentId} (last ${lines.length} lines)`,
+  );
+  for (const line of lines) {
+    console.log(`${line.timestamp} [${line.severity ?? 'info'}] ${line.message}`);
+  }
+  console.log('::endgroup::');
+}
+
+/**
+ * Scans a deployment's container log lines for the boot markers.
+ *
+ * @remarks
+ * - **Algorithm:** plain substring match on each line's message; `ready` is true when any line
+ *   contains the ready marker, `crashLine` is the first line containing any crash marker. Both are
+ *   reported — a restart loop logs the ready marker AND the crash marker, and the crash wins.
+ * - **Why substrings:** the processes log JSON (pino), so the marker is the `msg` value; matching
+ *   the whole line keeps the tool independent of the log shape.
+ */
+export function evaluateBootLogs({
+  lines,
+  readyMarker,
+  crashMarkers,
+}: {
+  lines: ReadonlyArray<Pick<RailwayDeploymentLogLine, 'message'>>;
+  readyMarker: string;
+  crashMarkers: readonly string[];
+}): BootLogVerdict {
+  let ready = false;
+  let crashLine: string | null = null;
+  for (const line of lines) {
+    if (!ready && line.message.includes(readyMarker)) {
+      ready = true;
+    }
+    if (crashLine === null && crashMarkers.some((marker) => line.message.includes(marker))) {
+      crashLine = line.message;
+    }
+  }
+  return { ready, crashLine };
+}
+
+/**
+ * Watches a SUCCESS deployment's container for the boot window and fails when it did not boot.
+ *
+ * @remarks
+ * - **Why:** Railway marks a deployment SUCCESS when the container starts, not when the process
+ *   has booted; a boot-guard failure exits a few seconds later and restart-loops behind a green
+ *   deploy. The worker has no public endpoint the runner could probe, so its own logs are the
+ *   only observable signal; the API gets the same treatment so the two gates stay identical.
+ * - **Algorithm:** every poll interval fetch `deployment(id).status` and the last container log
+ *   lines; throw at once when a crash marker shows or the status leaves SUCCESS; keep watching
+ *   until the window ends (a process that boots and then dies is caught); then throw unless the
+ *   ready marker was seen. Transient fetch errors are logged and retried; authorization errors
+ *   throw, because a gate that cannot observe must not pass.
+ * - **Side effects:** on failure prints the container logs (GitHub Actions group) before throwing.
+ */
+async function verifyDeploymentBoot({
+  token,
+  authMode,
+  deploymentId,
+  label,
+  readyMarker,
+  crashMarkers,
+  windowSeconds,
+  pollIntervalSeconds,
+}: {
+  token: string;
+  authMode: RailwayAuthMode;
+  deploymentId: string;
+  label: string;
+  readyMarker: string;
+  crashMarkers: string[];
+  windowSeconds: number;
+  pollIntervalSeconds: number;
+}): Promise<void> {
+  const deadline = Date.now() + windowSeconds * 1000;
+  let readySeen = false;
+  let readyAnnounced = false;
+  let lines: RailwayDeploymentLogLine[] = [];
+
+  const fail = (reason: string): never => {
+    printDeploymentLogs({ lines, deploymentId, label });
+    throw new Error(`Boot verification failed for ${label} deployment ${deploymentId}: ${reason}`);
+  };
+
+  while (true) {
+    try {
+      const [deployment, fetchedLines] = await Promise.all([
+        fetchDeployment({ token, authMode, deploymentId }),
+        fetchDeploymentLogs({ token, authMode, deploymentId }),
+      ]);
+      lines = fetchedLines;
+      const verdict = evaluateBootLogs({ lines, readyMarker, crashMarkers });
+      if (verdict.crashLine !== null) {
+        fail(`the container logged a crash marker — ${verdict.crashLine}`);
+      }
+      if (deployment.status !== DEPLOYMENT_SUCCESS_STATUS) {
+        fail(`deployment status left SUCCESS → ${deployment.status}`);
+      }
+      readySeen = readySeen || verdict.ready;
+      if (readySeen && !readyAnnounced) {
+        logger.info(`  ${label}: container logged "${readyMarker}"; watching for a restart.`);
+        readyAnnounced = true;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith('Boot verification failed') || isAuthorizationError(message)) {
+        throw error;
+      }
+      logger.warn(`  ${label}: boot verification poll errored (${message}); retrying.`);
+    }
+
+    if (Date.now() >= deadline) {
+      break;
+    }
+    await sleep(Math.min(pollIntervalSeconds * 1000, Math.max(deadline - Date.now(), 0)));
+  }
+
+  if (!readySeen) {
+    fail(`the container never logged "${readyMarker}" within ${windowSeconds}s`);
+  }
+  logger.success(
+    `  ${label}: boot verified — "${readyMarker}" logged, no crash marker, status SUCCESS for ${windowSeconds}s.`,
+  );
+}
+
 /**
  * Best-effort dump of a failed deployment's container logs so the CI job shows
  * the actual boot crash instead of only "ended in non-success status: FAILED"
@@ -539,30 +750,8 @@ async function dumpDeploymentLogsOnFailure({
   label: string;
 }): Promise<void> {
   try {
-    const result = await railwayGraphQL<{
-      deploymentLogs: { message: string; severity: string | null; timestamp: string }[] | null;
-    }>({
-      token,
-      authMode,
-      query: `
-        query($deploymentId: String!, $limit: Int!) {
-          deploymentLogs(deploymentId: $deploymentId, limit: $limit) {
-            message
-            severity
-            timestamp
-          }
-        }
-      `,
-      variables: { deploymentId, limit: 500 },
-    });
-    const lines = result.deploymentLogs ?? [];
-    console.log(
-      `::group::Railway container logs — ${label} deployment ${deploymentId} (last ${lines.length} lines)`,
-    );
-    for (const line of lines) {
-      console.log(`${line.timestamp} [${line.severity ?? 'info'}] ${line.message}`);
-    }
-    console.log('::endgroup::');
+    const lines = await fetchDeploymentLogs({ token, authMode, deploymentId });
+    printDeploymentLogs({ lines, deploymentId, label });
   } catch (error) {
     console.log(
       `Could not fetch Railway container logs for ${label} deployment ${deploymentId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -644,6 +833,9 @@ export function parseOptions(argv: string[] = process.argv.slice(2)): RailwayDep
       'timeout-seconds': { type: 'string' },
       'poll-interval-seconds': { type: 'string' },
       'skip-wait': { type: 'boolean', default: false },
+      'boot-ready-marker': { type: 'string' },
+      'boot-crash-marker': { type: 'string', multiple: true },
+      'boot-window-seconds': { type: 'string' },
     },
     allowPositionals: false,
     strict: true,
@@ -656,9 +848,20 @@ export function parseOptions(argv: string[] = process.argv.slice(2)): RailwayDep
   const label = (values.label ?? serviceId).trim();
   const timeoutSeconds = Number.parseInt(values['timeout-seconds'] ?? '900', 10);
   const pollIntervalSeconds = Number.parseInt(values['poll-interval-seconds'] ?? '5', 10);
+  const bootReadyMarker = (values['boot-ready-marker'] ?? '').trim();
+  const bootCrashMarkers = (values['boot-crash-marker'] ?? [])
+    .map((marker) => marker.trim())
+    .filter((marker) => marker.length > 0);
+  const bootWindowSeconds = Number.parseInt(values['boot-window-seconds'] ?? '90', 10);
 
   if (!serviceId) throw new Error('--service <id> is required.');
   if (!image) throw new Error('--image <ref> is required.');
+  if (bootCrashMarkers.length > 0 && !bootReadyMarker) {
+    throw new Error('--boot-crash-marker requires --boot-ready-marker.');
+  }
+  if (!Number.isFinite(bootWindowSeconds) || bootWindowSeconds <= 0) {
+    throw new Error(`Invalid --boot-window-seconds: ${values['boot-window-seconds']}`);
+  }
   // Project-token auth resolves the scoped environment through
   // `projectToken { environmentId }`, so environment name/id is only required
   // later if this token turns out to be an account/workspace token.
@@ -678,6 +881,9 @@ export function parseOptions(argv: string[] = process.argv.slice(2)): RailwayDep
     timeoutSeconds,
     pollIntervalSeconds,
     skipWait: values['skip-wait'] === true,
+    bootReadyMarker: bootReadyMarker || null,
+    bootCrashMarkers,
+    bootWindowSeconds,
   };
 }
 
@@ -756,6 +962,11 @@ async function main(): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (deploymentContext.authMode === 'project' && isAuthorizationError(message)) {
+      if (options.bootReadyMarker) {
+        throw new Error(
+          `${options.label}: boot verification was requested but the project token cannot read deployment status (${message}). A gate that cannot observe the container must not pass — grant the token deployment reads or set RAILWAY_API_TOKEN.`,
+        );
+      }
       logger.warn(
         `  ${options.label}: project token cannot read deployment status (${message}). Skipping GraphQL polling; workflow health checks remain the deployment gate.`,
       );
@@ -778,6 +989,22 @@ async function main(): Promise<void> {
 
   const accessUrl = finalDeployment.staticUrl ?? finalDeployment.url ?? '(no public url)';
   logger.success(`  ${options.label}: deployment ${deploymentId} SUCCESS (${accessUrl}).`);
+
+  if (options.bootReadyMarker) {
+    logger.info(
+      `  SUCCESS only means the container started. Watching its logs for "${options.bootReadyMarker}" (boot window ${options.bootWindowSeconds}s).`,
+    );
+    await verifyDeploymentBoot({
+      token,
+      authMode: deploymentContext.authMode,
+      deploymentId,
+      label: options.label,
+      readyMarker: options.bootReadyMarker,
+      crashMarkers: options.bootCrashMarkers,
+      windowSeconds: options.bootWindowSeconds,
+      pollIntervalSeconds: options.pollIntervalSeconds,
+    });
+  }
 }
 
 // Run as CLI only when invoked directly (not when imported by tests).
