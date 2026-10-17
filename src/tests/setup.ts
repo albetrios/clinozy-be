@@ -36,6 +36,10 @@ process.env.AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED = 'true';
 // pin it OFF with a plain assignment: the suite tests the production-safe answer (no token), and the
 // suites that cover the echo switch it on per test.
 process.env.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED = 'false';
+// Read-only mode for unpaid clinics is off by default (no clinic can pay in ₹ yet), and most suites
+// build clinics with no subscription — pin it OFF with a plain assignment so a machine that switched
+// it on in `.env.local` does not turn their writes into 403s. The suites that cover it switch it on.
+process.env.BILLING_READ_ONLY_ENFORCED = 'false';
 // Category-B security flags now default to their HARDENED value everywhere; the harness sets the
 // relaxed values explicitly (previously implied by the non-production runtime) so e2e behaves as
 // before: captcha bypass, Referer-fallback origin check, empty webhook allowlist, and unauthenticated

@@ -405,6 +405,7 @@ Environment through `.env.<environment>` + `pnpm github:sync`.
 | `APP_RECORD_PURGE_CRON` | `56 5 * * *` (scheduler default) | `56 5 * * *` | default | default |
 | `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` | `true` | `true` | `true` | `true` — enforced |
 | `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` | `false` | `true` (local QA accepts invitations without the email) | `false` unless QA needs it | `false` — enforced (refused outside `local` / `development`) |
+| `BILLING_READ_ONLY_ENFORCED` | `false` | `false` (set `true` in `.env.local` to work on the grace and read-only screens) | `false` | `false` until clinics can pay in ₹ — then `true`: a clinic without a paid plan turns read-only 14 days after it was created, or `BILLING_DUNNING_GRACE_DAYS` after a lapsed subscription's period (owner decision D3). Not refined — switching it on is a launch decision, not a security posture |
 
 The allowed values and a description of each key are in [reference/env-catalog.md](../../reference/env-catalog.md)
 (`EXTERNAL_SERVICE_VARS` in `env-schema.ts`). Messaging delivery (WhatsApp, Instagram) and the AI

@@ -83,3 +83,43 @@ export interface SubscriptionUpdateData {
    */
   last_stripe_event_created_at?: Date;
 }
+
+/**
+ * A clinic's plan access (owner decision D3, 2026-10-17): `active` with a paid entitlement (or while
+ * `BILLING_READ_ONLY_ENFORCED` is off, and always for a PERSONAL organization), `grace` while an
+ * unpaid clinic's grace runs, `read_only` once it has ended — every write under `/api/v1/app/` is then
+ * refused.
+ */
+export type PlanAccessState = 'active' | 'grace' | 'read_only';
+
+/** A clinic's plan access as the service decides it — produced by `resolvePlanAccess`. */
+export interface PlanAccess {
+  state: PlanAccessState;
+  /** When the grace ends (`grace`) or ended, i.e. when read-only began (`read_only`); `null` when `active`. */
+  graceEndsAt: Date | null;
+}
+
+/** Public `plan_access` body — `active_organization.plan_access` on `GET /auth/me/context`. */
+export interface PlanAccessOutput {
+  state: PlanAccessState;
+  /** ISO 8601 timestamp; `null` when `state` is `active`. */
+  grace_ends_at: string | null;
+}
+
+/**
+ * What a clinic's plan access is decided from — read by
+ * `SubscriptionRepository.findPlanAccessSubject` in one query.
+ */
+export interface PlanAccessSubject {
+  organization: { type: string; created_at: Date };
+  /**
+   * The organization's current subscription: its live (non-terminal) row when it has one, else its
+   * most recent; `null` when it never had one.
+   */
+  subscription: {
+    status: string;
+    current_period_end: Date;
+    /** The subscription plan's prices; `null` only when the plan row is gone. */
+    plan: { price_monthly: string; price_yearly: string } | null;
+  } | null;
+}

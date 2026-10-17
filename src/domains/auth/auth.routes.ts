@@ -228,7 +228,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Switch to personal organization',
         description:
-          "Re-mints the access token scoped to the caller's personal organization (no body — the server resolves it; never 403 for membership — only 403 with reason `mfa_required` when the caller has set their own personal organization to require MFA and this session has not proved a second factor). Returns a new access token; the client swaps its Bearer to it.",
+          "Re-mints the access token scoped to the caller's personal organization (no body — the server resolves it; never 403 for membership — only 403 with reason `mfa_required` when the caller has set their own personal organization to require MFA and this session has not proved a second factor). Returns a new access token; the client swaps its Bearer to it. Also returns the active organization (with its `plan_access`), `my_permissions` and `global_role`, so the client repaints without a follow-up `GET /auth/me/context`.",
         tags: ['Organization'],
       },
     },
@@ -242,7 +242,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Switch active organization',
         description:
-          "Re-mints the access token scoped to the given organization after validating the caller's active membership (403 if not a member). When the organization's security policy requires MFA and this session has not proved a second factor, returns 403 with reason `mfa_required` — complete `POST /auth/me/mfa/verify` (or enroll MFA) and switch again; the re-minted token then carries `amr: ['mfa']`. Returns a new access token; the client swaps its Bearer to it. The organization is also remembered as the caller's login default: the next sign-in opens it while the membership stays active.",
+          "Re-mints the access token scoped to the given organization after validating the caller's active membership (403 if not a member). When the organization's security policy requires MFA and this session has not proved a second factor, returns 403 with reason `mfa_required` — complete `POST /auth/me/mfa/verify` (or enroll MFA) and switch again; the re-minted token then carries `amr: ['mfa']`. Returns a new access token; the client swaps its Bearer to it, together with the active organization (with its `plan_access` — `active`, `grace` or `read_only`), `my_permissions` and `global_role`, so the client repaints without a follow-up `GET /auth/me/context`. The organization is also remembered as the caller's login default: the next sign-in opens it while the membership stays active.",
         tags: ['Organization'],
         body: z.object({
           organization_id: z
@@ -455,7 +455,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Get my session context',
         description:
-          "Returns the authenticated caller's identity, active organization (with type-derived capabilities), their own membership there (`membership_id` — the id of their `GET /app/memberships` row), the roles they hold (`my_role_ids`, and `my_roles` naming each with its `name`, `tone` and `is_system` — the main role first), the permission codes they hold in that organization, and their global role. One authoritative call for rendering a permission-aware UI — identical for personal and team organizations; without an active organization or a live membership `membership_id` is null and the role lists are empty. The organizations the caller belongs to are NOT here: that list is paginated and lives at GET /users/me/organizations.",
+          "Returns the authenticated caller's identity, active organization (with type-derived capabilities and its `plan_access`: `state` `active`, `grace` — no paid plan, writes allowed until `grace_ends_at` — or `read_only` — no paid plan since `grace_ends_at`, every write under /app answers 403 `organization_read_only`), their own membership there (`membership_id` — the id of their `GET /app/memberships` row), the roles they hold (`my_role_ids`, and `my_roles` naming each with its `name`, `tone` and `is_system` — the main role first), the permission codes they hold in that organization, and their global role. One authoritative call for rendering a permission-aware UI — identical for personal and team organizations; without an active organization or a live membership `membership_id` is null and the role lists are empty. The organizations the caller belongs to are NOT here: that list is paginated and lives at GET /users/me/organizations.",
         tags: ['Auth'],
       },
     },

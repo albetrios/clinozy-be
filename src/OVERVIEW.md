@@ -104,6 +104,7 @@ Top user journeys that touch more than one domain. Full sequence diagrams and fa
 - **`organization-switch-and-capability-discovery-flow`** — active-organization switch across `auth` (`switch-to-organization` / `switch-to-personal`, `org`-claim JWT re-issue) → `tenancy` (membership check, capability discovery).
 - **`subscription-change-flow`** — Stripe webhook reconciliation across `billing` (subscription state) → `notify` (in-app + email) → `audit`.
 - **`dunning-flow`** — billing-failure handling driven by Stripe across `billing` → `notify` → potentially `subscription-change-flow` to cancellation.
+- **`unpaid-clinic-read-only-flow`** — read-only mode for unpaid clinics (owner decision D3, behind `BILLING_READ_ONLY_ENFORCED`, off by default) across `billing` (plan access from the subscription) → `auth` (`active_organization.plan_access` on `GET /auth/me/context` and the switches) → `app` (every write refused with 403 `organization_read_only` past the grace).
 
 ## Policies
 
@@ -117,6 +118,7 @@ Deliberate business, UX, and security trade-offs encoded as constants. Full rati
 - **`NOTIFICATION_UNREAD_COUNT_CACHE_TTL_SECONDS = 60`** — backstop on the polled unread badge, for the two writers that cannot name a user.
 - **`CACHE_INVALIDATION_TOMBSTONE_TTL_SECONDS = 15`** — how long a freshness tombstone blocks repopulation; sized to the in-flight read, not to the cache.
 - **`STRIPE_WEBHOOK_MAX_PROCESSING_ATTEMPTS = 25`** — handler attempts after which a Stripe event is abandoned (one alert) instead of reclaimed forever.
+- **`NEW_ORGANIZATION_TRIAL_DAYS = 14`** — a new clinic's trial before it turns read-only without a paid plan (only while `BILLING_READ_ONLY_ENFORCED` is on).
 - **`STRIPE_WEBHOOK_STUCK_PROCESSING_LEASE_MINUTES = 15`** — Stripe-webhook reclaim window after a worker crash (the mail outbox uses `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES`; webhook deliveries need no lease — a new execution re-claims any row not yet `SENT`).
 - **`PAGINATION = { DEFAULT_LIMIT: 25, MAX_LIMIT: 100 }`** — list endpoint defaults; cursor pagination only.
 - **`GDPR_EXPORT_MAX_ROWS_PER_TABLE = 1 000`** — bounded export bundle size.

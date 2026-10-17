@@ -35,6 +35,7 @@ const baseData = (overrides: Partial<AuthMeContextData> = {}): AuthMeContextData
     updated_at: '2026-01-01T00:00:00.000Z',
   },
   activeOrganization: organization('org_active', 'TEAM'),
+  planAccess: { state: 'active', graceEndsAt: null },
   membershipId: 'mem_active',
   myPermissions: ['organization:read', 'membership:manage'],
   myRoleIds: ['rol_admin'],
@@ -70,10 +71,35 @@ describe('serializeAuthMeContext', () => {
     expect(output).not.toHaveProperty('organizations');
   });
 
+  it('adds plan_access to the active organization, grace_ends_at in ISO 8601 (owner decision D3)', () => {
+    expect(serializeAuthMeContext(baseData()).active_organization?.plan_access).toEqual({
+      state: 'active',
+      grace_ends_at: null,
+    });
+    const graceEndsAt = new Date('2026-10-31T09:30:00.000Z');
+    for (const state of ['grace', 'read_only'] as const) {
+      const output = serializeAuthMeContext(baseData({ planAccess: { state, graceEndsAt } }));
+      expect(output.active_organization?.plan_access).toEqual({
+        state,
+        grace_ends_at: '2026-10-31T09:30:00.000Z',
+      });
+      expect(output.active_organization?.id).toBe('org_active');
+    }
+  });
+
+  it('reads plan_access active when none was resolved for the active organization', () => {
+    const output = serializeAuthMeContext(baseData({ planAccess: null }));
+    expect(output.active_organization?.plan_access).toEqual({
+      state: 'active',
+      grace_ends_at: null,
+    });
+  });
+
   it('serializes a caller with no active organization', () => {
     const output = serializeAuthMeContext(
       baseData({
         activeOrganization: null,
+        planAccess: null,
         membershipId: null,
         myPermissions: [],
         myRoleIds: [],

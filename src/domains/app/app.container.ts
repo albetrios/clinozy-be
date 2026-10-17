@@ -18,6 +18,7 @@ import { AppointmentsRepository } from './sub-domains/appointments/appointments.
 import { BranchMembersRepository } from './sub-domains/branches/branch-members/branch-members.repository.js';
 import { BranchMembersService } from './sub-domains/branches/branch-members/branch-members.service.js';
 import { type AppRecordServices, createAppRecordServices } from './app-records.container.js';
+import type { AppPlanAccessPort } from './app-plan-access.js';
 import { MembershipPreferencesRepository } from './sub-domains/memberships/membership-preferences/membership-preferences.repository.js';
 import { MembershipPreferencesService } from './sub-domains/memberships/membership-preferences/membership-preferences.service.js';
 import { MembershipSavedViewsRepository } from './sub-domains/memberships/membership-saved-views/membership-saved-views.repository.js';
@@ -51,6 +52,8 @@ export type AppContainer = {
   membershipLeaveStep: AppMembershipLeaveStep;
   /** The ports every app record rule calls outside the app (one object, shared by every service). */
   ports: BaseRecordPorts;
+  /** Billing's plan access check behind the write guard on every app route (owner decision D3). */
+  planAccess: AppPlanAccessPort;
 } & AppRecordServices;
 
 /** Builds the app domain container from its repositories and the tenancy services it reads. */
@@ -59,11 +62,14 @@ export function createAppContainer({
   membershipService,
   organizationSettingsService,
   memberRoleService,
+  planAccess,
 }: {
   organizationService: OrganizationService;
   membershipService: MembershipService;
   organizationSettingsService: OrganizationSettingsService;
   memberRoleService: MemberRoleService;
+  /** Billing's `SubscriptionService` (read-only mode for unpaid clinics, D3). */
+  planAccess: AppPlanAccessPort;
 }): AppContainer {
   const branchesRepository = new BranchesRepository();
   const branchMembersRepository = new BranchMembersRepository();
@@ -140,6 +146,7 @@ export function createAppContainer({
     ),
     membershipLeaveStep: createAppMembershipLeaveStep(),
     ports,
+    planAccess,
     ...records,
   };
 }
@@ -205,6 +212,7 @@ export function registerAppContainer(application: FastifyInstance): void {
       membershipService,
       organizationSettingsService,
       memberRoleService,
+      planAccess: application.billingDomain.subscriptionService,
     }),
   );
 }

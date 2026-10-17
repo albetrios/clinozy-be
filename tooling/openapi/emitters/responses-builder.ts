@@ -80,7 +80,7 @@ const errorResponseSchema = {
         reason: {
           type: 'string',
           description:
-            'Stable snake_case sub-code on select 4xx errors — the field to branch on, never `detail`. Every 403 for a permission the caller lacks carries `missing_permission` (the route gate and the service checks alike); others: `field_permission_required`, `mfa_required`, … (docs/reference/api/response-codes.md). Absent on 5xx.',
+            'Stable snake_case sub-code on select 4xx errors — the field to branch on, never `detail`. Every 403 for a permission the caller lacks carries `missing_permission` (the route gate and the service checks alike); others: `field_permission_required`, `mfa_required`, `organization_read_only` (a write under /api/v1/app/ from a clinic whose grace without a paid plan has ended), … (docs/reference/api/response-codes.md). Absent on 5xx.',
         },
         documentation_url: {
           type: 'string',

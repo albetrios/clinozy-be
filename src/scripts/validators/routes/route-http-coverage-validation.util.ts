@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { RouteEntry } from '@/tests/helpers/route-catalog-registry.js';
+import { WRITE_HTTP_METHODS } from '@/shared/constants/index.js';
 
 const SRC_DIR = resolve(process.cwd(), 'src');
 const DOMAINS_DIR = join(SRC_DIR, 'domains');
@@ -30,9 +31,6 @@ export const INFRASTRUCTURE_DOMAIN_TEST_FILES: Record<string, string[]> = {
  *   is correctly a 404 (NotFoundError), never a body-validation 422.
  */
 export const DOMAINS_EXEMPT_FROM_VALIDATION_STATUS = new Set(['health', 'mcp', 'ops']);
-
-/** HTTP methods treated as mutating; only these require 400/422 validation coverage in domain tests. */
-export const MUTATING_HTTP_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 /**
  * Sub-domains without `*.routes.ts` that still expose HTTP handlers on a parent routes file.
@@ -166,7 +164,7 @@ export function requiresForbiddenStatusCoverage(route: RouteEntry): boolean {
 
 /** Mutating routes (POST/PUT/PATCH/DELETE) must exercise body validation (400/422) in domain tests. */
 export function requiresValidationStatusCoverage(route: RouteEntry): boolean {
-  return MUTATING_HTTP_METHODS.has(route.method);
+  return WRITE_HTTP_METHODS.has(route.method);
 }
 
 /** Returns true when the literal route path appears (in any quoting) inside the combined HTTP test sources. */
@@ -199,7 +197,7 @@ export function mutatingMethodReferencedForPath({
   method: string;
   pathLiteral: string;
 }): boolean {
-  if (!MUTATING_HTTP_METHODS.has(method)) return true;
+  if (!WRITE_HTTP_METHODS.has(method)) return true;
 
   const methodNeedle = `method: '${method}'`;
   const methodNeedleDouble = `method: "${method}"`;

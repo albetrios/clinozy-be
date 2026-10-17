@@ -239,7 +239,11 @@ describe('AuthMeContextService.getActiveOrganizationContext', () => {
     });
 
     expect(data).toEqual({
-      active_organization: activeOrganization,
+      // No plan access service in this harness: the organization reads `active` (owner decision D3).
+      active_organization: {
+        ...activeOrganization,
+        plan_access: { state: 'active', grace_ends_at: null },
+      },
       my_permissions: ['organization:read', 'membership:manage'],
       global_role: null,
     });
@@ -247,5 +251,78 @@ describe('AuthMeContextService.getActiveOrganizationContext', () => {
     // across a switch and reused from the client's initial /me/context).
     expect(userService.getMe).not.toHaveBeenCalled();
     expect(organizationService.listForUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthMeContextService plan access (owner decision D3)', () => {
+  const graceEndsAt = new Date('2026-10-31T09:30:00.000Z');
+  const services = () => ({
+    userService: { getMe: vi.fn().mockResolvedValue({ id: 'usr_1' }) },
+    organizationService: {
+      getByPublicId: vi.fn().mockResolvedValue({ id: 'org_active', type: 'TEAM' }),
+    },
+    authorizationService: { resolveUserOrganizationPermissions: vi.fn().mockResolvedValue([]) },
+    planAccessService: {
+      getPlanAccess: vi.fn().mockResolvedValue({ state: 'read_only', graceEndsAt }),
+    },
+  });
+
+  it("getContext reads the active organization's plan access", async () => {
+    const wired = services();
+    const service = new AuthMeContextService(
+      wired.userService as never,
+      wired.organizationService as never,
+      wired.authorizationService as never,
+      undefined,
+      wired.planAccessService as never,
+    );
+
+    const data = await service.getContext({ scope: meScope, globalRole: undefined });
+
+    expect(wired.planAccessService.getPlanAccess).toHaveBeenCalledExactlyOnceWith({
+      organizationPublicId: 'org_active',
+    });
+    expect(data.planAccess).toEqual({ state: 'read_only', graceEndsAt });
+  });
+
+  it('getContext reads none without an active organization', async () => {
+    const wired = services();
+    const service = new AuthMeContextService(
+      wired.userService as never,
+      wired.organizationService as never,
+      wired.authorizationService as never,
+      undefined,
+      wired.planAccessService as never,
+    );
+
+    const data = await service.getContext({
+      scope: PRINCIPAL_SCOPE.REQUEST({ userPublicId: 'usr_1' }) as UserPrincipalDatabaseScope,
+      globalRole: undefined,
+    });
+
+    expect(data.planAccess).toBeNull();
+    expect(wired.planAccessService.getPlanAccess).not.toHaveBeenCalled();
+  });
+
+  it('getActiveOrganizationContext puts plan_access on the switched-to organization', async () => {
+    const wired = services();
+    const service = new AuthMeContextService(
+      wired.userService as never,
+      wired.organizationService as never,
+      wired.authorizationService as never,
+      undefined,
+      wired.planAccessService as never,
+    );
+
+    const data = await service.getActiveOrganizationContext({
+      userPublicId: 'usr_1',
+      organizationPublicId: 'org_active',
+      globalRole: undefined,
+    });
+
+    expect(data.active_organization.plan_access).toEqual({
+      state: 'read_only',
+      grace_ends_at: '2026-10-31T09:30:00.000Z',
+    });
   });
 });

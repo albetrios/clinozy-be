@@ -1,5 +1,5 @@
 import type { GlobalRole } from '@/shared/constants/roles.constants.js';
-import type { OrganizationOutput } from '@/domains/tenancy/sub-domains/organization/organization.types.js';
+import type { AuthMeContextActiveOrganizationOutput } from '@/domains/auth/auth-me-context.types.js';
 
 /** Subset of an `auth_methods` row that is safe to return to the owning user. */
 interface AuthMethodResponseInput {
@@ -50,7 +50,7 @@ export const AuthSerializer = {
   }: {
     token: { access_token: string };
     context: {
-      active_organization: OrganizationOutput;
+      active_organization: AuthMeContextActiveOrganizationOutput;
       my_permissions: string[];
       global_role: GlobalRole | null;
     };

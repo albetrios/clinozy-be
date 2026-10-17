@@ -1,4 +1,9 @@
-import { ConflictError, NotFoundError, UnprocessableEntityError } from '@/shared/errors/index.js';
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  UnprocessableEntityError,
+} from '@/shared/errors/index.js';
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -12,6 +17,12 @@ import {
 } from '@/infrastructure/cache/redis-lock.util.js';
 import { addMonths } from './subscription-period.util.js';
 import { INACTIVE_SUBSCRIPTION_STATUSES } from './subscription.repository.js';
+import { ACTIVE_PLAN_ACCESS, PLAN_ACCESS_STATE } from './subscription.constants.js';
+import {
+  UNPAID_ENTITLEMENT_STATUSES,
+  requiresFreeSeatCeiling,
+  resolvePlanAccess,
+} from './subscription-entitlement.util.js';
 
 /**
  * Per-organization lock TTL (seconds) around subscription create (audit-#B4). Must exceed the worst-case
@@ -37,16 +48,6 @@ const SUBSCRIPTION_CREATE_LOCK_WAIT_MS = 10_000;
  */
 const TERMINAL_STATUSES = new Set<string>(INACTIVE_SUBSCRIPTION_STATUSES);
 
-/**
- * Dunning subscription statuses — a payment has failed but the subscription has not yet been
- * canceled. The organization keeps its full plan ceiling until `current_period_end + BILLING_DUNNING_GRACE_DAYS`
- * (F4), after which its entitlement lapses to the Free-tier ceiling.
- */
-const DUNNING_STATUSES = new Set<string>(['PAST_DUE', 'UNPAID']);
-// Unpaid states that never earned the plan: INCOMPLETE (first payment pending) and PAUSED
-// (trial ended without a payment method). Both hold the Free ceiling until payment lands.
-const UNPAID_ENTITLEMENT_STATUSES = new Set<string>(['INCOMPLETE', 'PAUSED']);
-
 import type { OrganizationService } from '@/domains/tenancy/sub-domains/organization/organization.service.js';
 import { assertTeamOrganization } from '@/domains/tenancy/sub-domains/organization/organization-capability.js';
 import {
@@ -56,13 +57,13 @@ import {
 import type { PaymentProvider } from './payment-provider.port.js';
 import type { SubscriptionRepository } from './subscription.repository.js';
 import type {
+  PlanAccess,
   StripeSubscriptionOrderingState,
   SubscriptionPublicState,
   SubscriptionUpdateData,
 } from './subscription.types.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { PAGINATION } from '@/shared/constants/pagination.constants.js';
-import { MILLISECONDS_PER_DAY } from '@/shared/constants/ttl.constants.js';
 import { BillingAccountSerializer } from './billing-account.serializer.js';
 import { SubscriptionSerializer } from './subscription.serializer.js';
 import { buildDomainEvent, eventBus, runEnqueueAfterCommit } from '@/core/events/event-bus.js';
@@ -268,7 +269,9 @@ export class SubscriptionService {
       );
     }
     // Reuse each decision: grace may expire while the Free catalog lookup is pending.
-    const freeSeatRequired = rows.map((row) => this.requiresFreeSeatCeiling(row));
+    // One clock read for every row (`Date.now()`, which the seat suites pin).
+    const now = new Date(Date.now());
+    const freeSeatRequired = rows.map((row) => requiresFreeSeatCeiling({ seatState: row, now }));
     const freeSeatCeiling = freeSeatRequired.some(Boolean)
       ? await this.planService.getFreePlanSeatCeiling()
       : null;
@@ -374,34 +377,67 @@ export class SubscriptionService {
   async reserveSeatCeilingForMemberAdd(organization_id: number): Promise<number | null> {
     const seatState =
       await this.repository.findActiveSeatStateByOrganizationForUpdate(organization_id);
-    if (this.requiresFreeSeatCeiling(seatState)) {
+    if (requiresFreeSeatCeiling({ seatState, now: new Date(Date.now()) })) {
       return this.planService.getFreePlanSeatCeiling();
     }
     return seatState?.plan_included_seats ?? null;
   }
 
-  private requiresFreeSeatCeiling(seatState: SubscriptionRowWithSeatState | null): boolean {
-    return (
-      !seatState ||
-      UNPAID_ENTITLEMENT_STATUSES.has(seatState.status) ||
-      this.isDunningEntitlementLapsed(seatState)
-    );
+  /**
+   * A clinic's plan access (owner decision D3, 2026-10-17): `active`, `grace` (unpaid, its grace
+   * still running) or `read_only` (unpaid, its grace over).
+   *
+   * @remarks
+   * - **Algorithm:** with `BILLING_READ_ONLY_ENFORCED` off, `active` at once — no query. On, one
+   *   indexed read of the organization and its current subscription
+   *   ({@link SubscriptionRepository.findPlanAccessSubject}) decided by `resolvePlanAccess`: a paid
+   *   entitlement keeps it `active`; otherwise the grace runs 14 days from a lapsed paid
+   *   subscription's `current_period_end` (`BILLING_DUNNING_GRACE_DAYS`) or, for a clinic that never
+   *   paid, from its `created_at` (`NEW_ORGANIZATION_TRIAL_DAYS`). PERSONAL organizations are always
+   *   `active`.
+   * - **Failure modes:** a query failure propagates; an organization that does not exist reads
+   *   `active` (the route's own checks answer for it).
+   * - **Side effects:** none — read-only.
+   * - **Notes:** `organizationPublicId` is one the caller has already proved — the signed `org`
+   *   claim (the app write guard, `GET /auth/me/context`) or a switch's verified target — read under
+   *   that organization's context, which a surrounding context for the same organization lends its
+   *   transaction (me/context adds none). Read by `GET /auth/me/context` and the organization
+   *   switches (`active_organization.plan_access`) and by {@link assertOrganizationWritable}.
+   */
+  async getPlanAccess({
+    organizationPublicId,
+  }: {
+    organizationPublicId: string;
+  }): Promise<PlanAccess> {
+    if (!env.BILLING_READ_ONLY_ENFORCED) return ACTIVE_PLAN_ACCESS;
+    const subject = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId }),
+      callback: () => this.repository.findPlanAccessSubject(organizationPublicId),
+    });
+    return resolvePlanAccess({ subject, now: new Date(Date.now()) });
   }
 
   /**
-   * F4: true when `seatState` is a dunning subscription (PAST_DUE / UNPAID) whose grace
-   * window (`current_period_end + BILLING_DUNNING_GRACE_DAYS`) has elapsed, so its entitlement has
-   * lapsed to the Free tier. ACTIVE / TRIALING and within-grace dunning keep the full plan ceiling.
+   * Refuses a write from a read-only clinic: 403 with `error.reason` `organization_read_only`.
+   *
+   * @remarks
+   * - **Algorithm:** {@link getPlanAccess}; throws only for `read_only` — `active` and `grace` pass.
+   * - **Failure modes:** `ForbiddenError` (`errors:organizationReadOnly`, reason
+   *   `organization_read_only`); a query failure propagates.
+   * - **Side effects:** none.
+   * - **Notes:** the app domain runs it as a `preHandler` on every POST / PUT / PATCH / DELETE
+   *   under `/api/v1/app/` (`app-plan-access.ts`). Billing, auth, user, tenancy and upload stay open,
+   *   so a read-only clinic can still pay, sign in, manage its team and export its data.
    */
-  private isDunningEntitlementLapsed(seatState: {
-    status: string;
-    current_period_end: Date;
-  }): boolean {
-    if (!DUNNING_STATUSES.has(seatState.status)) return false;
-    const graceEndsAt =
-      new Date(seatState.current_period_end).getTime() +
-      env.BILLING_DUNNING_GRACE_DAYS * MILLISECONDS_PER_DAY;
-    return Date.now() > graceEndsAt;
+  async assertOrganizationWritable({
+    organizationPublicId,
+  }: {
+    organizationPublicId: string;
+  }): Promise<void> {
+    const access = await this.getPlanAccess({ organizationPublicId });
+    if (access.state === PLAN_ACCESS_STATE.READ_ONLY) {
+      throw new ForbiddenError('errors:organizationReadOnly').withReason('organization_read_only');
+    }
   }
 
   /**

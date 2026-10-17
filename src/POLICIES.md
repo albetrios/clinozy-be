@@ -204,6 +204,16 @@ The canonical exports live under [src/shared/constants/](src/shared/constants/) 
   - Increasing → a broken event retries longer before anyone is told.
 - **Last reviewed**: 2026-10-05
 
+## NEW_ORGANIZATION_TRIAL_DAYS
+
+- **Value**: 14 days
+- **Source**: [src/shared/constants/billing.constants.ts](src/shared/constants/billing.constants.ts)
+- **Rationale**: A new clinic's trial (owner decision D3, 2026-10-17): a TEAM organization that never paid — no subscription, or one on the Free plan — keeps writing in the clinic rooms for this long after its `created_at`; past it, with `BILLING_READ_ONLY_ENFORCED` on, every write under `/api/v1/app/` answers 403 `organization_read_only` until it pays. Fourteen days matches the lapse grace a paid subscription gets after its period ends (`BILLING_DUNNING_GRACE_DAYS`, default 14), so a clinic gets the same two weeks whichever way it is unpaid. Decided by `resolvePlanAccess` (`subscription-entitlement.util.ts`); see [unpaid-clinic-read-only-flow](src/FLOWS.md#unpaid-clinic-read-only-flow).
+- **Consequences of change**:
+  - Decreasing → new clinics turn read-only sooner, possibly before they have finished setting up or decided to pay.
+  - Increasing → a clinic that never pays keeps full use for longer. Either way the change applies at once to every unpaid clinic still counting from its `created_at`.
+- **Last reviewed**: 2026-10-17
+
 ## PAGINATION
 
 - **Value**: `{ DEFAULT_LIMIT: 25, MAX_LIMIT: 100 }`

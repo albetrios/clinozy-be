@@ -12,7 +12,7 @@ import { listDeadLetterQueueNames } from '@/infrastructure/queue/dlq/dead-letter
 import { WORKER_QUEUE_NAMES } from '@/infrastructure/queue/queue-catalog.js';
 import { getEnv } from '@/shared/config/env.config.js';
 import { ForbiddenError } from '@/shared/errors/index.js';
-import { GLOBAL_ROLES } from '@/shared/constants/index.js';
+import { GLOBAL_ROLES, WRITE_HTTP_METHODS } from '@/shared/constants/index.js';
 import { requireRole } from '@/shared/utils/auth/authorization.util.js';
 
 // Every worker queue and its dead-letter mirror.
@@ -22,8 +22,6 @@ const QUEUE_NAMES = [
 ] as const;
 
 const DASHBOARD_PREFIX = '/admin/queues';
-
-const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 /**
  * Structured representation of a write-side Bull Board API call (pause, resume, retry,
@@ -157,7 +155,7 @@ export function parseQueueDashboardMutation({
   pathname: string;
   method: string;
 }): QueueDashboardMutationAudit | null {
-  if (!MUTATING_METHODS.has(method)) return null;
+  if (!WRITE_HTTP_METHODS.has(method)) return null;
   if (!pathname.startsWith(DASHBOARD_PREFIX)) return null;
   const relativePath = pathname.slice(DASHBOARD_PREFIX.length);
   if (!relativePath.startsWith('/api/')) return null;
@@ -212,7 +210,7 @@ export async function registerQueueDashboard({
         for (const handler of adminPreHandler) {
           await handler.call(scope, request, reply);
         }
-        if (!getEnv().ENABLE_QUEUE_DASHBOARD_MUTATIONS && MUTATING_METHODS.has(request.method)) {
+        if (!getEnv().ENABLE_QUEUE_DASHBOARD_MUTATIONS && WRITE_HTTP_METHODS.has(request.method)) {
           // re-audit LOW: the caller IS an authenticated SUPER_ADMIN; the action is forbidden in
           // read-only mode → 403 (matches the documented behavior), not 401 (unauthenticated).
           throw new ForbiddenError('errors:queueDashboardReadOnly');

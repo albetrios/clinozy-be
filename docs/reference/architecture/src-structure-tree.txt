@@ -30,6 +30,7 @@ src/
     │   │   │   ├── app-automation.integration.test.ts
     │   │   │   ├── app-branch-access.integration.test.ts
     │   │   │   ├── app-races.integration.test.ts
+    │   │   │   ├── app-read-only-mode.integration.test.ts
     │   │   │   ├── app-record-lifecycle.integration.test.ts
     │   │   │   ├── app-record-purge.integration.test.ts
     │   │   │   ├── app-route-smoke.integration.test.ts
@@ -1021,6 +1022,7 @@ src/
     │   ├── app-access-sections.ts
     │   ├── app-member-reference.ts
     │   ├── app-membership-leave.ts
+    │   ├── app-plan-access.ts
     │   ├── app-record-tables.ts
     │   ├── app-records.container.ts
     │   ├── app-records.plugin.ts
@@ -1440,6 +1442,7 @@ src/
     │   │   │       │   ├── billing-account.serializer.unit.test.ts
     │   │   │       │   ├── payment-provider.port.unit.test.ts
     │   │   │       │   ├── stripe-payment-provider.email.unit.test.ts
+    │   │   │       │   ├── subscription-entitlement.util.unit.test.ts
     │   │   │       │   ├── subscription-period.util.unit.test.ts
     │   │   │       │   ├── subscription-routes-rate-limit.policy.unit.test.ts
     │   │   │       │   ├── subscription-seat-sync.job.schema.unit.test.ts
@@ -1456,6 +1459,7 @@ src/
     │   │   │       │   ├── subscription.service.account-reads.unit.test.ts
     │   │   │       │   ├── subscription.service.billing-guard.unit.test.ts
     │   │   │       │   ├── subscription.service.cancel-resume.unit.test.ts
+    │   │   │       │   ├── subscription.service.plan-access.unit.test.ts
     │   │   │       │   ├── subscription.service.seats.unit.test.ts
     │   │   │       │   ├── subscription.service.stripe-reconciliation.unit.test.ts
     │   │   │       │   ├── subscription.service.unit.test.ts
@@ -1477,7 +1481,9 @@ src/
     │   │   │   ├── billing-account.serializer.ts
     │   │   │   ├── payment-provider.port.ts
     │   │   │   ├── stripe-payment-provider.ts
+    │   │   │   ├── subscription-entitlement.util.ts
     │   │   │   ├── subscription-period.util.ts
+    │   │   │   ├── subscription.constants.ts
     │   │   │   ├── subscription.controller.ts
     │   │   │   ├── subscription.dto.ts
     │   │   │   ├── subscription.overview.md

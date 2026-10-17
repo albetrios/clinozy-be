@@ -12,10 +12,12 @@ import { registerUserContainer } from '@/domains/user/user.container.js';
 async function registerDomainContainers(application: FastifyInstance): Promise<void> {
   registerUserContainer(application);
   registerTenancyContainer(application);
+  // Billing needs only tenancy, and the app write guard and /auth/me/context read its plan access
+  // (owner decision D3), so it is built before both.
+  registerBillingContainer(application);
   registerAppContainer(application);
   registerAuditContainer(application);
   registerAuthContainer(application);
-  registerBillingContainer(application);
   registerNotifyContainer(application);
   registerUploadContainer(application);
 

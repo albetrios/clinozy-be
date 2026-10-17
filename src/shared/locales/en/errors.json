@@ -327,6 +327,7 @@
   "organizationContextRequired": "Organization context required",
   "insufficientOrganizationPermissions": "Insufficient organization permissions",
   "organizationRequiresMfa": "This organization requires multi-factor authentication. Verify with your second factor, then try again.",
+  "organizationReadOnly": "This clinic is read-only: it has no paid plan and its grace period has ended. Choose a plan to make changes again.",
   "invalidField": "Invalid {{label}}",
   "missingAuthorizationHeader": "Missing Authorization header",
   "invalidAuthorizationHeaderFormat": "Invalid Authorization header format",

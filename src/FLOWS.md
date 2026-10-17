@@ -153,7 +153,7 @@ sequenceDiagram
 - A new access token is minted with the target organization in the `org` claim (the prior token's organization is replaced). No DB write to the organization itself.
 - `switch-to-organization` then remembers the organization as the caller's login default (`auth.users.last_active_organization_id`, written only when it changes). It is best-effort — the session is already re-bound to the new token, so a failed write is logged, never returned. Every later login (password, email code, OAuth, passkey, MFA) mints its token for that clinic while the membership is active, else the most recently joined clinic, else the personal organization — so the frontend lands on the clinic, not the organization picker. `switch-to-personal` does not change it.
 - A clinic the person **pinned** (`PATCH /users/me/settings { default_organization_id }`, `auth.user_settings.default_organization_id`) comes before the remembered one at every login, while that membership and the clinic are active; `null` returns to the automatic choice. The remembered clinic keeps updating underneath, ready for when the pin is cleared.
-- Both switch endpoints (`switch-to-organization` / `switch-to-personal`) return the **active-organization delta inline** — `{ access_token, active_organization, my_permissions, global_role }` (`AuthMeContextService.getActiveOrganizationContext` post-gate read) — so the client repaints the dashboard for the new organization **without** a follow-up `GET /auth/me/context`. The omitted `user` / `organizations[]` are stable across a switch and reused from the client's initial context.
+- Both switch endpoints (`switch-to-organization` / `switch-to-personal`) return the **active-organization delta inline** — `{ access_token, active_organization, my_permissions, global_role }`, the organization carrying its `plan_access` as on `GET /auth/me/context` ([unpaid-clinic-read-only-flow](#unpaid-clinic-read-only-flow)) (`AuthMeContextService.getActiveOrganizationContext` post-gate read) — so the client repaints the dashboard for the new organization **without** a follow-up `GET /auth/me/context`. The omitted `user` / `organizations[]` are stable across a switch and reused from the client's initial context.
 - Serialized organization responses (this `GET`, list, create, patch) carry the organization `type` (`PERSONAL` / `TEAM`) but **no** `capabilities` object. Clients derive team-only availability from `type` and gate the action on the caller's `my_permissions`. The personal-vs-team rule is enforced server-side by `assertTeamOrganization` in `src/domains/tenancy/sub-domains/organization/organization-capability.ts`.
 
 ### Failure modes
@@ -321,11 +321,56 @@ sequenceDiagram
 - `subscriptions.status` transitions: `active` → `past_due` (and back, or onward to `canceled`).
 - Each transition is a `subscription.updated` (the final one a `subscription.cancelled`) to the organization's subscribed webhooks.
 - **Losing the paid entitlement keeps the team.** Once a cancel, expiry, pause or never-paid status commits, `billing.entitlement_lost` is logged and no member is suspended (owner decision, 2026-10-17: suspending everyone past the Free allowance locked a clinic's staff out mid-day). The end of a dunning grace (`current_period_end + BILLING_DUNNING_GRACE_DAYS`) has no Stripe event, so the hourly `subscription-seat-reconcile` job on the seat-sync queue reports it (`subscription-seat-reconcile.entitlement_lapsed`), and re-enqueues a seat sync wherever Stripe bills a quantity other than the seats in use. Only an owner's own plan downgrade still suspends members past the new plan's ceiling.
+- **Then read-only, not lock-out.** With `BILLING_READ_ONLY_ENFORCED` on, a clinic whose entitlement has lapsed keeps writing until `current_period_end + BILLING_DUNNING_GRACE_DAYS`, then turns read-only — see [unpaid-clinic-read-only-flow](#unpaid-clinic-read-only-flow).
 
 ### Failure modes
 
 - **All standard subscription-change-flow failure modes apply** (signature, duplicate event id, stale events, worker crash).
 - **Customer ignores the dunning emails** → Stripe-driven cancellation eventually fires; the platform does not unilaterally cancel.
+
+## unpaid-clinic-read-only-flow
+
+### Trigger
+
+A TEAM organization (a clinic) has no paid entitlement — no subscription, a subscription on the Free plan, or a paid one that lapsed — while `BILLING_READ_ONLY_ENFORCED` is on (owner decision D3, 2026-10-17; **off by default** until clinics can pay in ₹). `GET /api/v1/auth/me/context` (and both organization switches) report the clinic's state; every POST / PUT / PATCH / DELETE under `/api/v1/app/` checks it.
+
+### Sequence
+
+```mermaid
+sequenceDiagram
+  participant Client
+  participant Ctx as AuthMeContextService
+  participant Guard as app write guard (preHandler)
+  participant Sub as SubscriptionService
+  participant DB as Postgres
+  Client->>Ctx: GET /auth/me/context
+  Ctx->>Sub: getPlanAccess(active organization)
+  Sub->>DB: organization + current subscription + plan prices (one query, the context's own transaction)
+  Sub-->>Ctx: active | grace (grace_ends_at) | read_only (grace_ends_at)
+  Ctx-->>Client: 200 active_organization.plan_access
+  Client->>Guard: POST/PUT/PATCH/DELETE /api/v1/app/…
+  Guard->>Sub: assertOrganizationWritable(org claim)
+  Sub->>DB: the same one query
+  alt read_only
+    Sub-->>Client: 403 error.reason organization_read_only
+  else active or grace
+    Guard->>Guard: route permission gate → idempotency claim → handler
+  end
+```
+
+### Side effects
+
+- **Nothing is written.** The state is computed on every read from `tenancy.organizations` and `billing.subscriptions` (`resolvePlanAccess` in `subscription-entitlement.util.ts`) — no column, no job, so paying lifts read-only on the very next request.
+- **Paid entitlement** = ACTIVE or TRIALING on a plan priced above zero (`isPaidPlan`), or a dunning subscription (PAST_DUE / UNPAID) still inside its grace — the same entitlement the seat ceiling reads (`requiresFreeSeatCeiling`).
+- **The grace:** a clinic that never paid (no subscription, or the Free plan) — `created_at + NEW_ORGANIZATION_TRIAL_DAYS` (14), a new clinic's trial; a lapsed paid subscription (cancelled, expired, paused, never paid, or dunning past its period) — `current_period_end + BILLING_DUNNING_GRACE_DAYS`. Until then `grace`; after it `read_only`, with `grace_ends_at` the moment read-only began.
+- **Only the clinic rooms close.** Reads stay open, and so do billing, auth, user, tenancy and upload — a read-only clinic can still pay, sign in, manage its team and export its data. Nobody is suspended and no data is deleted. PERSONAL organizations are always `active`.
+- The write guard runs before the route's permission gate and the idempotency claim, so a refused write holds no idempotency key.
+
+### Failure modes
+
+- **The plan access read fails** → the write fails with the error (no write goes through unchecked); `GET /auth/me/context` fails the same way.
+- **`BILLING_READ_ONLY_ENFORCED` off** → every organization reads `active` and no query runs.
+- **Switching the flag on** → every unpaid clinic already past its grace turns read-only at once; the grace counts from `created_at` / `current_period_end`, not from the day the flag was switched on.
 
 ## organization-resource-webhook-flow
 
