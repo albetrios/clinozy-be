@@ -38,6 +38,11 @@ flowchart LR
 
 ## Section A — Human reviewer checklist
 
+**An iteration's PR** (`iterations/<iteration>/` in the diff) was reviewed as it was built: each
+ROUTE row's review is its review of record — the `Reviewed` cell of its `AS-BUILT.md` row (date ·
+who · commit). Check that every row has one, then review only what changed after each row's
+reviewed commit and the close; do not re-review a reviewed row.
+
 Check only what the PR touches. Skip categories marked **none** in the PR **Reviewer notes** section.
 
 ### Architecture and layers

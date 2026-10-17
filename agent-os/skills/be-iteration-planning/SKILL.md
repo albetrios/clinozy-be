@@ -359,7 +359,9 @@ per iteration, current at every step, with before → after wherever something e
 ## Step review — at every stop, no PR diff needed
 
 Every step ends with the same short review, so the user can check everything in place and ask for a
-change before the next step:
+change before the next step. **The step reviews are the plan's review of record:** the approval
+(`ready-for-approval → approved`) confirms what they already accepted and what changed after the
+last one — it does not ask for a second full read of `KICKOFF.md` and `plans/`.
 
 1. **What changed** — each file this step wrote or changed, as a clickable link, with one line on
    what changed in it (counts, not dumps).

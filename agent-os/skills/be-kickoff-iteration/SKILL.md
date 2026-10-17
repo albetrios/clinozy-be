@@ -130,8 +130,8 @@ authorize changing either.
    and job names); any difference goes into the AS-BUILT row.
 3. **Record** — add the row to `AS-BUILT.md`:
 
-   | # | Planned | Actually built | Difference | Why | Decision | Commit |
-   | --- | --- | --- | --- | --- | --- | --- |
+   | # | Planned | Actually built | Difference | Why | Decision | Commit | Reviewed |
+   | --- | --- | --- | --- | --- | --- | --- | --- |
 
    Every technical decision the row made (table and column design, endpoints, permission codes,
    queue names) is recorded here or referenced from its approved specification or decision.
@@ -158,11 +158,17 @@ authorize changing either.
 5. **Stop** — mark the row `done`, show the user what was built and the AS-BUILT row, and wait for
    their review before the next row. Use the review summary from the linked row execution guidance:
    changes and contracts, verification evidence, deviations or blockers, impact, and the next row.
+   **This review is the row's review of record:** on the user's OK, fill the row's `Reviewed` cell
+   (date · who · the commit reviewed). A change they ask for is made, verified and shown again
+   before the cell is filled.
 
 ## Close
 
 - Run the repository's gates: `pnpm validate`, `pnpm ci:local`, and the route and domain gates.
 - Run `/be-pre-merge-review` as a review only — report its findings, change nothing on its say-so.
+- **The per-row reviews are the review of record.** Every `AS-BUILT.md` row has its `Reviewed`
+  cell; a row without one is reviewed now, before close. The PR's human review then covers what
+  changed after each row's reviewed commit (and the close), not the rows again.
 - Every ROUTE row is `done`, or `deferred` with the user's explicit OK.
 - Fill `plans/acceptance.md` — a Result and Evidence for every item.
 - Write the frontend's route map, `plans/frontend-route-map.md`: section 1 the contract changes, section 2
