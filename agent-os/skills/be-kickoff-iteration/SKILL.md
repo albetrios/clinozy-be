@@ -119,7 +119,9 @@ for what each record owns. Keep the approved row order and scope; a preflight fi
 authorize changing either.
 
 1. **Do** — mark the row `in progress` in `KICKOFF.md` and build it through its driver.
-2. **Verify** — the row's acceptance, its tests, `pnpm validate` — by the README's Intake mode:
+2. **Verify** — the row's acceptance, its tests (`pnpm test:select --run`; for a NEW table the
+   staged-build prompt's Stage 3 has run them — read its Stage 4 test run), `pnpm validate` — by
+   the README's Intake mode:
    `full` / `overlay` → the acceptance traced to the PRD; `brief` → the `BRIEF.md` acceptance
    criteria the row covers, and the parts it touches still match the carried-forward PRD and
    `schema-routes.md` except where the brief changes them. MODE incremental, every mode: re-run the

@@ -23,7 +23,11 @@ modifying existing tables. The ROUTE sends a CHANGE table (and every flow and ba
 `/be-build-requirement` instead.
 
 The prompt is kept verbatim from the core-platform `NEW-PRODUCT-GUIDE.md` (Appendix A, the reusable
-template).
+template), with one change: Stage 3 ends by running the tests the change selects,
+`pnpm test:select --run`, so Stage 4 reports a green run instead of tests nobody ran. The run uses
+its own test database, which the test setup creates and migrates; the development database is never
+migrated or seeded. A NEW table adds a migration, and a migration selects the whole suite, so this is
+`pnpm test` in practice — `pnpm test:select --why` shows why.
 
 ## The prompt
 
@@ -40,8 +44,9 @@ GLOBAL WORKING RULES (apply in every stage)
 - API contract + messages:
 - Follow repo conventions: snake_case body keys, public ids, param naming, headers, method/status policy, error codes.
 - User-facing strings must be i18n keys (no raw strings).
-- No execution:
-- DO NOT run migrations. DO NOT seed. DO NOT run tests. Only propose output and/or make file edits when in Stage 3.
+- No execution, except the tests:
+- DO NOT run migrations against the development database. DO NOT seed it. Only propose output and/or make file edits when in Stage 3.
+- At the end of Stage 3, run the tests the change selects: pnpm test:select --run (the test run creates and migrates its own test database).
 - Change completeness:
 - In Stage 3, update only the "mirror" artifacts required by this feature (route catalog, OpenAPI maps, i18n, permission seed, etc.).
 
@@ -124,11 +129,13 @@ Deliverable:
 - error handling for each failure case implied by the story
 - E2E tests for every route: happy path, validation failures, auth failures, edge cases, state-transition edge cases
 - seed data covering realistic records for every entity/state needed for QA + tests
-- summarize test coverage per route
+- run the tests the change selects: pnpm test:select --run
+- summarize test coverage per route, with the result of that run
 
 HARD CONSTRAINTS:
 - Implement only within feature scope + required mirrors.
-- Do not run migrations/seed/tests.
+- Do not run migrations against the development database or seed it.
+- Every selected test passes before you stop: fix a failure inside the feature scope and re-run; a failure outside it is a decision question — stop and ask.
 Stop after Stage 3. Wait for approval/comment.
 
 ========================
@@ -155,6 +162,8 @@ Rules:
 - Do NOT include deleted files, folders, or unchanged files
 - Do NOT include explanations, comments, or extra text outside the code block
 - Do NOT show the full project directory tree
+
+D) Test run: the command (pnpm test:select --run), how many test files it selected and why (pnpm test:select --why), and the result — every selected file passing.
 
 After Stage 4:
 - Do not change anything until I comment.
