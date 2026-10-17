@@ -2,6 +2,7 @@
 name: be-supabase-porting
 description: Ports Supabase Edge Functions (Deno) into clinozy-be (Node/Fastify/Drizzle/BullMQ). Manual invoke only. Not for SQL migrations in migrations/ — use be-db-migration-maintainer.
 indexNote: port Supabase Edge Functions (Deno) → Node/Fastify (manual invoke only)
+disable-model-invocation: true
 ---
 
 # Supabase porting (Edge Functions → clinozy-be)

@@ -1,6 +1,5 @@
 ---
-description: When starting a new requirement, use the intake format and invoke the right skills. Reference this rule and docs/getting-started/requirement-intake.md so the AI performs best.
-globs: docs/getting-started/requirement-intake.md
+description: When the user describes a new requirement (a new domain, routes, worker, schema, seed, migration, CI or infra change), use the intake format in docs/getting-started/requirement-intake.md and invoke the right skills. Agent-requested — a requirement arrives as a prompt, not a file, so no glob can attach this rule.
 alwaysApply: false
 ---
 

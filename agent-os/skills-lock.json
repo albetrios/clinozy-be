@@ -143,7 +143,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-lint-warnings-handler/SKILL.md",
-      "computedHash": "cdf7bf234d44b623439574f5e655f4ea236da63d96d3212086805185ed08375a"
+      "computedHash": "2c99c2e4ac90c1c9847e93486b7f77e2b6009408d87778a7fbb2076a46d6b82e"
     },
     "be-openapi-multilingual": {
       "source": "local",
@@ -239,7 +239,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-supabase-porting/SKILL.md",
-      "computedHash": "c38dbc8811992affc672fcfa28b3bbaa8af882387c696d681f2e78cfcdc6164a"
+      "computedHash": "1d41b8378ea127cf7e35c3ed9ff341329d400668ab5d81005941b4c9214e50aa"
     },
     "be-system-narrative-maintainer": {
       "source": "local",
