@@ -1,0 +1,45 @@
+name: Generate API docs
+description: |
+  Generates the OpenAPI documents and the Postman collection (`pnpm docs:all`), fails when the
+  committed generator output drifts (`pnpm docs:check`) and uploads both as one artifact. Needs
+  no secret: the app is assembled with placeholder database and Redis URLs that nothing
+  connects to. The caller has checked out, run setup-node-pnpm and the test-env action.
+
+  Used by reusable-openapi-postman-publish.yml (development docs after each merge) and by
+  release-deploy.yml, whose production deploy job then publishes the artifact
+  (upload-api-docs) — so one production approval covers the deploy and its docs.
+
+inputs:
+  artifact-name:
+    description: Name of the artifact holding docs/openapi/ and docs/postman-collection.json
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Regenerate API docs (OpenAPI + Postman)
+      shell: bash
+      env:
+        NODE_ENV: development
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
+        DATABASE_MAINTENANCE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
+        REDIS_URL: redis://localhost:6379
+      run: pnpm docs:all
+
+    - name: Check API docs sync
+      shell: bash
+      env:
+        NODE_ENV: development
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
+        DATABASE_MAINTENANCE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
+        REDIS_URL: redis://localhost:6379
+      run: pnpm docs:check
+
+    - name: Upload API docs artifact
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          docs/openapi/
+          docs/postman-collection.json
+        retention-days: 30

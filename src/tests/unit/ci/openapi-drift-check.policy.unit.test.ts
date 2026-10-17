@@ -30,7 +30,11 @@ describe('OpenAPI drift check policy', () => {
 
     expect(packageJson.scripts['ci:quality']).toMatch(/pnpm docs:check/);
 
-    const docsGenerate = readWorkflow('.github/workflows/reusable-openapi-postman-publish.yml');
+    // Every docs job (development docs, the production release) generates through one action.
+    const docsGenerate = readWorkflow('.github/actions/generate-api-docs/action.yml');
     expect(docsGenerate).toContain('pnpm docs:check');
+    expect(readWorkflow('.github/workflows/reusable-openapi-postman-publish.yml')).toContain(
+      'uses: ./.github/actions/generate-api-docs',
+    );
   });
 });

@@ -73,6 +73,14 @@ on:
         required: false
         type: boolean
         default: false
+      api_docs_artifact:
+        description: >-
+          Artifact of generated API docs (.github/actions/generate-api-docs) to publish once the
+          deploy is live. release-deploy.yml passes it, so the production docs go out inside the
+          approved deploy job — one approval for both. Empty → no docs step.
+        required: false
+        type: string
+        default: ''
     outputs:
       api_base_url:
         description: Deployed API base URL
@@ -773,6 +781,25 @@ jobs:
           set -euo pipefail
           echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           bash tooling/ci/rotate-live-image-tags.sh "${API_IMAGE}" "${WORKER_IMAGE}"
+
+      - name: Download the API docs generated for this release
+        if: success() && inputs.api_docs_artifact != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ inputs.api_docs_artifact }}
+          path: docs
+
+      # Uploads only: the docs were generated in a job with no environment (generate-api-docs), so
+      # nothing here assembles the app with the production values this job exported above.
+      - name: Publish the API docs (the deploy is live)
+        if: success() && inputs.api_docs_artifact != ''
+        uses: ./.github/actions/upload-api-docs
+        with:
+          postman-api-key: ${{ secrets.POSTMAN_API_KEY }}
+          postman-workspace-id: ${{ secrets.POSTMAN_WORKSPACE_ID }}
+          scalar-api-key: ${{ secrets.SCALAR_API_KEY }}
+          scalar-namespace: ${{ vars.SCALAR_NAMESPACE }}
+          scalar-slug: ${{ vars.SCALAR_SLUG }}
 
       - name: Retag failed deploy images for triage
         if: failure()
