@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.2.1](https://github.com/albetrios/clinozy-be/compare/v9.2.0...v9.2.1) (2026-10-17)
+
+
+### Fixed
+
+* **ci:** verify container boot after Railway SUCCESS and raise the DATABASE_POOL_MAX default to 70 ([#82](https://github.com/albetrios/clinozy-be/issues/82)) ([903ee3e](https://github.com/albetrios/clinozy-be/commit/903ee3ea1433ade663a513fa93960b7afb19d89e))
+
 ## [9.2.0](https://github.com/albetrios/clinozy-be/compare/v9.1.0...v9.2.0) (2026-10-16)
 
 
