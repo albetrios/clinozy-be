@@ -16,55 +16,50 @@ const PATIENTS = `${APP}/sub-domains/patients`;
 const STOCK = `${APP}/sub-domains/stock`;
 
 /** A small repository: three app sub-domains (patients imports leads), wiring, and one test per rule. */
+/**
+ * `from '<path>'` for a fixture import line. Built from the path so the from-alias sequence never
+ * appears verbatim in compiled dist (it would false-positive the `check-dist-imports` pre-push
+ * gate, which greps dist for it) — the same way as `worker-database-guard.unit.test.ts`.
+ */
+const from = (path: string): string => `from '${path}'`;
+
 const FIXTURE: Record<string, string> = {
   'package.json': '{}',
   'docs/reference/commands.md': '# Commands',
   'agent-os/hooks/guard.sh': '#!/usr/bin/env bash',
-  'src/app.ts': "import { appRoutes } from '@/domains/app/app.routes.js';\nexport { appRoutes };",
+  'src/app.ts': `import { appRoutes } ${from('@/domains/app/app.routes.js')};\nexport { appRoutes };`,
   [`${APP}/app.routes.ts`]: [
-    `import { leads } from '@/domains/app/sub-domains/leads/leads.controller.js';`,
-    `import { patients } from '@/domains/app/sub-domains/patients/patients.controller.js';`,
-    `import { stock } from '@/domains/app/sub-domains/stock/stock.controller.js';`,
+    `import { leads } ${from('@/domains/app/sub-domains/leads/leads.controller.js')};`,
+    `import { patients } ${from('@/domains/app/sub-domains/patients/patients.controller.js')};`,
+    `import { stock } ${from('@/domains/app/sub-domains/stock/stock.controller.js')};`,
     'export const appRoutes = [leads, patients, stock];',
   ].join('\n'),
   [`${LEADS}/leads.service.ts`]: 'export const leadsService = {};',
   [`${LEADS}/leads.controller.ts`]:
     "import { leadsService } from './leads.service.js';\nexport const leads = leadsService;",
-  [`${PATIENTS}/patients.service.ts`]:
-    "import { leadsService } from '@/domains/app/sub-domains/leads/leads.service.js';\nexport const patientsService = leadsService;",
+  [`${PATIENTS}/patients.service.ts`]: `import { leadsService } ${from('@/domains/app/sub-domains/leads/leads.service.js')};\nexport const patientsService = leadsService;`,
   [`${PATIENTS}/patients.controller.ts`]:
     "import { patientsService } from './patients.service.js';\nexport const patients = patientsService;",
   [`${STOCK}/stock.service.ts`]: 'export const stockService = {};',
   [`${STOCK}/stock.dto.ts`]: 'export const stockBody = {};',
   [`${STOCK}/stock.controller.ts`]:
     "import { stockService } from './stock.service.js';\nexport const stock = stockService;",
-  [`${LEADS}/__tests__/unit/leads.service.unit.test.ts`]:
-    "import { leadsService } from '@/domains/app/sub-domains/leads/leads.service.js';",
-  [`${LEADS}/__tests__/integration/leads.integration.test.ts`]:
-    "import { appRoutes } from '@/app.js';",
-  [`${PATIENTS}/__tests__/integration/patients.integration.test.ts`]:
-    "import { appRoutes } from '@/app.js';",
-  [`${STOCK}/__tests__/integration/stock.integration.test.ts`]:
-    "import { appRoutes } from '@/app.js';",
-  [`${APP}/__tests__/e2e/flow-enquiry.e2e.test.ts`]:
-    "import { appRoutes } from '@/app.js';\nconst path = '/api/v1/app/leads';",
-  [`${APP}/__tests__/e2e/flow-stock.e2e.test.ts`]:
-    "import { appRoutes } from '@/app.js';\nconst path = '/api/v1/app/stock';",
-  'src/tests/unit/routes-wiring.unit.test.ts':
-    "import { appRoutes } from '@/domains/app/app.routes.js';",
+  [`${LEADS}/__tests__/unit/leads.service.unit.test.ts`]: `import { leadsService } ${from('@/domains/app/sub-domains/leads/leads.service.js')};`,
+  [`${LEADS}/__tests__/integration/leads.integration.test.ts`]: `import { appRoutes } ${from('@/app.js')};`,
+  [`${PATIENTS}/__tests__/integration/patients.integration.test.ts`]: `import { appRoutes } ${from('@/app.js')};`,
+  [`${STOCK}/__tests__/integration/stock.integration.test.ts`]: `import { appRoutes } ${from('@/app.js')};`,
+  [`${APP}/__tests__/e2e/flow-enquiry.e2e.test.ts`]: `import { appRoutes } ${from('@/app.js')};\nconst path = '/api/v1/app/leads';`,
+  [`${APP}/__tests__/e2e/flow-stock.e2e.test.ts`]: `import { appRoutes } ${from('@/app.js')};\nconst path = '/api/v1/app/stock';`,
+  'src/tests/unit/routes-wiring.unit.test.ts': `import { appRoutes } ${from('@/domains/app/app.routes.js')};`,
   'src/tests/unit/hooks-policy.unit.test.ts':
     "import { join } from 'node:path';\nconst hooks = join(process.cwd(), 'agent-os', 'hooks');",
-  'src/tests/unit/docs-policy.unit.test.ts':
-    "import { stockService } from '@/domains/app/sub-domains/stock/stock.service.js';\nconst doc = 'docs/reference/commands.md';",
-  'src/tests/unit/dto-glob.unit.test.ts':
-    "import { stockService } from '@/domains/app/sub-domains/stock/stock.service.js';\nconst dtos = 'src/domains/**/*.dto.ts';",
-  'src/tests/security/tenant.security.test.ts': "import { appRoutes } from '@/app.js';",
+  'src/tests/unit/docs-policy.unit.test.ts': `import { stockService } ${from('@/domains/app/sub-domains/stock/stock.service.js')};\nconst doc = 'docs/reference/commands.md';`,
+  'src/tests/unit/dto-glob.unit.test.ts': `import { stockService } ${from('@/domains/app/sub-domains/stock/stock.service.js')};\nconst dtos = 'src/domains/**/*.dto.ts';`,
+  'src/tests/security/tenant.security.test.ts': `import { appRoutes } ${from('@/app.js')};`,
   'src/tests/global/layers.global.test.ts': "const roots = ['src'];",
-  'src/tests/helpers/fake.helper.ts':
-    "import { stockService } from '@/domains/app/sub-domains/stock/stock.service.js';\nexport const fake = stockService;",
-  'src/tests/integration/api-contract.integration.test.ts': "import { appRoutes } from '@/app.js';",
-  'src/tests/unit/harness-only.unit.test.ts':
-    "import { fake } from '@/tests/helpers/fake.helper.js';",
+  'src/tests/helpers/fake.helper.ts': `import { stockService } ${from('@/domains/app/sub-domains/stock/stock.service.js')};\nexport const fake = stockService;`,
+  'src/tests/integration/api-contract.integration.test.ts': `import { appRoutes } ${from('@/app.js')};`,
+  'src/tests/unit/harness-only.unit.test.ts': `import { fake } ${from('@/tests/helpers/fake.helper.js')};`,
 };
 
 let repositoryRoot = '';
