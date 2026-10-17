@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Claude Code PreToolUse guardrail for clinozy-be.
 //
-// BLOCK (deny): destructive shell commands, writes to secret files / secret content.
+// BLOCK (deny): reading or writing secret files, secret content, destructive shell commands.
+// ASK: `gh pr create` — a PR only when the user asked (no-unrequested-pr.sh covers the MCP tool).
 // WARN (systemMessage): edits to protected paths, cross-domain imports in a service.
 //
 // Reads the PreToolUse payload on stdin. Fail-open by design: any parse/read
@@ -29,7 +30,9 @@ const tool = payload.tool_name || "";
 const input = payload.tool_input || {};
 const filePath = input.file_path || input.path || "";
 const command = input.command || "";
-const content = [input.content, input.new_string].filter(Boolean).join("\n");
+const isWrite = tool === "Write" || tool === "Edit" || tool === "MultiEdit";
+const edits = Array.isArray(input.edits) ? input.edits.map((edit) => edit?.new_string) : [];
+const content = [input.content, input.new_string, ...edits].filter(Boolean).join("\n");
 
 // The WARN rules are clinozy-be's conventions, so they judge only files in this repository; the
 // BLOCK rules (destructive shell, secrets) guard every path. A session that holds several
@@ -56,6 +59,16 @@ const SECRET_READ_DENIAL =
   "(editable), setup creds in .setup-credentials (off-limits). If a human needs a value, read it from " +
   ".env.<environment> directly.";
 
+function ask(reason) {
+  recordTelemetry("guardrails", "PreToolUse", "fired");
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: reason },
+    }),
+  );
+  process.exit(0);
+}
+
 function deny(reason) {
   recordTelemetry("guardrails", "PreToolUse", "fired");
   process.stdout.write(
@@ -71,7 +84,7 @@ function deny(reason) {
 }
 
 // --- BLOCK: agent reading secrets files --------------------------------------
-if (tool === "Read" && isReadableSecretPath(filePath)) {
+if ((tool === "Read" || tool === "Grep") && isReadableSecretPath(filePath)) {
   deny(SECRET_READ_DENIAL);
 }
 if (tool === "Bash" && command) {
@@ -108,6 +121,11 @@ if (tool === "Bash" && command) {
       `Blocked by clinozy-be guardrail: ${why}. Command: "${command.slice(0, 160)}". If you truly intend this, run it yourself in a terminal.`,
     );
   }
+  if (/\bgh\s+pr\s+create\b/.test(scan)) {
+    ask(
+      "clinozy-be policy: open a PR only when the user explicitly asked for one (Bash(gh pr*) is allowlisted, so this hook is the check). Confirm this was requested before proceeding.",
+    );
+  }
   if (/\bgit\s+reset\s+--hard\b/i.test(scan) || /\bgit\s+clean\s+-[a-z]*f/i.test(scan)) {
     warnings.push(`destructive git op ("${command.slice(0, 80)}") discards uncommitted work.`);
   }
@@ -116,7 +134,7 @@ if (tool === "Bash" && command) {
 // --- BLOCK: secrets ----------------------------------------------------------
 // Same path set as reads — app `.env.<env>`, `.setup-credentials`, `.setup-state.*`
 // (templates `*.example` excluded). Edit app config in `.env.<environment>`, never these.
-if ((tool === "Write" || tool === "Edit") && isReadableSecretPath(filePath)) {
+if (isWrite && isReadableSecretPath(filePath)) {
   deny(
     `Blocked by clinozy-be guardrail: "${filePath}" is a gitignored secrets file. App config templates go in .env.example; setup-tooling creds in .setup-credentials are written by the setup CLI, not by hand.`,
   );
@@ -128,14 +146,14 @@ const secretPatterns = [
   /\bghp_[A-Za-z0-9]{36}\b/,
   /\bxox[baprs]-[A-Za-z0-9-]{10,}/,
 ];
-if ((tool === "Write" || tool === "Edit") && content && secretPatterns.some((re) => re.test(content))) {
+if (isWrite && content && secretPatterns.some((re) => re.test(content))) {
   deny(
     "Blocked by clinozy-be guardrail: the content looks like a private key or live credential. Use environment variables / a secret manager instead of committing secrets.",
   );
 }
 
 // --- WARN: protected paths ---------------------------------------------------
-if ((tool === "Write" || tool === "Edit") && filePath && inRepository) {
+if (isWrite && filePath && inRepository) {
   if (/(^|\/)migrations\/.+\.sql$/.test(filePath)) {
     warnings.push(
       `editing a migration (${filePath}) — applied migrations are immutable; add a NEW migration instead. Run pnpm db:migrate:lint.`,
@@ -150,7 +168,7 @@ if ((tool === "Write" || tool === "Edit") && filePath && inRepository) {
 // (Secret .env.<env> backups are already denied above; this catches the rest —
 // e.g. an example backup — and steers local backups into the gitignored .backups/.)
 if (
-  (tool === "Write" || tool === "Edit") &&
+  isWrite &&
   inRepository &&
   /(^|\/)\.?env[\w.-]*(bak|backup)[\w.-]*$/i.test(filePath) &&
   !filePath.includes("/.backups/")
@@ -161,7 +179,7 @@ if (
 }
 
 // --- WARN: cross-domain imports in a service ---------------------------------
-if ((tool === "Write" || tool === "Edit") && inRepository && /src\/domains\/[^/]+\/.*\.service\.ts$/.test(filePath) && content) {
+if (isWrite && inRepository && /src\/domains\/[^/]+\/.*\.service\.ts$/.test(filePath) && content) {
   const own = (filePath.match(/src\/domains\/([^/]+)\//) || [])[1] || "";
   const importRe = /@\/domains\/([^/]+)\/[^'"]*\.(repository|schema)(?:\.js)?['"]/g;
   const offenders = new Set();

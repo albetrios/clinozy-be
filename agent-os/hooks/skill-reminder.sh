@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 source "$(dirname "${BASH_SOURCE[0]}")/_telemetry.sh"
 telemetry_init "skill-reminder" "PostToolUse"
-# Claude Code PostToolUse hook.
-# Reads Edit/Write tool JSON from stdin, extracts the edited file path,
-# prints relevant skill reminders based on file pattern matching.
+source "$(dirname "${BASH_SOURCE[0]}")/_turn-once.sh"
+# Claude Code PostToolUse hook (Edit | Write | MultiEdit).
+# Reads the tool JSON from stdin, extracts the edited file path and adds the skill reminders
+# its file pattern implies as additionalContext — PostToolUse plain stdout never reaches the
+# model. Each reminder appears once per turn (_turn-once.sh), not on every edit.
 
 INPUT=$(cat)
 FILE=$(echo "$INPUT" | python3 -c \
   "import sys,json; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" \
   2>/dev/null || echo "")
+SESSION=$(echo "$INPUT" | python3 -c \
+  "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null || echo "")
 
 [[ -z "$FILE" ]] && exit 0
 
@@ -50,14 +54,21 @@ REMINDERS=()
 [[ "$FILE" == *".container.ts" ]] && \
   REMINDERS+=("container → be-domain-generator (check DI wiring)")
 
-if [[ "${#REMINDERS[@]}" -gt 0 ]]; then
-  telemetry_fired
-  echo ""
-  echo "⚡ Skill reminders for $(basename "$FILE"):"
-  for r in "${REMINDERS[@]}"; do
-    echo "  • $r"
-  done
-  echo "  Full map: agent-os/docs/skill-triggers.md"
-fi
+NEW_REMINDERS=()
+for r in "${REMINDERS[@]}"; do
+  turn_once "$SESSION" "skill-reminder:$r" && NEW_REMINDERS+=("$r")
+done
+[[ "${#NEW_REMINDERS[@]}" -gt 0 ]] || exit 0
 
+telemetry_fired
+text="⚡ Skill reminders for $(basename "$FILE"):"
+for r in "${NEW_REMINDERS[@]}"; do
+  text+=$'\n'"  • $r"
+done
+text+=$'\n'"  Full map: agent-os/docs/skill-triggers.md"
+if command -v jq >/dev/null 2>&1; then
+  jq -cn --arg c "$text" '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c}}'
+else
+  printf '%s\n' "$text"
+fi
 exit 0

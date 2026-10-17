@@ -42,7 +42,7 @@
       "script": "guardrails.mjs",
       "claude": {
         "event": "PreToolUse",
-        "matcher": "Bash|Edit|Write"
+        "matcher": "Bash|Read|Grep|Edit|Write|MultiEdit"
       },
       "codex": {
         "event": "PreToolUse",
@@ -74,7 +74,7 @@
       "script": "skill-reminder.sh",
       "claude": {
         "event": "PostToolUse",
-        "matcher": "Edit|Write"
+        "matcher": "Edit|Write|MultiEdit"
       }
     },
     {
@@ -105,7 +105,8 @@
       "runtime": "bash",
       "script": "subagent-verify.sh",
       "claude": {
-        "event": "SubagentStop"
+        "event": "PostToolUse",
+        "matcher": "Agent|Task"
       }
     },
     {
@@ -122,7 +123,8 @@
       "runtime": "bash",
       "script": "stop-gate-reminder.sh",
       "claude": {
-        "event": "Stop"
+        "event": "PostToolUse",
+        "matcher": "Edit|Write|MultiEdit"
       },
       "codex": {
         "event": "Stop",

@@ -59,7 +59,7 @@
         ]
       },
       {
-        "matcher": "Bash|Edit|Write",
+        "matcher": "Bash|Read|Grep|Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
@@ -88,7 +88,7 @@
         ]
       },
       {
-        "matcher": "Edit|Write",
+        "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
@@ -113,14 +113,22 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/injection-scan.mjs\""
           }
         ]
-      }
-    ],
-    "SubagentStop": [
+      },
       {
+        "matcher": "Agent|Task",
         "hooks": [
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/subagent-verify.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/stop-gate-reminder.sh\""
           }
         ]
       }
@@ -132,16 +140,6 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/gate-failure-hint.sh\""
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/stop-gate-reminder.sh\""
           }
         ]
       }

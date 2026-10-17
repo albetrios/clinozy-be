@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Claude Code Stop hook for clinozy-be.
+# Claude Code PostToolUse hook (Edit | Write | MultiEdit) and Codex Stop hook for clinozy-be.
 #
-# At end of turn, look at the uncommitted working-tree changes and surface the
+# Look at the uncommitted working-tree changes and surface the
 # SPECIFIC gate(s) those files imply — reusing the same file→skill map as
 # [`skill-reminder.sh`](skill-reminder.sh) / [`gate-failure-hint.sh`](gate-failure-hint.sh)
 # and [`agent-os/docs/skill-triggers.md`](../docs/skill-triggers.md). This turns the
@@ -10,11 +10,18 @@
 # commit/handoff. When nothing relevant changed (or the tree is clean — gates
 # already ran at commit), it falls back to the generic quick-checks reminder.
 #
-# Plain stdout, NON-blocking (never returns decision:block, so it cannot loop the
-# turn). Fails OPEN: any error exits 0.
+# Claude: after each edit, the gates not yet shown this turn go out as PostToolUse
+# additionalContext — a Stop hook's plain stdout never reaches the model, and a blocking
+# one would force another turn. Each gate appears once per turn (_turn-once.sh), and the
+# generic fallback is left out there so an ordinary edit adds nothing. Codex keeps the Stop
+# wiring and its plain-stdout checklist. NON-blocking either way. Fails OPEN: any error exits 0.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_telemetry.sh"
-telemetry_init "stop-gate-reminder" "Stop"
+source "$(dirname "${BASH_SOURCE[0]}")/_turn-once.sh"
+INPUT=$(cat 2>/dev/null || true)
+EVENT=$(printf '%s' "$INPUT" | jq -r '.hook_event_name // empty' 2>/dev/null || echo "")
+SESSION=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || echo "")
+telemetry_init "stop-gate-reminder" "${EVENT:-Stop}"
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 cd "$ROOT" 2>/dev/null || exit 0
@@ -45,6 +52,23 @@ match 'idempotency|stripe\.client\.ts$' && \
   REMINDERS+=("idempotency/stripe writes → be-idempotency-guard")
 match '\.mdc$|^agent-os/|agent-os/|CLAUDE\.md$' && \
   REMINDERS+=("agent-os, rules or docs changed → pnpm agent-os:check (be-structure-maintainer)")
+
+if [[ "$EVENT" == "PostToolUse" ]]; then
+  NEW_REMINDERS=()
+  for r in "${REMINDERS[@]}"; do
+    turn_once "$SESSION" "stop-gate-reminder:$r" && NEW_REMINDERS+=("$r")
+  done
+  [[ "${#NEW_REMINDERS[@]}" -gt 0 ]] || exit 0
+  telemetry_fired
+  text="📋 Gates implied by your uncommitted changes (run them before you finish):"
+  for r in "${NEW_REMINDERS[@]}"; do
+    text+=$'\n'"  • $r"
+  done
+  text+=$'\n'"  Then: pnpm validate (lint + format + typecheck). Full map: agent-os/docs/skill-triggers.md"
+  jq -cn --arg c "$text" '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c}}' 2>/dev/null \
+    || printf '%s\n' "$text"
+  exit 0
+fi
 
 echo ""
 if [[ "${#REMINDERS[@]}" -gt 0 ]]; then

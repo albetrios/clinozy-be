@@ -19,6 +19,9 @@ telemetry_init "prompt-skill-router" "UserPromptSubmit"
 command -v jq >/dev/null 2>&1 || exit 0
 
 INPUT=$(cat)
+# A new prompt is a new turn: the reminder hooks may speak once more (_turn-once.sh).
+source "$(dirname "${BASH_SOURCE[0]}")/_turn-once.sh"
+turn_reset "$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || echo "")"
 PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // empty' 2>/dev/null || echo "")
 [[ -z "$PROMPT" ]] && exit 0
 
