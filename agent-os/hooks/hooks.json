@@ -126,6 +126,16 @@
       }
     },
     {
+      "id": "turn-end-tests",
+      "runtime": "node",
+      "script": "turn-end-tests.mjs",
+      "claude": {
+        "event": "Stop",
+        "asyncRewake": true,
+        "timeout": 120
+      }
+    },
+    {
       "id": "pre-compact-preserve",
       "runtime": "bash",
       "script": "pre-compact-preserve.sh",

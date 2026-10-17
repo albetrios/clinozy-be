@@ -164,6 +164,16 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/edit-hooks.mjs\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/turn-end-tests.mjs\"",
+            "asyncRewake": true,
+            "timeout": 120
+          }
+        ]
       }
     ],
     "PreCompact": [

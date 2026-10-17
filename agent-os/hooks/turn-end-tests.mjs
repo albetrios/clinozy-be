@@ -1,0 +1,162 @@
+#!/usr/bin/env node
+// Claude Code Stop hook for clinozy-be, registered with `asyncRewake`: at turn end, in the
+// background, it runs the unit-level tests the uncommitted changes affect — `pnpm test:select`,
+// then its unit, property and global files — within a 60-second budget, one run at a time. A
+// failure exits 2, which wakes the model with the failing tests; a pass, a timeout, a skip or
+// any error exits 0 and says nothing. App-level database tests stay at push and in the PR.
+//
+// Switch: AGENT_TURN_END_TESTS=1 runs it, =0 never; unset, it is off until 2026-10-24
+// (Asia/Calcutta) and on from then. It skips a tree it already passed (same changes), a
+// selection that runs everything (the push does), and a change no unit-level test reaches.
+//
+// Only this repository is judged: a session that holds several repositories runs every
+// repository's hooks, each with its own CLAUDE_PROJECT_DIR (tooling/agent-os/session-hooks.ts).
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { recordTelemetry } from "./_telemetry.mjs";
+
+const HOOK_ID = "turn-end-tests";
+/** The first day (Asia/Calcutta) the hook runs without AGENT_TURN_END_TESTS=1. */
+const ON_BY_DEFAULT_FROM = "2026-10-24";
+const TEST_BUDGET_MILLISECONDS = 60_000;
+const SELECTION_BUDGET_MILLISECONDS = 20_000;
+const UNIT_LEVEL_PROJECTS = ["unit", "property", "global"];
+const FAILURE_LINES = 40;
+
+const repositoryRoot =
+  process.env.CLAUDE_PROJECT_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const stateRoot = join(process.env.TMPDIR || "/tmp", "clinozy-be-hooks");
+const lockPath = join(stateRoot, `${HOOK_ID}.lock`);
+const passedPath = join(stateRoot, `${HOOK_ID}.passed`);
+
+function isSwitchedOn() {
+  const value = process.env.AGENT_TURN_END_TESTS?.trim();
+  if (value === "1") return true;
+  if (value === "0") return false;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+  return today >= ON_BY_DEFAULT_FROM;
+}
+
+/** Holds the one-run lock, or returns false while a live run holds it. */
+function takeLock() {
+  mkdirSync(stateRoot, { recursive: true });
+  if (existsSync(lockPath)) {
+    const holder = Number(readFileSync(lockPath, "utf8"));
+    try {
+      if (holder > 0) {
+        process.kill(holder, 0);
+        return false;
+      }
+    } catch {
+      /* the holder is gone: take the lock over */
+    }
+  }
+  writeFileSync(lockPath, String(process.pid));
+  return true;
+}
+
+function git(args) {
+  const result = spawnSync("git", args, { cwd: repositoryRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  return result.status === 0 ? result.stdout : "";
+}
+
+/** Uncommitted paths that still exist (a rename counts as its new path). */
+function changedFiles() {
+  return git(["status", "--porcelain", "-unormal"])
+    .split("\n")
+    .filter((line) => line.length > 3)
+    .map((line) => line.slice(3).split(" -> ").pop())
+    .filter((path) => existsSync(join(repositoryRoot, path)) && statSync(join(repositoryRoot, path)).isFile());
+}
+
+/** Changes the tree's uncommitted state: the diff against HEAD and each untracked file's size and time. */
+function fingerprint(files) {
+  const hash = createHash("sha1").update(git(["diff", "HEAD"]));
+  for (const file of files) {
+    const { size, mtimeMs } = statSync(join(repositoryRoot, file));
+    hash.update(`${file}:${size}:${mtimeMs}\n`);
+  }
+  return hash.digest("hex");
+}
+
+function bin(name) {
+  return join(repositoryRoot, "node_modules", ".bin", name);
+}
+
+/** `pnpm test:select --files … --json`, or null when it cannot answer. */
+function select(files) {
+  const result = spawnSync(bin("tsx"), ["tooling/vitest/select-tests.ts", "--files", files.join(","), "--json"], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    timeout: SELECTION_BUDGET_MILLISECONDS,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (result.status !== 0) return null;
+  const start = result.stdout.indexOf("{");
+  return start === -1 ? null : JSON.parse(result.stdout.slice(start));
+}
+
+function run() {
+  if (!isSwitchedOn()) return "off";
+  if (!takeLock()) return "busy";
+  try {
+    const files = changedFiles();
+    if (files.length === 0) return "silent";
+    const tree = fingerprint(files);
+    if (existsSync(passedPath) && readFileSync(passedPath, "utf8") === tree) return "already-passed";
+    const selection = select(files);
+    if (!selection || selection.mode !== "selected") return "silent";
+    const projects = UNIT_LEVEL_PROJECTS.filter((project) => selection.projects[project]?.length);
+    const tests = projects.flatMap((project) => selection.projects[project]);
+    if (tests.length === 0) return "silent";
+
+    const result = spawnSync(
+      bin("vitest"),
+      ["run", ...projects.flatMap((project) => ["--project", project]), ...tests],
+      {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+        timeout: TEST_BUDGET_MILLISECONDS,
+        killSignal: "SIGKILL",
+        maxBuffer: 64 * 1024 * 1024,
+        env: { ...process.env, FORCE_COLOR: "0" },
+      },
+    );
+    if (result.error || result.signal) return "timeout";
+    if (result.status === 0) {
+      writeFileSync(passedPath, tree);
+      return "passed";
+    }
+    const output = `${result.stdout}\n${result.stderr}`;
+    const failures = output
+      .split("\n")
+      .filter((line) => /FAIL|×|✗|AssertionError|Error:/.test(line))
+      .slice(0, FAILURE_LINES);
+    process.stderr.write(
+      [
+        `Turn-end tests: the unit-level tests your uncommitted changes affect failed (${tests.length} file(s), ${projects.join(" + ")}):`,
+        ...failures,
+        `Re-run: pnpm exec vitest run ${projects.map((project) => `--project ${project}`).join(" ")} <file> — or pnpm test:select --why`,
+      ].join("\n") + "\n",
+    );
+    return "failed";
+  } finally {
+    rmSync(lockPath, { force: true });
+  }
+}
+
+let outcome = "error";
+try {
+  outcome = run();
+} catch {
+  /* fail-open */
+}
+try {
+  recordTelemetry(HOOK_ID, "Stop", outcome);
+} catch {
+  /* telemetry never changes the outcome */
+}
+process.exit(outcome === "failed" ? 2 : 0);

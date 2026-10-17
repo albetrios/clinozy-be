@@ -35,8 +35,16 @@ interface HookManifestEntry {
    * `if`: permission rules (`Edit(**)`, `Write(**)`), one handler each — Claude Code spawns the
    * hook only for a tool call that matches one. An `Edit(…)` rule matches Edit calls only, a
    * `Write(…)` rule Write calls only (checked on Claude Code 2.1.302).
+   * `asyncRewake`: the hook runs in the background and wakes the model when it exits 2;
+   * `timeout`: seconds before Claude Code stops it.
    */
-  claude?: { event: string; matcher?: string; if?: string[] };
+  claude?: {
+    event: string;
+    matcher?: string;
+    if?: string[];
+    asyncRewake?: boolean;
+    timeout?: number;
+  };
   cursor?: { event: string; matcher?: string };
   codex?: { event: string; matcher?: string; statusMessage?: string };
 }
@@ -76,7 +84,13 @@ const codexCommand = (entry: HookManifestEntry): string =>
 
 type ClaudeHookEntry = {
   matcher?: string;
-  hooks: Array<{ type: 'command'; command: string; if?: string }>;
+  hooks: Array<{
+    type: 'command';
+    command: string;
+    if?: string;
+    asyncRewake?: boolean;
+    timeout?: number;
+  }>;
 };
 
 /**
@@ -115,10 +129,14 @@ function buildClaudeHooks(): Record<string, ClaudeHookEntry[]> {
       continue;
     }
     const command = claudeCommand(entry);
+    const options = {
+      ...(entry.claude.asyncRewake ? { asyncRewake: true } : {}),
+      ...(entry.claude.timeout === undefined ? {} : { timeout: entry.claude.timeout }),
+    };
     const handlers: ClaudeHookEntry['hooks'] =
       rules.length > 0
-        ? rules.map((rule) => ({ type: 'command', command, if: rule }))
-        : [{ type: 'command', command }];
+        ? rules.map((rule) => ({ type: 'command', command, if: rule, ...options }))
+        : [{ type: 'command', command, ...options }];
     const hookEntry: ClaudeHookEntry = entry.claude.matcher
       ? { matcher: entry.claude.matcher, hooks: handlers }
       : { hooks: handlers };

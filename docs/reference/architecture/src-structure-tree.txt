@@ -3493,6 +3493,7 @@ src/
     │   │   ├── agent-stack-lock.unit.test.ts
     │   │   ├── agent-tool-install-lib.unit.test.ts
     │   │   ├── agent-tool-versions.policy.unit.test.ts
+    │   │   ├── agent-turn-end-tests.unit.test.ts
     │   │   ├── check-load-coverage.unit.test.ts
     │   │   ├── check-patch-coverage.unit.test.ts
     │   │   ├── dashboards-mcp.unit.test.ts
