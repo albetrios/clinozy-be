@@ -90,7 +90,7 @@ describe('restore drill automation policy', () => {
       const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
       const migrateIndex = workflow.indexOf('run: pnpm db:migrate');
       const advanceIndex = workflow.indexOf('pnpm --silent db:sequences:advance');
-      const smokeIndex = workflow.indexOf('run: pnpm test:integration');
+      const smokeIndex = workflow.indexOf('run: pnpm db:restore:smoke');
 
       expect(migrateIndex, workflowFileName).toBeGreaterThan(-1);
       expect(advanceIndex, workflowFileName).toBeGreaterThan(migrateIndex);
@@ -167,15 +167,15 @@ describe('restore drill automation policy', () => {
       }
     });
 
-    it('smokes the one auth suite, not the whole integration project', () => {
-      // pnpm forwards a literal `--`, after which Vitest drops the file filter and runs all of
-      // the integration project against the production copy.
+    it('smokes the copy without a test suite — their setup truncates every table', () => {
+      // The drills once ran the auth integration suite here: its cleanup TRUNCATEs every table,
+      // and only a missing table privilege on the copy stopped it.
       for (const workflowFileName of drillWorkflowFileNames) {
         const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
-        expect(workflow, workflowFileName).toContain(
-          'run: pnpm test:integration src/domains/auth/__tests__/integration/auth.integration.test.ts',
-        );
-        expect(workflow, workflowFileName).not.toMatch(/pnpm test:integration -- /);
+        expect(workflow, workflowFileName).toContain('run: pnpm db:restore:smoke');
+        expect(workflow, workflowFileName).not.toMatch(/pnpm (test|vitest)\b|vitest run/);
+        // send-code returns the sign-in code only under TEST_MODE, on the smoke step alone.
+        expect(workflow.match(/TEST_MODE: 'true'/g), workflowFileName).toHaveLength(1);
       }
     });
 

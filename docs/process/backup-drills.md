@@ -21,7 +21,7 @@ Elapsed restore time must be **strictly less than** `RTO_MINUTES × 60` seconds.
 ```mermaid
 flowchart LR
   A[GitHub Environment secrets] --> B["PITR branch in the environment's Neon project"]
-  B --> C[db:migrate + advance id sequences + auth integration smoke]
+  B --> C[db:migrate + advance id sequences + restore smoke]
   C --> D[restore-drill-rto.json]
   D --> E{elapsed < RTO_MINUTES?}
   E -->|yes| F[Pass + delete branch]
@@ -33,7 +33,7 @@ flowchart LR
 | **Parent branch** | The only branch of the resolved **GitHub Environment**'s Neon project (`main` → **`production`** → project `clinozy-be-production`, branch `production`; the drill runs from `main` only) |
 | **Install** | Node, pnpm and dependencies — before the branch exists, so the copy of production lives only as long as the restore steps |
 | **Branch create** | Child branch from that parent at **15-minute** PITR lookback; its id is recorded first, so the delete step finds it even if a later step fails |
-| **Recovery** | `pnpm db:migrate` over the branch's **direct** endpoint (the migration advisory lock needs one backend), then `pnpm db:sequences:advance` (the [DR runbook](dr-runbook.md#advance-the-id-sequences-after-a-restore) step), then the auth integration smoke (`auth.integration.test.ts` only) over the **pooled** endpoint, as in production — the weekly restore smoke runs the same three |
+| **Recovery** | `pnpm db:migrate` over the branch's **direct** endpoint (the migration advisory lock needs one backend), then `pnpm db:sequences:advance` (the [DR runbook](dr-runbook.md#advance-the-id-sequences-after-a-restore) step), then `pnpm db:restore:smoke` over the **pooled** endpoint, as in production: every migration applied, every table reads, every id sequence past its ids, and a sign-in round trip on the booted app — nothing deleted, no test suite (their setup truncates every table). The weekly restore smoke runs the same three |
 | **RTO clock** | Starts at branch creation; ends after smoke passes |
 | **Cleanup** | Ephemeral branch deleted; it also expires **1 hour** after creation |
 

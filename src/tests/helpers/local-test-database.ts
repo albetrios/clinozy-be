@@ -97,16 +97,33 @@ export function pointHarnessAtLocalTestDatabase(): void {
  * Throws unless a connection is on the local test database — the guard in front of every wipe.
  *
  * @remarks
- * - **Algorithm:** asks the server for `current_database()` and compares it with
- *   {@link LOCAL_TEST_DATABASE_NAME}; skipped when {@link isHarnessOnProvidedDatabase}.
- * - **Failure modes:** throws, naming the database it refused, so no suite can `TRUNCATE` the
- *   database `pnpm dev` serves — or a remote one — whatever an env file says.
- * - **Side effects:** one read-only query.
+ * - **Algorithm:** with `ALLOW_HOSTED_TEST_DATABASE=true`, passes. On a GitHub Actions runner,
+ *   passes only when every `DATABASE_*URL` is on the runner itself (its service container, reached
+ *   over loopback). Otherwise asks the server for `current_database()` and compares it with
+ *   {@link LOCAL_TEST_DATABASE_NAME}.
+ * - **Failure modes:** throws, naming the database or the env variable it refused, so no suite can
+ *   `TRUNCATE` the database `pnpm dev` serves — or a remote one — whatever an env file or a
+ *   workflow says. The restore drills once ran an integration suite on a runner against a restored
+ *   copy of production; only a missing table privilege stopped its wipe.
+ * - **Side effects:** at most one read-only query.
  */
 export async function assertConnectedToTestDatabase(
   databaseHandle: Pick<PostgresDatabaseHandle, 'execute'>,
 ): Promise<void> {
-  if (isHarnessOnProvidedDatabase()) return;
+  if (process.env.ALLOW_HOSTED_TEST_DATABASE === 'true') return;
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    const remoteKey = DATABASE_URL_KEYS.find(
+      (key) => process.env[key] !== undefined && !isLocalDatabaseUrl(process.env[key]),
+    );
+    if (remoteKey) {
+      throw new Error(
+        `Refusing to wipe: ${remoteKey} points off this runner. On GitHub Actions test cleanup ` +
+          "only runs against the job's own service container; set ALLOW_HOSTED_TEST_DATABASE=true " +
+          'for a dedicated hosted test database.',
+      );
+    }
+    return;
+  }
   const result = await databaseHandle.execute<{ name: string }>(
     sql`SELECT current_database() AS name`,
   );

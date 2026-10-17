@@ -125,9 +125,31 @@ describe('local test database harness', () => {
       );
     });
 
-    it('does not even ask on a provided database', async () => {
+    it("does not even ask on a GitHub Actions runner's own service container", async () => {
       process.env.GITHUB_ACTIONS = 'true';
+      process.env.DATABASE_URL = 'postgresql://ci:ci@localhost:5432/ci_database';
       const { query, sql } = fakeQuery('ci_database');
+      await assertConnectedToTestDatabase(sql);
+      expect(query).not.toHaveBeenCalled();
+    });
+
+    it('refuses a runner whose database is off the runner, naming only the env variable', async () => {
+      process.env.GITHUB_ACTIONS = 'true';
+      process.env.DATABASE_URL = 'postgresql://ci:ci@localhost:5432/ci_database';
+      process.env.DATABASE_MAINTENANCE_URL =
+        'postgresql://owner:secret@ep-restore-drill.neon.tech/production';
+      const { query, sql } = fakeQuery('production');
+      const refusal = assertConnectedToTestDatabase(sql);
+      await expect(refusal).rejects.toThrow(/Refusing to wipe: DATABASE_MAINTENANCE_URL/);
+      await expect(refusal).rejects.not.toThrow(/neon\.tech|secret/);
+      expect(query).not.toHaveBeenCalled();
+    });
+
+    it('passes a hosted database only with the explicit opt-in', async () => {
+      process.env.GITHUB_ACTIONS = 'true';
+      process.env.DATABASE_URL = 'postgresql://test:test@hosted-test.example.com/test';
+      process.env.ALLOW_HOSTED_TEST_DATABASE = 'true';
+      const { query, sql } = fakeQuery('test');
       await assertConnectedToTestDatabase(sql);
       expect(query).not.toHaveBeenCalled();
     });

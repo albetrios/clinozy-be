@@ -1,8 +1,8 @@
 # Weekly lightweight restore smoke drill — catches restore/migrate regressions 4x faster
 # than the monthly RTO drill, without the full RTO overhead. Creates a throwaway Neon PITR
 # branch in the GitHub Environment's own Neon project (main → production → project
-# <slug>-production, branch production), runs migrate + auth integration smoke, then deletes the
-# branch. No RTO assertion. See docs/process/backup-drills.md.
+# <slug>-production, branch production), runs migrate + the non-destructive restore
+# smoke, then deletes the branch. No RTO assertion. See docs/process/backup-drills.md.
 
 name: Weekly restore smoke drill
 
@@ -42,7 +42,7 @@ jobs:
           esac
 
   restore-smoke:
-    name: Restore branch — migrate and auth smoke
+    name: Restore branch — migrate and restore smoke
     needs: [resolve-environment]
     runs-on: ubuntu-latest
     environment: ${{ needs.resolve-environment.outputs.environment }}
@@ -114,12 +114,19 @@ jobs:
           set -euo pipefail
           pnpm --silent db:sequences:advance | tail -n 1
 
-      - name: Auth integration smoke on restored database
+      # Reads every table, checks every id sequence is past its column's ids, then boots the app and
+      # signs a new user in and out (src/scripts/ops/db-restore-smoke.ts). Never a test suite: their
+      # setup truncates every table, and this branch is a copy of production. TEST_MODE makes
+      # send-code return the sign-in code (no CAPTCHA in front of it); the drill user goes when
+      # the branch is deleted.
+      - name: Restore smoke on restored database
         env:
           DATABASE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
           DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
           DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.direct_database_url }}
-        run: pnpm test:integration src/domains/auth/__tests__/integration/auth.integration.test.ts
+          TEST_MODE: 'true'
+          CAPTCHA_PROVIDER: disabled
+        run: pnpm db:restore:smoke
 
       - name: Delete Neon restore drill branch
         if: always() && steps.neon_drill.outputs.branch_id != ''
@@ -136,4 +143,4 @@ jobs:
     steps:
       - name: Emit workflow failure notice
         run: |
-          echo "::error title=Weekly restore smoke failed::Review docs/process/backup-drills.md — weekly drill validates migrate + auth smoke on a restored Neon PITR branch."
+          echo "::error title=Weekly restore smoke failed::Review docs/process/backup-drills.md — weekly drill validates migrate + the restore smoke on a restored Neon PITR branch."
