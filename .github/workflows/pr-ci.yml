@@ -267,6 +267,35 @@ jobs:
     with:
       matrix-tests-result: ${{ needs.matrix-tests.result }}
 
+  # Not a gate: after the full suite, the failed test files pnpm test:select would have skipped for
+  # this PR's changes — each is a selector miss (or a flake); its fixture line goes into
+  # tooling/vitest/selector-fixtures.json so the selection includes it next time.
+  selector-miss-check:
+    name: Selector miss check
+    needs: [unit-tests, matrix-tests]
+    if: always() && (needs.unit-tests.result == 'failure' || needs.matrix-tests.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Download the test results of every job and shard
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: test-results-*
+          path: test-results
+          merge-multiple: true
+
+      - name: Failed tests the selection would have skipped
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: pnpm test:selector-misses --base "$BASE_SHA" --results test-results
+
   migration-lint:
     name: Migration lint
     needs: [changes]

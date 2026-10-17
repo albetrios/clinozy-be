@@ -247,6 +247,12 @@ Everything runs when a change touches the escalation list (dependencies, Vitest 
 deleted file nothing imports any more, or when the selector fails. So an app sub-domain change
 gets a small selection and a core-domain change runs everything — by design.
 
+The selection is checked against the full suite: when a PR's unit job or database matrix fails,
+the `Selector miss check` job (`pnpm test:selector-misses`, not a gate) lists every failed file the
+selection would have skipped — a miss, or a flake. A real miss becomes an entry in
+`tooling/vitest/selector-fixtures.json` (its fixture line is printed), so the next selection
+includes it.
+
 ### Run one database suite at a time
 
 `fileParallelism: false` on the database-backed projects (`unit-db`, `e2e`, `integration`,

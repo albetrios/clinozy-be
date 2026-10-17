@@ -158,6 +158,7 @@ jobs:
         env:
           VITEST_DOMAIN_FILTER: ${{ matrix.shard.domain_filter }}
           VITEST_SECURITY_SLICE: ${{ matrix.shard.security_slice }}
+          SHARD_ID: ${{ matrix.shard.id }}
         run: |
           set -euo pipefail
           pnpm exec vitest run \
@@ -168,7 +169,18 @@ jobs:
             --coverage.thresholds.branches=0 \
             --passWithNoTests \
             --exclude 'src/tests/security/rls/**' \
+            --reporter=default --reporter=github-actions \
+            --reporter=json --outputFile.json="test-results/${SHARD_ID}.json" \
             ${{ matrix.shard.projects }}
+
+      # Read by the PR's selector miss check: the failed files pnpm test:select would have skipped.
+      - name: Upload test results
+        if: always() && hashFiles('test-results/**') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-results-${{ matrix.shard.id }}
+          path: test-results/
+          retention-days: 7
 
       - name: Rename coverage report for shard
         if: always() && hashFiles('coverage/**') != ''

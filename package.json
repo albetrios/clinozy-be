@@ -92,6 +92,7 @@
     "test:all-projects": "vitest run",
     "test:parallel": "tsx tooling/vitest/run-parallel.ts",
     "test:select": "tsx tooling/vitest/select-tests.ts",
+    "test:selector-misses": "tsx tooling/vitest/selector-misses.ts",
     "test:contract": "CONTRACT_TESTS_ENABLED=true NODE_OPTIONS=--import=nock vitest run --config tooling/vitest/contract.config.ts --no-file-parallelism",
     "test:property": "PROPERTY_TESTS_ENABLED=true FAST_CHECK_NUM_RUNS=${FAST_CHECK_NUM_RUNS:-100} vitest run --project property",
     "test:integration": "vitest run --project integration",
