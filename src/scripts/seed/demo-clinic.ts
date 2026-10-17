@@ -1,7 +1,7 @@
 /**
  * Demo clinic seed — a real-looking skin & hair clinic with two branches, five staff who can sign
- * in, two dozen patients and six weeks of visits, bills, notes, enquiries and tasks, so every room
- * of the app has something to show. The story is `demo-clinic.plan.ts` (pure, seeded Faker); this
+ * in, two dozen patients and six weeks of visits, bills, notes, enquiries and tasks, a medical store
+ * and a procedure room's stock, so every room of the app has something to show. The story is `demo-clinic.plan.ts` (pure, seeded Faker); this
  * file writes it through each domain's seed helpers. Orchestration only.
  *
  * Usage: pnpm db:seed:demo-clinic [--fresh]
@@ -27,7 +27,18 @@ import {
   type DemoMoment,
   type DemoStaffKey,
 } from './demo-clinic.plan.js';
-import { DEMO_MACHINES, DEMO_OFFERINGS, DEMO_ROOMS } from './demo-clinic.catalog.js';
+import {
+  DEMO_MACHINES,
+  DEMO_MANUFACTURERS,
+  DEMO_OFFERINGS,
+  DEMO_ROOMS,
+  type DemoManufacturerKey,
+  type DemoMedicineKey,
+  type DemoStockItemKey,
+  type DemoStockVendorKey,
+  type DemoSupplierKey,
+} from './demo-clinic.catalog.js';
+import { demoMedicine, demoStockItem, momentKey } from './demo-clinic.stock.plan.js';
 import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
@@ -73,6 +84,42 @@ import {
 } from '@/domains/app/sub-domains/billing/invoices/seed/invoices.seed.js';
 import { seedPayment } from '@/domains/app/sub-domains/billing/payments/seed/payments.seed.js';
 import { seedTask } from '@/domains/app/sub-domains/tasks/seed/tasks.seed.js';
+import { seedManufacturer } from '@/domains/app/sub-domains/medical/manufacturers/seed/manufacturers.seed.js';
+import {
+  seedSupplier,
+  seedSupplierManufacturer,
+} from '@/domains/app/sub-domains/medical/suppliers/seed/suppliers.seed.js';
+import { seedSupplierCredit } from '@/domains/app/sub-domains/medical/suppliers/supplier-credits/seed/supplier-credits.seed.js';
+import {
+  seedMedicine,
+  seedMedicineBatch,
+  seedMedicineSupplierPrice,
+} from '@/domains/app/sub-domains/medical/medicines/seed/medicines.seed.js';
+import {
+  seedMedicalPurchaseOrder,
+  seedMedicalPurchaseOrderItem,
+} from '@/domains/app/sub-domains/medical/medical-purchase-orders/seed/medical-purchase-orders.seed.js';
+import {
+  seedMedicalRep,
+  seedMedicalRepManufacturer,
+} from '@/domains/app/sub-domains/medical/medical-reps/seed/medical-reps.seed.js';
+import { seedMedicalRepVisit } from '@/domains/app/sub-domains/medical/medical-reps/medical-rep-visits/seed/medical-rep-visits.seed.js';
+import { seedMedicalSale } from '@/domains/app/sub-domains/medical/medical-sales/seed/medical-sales.seed.js';
+import { seedStockVendor } from '@/domains/app/sub-domains/stock/stock-vendors/seed/stock-vendors.seed.js';
+import { seedStockItem } from '@/domains/app/sub-domains/stock/stock-items/seed/stock-items.seed.js';
+import { seedStockPurchase } from '@/domains/app/sub-domains/stock/stock-purchases/seed/stock-purchases.seed.js';
+import { seedStockCount } from '@/domains/app/sub-domains/stock/stock-counts/seed/stock-counts.seed.js';
+import { seedStockItemMovement } from '@/domains/app/sub-domains/stock/stock-item-movements/seed/stock-item-movements.seed.js';
+import {
+  quantityMilli,
+  quantityText,
+} from '@/domains/app/sub-domains/stock/stock-item-movements/stock-item-movements.ledger.js';
+import { MEDICAL_PURCHASE_ORDER_STAGE } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.constants.js';
+import {
+  PAYMENT_DIRECTION,
+  PAYMENT_EXPENSE_CATEGORY,
+  PAYMENT_KIND,
+} from '@/domains/app/sub-domains/billing/payments/payments.constants.js';
 import { runTaskRulesJob } from '@/domains/app/sub-domains/tasks/workers/task-rules.processor.js';
 import { runOrganizationScopedWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -86,6 +133,17 @@ export interface DemoClinicSeedResult {
   slug: string;
   /** False when the clinic was already there and `fresh` was not asked for. */
   created: boolean;
+}
+
+/** Paise as the `numeric(12,2)` text a money column takes (`74800` → `748.00`). */
+function rupeesText(paise: number): string {
+  return (paise / 100).toFixed(2);
+}
+
+/** A payment the shelves owe the ledger, written in the order it was paid. */
+interface ShelfPayment {
+  at: DemoMoment;
+  write: () => Promise<void>;
 }
 
 /** The staff's ids once they exist: their logins and their memberships in the clinic. */
@@ -244,6 +302,10 @@ export async function runDemoClinicSeed(
       leads: plan.leads.length,
       invoices: plan.invoices.length,
       tasks: plan.tasks.length + rules.openedCount,
+      medicines: plan.store.medicines.length,
+      medicalSales: plan.store.sales.length,
+      stockItems: plan.stock.items.length,
+      stockMovements: plan.stock.movements.length,
     },
     'seed.demo-clinic: done',
   );
@@ -276,6 +338,8 @@ class DemoClinicWriter {
   private readonly appointmentIds: number[] = [];
   private readonly treatmentIds: number[] = [];
   private readonly invoiceIds: number[] = [];
+  /** The store's and the stock's payments, written together in the order they were paid. */
+  private readonly shelfPayments: ShelfPayment[] = [];
 
   constructor(options: {
     plan: DemoClinicPlan;
@@ -304,6 +368,9 @@ class DemoClinicWriter {
     await this.writeAppointments();
     await this.writePatientFile();
     await this.writeBills();
+    await this.writeMedicalStore();
+    await this.writeClinicStock();
+    await this.writeShelfPayments();
     await this.writeTasks();
   }
 
@@ -684,6 +751,480 @@ class DemoClinicWriter {
         await seedInvoicePaidAmount({ invoice_id: invoice.id, paid_amount: amount });
       }
     }
+  }
+
+  /**
+   * The medical store: its brands, agencies and their prices, the medicines with every batch, the
+   * orders and their lines, the packs sent back to agencies, the MRs and the sales; the payments
+   * follow in {@link writeShelfPayments}.
+   */
+  private async writeMedicalStore(): Promise<void> {
+    const { store } = this.plan;
+    const { organization_id, ownerId, frontDeskId } = this;
+    const opened = this.createdAt(store.openedAt);
+    const byOwner = {
+      created_by_user_id: ownerId,
+      updated_by_user_id: ownerId,
+      created_at: opened,
+      updated_at: opened,
+    };
+    const manufacturerIds = new Map<DemoManufacturerKey, number>();
+    for (const manufacturer of DEMO_MANUFACTURERS) {
+      manufacturerIds.set(
+        manufacturer.key,
+        await seedManufacturer({
+          organization_id,
+          name: manufacturer.name,
+          tone: manufacturer.tone,
+          ...byOwner,
+        }),
+      );
+    }
+    const supplierIds = new Map<DemoSupplierKey, number>();
+    for (const supplier of store.suppliers) {
+      const supplierId = await seedSupplier({
+        organization_id,
+        name: supplier.name,
+        phone: supplier.phone,
+        gst_number: supplier.gstNumber,
+        ...byOwner,
+      });
+      supplierIds.set(supplier.key, supplierId);
+      for (const key of supplier.manufacturers) {
+        await seedSupplierManufacturer({
+          supplier_id: supplierId,
+          manufacturer_id: manufacturerIds.get(key)!,
+          organization_id,
+          created_by_user_id: ownerId,
+          created_at: opened,
+        });
+      }
+    }
+    const medicineIds = new Map<DemoMedicineKey, number>();
+    for (const medicine of store.medicines) {
+      const item = demoMedicine(medicine.key);
+      medicineIds.set(
+        medicine.key,
+        await seedMedicine({
+          organization_id,
+          name: item.name,
+          composition: item.composition,
+          manufacturer_id: manufacturerIds.get(item.manufacturer)!,
+          is_prescription_only: item.isPrescriptionOnly,
+          mrp: item.mrp.toFixed(2),
+          gst_percent: item.gstPercent,
+          min_stock: item.minStock,
+          max_stock: item.maxStock,
+          quantity: medicine.quantity,
+          near_expiry_discount_percent: item.nearExpiryDiscountPercent?.toFixed(2) ?? null,
+          ...byOwner,
+          updated_at: this.createdAt(medicine.updatedAt),
+        }),
+      );
+    }
+    for (const price of store.prices) {
+      await seedMedicineSupplierPrice({
+        medicine_id: medicineIds.get(price.medicine)!,
+        supplier_id: supplierIds.get(price.supplier)!,
+        organization_id,
+        rate: rupeesText(price.ratePaise),
+        free_quantity: price.freeQuantity,
+        lead_days: price.leadDays,
+        created_at: opened,
+        updated_at: opened,
+      });
+    }
+    const orderIds: number[] = [];
+    for (const order of store.purchaseOrders) {
+      const orderId = await seedMedicalPurchaseOrder({
+        organization_id,
+        supplier_id: supplierIds.get(order.supplier)!,
+        supplier_bill_number: order.supplierBillNumber ?? null,
+        order_date: order.orderDate,
+        stage: order.receivedAt
+          ? MEDICAL_PURCHASE_ORDER_STAGE.RECEIVED
+          : MEDICAL_PURCHASE_ORDER_STAGE.ORDERED,
+        received_at: this.optionalInstant(order.receivedAt),
+        total: rupeesText(order.totalPaise),
+        paid_amount: rupeesText(order.paidPaise),
+        credited_amount: rupeesText(order.creditedPaise),
+        created_by_user_id: frontDeskId,
+        updated_by_user_id: frontDeskId,
+        created_at: this.createdAt(order.orderedAt),
+        updated_at: this.createdAt(order.updatedAt),
+      });
+      orderIds.push(orderId);
+      if (order.payment) {
+        const { payment } = order;
+        const supplierName = store.suppliers.find((item) => item.key === order.supplier)!.name;
+        this.shelfPayments.push({
+          at: payment.at,
+          write: () =>
+            this.writeSupplierBill({
+              at: payment.at,
+              mode: payment.mode,
+              amountPaise: payment.amountPaise,
+              payeeName: supplierName,
+              link: { medical_purchase_order_id: orderId },
+            }),
+        });
+      }
+    }
+    const batchIds: number[] = [];
+    for (const batch of store.batches) {
+      batchIds.push(
+        await seedMedicineBatch({
+          organization_id,
+          medicine_id: medicineIds.get(batch.medicine)!,
+          batch_number: batch.batchNumber,
+          expiry_month: batch.expiryMonth,
+          quantity: batch.quantity,
+          purchase_rate: rupeesText(batch.purchaseRatePaise),
+          supplier_id: supplierIds.get(batch.supplier)!,
+          medical_purchase_order_id:
+            batch.purchaseOrder === undefined ? null : orderIds[batch.purchaseOrder]!,
+          created_by_user_id: frontDeskId,
+          updated_by_user_id: frontDeskId,
+          created_at: this.createdAt(batch.createdAt),
+          updated_at: this.createdAt(batch.updatedAt),
+        }),
+      );
+    }
+    for (const [index, order] of store.purchaseOrders.entries()) {
+      for (const [lineIndex, line] of order.lines.entries()) {
+        const batch = line.batch === undefined ? undefined : store.batches[line.batch]!;
+        await seedMedicalPurchaseOrderItem({
+          organization_id,
+          medical_purchase_order_id: orderIds[index]!,
+          line_number: lineIndex + 1,
+          medicine_id: medicineIds.get(line.medicine)!,
+          quantity: line.quantity,
+          free_quantity: line.freeQuantity,
+          rate: rupeesText(line.ratePaise),
+          amount: rupeesText(line.amountPaise),
+          is_received: batch ? true : null,
+          batch_number: batch?.batchNumber ?? null,
+          expiry_month: batch?.expiryMonth ?? null,
+          medicine_batch_id: line.batch === undefined ? null : batchIds[line.batch]!,
+          created_at: this.createdAt(order.orderedAt),
+          updated_at: this.createdAt(order.receivedAt ?? order.orderedAt),
+        });
+      }
+    }
+    for (const credit of store.credits) {
+      await seedSupplierCredit({
+        organization_id,
+        supplier_id: supplierIds.get(credit.supplier)!,
+        medicine_id: medicineIds.get(credit.medicine)!,
+        medicine_batch_id: batchIds[credit.batch]!,
+        quantity: credit.quantity,
+        rate: rupeesText(credit.ratePaise),
+        amount: rupeesText(credit.amountPaise),
+        applied_amount: rupeesText(credit.appliedPaise),
+        created_by_membership_id: this.staff.memberships.frontDesk,
+        created_by_user_id: frontDeskId,
+        updated_by_user_id: frontDeskId,
+        created_at: this.createdAt(credit.at),
+        updated_at: this.createdAt(credit.updatedAt),
+      });
+    }
+    await this.writeMedicalReps(manufacturerIds);
+    await this.writeMedicalSales({ medicineIds, batchIds });
+    for (const expense of store.expenses) {
+      this.shelfPayments.push({
+        at: expense.at,
+        write: () =>
+          this.writeShelfPayment({
+            at: expense.at,
+            values: {
+              kind: PAYMENT_KIND.EXPENSE,
+              expense_category: PAYMENT_EXPENSE_CATEGORY.MEDICINES,
+              payee_name: expense.payeeName,
+              note: expense.note,
+              amount: rupeesText(expense.amountPaise),
+              [`${expense.mode}_amount`]: rupeesText(expense.amountPaise),
+            },
+          }),
+      });
+    }
+  }
+
+  /** The MRs with the brands they represent, and their visits as logged. */
+  private async writeMedicalReps(manufacturerIds: Map<DemoManufacturerKey, number>): Promise<void> {
+    const { store } = this.plan;
+    const { organization_id, ownerId, staff } = this;
+    const repIds: number[] = [];
+    for (const rep of store.reps) {
+      const createdAt = this.createdAt(rep.createdAt);
+      const repId = await seedMedicalRep({
+        organization_id,
+        name: rep.name,
+        phone: rep.phone,
+        next_visit_on: rep.nextVisitOn,
+        created_by_user_id: ownerId,
+        updated_by_user_id: ownerId,
+        created_at: createdAt,
+        updated_at: this.createdAt(rep.updatedAt),
+      });
+      repIds.push(repId);
+      for (const key of rep.manufacturers) {
+        await seedMedicalRepManufacturer({
+          medical_rep_id: repId,
+          manufacturer_id: manufacturerIds.get(key)!,
+          organization_id,
+          created_by_user_id: ownerId,
+          created_at: createdAt,
+        });
+      }
+    }
+    for (const visit of store.repVisits) {
+      const at = this.createdAt(visit.at);
+      await seedMedicalRepVisit({
+        organization_id,
+        medical_rep_id: repIds[visit.rep]!,
+        visit_date: visit.visitDate,
+        next_visit_on: visit.nextVisitOn,
+        samples: visit.samples,
+        notes: visit.notes,
+        logged_by_membership_id: staff.memberships[visit.loggedBy],
+        created_by_user_id: staff.users[visit.loggedBy],
+        updated_by_user_id: staff.users[visit.loggedBy],
+        created_at: at,
+        updated_at: at,
+      });
+    }
+  }
+
+  /** The store's sales with their `medical` bills; what was paid on each goes to the ledger. */
+  private async writeMedicalSales(options: {
+    medicineIds: Map<DemoMedicineKey, number>;
+    batchIds: readonly number[];
+  }): Promise<void> {
+    const { store } = this.plan;
+    const { organization_id, staff, frontDeskId } = this;
+    for (const sale of store.sales) {
+      const result = await seedMedicalSale({
+        organization_id,
+        branch_id: this.branchIds[sale.branch],
+        contact_id: this.contactIds[sale.person]!,
+        invoice_date: sale.at.date,
+        sold_at: this.createdAt(sale.at),
+        lines: sale.lines.map((line) => {
+          const medicine = demoMedicine(line.medicine);
+          return {
+            medicine_id: options.medicineIds.get(line.medicine)!,
+            medicine_batch_id: options.batchIds[line.batch]!,
+            batch_number: store.batches[line.batch]!.batchNumber,
+            name: medicine.name,
+            quantity: line.quantity,
+            rate: medicine.mrp,
+            discount_percent: line.discountPercent,
+            gst_percent: medicine.gstPercent,
+          };
+        }),
+        member_ids: sale.doctor ? [staff.memberships[sale.doctor]] : [],
+        created_by_user_id: frontDeskId,
+      });
+      const amount = Math.round(result.total * sale.paidShare * 100) / 100;
+      const { payment } = sale;
+      if (payment === null || amount <= 0) continue;
+      this.shelfPayments.push({
+        at: payment.at,
+        write: async () => {
+          await this.writeShelfPayment({
+            at: payment.at,
+            branch: sale.branch,
+            values: {
+              direction: PAYMENT_DIRECTION.RECEIVED,
+              kind: PAYMENT_KIND.RECEIPT,
+              contact_id: this.contactIds[sale.person]!,
+              invoice_id: result.invoiceId,
+              amount: amount.toFixed(2),
+              [`${payment.mode}_amount`]: amount.toFixed(2),
+            },
+          });
+          await seedInvoicePaidAmount({ invoice_id: result.invoiceId, paid_amount: amount });
+        },
+      });
+    }
+  }
+
+  /**
+   * The clinic's own stock: the vendors, the items at the balance their movements leave, the
+   * vendor bills with their lines, the stock checks and every movement in time order.
+   */
+  private async writeClinicStock(): Promise<void> {
+    const { stock } = this.plan;
+    const { organization_id, ownerId, frontDeskId, staff } = this;
+    const opened = this.createdAt(stock.openedAt);
+    const vendorIds = new Map<DemoStockVendorKey, number>();
+    for (const vendor of stock.vendors) {
+      vendorIds.set(
+        vendor.key,
+        await seedStockVendor({
+          organization_id,
+          name: vendor.name,
+          phone: vendor.phone,
+          created_by_user_id: ownerId,
+          updated_by_user_id: ownerId,
+          created_at: opened,
+          updated_at: opened,
+        }),
+      );
+    }
+    const itemIds = new Map<DemoStockItemKey, number>();
+    for (const item of stock.items) {
+      const entry = demoStockItem(item.key);
+      itemIds.set(
+        item.key,
+        await seedStockItem({
+          organization_id,
+          name: entry.name,
+          category: entry.category,
+          unit: entry.unit,
+          size_per_unit: entry.size ? quantityText(quantityMilli(entry.size.perUnit)) : null,
+          measure_unit: entry.size?.measure ?? null,
+          quantity: quantityText(item.quantityMilli),
+          min_quantity: quantityText(quantityMilli(entry.minQuantity)),
+          max_quantity: quantityText(quantityMilli(entry.maxQuantity)),
+          usage_per_week: quantityText(quantityMilli(entry.usagePerWeek)),
+          stock_vendor_id: vendorIds.get(entry.vendor)!,
+          last_rate: item.lastRatePaise === null ? null : rupeesText(item.lastRatePaise),
+          created_by_user_id: ownerId,
+          updated_by_user_id: frontDeskId,
+          created_at: opened,
+          updated_at: this.createdAt(item.updatedAt),
+        }),
+      );
+    }
+    const purchaseIds: number[] = [];
+    for (const purchase of stock.purchases) {
+      const purchaseId = await seedStockPurchase({
+        organization_id,
+        stock_vendor_id: vendorIds.get(purchase.vendor)!,
+        bill_number: purchase.billNumber,
+        purchase_date: purchase.purchaseDate,
+        bill_amount: rupeesText(purchase.billPaise),
+        paid_amount: rupeesText(purchase.paidPaise),
+        created_by_user_id: frontDeskId,
+        updated_by_user_id: frontDeskId,
+        created_at: this.createdAt(purchase.at),
+        updated_at: this.createdAt(purchase.updatedAt),
+        lines: purchase.lines.map((line) => ({
+          stock_item_id: itemIds.get(line.item)!,
+          quantity: quantityText(line.quantityMilli),
+          rate: rupeesText(line.ratePaise),
+          amount: rupeesText(line.amountPaise),
+        })),
+      });
+      purchaseIds.push(purchaseId);
+      if (purchase.payment) {
+        const { payment } = purchase;
+        const vendorName = stock.vendors.find((item) => item.key === purchase.vendor)!.name;
+        this.shelfPayments.push({
+          at: payment.at,
+          write: () =>
+            this.writeSupplierBill({
+              at: payment.at,
+              mode: payment.mode,
+              amountPaise: payment.amountPaise,
+              payeeName: vendorName,
+              link: { stock_purchase_id: purchaseId },
+            }),
+        });
+      }
+    }
+    const countIds: number[] = [];
+    for (const count of stock.counts) {
+      const countedAt = this.createdAt(count.at);
+      countIds.push(
+        await seedStockCount({
+          organization_id,
+          counted_at: countedAt,
+          author_membership_id: staff.memberships[count.by],
+          created_by_user_id: staff.users[count.by],
+          created_at: countedAt,
+          lines: count.lines.map((line) => ({
+            stock_item_id: itemIds.get(line.item)!,
+            system_quantity: quantityText(line.systemMilli),
+            counted_quantity: quantityText(line.countedMilli),
+          })),
+        }),
+      );
+    }
+    const movementIds: number[] = [];
+    for (const movement of stock.movements) {
+      movementIds.push(
+        await seedStockItemMovement({
+          organization_id,
+          stock_item_id: itemIds.get(movement.item)!,
+          type: movement.type,
+          quantity_change: quantityText(movement.changeMilli),
+          quantity_after: quantityText(movement.afterMilli),
+          used_for: movement.usedFor ?? null,
+          note: movement.note ?? null,
+          patient_treatment_id:
+            movement.treatment === undefined ? null : this.treatmentIds[movement.treatment]!,
+          stock_purchase_id:
+            movement.purchase === undefined ? null : purchaseIds[movement.purchase]!,
+          stock_count_id: movement.count === undefined ? null : countIds[movement.count]!,
+          reverts_stock_item_movement_id:
+            movement.reverts === undefined ? null : movementIds[movement.reverts]!,
+          revert_reason: movement.revertReason ?? null,
+          author_membership_id: staff.memberships[movement.by],
+          created_by_user_id: staff.users[movement.by],
+          created_at: this.createdAt(movement.at),
+        }),
+      );
+    }
+  }
+
+  /** A supplier bill paying an agency's order or a vendor's bill, from the main branch (MD7, S11). */
+  private writeSupplierBill(options: {
+    at: DemoMoment;
+    mode: 'cash' | 'upi' | 'card';
+    amountPaise: number;
+    payeeName: string;
+    link: { medical_purchase_order_id: number } | { stock_purchase_id: number };
+  }): Promise<void> {
+    const amount = rupeesText(options.amountPaise);
+    return this.writeShelfPayment({
+      at: options.at,
+      values: {
+        kind: PAYMENT_KIND.SUPPLIER_BILL,
+        payee_name: options.payeeName,
+        amount,
+        [`${options.mode}_amount`]: amount,
+        ...options.link,
+      },
+    });
+  }
+
+  /** One payment of the shelves at its moment (paid out of the main branch unless it says so). */
+  private async writeShelfPayment(options: {
+    at: DemoMoment;
+    branch?: 'main' | 'second';
+    values: Partial<Parameters<typeof seedPayment>[0]> & { amount: string; kind: string };
+  }): Promise<void> {
+    const at = this.createdAt(options.at);
+    await seedPayment({
+      organization_id: this.organization_id,
+      direction: PAYMENT_DIRECTION.PAID,
+      branch_id: this.branchIds[options.branch ?? 'main'],
+      paid_at: at,
+      created_by_user_id: this.frontDeskId,
+      created_at: at,
+      updated_at: at,
+      ...options.values,
+    });
+  }
+
+  /** The store's and the stock's payments, in the order they were paid (their numbers follow). */
+  private async writeShelfPayments(): Promise<void> {
+    const ordered = [...this.shelfPayments].sort((first, second) =>
+      momentKey(first.at).localeCompare(momentKey(second.at)),
+    );
+    for (const payment of ordered) await payment.write();
   }
 
   /** The planned tasks: aftercare calls made, a snoozed follow-up, the demo login's to-dos. */

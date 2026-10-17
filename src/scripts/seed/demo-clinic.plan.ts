@@ -1,7 +1,7 @@
 /**
  * The demo clinic's story as data — who works there, who comes in, and every visit, bill, note
- * and task of the last six weeks and the next two — built by a pure function from a seeded Faker,
- * today's date and the clock. `demo-clinic.ts` writes it; nothing here touches the database, so
+ * and task of the last six weeks and the next two, then its shelves (`demo-clinic.stock.plan.ts`)
+ * — built by a pure function from a seeded Faker, today's date and the clock. `demo-clinic.ts` writes it; nothing here touches the database, so
  * the plan is unit-tested on its own (no overlapping bookings, every Today lane filled).
  */
 import type { Faker } from '@faker-js/faker';
@@ -33,6 +33,12 @@ import {
   type DemoOffering,
   type DemoOfferingKey,
 } from './demo-clinic.catalog.js';
+import {
+  type DemoClinicStockPlan,
+  type DemoMedicalStorePlan,
+  planClinicStock,
+  planMedicalStore,
+} from './demo-clinic.stock.plan.js';
 
 /** The two branches: the main one and the second. */
 export type DemoBranchKey = 'main' | 'second';
@@ -245,6 +251,10 @@ export interface DemoClinicPlan {
   checkIns: readonly DemoCheckInPlan[];
   reviews: readonly DemoReviewPlan[];
   tasks: readonly DemoTaskPlan[];
+  /** The medical store: agencies, medicines and batches, orders, returns, sales and MRs. */
+  store: DemoMedicalStorePlan;
+  /** The clinic's own stock: vendors, items, bills, movements and stock checks. */
+  stock: DemoClinicStockPlan;
 }
 
 /** Days of history before today, and of bookings after it. */
@@ -583,6 +593,16 @@ class DemoClinicPlanner {
 
   private branchOf(key: DemoBranchKey): DemoBranchPlan {
     return key === 'main' ? this.branches![0] : this.branches![1];
+  }
+
+  /** A name for someone outside the clinic's people (an MR): unique, like everyone's. */
+  newName(sex: 'female' | 'male'): { firstName: string; lastName: string } {
+    return this.name(sex);
+  }
+
+  /** A mobile no one in the plan has yet (an agency's, a vendor's, an MR's). */
+  newMobile(): string {
+    return mobile({ faker: this.faker, used: this.phones });
   }
 
   private addPerson(options: { sex: 'female' | 'male'; firstSeen: DemoMoment }): number {
@@ -1294,6 +1314,22 @@ export function buildDemoClinicPlan(options: {
   planner.planLeads();
   planner.planAftercareHistory();
   planner.planOwnerList();
+  // The shelves last, so the draws above — the clinic's people and visits — stay as they were.
+  const supplies = {
+    faker: options.faker,
+    today: options.today,
+    city,
+    people: planner.people,
+    patients: planner.patients,
+    leads: planner.leads,
+    appointments: planner.appointments,
+    treatments: planner.treatments,
+    newMobile: () => planner.newMobile(),
+    newName: (sex: 'female' | 'male') => planner.newName(sex),
+    newGstNumber: () => gstNumber({ faker: options.faker, stateCode: city.gstStateCode }),
+  };
+  const store = planMedicalStore(supplies);
+  const stock = planClinicStock(supplies);
   return {
     name,
     slug,
@@ -1310,5 +1346,7 @@ export function buildDemoClinicPlan(options: {
     checkIns: planner.checkIns,
     reviews: planner.reviews,
     tasks: planner.tasks,
+    store,
+    stock,
   };
 }

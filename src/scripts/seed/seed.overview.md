@@ -14,11 +14,12 @@ All three share the contract and the per-domain seeders:
 - **`pnpm db:seed:full`** (`full.ts`) — a small fixed demo set plus the cross-domain flows that exercise the API (add user to organization, send invite).
 - **`pnpm db:seed:bulk`** (`bulk.ts`) — scaled volume via profiles, for load/pagination testing and full demo tenants.
 
-**`pnpm db:seed:demo-clinic`** (`demo-clinic.ts`, run by `db:seed:full` too) — one real-looking skin & hair clinic for working in the app. It has two branches, five staff who can sign in, 24 patients, six weeks of visits, notes, treatments, bills and payments, enquiries with their WhatsApp threads, and today's floor in every lane.
+**`pnpm db:seed:demo-clinic`** (`demo-clinic.ts`, run by `db:seed:full` too) — one real-looking skin & hair clinic for working in the app. It has two branches, five staff who can sign in, 24 patients, six weeks of visits, notes, treatments, bills and payments, enquiries with their WhatsApp threads, today's floor in every lane, a medical store and the procedure room's stock.
 
 - `demo-clinic.plan.ts` builds the story as data. It is a pure function of a seeded `fakerEN_IN` (`SEED`), today and the clinic's clock, and is unit-tested.
-- `demo-clinic.catalog.ts` holds what Faker cannot supply: clinic names, real city areas and PIN codes, the price list, and a dermatologist's wording.
-- The script writes the plan through each sub-domain's `seed/` helpers, then runs the clinic's task rules once, so the open rule tasks are the app's own.
+- `demo-clinic.stock.plan.ts` plans the shelves from the same Faker, after the rest (so the people and visits stay as they were): the medical store — agencies, medicines and their batches, orders received into batches, packs sent back to agencies, sales drawn from the earliest unexpired batch, MRs and their visits — and the clinic's own stock, every movement with the balance it leaves. Every quantity and amount is worked out there, so batches, balances, bills, payments and credits reconcile; a sale's bill is priced by the invoice ledger's `computeInvoiceAmounts`.
+- `demo-clinic.catalog.ts` holds what Faker cannot supply: clinic names, real city areas and PIN codes, the price list, a dermatologist's wording, and the store's and the stock's shelves (brands, agencies, medicines at metro MRPs, consumables).
+- The script writes the plan through each sub-domain's `seed/` helpers (the medical and stock ones included), then runs the clinic's task rules once, so the open rule tasks are the app's own — the MR due today gets their "Meet" task.
 - Everything looks real except the emails, which stay on `example.com`. `demo@example.com` joins as an Admin.
 - A clinic already seeded under the plan's slug is kept. `--fresh` deletes it and seeds it again around today (local databases only, `assertBulkSeedAllowed`).
 
