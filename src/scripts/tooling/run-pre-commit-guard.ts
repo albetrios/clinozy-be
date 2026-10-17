@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { reportEarlyCheck } from '@/scripts/tooling/early-checks.util.js';
 import { DBML_OUTPUT_PATH } from '@/shared/constants/project-identity.constants.js';
 
 const ROUTES_CATALOG_PATH = 'docs/routes.txt';
@@ -106,6 +107,41 @@ export function shouldRunLockfileCheck(stagedFiles: string[]): boolean {
     (file) =>
       file === 'package.json' || file === 'pnpm-lock.yaml' || file === 'pnpm-workspace.yaml',
   );
+}
+
+/** Returns whether staged files include a migration or a Drizzle schema (the RLS policy lint). */
+export function shouldRunRlsPolicyLint(stagedFiles: string[]): boolean {
+  return stagedFiles.some(
+    (file) => /^migrations\/.*\.sql$/.test(file) || file.endsWith('.schema.ts'),
+  );
+}
+
+/** Returns whether the lockfile is staged — what installs changed, so audit it before the commit. */
+export function shouldRunLockfileAudit(stagedFiles: string[]): boolean {
+  return stagedFiles.includes('pnpm-lock.yaml');
+}
+
+/** `pnpm audit` could not reach the registry — no verdict on the lockfile. */
+const AUDIT_UNREACHABLE =
+  /ERR_PNPM_AUDIT_(?:BAD_RESPONSE|NO_RESPONSE)|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|fetch failed|socket hang up/i;
+
+/**
+ * `pnpm deps:audit:prod` on a staged lockfile, an early check: advisories warn until the early
+ * checks block; an unreachable registry warns and passes (the PR's Security audit lane runs it).
+ */
+function runLockfileAudit(): number {
+  const result = spawnSync('pnpm', ['deps:audit:prod'], { encoding: 'utf8', shell: false });
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  process.stdout.write(output);
+  if (result.status === 0) return 0;
+  if (AUDIT_UNREACHABLE.test(output)) {
+    console.warn('⚠ Dependency audit: the registry could not be reached — the PR audits it');
+    return 0;
+  }
+  return reportEarlyCheck({
+    check: 'Dependency audit (lockfile staged)',
+    findings: ['pnpm audit --prod reported advisories — see above'],
+  });
 }
 
 /** Returns whether staged files touch `src/` or `tooling/` (structure tree drift). */
@@ -426,6 +462,27 @@ export function buildGuardSteps(options: {
       description:
         'pnpm sonar:scan — blocks the commit on any unresolved SonarQube issue/hotspot (when deployed-surface src/**/*.ts staged)',
     },
+    {
+      id: '18',
+      label: 'RLS policy lint',
+      when: shouldRunRlsPolicyLint(stagedFiles) ? 'always' : 'conditional',
+      description:
+        'pnpm validate:rls-policies — ENABLE + FORCE + tenant WITH CHECK on the tables the staged migrations / schemas touch (warn-only until 2026-10-31)',
+    },
+    {
+      id: '19',
+      label: 'Route access diff',
+      when: 'always',
+      description:
+        'pnpm routes:access-diff — staged docs/routes.txt vs HEAD; a widening needs ROUTE_ACCESS_CHANGE_REASON (warn-only until 2026-10-31)',
+    },
+    {
+      id: '20',
+      label: 'Dependency audit (lockfile staged)',
+      when: shouldRunLockfileAudit(stagedFiles) ? 'always' : 'conditional',
+      description:
+        'pnpm deps:audit:prod when pnpm-lock.yaml is staged; an unreachable registry passes (warn-only until 2026-10-31)',
+    },
   );
 
   return steps;
@@ -649,6 +706,27 @@ export function buildRunnableSteps(options: {
       }),
     );
   }
+
+  // The early checks run in-process (no `command`), so their warnings reach the terminal —
+  // the parallel phase shows nothing of a check that passes.
+  steps.push(
+    {
+      label: 'RLS policy lint',
+      phase: 'check',
+      run: () =>
+        shouldRunRlsPolicyLint(stagedFiles) ? runPnpm({ scriptName: 'validate:rls-policies' }) : 0,
+    },
+    {
+      label: 'Route access diff',
+      phase: 'check',
+      run: () => runPnpm({ scriptName: 'routes:access-diff' }),
+    },
+    {
+      label: 'Dependency audit (lockfile staged)',
+      phase: 'check',
+      run: () => (shouldRunLockfileAudit(stagedFiles) ? runLockfileAudit() : 0),
+    },
+  );
 
   return steps;
 }

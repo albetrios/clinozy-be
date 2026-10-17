@@ -57,6 +57,10 @@ else
   echo "Skipping generated-doc drift checks on pre-push (no src/tooling changes)."
 fi
 
+# Semgrep on the pushed auth, tenancy, billing and database-context code (the PR's SAST lane
+# scans everything) — an early check, warn-only until 2026-10-31; no semgrep → a warning.
+pnpm security:semgrep:push --base "$PUSH_BASE"
+
 # Unit tests (matches PR CI unit lane; excludes DB project)
 # Run only when pushed commits include unit-relevant files.
 # grep -E (not rg) — POSIX-portable so a machine without ripgrep still gates.

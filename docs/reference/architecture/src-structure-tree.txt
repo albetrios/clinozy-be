@@ -2559,8 +2559,10 @@ src/
     ├── tooling/
     │   ├── codemod-import-paths.ts
     │   ├── codemod-test-suffixes.ts
+    │   ├── early-checks.util.ts
     │   ├── run-ci-local-guard.ts
-    │   └── run-pre-commit-guard.ts
+    │   ├── run-pre-commit-guard.ts
+    │   └── run-push-semgrep.ts
     └── validators/
     │   ├── __tests__/
     │       └── unit/
@@ -2587,12 +2589,14 @@ src/
     │       ├── validate-locale-key-parity.ts
     │       └── validate-locale-keys.ts
     │   ├── migration/
-    │       └── lint-migrations.ts
+    │       ├── lint-migrations.ts
+    │       └── lint-rls-policies.ts
     │   ├── routes/
     │       ├── route-http-coverage-validation.util.ts
     │       ├── route-http-coverage.allowlist.ts
     │       ├── route-schema-docs-validation.util.ts
     │       ├── route-success-coverage.util.ts
+    │       ├── validate-route-access-diff.ts
     │       ├── validate-route-http-coverage.ts
     │       ├── validate-route-organization-scope.ts
     │       ├── validate-route-param-schemas.ts
@@ -3437,6 +3441,7 @@ src/
     │   │   │   └── stripe-catalog-sync.unit.test.ts
     │   │   ├── db-restore-smoke.db.unit.test.ts
     │   │   ├── db-sequences-advance.db.unit.test.ts
+    │   │   ├── early-checks.unit.test.ts
     │   │   ├── generate-project-structure-tree.unit.test.ts
     │   │   ├── generate-route-catalog.unit.test.ts
     │   │   ├── lint-migrations-concurrent-index.unit.test.ts

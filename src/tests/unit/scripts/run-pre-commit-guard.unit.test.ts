@@ -5,9 +5,11 @@ import {
   findOversizedStagedFiles,
   hasPackageScript,
   shouldRunGlobalTests,
+  shouldRunLockfileAudit,
   shouldRunLockfileCheck,
   shouldRunMigrationCheck,
   shouldRunOpenApiCheck,
+  shouldRunRlsPolicyLint,
   shouldRunSonarScan,
   shouldRunStructureTreeCheck,
   type RunnableStep,
@@ -37,6 +39,31 @@ describe('run-pre-commit-guard conditionals', () => {
     expect(shouldRunStructureTreeCheck(['src/domains/auth/auth.routes.ts'])).toBe(true);
     expect(shouldRunStructureTreeCheck(['tooling/ci/run-named-step.sh'])).toBe(true);
     expect(shouldRunStructureTreeCheck(['docs/README.md'])).toBe(false);
+  });
+
+  it('runs the RLS policy lint on migrations and schemas, the audit on a staged lockfile', () => {
+    expect(shouldRunRlsPolicyLint(['migrations/20260531000001_test.sql'])).toBe(true);
+    expect(shouldRunRlsPolicyLint(['src/domains/app/sub-domains/leads/leads.schema.ts'])).toBe(
+      true,
+    );
+    expect(shouldRunRlsPolicyLint(['src/domains/app/sub-domains/leads/leads.service.ts'])).toBe(
+      false,
+    );
+    expect(shouldRunLockfileAudit(['pnpm-lock.yaml'])).toBe(true);
+    expect(shouldRunLockfileAudit(['package.json'])).toBe(false);
+  });
+
+  it('runs the early checks in-process, so their warnings reach the terminal', () => {
+    const steps = buildRunnableSteps({ stagedFiles: [], scripts: baseScripts });
+    for (const label of [
+      'RLS policy lint',
+      'Route access diff',
+      'Dependency audit (lockfile staged)',
+    ]) {
+      const step = steps.find((candidate) => candidate.label === label);
+      expect(step?.phase, label).toBe('check');
+      expect(step && 'command' in step, label).toBe(false);
+    }
   });
 
   it('detects dependency-manifest / lockfile staged paths', () => {

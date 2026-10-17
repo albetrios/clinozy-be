@@ -17,6 +17,9 @@ Every `pnpm` script beyond the everyday ones in the root [`CLAUDE.md`](../../CLA
 - `pnpm docs:upload:hosted` — run both hosted uploads (Postman workspace + Scalar Registry)
 - `pnpm docs:all` — generate OpenAPI spec + Postman Collection in one step
 - `pnpm test:coverage` — all tests with V8 coverage (CI)
+- `pnpm validate:rls-policies [--files a,b]` — RLS policy lint on the tables the staged (or given) migrations and `*.schema.ts` touch: ENABLE + FORCE, WITH CHECK on tenant write policies, a migration per declared table (pre-commit step 18; warn-only until 2026-10-31, `src/scripts/tooling/early-checks.util.ts`)
+- `pnpm routes:access-diff [--base <ref>]` — who may call each route: the staged `docs/routes.txt` against HEAD's (or the working tree against `<ref>`); widenings are findings, `ROUTE_ACCESS_CHANGE_REASON="<why>"` states a meant one (pre-commit step 19; warn-only until 2026-10-31)
+- `pnpm security:semgrep:push [--base <ref>]` — Semgrep `p/default` (new findings only) on the pushed auth, tenancy, billing and database-context code (pre-push; warn-only until 2026-10-31). A finding judged wrong by any early check goes into `agent-os/evals/warn-only-false-positives.md`
 - `pnpm test:select` — the tests a change can affect, and why (`tooling/vitest/test-selection.util.ts`): changes since the merge base with `origin/main` plus the working tree (`--base <ref>`, `--files a,b`); `--why` lists each test with its reason, `--json` the whole selection, `--run` runs it lane by lane (`pnpm test` when everything is selected). Fails closed — see **Selecting the affected tests** in `docs/reference/testing/testing-conventions.md`
 - `pnpm test:performance` — performance tests
 - `pnpm test:security` — security test suite

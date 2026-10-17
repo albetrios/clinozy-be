@@ -21,6 +21,6 @@ Each finding names the procedural skill that fixes it (`handoff`: agent finds, s
 
 **Blocking, from 2026-10-31.** Until then the review only warns — `/be-ship` reports the findings
 and still pushes. When the user says a finding is a false positive, add a row to
-`agent-os/evals/review-false-positives.md` (date, reviewer, `file:line` · check, why it is wrong),
+`agent-os/evals/warn-only-false-positives.md` (date, reviewer, `file:line` · check, why it is wrong),
 so the reviewers can be tuned before the switch. From 2026-10-31 a `critical` or `major` finding
 stops `/be-ship` before the push until it is fixed or the user overrides it.
