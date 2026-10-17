@@ -3276,6 +3276,7 @@ src/
     │   │   ├── rulesets.policy.unit.test.ts
     │   │   ├── setup-mac-tools.policy.unit.test.ts
     │   │   ├── stryker-config.policy.unit.test.ts
+    │   │   ├── supply-chain-attestations.policy.unit.test.ts
     │   │   ├── supply-chain-sbom.policy.unit.test.ts
     │   │   └── worker-pool-budget.policy.unit.test.ts
     │   ├── composition-root/

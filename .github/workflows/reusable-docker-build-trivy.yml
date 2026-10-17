@@ -221,6 +221,24 @@ jobs:
           output-file: worker-image.spdx.json
           upload-artifact: false
 
+      # CycloneDX image SBOMs for the cosign attestations below, which work on any plan
+      # (GitHub's own attestations need Enterprise Cloud on a private repository).
+      - name: Generate API image CycloneDX SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ env.DOCKER_LOCAL_API_TAG }}:ci
+          format: cyclonedx-json
+          output-file: api-image.cyclonedx.json
+          upload-artifact: false
+
+      - name: Generate worker image CycloneDX SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ env.WORKER_IMAGE }}:ci
+          format: cyclonedx-json
+          output-file: worker-image.cyclonedx.json
+          upload-artifact: false
+
       - name: Login to GitHub Container Registry
         if: contains(fromJSON(env.PROTECTED_BRANCHES_JSON), env.TARGET_BRANCH)
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
@@ -281,6 +299,24 @@ jobs:
         run: |
           set -euo pipefail
           cosign sign --yes "${{ steps.push.outputs.worker_image }}"
+
+      # Signed SBOM + provenance that work on a private repository on any plan: cosign stores the
+      # attestations next to the image in GHCR. release-deploy.yml verifies the signature and
+      # both attestations before the production deploy (`cosign verify-attestation`).
+      - name: Attest SBOM + provenance onto the images (cosign)
+        if: contains(fromJSON(env.PROTECTED_BRANCHES_JSON), env.TARGET_BRANCH)
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+          SOURCE_COMMIT: ${{ env.MERGE_COMMIT_SHA }}
+          API_IMAGE_DIGEST_REF: ${{ steps.push.outputs.api_image_base }}@${{ steps.push.outputs.api_digest }}
+          WORKER_IMAGE_DIGEST_REF: ${{ steps.push.outputs.worker_image_base }}@${{ steps.push.outputs.worker_digest }}
+        run: |
+          set -euo pipefail
+          node tooling/ci/slsa-provenance-predicate.mjs > provenance.slsa.json
+          cosign attest --yes --type cyclonedx --predicate api-image.cyclonedx.json "${API_IMAGE_DIGEST_REF}"
+          cosign attest --yes --type slsaprovenance1 --predicate provenance.slsa.json "${API_IMAGE_DIGEST_REF}"
+          cosign attest --yes --type cyclonedx --predicate worker-image.cyclonedx.json "${WORKER_IMAGE_DIGEST_REF}"
+          cosign attest --yes --type slsaprovenance1 --predicate provenance.slsa.json "${WORKER_IMAGE_DIGEST_REF}"
 
       # Artifact attestations need GitHub Enterprise Cloud on a private repository; on any
       # other plan GitHub refuses to store them and the step fails. There, set the repository
