@@ -483,7 +483,7 @@ waiting database work, rather than database connections alone. A run that sheds
 with `database_pool_wait_overload` had a connection waiter older than
 `OVERLOAD_DB_ACQUIRE_WAIT_SHED_MS` (2 s) — the pool was not draining, which is
 the database's latency, not the burst's size.
-The defaults (pool 30, ratio 10) admit 300 units, and the API opens its pool before
+The defaults (pool 70, ratio 10) admit 700 units, and the API opens its pool before
 listening, so a freshly started process takes a synchronized 240-user burst
 without shedding or paying connection handshakes under load. The bulk seed gives every
 seeded user the personal organization signup provisions, so a user's first

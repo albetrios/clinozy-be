@@ -56,18 +56,49 @@ function readTemplate(): Record<string, string> {
 const template = readTemplate();
 const templatePool = Number(template.DATABASE_POOL_MAX);
 
+/** The schema default of `DATABASE_POOL_MAX` — what a process gets when the variable is unset. */
+function readSchemaDefaultPool(): number {
+  const schemaSource = readFileSync(
+    resolve(REPOSITORY_ROOT, 'src/shared/config/env-schema.ts'),
+    'utf8',
+  );
+  const match =
+    /DATABASE_POOL_MAX: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.default\((\d+)\)/.exec(
+      schemaSource,
+    );
+  if (!match?.[1]) throw new Error('DATABASE_POOL_MAX schema default not found in env-schema.ts');
+  return Number(match[1]);
+}
+
+const schemaDefaultPool = readSchemaDefaultPool();
+
+function computeTemplateWorkerDemand() {
+  for (const key of Object.keys(template).filter((name) => name.startsWith('WORKER_'))) {
+    const value = template[key] ?? '';
+    envValues[key] = /^\d+$/.test(value) ? Number(value) : value;
+  }
+  return computeWorkerPostgresPoolDemand();
+}
+
 describe('env template worker pool budget', () => {
   it("covers the template worker's peak Postgres demand, with burst headroom", () => {
-    for (const key of Object.keys(template).filter((name) => name.startsWith('WORKER_'))) {
-      const value = template[key] ?? '';
-      envValues[key] = /^\d+$/.test(value) ? Number(value) : value;
-    }
-    const demand = computeWorkerPostgresPoolDemand();
+    const demand = computeTemplateWorkerDemand();
 
     expect(demand.monolithicWorker).toBe(true);
     // Anti-vacuity: the real registry loaded and contributes real demand.
     expect(demand.peakPostgresConcurrency).toBeGreaterThan(20);
     expect(demand.peakPostgresConcurrencyWithSafetyMargin).toBeLessThanOrEqual(templatePool);
+  });
+
+  it("the SCHEMA default also covers the worker's demand with burst headroom", () => {
+    // The default is what a hosted service gets when DATABASE_POOL_MAX is unset or an operator
+    // "resets" it. It was 30 while the monolithic worker needed 54 (36 Postgres-using queues at
+    // the default concurrency): a production worker at that value failed its boot guard and
+    // restart-looped on 2026-10-13. The schema default must therefore track the registry the
+    // same way the template does — and match the template, so the two never drift apart.
+    const demand = computeTemplateWorkerDemand();
+    expect(demand.peakPostgresConcurrencyWithSafetyMargin).toBeLessThanOrEqual(schemaDefaultPool);
+    expect(schemaDefaultPool).toBe(templatePool);
   });
 
   it('fits every template process inside the Compose connection budget', () => {
