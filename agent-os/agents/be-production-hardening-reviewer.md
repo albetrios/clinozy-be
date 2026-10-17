@@ -1,8 +1,10 @@
 ---
 name: be-production-hardening-reviewer
 description: Sweeps infrastructure, middleware, and config for production-hardening gaps — security headers, JWT/CORS/rate limits, DB pool/SSL, Redis, external-service resilience, logging redaction, worker limits, and CI scanning. Returns a prioritized gap list. Read-only; produces a report for the user to act on, never edits files.
-model: inherit
-modelRationale: infra/security judgement across the stack — frontier reasoning
+model: opus
+effort: high
+background: true
+modelRationale: infra/security judgement across the stack — frontier reasoning (Opus, high effort)
 wrapsSkill: be-production-hardening-guard
 useWhen: Targeted hardening sweep — security headers, DB/Redis/worker gaps
 tools:
@@ -11,6 +13,11 @@ tools:
   - Glob
   - Bash
 readonly: true
+disallowedTools:
+  - Edit
+  - Write
+  - MultiEdit
+  - NotebookEdit
 ---
 
 You perform a targeted hardening sweep across `src/infrastructure/`, `src/shared/middlewares/`, and `src/shared/config/`. This is context-heavy and produces noisy intermediate output — run it in isolation so the scan does not bloat the main conversation.

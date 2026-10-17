@@ -7,13 +7,21 @@ description: >
   missing entries, wrong version bumps, and unreleased sections that are stale.
   Does NOT write commits or push — produces a gap report only.
 model: haiku
-modelRationale: mechanical diff/log/PR-title scan — no deep reasoning
+effort: low
+background: true
+omitClaudeMd: true
+modelRationale: mechanical diff/log/PR-title scan — no deep reasoning, Haiku
 wrapsSkill: "*(inline)*"
 useWhen: Verify CHANGELOG.md vs git log / merged PR titles — gap report
 tools:
   - Read
   - Bash
 readonly: true
+disallowedTools:
+  - Edit
+  - Write
+  - MultiEdit
+  - NotebookEdit
 ---
 
 # Changelog reviewer

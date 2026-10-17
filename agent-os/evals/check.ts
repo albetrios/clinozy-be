@@ -234,24 +234,26 @@ if (existsSync(catalogFile)) {
   }
 }
 
-// ── Check 7: every agent file has valid frontmatter; deep reasoners stay on inherit ──
-// Model routing is intentional (Task 6): mechanical checkers are pinned to a cheap
-// model (e.g. haiku) — that is fine and does NOT warn. Only a *deep reasoner* pinned
-// off `inherit` warns, since under-powering a reasoning-heavy review is the real risk.
-const deepReasoners = new Set([
+// ── Check 7: every agent file has valid frontmatter and a model fit for its job ──
+// Models are set by job (17 Oct): the agents whose output is a judgment call — the verifier
+// and the production reviewers — run on Opus (or `inherit`); auditors and investigators on
+// Sonnet; mechanical scanners on Haiku. A judgment agent pinned to anything smaller fails.
+// Claude Code silently ignores a frontmatter field it does not recognize, so the routing
+// fields are validated here: a misspelled or out-of-range value would just be dropped.
+const judgmentAgents = new Set([
   "be-verifier",
-  "be-sql-design-reviewer",
   "be-production-hardening-reviewer",
   "be-production-reviewer",
-  "be-ci-investigator",
-  "be-stack-monitor",
 ]);
+const agentModels = /^(inherit|opus|sonnet|haiku|fable|claude-[a-z0-9-]+)$/;
+const agentEfforts = new Set(["low", "medium", "high", "xhigh", "max"]);
 for (const file of agentFiles) {
   const text = readText(join(agentOsDirectory, "agents", file));
   const agentName = basename(file, ".md");
   const name = frontmatterField(text, "name");
   const description = frontmatterField(text, "description");
   const model = frontmatterField(text, "model");
+  const effort = frontmatterField(text, "effort");
   if (!name || name !== agentName)
     error(
       "agent-frontmatter",
@@ -262,11 +264,23 @@ for (const file of agentFiles) {
       "agent-frontmatter",
       `agents/${file} missing frontmatter \`description\``,
     );
-  if (model && model !== "inherit" && deepReasoners.has(agentName))
-    warn(
+  if (!model || !agentModels.test(model))
+    error("agent-model", `agents/${file} model "${model ?? "∅"}" is not a model alias or id`);
+  else if (judgmentAgents.has(agentName) && model !== "opus" && model !== "inherit")
+    error(
       "agent-model",
-      `agents/${file} pins model "${model}" but is a deep reasoner — prefer \`inherit\` so it keeps frontier reasoning`,
+      `agents/${file} pins model "${model}" but its output is a judgment call — use \`opus\` or \`inherit\``,
     );
+  if (!effort || !agentEfforts.has(effort))
+    error(
+      "agent-effort",
+      `agents/${file} effort "${effort ?? "∅"}" — set one of ${[...agentEfforts].join(", ")}`,
+    );
+  for (const flag of ["background", "omitClaudeMd"]) {
+    const value = frontmatterField(text, flag);
+    if (value !== undefined && value !== "true")
+      error("agent-frontmatter", `agents/${file} ${flag} "${value}" — only \`true\` is documented; omit it otherwise`);
+  }
 }
 
 // ── Check 12: read-only agents must enforce read-only via a tools allowlist ──
@@ -294,6 +308,14 @@ for (const file of agentFiles) {
         `agents/${file} is readonly:true but its \`tools\` allowlist includes write tool(s): ${offenders.join(", ")}`,
       );
   }
+  // An explicit denylist as well, so a later `tools` edit cannot quietly hand back a write tool.
+  const disallowed = frontmatterField(text, "disallowedTools") ?? "";
+  const missing = writeTools.filter((tool) => !new RegExp(`\\b${tool}\\b`).test(disallowed));
+  if (missing.length)
+    error(
+      "agent-readonly",
+      `agents/${file} is readonly:true but \`disallowedTools\` does not list: ${missing.join(", ")}`,
+    );
 }
 
 // ── Check 8: hook commands must be portable and reference scripts that exist ──

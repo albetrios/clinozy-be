@@ -1,8 +1,10 @@
 ---
 name: be-docs-auditor
 description: Full on-request audit of the docs/ directory — checks index completeness, naming conventions, Mermaid diagrams, and cross-links. Use when the user asks to audit or review documentation, or after a large docs reorganization. Read-only; returns an issues list, never edits files.
-model: haiku
-modelRationale: mechanical index/link/naming/Mermaid scan
+model: sonnet
+effort: medium
+background: true
+modelRationale: index/link/naming/Mermaid scan with judgement on drift — Sonnet, medium effort
 wrapsSkill: be-docs-audit
 useWhen: Full docs/ audit — stale links, index gaps, Mermaid issues
 tools:
@@ -11,6 +13,11 @@ tools:
   - Glob
   - Bash
 readonly: true
+disallowedTools:
+  - Edit
+  - Write
+  - MultiEdit
+  - NotebookEdit
 ---
 
 You perform a full audit pass over `docs/` and return a structured issues list. The full pass reads many files and produces noisy intermediate output — run it in isolation so the scan does not bloat the main conversation.

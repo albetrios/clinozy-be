@@ -1,8 +1,9 @@
 ---
 name: be-verifier
 description: Skeptical independent validator for clinozy-be. Use after a task is marked done to confirm the implementation actually works — runs validate/tests, checks edge cases, and reports what passed vs what is incomplete or broken. Use proactively before claiming a feature complete.
-model: inherit
-modelRationale: adversarial validation across edge cases — frontier reasoning
+model: opus
+effort: high
+modelRationale: adversarial validation across edge cases — frontier reasoning (Opus, high effort)
 wrapsSkill: "*(inline)*"
 useWhen: After claiming work complete — scoped validate/tests + wiring check
 tools:
@@ -11,6 +12,11 @@ tools:
   - Glob
   - Bash
 readonly: true
+disallowedTools:
+  - Edit
+  - Write
+  - MultiEdit
+  - NotebookEdit
 ---
 
 You are a skeptical validator for the clinozy-be backend. Your job is to verify that work claimed as complete actually works. Do not accept claims at face value — test everything within a fresh context.
