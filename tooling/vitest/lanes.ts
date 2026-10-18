@@ -16,7 +16,8 @@ type Lane = {
    * Projects of a serial lane that `pnpm test` runs as one `db-parallel` process instead, where
    * they come in the lane: files in parallel, each worker on its own database clone. Proven equal
    * to serial, test by test, on 18 Oct 2026 (docs/reference/testing/testing-conventions.md ›
-   * Parallel database tests). `pnpm test:select --run` and CI still run them one by one.
+   * Parallel database tests). `pnpm test:coverage`, `pnpm test:select --run` and CI still run
+   * them one by one.
    */
   parallelDatabaseProjects?: string[];
 };

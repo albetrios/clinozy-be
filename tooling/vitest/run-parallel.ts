@@ -4,8 +4,8 @@
  * concurrently inside it), then the `db-bound` lane, one after the other so a single local
  * Postgres is never driven by two processes. In the `db-bound` lane, e2e + integration run as one
  * `db-parallel` process, files in parallel, each worker on its own database clone (the lane's
- * `parallelDatabaseProjects`). It stops at the first failing lane, so a unit failure skips the DB
- * lanes.
+ * `parallelDatabaseProjects`) — except under `--coverage`, where they run one by one as before.
+ * It stops at the first failing lane, so a unit failure skips the DB lanes.
  *
  * CI uses a matrix split (`.github/workflows/reusable-vitest-postgres-redis.yml`) with the same
  * project filters so each shard runs on its own runner, in parallel.
@@ -61,9 +61,11 @@ function buildLaneArgs(lane: Lane): string[] {
  * one per project, its `parallelDatabaseProjects` folded into one `db-parallel` run.
  *
  * @remarks
- * The fold takes the place of the first folded project, so the lane's order holds.
+ * The fold takes the place of the first folded project, so the lane's order holds. Under coverage
+ * nothing is folded: with V8 coverage on, four parallel workers on a 4-core machine pushed an API
+ * query past its 5 s statement timeout (18 Oct 2026), while plain parallel runs stayed green.
  */
-export function splitSerialProjectArgs(lane: Lane): string[][] {
+export function splitSerialProjectArgs(lane: Lane, coverage = coverageEnabled): string[][] {
   if (!lane.serial) return [buildLaneArgs(lane)];
 
   const command = lane.args[0] ?? 'run';
@@ -76,7 +78,7 @@ export function splitSerialProjectArgs(lane: Lane): string[][] {
   }
   if (projects.length === 0) return [buildLaneArgs(lane)];
 
-  const folded = new Set(lane.parallelDatabaseProjects ?? []);
+  const folded = new Set(coverage ? [] : (lane.parallelDatabaseProjects ?? []));
   const runs: string[] = [];
   for (const project of projects) {
     const run = folded.has(project) ? PARALLEL_DATABASE_PROJECT : project;
@@ -85,7 +87,7 @@ export function splitSerialProjectArgs(lane: Lane): string[][] {
 
   return runs.map((project) => {
     const args = [command, '--project', project];
-    if (!coverageEnabled) return args;
+    if (!coverage) return args;
     return [
       ...args,
       COVERAGE_FLAG,

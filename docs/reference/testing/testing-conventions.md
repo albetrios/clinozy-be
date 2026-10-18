@@ -318,6 +318,10 @@ integration) of the same 199 files gave the same 1,671 test ids with the same st
 and 1 skipped by design (it runs only under `pnpm test:rls-role`). The serial run took 3,743 s; the
 parallel runs 1,087–1,376 s, with at most 19 Postgres connections seen.
 
+`pnpm test:coverage` runs them one by one too: with V8 coverage on, the four parallel workers on a
+4-core machine pushed one API query past its 5 s statement timeout (`DATABASE_HTTP_STATEMENT_TIMEOUT_MS`),
+a 500 in one test of 1,671 (18 Oct), while every plain parallel run stayed green.
+
 `pnpm test:select --run`, `pnpm test:rls-role` and CI still run the e2e and integration projects
 one by one; CI's database lanes stay serial shards. The main canary's `Parallel database tests
 (experiment)` job (nightly, not a gate, no failure issue; its summary records the time) keeps
