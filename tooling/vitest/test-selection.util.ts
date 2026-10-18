@@ -163,6 +163,8 @@ export interface GraphAnalysis {
   aggregators: Set<string>;
   /** Tests no single source change selects ({@link findUnreachableTests}) — always run. */
   unreachable: Set<string>;
+  /** Container → the tests that load it, directly or through the harness ({@link findContainerBuildingTests}). */
+  containerTests: Map<string, Set<string>>;
   /** Test file → its text and the paths it names, read once. */
   texts: Map<string, { source: string; named: string[] }>;
 }
@@ -385,6 +387,46 @@ export function findUnreachableTests(options: {
   return unreachable;
 }
 
+/**
+ * The tests that load a container — a wiring file named for one (`app-records.container.ts`,
+ * `worker-containers.ts`) — directly or through the harness: `app-record-service-contract.helper.ts`
+ * builds every app record service through `app-records.container.ts`; the composition-root tests
+ * import `worker-containers.ts`. Such a test fails as soon as anything the container wires fails to
+ * load (a top-level error, a renamed export, an import cycle), so a change that reaches the
+ * container selects it, though the import walk stops at the harness and at wiring files.
+ *
+ * @remarks
+ * Found by the planted-break proof of 18 Oct 2026: a top-level throw in `leads.service.ts` failed
+ * 41 unit test files of other sub-domains, and one in `webhook.service.ts` the worker-containers
+ * composition test — all skipped by the selection. Only containers: following every wiring file a
+ * test loads would select about half the unit suite for a billing change, where 12 test files broke.
+ */
+export function findContainerBuildingTests(options: {
+  graph: ImportGraph;
+  aggregators: Set<string>;
+}): Map<string, Set<string>> {
+  const { graph, aggregators } = options;
+  const isHarness = (file: string) => matchesAny({ path: file, globs: HARNESS_GLOBS });
+  const isContainer = (file: string) =>
+    aggregators.has(file) && /container/.test(file.slice(file.lastIndexOf('/') + 1));
+  const builders = new Map<string, Set<string>>();
+  for (const test of graph.tests) {
+    const seen = new Set<string>();
+    const queue = [...(graph.imports.get(test) ?? [])];
+    while (queue.length > 0) {
+      const file = queue.shift() as string;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      if (isContainer(file)) {
+        const tests = builders.get(file) ?? new Set<string>();
+        tests.add(test);
+        builders.set(file, tests);
+      } else if (isHarness(file)) queue.push(...(graph.imports.get(file) ?? []));
+    }
+  }
+  return builders;
+}
+
 /** The graph's shared analysis, computed on first use. */
 export function analyzeGraph(graph: ImportGraph): GraphAnalysis {
   if (!graph.analysis) {
@@ -394,6 +436,7 @@ export function analyzeGraph(graph: ImportGraph): GraphAnalysis {
       booting,
       aggregators,
       unreachable: findUnreachableTests({ graph, booting, aggregators }),
+      containerTests: findContainerBuildingTests({ graph, aggregators }),
       texts: new Map(),
     };
   }
@@ -580,7 +623,7 @@ function selectTestsOrThrow(options: {
   }
 
   const graph = options.graph ?? buildImportGraph(repositoryRoot);
-  const { booting, aggregators, unreachable, texts } = analyzeGraph(graph);
+  const { booting, aggregators, unreachable, texts, containerTests } = analyzeGraph(graph);
   const why = new Map<string, Set<string>>();
   const select = (test: string, reason: string) => {
     const reasons = why.get(test) ?? new Set<string>();
@@ -630,6 +673,11 @@ function selectTestsOrThrow(options: {
         start: changed,
         stopAt: (file) => aggregators.has(file),
       });
+      for (const file of reached) {
+        for (const test of containerTests.get(file) ?? []) {
+          select(test, `loads ${file}, which wires ${changed}`);
+        }
+      }
       const areas = new Set<string>();
       for (const file of reached) {
         const area = areaOf(file);

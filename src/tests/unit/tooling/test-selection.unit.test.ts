@@ -60,6 +60,16 @@ const FIXTURE: Record<string, string> = {
   'src/tests/helpers/fake.helper.ts': `import { stockService } ${from('@/domains/app/sub-domains/stock/stock.service.js')};\nexport const fake = stockService;`,
   'src/tests/integration/api-contract.integration.test.ts': `import { appRoutes } ${from('@/app.js')};`,
   'src/tests/unit/harness-only.unit.test.ts': `import { fake } ${from('@/tests/helpers/fake.helper.js')};`,
+  // A contract test that builds every service through a container, as app-record-service-contract does.
+  [`${APP}/app-records.container.ts`]: [
+    `import { leadsService } ${from('@/domains/app/sub-domains/leads/leads.service.js')};`,
+    `import { patientsService } ${from('@/domains/app/sub-domains/patients/patients.service.js')};`,
+    `import { stockService } ${from('@/domains/app/sub-domains/stock/stock.service.js')};`,
+    'export const services = { leadsService, patientsService, stockService };',
+  ].join('\n'),
+  'src/tests/helpers/record-contract.helper.ts': `import { services } ${from('@/domains/app/app-records.container.js')};\nexport const contract = services;`,
+  [`${STOCK}/__tests__/unit/stock.contract.unit.test.ts`]: `import { contract } ${from('@/tests/helpers/record-contract.helper.js')};`,
+  'src/tests/unit/records-wiring.unit.test.ts': `import { services } ${from('@/domains/app/app-records.container.js')};`,
 };
 
 let repositoryRoot = '';
@@ -107,8 +117,11 @@ describe('selectTests', () => {
       security: ['src/tests/security/tenant.security.test.ts'],
       unit: [
         `${LEADS}/__tests__/unit/leads.service.unit.test.ts`,
+        // Load app-records.container, which wires leads (through the harness, and directly).
+        `${STOCK}/__tests__/unit/stock.contract.unit.test.ts`,
         'src/tests/unit/harness-only.unit.test.ts',
         'src/tests/unit/hooks-policy.unit.test.ts',
+        'src/tests/unit/records-wiring.unit.test.ts',
       ],
     });
     expect(selection.why[`${PATIENTS}/__tests__/integration/patients.integration.test.ts`]).toEqual(
@@ -135,6 +148,20 @@ describe('selectTests', () => {
       fixtures: 3,
       unreachable: 2,
     });
+  });
+
+  it('selects the tests that load a container, directly or through the harness, for a change it wires', () => {
+    // The 18 Oct planted-break proof: a top-level throw in one app service failed every other
+    // sub-domain's service contract test (all services built through app-records.container) and
+    // the composition-root test (worker-containers).
+    const contract = `${STOCK}/__tests__/unit/stock.contract.unit.test.ts`;
+    expect(selected(`${LEADS}/leads.service.ts`)).toContain(contract);
+    expect(selected(`${LEADS}/leads.service.ts`)).toContain(
+      'src/tests/unit/records-wiring.unit.test.ts',
+    );
+    // A change the container does not wire (a controller reaches only the routes) is not one.
+    expect(selected(`${PATIENTS}/patients.controller.ts`)).not.toContain(contract);
+    // A wiring file that is not a container still stops the walk (the routes-wiring case below).
   });
 
   it('does not follow a change through a wiring file', () => {
@@ -196,7 +223,11 @@ describe('changedOnly and withoutTests', () => {
         `${LEADS}/__tests__/integration/leads.integration.test.ts`,
         `${PATIENTS}/__tests__/integration/patients.integration.test.ts`,
       ],
-      unit: [`${LEADS}/__tests__/unit/leads.service.unit.test.ts`],
+      unit: [
+        `${LEADS}/__tests__/unit/leads.service.unit.test.ts`,
+        `${STOCK}/__tests__/unit/stock.contract.unit.test.ts`,
+        'src/tests/unit/records-wiring.unit.test.ts',
+      ],
     });
     expect(Object.keys(selection.why).sort()).toEqual(
       Object.values(selection.projects).flat().sort(),
