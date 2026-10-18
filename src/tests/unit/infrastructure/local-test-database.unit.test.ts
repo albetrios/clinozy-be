@@ -161,7 +161,7 @@ describe('local test database harness', () => {
     });
   });
 
-  describe('the parallel database experiment', () => {
+  describe('a parallel database run', () => {
     it('is off unless switched on: URLs, the Redis prefix and the wipe guard as before', async () => {
       process.env.DATABASE_URL = LOCAL_TEST_DATABASE_URL;
       process.env.VITEST_POOL_ID = '3';

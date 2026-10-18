@@ -241,7 +241,7 @@ function workerPoolId(): string {
 export function pointWorkerAtItsOwnDatabase(): void {
   if (!isParallelDatabaseRun()) return;
   if (process.env.ALLOW_HOSTED_TEST_DATABASE === 'true') {
-    throw new Error('The parallel database experiment never runs on a hosted test database.');
+    throw new Error('A parallel database run never runs on a hosted test database.');
   }
   const worker = workerPoolId();
   for (const key of DATABASE_URL_KEYS) {
@@ -262,7 +262,7 @@ export function testRedisKeyPrefix(stem: string): string {
 }
 
 /**
- * Clones the migrated test database once per worker for the parallel database experiment.
+ * Clones the migrated test database once per worker for a parallel database run.
  *
  * @remarks
  * - **Algorithm:** a no-op unless {@link isParallelDatabaseRun}. Connects to the server's
@@ -277,7 +277,7 @@ export function testRedisKeyPrefix(stem: string): string {
 export async function cloneTestDatabaseForWorkers(): Promise<void> {
   if (!isParallelDatabaseRun()) return;
   if (process.env.ALLOW_HOSTED_TEST_DATABASE === 'true') {
-    throw new Error('The parallel database experiment never runs on a hosted test database.');
+    throw new Error('A parallel database run never runs on a hosted test database.');
   }
   const templateUrl =
     process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL ?? LOCAL_TEST_DATABASE_URL;

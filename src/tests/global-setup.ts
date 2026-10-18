@@ -87,7 +87,7 @@ export default async function globalSetup(): Promise<() => void> {
   } finally {
     await client.end();
   }
-  // The parallel database experiment (TEST_PARALLEL_DATABASES=true): one clone of the migrated,
+  // A parallel database run (`pnpm test`'s e2e + integration step): one clone of the migrated,
   // seeded test database per worker. A no-op otherwise.
   await cloneTestDatabaseForWorkers();
 
