@@ -39,4 +39,7 @@ routes-final 8.D, B23–B24). Table `app.pending_credits`.
   credit and moves its settled amount in the same transaction. A use on a bill lands at the
   invoice's branch, dated now, as one `credit` split — that day must be open (`409 day_closed`;
   D81 PAY-M6).
+- **A settlement names the party:** the credit's contact, or — a typed party with no contact — its
+  `party_name` as the refund's or money back's `payee_name`, so the ledger's FROM / TO, Day-close
+  review and `GET /app/payments?q=` show and find it (QA FIN-001).
 - **The organization's (B4):** no branch filter.
