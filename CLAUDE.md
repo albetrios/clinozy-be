@@ -184,7 +184,7 @@ Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `son
 - `pnpm typecheck` — TypeScript type check
 - `pnpm db:migrate` — run SQL migrations from `migrations/`
 - `pnpm docs:check` — verify OpenAPI generator output is in sync (works on fresh clones; specs are gitignored)
-- `pnpm test` — run all Vitest tests (serial)
+- `pnpm test` — run all Vitest tests: the fast lane, then the database projects one process at a time (e2e + integration together, files in parallel, one database clone per worker)
 - `pnpm test:unit` — unit only (`--project unit` in `tooling/vitest/projects.ts`: `src/tests/unit` + domain `__tests__/unit/`)
 - `pnpm test:integration` — `src/tests/integration`
 - `pnpm test:e2e` — domain route tests (excludes `__tests__/unit/`)

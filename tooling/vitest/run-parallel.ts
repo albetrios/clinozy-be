@@ -2,8 +2,10 @@
 /**
  * Test driver behind `pnpm test` — runs the `fast` lane (unit, property, global; files run
  * concurrently inside it), then the `db-bound` lane, one after the other so a single local
- * Postgres is never driven by two processes. It stops at the first failing lane, so a unit
- * failure skips the DB lanes.
+ * Postgres is never driven by two processes. In the `db-bound` lane, e2e + integration run as one
+ * `db-parallel` process, files in parallel, each worker on its own database clone (the lane's
+ * `parallelDatabaseProjects`). It stops at the first failing lane, so a unit failure skips the DB
+ * lanes.
  *
  * CI uses a matrix split (`.github/workflows/reusable-vitest-postgres-redis.yml`) with the same
  * project filters so each shard runs on its own runner, in parallel.
@@ -21,6 +23,10 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { LANES, type Lane } from '@tooling/vitest/lanes.js';
+import {
+  PARALLEL_DATABASE_PROJECT,
+  PARALLEL_DATABASES_SWITCH,
+} from '@tooling/vitest/parallel-databases.js';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -50,7 +56,14 @@ function buildLaneArgs(lane: Lane): string[] {
   ];
 }
 
-function splitSerialProjectArgs(lane: Lane): string[][] {
+/**
+ * The Vitest invocations of one lane, in order: the whole lane at once, or — for a serial lane —
+ * one per project, its `parallelDatabaseProjects` folded into one `db-parallel` run.
+ *
+ * @remarks
+ * The fold takes the place of the first folded project, so the lane's order holds.
+ */
+export function splitSerialProjectArgs(lane: Lane): string[][] {
   if (!lane.serial) return [buildLaneArgs(lane)];
 
   const command = lane.args[0] ?? 'run';
@@ -63,7 +76,14 @@ function splitSerialProjectArgs(lane: Lane): string[][] {
   }
   if (projects.length === 0) return [buildLaneArgs(lane)];
 
-  return projects.map((project) => {
+  const folded = new Set(lane.parallelDatabaseProjects ?? []);
+  const runs: string[] = [];
+  for (const project of projects) {
+    const run = folded.has(project) ? PARALLEL_DATABASE_PROJECT : project;
+    if (!runs.includes(run)) runs.push(run);
+  }
+
+  return runs.map((project) => {
     const args = [command, '--project', project];
     if (!coverageEnabled) return args;
     return [
@@ -79,6 +99,7 @@ function runChild(
   prefix: string,
   command: string,
   commandArgs: string[],
+  environment: NodeJS.ProcessEnv = {},
 ): Promise<{ code: number; ms: number }> {
   return new Promise((resolvePromise) => {
     const start = performance.now();
@@ -86,7 +107,7 @@ function runChild(
 
     const child: ChildProcess = spawn(command, commandArgs, {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '1' },
+      env: { ...process.env, FORCE_COLOR: '1', ...environment },
     });
 
     const tagStream = (chunk: Buffer, write: (s: string) => void): void => {
@@ -116,7 +137,15 @@ async function runLane(lane: Lane): Promise<LaneResult[]> {
     const projectName = lane.serial
       ? (args[args.indexOf('--project') + 1] ?? lane.name)
       : lane.name;
-    const result = await runChild(`[${lane.name}]`, 'pnpm', ['exec', 'vitest', ...args]);
+    // `db-parallel` exists only in a run that turns the parallel databases on (projects.ts).
+    const environment =
+      projectName === PARALLEL_DATABASE_PROJECT ? { [PARALLEL_DATABASES_SWITCH]: 'true' } : {};
+    const result = await runChild(
+      `[${lane.name}]`,
+      'pnpm',
+      ['exec', 'vitest', ...args],
+      environment,
+    );
     results.push({ name: lane.serial ? `${lane.name}:${projectName}` : lane.name, ...result });
     if (result.code !== 0) break;
   }

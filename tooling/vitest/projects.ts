@@ -1,5 +1,9 @@
 import type { TestProjectConfiguration } from 'vitest/config';
-import { isParallelDatabaseRun, parallelDatabaseWorkers } from './parallel-databases.js';
+import {
+  isParallelDatabaseRun,
+  PARALLEL_DATABASE_PROJECT,
+  parallelDatabaseWorkers,
+} from './parallel-databases.js';
 
 /**
  * Named Vitest projects — run a tier with `vitest run --project <name>`.
@@ -320,18 +324,18 @@ export const vitestProjects = [
   },
 
   /**
-   * The parallel database experiment (`pnpm test:parallel-db`, only with
-   * `TEST_PARALLEL_DATABASES=true`): the e2e and integration suites with files in parallel, each
-   * worker on its own clone of the migrated test database and its own Redis namespace
-   * (`src/tests/helpers/local-test-database.ts`). Serial stays the default until its nightly lane
-   * has 10 green runs.
+   * The parallel database run (`pnpm test`'s e2e + integration step, and `pnpm test:parallel-db`):
+   * the e2e and integration suites with files in parallel, each worker on its own clone of the
+   * migrated test database and its own Redis namespace (`src/tests/helpers/local-test-database.ts`).
+   * It exists only when a launcher turns it on, so a plain `vitest run` never runs it beside the
+   * e2e and integration projects against one database. Proven equal to serial on 18 Oct 2026.
    */
   ...(isParallelDatabaseRun()
     ? [
         {
           extends: true,
           test: {
-            name: 'db-parallel',
+            name: PARALLEL_DATABASE_PROJECT,
             include: [...buildE2eIncludes(), ...buildIntegrationIncludes()],
             exclude: [
               'src/**/__tests__/unit/**',

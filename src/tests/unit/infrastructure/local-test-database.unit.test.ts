@@ -1,3 +1,4 @@
+import { availableParallelism } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   assertConnectedToTestDatabase,
@@ -20,7 +21,6 @@ const MANAGED_KEYS = [
   'ALLOW_HOSTED_TEST_DATABASE',
   'CI',
   'TEST_PARALLEL_DATABASES',
-  'TEST_PARALLEL_WORKERS',
   'VITEST_POOL_ID',
 ] as const;
 
@@ -214,14 +214,8 @@ describe('local test database harness', () => {
       expect(() => pointWorkerAtItsOwnDatabase()).toThrow(/never runs on a hosted/);
     });
 
-    it('runs 4 workers by default, 1 to 16 when set', () => {
-      expect(parallelDatabaseWorkers()).toBe(4);
-      process.env.TEST_PARALLEL_WORKERS = '8';
-      expect(parallelDatabaseWorkers()).toBe(8);
-      for (const value of ['0', '17', 'many', '2.5']) {
-        process.env.TEST_PARALLEL_WORKERS = value;
-        expect(parallelDatabaseWorkers()).toBe(4);
-      }
+    it('runs one worker per core, at most 4, with nothing to set', () => {
+      expect(parallelDatabaseWorkers()).toBe(Math.min(4, availableParallelism()));
     });
   });
 

@@ -299,21 +299,29 @@ run's lock is taken over automatically (dead pid), and two runs against two diff
 not block each other. If a suite refuses to start and the named process is genuinely gone, delete
 the lock file the message points at.
 
-### Parallel database tests (experiment)
+### Parallel database tests
 
-`pnpm test:parallel-db` runs the e2e and integration suites with files in parallel — the
-`db-parallel` project, which exists only with `TEST_PARALLEL_DATABASES=true`
-(`tooling/vitest/parallel-databases.ts`). After migrating and seeding, global setup clones the test
-database once per worker with `CREATE DATABASE … TEMPLATE` (`<test database>_worker_<n>`; roles
-are cluster-wide, so every login works in a clone), and each worker points its `DATABASE_*URL`s at
-its clone and its Redis prefix at `<stem>:worker-<n>:test:` (`src/tests/helpers/local-test-database.ts`).
-The wipe guard accepts exactly those clones, and only in such a run; a hosted test database is
-refused. `TEST_PARALLEL_WORKERS` sets the count (1–16, default 4).
+`pnpm test` runs the e2e and integration suites together, with files in parallel — the
+`db-parallel` project (`tooling/vitest/parallel-databases.ts`), which its `db-bound` lane runs in
+their place (`parallelDatabaseProjects` in `tooling/vitest/lanes.ts`); `pnpm test:parallel-db`
+runs just that step. There is nothing to set: the launcher turns the project on
+(`TEST_PARALLEL_DATABASES`), and it uses one worker per core, at most 4. The project exists only in
+such a run, so a plain `vitest run` never runs it beside the e2e and integration projects against
+one database. After migrating and seeding, global setup clones the test database once per worker
+with `CREATE DATABASE … TEMPLATE` (`<test database>_worker_<n>`; roles are cluster-wide, so every
+login works in a clone), and each worker points its `DATABASE_*URL`s at its clone and its Redis
+prefix at `<stem>:worker-<n>:test:` (`src/tests/helpers/local-test-database.ts`). The wipe guard
+accepts exactly those clones, and only in such a run; a hosted test database is refused.
 
-On the billing suites (23 files, 132 tests) it took 148 s against 338 s serial, both green, on a
-shared machine. **Serial stays the default** until the main canary's `Parallel database tests
-(experiment)` job (nightly, not a gate, no failure issue; its summary records the time) has 10
-green runs; then the database lanes switch to it.
+Proven before it became the default (18 Oct): three parallel runs and one serial run (e2e, then
+integration) of the same 199 files gave the same 1,671 test ids with the same status, 1,670 passed
+and 1 skipped by design (it runs only under `pnpm test:rls-role`). The serial run took 3,743 s; the
+parallel runs 1,087–1,376 s, with at most 19 Postgres connections seen.
+
+`pnpm test:select --run`, `pnpm test:rls-role` and CI still run the e2e and integration projects
+one by one; CI's database lanes stay serial shards. The main canary's `Parallel database tests
+(experiment)` job (nightly, not a gate, no failure issue; its summary records the time) keeps
+running the parallel step on CI, and its 10 green runs would move those lanes to it.
 
 ### What global setup prepares
 

@@ -79,10 +79,11 @@ jobs:
         if: always()
         run: pnpm deps:audit:report
 
-  # The parallel database experiment (pnpm test:parallel-db): the e2e and integration suites with
-  # files in parallel, each worker on its own clone of the migrated test database and its own
-  # Redis namespace. Not a gate and no failure issue — it collects the 10 green nightly runs that
-  # make parallel the default (docs/reference/testing/testing-conventions.md › Parallel database
+  # The parallel database run (pnpm test:parallel-db): the e2e and integration suites with files in
+  # parallel, each worker on its own clone of the migrated test database and its own Redis
+  # namespace. Local `pnpm test` runs it since the 18 Oct proof (parallel equals serial, test by
+  # test). Not a gate and no failure issue — it collects the 10 green nightly runs that would move
+  # the CI database lanes to it (docs/reference/testing/testing-conventions.md › Parallel database
   # tests); the run summary records its time.
   parallel-db-experiment:
     name: Parallel database tests (experiment)
@@ -125,7 +126,6 @@ jobs:
       RUN_DB_TESTS: 1
       RUN_REDIS_TESTS: 1
       ENABLE_MCP_SERVER: 'true'
-      TEST_PARALLEL_WORKERS: 4
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -155,7 +155,7 @@ jobs:
           {
             echo "## Parallel database tests (experiment)"
             echo ""
-            echo "${TEST_PARALLEL_WORKERS} workers, ${seconds} s, exit ${status}."
+            echo "$(( $(nproc) < 4 ? $(nproc) : 4 )) workers, ${seconds} s, exit ${status}."
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
 
