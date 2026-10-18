@@ -18,6 +18,13 @@ on:
         required: false
         type: boolean
         default: false
+      api_smoke:
+        description: >-
+          After the /readyz boot, seed the full demo data and run `pnpm test:api-smoke` against the
+          API container (post-merge CI; a release build skips it).
+        required: false
+        type: boolean
+        default: false
     outputs:
       api_image:
         description: GHCR API image reference pushed for this commit
@@ -40,6 +47,11 @@ on:
           - main
       fresh_security_patches:
         description: Re-run the apk upgrade layer now instead of reusing today's
+        required: false
+        type: boolean
+        default: false
+      api_smoke:
+        description: Seed the full demo data and run the API smoke against the booted container
         required: false
         type: boolean
         default: false
@@ -70,6 +82,10 @@ jobs:
       DOCKER_BUILDKIT: 1
       MERGE_COMMIT_SHA: ${{ inputs.merge_commit_sha || github.sha }}
       TARGET_BRANCH: ${{ inputs.target_branch || github.ref_name }}
+      # The service containers below, for the container boot, the seed and the API smoke.
+      DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      REDIS_URL: redis://localhost:6379
 
     services:
       postgres:
@@ -109,7 +125,8 @@ jobs:
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup-node-pnpm
         with:
-          install: 'false'
+          # The seed and the API smoke run from this checkout (tsx); the image build needs nothing.
+          install: ${{ inputs.api_smoke && 'true' || 'false' }}
 
       - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
         uses: ./.github/actions/test-env
@@ -399,10 +416,6 @@ jobs:
           push-to-registry: true
 
       - name: Boot API container and verify /readyz
-        env:
-          DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
-          DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
-          REDIS_URL: redis://localhost:6379
         run: |
           set -euo pipefail
           docker run --rm --network host \
@@ -443,11 +456,36 @@ jobs:
             -e AUTH_SESSION_RETENTION_DAYS="$AUTH_SESSION_RETENTION_DAYS" \
             -e METRICS_SCRAPE_TOKEN="$METRICS_SCRAPE_TOKEN" \
             -e SECRETS_ENCRYPTION_KEY="$SECRETS_ENCRYPTION_KEY" \
+            -e RESEND_API_KEY=re_test_contract_fixture_key \
+            -e EMAIL_FROM_ADDRESS=noreply@example.com \
             ${{ env.DOCKER_LOCAL_API_TAG }}:ci
           if ! timeout 90 bash -c 'until curl -sf http://localhost:3000/readyz; do sleep 2; done'; then
             docker logs ${{ env.DOCKER_LOCAL_API_TAG }}-health --tail 200 || true
             docker rm -f ${{ env.DOCKER_LOCAL_API_TAG }}-health || true
             exit 1
           fi
-          docker logs ${{ env.DOCKER_LOCAL_API_TAG }}-health --tail 50
-          docker rm -f ${{ env.DOCKER_LOCAL_API_TAG }}-health
+
+      # The API smoke (task 15): every domain's key routes answer (no 5xx) for the seeded demo
+      # account, against the image this run built. The demo account is the k6 workflow's pair: the
+      # full seed creates DEMO_EMAIL with DEMO_PASSWORD, and the smoke signs in with them.
+      - name: Seed the full demo data for the API smoke
+        if: inputs.api_smoke
+        env:
+          NODE_ENV: development
+          DEMO_EMAIL: demo@example.com
+          DEMO_PASSWORD: DemoPassword123!
+        run: pnpm db:seed:full
+
+      - name: API smoke against the container
+        if: inputs.api_smoke
+        env:
+          BASE_URL: http://localhost:3000
+          DEMO_EMAIL: demo@example.com
+          DEMO_PASSWORD: DemoPassword123!
+        run: pnpm test:api-smoke
+
+      - name: Stop the API container
+        if: always()
+        run: |
+          docker logs ${{ env.DOCKER_LOCAL_API_TAG }}-health --tail 100 || true
+          docker rm -f ${{ env.DOCKER_LOCAL_API_TAG }}-health || true

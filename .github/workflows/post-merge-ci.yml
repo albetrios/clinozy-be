@@ -196,6 +196,7 @@ jobs:
       merge_commit_sha: ${{ github.sha }}
       target_branch: main
       fresh_security_patches: ${{ inputs.fresh_security_patches == true }}
+      api_smoke: true
 
   matrix-tests:
     name: Matrix Tests

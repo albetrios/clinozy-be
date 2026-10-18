@@ -3259,6 +3259,7 @@ src/
     │   │   ├── db-shard-balance.policy.unit.test.ts
     │   │   ├── dependabot-ci-triage.policy.unit.test.ts
     │   │   ├── deploy-node-env.policy.unit.test.ts
+    │   │   ├── docker-api-smoke.policy.unit.test.ts
     │   │   ├── docker-security-patch-epoch.policy.unit.test.ts
     │   │   ├── dockerfile-patches.policy.unit.test.ts
     │   │   ├── early-failure-alert.unit.test.ts

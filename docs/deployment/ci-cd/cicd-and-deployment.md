@@ -101,7 +101,7 @@ Runs when a PR **merges** into `main` (or manual dispatch). Does **not** re-run 
 | Job | Order | When | What |
 | --- | --- | ---- | ---- |
 | **Commitlint** | parallel | Every merge | Conventional commit messages on merged commits |
-| **Docker** | parallel | `src-code`, `docker`, or `ci-config` | Build + Trivy + ephemeral Postgres/Redis container smoke + push `ghcr.io/.../clinozy-be-api:{sha}` (and `:latest` on `main`) |
+| **Docker** | parallel | `src-code`, `docker`, or `ci-config` | Build + Trivy + ephemeral Postgres/Redis container boot (`/readyz`), then the full seed and `pnpm test:api-smoke` against the container (post-merge only) + push `ghcr.io/.../clinozy-be-api:{sha}` (and `:latest` on `main`) |
 | **SBOM** | parallel | `src-code` | CycloneDX artifact (workflow artifact) |
 | **API docs** | parallel | `src-code` or openapi paths | `pnpm docs:all`, Postman + Scalar publish |
 | **Release Please** | after Docker | Every merge | Opens/updates release PR; may publish GitHub Release |

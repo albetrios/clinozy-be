@@ -34,7 +34,7 @@ Every `pnpm` script beyond the everyday ones in the root [`CLAUDE.md`](../../CLA
 - `pnpm test:contract:live` — opt-in, never in CI: the `*.live.contract.test.ts` specs against the Stripe sandbox, Resend, the configured S3 bucket, Turnstile test secrets, Sentry and PostHog, with the configured keys (refuses a live Stripe key)
 - `pnpm chaos:up` / `pnpm chaos:down` — start/stop the Toxiproxy sidecar (`docker compose --profile chaos`)
 - `pnpm chaos:provision` — register Postgres + Redis listener proxies (`src/tests/chaos/provision-proxies.ts`)
-- `pnpm test:api-smoke` — live API smoke (server running + seed)
+- `pnpm test:api-smoke` — live API smoke (server running + seed); post-merge CI runs it against the API image it built, after the full seed (`reusable-docker-build-trivy.yml`, `api_smoke: true`)
 - `pnpm verify:base` — end-to-end gate: migrate → seed (minimal + full) → API smoke (auto-detects/launches server + worker) → validate
 - `pnpm validate:route-success-statuses` — verify `tooling/openapi/route-catalog/route-success-statuses.json` (declared happy-path status per route) stays in sync with `docs/routes.txt`
 - `pnpm validate:route-schema-docs` — verify every route registration (incl. `health.middleware.ts`, `mcp-server.ts`) declares `schema.summary`/`description`/`tags` (drives OpenAPI operation docs)

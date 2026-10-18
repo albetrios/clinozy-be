@@ -35,7 +35,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-ci-investigation/SKILL.md",
-      "computedHash": "7947f1a743f7707f933021474a4d76e9f4b389b5465106aece541b895fa79f8c"
+      "computedHash": "ceeb32374138ac15c1d4809d345ce9075065b8eeb6fe18331e90461fb8d80316"
     },
     "be-code-quality-guard": {
       "source": "local",

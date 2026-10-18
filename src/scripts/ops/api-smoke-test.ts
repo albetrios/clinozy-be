@@ -505,6 +505,10 @@ const SWEEP_EXPECTED_OVERRIDES: Record<string, number[]> = {
   // the smoke user is a super_admin (GLOBAL_ADMIN_EMAILS): past the role check, the streamable-HTTP
   // transport refuses a GET that does not accept `text/event-stream`, which this sweep never sends.
   'GET /api/v1/mcp': [403, 404, 406],
+  // Required query the sweep never sends (`date_from` + `date_to`; `branch_id` + `appointment_date`):
+  // 400 is the validation answering, 403 a smoke user without appointment:read.
+  'GET /api/v1/app/appointments/daily-counts': [400, 403],
+  'GET /api/v1/app/appointments/slots': [400, 403],
 };
 
 import {
