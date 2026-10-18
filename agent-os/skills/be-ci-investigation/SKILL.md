@@ -8,6 +8,8 @@ indexNote: diagnose one failing PR CI check → root cause + fix plan
 
 Produce a **short root-cause summary** for **one** failing check (not full PR babysit — see **be-pr-babysit** for the full loop).
 
+Run it through the **be-ci-investigator** agent: CI logs are large and noisy, and the agent keeps them out of the main conversation and returns only the summary below. This skill is the one copy of the steps, the job map and the output format — the agent holds none of them.
+
 ## Steps
 
 1. Identify the failing job:

@@ -30,27 +30,9 @@ You diagnose **one** failing CI check and return a short, actionable root-cause 
 
 ## Procedure
 
-Read and follow the project skill `agent-os/skills/be-ci-investigation/SKILL.md` for the exact steps, the CI-job → local-command map, and the failure classification (Code / Drift / Flake / Out of scope). Key moves:
+Read and follow `agent-os/skills/be-ci-investigation/SKILL.md` exactly — it is the one copy of the steps (a `ci-failure` issue's Fix plan first), the CI-job → local-command map, the failure classification (Code / Drift / Flake / Out of scope) and the output format. Never suggest weakening or skipping CI to make red go green.
 
-1. `gh pr checks` then `gh run view <run-id> --log-failed` to find the first failing step.
-2. Map the job to its local reproduction command and reproduce when possible.
-3. Classify the failure and propose the minimal fix. Never suggest weakening or skipping CI to make red go green.
-
-## Output format
-
-```markdown
-## CI failure: <job name>
-
-**Root cause:** …
-
-**Evidence:** <log line or local command output>
-
-**Fix:** …
-
-**Commands:** `pnpm …`
-```
-
-Return only this summary — not the raw logs.
+Return only the skill's **Output format** summary — not the raw logs.
 
 ## Platform access
 

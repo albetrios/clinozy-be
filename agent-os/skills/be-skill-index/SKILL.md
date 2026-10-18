@@ -14,12 +14,14 @@ For **Cursor-built-in** skills (`~/.cursor/skills-cursor/`), see **be-cursor-glo
 
 Start here — map your intent to the skill or **chain** to run (chains are named sequences in
 `agent-os/skills/chains.json`; run them with `pnpm agent-os:plan-skills <file>` or the matching
-`/be-route-complete` · `/be-schema-complete` · `/be-worker-complete` · `/be-new-domain` command):
+`/be-route-complete` · `/be-schema-complete` · `/be-worker-complete` · `/be-new-domain` command;
+their steps, in order, are the chain rows of [`agent-os/docs/skill-triggers.md`](../../docs/skill-triggers.md)
+— generated, so this index keeps no copy of them):
 
-- **Add a whole domain / sub-domain** → **new-domain** chain (be-domain-generator → … → be-test-generator)
-- **Add or change an API route** → **route-change** chain (be-api-contract-guard → be-route-schema-doc-guard → be-route-catalog → be-seed-maintainer)
-- **Change a Drizzle schema / table** → **schema-change** chain (be-schema-generator → be-sql-design-guard → be-db-migration-maintainer → be-rls-tenant-isolation-guard)
-- **Add an event / queue / worker** → **worker-change** chain (be-workers-events → be-test-generator → be-tsdoc-export-guard)
+- **Add a whole domain / sub-domain** → **new-domain** chain
+- **Add or change an API route** → **route-change** chain
+- **Change a Drizzle schema / table** → **schema-change** chain
+- **Add an event / queue / worker** → **worker-change** chain
 - **Add / adjust seed data** → **be-seed-maintainer**
 - **Add / rename / remove an env var** → **be-env-schema-add**
 - **Write or reorganize `docs/**`** → **be-docs-maintainer** (audit-only pass → **be-docs-audit**)

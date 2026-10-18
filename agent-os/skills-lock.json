@@ -35,7 +35,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-ci-investigation/SKILL.md",
-      "computedHash": "31ff572ea7569aa9aca5536fbf1dbb952ed86a24cc360a12640c658a29e09b3c"
+      "computedHash": "7947f1a743f7707f933021474a4d76e9f4b389b5465106aece541b895fa79f8c"
     },
     "be-code-quality-guard": {
       "source": "local",
@@ -83,7 +83,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-docs-audit/SKILL.md",
-      "computedHash": "bceeb18c130d6fdd87554553761c3c2f3f099ed8f2b575f3c8fca1e115873d7a"
+      "computedHash": "604ed8836ad04ad70e1e10874db0e82c9a3d67442df839d7c37121bf37de97d0"
     },
     "be-docs-maintainer": {
       "source": "local",
@@ -215,7 +215,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-skill-index/SKILL.md",
-      "computedHash": "9880a4feeede9138582e8a63c9f9015cd792bd119fc52460f68641c275b32f14"
+      "computedHash": "24145c647c0c9f2b1cdc4fb7cd0d6005778d01434cf7169a7f80115cf0bb7330"
     },
     "be-split-to-prs": {
       "source": "local",
