@@ -146,6 +146,7 @@ async function settleByRefund(options: {
       direction: PAYMENT_DIRECTION.PAID,
       branch_id: branchId,
       contact_id: credit.contact_id,
+      payee_name: typedPartyName(credit),
       invoice_id: invoice?.id ?? null,
       invoice_credit_note_id: creditNoteId,
       pending_credit_id: credit.id,
@@ -153,6 +154,17 @@ async function settleByRefund(options: {
       ...splitsToColumns(body.splits ?? []),
     },
   });
+}
+
+/**
+ * A typed party's name (no `contact_id`) for a money settlement's `payee_name`, so the ledger's
+ * FROM / TO and its `q` keep who was paid or paid back; a contact's credit names nobody — the
+ * contact does.
+ */
+function typedPartyName(credit: BaseRecordRow): string | null {
+  return typeof credit.contact_id === 'number'
+    ? null
+    : ((credit.party_name as string | null) ?? null);
 }
 
 /** `take` + money: money coming back to the clinic (B24). */
@@ -169,6 +181,7 @@ async function settleByMoneyBack(options: {
       direction: PAYMENT_DIRECTION.RECEIVED,
       branch_id: await resolveBranchId({ context, publicId: body.branch_id as string }),
       contact_id: credit.contact_id,
+      payee_name: typedPartyName(credit),
       pending_credit_id: credit.id,
       paid_at: body.paid_at === undefined ? new Date() : new Date(body.paid_at),
       ...splitsToColumns(body.splits ?? []),

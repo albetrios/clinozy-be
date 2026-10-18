@@ -201,5 +201,77 @@ describe('Flow — refund and credit carried to the next bill', () => {
       '[.data[] | "\\(.kind):\\(.direction):\\(.amount)"] | sort | join(",")',
       'receipt:received:500,receipt:received:6000,refund:paid:1000,refund:paid:500',
     );
+    flow.expectValue(
+      'a contact names her settlements — no typed payee',
+      '[.data[] | select(.kind == "refund") | .payee_name] | unique | map(tostring) | join(",")',
+      'null',
+    );
+  });
+
+  it('6. a typed vendor keeps its name on every settlement, and the ledger finds it (FIN-001)', async () => {
+    const vendor = `Credit Vendor ${T}`;
+    flow.as('owner');
+    await flow.expect(200, 'owe a typed vendor 21.43', 'POST', '/app/pending-credits', {
+      direction: 'give',
+      amount: 21.43,
+      reason: 'Returned stock',
+      party_name: vendor,
+    });
+    const owed = flow.last('.data.id');
+    await flow.expect(200, 'give back 1 by UPI', 'POST', `/app/pending-credits/${owed}/settle`, {
+      amount: 1,
+      method: 'money',
+      branch_id: vesu,
+      splits: [{ mode: 'upi', amount: 1 }],
+    });
+    await flow.expect(200, 'give back the rest', 'POST', `/app/pending-credits/${owed}/settle`, {
+      amount: 20.43,
+      method: 'money',
+      branch_id: vesu,
+      splits: [{ mode: 'upi', amount: 20.43 }],
+    });
+    flow.expectValue(
+      'given back in full',
+      '[.data.settled_amount, .data.left_amount, .data.status] | map(tostring) | join(",")',
+      '21.43,0,given_back',
+    );
+    await flow.expect(200, 'the vendor owes 31.01', 'POST', '/app/pending-credits', {
+      direction: 'take',
+      amount: 31.01,
+      reason: 'Overpaid bill',
+      party_name: vendor,
+    });
+    const due = flow.last('.data.id');
+    await flow.expect(
+      200,
+      'taken back by UPI and cash',
+      'POST',
+      `/app/pending-credits/${due}/settle`,
+      {
+        amount: 31.01,
+        method: 'money',
+        branch_id: vesu,
+        splits: [
+          { mode: 'upi', amount: 10 },
+          { mode: 'cash', amount: 21.01 },
+        ],
+      },
+    );
+    flow.expectValue(
+      'settled, nothing left',
+      '[.data.settled_amount, .data.left_amount] | map(tostring) | join(",")',
+      '31.01,0',
+    );
+    await flow.expect(
+      200,
+      "the vendor's payments by name",
+      'GET',
+      `/app/payments?q=${encodeURIComponent(vendor)}`,
+    );
+    flow.expectValue(
+      'both refunds and the money back, each naming the vendor',
+      `[.data[] | "\\(.kind):\\(.amount):\\(.payee_name == "${vendor}")"] | sort | join(",")`,
+      'money_back:31.01:true,refund:1:true,refund:20.43:true',
+    );
   });
 });
