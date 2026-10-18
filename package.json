@@ -93,6 +93,7 @@
     "test:parallel": "tsx tooling/vitest/run-parallel.ts",
     "test:parallel-db": "TEST_PARALLEL_DATABASES=true vitest run --project db-parallel",
     "test:affected": "tsx tooling/vitest/affected.ts",
+    "test:pre-push": "tsx tooling/vitest/pre-push-tests.ts",
     "test:select": "tsx tooling/vitest/select-tests.ts",
     "test:selector-misses": "tsx tooling/vitest/selector-misses.ts",
     "test:contract": "CONTRACT_TESTS_ENABLED=true NODE_OPTIONS=--import=nock vitest run --config tooling/vitest/contract.config.ts --no-file-parallelism",

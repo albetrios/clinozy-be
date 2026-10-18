@@ -3512,6 +3512,7 @@ src/
     │   │   ├── load-test-monitor.unit.test.ts
     │   │   ├── local-captcha.unit.test.ts
     │   │   ├── local-database-logins.unit.test.ts
+    │   │   ├── pre-push-tests.unit.test.ts
     │   │   ├── project-identity.policy.unit.test.ts
     │   │   ├── railway-deploy-image.unit.test.ts
     │   │   ├── rotate-live-image-tags.unit.test.ts

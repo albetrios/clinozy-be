@@ -4,8 +4,9 @@
  * run for the commits it pushes (the steps of `.husky/pre-push`, each with why it runs or not),
  * then the tests `pnpm test:select` picks for them, with why each was picked.
  *
- * Pre-push runs `pnpm test:unit` in full today; the selected set is what it will run once the
- * selector miss check has shown no miss for two weeks. The steps mirror `.husky/pre-push`
+ * Pre-push runs the whole unit project by default; the selected set is what it runs with
+ * `PRE_PUSH_SELECTED_TESTS=1` (`tooling/vitest/pre-push-tests.ts`, off until the selector miss check
+ * has shown no miss for two weeks). The steps mirror `.husky/pre-push`
  * (`src/tests/unit/tooling/affected.policy.unit.test.ts` keeps the two in step).
  */
 import { spawnSync } from 'node:child_process';
@@ -13,6 +14,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pushSemgrepTargets } from '@/scripts/tooling/run-push-semgrep.js';
 import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { SELECTED_TESTS_SWITCH } from '@tooling/vitest/pre-push-tests.js';
 import {
   ALWAYS_RUN_REASON,
   selectTests,
@@ -30,8 +32,11 @@ export interface PushStep {
 export const UNIT_RELEVANT =
   /^(src\/|tooling\/vitest\/|vitest\.config\.ts$|package\.json$|pnpm-lock\.yaml$)/;
 
-/** The steps of `.husky/pre-push` for the pushed files, in its order. */
-export function pushSteps(changedFiles: readonly string[]): PushStep[] {
+/**
+ * The steps of `.husky/pre-push` for the pushed files, in its order; `selectedTestsOn` is the
+ * `PRE_PUSH_SELECTED_TESTS` switch of its unit-test step.
+ */
+export function pushSteps(changedFiles: readonly string[], selectedTestsOn = false): PushStep[] {
   const markdown = changedFiles.some((file) => file.endsWith('.md'));
   const sourceOrTooling = changedFiles.some((file) => /^(src|tooling)\//.test(file));
   const semgrep = pushSemgrepTargets(changedFiles);
@@ -67,10 +72,10 @@ export function pushSteps(changedFiles: readonly string[]): PushStep[] {
           : 'none of auth, tenancy, billing, database contexts',
     },
     {
-      command: 'pnpm test:unit',
+      command: 'pnpm test:pre-push',
       runs: unitRelevant,
       why: unitRelevant
-        ? 'pushed unit-relevant files — the whole unit project'
+        ? `pushed unit-relevant files — ${selectedTestsOn ? 'the selected unit-project files below (PRE_PUSH_SELECTED_TESTS=1)' : 'the whole unit project (PRE_PUSH_SELECTED_TESTS=1 runs the selected files below)'}`
         : 'nothing unit-relevant pushed',
     },
   ];
@@ -123,13 +128,13 @@ function main(): void {
     '',
     '| Step | Runs | Why |',
     '| --- | --- | --- |',
-    ...pushSteps(changedFiles).map(
+    ...pushSteps(changedFiles, process.env[SELECTED_TESTS_SWITCH]?.trim() === '1').map(
       (step) => `| \`${step.command}\` | ${step.runs ? 'yes' : 'no'} | ${step.why} |`,
     ),
     '',
     '## The tests pnpm test:select picks',
     '',
-    'Pre-push runs the whole unit project today; this is what it will run once the selector miss check has shown no miss for two weeks. CI runs everything.',
+    'Pre-push runs the whole unit project by default; with PRE_PUSH_SELECTED_TESTS=1 it runs the unit-project files of this selection. CI runs everything.',
     '',
     ...selectionTable(selectTests({ changedFiles, repositoryRoot })),
   ];

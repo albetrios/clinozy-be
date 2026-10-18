@@ -264,6 +264,20 @@ fixture per sub-domain and nested sub-domain (its main file selects every test i
 checks that the core domains run everything and that every unreachable test is always run
 (`tooling/vitest/selector-fixtures.check.ts`).
 
+### Selected tests at push
+
+`.husky/pre-push` runs its unit tests through `pnpm test:pre-push`
+(`tooling/vitest/pre-push-tests.ts`). By default that is `pnpm test:unit`, the whole unit
+project. With `PRE_PUSH_SELECTED_TESTS=1` it runs only the unit-project files the selection picks
+for the pushed commits, always-run files included. A core-domain change (tenancy, user, auth,
+audit, `src/shared/`, `src/core/`, `src/infrastructure/`) escalates, so it still runs the whole
+project, as does a selection that cannot be built. Measured on 18 Oct: a `leads` service change selects 93
+of the 718 unit files (621 tests), which run in 62 s against 518 s for the whole project.
+
+The switch stays off by default until the `Selector miss check` has reported no miss for two
+weeks. Then the default flips to on, in `pre-push-tests.ts`. `pnpm test:affected` previews either
+way.
+
 ### Run one database suite at a time
 
 `fileParallelism: false` on the database-backed projects (`unit-db`, `e2e`, `integration`,

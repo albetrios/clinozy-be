@@ -1,0 +1,82 @@
+#!/usr/bin/env tsx
+/**
+ * `pnpm test:pre-push [--base <ref>]` — the unit tests `.husky/pre-push` runs for the pushed
+ * commits.
+ *
+ * Off (the default): `pnpm test:unit`, the whole unit project, as before. With
+ * `PRE_PUSH_SELECTED_TESTS=1`: only the unit-project files `pnpm test:select` picks for the pushed
+ * changes (its always-run files included). The selection's escalation list keeps the core domains
+ * whole — a tenancy, user, auth, audit, `src/shared/`, `src/core/` or `src/infrastructure/` change
+ * selects everything, and then the whole unit project runs; so does a selection that cannot be
+ * built. It stays off by default until the PR suite's `Selector miss check` has reported no miss
+ * for two weeks (docs/reference/testing/testing-conventions.md → Selected tests at push).
+ */
+import { spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { selectTests, type TestSelection } from '@tooling/vitest/test-selection.util.js';
+
+/** The switch: `1` runs the selected unit tests at push; anything else, the whole unit project. */
+export const SELECTED_TESTS_SWITCH = 'PRE_PUSH_SELECTED_TESTS';
+
+/** What pre-push runs: the whole unit project, nothing, or these unit-project files. */
+export interface PrePushTests {
+  run: 'all' | 'none' | 'selected';
+  files: string[];
+  reason: string;
+}
+
+/**
+ * What pre-push runs for a change: `select` is called only when the switch is on, and a
+ * selection that throws runs everything.
+ */
+export function prePushTests(options: {
+  switchedOn: boolean;
+  select: () => TestSelection;
+}): PrePushTests {
+  const all = (reason: string): PrePushTests => ({ run: 'all', files: [], reason });
+  if (!options.switchedOn) {
+    return all(`selected tests at push are off — ${SELECTED_TESTS_SWITCH}=1 turns them on`);
+  }
+  let selection: TestSelection;
+  try {
+    selection = options.select();
+  } catch (error) {
+    return all(`the selection failed, so everything runs: ${(error as Error).message}`);
+  }
+  if (selection.mode === 'all') return all(selection.reasons.join('; '));
+  const files = selection.mode === 'selected' ? (selection.projects.unit ?? []) : [];
+  if (files.length === 0) return { run: 'none', files, reason: 'no unit-project test selected' };
+  return { run: 'selected', files, reason: `${files.length} unit-project file(s) selected` };
+}
+
+function changedFiles(base: string): string[] {
+  const result = spawnSync('git', ['diff', '--name-only', '--no-renames', `${base}...HEAD`], {
+    encoding: 'utf8',
+    env: gitEnvironmentWithoutInheritedRepository(),
+  });
+  if (result.status !== 0) throw new Error(`git diff against ${base}: ${result.stderr.trim()}`);
+  return result.stdout.split('\n').filter((file) => file.trim() !== '');
+}
+
+function main(): void {
+  const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
+  const baseIndex = process.argv.indexOf('--base');
+  const base = (baseIndex === -1 ? undefined : process.argv[baseIndex + 1]) ?? 'origin/main';
+  const plan = prePushTests({
+    switchedOn: process.env[SELECTED_TESTS_SWITCH]?.trim() === '1',
+    select: () => selectTests({ changedFiles: changedFiles(base), repositoryRoot }),
+  });
+  console.log(`Pre-push unit tests: ${plan.run} — ${plan.reason}`);
+  if (plan.run === 'none') return;
+  const args =
+    plan.run === 'all'
+      ? ['test:unit']
+      : ['exec', 'vitest', 'run', '--project', 'unit', ...plan.files];
+  process.exitCode = spawnSync('pnpm', args, { cwd: repositoryRoot, stdio: 'inherit' }).status ?? 1;
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main();
+}
