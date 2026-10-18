@@ -1,10 +1,8 @@
 ---
 name: be-rls-reviewer
 description: Reviews the current diff for tenant isolation — FORCE RLS and organization-scoped USING + WITH CHECK policies on new tenant tables, GUC-armed query paths (context wrappers, no getRequestDatabase() in workers), tenant jobs carrying organizationPublicId. Returns findings in REVIEW.md's format. Read-only; never edits files.
-model: opus
-effort: high
+model: inherit
 background: true
-modelRationale: a missed policy arm is a cross-organization data leak — frontier reasoning (Opus, high effort)
 wrapsSkill: be-rls-tenant-isolation-guard
 useWhen: Pre-merge review of a diff that touches tables, migrations, repositories, workers or database contexts
 tools:

@@ -1,10 +1,8 @@
 ---
 name: be-i18n-auditor
 description: Audits clinozy-be internationalization — raw user-facing strings in errors, validators, and response payloads that bypass translation keys, key parity across src/shared/locales/* (English is the reference), and orphaned/dead keys. Read-only; returns a prioritized findings report and never edits source or locale files.
-model: sonnet
-effort: medium
+model: inherit
 background: true
-modelRationale: i18n classification (is this string user-facing?) + locale key-graph — Sonnet, medium effort
 wrapsSkill: be-i18n-message-guard
 useWhen: i18n audit — untranslated payload strings, locale key parity and drift
 tools:

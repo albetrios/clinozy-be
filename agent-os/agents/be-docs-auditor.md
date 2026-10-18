@@ -1,10 +1,8 @@
 ---
 name: be-docs-auditor
 description: Full on-request audit of the docs/ directory — checks index completeness, naming conventions, Mermaid diagrams, and cross-links. Use when the user asks to audit or review documentation, or after a large docs reorganization. Read-only; returns an issues list, never edits files.
-model: sonnet
-effort: medium
+model: inherit
 background: true
-modelRationale: index/link/naming/Mermaid scan with judgement on drift — Sonnet, medium effort
 wrapsSkill: be-docs-audit
 useWhen: Full docs/ audit — stale links, index gaps, Mermaid issues
 tools:

@@ -1,11 +1,9 @@
 ---
 name: be-dependency-auditor
 description: Runs pnpm audit, analyzes vulnerabilities, and returns a prioritized fix plan — severity, affected package, recommended action (patch/update/replace/accept). Read-only; produces a report for the user to act on, never edits package.json or lockfile.
-model: sonnet
-effort: medium
+model: inherit
 background: true
 omitClaudeMd: true
-modelRationale: parses pnpm audit and maps severities to a fix plan — Sonnet, medium effort
 wrapsSkill: be-dependency-security
 useWhen: pnpm audit — vulnerabilities + prioritized fix plan
 tools:

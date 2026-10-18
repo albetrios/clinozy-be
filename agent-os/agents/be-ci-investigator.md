@@ -1,9 +1,7 @@
 ---
 name: be-ci-investigator
 description: Diagnoses a single failing clinozy-be PR CI check and returns a short root-cause summary with a fix plan. Use when the user asks why CI failed or to diagnose a specific GitHub Actions job. Runs in isolation so verbose CI logs do not bloat the main conversation.
-model: sonnet
-effort: medium
-modelRationale: root-cause diagnosis from noisy CI logs — Sonnet, medium effort (by job, 17 Oct)
+model: inherit
 wrapsSkill: be-ci-investigation
 useWhen: One failing CI job — root-cause summary without log noise
 tools:

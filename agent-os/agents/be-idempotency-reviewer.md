@@ -1,10 +1,8 @@
 ---
 name: be-idempotency-reviewer
 description: Reviews the current diff for the idempotency contract — X-Idempotency-Key on the idempotencyRequired writes, the 422/409 flow, replayed responses, Stripe mutations forwarding the client key as idempotencyKey. Returns findings in REVIEW.md's format. Read-only; never edits files.
-model: sonnet
-effort: medium
+model: inherit
 background: true
-modelRationale: a contract checklist over the touched routes — Sonnet, medium effort
 wrapsSkill: be-idempotency-guard
 useWhen: Pre-merge review of a diff that touches routes, controllers, billing or Stripe calls
 tools:

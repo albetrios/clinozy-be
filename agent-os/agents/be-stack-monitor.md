@@ -1,11 +1,9 @@
 ---
 name: be-stack-monitor
 description: Monitors the running local clinozy-be stack via the dashboards MCP data tools (never the human HTML dashboard) and returns a concise health verdict plus any anomalies. Use for periodic or continuous stack monitoring — invoke it each cycle (e.g. via /loop), passing the prior cycle's verdict so it can flag regressions.
-model: haiku
-effort: low
+model: inherit
 background: true
 omitClaudeMd: true
-modelRationale: reads health signals per cycle and flags regressions — mechanical, Haiku
 wrapsSkill: "*(inline)*"
 useWhen: Periodic / continuous stack monitoring — health verdict + anomalies from the dashboards MCP data tools (never the HTML UI)
 tools:

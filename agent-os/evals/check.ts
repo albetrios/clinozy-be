@@ -235,27 +235,18 @@ if (existsSync(catalogFile)) {
   }
 }
 
-// ── Check 7: every agent file has valid frontmatter and a model fit for its job ──
-// Models are set by job (17 Oct): the agents whose output is a judgment call — the verifier
-// the production reviewers and the RLS reviewer — run on Opus (or `inherit`); auditors and investigators on
-// Sonnet; mechanical scanners on Haiku. A judgment agent pinned to anything smaller fails.
-// Claude Code silently ignores a frontmatter field it does not recognize, so the routing
-// fields are validated here: a misspelled or out-of-range value would just be dropped.
-const judgmentAgents = new Set([
-  "be-verifier",
-  "be-production-hardening-reviewer",
-  "be-production-reviewer",
-  "be-rls-reviewer",
-]);
-const agentModels = /^(inherit|opus|sonnet|haiku|fable|claude-[a-z0-9-]+)$/;
-const agentEfforts = new Set(["low", "medium", "high", "xhigh", "max"]);
+// ── Check 7: every agent file has valid frontmatter and runs on the session's model ──
+// Per-job routing (Opus for the judgment calls, Sonnet for the auditors, Haiku for the
+// scanners) is set aside for now (18 Oct 2026): every agent is `model: inherit` and sets no
+// `effort`, so it runs on the model and effort of the session that starts it, as in
+// clinozy-fe. Claude Code silently ignores a frontmatter field it does not recognize, so
+// these fields are validated here.
 for (const file of agentFiles) {
   const text = readText(join(agentOsDirectory, "agents", file));
   const agentName = basename(file, ".md");
   const name = frontmatterField(text, "name");
   const description = frontmatterField(text, "description");
   const model = frontmatterField(text, "model");
-  const effort = frontmatterField(text, "effort");
   if (!name || name !== agentName)
     error(
       "agent-frontmatter",
@@ -266,18 +257,17 @@ for (const file of agentFiles) {
       "agent-frontmatter",
       `agents/${file} missing frontmatter \`description\``,
     );
-  if (!model || !agentModels.test(model))
-    error("agent-model", `agents/${file} model "${model ?? "∅"}" is not a model alias or id`);
-  else if (judgmentAgents.has(agentName) && model !== "opus" && model !== "inherit")
+  if (model !== "inherit")
     error(
       "agent-model",
-      `agents/${file} pins model "${model}" but its output is a judgment call — use \`opus\` or \`inherit\``,
+      `agents/${file} model "${model ?? "∅"}" — every agent uses \`model: inherit\` (the session's model), for now`,
     );
-  if (!effort || !agentEfforts.has(effort))
-    error(
-      "agent-effort",
-      `agents/${file} effort "${effort ?? "∅"}" — set one of ${[...agentEfforts].join(", ")}`,
-    );
+  for (const field of ["effort", "modelRationale"])
+    if (frontmatterField(text, field) !== undefined)
+      error(
+        "agent-effort",
+        `agents/${file} sets \`${field}\` — every agent runs at the session's model and effort, for now`,
+      );
   for (const flag of ["background", "omitClaudeMd"]) {
     const value = frontmatterField(text, flag);
     if (value !== undefined && value !== "true")

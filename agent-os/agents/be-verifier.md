@@ -1,9 +1,7 @@
 ---
 name: be-verifier
 description: Skeptical independent validator for clinozy-be. Use after a task is marked done to confirm the implementation actually works — runs validate/tests, checks edge cases, and reports what passed vs what is incomplete or broken. Use proactively before claiming a feature complete.
-model: opus
-effort: high
-modelRationale: adversarial validation across edge cases — frontier reasoning (Opus, high effort)
+model: inherit
 wrapsSkill: "*(inline)*"
 useWhen: After claiming work complete — scoped validate/tests + wiring check
 tools:

@@ -1,10 +1,8 @@
 ---
 name: be-production-reviewer
 description: Runs a full production-readiness review of clinozy-be and returns a prioritized plan (satisfied items, blocking gaps, optional improvements). Use before any path-to-production action — release, deploy, or "ready for production" sign-off. Read-only; produces a plan for the user to approve, never deploys.
-model: opus
-effort: high
+model: inherit
 background: true
-modelRationale: full production-readiness synthesis — frontier reasoning (Opus, high effort)
 wrapsSkill: be-path-to-production-gate + be-production-hardening-guard
 useWhen: Pre-release / deploy sign-off — full readiness plan
 tools:
