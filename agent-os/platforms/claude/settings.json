@@ -57,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/session-start.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-session-start.sh\""
           }
         ]
       }
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/prompt-skill-router.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-prompt-skill-router.sh\""
           }
         ]
       }
@@ -78,7 +78,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/guard-edits.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-guard-edits.sh\""
           }
         ]
       },
@@ -87,7 +87,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/guardrails.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-guardrails.mjs\""
           }
         ]
       },
@@ -96,7 +96,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/no-unrequested-pr.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-no-unrequested-pr.sh\""
           }
         ]
       }
@@ -107,12 +107,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/edit-hooks.mjs\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-edit-hooks.mjs\"",
             "if": "Edit(**)"
           },
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/edit-hooks.mjs\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-edit-hooks.mjs\"",
             "if": "Write(**)"
           }
         ]
@@ -122,7 +122,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/large-read-nudge.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-large-read-nudge.sh\""
           }
         ]
       },
@@ -131,7 +131,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/injection-scan.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-injection-scan.mjs\""
           }
         ]
       },
@@ -140,7 +140,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/subagent-verify.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-subagent-verify.sh\""
           }
         ]
       },
@@ -149,7 +149,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/push-ci-watch.mjs\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-push-ci-watch.mjs\"",
             "if": "Bash(git push*)",
             "asyncRewake": true,
             "timeout": 2700
@@ -163,7 +163,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/gate-failure-hint.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-gate-failure-hint.sh\""
           }
         ]
       }
@@ -173,7 +173,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/edit-hooks.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-edit-hooks.mjs\""
           }
         ]
       },
@@ -181,7 +181,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/turn-end-tests.mjs\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-turn-end-tests.mjs\"",
             "asyncRewake": true,
             "timeout": 120
           }
@@ -193,7 +193,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/pre-compact-preserve.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-pre-compact-preserve.sh\""
           }
         ]
       }
@@ -203,7 +203,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/session-end.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-session-end.sh\""
           }
         ]
       }

@@ -35,7 +35,7 @@ cd "${repository_root}" || exit 0
 # even when this runs as a standalone Setup-script line rather than via
 # bootstrap.sh. install-node.sh drops the pinned Node into <prefix>/node<major>
 # but runs in a child process and cannot change THIS shell's PATH; mirror the
-# candidate search in agent-os/hooks/session-start.sh (honors NODE_INSTALL_PREFIX).
+# candidate search in agent-os/hooks/be-session-start.sh (honors NODE_INSTALL_PREFIX).
 required_major="24"
 [ -f .nvmrc ] && required_major="$(tr -dc '0-9.' < .nvmrc | cut -d. -f1)"
 current_major="$(node -v 2>/dev/null | tr -dc '0-9.' | cut -d. -f1)"

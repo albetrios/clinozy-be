@@ -23,7 +23,7 @@ That makes `pnpm install` → `pnpm validate` / `pnpm test:unit` / `pnpm agent-o
 
 ## Why a setup script is required
 
-The cloud image ships **Node 20, 21, and 22**; clinozy-be's `engines` require **Node 24+** (pinned in [`.nvmrc`](../../.nvmrc)). Node 24 is **not** pre-installed, so a setup script must install it. [`tooling/setup/agent/install-node.sh`](../../tooling/setup/agent/install-node.sh) installs the `.nvmrc` version into `/opt/node24` — the same layout the image uses and exactly where the [`session-start.sh`](../../agent-os/hooks/session-start.sh) hook looks — so the hook switches `PATH` to it and runs `pnpm install` automatically. The repo's Node version is unchanged.
+The cloud image ships **Node 20, 21, and 22**; clinozy-be's `engines` require **Node 24+** (pinned in [`.nvmrc`](../../.nvmrc)). Node 24 is **not** pre-installed, so a setup script must install it. [`tooling/setup/agent/install-node.sh`](../../tooling/setup/agent/install-node.sh) installs the `.nvmrc` version into `/opt/node24` — the same layout the image uses and exactly where the [`be-session-start.sh`](../../agent-os/hooks/be-session-start.sh) hook looks — so the hook switches `PATH` to it and runs `pnpm install` automatically. The repo's Node version is unchanged.
 
 The hook's switch reaches only the Bash tool, and only when the hook loads — a session that holds both repos loads none. So `install-node.sh` also links the pinned `node`, `npm`, `npx`, `corepack` and `pnpm` into `~/.local/bin`, which the image puts ahead of its own `/opt/node22/bin`: every shell runs Node 24, Claude Code's own process (the MCP servers) included. It links only when the `node` on `PATH` is the image's (`/opt/node<major>`), so a Node from nvm is left alone; `NODE_LINK_USER_BIN=0` turns it off.
 
@@ -112,9 +112,9 @@ backs the file up to `settings.json.bak` before a change. `AGENT_SESSION_HOOKS=0
 - **The live stack starts too.** Once hooks load, a two-repo session brings the stack up in the
   background like a single-repo one; `AGENT_AUTO_STACK=0` turns that off.
 
-On the first session the cached Node 24 is already on disk, [`session-start.sh`](../../agent-os/hooks/session-start.sh) switches `PATH` to `/opt/node24`, and runs `pnpm install`. Do **not** start Postgres / Redis here — setup-script processes do not persist; start them per session (below).
+On the first session the cached Node 24 is already on disk, [`be-session-start.sh`](../../agent-os/hooks/be-session-start.sh) switches `PATH` to `/opt/node24`, and runs `pnpm install`. Do **not** start Postgres / Redis here — setup-script processes do not persist; start them per session (below).
 
-**GitHub CLI (optional).** [`install-gh.sh`](../../tooling/setup/agent/install-gh.sh) adds `gh` as an in-session fallback for reading Actions logs, checking CI, and merging (the GitHub MCP tools already cover this). It belongs in the cached **setup script**, not `session-start.sh` — a per-session `apt install` would not cache and would slow every startup. Set `GH_TOKEN` in the environment's **Variables** (least-privilege: `contents` + `pull_requests` + `actions:read`; env vars are not a secrets store). The script first installs the **github.com release binary** (reachable on the default Trusted allowlist, so no extra allowlist entry is normally needed); its `cli.github.com` apt-repo path is only a last resort.
+**GitHub CLI (optional).** [`install-gh.sh`](../../tooling/setup/agent/install-gh.sh) adds `gh` as an in-session fallback for reading Actions logs, checking CI, and merging (the GitHub MCP tools already cover this). It belongs in the cached **setup script**, not `be-session-start.sh` — a per-session `apt install` would not cache and would slow every startup. Set `GH_TOKEN` in the environment's **Variables** (least-privilege: `contents` + `pull_requests` + `actions:read`; env vars are not a secrets store). The script first installs the **github.com release binary** (reachable on the default Trusted allowlist, so no extra allowlist entry is normally needed); its `cli.github.com` apt-repo path is only a last resort.
 
 **gitleaks (recommended if you commit).** The pre-commit guard's "Staged secrets scan" step shells out to `gitleaks protect --staged …` and hard-errors when the binary is missing, so a cloud session cannot commit until gitleaks is installed. The cloud image does not ship it. [`install-gitleaks.sh`](../../tooling/setup/agent/install-gitleaks.sh) installs the **github.com release binary** (reachable on the default Trusted allowlist), pinned to the same version as the CI `security-secrets` job. If that download fails it falls back to `go install` — which must use gitleaks's **legacy self-declared module path** `github.com/zricethezav/gitleaks/v8` (the current `github.com/gitleaks` repo path fails Go's module-path check).
 
@@ -232,7 +232,7 @@ A re-run is safe: a lock stops a second bring-up from racing the first, and an A
 ## Session startup — the live playground
 
 A web session is a playground: it brings itself **fully live** before the work starts, without
-delaying the session. [`session-start.sh`](../../agent-os/hooks/session-start.sh) runs on startup
+delaying the session. [`be-session-start.sh`](../../agent-os/hooks/be-session-start.sh) runs on startup
 and resume (not after `/clear` or a compact), runs `pnpm install` when dependencies are missing,
 starts the `pnpm agent-os:check` gate and the tool-pin probes in the background (the banner shows
 their last result), then launches `bootstrap.sh` **detached** and returns at once:
@@ -263,7 +263,7 @@ with no manual step. Local sessions are unchanged (`Stack: on demand`).
 
 ## How to tell a session is provisioned
 
-The `session-start.sh` banner (top of every session) leads with **`environment provisioned: yes|no`** — `yes` means the cached toolchain the Setup script builds (Node ≥ `.nvmrc` + installed deps) is live in this session. The same line reports `Node`, `deps`, `gh`, `codegraph`, `gitleaks`, `agent-os`, and `docker` status. Manual cross-checks: `node -v` (expect 24.x), `gh --version`, `ls /opt/node24`.
+The `be-session-start.sh` banner (top of every session) leads with **`environment provisioned: yes|no`** — `yes` means the cached toolchain the Setup script builds (Node ≥ `.nvmrc` + installed deps) is live in this session. The same line reports `Node`, `deps`, `gh`, `codegraph`, `gitleaks`, `agent-os`, and `docker` status. Manual cross-checks: `node -v` (expect 24.x), `gh --version`, `ls /opt/node24`.
 
 A `no` means the Setup script has not built this cache yet (e.g. Node still 22, deps missing) — configure the Setup script + `nodejs.org` allowlist, then start a fresh session.
 
@@ -273,7 +273,7 @@ A `no` means the Setup script has not built this cache yet (e.g. Node still 22, 
 flowchart TD
   create["Create environment"] --> net["Network: Custom + nodejs.org"]
   net --> setupScript["Setup script: install-node.sh (cached)"]
-  setupScript --> hook["session-start.sh: /opt/node24, pnpm install, agent-os:check"]
+  setupScript --> hook["be-session-start.sh: /opt/node24, pnpm install, agent-os:check"]
   hook --> ready["Session ready (light startup)"]
   ready -->|"your prompt drives work"| prompt["Work starts per prompt"]
   prompt --> staticChecks["validate / test:unit / agent-os:check"]

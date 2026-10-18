@@ -13,10 +13,10 @@
 // wasn't already true. Non-blocking by design: PostToolUse cannot veto a call
 // that already ran. Fails OPEN: any error exits 0 silently.
 import { readFileSync } from "node:fs";
-import { recordTelemetry } from "./_telemetry.mjs";
+import { recordTelemetry } from "./_be-telemetry.mjs";
 
 function done(status, context) {
-  recordTelemetry("injection-scan", "PostToolUse", status);
+  recordTelemetry("be-injection-scan", "PostToolUse", status);
   if (context) {
     process.stdout.write(
       JSON.stringify({

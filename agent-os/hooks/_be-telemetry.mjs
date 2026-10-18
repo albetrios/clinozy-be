@@ -1,4 +1,4 @@
-// Shared telemetry for the node hooks (guardrails.mjs, cursor-shell-guard.mjs).
+// Shared telemetry for the node hooks (be-guardrails.mjs, be-cursor-shell-guard.mjs).
 // Appends one CSV line — timestamp,hook-id,event,fired|silent — to the gitignored
 // agent-os/hooks/.telemetry.log so `pnpm agent-os:hooks:report` can show which
 // hooks fire. Fail-open: any error is swallowed so telemetry never blocks a hook.

@@ -41,7 +41,7 @@ Fill the full-slice template in [`docs/getting-started/requirement-intake.md`](.
 
 ## Continuous context
 
-`pre-compact-preserve.sh` (PreCompact) emits a resume card before compaction; `session-end.sh` (SessionEnd) flags uncommitted work. Together with `codegraph + headroom` (the default MCP pair, declared per agent in `targets.json`) and subagent fan-out, a long unattended build keeps its thread.
+`be-pre-compact-preserve.sh` (PreCompact) emits a resume card before compaction; `be-session-end.sh` (SessionEnd) flags uncommitted work. Together with `codegraph + headroom` (the default MCP pair, declared per agent in `targets.json`) and subagent fan-out, a long unattended build keeps its thread.
 
 ## Onboarding a new (or upgraded) agent
 

@@ -6,18 +6,18 @@
 # (permissionDecision "ask") — a deterministic backstop so an autonomous run
 # never opens a PR unprompted. It does NOT block: a genuinely requested PR
 # proceeds once the user confirms. A turn the user started with /be-ship or /be-open-pr — the
-# commands that ARE the request — goes through without asking again (prompt-skill-router.sh marks
-# it; _turn-once.sh).
+# commands that ARE the request — goes through without asking again (be-prompt-skill-router.sh marks
+# it; _be-turn-once.sh).
 #
 # Fails OPEN: a missing jq exits 0, leaving the normal permission flow in charge.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/_telemetry.sh"
-telemetry_init "no-unrequested-pr" "PreToolUse"
+source "$(dirname "${BASH_SOURCE[0]}")/_be-telemetry.sh"
+telemetry_init "be-no-unrequested-pr" "PreToolUse"
 
 command -v jq >/dev/null 2>&1 || exit 0
 
 INPUT=$(cat)
-source "$(dirname "${BASH_SOURCE[0]}")/_turn-once.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/_be-turn-once.sh"
 session=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || echo "")
 turn_marked "$session" "pr-requested" && exit 0
 title=$(printf '%s' "$INPUT" | jq -r '.tool_input.title // empty' 2>/dev/null || echo "")

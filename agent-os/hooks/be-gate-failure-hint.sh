@@ -10,8 +10,8 @@
 # block — the command already ran). Fails OPEN: a missing jq, no command, or no
 # gate match exits 0 silently.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/_telemetry.sh"
-telemetry_init "gate-failure-hint" "PostToolUseFailure"
+source "$(dirname "${BASH_SOURCE[0]}")/_be-telemetry.sh"
+telemetry_init "be-gate-failure-hint" "PostToolUseFailure"
 
 command -v jq >/dev/null 2>&1 || exit 0
 

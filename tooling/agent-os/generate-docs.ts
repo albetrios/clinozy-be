@@ -292,7 +292,7 @@ function buildSkillTriggers(): DocResult {
   return { path, displayPath: 'agent-os/docs/skill-triggers.md', next, changed: next !== text };
 }
 
-/** The same rows for the edit hook (`agent-os/hooks/edit-hooks.mjs`), so it reminds from the map. */
+/** The same rows for the edit hook (`agent-os/hooks/be-edit-hooks.mjs`), so it reminds from the map. */
 function buildSkillRouting(): DocResult {
   const path = join(agentOsDirectory, 'hooks', 'skill-routing.json');
   const routes = routingRoutes().map(({ chain, globs, skills, optional, note }) => ({

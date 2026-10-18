@@ -4,22 +4,22 @@
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": "node ../agent-os/hooks/cursor-shell-guard.mjs"
+        "command": "node ../agent-os/hooks/be-cursor-shell-guard.mjs"
       }
     ],
     "afterFileEdit": [
       {
-        "command": "node ../agent-os/hooks/cursor-edit-guard.mjs"
+        "command": "node ../agent-os/hooks/be-cursor-edit-guard.mjs"
       }
     ],
     "beforeReadFile": [
       {
-        "command": "node ../agent-os/hooks/cursor-read-guard.mjs"
+        "command": "node ../agent-os/hooks/be-cursor-read-guard.mjs"
       }
     ],
     "beforeMCPExecution": [
       {
-        "command": "node ../agent-os/hooks/cursor-mcp-guard.mjs"
+        "command": "node ../agent-os/hooks/be-cursor-mcp-guard.mjs"
       }
     ]
   }

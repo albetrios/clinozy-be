@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" bash \"$(git rev-parse --show-toplevel)/agent-os/hooks/session-start.sh\"",
+            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" bash \"$(git rev-parse --show-toplevel)/agent-os/hooks/be-session-start.sh\"",
             "statusMessage": "Loading clinozy-be session context"
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" bash \"$(git rev-parse --show-toplevel)/agent-os/hooks/prompt-skill-router.sh\"",
+            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" bash \"$(git rev-parse --show-toplevel)/agent-os/hooks/be-prompt-skill-router.sh\"",
             "statusMessage": "Checking clinozy-be skill routing"
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" node \"$(git rev-parse --show-toplevel)/agent-os/hooks/guardrails.mjs\"",
+            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" node \"$(git rev-parse --show-toplevel)/agent-os/hooks/be-guardrails.mjs\"",
             "statusMessage": "Checking clinozy-be shell guardrails"
           }
         ]
@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" node \"$(git rev-parse --show-toplevel)/agent-os/hooks/injection-scan.mjs\"",
+            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" node \"$(git rev-parse --show-toplevel)/agent-os/hooks/be-injection-scan.mjs\"",
             "statusMessage": "Scanning external content for prompt injection"
           }
         ]
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" node \"$(git rev-parse --show-toplevel)/agent-os/hooks/edit-hooks.mjs\"",
+            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" node \"$(git rev-parse --show-toplevel)/agent-os/hooks/be-edit-hooks.mjs\"",
             "statusMessage": "Checking clinozy-be completion gates"
           }
         ]

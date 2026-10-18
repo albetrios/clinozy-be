@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const sessionStart = readFileSync('agent-os/hooks/session-start.sh', 'utf8');
+const sessionStart = readFileSync('agent-os/hooks/be-session-start.sh', 'utf8');
 const bootstrap = readFileSync('tooling/setup/agent/bootstrap.sh', 'utf8');
 const installNode = readFileSync('tooling/setup/agent/install-node.sh', 'utf8');
 const stack = readFileSync('tooling/setup/agent/stack.sh', 'utf8');
@@ -44,7 +44,7 @@ describe('live playground stack policy', () => {
       hooks: Array<{ id: string; claude?: { matcher?: string } }>;
     };
     // A resumed cloud session can be a new container (deps, stack); clear and compact cannot.
-    expect(manifest.hooks.find((hook) => hook.id === 'session-start')?.claude?.matcher).toBe(
+    expect(manifest.hooks.find((hook) => hook.id === 'be-session-start')?.claude?.matcher).toBe(
       'startup|resume',
     );
     expect(sessionStart).toContain(`pnpm agent-os:check >"\${probe_directory}/agent-os-check.log"`);

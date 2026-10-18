@@ -21,7 +21,7 @@ Each finding names the procedural skill that fixes it (`handoff`: agent finds, s
 
 **Record a clean result.** When the aggregated report has no `critical` or `major` finding and the
 verifier passed, run `pnpm agent-os:review-clean --note "<one line>"`: it records the review for
-HEAD, and the push review gate (`agent-os/hooks/guardrails.mjs`) then lets a push of auth, RLS,
+HEAD, and the push review gate (`agent-os/hooks/be-guardrails.mjs`) then lets a push of auth, RLS,
 billing, migration or route changes through without asking. Never record it while such a finding
 remains; a new commit needs a new review.
 

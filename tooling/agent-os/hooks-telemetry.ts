@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * agent-os hooks telemetry report — aggregates agent-os/hooks/.telemetry.log
- * (written by _telemetry.sh / _telemetry.mjs) into a per-hook summary: total
+ * (written by _be-telemetry.sh / _be-telemetry.mjs) into a per-hook summary: total
  * runs, fired vs silent, silent ratio, and last-fired timestamp.
  *
  * Every hook declared in agent-os/hooks/hooks.json is listed even with zero
@@ -98,7 +98,7 @@ for (const [id, stat] of rows) {
 const totalFlaggedBytes = [...stats.values()].reduce((sum, stat) => sum + stat.flaggedBytes, 0);
 if (totalFlaggedBytes > 0) {
   console.log(
-    `\n  flagged read volume (large-read-nudge \`bytes=\` details): ${(totalFlaggedBytes / 1024).toFixed(0)} KiB — candidate savings via ranged Reads / codegraph / headroom_compress`,
+    `\n  flagged read volume (be-large-read-nudge \`bytes=\` details): ${(totalFlaggedBytes / 1024).toFixed(0)} KiB — candidate savings via ranged Reads / codegraph / headroom_compress`,
   );
 }
 

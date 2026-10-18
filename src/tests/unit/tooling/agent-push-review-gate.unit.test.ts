@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const GUARDRAILS = join(process.cwd(), 'agent-os', 'hooks', 'guardrails.mjs');
+const GUARDRAILS = join(process.cwd(), 'agent-os', 'hooks', 'be-guardrails.mjs');
 const REVIEW_MARKER = join(process.cwd(), 'tooling', 'agent-os', 'review-marker.ts');
 const TSX = join(process.cwd(), 'node_modules', '.bin', 'tsx');
 const temporaryDirectories: string[] = [];
@@ -57,7 +57,7 @@ function decision(options: { root: string; command: string }): string {
  * asks the user first until /be-pre-merge-review records a clean result for HEAD; other pushes,
  * and pushes in another repository, go through.
  */
-describe('guardrails.mjs push review gate', () => {
+describe('be-guardrails.mjs push review gate', () => {
   it('asks before pushing an unreviewed auth change, not after a clean review of HEAD', () => {
     const root = repository('src/domains/auth/auth.service.ts');
     expect(decision({ root, command: 'git push -u origin feat/change' })).toBe('ask');

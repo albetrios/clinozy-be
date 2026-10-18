@@ -11,8 +11,8 @@
 #
 #   stderr -> install logs / diagnostics (NOT added to context)
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/_telemetry.sh"
-telemetry_init "session-start" "SessionStart"
+source "$(dirname "${BASH_SOURCE[0]}")/_be-telemetry.sh"
+telemetry_init "be-session-start" "SessionStart"
 telemetry_fired  # SessionStart always emits the session briefing
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
@@ -260,7 +260,7 @@ fi
 
 # --- Build session context: skill routing map + env/commands summary --------
 # The first line names the repository root the hooks ran from: the canary that shows this
-# repository's hooks loaded (with telemetry's `session-start` row in agent-os/hooks/.telemetry.log),
+# repository's hooks loaded (with telemetry's `be-session-start` row in agent-os/hooks/.telemetry.log),
 # including in a session that holds several repositories (tooling/agent-os/session-hooks.ts).
 node_version="$(node -v 2>/dev/null || echo unknown)"
 deps="missing"; [ -x node_modules/.bin/biome ] && deps="installed"

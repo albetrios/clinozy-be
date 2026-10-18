@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * `pnpm agent-os:review-clean [--note "<summary>"]` — records that `/be-pre-merge-review` found no
- * critical or major finding on HEAD. The push review gate (`agent-os/hooks/guardrails.mjs`) reads
+ * critical or major finding on HEAD. The push review gate (`agent-os/hooks/be-guardrails.mjs`) reads
  * it: a `git push` of auth, RLS, billing, migration or route changes asks the user first unless
  * HEAD has this record.
  *

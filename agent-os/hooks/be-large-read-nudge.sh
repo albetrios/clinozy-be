@@ -11,8 +11,8 @@
 # context via hookSpecificOutput.additionalContext. Fails OPEN: missing jq / no
 # input / any error exits 0.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/_telemetry.sh"
-telemetry_init "large-read-nudge" "PostToolUse"
+source "$(dirname "${BASH_SOURCE[0]}")/_be-telemetry.sh"
+telemetry_init "be-large-read-nudge" "PostToolUse"
 
 command -v jq >/dev/null 2>&1 || exit 0
 

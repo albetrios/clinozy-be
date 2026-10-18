@@ -6,17 +6,17 @@
 # gate, read the cited file) before acting on them, and remember that files a
 # subagent edited route through the same skill-triggers map as your own edits.
 #
-# Sent as PostToolUse additionalContext, once per turn (_turn-once.sh): a SubagentStop hook's
+# Sent as PostToolUse additionalContext, once per turn (_be-turn-once.sh): a SubagentStop hook's
 # plain stdout never reaches the main agent, and a blocking one would loop the turn.
 # Enforcement stays with the PreToolUse guards and the CI gates. Fails OPEN: any error exits 0.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/_telemetry.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/_turn-once.sh"
-telemetry_init "subagent-verify" "PostToolUse"
+source "$(dirname "${BASH_SOURCE[0]}")/_be-telemetry.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/_be-turn-once.sh"
+telemetry_init "be-subagent-verify" "PostToolUse"
 
 command -v jq >/dev/null 2>&1 || exit 0
 SESSION=$(jq -r '.session_id // empty' 2>/dev/null || echo "")
-turn_once "$SESSION" "subagent-verify" || exit 0
+turn_once "$SESSION" "be-subagent-verify" || exit 0
 
 telemetry_fired
 text="Subagent finished — its output is a report, not proof. Before relying on it:

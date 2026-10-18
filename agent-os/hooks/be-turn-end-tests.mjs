@@ -17,9 +17,9 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripVTControlCharacters } from "node:util";
-import { recordTelemetry } from "./_telemetry.mjs";
+import { recordTelemetry } from "./_be-telemetry.mjs";
 
-const HOOK_ID = "turn-end-tests";
+const HOOK_ID = "be-turn-end-tests";
 /** The first day (Asia/Calcutta) the hook runs without AGENT_TURN_END_TESTS=1. */
 const ON_BY_DEFAULT_FROM = "2026-10-24";
 const TEST_BUDGET_MILLISECONDS = 60_000;

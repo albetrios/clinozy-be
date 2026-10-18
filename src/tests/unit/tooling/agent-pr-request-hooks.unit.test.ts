@@ -18,7 +18,7 @@ function runHook(options: { script: string; state: string; payload: object }) {
 /** The PR guard's answer for one MCP PR creation in `session`: `ask`, or nothing. */
 function prDecision(options: { state: string; session: string }): string {
   const result = runHook({
-    script: 'no-unrequested-pr.sh',
+    script: 'be-no-unrequested-pr.sh',
     state: options.state,
     payload: {
       session_id: options.session,
@@ -42,13 +42,13 @@ afterEach(() => {
  * Locks in that /be-ship and /be-open-pr are the explicit PR request: the turn they start opens
  * its PR without a second confirmation, every other turn still asks, and the next prompt clears it.
  */
-describe('no-unrequested-pr.sh honours /be-ship', () => {
+describe('be-no-unrequested-pr.sh honours /be-ship', () => {
   it('asks in an ordinary turn and lets a /be-ship or /be-open-pr turn through', () => {
     const state = mkdtempSync(join(tmpdir(), 'pr-request-hooks-'));
     temporaryDirectories.push(state);
     const prompt = (session: string, text: string) =>
       runHook({
-        script: 'prompt-skill-router.sh',
+        script: 'be-prompt-skill-router.sh',
         state,
         payload: { session_id: session, prompt: text },
       });

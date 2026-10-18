@@ -11,7 +11,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-auto-implement/SKILL.md",
-      "computedHash": "558da24d0601acb1e26a5ee57d4a1452865ccbe0f10fe77d76796ff93f2a44a8"
+      "computedHash": "92791dd17d5ea63dd6ba16547e952037fa6ed40641b09d401e75b0d143ad3e09"
     },
     "be-before-commit-guard": {
       "source": "local",
@@ -101,7 +101,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-env-schema-add/SKILL.md",
-      "computedHash": "ca7ffdf46dda652677ee936f284d4e1833f9e17aab44a11a9eebb3ddde6c0bc6"
+      "computedHash": "977687e3d4eff28e162fc05ab97c6b24bd27108ac4c2eb5bda4bf237fa286140"
     },
     "be-find-skills": {
       "source": "local",
@@ -167,7 +167,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-pr-babysit/SKILL.md",
-      "computedHash": "026e07cffbcfa320998adba494ec4ea82fb64af6d24c44521894065ad5344c1c"
+      "computedHash": "eadd01ad7306b0a04913e9b98df342cc9abf09fb1f444f3112bdd7fa8182e550"
     },
     "be-production-hardening-guard": {
       "source": "local",

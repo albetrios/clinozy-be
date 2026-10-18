@@ -10,8 +10,8 @@
 # Output: PreCompact additionalContext envelope (jq); plain stdout fallback.
 # Fail-open: any error exits 0 and never blocks compaction.
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/_telemetry.sh"
-telemetry_init "pre-compact-preserve" "PreCompact"
+source "$(dirname "${BASH_SOURCE[0]}")/_be-telemetry.sh"
+telemetry_init "be-pre-compact-preserve" "PreCompact"
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 cd "$ROOT" 2>/dev/null || exit 0

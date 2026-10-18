@@ -7,7 +7,7 @@
 // - PostToolUse queues the edited file for formatting and adds, as additionalContext (a
 //   PostToolUse hook's plain stdout never reaches the model), the skill reminders its path implies
 //   and the gates the uncommitted changes imply. Each reminder appears once per turn: the record
-//   lives in the _turn-once.sh directory, which prompt-skill-router.sh clears at every prompt.
+//   lives in the _be-turn-once.sh directory, which be-prompt-skill-router.sh clears at every prompt.
 // - Stop formats every file queued during the turn with one Biome call, so a turn of many edits
 //   formats once, then prints the gate checklist on stdout — Codex shows it; Claude does not pass a
 //   Stop hook's stdout to the model, and the hook never blocks the stop.
@@ -23,9 +23,9 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { recordTelemetry } from "./_telemetry.mjs";
+import { recordTelemetry } from "./_be-telemetry.mjs";
 
-const HOOK_ID = "edit-hooks";
+const HOOK_ID = "be-edit-hooks";
 const SKILL_MAP = "Full map: agent-os/docs/skill-triggers.md";
 const FORMATTED_DIRECTORIES = ["src/", "tooling/"];
 const FORMATTED_EXTENSIONS = /\.(ts|tsx|js|jsx|mjs|cjs|json|jsonc)$/;
@@ -93,7 +93,7 @@ function repositoryFile(filePath) {
   return absolute.startsWith(`${repositoryRoot}/`) ? absolute : "";
 }
 
-/** Succeeds the first time `key` is seen this turn (the _turn-once.sh record); fails open. */
+/** Succeeds the first time `key` is seen this turn (the _be-turn-once.sh record); fails open. */
 function turnOnce(session, key) {
   const directory = join(stateRoot, session);
   try {

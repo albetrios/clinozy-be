@@ -2,22 +2,22 @@
 // Cursor `beforeReadFile` guardrail for clinozy-be (Cursor agent hooks, beta).
 //
 // Blocks the agent from reading real secrets files — the same path set the
-// Claude PreToolUse guardrail (guardrails.mjs) denies: `.env.<env>` (but not
+// Claude PreToolUse guardrail (be-guardrails.mjs) denies: `.env.<env>` (but not
 // the committed `*.example` templates), `.setup-credentials`, `.setup-state.*`.
 // Cursor sessions previously had NO read protection at all.
 //
 // Reads the hook payload on stdin; prints { permission: "allow" | "deny" }.
 // Fail-open: any error allows the read.
 import { readFileSync } from "node:fs";
-import { recordTelemetry } from "./_telemetry.mjs";
+import { recordTelemetry } from "./_be-telemetry.mjs";
 
 function allow() {
-  recordTelemetry("cursor-read-guard", "beforeReadFile", "silent");
+  recordTelemetry("be-cursor-read-guard", "beforeReadFile", "silent");
   process.stdout.write(JSON.stringify({ continue: true, permission: "allow" }));
   process.exit(0);
 }
 function deny(message) {
-  recordTelemetry("cursor-read-guard", "beforeReadFile", "fired");
+  recordTelemetry("be-cursor-read-guard", "beforeReadFile", "fired");
   process.stdout.write(
     JSON.stringify({ continue: true, permission: "deny", userMessage: message, agentMessage: message }),
   );
@@ -35,7 +35,7 @@ const filePath =
   payload.file_path || payload.filePath || payload.path || (payload.tool_input && payload.tool_input.file_path) || "";
 if (!filePath) allow();
 
-// Same predicate as guardrails.mjs isReadableSecretPath().
+// Same predicate as be-guardrails.mjs isReadableSecretPath().
 function isReadableSecretPath(p) {
   if (!p) return false;
   if (/(^|\/)\.setup-credentials$/.test(p)) return true;

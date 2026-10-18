@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PROJECT_SLUG } from '@/shared/constants/project-identity.constants.js';
 
-const HOOK = join(process.cwd(), 'agent-os', 'hooks', 'turn-end-tests.mjs');
+const HOOK = join(process.cwd(), 'agent-os', 'hooks', 'be-turn-end-tests.mjs');
 /** The hook's state folder under TMPDIR. */
 const HOOK_STATE = `${PROJECT_SLUG}-hooks`;
 const temporaryDirectories: string[] = [];
@@ -89,7 +89,7 @@ function runCount(runs: string): number {
  * selection, a failure exits 2 (asyncRewake wakes the model with the failing tests), a passed
  * tree is not run again, and a live run's lock makes the next one skip.
  */
-describe('turn-end-tests.mjs', () => {
+describe('be-turn-end-tests.mjs', () => {
   it('does nothing when switched off', () => {
     const { root, state, runs } = repository();
     expect(runHook({ root, state, switchValue: '0', exitCode: 1 }).status).toBe(0);
@@ -119,7 +119,7 @@ describe('turn-end-tests.mjs', () => {
   it('skips while another run holds the lock', () => {
     const { root, state, runs } = repository();
     mkdirSync(join(state, HOOK_STATE), { recursive: true });
-    writeFileSync(join(state, HOOK_STATE, 'turn-end-tests.lock'), String(process.pid));
+    writeFileSync(join(state, HOOK_STATE, 'be-turn-end-tests.lock'), String(process.pid));
     expect(runHook({ root, state, exitCode: 1 }).status).toBe(0);
     expect(runCount(runs)).toBe(0);
   });

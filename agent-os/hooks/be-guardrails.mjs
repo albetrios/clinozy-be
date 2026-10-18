@@ -3,7 +3,7 @@
 //
 // BLOCK (deny): reading or writing secret files, secret content, destructive shell commands,
 //   skipping the git hooks (--no-verify, `git commit -n`, HUSKY=0).
-// ASK: `gh pr create` — a PR only when the user asked (no-unrequested-pr.sh covers the MCP tool).
+// ASK: `gh pr create` — a PR only when the user asked (be-no-unrequested-pr.sh covers the MCP tool).
 //   `git push` of auth, RLS, billing, migration or route changes with no clean
 //   /be-pre-merge-review recorded for HEAD (`pnpm agent-os:review-clean` records it).
 // WARN (systemMessage): edits to protected paths, cross-domain imports in a service.
@@ -14,8 +14,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isInRepository, pushDirectory } from "./_push-target.mjs";
-import { recordTelemetry } from "./_telemetry.mjs";
+import { isInRepository, pushDirectory } from "./_be-push-target.mjs";
+import { recordTelemetry } from "./_be-telemetry.mjs";
 
 let raw = "";
 try {
@@ -107,7 +107,7 @@ function unreviewedSensitivePush(scan) {
 }
 
 function ask(reason) {
-  recordTelemetry("guardrails", "PreToolUse", "fired");
+  recordTelemetry("be-guardrails", "PreToolUse", "fired");
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: reason },
@@ -117,7 +117,7 @@ function ask(reason) {
 }
 
 function deny(reason) {
-  recordTelemetry("guardrails", "PreToolUse", "fired");
+  recordTelemetry("be-guardrails", "PreToolUse", "fired");
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: {
@@ -259,5 +259,5 @@ if (isWrite && inRepository && /src\/domains\/[^/]+\/.*\.service\.ts$/.test(file
 if (warnings.length) {
   process.stdout.write(JSON.stringify({ systemMessage: "⚠️ clinozy-be guardrail:\n- " + warnings.join("\n- ") }));
 }
-recordTelemetry("guardrails", "PreToolUse", warnings.length ? "fired" : "silent");
+recordTelemetry("be-guardrails", "PreToolUse", warnings.length ? "fired" : "silent");
 process.exit(0);

@@ -66,7 +66,7 @@ const OTHER_SETTINGS = JSON.stringify({
         hooks: [
           {
             type: 'command',
-            command: 'bash "$CLAUDE_PROJECT_DIR/agent-os/hooks/session-start.sh"',
+            command: 'bash "$CLAUDE_PROJECT_DIR/agent-os/hooks/be-session-start.sh"',
           },
         ],
       },
@@ -75,7 +75,10 @@ const OTHER_SETTINGS = JSON.stringify({
       {
         matcher: 'Edit|Write',
         hooks: [
-          { type: 'command', command: 'node "$CLAUDE_PROJECT_DIR/agent-os/hooks/guardrails.mjs"' },
+          {
+            type: 'command',
+            command: 'node "$CLAUDE_PROJECT_DIR/agent-os/hooks/be-guardrails.mjs"',
+          },
         ],
       },
     ],
@@ -199,7 +202,7 @@ describe('tooling/agent-os/session-hooks.ts', () => {
         group.hooks.flatMap((hook) => (hook.if === undefined ? [] : [hook.if])),
       ),
     );
-    // `Bash(git push*)` names a command, not a path: push-ci-watch.mjs checks the repository itself.
+    // `Bash(git push*)` names a command, not a path: be-push-ci-watch.mjs checks the repository itself.
     expect(rules).toEqual([
       `Edit(/${repository}/**)`,
       `Write(/${repository}/**)`,

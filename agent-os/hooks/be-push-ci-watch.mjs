@@ -13,10 +13,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isInRepository, pushDirectory } from "./_push-target.mjs";
-import { recordTelemetry } from "./_telemetry.mjs";
+import { isInRepository, pushDirectory } from "./_be-push-target.mjs";
+import { recordTelemetry } from "./_be-telemetry.mjs";
 
-const HOOK_ID = "push-ci-watch";
+const HOOK_ID = "be-push-ci-watch";
 const POLL_MILLISECONDS = Number(process.env.PUSH_CI_WATCH_POLL_MILLISECONDS || 30_000);
 const APPEAR_WITHIN_MILLISECONDS = 5 * 60_000;
 const FINISH_WITHIN_MILLISECONDS = 40 * 60_000;

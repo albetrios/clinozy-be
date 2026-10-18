@@ -786,7 +786,7 @@ if (!existsSync(requirementForm)) {
 
 // ── Check 17: every agent-os item this repo owns starts with `be-` ──
 // clinozy-be and clinozy-fe (`fe-`) are often loaded in one session, where a shared name lets
-// one repo's skill, agent, command or rule hide the other's. Skills installed from
+// one repo's skill, agent, command, rule or hook hide the other's. Skills installed from
 // upstream keep their upstream names: the skills-lock.json entries whose sourceType is
 // not "local" (today ponytail and ponytail-audit).
 const repositoryPrefix = "be-";
@@ -818,6 +818,29 @@ if (existsSync(commandsDirectory))
     requirePrefix("command", basename(file, ".md"));
 for (const file of listFilesWithExtension(join(agentOsDirectory, "rules"), ".mdc"))
   requirePrefix("rule", basename(file, ".mdc"));
+// Hook scripts and their manifest ids too, so a block message, a telemetry row or a session-root
+// settings entry always names its repository. A helper the hooks import (never registered
+// itself) keeps its leading `_` before the prefix: `_be-telemetry.sh`.
+const hooksDirectory = join(agentOsDirectory, "hooks");
+for (const file of [
+  ...listFilesWithExtension(hooksDirectory, ".sh"),
+  ...listFilesWithExtension(hooksDirectory, ".mjs"),
+])
+  if (!file.replace(/^_/, "").startsWith(repositoryPrefix))
+    error(
+      "name-prefix",
+      `hook "${file}" must start with "${repositoryPrefix}" (a helper with "_${repositoryPrefix}")`,
+    );
+if (existsSync(hooksManifestFile)) {
+  try {
+    const manifest = JSON.parse(readText(hooksManifestFile)) as {
+      hooks?: Array<{ id?: string }>;
+    };
+    for (const entry of manifest.hooks ?? []) if (entry.id) requirePrefix("hook id", entry.id);
+  } catch {
+    // Check 11 reports invalid JSON in the hook manifest.
+  }
+}
 
 // ── Check 20: the test selection (pnpm test:select) holds its fixtures ──
 // One generated fixture per sub-domain (its main file selects every test in its folder), the

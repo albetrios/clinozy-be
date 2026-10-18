@@ -2,9 +2,9 @@
   "description": "Single source of truth for agent hook wiring. tooling/agent-os/generate.ts derives the platform hook configs under agent-os/platforms/ — claude/settings.json (hooks block), cursor/hooks.json, codex/hooks.json — which .claude/settings.json, .cursor/hooks.json, and .codex/hooks.json symlink to; agent-os:generate:check fails on drift. Each entry may target Claude, Cursor, and/or Codex; the generator emits a hook for an agent only when the agent supports that event (platforms/targets.json).",
   "hooks": [
     {
-      "id": "session-start",
+      "id": "be-session-start",
       "runtime": "bash",
-      "script": "session-start.sh",
+      "script": "be-session-start.sh",
       "claude": {
         "event": "SessionStart",
         "matcher": "startup|resume"
@@ -16,9 +16,9 @@
       }
     },
     {
-      "id": "prompt-skill-router",
+      "id": "be-prompt-skill-router",
       "runtime": "bash",
-      "script": "prompt-skill-router.sh",
+      "script": "be-prompt-skill-router.sh",
       "claude": {
         "event": "UserPromptSubmit"
       },
@@ -28,18 +28,18 @@
       }
     },
     {
-      "id": "guard-edits",
+      "id": "be-guard-edits",
       "runtime": "bash",
-      "script": "guard-edits.sh",
+      "script": "be-guard-edits.sh",
       "claude": {
         "event": "PreToolUse",
         "matcher": "Edit|Write|MultiEdit"
       }
     },
     {
-      "id": "guardrails",
+      "id": "be-guardrails",
       "runtime": "node",
-      "script": "guardrails.mjs",
+      "script": "be-guardrails.mjs",
       "claude": {
         "event": "PreToolUse",
         "matcher": "Bash|Read|Grep|Edit|Write|MultiEdit"
@@ -51,18 +51,18 @@
       }
     },
     {
-      "id": "no-unrequested-pr",
+      "id": "be-no-unrequested-pr",
       "runtime": "bash",
-      "script": "no-unrequested-pr.sh",
+      "script": "be-no-unrequested-pr.sh",
       "claude": {
         "event": "PreToolUse",
         "matcher": "mcp__github__create_pull_request"
       }
     },
     {
-      "id": "edit-hooks",
+      "id": "be-edit-hooks",
       "runtime": "node",
-      "script": "edit-hooks.mjs",
+      "script": "be-edit-hooks.mjs",
       "claude": {
         "event": "PostToolUse",
         "matcher": "Edit|Write",
@@ -73,18 +73,18 @@
       }
     },
     {
-      "id": "large-read-nudge",
+      "id": "be-large-read-nudge",
       "runtime": "bash",
-      "script": "large-read-nudge.sh",
+      "script": "be-large-read-nudge.sh",
       "claude": {
         "event": "PostToolUse",
         "matcher": "Read|Grep"
       }
     },
     {
-      "id": "injection-scan",
+      "id": "be-injection-scan",
       "runtime": "node",
-      "script": "injection-scan.mjs",
+      "script": "be-injection-scan.mjs",
       "claude": {
         "event": "PostToolUse",
         "matcher": "WebFetch|WebSearch|mcp__.*"
@@ -96,27 +96,27 @@
       }
     },
     {
-      "id": "subagent-verify",
+      "id": "be-subagent-verify",
       "runtime": "bash",
-      "script": "subagent-verify.sh",
+      "script": "be-subagent-verify.sh",
       "claude": {
         "event": "PostToolUse",
         "matcher": "Agent|Task"
       }
     },
     {
-      "id": "gate-failure-hint",
+      "id": "be-gate-failure-hint",
       "runtime": "bash",
-      "script": "gate-failure-hint.sh",
+      "script": "be-gate-failure-hint.sh",
       "claude": {
         "event": "PostToolUseFailure",
         "matcher": "Bash"
       }
     },
     {
-      "id": "edit-hooks-stop",
+      "id": "be-edit-hooks-stop",
       "runtime": "node",
-      "script": "edit-hooks.mjs",
+      "script": "be-edit-hooks.mjs",
       "claude": {
         "event": "Stop"
       },
@@ -126,9 +126,9 @@
       }
     },
     {
-      "id": "push-ci-watch",
+      "id": "be-push-ci-watch",
       "runtime": "node",
-      "script": "push-ci-watch.mjs",
+      "script": "be-push-ci-watch.mjs",
       "claude": {
         "event": "PostToolUse",
         "matcher": "Bash",
@@ -138,9 +138,9 @@
       }
     },
     {
-      "id": "turn-end-tests",
+      "id": "be-turn-end-tests",
       "runtime": "node",
-      "script": "turn-end-tests.mjs",
+      "script": "be-turn-end-tests.mjs",
       "claude": {
         "event": "Stop",
         "asyncRewake": true,
@@ -148,49 +148,49 @@
       }
     },
     {
-      "id": "pre-compact-preserve",
+      "id": "be-pre-compact-preserve",
       "runtime": "bash",
-      "script": "pre-compact-preserve.sh",
+      "script": "be-pre-compact-preserve.sh",
       "claude": {
         "event": "PreCompact"
       }
     },
     {
-      "id": "session-end",
+      "id": "be-session-end",
       "runtime": "bash",
-      "script": "session-end.sh",
+      "script": "be-session-end.sh",
       "claude": {
         "event": "SessionEnd"
       }
     },
     {
-      "id": "cursor-shell-guard",
+      "id": "be-cursor-shell-guard",
       "runtime": "node",
-      "script": "cursor-shell-guard.mjs",
+      "script": "be-cursor-shell-guard.mjs",
       "cursor": {
         "event": "beforeShellExecution"
       }
     },
     {
-      "id": "cursor-edit-guard",
+      "id": "be-cursor-edit-guard",
       "runtime": "node",
-      "script": "cursor-edit-guard.mjs",
+      "script": "be-cursor-edit-guard.mjs",
       "cursor": {
         "event": "afterFileEdit"
       }
     },
     {
-      "id": "cursor-read-guard",
+      "id": "be-cursor-read-guard",
       "runtime": "node",
-      "script": "cursor-read-guard.mjs",
+      "script": "be-cursor-read-guard.mjs",
       "cursor": {
         "event": "beforeReadFile"
       }
     },
     {
-      "id": "cursor-mcp-guard",
+      "id": "be-cursor-mcp-guard",
       "runtime": "node",
-      "script": "cursor-mcp-guard.mjs",
+      "script": "be-cursor-mcp-guard.mjs",
       "cursor": {
         "event": "beforeMCPExecution"
       }

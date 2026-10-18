@@ -3,22 +3,22 @@
 //
 // Blocks the same destructive shell commands, and the same git-hook skips, as the Claude
 // PreToolUse guardrail.
-// Companions: cursor-read-guard.mjs (beforeReadFile secrets block),
-// cursor-mcp-guard.mjs (beforeMCPExecution), cursor-edit-guard.mjs (afterFileEdit,
+// Companions: be-cursor-read-guard.mjs (beforeReadFile secrets block),
+// be-cursor-mcp-guard.mjs (beforeMCPExecution), be-cursor-edit-guard.mjs (afterFileEdit,
 // advisory — Cursor cannot veto writes pre-flight; hard policy stays in
 // .cursor/rules/be-ai-guardrails.mdc).
 //
 // Reads the hook payload on stdin; prints { "permission": "allow" | "deny", ... }.
 import { readFileSync } from "node:fs";
-import { recordTelemetry } from "./_telemetry.mjs";
+import { recordTelemetry } from "./_be-telemetry.mjs";
 
 function allow() {
-  recordTelemetry("cursor-shell-guard", "beforeShellExecution", "silent");
+  recordTelemetry("be-cursor-shell-guard", "beforeShellExecution", "silent");
   process.stdout.write(JSON.stringify({ continue: true, permission: "allow" }));
   process.exit(0);
 }
 function deny(message) {
-  recordTelemetry("cursor-shell-guard", "beforeShellExecution", "fired");
+  recordTelemetry("be-cursor-shell-guard", "beforeShellExecution", "fired");
   process.stdout.write(JSON.stringify({ continue: true, permission: "deny", userMessage: message, agentMessage: message }));
   process.exit(0);
 }

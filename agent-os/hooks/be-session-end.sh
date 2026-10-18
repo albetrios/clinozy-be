@@ -6,8 +6,8 @@
 # discarded when the container is reclaimed) and any in-progress autonomous
 # build under docs/builds/. Informational only; fail-open (always exits 0).
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/_telemetry.sh"
-telemetry_init "session-end" "SessionEnd"
+source "$(dirname "${BASH_SOURCE[0]}")/_be-telemetry.sh"
+telemetry_init "be-session-end" "SessionEnd"
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 cd "$ROOT" 2>/dev/null || exit 0

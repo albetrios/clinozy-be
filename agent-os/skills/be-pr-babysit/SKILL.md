@@ -11,7 +11,7 @@ Get the current PR to **mergeable + green CI + review comments addressed**, then
 ## Preconditions
 
 - Use `gh` (or the GitHub tools) for PR status, checks, and comments — to read them once, never in a polling loop.
-- Subscribe to the PR's activity (`subscribe_pr_activity` where it exists): CI results, reviews, conflicts and the merge wake the session; after a push from the CLI, the `push-ci-watch.mjs` hook wakes it when a run fails. Where neither exists, one safety-net check-in (`send_later`) replaces any timer.
+- Subscribe to the PR's activity (`subscribe_pr_activity` where it exists): CI results, reviews, conflicts and the merge wake the session; after a push from the CLI, the `be-push-ci-watch.mjs` hook wakes it when a run fails. Where neither exists, one safety-net check-in (`send_later`) replaces any timer.
 - Default branch: `main` (see `.github/workflows/pr-ci.yml`).
 - Review rubric: **`docs/process/pr-review.md`** (human + agent checklist, severity legend).
 

@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const HOOK = join(process.cwd(), 'agent-os', 'hooks', 'push-ci-watch.mjs');
+const HOOK = join(process.cwd(), 'agent-os', 'hooks', 'be-push-ci-watch.mjs');
 const temporaryDirectories: string[] = [];
 
 afterEach(() => {
@@ -82,7 +82,7 @@ const run = (name: string, conclusion: string) => ({
  * model) and asks for be-ci-investigator; a green commit, no authenticated gh, or a push in
  * another repository exits 0.
  */
-describe('push-ci-watch.mjs', () => {
+describe('be-push-ci-watch.mjs', () => {
   it('wakes the model with each failed run of the pushed commit', () => {
     const watched = fixture({ runs: [run('PR CI', 'failure'), run('Docs lane', 'success')] });
     const result = runHook(watched);

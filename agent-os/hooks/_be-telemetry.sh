@@ -9,7 +9,7 @@
 # block or fail the hook that sourced it.
 #
 # Usage in a hook (right after `set -uo pipefail`, before any `cd`):
-#   source "$(dirname "${BASH_SOURCE[0]}")/_telemetry.sh"
+#   source "$(dirname "${BASH_SOURCE[0]}")/_be-telemetry.sh"
 #   telemetry_init "<hook-id>" "<Event>"
 #   ...    # at the point the hook actually acts (emits output / blocks / formats):
 #   telemetry_fired

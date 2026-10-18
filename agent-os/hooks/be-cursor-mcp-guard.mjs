@@ -4,25 +4,25 @@
 // Mirrors the Claude-side MCP protections for Cursor sessions:
 //   - deny an MCP call whose input references a real secrets file
 //     (.env.<env> / .setup-credentials / .setup-state.*), same predicate as
-//     guardrails.mjs;
+//     be-guardrails.mjs;
 //   - deny destructive shell smuggled through an MCP tool's command-like input
 //     (rm -rf, git push --force, mkfs/dd), same patterns as cursor-shell-guard;
-//   - escalate GitHub PR creation to the user (parity with no-unrequested-pr.sh)
+//   - escalate GitHub PR creation to the user (parity with be-no-unrequested-pr.sh)
 //     — deny with an instruction to ask the user, since Cursor hooks have no
 //     native "ask" decision.
 //
 // Reads the hook payload on stdin; prints { permission: "allow" | "deny" }.
 // Fail-open: any error allows the call.
 import { readFileSync } from "node:fs";
-import { recordTelemetry } from "./_telemetry.mjs";
+import { recordTelemetry } from "./_be-telemetry.mjs";
 
 function allow() {
-  recordTelemetry("cursor-mcp-guard", "beforeMCPExecution", "silent");
+  recordTelemetry("be-cursor-mcp-guard", "beforeMCPExecution", "silent");
   process.stdout.write(JSON.stringify({ continue: true, permission: "allow" }));
   process.exit(0);
 }
 function deny(message) {
-  recordTelemetry("cursor-mcp-guard", "beforeMCPExecution", "fired");
+  recordTelemetry("be-cursor-mcp-guard", "beforeMCPExecution", "fired");
   process.stdout.write(
     JSON.stringify({ continue: true, permission: "deny", userMessage: message, agentMessage: message }),
   );
@@ -45,7 +45,7 @@ try {
   allow();
 }
 
-// PR creation must be user-requested (parity with no-unrequested-pr.sh).
+// PR creation must be user-requested (parity with be-no-unrequested-pr.sh).
 if (/create_pull_request/i.test(toolName)) {
   deny(
     "clinozy-be guardrail: opening a GitHub PR via MCP requires an explicit user request. Confirm with the user, then have them approve the PR creation.",

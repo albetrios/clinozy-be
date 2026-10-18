@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const HOOK = join(process.cwd(), 'agent-os', 'hooks', 'edit-hooks.mjs');
+const HOOK = join(process.cwd(), 'agent-os', 'hooks', 'be-edit-hooks.mjs');
 const temporaryDirectories: string[] = [];
 
 /** A repository with a stand-in `biome` that records its arguments, one call per line. */
@@ -59,7 +59,7 @@ afterEach(() => {
  * Locks in format-once-at-Stop: a turn's edits queue their files, and Stop formats them with one
  * Biome call — each file once, only `pnpm format`'s scope, never another repository's files.
  */
-describe('edit-hooks.mjs', () => {
+describe('be-edit-hooks.mjs', () => {
   it('formats the files of a turn once, at Stop, with one Biome call', () => {
     const { repository, state, biomeCalls } = makeRepository();
     const first = join(repository, 'src', 'first.ts');

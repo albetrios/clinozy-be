@@ -2,7 +2,7 @@
 // Cursor `afterFileEdit` guardrail for clinozy-be (Cursor agent hooks, beta).
 //
 // Cursor cannot veto a file edit before it lands, so this is the after-the-fact
-// mirror of the Claude `guard-edits.sh` PreToolUse rules: when an edit that just
+// mirror of the Claude `be-guard-edits.sh` PreToolUse rules: when an edit that just
 // landed violates a hard rule (R1 worker getRequestDatabase, R2 `../` import
 // under src/, R3 generated file, R4 removed NODE_ENV value, R5 enforcement
 // wiring), it tells the agent to revert/fix NOW instead of at pre-commit/CI.
@@ -11,10 +11,10 @@
 // (advisory — Cursor applies no permission semantics to afterFileEdit).
 // Fail-open: any error exits 0 silently.
 import { readFileSync } from "node:fs";
-import { recordTelemetry } from "./_telemetry.mjs";
+import { recordTelemetry } from "./_be-telemetry.mjs";
 
 function done(status, message) {
-  recordTelemetry("cursor-edit-guard", "afterFileEdit", status);
+  recordTelemetry("be-cursor-edit-guard", "afterFileEdit", status);
   if (message) process.stdout.write(JSON.stringify({ agentMessage: message }));
   process.exit(0);
 }
@@ -54,7 +54,7 @@ if (
 
 // R5 — enforcement wiring (hook manifest / platform hook configs / guard scripts).
 if (
-  /(agent-os\/hooks\/hooks\.json|agent-os\/platforms\/targets\.json|agent-os\/platforms\/claude\/settings\.json|\.claude\/settings(\.local)?\.json|\.cursor\/hooks\.json|agent-os\/hooks\/(guard-edits\.sh|guardrails\.mjs|cursor-shell-guard\.mjs|cursor-edit-guard\.mjs|cursor-read-guard\.mjs|cursor-mcp-guard\.mjs|injection-scan\.mjs))$/.test(
+  /(agent-os\/hooks\/hooks\.json|agent-os\/platforms\/targets\.json|agent-os\/platforms\/claude\/settings\.json|\.claude\/settings(\.local)?\.json|\.cursor\/hooks\.json|agent-os\/hooks\/(be-guard-edits\.sh|be-guardrails\.mjs|be-cursor-shell-guard\.mjs|be-cursor-edit-guard\.mjs|be-cursor-read-guard\.mjs|be-cursor-mcp-guard\.mjs|be-injection-scan\.mjs))$/.test(
     filePath,
   )
 ) {
