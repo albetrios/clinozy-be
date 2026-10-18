@@ -6,6 +6,11 @@ description: |
   real notification. One open issue per title collects repeats as comments. Every scheduled and
   post-merge check uses this one action; clinozy-fe reuses it from here.
 
+  An `open` adds a fix plan below the body (fix-plan.mjs): each failed job and step with its log
+  tail up to the last error, the area the paths in it belong to, and the skills the repository's
+  `agent-os/hooks/skill-routing.json` names for them. It needs `actions: read`; without it, or on
+  any error, the issue opens without a plan.
+
   The job needs `issues: write`, and a checkout of this folder (a local action is read from the
   workspace): `sparse-checkout: .github/actions/ci-failure-issue`. The `open` job runs on a failed
   or a cancelled job — one past its timeout-minutes ends cancelled, not failed:
@@ -44,4 +49,6 @@ runs:
         BODY: ${{ inputs.body }}
         CLOSE_COMMENT: ${{ inputs.close-comment }}
         WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        RUN_ID: ${{ github.run_id }}
+        HEAD_SHA: ${{ github.sha }}
       run: bash "${GITHUB_ACTION_PATH}/ci-failure-issue.sh"

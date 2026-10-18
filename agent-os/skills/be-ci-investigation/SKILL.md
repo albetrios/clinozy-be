@@ -17,6 +17,11 @@ Produce a **short root-cause summary** for **one** failing check (not full PR ba
    gh run view <run-id> --log-failed
    ```
 
+   A scheduled or post-merge failure has a `ci-failure` issue: its **Fix plan** (written by
+   `.github/actions/ci-failure-issue/fix-plan.mjs`) already names the failed jobs and steps, the
+   log tail up to the last error, the owning area and the skills the routing map names for the
+   files in it. Start from it, then confirm against the log — it reads paths, not causes.
+
 2. Map the job to local commands:
 
    | CI job name | Workflow | Local reproduction |

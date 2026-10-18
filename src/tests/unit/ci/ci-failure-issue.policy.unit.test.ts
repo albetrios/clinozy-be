@@ -1,5 +1,13 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -55,7 +63,8 @@ describe('ci-failure issue alert', () => {
     directory = mkdtempSync(join(tmpdir(), 'ci-failure-issue-'));
     state = join(directory, 'open-issue');
     log = join(directory, 'gh.log');
-    // A stand-in `gh`: logs each call; `issue list` prints the open issue number, if any.
+    // A stand-in `gh`: logs each call; `issue list` prints the open issue number, if any; `api`
+    // answers the fix plan's three reads from GH_FIXTURES (and fails when it is unset).
     const stub = join(directory, 'gh');
     writeFileSync(
       stub,
@@ -67,6 +76,14 @@ describe('ci-failure issue alert', () => {
         '  "issue create") echo 7 > "$GH_STATE" ;;',
         '  "issue close") rm -f "$GH_STATE" ;;',
         'esac',
+        'if [ "$1" = api ]; then',
+        '  case "$2" in',
+        '    */actions/runs/*/jobs*) cat "$GH_FIXTURES/jobs.json" ;;',
+        '    */actions/jobs/*/logs) cat "$GH_FIXTURES/job.log" ;;',
+        '    */contents/agent-os/hooks/skill-routing.json*) cat "$GH_FIXTURES/routes.json" ;;',
+        '    *) exit 1 ;;',
+        '  esac',
+        'fi',
         '',
       ].join('\n'),
     );
@@ -77,7 +94,10 @@ describe('ci-failure issue alert', () => {
     rmSync(directory, { recursive: true, force: true });
   });
 
-  function run(mode: string): { status: number | null; output: string } {
+  function run(
+    mode: string,
+    extra: Record<string, string> = {},
+  ): { status: number | null; output: string } {
     const result = spawnSync('bash', [SCRIPT], {
       encoding: 'utf8',
       env: {
@@ -90,6 +110,7 @@ describe('ci-failure issue alert', () => {
         BODY: 'What failed.',
         CLOSE_COMMENT: 'Green again.',
         WORKFLOW_URL: 'https://github.com/owner/repository/actions/runs/42',
+        ...extra,
       },
     });
     return { status: result.status, output: `${result.stdout}${result.stderr}` };
@@ -114,6 +135,59 @@ describe('ci-failure issue alert', () => {
 
     expect(run('close').output).toContain('No open ci-failure issue to close.');
     expect(ghLog().match(/^issue create /gm)).toHaveLength(1);
+  });
+
+  it('adds the fix plan below the body: the failed step, its log tail, area and skill', () => {
+    const fixtures = join(directory, 'fixtures');
+    mkdirSync(fixtures);
+    writeFileSync(
+      join(fixtures, 'jobs.json'),
+      JSON.stringify({
+        jobs: [
+          {
+            id: 9,
+            name: 'Unit tests',
+            conclusion: 'failure',
+            steps: [{ name: 'Run unit tests', conclusion: 'failure' }],
+          },
+          { id: 10, name: 'Notify failure', conclusion: null, steps: [] },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(fixtures, 'job.log'),
+      [
+        '2026-10-18T01:00:00.0000000Z ##[group]Run pnpm test:unit',
+        '2026-10-18T01:00:01.0000000Z  FAIL  src/domains/billing/sub-domains/billing-plan/billing-plan.unit.test.ts',
+        '2026-10-18T01:00:01.1000000Z AssertionError: expected 400 to be 200',
+        '2026-10-18T01:00:02.0000000Z ##[error]Process completed with exit code 1.',
+        '2026-10-18T01:00:03.0000000Z Post job cleanup.',
+      ].join('\n'),
+    );
+    writeFileSync(
+      join(fixtures, 'routes.json'),
+      JSON.stringify({ routes: [{ globs: ['src/domains/**'], skills: ['be-test-generator'] }] }),
+    );
+    const result = run('open', { GH_FIXTURES: fixtures, RUN_ID: '42', HEAD_SHA: 'abc123' });
+    expect(result.status).toBe(0);
+    const body = ghLog();
+    expect(body).toContain(`--body ${runLink}\n\nWhat failed.\n\n## Fix plan`);
+    expect(body).toContain('### Unit tests › Run unit tests');
+    expect(body).toContain('- **Owning area:** `src/domains/billing/sub-domains/billing-plan`');
+    expect(body).toContain('- **Skill that fixes it:** `be-test-generator`');
+    expect(body).toContain('AssertionError: expected 400 to be 200');
+    expect(body).not.toContain('Post job cleanup.');
+    expect(body).not.toContain('### Notify failure');
+    expect(body).toContain(
+      'api repos/owner/repository/contents/agent-os/hooks/skill-routing.json?ref=abc123',
+    );
+  });
+
+  it('opens the issue without a plan when the plan cannot be built', () => {
+    const result = run('open', { RUN_ID: '42', HEAD_SHA: 'abc123' });
+    expect(result.status).toBe(0);
+    expect(ghLog()).toContain(`--body ${runLink}\n\nWhat failed.\n`);
+    expect(ghLog()).not.toContain('## Fix plan');
   });
 
   it('refuses an unknown mode', () => {
@@ -147,6 +221,17 @@ describe('ci-failure issue alert', () => {
         ) {
           offenders.push(`${name} → ${job}`);
         }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('every job that opens an issue can read the run it reports, for the fix plan', () => {
+    const offenders: string[] = [];
+    for (const name of workflowFiles) {
+      for (const [job, block] of jobBlocks(workflowText(name))) {
+        const opensIssue = block.includes(ACTION_USE) && block.includes('mode: open');
+        if (opensIssue && !/^ {6}actions: read\b/m.test(block)) offenders.push(`${name} → ${job}`);
       }
     }
     expect(offenders).toEqual([]);

@@ -3252,6 +3252,7 @@ src/
     │   ├── bench/
     │   │   └── bench-runner.unit.test.ts
     │   ├── ci/
+    │   │   ├── ci-failure-fix-plan.unit.test.ts
     │   │   ├── ci-failure-issue.policy.unit.test.ts
     │   │   ├── cleanup-ghcr.policy.unit.test.ts
     │   │   ├── codegraph-git-hooks.policy.unit.test.ts
