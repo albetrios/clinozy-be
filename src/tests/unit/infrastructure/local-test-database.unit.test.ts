@@ -6,7 +6,10 @@ import {
   LOCAL_TEST_DATABASE_NAME,
   LOCAL_TEST_DATABASE_URL,
   pointHarnessAtLocalTestDatabase,
+  pointWorkerAtItsOwnDatabase,
+  testRedisKeyPrefix,
 } from '@/tests/helpers/local-test-database.js';
+import { parallelDatabaseWorkers } from '@tooling/vitest/parallel-databases.js';
 
 const MANAGED_KEYS = [
   'DATABASE_URL',
@@ -16,6 +19,9 @@ const MANAGED_KEYS = [
   'GITHUB_ACTIONS',
   'ALLOW_HOSTED_TEST_DATABASE',
   'CI',
+  'TEST_PARALLEL_DATABASES',
+  'TEST_PARALLEL_WORKERS',
+  'VITEST_POOL_ID',
 ] as const;
 
 /** A Drizzle `execute` stand-in answering `current_database()` with `databaseName`. */
@@ -152,6 +158,70 @@ describe('local test database harness', () => {
       const { query, sql } = fakeQuery('test');
       await assertConnectedToTestDatabase(sql);
       expect(query).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('the parallel database experiment', () => {
+    it('is off unless switched on: URLs, the Redis prefix and the wipe guard as before', async () => {
+      process.env.DATABASE_URL = LOCAL_TEST_DATABASE_URL;
+      process.env.VITEST_POOL_ID = '3';
+      pointWorkerAtItsOwnDatabase();
+      expect(process.env.DATABASE_URL).toBe(LOCAL_TEST_DATABASE_URL);
+      expect(testRedisKeyPrefix('clinozy')).toBe('clinozy:test:');
+      await expect(
+        assertConnectedToTestDatabase(fakeQuery(`${LOCAL_TEST_DATABASE_NAME}_worker_3`).sql),
+      ).rejects.toThrow(/Refusing to wipe/);
+    });
+
+    it('points each worker at its own clone and Redis namespace, logins kept', () => {
+      process.env.TEST_PARALLEL_DATABASES = 'true';
+      process.env.VITEST_POOL_ID = '3';
+      process.env.DATABASE_URL = LOCAL_TEST_DATABASE_URL;
+      process.env.DATABASE_OPERATOR_URL = `postgresql://operator:secret@localhost:5432/${LOCAL_TEST_DATABASE_NAME}`;
+      pointWorkerAtItsOwnDatabase();
+      expect(new URL(process.env.DATABASE_URL).pathname).toBe(
+        `/${LOCAL_TEST_DATABASE_NAME}_worker_3`,
+      );
+      const operator = new URL(process.env.DATABASE_OPERATOR_URL ?? '');
+      expect(operator.username).toBe('operator');
+      expect(operator.pathname).toBe(`/${LOCAL_TEST_DATABASE_NAME}_worker_3`);
+      expect(testRedisKeyPrefix('clinozy')).toBe('clinozy:worker-3:test:');
+    });
+
+    it('lets the wipe guard accept exactly a worker clone of the test database', async () => {
+      process.env.TEST_PARALLEL_DATABASES = 'true';
+      await expect(
+        assertConnectedToTestDatabase(fakeQuery(`${LOCAL_TEST_DATABASE_NAME}_worker_12`).sql),
+      ).resolves.toBeUndefined();
+      for (const name of [
+        `${LOCAL_TEST_DATABASE_NAME}_worker_`,
+        `${LOCAL_TEST_DATABASE_NAME}_worker_1x`,
+        'clinozy_be_worker_1',
+        `dev_${LOCAL_TEST_DATABASE_NAME}_worker_1`,
+      ]) {
+        await expect(assertConnectedToTestDatabase(fakeQuery(name).sql)).rejects.toThrow(
+          /Refusing to wipe/,
+        );
+      }
+    });
+
+    it('refuses a run without a Vitest worker, and a hosted test database', () => {
+      process.env.TEST_PARALLEL_DATABASES = 'true';
+      process.env.DATABASE_URL = LOCAL_TEST_DATABASE_URL;
+      expect(() => pointWorkerAtItsOwnDatabase()).toThrow(/VITEST_POOL_ID/);
+      process.env.VITEST_POOL_ID = '1';
+      process.env.ALLOW_HOSTED_TEST_DATABASE = 'true';
+      expect(() => pointWorkerAtItsOwnDatabase()).toThrow(/never runs on a hosted/);
+    });
+
+    it('runs 4 workers by default, 1 to 16 when set', () => {
+      expect(parallelDatabaseWorkers()).toBe(4);
+      process.env.TEST_PARALLEL_WORKERS = '8';
+      expect(parallelDatabaseWorkers()).toBe(8);
+      for (const value of ['0', '17', 'many', '2.5']) {
+        process.env.TEST_PARALLEL_WORKERS = value;
+        expect(parallelDatabaseWorkers()).toBe(4);
+      }
     });
   });
 

@@ -91,6 +91,7 @@
     "test:fast": "vitest run --project unit --project property --project global",
     "test:all-projects": "vitest run",
     "test:parallel": "tsx tooling/vitest/run-parallel.ts",
+    "test:parallel-db": "TEST_PARALLEL_DATABASES=true vitest run --project db-parallel",
     "test:affected": "tsx tooling/vitest/affected.ts",
     "test:select": "tsx tooling/vitest/select-tests.ts",
     "test:selector-misses": "tsx tooling/vitest/selector-misses.ts",

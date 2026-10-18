@@ -281,6 +281,22 @@ run's lock is taken over automatically (dead pid), and two runs against two diff
 not block each other. If a suite refuses to start and the named process is genuinely gone, delete
 the lock file the message points at.
 
+### Parallel database tests (experiment)
+
+`pnpm test:parallel-db` runs the e2e and integration suites with files in parallel — the
+`db-parallel` project, which exists only with `TEST_PARALLEL_DATABASES=true`
+(`tooling/vitest/parallel-databases.ts`). After migrating and seeding, global setup clones the test
+database once per worker with `CREATE DATABASE … TEMPLATE` (`<test database>_worker_<n>`; roles
+are cluster-wide, so every login works in a clone), and each worker points its `DATABASE_*URL`s at
+its clone and its Redis prefix at `<stem>:worker-<n>:test:` (`src/tests/helpers/local-test-database.ts`).
+The wipe guard accepts exactly those clones, and only in such a run; a hosted test database is
+refused. `TEST_PARALLEL_WORKERS` sets the count (1–16, default 4).
+
+On the billing suites (23 files, 132 tests) it took 148 s against 338 s serial, both green, on a
+shared machine. **Serial stays the default** until the main canary's `Parallel database tests
+(experiment)` job (nightly, not a gate, no failure issue; its summary records the time) has 10
+green runs; then the database lanes switch to it.
+
 ### What global setup prepares
 
 Before any database-backed suite, `src/tests/global-setup.ts` mirrors the deploy sequence

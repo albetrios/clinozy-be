@@ -8,6 +8,7 @@ import { acquireDatabaseSuiteLock } from '@/tests/database-suite-lock.js';
 import pg from 'pg';
 import {
   buildMigrationChildEnvironment,
+  cloneTestDatabaseForWorkers,
   ensureLocalTestDatabaseExists,
   isHarnessOnProvidedDatabase,
   LOCAL_TEST_DATABASE_URL,
@@ -86,6 +87,9 @@ export default async function globalSetup(): Promise<() => void> {
   } finally {
     await client.end();
   }
+  // The parallel database experiment (TEST_PARALLEL_DATABASES=true): one clone of the migrated,
+  // seeded test database per worker. A no-op otherwise.
+  await cloneTestDatabaseForWorkers();
 
   return releaseDatabaseSuiteLock;
 }
