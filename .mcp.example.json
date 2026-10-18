@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "context7": {
+    "be-context7": {
       "command": "npx",
       "args": [
         "-y",
@@ -40,13 +40,13 @@
       "url": "https://mcp.stripe.com",
       "headers": {}
     },
-    "semgrep": {
+    "be-semgrep": {
       "command": "uvx",
       "args": [
         "semgrep-mcp"
       ]
     },
-    "sonarqube": {
+    "be-sonarqube": {
       "command": "docker",
       "args": [
         "run",
@@ -107,7 +107,7 @@
         "ide-assistant"
       ]
     },
-    "codegraph": {
+    "be-codegraph": {
       "type": "stdio",
       "command": "codegraph",
       "args": [
@@ -115,7 +115,7 @@
         "--mcp"
       ]
     },
-    "headroom": {
+    "be-headroom": {
       "type": "stdio",
       "command": "headroom",
       "args": [

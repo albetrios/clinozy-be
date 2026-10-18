@@ -2,17 +2,17 @@
 /**
  * `pnpm mcp:setup` — scaffold the project MCP config (`.mcp.json`).
  *
- * The full set of MCP servers (context7, the project API server, neon, sentry, railway, aws,
- * stripe, semgrep, sonarqube, redis, postman, resend, codegraph, headroom) lives in the
- * committed template `.mcp.example.json`; the default auto-start pair (codegraph +
- * headroom) lives in `.mcp.default.json`. This command copies them into a local,
+ * The full set of MCP servers (be-context7, the project API server, neon, sentry, railway, aws,
+ * stripe, be-semgrep, be-sonarqube, redis, postman, resend, be-codegraph, be-headroom) lives in the
+ * committed template `.mcp.example.json`; the default auto-start pair (be-codegraph +
+ * be-headroom) lives in `.mcp.default.json`. This command copies them into a local,
  * gitignored `.mcp.json` so the agent's MCP clients can connect. Most servers need a
  * provider token (set via env / `${VAR}` placeholders); servers whose key or CLI is
  * missing simply stay disconnected.
  *
  *   pnpm mcp:setup              # all servers (on-demand hosted integrations)
  *   pnpm mcp:setup <name>...    # only the named servers (e.g. stripe sentry redis)
- *   pnpm mcp:setup:default      # only the auto-start pair (codegraph + headroom)
+ *   pnpm mcp:setup:default      # only the auto-start pair (be-codegraph + be-headroom)
  *   pnpm mcp:setup --check      # report what would change; no write
  *   pnpm mcp:setup --list       # list template servers + .mcp.json status
  *
@@ -46,7 +46,7 @@ function printHelp(): void {
     `${ANSI.bold}pnpm mcp:setup${ANSI.reset} — scaffold .mcp.json from .mcp.example.json\n\n` +
       `  pnpm mcp:setup            scaffold ALL template servers (on-demand integrations)\n` +
       `  pnpm mcp:setup <name>...  scaffold only the named servers (e.g. stripe sentry)\n` +
-      `  pnpm mcp:setup:default    scaffold only codegraph + headroom (auto-start pair)\n` +
+      `  pnpm mcp:setup:default    scaffold only be-codegraph + be-headroom (auto-start pair)\n` +
       `  pnpm mcp:setup --default  same as mcp:setup:default\n` +
       `  pnpm mcp:setup --check    dry run: report what would change, no write\n` +
       `  pnpm mcp:setup --list     list template servers and .mcp.json status\n` +
@@ -66,7 +66,7 @@ function printList(): void {
     process.stdout.write(`  ${mark}  ${key}${tag}\n`);
   }
   process.stdout.write(
-    `\n${ANSI.gray}default = auto-start pair (codegraph + headroom)${ANSI.reset}\n`,
+    `\n${ANSI.gray}default = auto-start pair (be-codegraph + be-headroom)${ANSI.reset}\n`,
   );
 }
 
@@ -87,8 +87,14 @@ function reportResult(result: EnsureResult, dryRun: boolean): void {
     );
     return;
   }
-  const verb = dryRun ? 'would add' : 'added';
-  process.stdout.write(`${ANSI.green}✓${ANSI.reset} ${verb}: ${result.added.join(', ')}\n`);
+  if (result.renamed.length > 0)
+    process.stdout.write(
+      `${ANSI.green}✓${ANSI.reset} ${dryRun ? 'would rename' : 'renamed'}: ${result.renamed.join(', ')}\n`,
+    );
+  if (result.added.length > 0)
+    process.stdout.write(
+      `${ANSI.green}✓${ANSI.reset} ${dryRun ? 'would add' : 'added'}: ${result.added.join(', ')}\n`,
+    );
   if (!dryRun) process.stdout.write(`${ANSI.gray}wrote ${MCP_CONFIG_PATH}${ANSI.reset}\n`);
 }
 
@@ -108,7 +114,7 @@ function main(): void {
 
   let scope = 'full set';
   if (names.length > 0) scope = `selected: ${names.join(', ')}`;
-  else if (defaultOnly) scope = 'default pair (codegraph + headroom)';
+  else if (defaultOnly) scope = 'default pair (be-codegraph + be-headroom)';
 
   process.stdout.write(
     `${ANSI.bold}Scaffolding .mcp.json — ${scope}${dryRun ? ' (dry run)' : ''}${ANSI.reset}\n`,

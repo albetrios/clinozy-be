@@ -18,8 +18,8 @@ from [`.mcp.default.json`](../../.mcp.default.json).
 
 | Server | CLI install | `.mcp.json` command | Purpose |
 | ------ | ----------- | ------------------- | ------- |
-| **codegraph** | `install-codegraph.sh` | `codegraph serve --mcp` | Semantic code index — query the repo graph instead of grep loops |
-| **headroom** | `install-headroom.sh` | `headroom mcp serve` | Context compression — `headroom_compress` / `headroom_retrieve` / `headroom_stats` for large tool output |
+| **be-codegraph** | `install-codegraph.sh` | `codegraph serve --mcp` | Semantic code index — query the repo graph instead of grep loops |
+| **be-headroom** | `install-headroom.sh` | `headroom mcp serve` | Context compression — `headroom_compress` / `headroom_retrieve` / `headroom_stats` for large tool output |
 
 **PATH:** CLIs land in `~/.local/bin`; install sets `PATH="/opt/node24/bin:$HOME/.local/bin:$PATH"`.
 `codegraph` installs under `/opt/node24/bin`, which the process that launches MCP servers does
@@ -50,10 +50,10 @@ Scaffold into `.mcp.json` with `pnpm mcp:setup <name>` (see
 | ------ | ----------- | ------------ |
 | **dashboards** | Stack monitoring (`be-stack-monitor` subagent), load-test observability | `pnpm mcp:setup dashboards` then `pnpm dashboards:up` or `pnpm dashboards:proxy` |
 | **clinozy-be:api** | Call live API tools from the agent | API running with `ENABLE_MCP_SERVER=true` — `pnpm mcp:setup clinozy-be:api` |
-| **context7** | Up-to-date Fastify/Drizzle/BullMQ docs (if not platform-provided) | `CONTEXT7_API_KEY` — `pnpm mcp:setup context7` |
+| **be-context7** | Up-to-date Fastify/Drizzle/BullMQ docs (if not platform-provided) | `CONTEXT7_API_KEY` — `pnpm mcp:setup be-context7` |
 | **serena** | Semantic code navigation on a large repo — go-to-def / find-refs / symbol bodies; returns **symbols, not files** (token-efficient) | `uvx` — `pnpm mcp:setup serena` |
 | **ast-grep** | Structural (AST) code search — returns **matches, not** text hits or whole files | `uvx` + `ast-grep` CLI — `pnpm mcp:setup ast-grep` |
-| **neon**, **sentry**, **railway**, **aws**, **stripe**, **semgrep**, **sonarqube**, **redis**, **postman**, **resend** | Hosted integration / ops tasks | Provider token + `pnpm mcp:setup <name>` |
+| **neon**, **sentry**, **railway**, **aws**, **stripe**, **be-semgrep**, **be-sonarqube**, **redis**, **postman**, **resend** | Hosted integration / ops tasks | Provider token + `pnpm mcp:setup <name>` |
 
 Full template: [`.mcp.example.json`](../../.mcp.example.json). List status: `pnpm mcp:setup:list`.
 

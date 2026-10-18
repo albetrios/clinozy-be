@@ -1002,7 +1002,7 @@ function runCodeGraphSetup(reports: StepReport[], options: BootstrapOptions): vo
   );
 }
 
-// Declare the default auto-start MCP pair (codegraph + headroom) in .mcp.json so a local
+// Declare the default auto-start MCP pair (be-codegraph + be-headroom) in .mcp.json so a local
 // session matches the cloud bootstrap. Non-destructive: writes through the .mcp.json
 // symlink and adds codegraph + headroom without clobbering real keys.
 function ensureDefaultMcpConfig(reports: StepReport[], options: BootstrapOptions): void {
@@ -1025,8 +1025,13 @@ function ensureDefaultMcpConfig(reports: StepReport[], options: BootstrapOptions
       'done',
       startedAt,
       result.changed
-        ? `declared ${result.added.join(' + ')}`
-        : 'codegraph + headroom already declared',
+        ? [
+            result.renamed.length > 0 ? `renamed ${result.renamed.join(', ')}` : '',
+            result.added.length > 0 ? `declared ${result.added.join(' + ')}` : '',
+          ]
+            .filter(Boolean)
+            .join('; ')
+        : 'be-codegraph + be-headroom already declared',
     );
   } catch (error) {
     reportStep(

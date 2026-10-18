@@ -47,10 +47,10 @@ flowchart TD
 - **Version** — pinned as `CODEGRAPH_VERSION` in [`tooling/setup/agent/tool-versions.sh`](../../tooling/setup/agent/tool-versions.sh), the same pin the cloud bootstrap installs; a missing CLI or another installed version is replaced with the pin. Bump policy: [Tool versions](claude-code-web-environment.md#tool-versions-pinned-checked-at-install).
 - **First run / fresh clone** — `codegraph.db` is absent, so it runs `codegraph init` (after installing the pinned CLI if needed), which builds the index from the current working tree.
 - **Subsequent runs** — the DB exists, so it runs the fast incremental `codegraph sync`.
-- **MCP config** — the next step declares the `codegraph` server (with `headroom`) in `.mcp.json`, writing through the symlink, so Claude Code and Cursor both pick it up.
+- **MCP config** — the next step declares the `be-codegraph` server (with `be-headroom`) in `.mcp.json`, writing through the symlink, so Claude Code and Cursor both pick it up.
 - **Skip it** — `pnpm setup:local --skip-codegraph`.
 
-> After the first run, **restart your agent** (Cursor / Claude Code) so it loads the new `codegraph` MCP server. This is the one manual step CodeGraph requires.
+> After the first run, **restart your agent** (Cursor / Claude Code) so it loads the new `be-codegraph` MCP server. This is the one manual step CodeGraph requires.
 
 ### Cloud sessions
 
@@ -63,8 +63,8 @@ The cloud bootstrap runs [`install-codegraph.sh`](../../tooling/setup/agent/inst
 ```bash
 npm i -g "@colbymchenry/codegraph@$(sed -n 's/^CODEGRAPH_VERSION=//p' tooling/setup/agent/tool-versions.sh)"   # the pinned version
 codegraph init           # build the index
-pnpm mcp:setup:default   # declare codegraph + headroom in .mcp.json (Claude Code + Cursor share it)
-# `pnpm mcp:setup` for the full set; then replace ${CONTEXT7_API_KEY} etc. — the codegraph entry needs no edits
+pnpm mcp:setup:default   # declare be-codegraph + be-headroom in .mcp.json (Claude Code + Cursor share it)
+# `pnpm mcp:setup` for the full set; then replace ${CONTEXT7_API_KEY} etc. — the be-codegraph entry needs no edits
 ```
 
 `codegraph install --print-config cursor` prints the MCP snippet without writing any files.

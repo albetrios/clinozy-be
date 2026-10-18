@@ -23,7 +23,7 @@ function readMcpServers(relativePath: string): McpServers {
   return parsed.mcpServers ?? {};
 }
 
-const EXPECTED_DEFAULT_KEYS = ['codegraph', 'headroom'];
+const EXPECTED_DEFAULT_KEYS = ['be-codegraph', 'be-headroom'];
 
 describe('MCP template consistency', () => {
   const fullSet = readMcpServers('.mcp.example.json');

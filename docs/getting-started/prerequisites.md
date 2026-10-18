@@ -56,7 +56,7 @@ Check them with `pnpm tool:agent-tools --smoke` (installed vs pin + an MCP hands
 | **railway** / **neonctl** CLIs | deploy / infra ops | npm global, or via their MCP servers |
 | **trivy** · **codeql** · **actionlint** | run in CI | installed by the CI workflows, not locally |
 | **semgrep** · **k6** | `pnpm security:sast` · `pnpm load:*` (and CI) | cloud sessions get the pinned versions from the bootstrap; locally `brew install semgrep k6` (`tool-versions.sh` holds the pins CI uses) |
-| the ~15 provider MCP servers (context7, stripe, sentry, …) | opt-in agent tooling | `pnpm mcp:setup <names>` + provider tokens; runtimes self-fetch via `npx`/`uvx`/Docker |
+| the ~15 provider MCP servers (be-context7, stripe, sentry, …) | opt-in agent tooling | `pnpm mcp:setup <names>` + provider tokens; runtimes self-fetch via `npx`/`uvx`/Docker |
 
 ## Docker images (pulled by Compose, not host installs)
 

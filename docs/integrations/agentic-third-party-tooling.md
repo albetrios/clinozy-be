@@ -65,13 +65,15 @@ and the Stripe MCP lets an agent inspect test-mode objects. They coexist; none r
 ## What the agent already has
 
 The MCP servers in [`.mcp.example.json`](../../.mcp.example.json) (mirrored at
-`agent-os/mcp/mcp.example.json`): **context7, clinozy-be:api, neon, sentry, railway, aws,
-stripe, semgrep, sonarqube, redis, postman, resend, codegraph, headroom**. These are
-*agent-only*; CI/CD and runtime do not use them.
+`agent-os/mcp/mcp.example.json`): **be-context7, clinozy-be:api, neon, sentry, railway, aws,
+stripe, be-semgrep, be-sonarqube, redis, postman, resend, be-codegraph, be-headroom**. These are
+*agent-only*; CI/CD and runtime do not use them. The five clinozy-fe declares too carry the
+`be-` prefix, so a client that loads both repositories never runs one repository's server for
+the other; `pnpm mcp:setup` renames them in an existing `.mcp.json`.
 
 They split into two tiers:
 
-- **Default auto-start pair — `codegraph` + `headroom`** (committed in
+- **Default auto-start pair — `be-codegraph` + `be-headroom`** (committed in
   [`.mcp.default.json`](../../.mcp.default.json)). Zero-config, no token (local CLIs);
   declared in `.mcp.json` by `pnpm setup:local`, the session-start hook, and the cloud
   bootstrap so they are available before the first prompt.
@@ -94,7 +96,7 @@ personal-account servers at the user level so they stay separate from the repo.
 | ------- | --------- |
 | `pnpm mcp:setup` | the full set (default pair + the 12 on-demand servers) |
 | `pnpm mcp:setup <name>…` | only the named servers, e.g. `pnpm mcp:setup stripe sentry redis` |
-| `pnpm mcp:setup:default` | only the auto-start pair (codegraph + headroom) |
+| `pnpm mcp:setup:default` | only the auto-start pair (be-codegraph + be-headroom) |
 | `pnpm mcp:setup --list` | every server + whether it is declared (the canonical list) |
 | `pnpm mcp:setup --check` | dry run — report what would change, no write |
 
@@ -133,9 +135,9 @@ access (read findings, inspect Redis, send a test email) instead of parsing CLI 
 Bash. The non-trivial local invocations:
 
 ```jsonc
-"semgrep":   { "command": "uvx",    "args": ["semgrep-mcp"] },
-"sonarqube": { "command": "docker", "args": ["run", "--init", "--pull=always", "--rm", "-i",
-                                              "-e", "SONARQUBE_TOKEN", "-e", "SONARQUBE_URL", "mcp/sonarqube"] },
+"be-semgrep":   { "command": "uvx",    "args": ["semgrep-mcp"] },
+"be-sonarqube": { "command": "docker", "args": ["run", "--init", "--pull=always", "--rm", "-i",
+                                                 "-e", "SONARQUBE_TOKEN", "-e", "SONARQUBE_URL", "mcp/sonarqube"] },
 "redis":     { "command": "uvx",    "args": ["--from", "redis-mcp-server@latest", "redis-mcp-server", "--url", "${REDIS_URL}"] },
 "resend":    { "command": "docker", "args": ["run", "-i", "--rm", "-e", "RESEND_API_KEY", "mcp/resend"] }
 ```

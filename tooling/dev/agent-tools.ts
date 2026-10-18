@@ -71,14 +71,14 @@ export const AGENT_TOOLS: readonly AgentTool[] = [
     versionKey: 'CODEGRAPH_VERSION',
     versionCommand: ['codegraph', '--version'],
     latestRelease: { kind: 'npm', packageName: '@colbymchenry/codegraph' },
-    mcpServer: 'codegraph',
+    mcpServer: 'be-codegraph',
   },
   {
     name: 'headroom',
     versionKey: 'HEADROOM_VERSION',
     versionCommand: ['headroom', '--version'],
     latestRelease: { kind: 'pypi', packageName: 'headroom-ai' },
-    mcpServer: 'headroom',
+    mcpServer: 'be-headroom',
   },
   {
     name: 'semgrep',
