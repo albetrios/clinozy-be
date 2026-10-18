@@ -54,7 +54,7 @@ function repository(): { root: string; state: string; runs: string } {
   const runs = join(state, 'vitest-runs');
   writeFileSync(
     join(bin, 'vitest'),
-    `#!/usr/bin/env bash\necho "$*" >> "${runs}"\necho " FAIL  src/a.unit.test.ts > a is two"\nexit "\${VITEST_STUB_EXIT:-0}"\n`,
+    `#!/usr/bin/env bash\necho "$*" >> "${runs}"\nprintf '\\033[41m FAIL \\033[49m src/a.unit.test.ts > a is two\\n'\nexit "\${VITEST_STUB_EXIT:-0}"\n`,
   );
   chmodSync(join(bin, 'tsx'), 0o755);
   chmodSync(join(bin, 'vitest'), 0o755);
@@ -100,7 +100,8 @@ describe('turn-end-tests.mjs', () => {
     const { root, state, runs } = repository();
     const result = runHook({ root, state, exitCode: 1 });
     expect(result.status).toBe(2);
-    expect(result.stderr).toContain('FAIL  src/a.unit.test.ts > a is two');
+    expect(result.stderr).toContain(' FAIL  src/a.unit.test.ts > a is two');
+    expect(result.stderr.includes('\u001b')).toBe(false);
     expect(readFileSync(runs, 'utf8')).toContain('run --project unit src/a.unit.test.ts');
     expect(readFileSync(runs, 'utf8')).not.toContain('integration');
   });

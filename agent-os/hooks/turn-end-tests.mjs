@@ -16,6 +16,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 import { recordTelemetry } from "./_telemetry.mjs";
 
 const HOOK_ID = "turn-end-tests";
@@ -130,7 +131,8 @@ function run() {
       writeFileSync(passedPath, tree);
       return "passed";
     }
-    const output = `${result.stdout}\n${result.stderr}`;
+    // Vitest still colors a piped run under some terminals: the wake message is plain text.
+    const output = stripVTControlCharacters(`${result.stdout}\n${result.stderr}`);
     const failures = output
       .split("\n")
       .filter((line) => /FAIL|×|✗|AssertionError|Error:/.test(line))
