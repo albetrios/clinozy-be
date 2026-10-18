@@ -30,10 +30,17 @@ export interface PushStep {
 export const UNIT_RELEVANT =
   /^(src\/|tooling\/vitest\/|vitest\.config\.ts$|package\.json$|pnpm-lock\.yaml$)/;
 
+/**
+ * The files that make pre-push run the generated-doc drift checks (its
+ * `PUSHED_GENERATED_DOC_RELEVANT` pattern): source, tooling, and a hand edit of a generated doc.
+ */
+export const GENERATED_DOC_RELEVANT =
+  /^(src\/|tooling\/|docs\/routes\.txt$|docs\/reference\/architecture\/src-structure-tree\.txt$)/;
+
 /** The steps of `.husky/pre-push` for the pushed files, in its order. */
 export function pushSteps(changedFiles: readonly string[]): PushStep[] {
   const markdown = changedFiles.some((file) => file.endsWith('.md'));
-  const sourceOrTooling = changedFiles.some((file) => /^(src|tooling)\//.test(file));
+  const generatedDocRelevant = changedFiles.some((file) => GENERATED_DOC_RELEVANT.test(file));
   const semgrep = pushSemgrepTargets(changedFiles);
   const unitRelevant = changedFiles.some((file) => UNIT_RELEVANT.test(file));
   const always = (command: string): PushStep => ({ command, runs: true, why: 'always' });
@@ -54,8 +61,10 @@ export function pushSteps(changedFiles: readonly string[]): PushStep[] {
     ].map(
       (command): PushStep => ({
         command,
-        runs: sourceOrTooling,
-        why: sourceOrTooling ? 'pushed src/ or tooling/' : 'no src/ or tooling/ pushed',
+        runs: generatedDocRelevant,
+        why: generatedDocRelevant
+          ? 'pushed src/, tooling/ or a generated doc'
+          : 'no src/, tooling/ or generated doc pushed',
       }),
     ),
     {

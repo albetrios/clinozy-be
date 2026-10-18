@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { pushSteps, selectionTable, UNIT_RELEVANT } from '@tooling/vitest/affected.js';
+import {
+  GENERATED_DOC_RELEVANT,
+  pushSteps,
+  selectionTable,
+  UNIT_RELEVANT,
+} from '@tooling/vitest/affected.js';
 
 const PRE_PUSH = readFileSync(join(process.cwd(), '.husky', 'pre-push'), 'utf8');
 
@@ -21,6 +26,16 @@ describe('test:affected mirrors .husky/pre-push', () => {
 
   it('uses the hook’s unit-relevant pattern', () => {
     expect(PRE_PUSH).toContain(`'${UNIT_RELEVANT.source.replaceAll('\\/', '/')}'`);
+  });
+
+  it('uses the hook’s generated-doc pattern, so a hand-edited catalog is checked at push', () => {
+    expect(PRE_PUSH).toContain(`'${GENERATED_DOC_RELEVANT.source.replaceAll('\\/', '/')}'`);
+    const catalogOnly = pushSteps(['docs/routes.txt']);
+    expect(catalogOnly.find((step) => step.command === 'pnpm routes:catalog:check')?.runs).toBe(
+      true,
+    );
+    const docsOnly = pushSteps(['docs/reference/commands.md']);
+    expect(docsOnly.find((step) => step.command === 'pnpm routes:catalog:check')?.runs).toBe(false);
   });
 
   it('says why each step runs, and summarizes the always-run tests', () => {

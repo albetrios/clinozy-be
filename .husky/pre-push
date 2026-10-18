@@ -45,16 +45,18 @@ fi
 
 # Generated-doc drift (source tree, route catalog, org-scope catalog) — cheap
 # check-only net for commits made with --no-verify, where pre-commit steps
-# 5/6b/6c never regenerated docs/routes.txt or src-structure-tree.txt. Check
+# 5/6b/6c never regenerated docs/routes.txt or src-structure-tree.txt. Runs for
+# src/ and tooling/ changes and for a hand edit of either generated file. Check
 # only, never mutate: fix on failure with pnpm tool:project-structure-tree /
 # pnpm routes:catalog, then amend the commit.
-PUSHED_SRC_OR_TOOLING=$(git diff --name-only "$PUSH_BASE"...HEAD 2>/dev/null | grep -E '^(src/|tooling/)' || true)
-if [ -n "$PUSHED_SRC_OR_TOOLING" ]; then
+PUSHED_GENERATED_DOC_RELEVANT=$(git diff --name-only "$PUSH_BASE"...HEAD 2>/dev/null | grep -E \
+  '^(src/|tooling/|docs/routes\.txt$|docs/reference/architecture/src-structure-tree\.txt$)' || true)
+if [ -n "$PUSHED_GENERATED_DOC_RELEVANT" ]; then
   pnpm tool:project-structure-tree:check
   pnpm routes:catalog:check
   pnpm validate:route-organization-scope
 else
-  echo "Skipping generated-doc drift checks on pre-push (no src/tooling changes)."
+  echo "Skipping generated-doc drift checks on pre-push (no src/, tooling/ or generated-doc changes)."
 fi
 
 # Semgrep on the pushed auth, tenancy, billing and database-context code (the PR's SAST lane
