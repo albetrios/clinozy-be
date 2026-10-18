@@ -62,10 +62,9 @@ fi
 pnpm security:semgrep:push --base "$PUSH_BASE"
 
 # Unit tests (matches PR CI unit lane; excludes DB project)
-# Run only when pushed commits include unit-relevant files. `pnpm test:pre-push` runs the whole
-# unit project; PRE_PUSH_SELECTED_TESTS=1 runs only the unit files `pnpm test:select` picks (off
-# until the selector miss check has shown no miss for two weeks; a core-domain change still runs
-# everything).
+# Run only when pushed commits include unit-relevant files. `pnpm test:pre-push` runs the unit
+# files `pnpm test:select` picks for them (a core-domain change, or a selection that cannot be
+# built, runs the whole unit project; CI runs every suite).
 # grep -E (not rg) — POSIX-portable so a machine without ripgrep still gates.
 PUSHED_UNIT_RELEVANT=$(git diff --name-only "$PUSH_BASE"...HEAD 2>/dev/null | grep -E \
   '^(src/|tooling/vitest/|vitest\.config\.ts$|package\.json$|pnpm-lock\.yaml$)' || true)

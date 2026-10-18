@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { prePushTests, SELECTED_TESTS_SWITCH } from '@tooling/vitest/pre-push-tests.js';
+import { prePushTests } from '@tooling/vitest/pre-push-tests.js';
 import type { TestSelection } from '@tooling/vitest/test-selection.util.js';
 import { describe, expect, it } from 'vitest';
 
@@ -14,28 +14,12 @@ const selected = (projects: Record<string, string[]>): TestSelection => ({
 });
 
 /**
- * Pins what `.husky/pre-push` runs for its unit tests (task 7): the whole unit project unless
- * `PRE_PUSH_SELECTED_TESTS=1`; then the selected unit-project files, and still everything when the
- * selection escalates (a core-domain change) or fails.
+ * Pins what `.husky/pre-push` runs for its unit tests (task 7): the selected unit-project files,
+ * and still everything when the selection escalates (a core-domain change) or fails.
  */
 describe('pre-push unit tests', () => {
-  it('runs the whole unit project while the switch is off, without selecting', () => {
-    let selects = 0;
+  it('runs only the selected unit-project files', () => {
     const plan = prePushTests({
-      switchedOn: false,
-      select: () => {
-        selects += 1;
-        return selected({ unit: ['src/a.unit.test.ts'] });
-      },
-    });
-    expect(plan.run).toBe('all');
-    expect(plan.reason).toContain(`${SELECTED_TESTS_SWITCH}=1 turns them on`);
-    expect(selects).toBe(0);
-  });
-
-  it('runs only the selected unit-project files when on', () => {
-    const plan = prePushTests({
-      switchedOn: true,
       select: () =>
         selected({
           unit: ['src/a.unit.test.ts', 'src/b.unit.test.ts'],
@@ -51,7 +35,6 @@ describe('pre-push unit tests', () => {
 
   it('runs everything for a core-domain change, and when the selection fails', () => {
     const core = prePushTests({
-      switchedOn: true,
       select: () => ({
         mode: 'all',
         reasons: ['src/domains/tenancy/tenancy.container.ts escalates'],
@@ -64,7 +47,6 @@ describe('pre-push unit tests', () => {
       reason: 'src/domains/tenancy/tenancy.container.ts escalates',
     });
     const failed = prePushTests({
-      switchedOn: true,
       select: () => {
         throw new Error('no merge base');
       },
@@ -74,12 +56,9 @@ describe('pre-push unit tests', () => {
   });
 
   it('runs nothing when no unit-project test is selected', () => {
-    expect(
-      prePushTests({ switchedOn: true, select: () => selected({ 'unit-db': ['x.test.ts'] }) }).run,
-    ).toBe('none');
+    expect(prePushTests({ select: () => selected({ 'unit-db': ['x.test.ts'] }) }).run).toBe('none');
     expect(
       prePushTests({
-        switchedOn: true,
         select: () => ({ mode: 'none', reasons: [], projects: {}, why: {} }),
       }).run,
     ).toBe('none');

@@ -268,16 +268,19 @@ checks that the core domains run everything and that every unreachable test is a
 ### Selected tests at push
 
 `.husky/pre-push` runs its unit tests through `pnpm test:pre-push`
-(`tooling/vitest/pre-push-tests.ts`). By default that is `pnpm test:unit`, the whole unit
-project. With `PRE_PUSH_SELECTED_TESTS=1` it runs only the unit-project files the selection picks
-for the pushed commits, always-run files included. A core-domain change (tenancy, user, auth,
-audit, `src/shared/`, `src/core/`, `src/infrastructure/`) escalates, so it still runs the whole
-project, as does a selection that cannot be built. Measured on 18 Oct: a `leads` service change selects 93
-of the 718 unit files (621 tests), which run in 62 s against 518 s for the whole project.
+(`tooling/vitest/pre-push-tests.ts`): only the unit-project files the selection picks for the
+pushed commits, always-run files included. A core-domain change (tenancy, user, auth, audit,
+`src/shared/`, `src/core/`, `src/infrastructure/`) escalates, so it runs the whole unit project
+(`pnpm test:unit`), as does a selection that cannot be built. CI still runs every suite.
+`pnpm test:affected` previews it.
 
-The switch stays off by default until the `Selector miss check` has reported no miss for two
-weeks. Then the default flips to on, in `pre-push-tests.ts`. `pnpm test:affected` previews either
-way.
+Proven before it became the default (18 Oct): eight planted breaks, one at a time, each run
+against the whole unit project — a top-level throw in the leads, billing plan, webhook and upload
+services and in the early failure alert script, a workflow without its `actions: read`, a route
+dropped from `docs/routes.txt`, and a changed slot step in the appointment rules (the last two
+fail no unit test; CI's route catalog check catches the dropped route). After the container rule
+above, every failing test was in the selection (0 misses). The `Selector miss check` keeps
+watching every PR.
 
 ### Run one database suite at a time
 
