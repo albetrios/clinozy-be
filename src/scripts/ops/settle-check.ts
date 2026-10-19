@@ -20,6 +20,7 @@
  *   SETTLE_CHECK_POLL_INTERVAL_MS  poll cadence while waiting (default 2000)
  *   SETTLE_CHECK_QUEUES            comma-separated queue override (default throughput queues)
  */
+import { setTimeout as sleep } from 'node:timers/promises';
 import '@/shared/config/load-env-files.js';
 import { Queue } from 'bullmq';
 import { closeRedis, connectRedis } from '@/infrastructure/cache/redis.client.js';
@@ -49,12 +50,6 @@ const DEFAULT_TIMEOUT_MILLISECONDS = 120_000;
 
 /** Default interval between drain polls (milliseconds). */
 const DEFAULT_POLL_INTERVAL_MILLISECONDS = 2_000;
-
-async function sleep(milliseconds: number): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
-}
 
 async function readQueueDepth(queue: Queue): Promise<QueueDepthSnapshot> {
   const counts = await queue.getJobCounts('waiting', 'active', 'delayed', 'failed');

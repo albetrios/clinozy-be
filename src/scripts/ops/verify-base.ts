@@ -15,6 +15,7 @@ import '@/shared/config/load-env-files.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import dotenv from 'dotenv';
 import { DATABASE_URL_KEYS } from '@/infrastructure/database/utils/connection-url.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -54,12 +55,6 @@ let didRegisterSignalHandlers = false;
 
 function isVerboseDevLogs(): boolean {
   return process.env.VERIFY_BASE_VERBOSE === '1';
-}
-
-async function sleep(milliseconds: number): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
 }
 
 /** Every process under the spawned dev server and worker, roots included. */

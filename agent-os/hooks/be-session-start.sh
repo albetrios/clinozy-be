@@ -106,13 +106,15 @@ docker_status="n/a"
 if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] && command -v docker >/dev/null 2>&1; then
   if docker info >/dev/null 2>&1; then
     docker_status="up"
-  elif command -v dockerd >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    echo "session-start: Docker daemon down — starting dockerd (best-effort)…" >&2
-    setsid sudo -n dockerd >/tmp/dockerd-session-start.log 2>&1 </dev/null & disown 2>/dev/null || true
-    for _ in 1 2 3 4 5 6 7 8 9 10; do docker info >/dev/null 2>&1 && break; sleep 1; done
-    if docker info >/dev/null 2>&1; then docker_status="started"; else docker_status="start-failed (run: sudo dockerd)"; fi
   else
-    docker_status="down (start manually: sudo dockerd)"
+    # The one way tooling starts Docker; bounded so a stuck daemon never holds the session up.
+    echo "session-start: Docker daemon down — starting it (best-effort)…" >&2
+    if DOCKERD_WAIT_SECONDS=10 timeout 90 bash "$CLAUDE_PROJECT_DIR/tooling/setup/agent/ensure-docker-daemon.sh" \
+      >/tmp/dockerd-session-start.log 2>&1; then
+      docker_status="started"
+    else
+      docker_status="start-failed (run: bash tooling/setup/agent/ensure-docker-daemon.sh)"
+    fi
   fi
 fi
 

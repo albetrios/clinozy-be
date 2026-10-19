@@ -16,6 +16,7 @@
  */
 import '@/shared/config/load-env-files.js';
 import { parseArgs } from 'node:util';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { Queue } from 'bullmq';
 import {
   closeBullMqRedis,
@@ -37,12 +38,6 @@ interface QueueDepth {
   active: number;
   delayed: number;
   failed: number;
-}
-
-async function sleep(milliseconds: number): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
 }
 
 function getRegisteredQueueNames(): string[] {

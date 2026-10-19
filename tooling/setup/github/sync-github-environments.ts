@@ -39,6 +39,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as sleep } from 'node:timers/promises';
 import dotenv from 'dotenv';
 import sodium from 'libsodium-wrappers';
 
@@ -249,10 +250,6 @@ class GitHubApiError extends Error {
   ) {
     super(message);
   }
-}
-
-function sleep(milliseconds: number): Promise<void> {
-  return new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds));
 }
 
 function getGitHubToken(): string {

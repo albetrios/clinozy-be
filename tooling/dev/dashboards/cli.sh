@@ -41,10 +41,8 @@ is_up()     { case "$1" in 2*|3*|401) return 0;; *) return 1;; esac; }
 ensure_engine() {
   if docker info >/dev/null 2>&1; then return 0; fi
   warn "Docker engine not reachable — trying to start it…"
-  command -v orb >/dev/null 2>&1 && orb start >/dev/null 2>&1
-  docker context use orbstack >/dev/null 2>&1
-  [ -d /Applications/Docker.app ] && open -a Docker >/dev/null 2>&1
-  for _ in $(seq 1 40); do docker info >/dev/null 2>&1 && break; done
+  # The one way tooling starts Docker (OrbStack / Docker Desktop on a Mac, dockerd on Linux).
+  bash tooling/setup/agent/ensure-docker-daemon.sh >&2
   docker info >/dev/null 2>&1
 }
 

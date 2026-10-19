@@ -97,6 +97,7 @@
  */
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { setTimeout as sleep } from 'node:timers/promises';
 import * as logger from '@tooling/setup/common/logger.js';
 
 const RAILWAY_API_URL = 'https://backboard.railway.com/graphql/v2';
@@ -165,12 +166,6 @@ interface RailwayDeployment {
   status: string;
   staticUrl?: string | null;
   url?: string | null;
-}
-
-async function sleep(milliseconds: number): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
 }
 
 /**

@@ -16,6 +16,7 @@
  */
 
 import { pathToFileURL } from 'node:url';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 export const ALERT_CONTEXT = 'Early failure alert';
 
@@ -94,7 +95,7 @@ async function main() {
       console.log('early-failure-alert: stopped watching at the time limit');
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, POLL_MILLISECONDS));
+    await sleep(POLL_MILLISECONDS);
   }
 }
 

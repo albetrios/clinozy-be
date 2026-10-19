@@ -100,20 +100,17 @@ function dockerCompose(args: string[], extraEnv: Record<string, string> = {}): n
 }
 
 /**
- * Starts the Docker daemon when it is not reachable, so the gate never blocks a commit on
- * "is Docker running?" in a cloud session whose session-start hook did not start it.
- *
- * @remarks
- * Linux only, through the shared `tooling/setup/agent/ensure-docker-daemon.sh` (passwordless
- * sudo, restricted-network fallback). Elsewhere Docker Desktop or OrbStack owns the daemon, so
- * the gate leaves it to the developer.
+ * Starts the Docker daemon when it is not reachable, so the gate never stops on "is Docker
+ * running?" — through `tooling/setup/agent/ensure-docker-daemon.sh`, the one way tooling starts
+ * Docker (OrbStack or Docker Desktop on a Mac; dockerd, with its restricted-network fallback, on
+ * Linux).
  */
 function ensureDockerDaemon(): void {
   if (!requireTool({ name: 'docker', mode: 'block', purpose: 'the SonarQube gate' })) {
     throw new Error('Docker is required for the SonarQube gate.');
   }
   if (spawnSync('docker', ['info'], { stdio: 'ignore' }).status === 0) return;
-  if (process.platform !== 'linux' || !existsSync(DOCKER_DAEMON_SCRIPT)) return;
+  if (!existsSync(DOCKER_DAEMON_SCRIPT)) return;
   log('Docker daemon not reachable — starting it (tooling/setup/agent/ensure-docker-daemon.sh)…');
   spawnSync('/bin/bash', [DOCKER_DAEMON_SCRIPT], { stdio: 'inherit' });
 }

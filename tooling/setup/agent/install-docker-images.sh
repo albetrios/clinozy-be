@@ -47,10 +47,10 @@ wait_for_docker() {
   return 1
 }
 
-# Start (or restart) the Docker daemon so a freshly written daemon.json applies.
+# Start the Docker daemon the one way (ensure-docker-daemon.sh), so a freshly written daemon.json
+# applies on its next start.
 start_docker() {
-  service docker start >/dev/null 2>&1 || (dockerd >/tmp/dockerd-setup.log 2>&1 &)
-  wait_for_docker
+  bash "${agent_dir}/ensure-docker-daemon.sh" && wait_for_docker
 }
 
 # Steps 1–2 are for the Linux cloud image, whose Docker Hub blob CDN is blocked. Docker Desktop
@@ -80,7 +80,7 @@ if [ "$(uname -s)" = "Linux" ]; then
   # 2) Ensure dockerd is running and has actually picked up the mirror.
   if ! docker info >/dev/null 2>&1; then
     echo "install-docker-images: starting dockerd…" >&2
-    bash "${agent_dir}/ensure-docker-daemon.sh" || start_docker || true
+    start_docker || true
   fi
 
   if ! docker info >/dev/null 2>&1; then

@@ -13,6 +13,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { setTimeout as sleep } from "node:timers/promises";
 import { isInRepository, pushDirectory } from "./_be-push-target.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
@@ -52,8 +53,6 @@ function listRuns(sha) {
   ]);
   return result.ok ? JSON.parse(result.output || "[]") : null;
 }
-
-const sleep = (milliseconds) => new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds));
 
 async function watch(payload) {
   const command = payload.tool_input?.command || "";
