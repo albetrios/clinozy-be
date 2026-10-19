@@ -13,6 +13,8 @@ import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
+import dotenv from 'dotenv';
+import { formatEnvValue, upsertEnvAssignment } from '@tooling/dev/env-file.util.js';
 import { resolveDerivedNames } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
 import { requireTool } from '@tooling/setup/common/require-tool.js';
@@ -38,29 +40,32 @@ function die(message: string): never {
   process.exit(1);
 }
 
-/** Parses `.env.local` into a key→value map (quotes stripped); returns {} when absent. */
+/** The `.env.local` values (dotenv syntax, the one parser); {} when the file is absent. */
 function readEnvLocal(): Record<string, string> {
-  if (!existsSync(ENV_LOCAL)) return {};
-  const out: Record<string, string> = {};
-  for (const rawLine of readFileSync(ENV_LOCAL, 'utf8').split('\n')) {
-    const match = /^([A-Z0-9_]+)=(.*)$/.exec(rawLine.trim());
-    if (match?.[1]) out[match[1]] = (match[2] ?? '').replace(/^["']|["']$/g, '');
-  }
-  return out;
+  return existsSync(ENV_LOCAL) ? dotenv.parse(readFileSync(ENV_LOCAL, 'utf8')) : {};
 }
 
-/** Inserts/updates the given keys in `.env.local`, preserving all other lines. */
+/** The comment above the keys this gate writes. */
+const SONAR_SECTION_COMMENT = '# SonarQube local quality gate (generated; gitignored)';
+
+/**
+ * Sets the given keys in `.env.local` with the shared line editor: a key's line is replaced in
+ * place, a new key is appended under the section comment (written once), every other line is kept.
+ */
 function upsertEnvLocal(updates: Record<string, string>): void {
-  const existing = existsSync(ENV_LOCAL) ? readFileSync(ENV_LOCAL, 'utf8').split('\n') : [];
-  const updateKeys = new Set(Object.keys(updates));
-  const kept = existing.filter((line) => {
-    const match = /^([A-Z0-9_]+)=/.exec(line.trim());
-    return !(match?.[1] && updateKeys.has(match[1]));
-  });
-  while (kept.length > 0 && kept[kept.length - 1] === '') kept.pop();
-  if (kept.length > 0) kept.push('# SonarQube local quality gate (generated; gitignored)');
-  for (const [key, value] of Object.entries(updates)) kept.push(`${key}=${value}`);
-  writeFileSync(ENV_LOCAL, `${kept.join('\n')}\n`);
+  const existing = existsSync(ENV_LOCAL) ? readFileSync(ENV_LOCAL, 'utf8') : '';
+  const present = dotenv.parse(existing);
+  let content = existing;
+  if (
+    !content.includes(SONAR_SECTION_COMMENT) &&
+    Object.keys(updates).some((key) => !(key in present))
+  ) {
+    content = `${content}${content === '' || content.endsWith('\n') ? '' : '\n'}${SONAR_SECTION_COMMENT}\n`;
+  }
+  for (const [key, value] of Object.entries(updates)) {
+    content = upsertEnvAssignment(content, key, formatEnvValue(value));
+  }
+  writeFileSync(ENV_LOCAL, content);
 }
 
 interface ApiOptions {
