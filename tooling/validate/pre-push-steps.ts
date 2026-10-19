@@ -21,10 +21,12 @@ export interface PrePushStep {
 
 /**
  * The files that make pre-push run the selected tests. All of `tooling/` counts: its tests live
- * in `src/tests/unit/tooling`, and the selector picks the ones that read the changed file.
+ * in `src/tests/unit/tooling`, and the selector picks the ones that read the changed file. So does
+ * `.github/`: the CI policy tests in `src/tests/unit/ci` read the workflows and actions, so a push
+ * that changes only a workflow runs the ones that name it.
  */
 export const UNIT_RELEVANT =
-  /^(src\/|tooling\/|vitest\.config\.ts$|package\.json$|pnpm-lock\.yaml$)/;
+  /^(src\/|tooling\/|\.github\/|vitest\.config\.ts$|package\.json$|pnpm-lock\.yaml$)/;
 
 /**
  * The files that make pre-push run the generated-doc drift checks: source, tooling, and a hand
