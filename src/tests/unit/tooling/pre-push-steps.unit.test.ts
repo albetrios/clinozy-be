@@ -37,6 +37,9 @@ describe('the pre-push steps', () => {
     expect(labels(['docs/x.md'])).toContain('pnpm docs:lint:changed');
     expect(labels(['docs/routes.txt'])).toContain('pnpm routes:catalog:check');
     expect(labels(['docs/reference/commands.md'])).not.toContain('pnpm routes:catalog:check');
+    // A tooling-only push runs the tests that read the changed tooling (src/tests/unit/tooling).
+    expect(labels(['tooling/ci/check-load-coverage.mjs'])).toContain('pnpm test:pre-push');
+    expect(labels(['docs/x.md'])).not.toContain('pnpm test:pre-push');
     expect(labels(['src/domains/auth/auth.service.ts'])).toEqual(
       expect.arrayContaining([
         'pnpm security:semgrep:push',

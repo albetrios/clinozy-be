@@ -19,9 +19,12 @@ export interface PrePushStep {
   why: string;
 }
 
-/** The files that make pre-push run the unit project's selected tests. */
+/**
+ * The files that make pre-push run the selected tests. All of `tooling/` counts: its tests live
+ * in `src/tests/unit/tooling`, and the selector picks the ones that read the changed file.
+ */
 export const UNIT_RELEVANT =
-  /^(src\/|tooling\/vitest\/|vitest\.config\.ts$|package\.json$|pnpm-lock\.yaml$)/;
+  /^(src\/|tooling\/|vitest\.config\.ts$|package\.json$|pnpm-lock\.yaml$)/;
 
 /**
  * The files that make pre-push run the generated-doc drift checks: source, tooling, and a hand
