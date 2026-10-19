@@ -1,4 +1,6 @@
-# Opens or updates a GitHub issue when PR CI fails on a Dependabot pull request.
+# Opens or updates a ci-failure issue when PR CI fails on a Dependabot pull request, and closes it
+# when that pull request's PR CI is green again — through the shared ci-failure-issue action, the
+# one way every workflow here reports a failure.
 # Low-risk (npm-non-major) Dependabot PRs auto-merge after approval
 # (dependabot-auto-merge.yml); majors / security / github-actions / docker are manual.
 
@@ -18,8 +20,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  issues: write
-  pull-requests: read
+  contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
@@ -27,8 +28,9 @@ env:
 jobs:
   ci-failed-triage:
     name: CI failed triage
+    # A timed-out PR CI run ends `timed_out`; a superseded one ends `cancelled` and is not a failure.
     if: >-
-      github.event.workflow_run.conclusion == 'failure' &&
+      (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out') &&
       github.event.workflow_run.event == 'pull_request' &&
       (
         github.event.workflow_run.actor.login == 'dependabot[bot]' ||
@@ -37,11 +39,17 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      actions: read # the fix plan reads the failed PR CI run's jobs and their logs
+      contents: read
+      issues: write
+      pull-requests: read
     steps:
-      - name: Open or update Dependabot CI failure issue
+      - name: Describe the failed Dependabot pull request
+        id: describe
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WORKFLOW_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
@@ -60,42 +68,30 @@ jobs:
           metadata_file="$(mktemp)"
           gh pr view "$pr_number" --json url,title,body,labels,baseRefName > "$metadata_file"
 
-          is_security="$(node - "$metadata_file" <<'NODE'
-          const { readFileSync } = require('node:fs');
-          const metadata = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-          const text = `${metadata.title ?? ''}\n${metadata.body ?? ''}`.toLowerCase();
-          const labels = new Set((metadata.labels ?? []).map((label) => label.name));
-          const isSecurity =
-            labels.has('security') ||
-            text.includes('security update') ||
-            text.includes('security-updates group');
-          process.stdout.write(isSecurity ? 'true' : 'false');
-          NODE
-          )"
+          is_security="$(jq -r '
+            ([.labels[]?.name] | index("security")) != null
+            or ((.title // "") + "\n" + (.body // "") | ascii_downcase | test("security update|security-updates group"))
+          ' "$metadata_file")"
+          pr_url="$(jq -r '.url' "$metadata_file")"
+          pr_title="$(jq -r '.title' "$metadata_file")"
+          base_ref="$(jq -r '.baseRefName' "$metadata_file")"
 
-          pr_url="$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).url)" "$metadata_file")"
-          pr_title="$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).title)" "$metadata_file")"
-          base_ref="$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).baseRefName)" "$metadata_file")"
-          marker="dependabot-ci-failed-pr:$pr_number"
+          if [ "$is_security" = "true" ]; then
+            issue_title="Security Dependabot PR blocked by CI: PR #$pr_number"
+          else
+            issue_title="Dependabot PR blocked by CI: PR #$pr_number"
+          fi
 
-          existing_issue="$(
-            gh issue list \
-              --state open \
-              --search "$marker in:body" \
-              --json number \
-              --jq '.[0].number // empty'
-          )"
-
-          body_file="$(mktemp)"
-          cat > "$body_file" <<EOF
-          ## Dependabot PR blocked by CI
-
+          delimiter="body_$(openssl rand -hex 8)"
+          {
+            echo "title=$issue_title"
+            echo "body<<$delimiter"
+            cat <<EOF
           PR CI failed for a Dependabot pull request. Merge manually after checks pass and review.
 
           - PR: $pr_url
           - PR title: $pr_title
           - Base branch: $base_ref
-          - Failed workflow run: $WORKFLOW_RUN_URL
           - Security update: $is_security
 
           ## Triage checklist
@@ -104,23 +100,57 @@ jobs:
           - [ ] Reproduce locally (\`pnpm ci:local\` or the failing job command).
           - [ ] Fix the breakage on the Dependabot branch, or close the PR and apply the fix manually.
           - [ ] For security updates, prioritize per \`SECURITY.md\` severity targets.
-          - [ ] Re-run PR CI; close this issue once the PR merges or is superseded.
-
-          $marker
+          - [ ] Re-run PR CI — the next green run on this PR closes this issue.
           EOF
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
 
-          if [ "$is_security" = "true" ]; then
-            issue_title="Security Dependabot PR blocked by CI: PR #$pr_number"
-          else
-            issue_title="Dependabot PR blocked by CI: PR #$pr_number"
-          fi
+      - name: Checkout the ci-failure-issue action
+        if: steps.describe.outputs.title != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: .github/actions/ci-failure-issue
 
-          if [ -n "$existing_issue" ]; then
-            gh issue comment "$existing_issue" --body-file "$body_file"
-            echo "Updated existing CI failure issue #$existing_issue"
-          else
-            gh issue create \
-              --title "$issue_title" \
-              --label dependencies \
-              --body-file "$body_file"
-          fi
+      - name: Open or update the ci-failure issue
+        if: steps.describe.outputs.title != ''
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: open
+          title: ${{ steps.describe.outputs.title }}
+          body: ${{ steps.describe.outputs.body }}
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
+
+  ci-passed-close:
+    name: CI passed — close the issue
+    # The phrase search in the action finds the security-titled issue too.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      (
+        github.event.workflow_run.actor.login == 'dependabot[bot]' ||
+        github.event.workflow_run.actor.login == 'app/dependabot'
+      ) &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.pull_requests[0] != null
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: .github/actions/ci-failure-issue
+
+      - name: Close the open ci-failure issue
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: close
+          title: 'Dependabot PR blocked by CI: PR #${{ github.event.workflow_run.pull_requests[0].number }}'
+          close-comment: PR CI is green again on this Dependabot pull request — closing automatically.

@@ -39,7 +39,7 @@ CI runs the same check before image builds ([`tooling/ci/check-dockerfile-sync.m
 
 | Arg                 | Default   | Use                                                                                     |
 | ------------------- | --------- | --------------------------------------------------------------------------------------- |
-| `NODE_VERSION`      | `24.21.0` | Pinned Node.js patch (`.nvmrc`, `.node-version`, CI)                                    |
+| `NODE_VERSION`      | `24.21.0` | Pinned Node.js patch — the default must equal `.nvmrc` (`pnpm docker:check-sync`)                                    |
 | `PNPM_VERSION`      | `12.8.1` | Matches `package.json` `packageManager`                                                 |
 | `GENERATE_MCP_DOCS`    | `true`    | When `true`, runs `pnpm routes:catalog` + `pnpm docs:generate:multilang` in build stage |
 | `INSTALL_MCP_OPTIONAL` | `false`   | When `true`, runtime `pnpm install --prod` includes optional `@modelcontextprotocol/sdk`; default omits it (`--no-optional`) |

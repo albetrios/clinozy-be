@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
- * Ensures Dockerfile.worker build/runtime stages stay in sync with Dockerfile.
+ * Ensures Dockerfile.worker build/runtime stages stay in sync with Dockerfile, and that every
+ * Dockerfile's `ARG NODE_VERSION` / `ARG PNPM_VERSION` default is the one pin — `.nvmrc` and
+ * package.json `packageManager` (a plain `docker build` needs a literal default).
  * Exits 0 when in sync, 1 with a short diff hint when not.
  */
 import { readFileSync } from 'node:fs';
@@ -77,7 +79,37 @@ function printUnifiedDiff(leftLabel, left, rightLabel, right) {
   }
 }
 
+/** The `ARG <name>=<default>` defaults that differ from the pins, as messages. */
+function toolchainPinDrift() {
+  const node = readFileSync(join(repositoryRoot, '.nvmrc'), 'utf8').trim();
+  const { packageManager = '' } = JSON.parse(
+    readFileSync(join(repositoryRoot, 'package.json'), 'utf8'),
+  );
+  const pnpm = /^pnpm@(\d+\.\d+\.\d+)/.exec(packageManager)?.[1] ?? '';
+  const drift = [];
+  for (const fileName of ['Dockerfile', 'Dockerfile.worker', 'Dockerfile.agent']) {
+    const contents = readDockerfile(fileName);
+    for (const [name, pin, source] of [
+      ['NODE_VERSION', node, '.nvmrc'],
+      ['PNPM_VERSION', pnpm, 'package.json packageManager'],
+    ]) {
+      const declared = new RegExp(`^ARG ${name}=(\\S+)$`, 'm').exec(contents)?.[1];
+      if (declared !== undefined && declared !== pin) {
+        drift.push(`${fileName}: ARG ${name}=${declared}, but ${source} pins ${pin}`);
+      }
+    }
+  }
+  return drift;
+}
+
 function main() {
+  const drift = toolchainPinDrift();
+  if (drift.length > 0) {
+    for (const line of drift) console.error(line);
+    console.error('\nSet each ARG default to the pin, then run: pnpm docker:check-sync');
+    process.exit(1);
+  }
+
   const mainDockerfile = readDockerfile('Dockerfile');
   const workerDockerfile = readDockerfile('Dockerfile.worker');
 

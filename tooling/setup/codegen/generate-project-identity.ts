@@ -301,7 +301,25 @@ function renderOpenApiLocale(localePath: string, openApiTitle: string): string |
   return `${JSON.stringify(parsed, null, 2)}\n`;
 }
 
+/** The Node and pnpm versions the images build with: `.nvmrc` and `packageManager`, the one pins. */
+function toolchainVersions(): { readonly node: string; readonly pnpm: string } {
+  const node = readFileSync(resolve(REPOSITORY_ROOT, '.nvmrc'), 'utf-8').trim();
+  const packageManager = (
+    JSON.parse(readFileSync(resolve(REPOSITORY_ROOT, 'package.json'), 'utf-8')) as {
+      packageManager?: string;
+    }
+  ).packageManager;
+  const pnpm = /^pnpm@(\d+\.\d+\.\d+)/.exec(packageManager ?? '')?.[1];
+  if (!(/^\d+\.\d+\.\d+$/.test(node) && pnpm)) {
+    throw new Error(
+      '.nvmrc must pin an exact Node x.y.z and package.json packageManager pnpm@x.y.z.',
+    );
+  }
+  return { node, pnpm };
+}
+
 function renderDockerBake(snapshot: ReturnType<typeof buildProjectIdentitySnapshot>): string {
+  const toolchain = toolchainVersions();
   const apiTag = snapshot.artifacts.dockerLocalApiTag;
   const workerTag = snapshot.artifacts.workerImage;
   return `group "default" {
@@ -312,8 +330,8 @@ target "_common" {
   context    = "."
   dockerfile = "Dockerfile"
   args = {
-    NODE_VERSION = "24.21.0"
-    PNPM_VERSION = "12.8.1"
+    NODE_VERSION = "${toolchain.node}"
+    PNPM_VERSION = "${toolchain.pnpm}"
   }
 }
 

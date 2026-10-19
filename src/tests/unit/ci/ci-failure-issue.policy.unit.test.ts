@@ -246,11 +246,20 @@ describe('ci-failure issue alert', () => {
       for (const [job, block] of jobBlocks(workflowText(name))) {
         const opensIssue = block.includes(ACTION_USE) && block.includes('mode: open');
         if (!opensIssue) continue;
-        const condition = block.match(/^ {4}if: (.+)$/m)?.[1] ?? '';
+        // The job's `if:`, folded (`>-`) or on one line.
+        const condition = (block.match(/^ {4}if: (?:>-\n((?: {6}.*\n)+)|(.+)$)/m) ?? [])
+          .slice(1)
+          .filter(Boolean)
+          .join(' ')
+          .trim();
         const onFailure =
           condition.includes("contains(needs.*.result, 'failure')") ||
-          condition.startsWith('failure()');
-        const onTimeout = condition.includes("contains(needs.*.result, 'cancelled')");
+          condition.startsWith('failure()') ||
+          condition.includes("workflow_run.conclusion == 'failure'");
+        // A job checking another workflow's run (workflow_run) sees a timeout as `timed_out`.
+        const onTimeout =
+          condition.includes("contains(needs.*.result, 'cancelled')") ||
+          condition.includes("workflow_run.conclusion == 'timed_out'");
         if (!(onFailure && onTimeout)) offenders.push(`${name} → ${job}: ${condition}`);
       }
     }
