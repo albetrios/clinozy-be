@@ -29,6 +29,8 @@ const removedNodeEnvAssignment = ['NODE_ENV', "'test'"].join(' = ');
 const fakeAwsAccessKeyId = ['AKIA', 'ABCDEFGHIJKLMNOP'].join('');
 const secretEnvPath = ['.env', 'production'].join('.');
 // A file in another repository of the same session (a sibling of the scratch root, not under it).
+/** A parent-relative import line, assembled so src/'s import-path policy never reads it as one. */
+const parentImport = (path: string) => `import { a } from '${['..', path].join('/')}'`;
 const siblingPath = (relativePath: string) => join(`${scratchRoot}-sibling`, relativePath);
 
 const cases: GuardCase[] = [
@@ -50,7 +52,7 @@ const cases: GuardCase[] = [
     payload: {
       tool_input: {
         file_path: 'src/domains/x/x.service.ts',
-        new_string: "import { a } from '../other/a.js'",
+        new_string: parentImport('other/a.js'),
       },
     },
     expect: 'deny',
@@ -126,7 +128,7 @@ const cases: GuardCase[] = [
     payload: {
       tool_input: {
         file_path: siblingPath('src/pages/x/X.tsx'),
-        new_string: "import { a } from '../a.ts'",
+        new_string: parentImport('a.ts'),
       },
     },
     expect: 'silent',
@@ -137,7 +139,7 @@ const cases: GuardCase[] = [
     payload: {
       tool_input: {
         file_path: join(scratchRoot, 'src/domains/x/x.service.ts'),
-        new_string: "import { a } from '../a.js'",
+        new_string: parentImport('a.js'),
       },
     },
     expect: 'deny',
