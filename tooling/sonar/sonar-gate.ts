@@ -15,6 +15,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { resolveDerivedNames } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
+import { requireTool } from '@tooling/setup/common/require-tool.js';
 
 const DERIVED_NAMES = resolveDerivedNames(loadConfig());
 const SONAR_URL = process.env.SONAR_HOST_URL ?? 'http://localhost:9000';
@@ -103,6 +104,9 @@ function dockerCompose(args: string[], extraEnv: Record<string, string> = {}): n
  * the gate leaves it to the developer.
  */
 function ensureDockerDaemon(): void {
+  if (!requireTool({ name: 'docker', mode: 'block', purpose: 'the SonarQube gate' })) {
+    throw new Error('Docker is required for the SonarQube gate.');
+  }
   if (spawnSync('docker', ['info'], { stdio: 'ignore' }).status === 0) return;
   if (process.platform !== 'linux' || !existsSync(DOCKER_DAEMON_SCRIPT)) return;
   log('Docker daemon not reachable — starting it (tooling/setup/agent/ensure-docker-daemon.sh)…');

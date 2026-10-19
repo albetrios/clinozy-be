@@ -14,6 +14,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { reportEarlyCheck } from '@/scripts/tooling/early-checks.util.js';
 import { DBML_OUTPUT_PATH } from '@/shared/constants/project-identity.constants.js';
+import { requireTool } from '@tooling/setup/common/require-tool.js';
 
 const ROUTES_CATALOG_PATH = 'docs/routes.txt';
 const SRC_STRUCTURE_TREE_PATH = 'docs/reference/architecture/src-structure-tree.txt';
@@ -204,14 +205,6 @@ function runShell(command: string): number {
 function gitAdd(paths: string[]): void {
   if (paths.length === 0) return;
   spawnSync('git', ['add', ...paths], { stdio: 'inherit' });
-}
-
-function gitleaksInstalled(): boolean {
-  const result = spawnSync('gitleaks', ['version'], {
-    stdio: 'ignore',
-    shell: false,
-  });
-  return result.status === 0;
 }
 
 /**
@@ -676,10 +669,9 @@ export function buildRunnableSteps(options: {
         label: 'Staged secrets scan',
         phase: 'check',
         run: () => {
-          if (!gitleaksInstalled()) {
-            console.error(
-              'ERROR: gitleaks is not installed. Install it (e.g. brew install gitleaks; pnpm setup:local auto-installs it on macOS).',
-            );
+          if (
+            !requireTool({ name: 'gitleaks', mode: 'block', purpose: 'the staged secrets scan' })
+          ) {
             return 1;
           }
           return runShell('gitleaks protect --staged --verbose --redact');

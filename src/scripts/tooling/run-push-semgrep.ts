@@ -15,6 +15,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { reportEarlyCheck } from '@/scripts/tooling/early-checks.util.js';
 import { resolveBase, tryGit } from '@tooling/setup/common/git-environment.js';
+import { requireTool } from '@tooling/setup/common/require-tool.js';
 
 /** The code Semgrep scans at push: where a missed check leaks another organization's data. */
 export const PUSH_SEMGREP_PATTERNS = [
@@ -47,12 +48,8 @@ function main(): void {
     console.log('Semgrep at push: no auth, tenancy, billing or database-context changes.');
     return;
   }
-  if (spawnSync('semgrep', ['--version'], { encoding: 'utf8' }).status !== 0) {
-    console.warn(
-      '⚠ Semgrep at push: semgrep is not installed (SEMGREP_VERSION in tooling/setup/agent/tool-versions.sh); skipped — the PR SAST lane scans',
-    );
-    return;
-  }
+  // A warning, not a block: the PR's SAST lane scans everything.
+  if (!requireTool({ name: 'semgrep', mode: 'warn', purpose: 'Semgrep at push' })) return;
   console.log(`Semgrep at push: ${targets.length} file(s) in auth, tenancy, billing, contexts`);
   const scan = spawnSync(
     'semgrep',
