@@ -13,8 +13,8 @@
  * so each hook still resolves its own repository root, and a relative `if` file rule anchored to
  * the repository (`Edit(**)` → `Edit(//<repository>/**)`), so one repository's edits do not spawn
  * another's hooks. Each repository's `permissions.allow` /
- * `ask` / `deny` lists are merged in too (a union without duplicates; deny still beats ask and
- * allow).
+ * `deny` lists are merged in beside the root's own (a union without duplicates), and the root's
+ * `ask` list is rebuilt from the repositories' on every run; deny still beats ask and allow.
  *
  * Idempotent: the commands it writes (`CLAUDE_PROJECT_DIR="…" <runtime> "…/agent-os/hooks/…"`)
  * are rebuilt on every run, while any other hook and every non-hook key in the file are kept.
@@ -183,7 +183,14 @@ function buildHooks({ existing, repositories }: { existing: HookMap; repositorie
   return { hooks, counts };
 }
 
-/** The session root's permission rules plus every repository's, each list without duplicates. */
+/**
+ * The session root's permission rules merged with every repository's, each list without duplicates.
+ *
+ * `allow` and `deny` keep the root's own rules (a session-wide approval, a deny no repository may
+ * lift) beside the repositories'. `ask` is the repositories' alone, rebuilt on every run: an ask
+ * outranks every allow, so a rule a repository has since dropped would otherwise keep prompting
+ * for the rest of the session.
+ */
 function mergePermissions({
   existing,
   repositories,
@@ -199,8 +206,10 @@ function mergePermissions({
   ];
   const merged: Permissions = { ...existing };
   for (const list of permissionLists) {
-    const rules = [...new Set(sources.flatMap((source) => source[list] ?? []))];
+    const from = list === 'ask' ? sources.slice(1) : sources;
+    const rules = [...new Set(from.flatMap((source) => source[list] ?? []))];
     if (rules.length > 0) merged[list] = rules;
+    else delete merged[list];
   }
   return merged;
 }

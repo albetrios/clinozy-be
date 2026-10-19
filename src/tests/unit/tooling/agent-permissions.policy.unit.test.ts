@@ -39,6 +39,16 @@ describe('Claude Code permission rules', () => {
     }
   });
 
+  it('asks the same three things as clinozy-fe: a PR, a new dependency, a downloaded tool', () => {
+    // One policy for both repositories (tests/ci/agent-permissions.policy.test.ts there): a session
+    // that holds both merges their rules, and an ask outranks every allow.
+    expect([...permissions.ask].sort()).toEqual(
+      ['Bash(gh pr create *)', 'Bash(pnpm add *)', 'Bash(pnpm dlx *)'].sort(),
+    );
+    // `pnpm exec` runs a binary already installed (a single Vitest file, tsx): no prompt.
+    expect(permissions.allow).toContain('Bash(pnpm exec *)');
+  });
+
   it('opening a PR asks, and destructive commands are denied', () => {
     expect(permissions.ask).toContain('Bash(gh pr create *)');
     for (const rule of ['Bash(git push --force *)', 'Bash(git push -f *)', 'Bash(rm -rf *)']) {

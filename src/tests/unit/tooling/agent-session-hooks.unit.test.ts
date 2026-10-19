@@ -104,6 +104,28 @@ describe('tooling/agent-os/session-hooks.ts', () => {
     expect((permissions.allow ?? []).filter((rule) => rule === 'Bash(pnpm test*)')).toHaveLength(1);
   });
 
+  it("rebuilds the root's ask rules from the repositories, and keeps its own allow and deny", () => {
+    const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other: OTHER_SETTINGS });
+    mkdirSync(join(sessionRoot, '.claude'), { recursive: true });
+    writeFileSync(
+      sessionSettingsPath(sessionRoot),
+      JSON.stringify({
+        permissions: {
+          allow: ['Bash'],
+          ask: ['Bash(pnpm exec *)'],
+          deny: ['Bash(rm -rf /)'],
+        },
+      }),
+    );
+    expect(runScript({ sessionRoot }).status).toBe(0);
+    const permissions = readSessionSettings(sessionRoot).permissions as Record<string, string[]>;
+    // A dropped ask rule would outrank every allow for the rest of the session.
+    expect(permissions.ask).not.toContain('Bash(pnpm exec *)');
+    expect(permissions.ask).toContain('Bash(gh pr create *)');
+    expect(permissions.allow).toContain('Bash');
+    expect(permissions.deny).toContain('Bash(rm -rf /)');
+  });
+
   it('is idempotent', () => {
     const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other: OTHER_SETTINGS });
     runScript({ sessionRoot });
