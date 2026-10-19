@@ -138,6 +138,17 @@ describe('ci-failure issue alert', () => {
     expect(ghLog().match(/^issue create /gm)).toHaveLength(1);
   });
 
+  it('adds the extra labels when it creates the issue, each created first if missing', () => {
+    expect(run('open', { LABELS: 'dependencies' }).status).toBe(0);
+    expect(ghLog()).toContain('label create dependencies --repo owner/repository\n');
+    expect(ghLog()).toContain(
+      `issue create --repo owner/repository --title Weekly chaos suite failing --label ci-failure,dependencies --body ${runLink}`,
+    );
+    // A comment on the open issue changes no label.
+    run('open', { LABELS: 'dependencies' });
+    expect(ghLog().match(/^label create dependencies /gm)).toHaveLength(1);
+  });
+
   it('adds the fix plan below the body: the failed step, its log tail, area and skill', () => {
     const fixtures = join(directory, 'fixtures');
     mkdirSync(fixtures);
