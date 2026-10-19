@@ -37,6 +37,10 @@ Claude Code reads `agent-os/` directly via `.claude/` symlinks (`agents`, `skill
 
 Every agent-os item this repo owns (skill folder, agent file, command file, rule file, hook script and hook id) starts with `be-`, and a hook helper with `_be-`, so names stay unique when clinozy-be and clinozy-fe (whose items start with `fe-`) are loaded in one session. Skills installed from upstream keep their upstream names: the `agent-os/skills-lock.json` entries whose `sourceType` is not `local` (today `ponytail` and `ponytail-audit`). A skill's frontmatter `name` always equals its folder name. `pnpm agent-os:check` enforces both. The two prefixes are the one sanctioned short form beyond the wire literals in [be-full-names-only.mdc](.cursor/rules/be-full-names-only.mdc).
 
+## Same task, same pattern in both repositories
+
+clinozy-be and clinozy-fe share many tasks: CI actions, pre-push test selection, session hooks, agent-os tooling, failure issues. A task both repositories have uses **the same pattern in both**: the same rule shape, comment wording, test shape and PR title. The two differ only where a repository needs a different step (its own paths, language or file layout), and the PR says what differs and why. Before finishing a change here, check whether clinozy-fe has the same task; if it does, make the same change there in a sibling PR. The files kept byte-identical in both are listed in [`src/tests/unit/ci/mirrored-files.policy.unit.test.ts`](src/tests/unit/ci/mirrored-files.policy.unit.test.ts); everything else that shares a shape is a parallel implementation that follows this rule.
+
 ## API Contract (Non-Negotiable)
 
 See **`agent-os/skills/be-api-contract-guard/SKILL.md`** (rule: `agent-os/rules/be-api-contract.mdc`):
