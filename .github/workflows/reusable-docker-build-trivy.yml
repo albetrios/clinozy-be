@@ -442,6 +442,9 @@ jobs:
           # .env.example); relax them here like local dev does — this smoke boot runs
           # against the plaintext CI Postgres (superuser role, no TLS, no proxy, no
           # replica counts) and would otherwise fail before binding the listener.
+          # The connection budget is still checked with the flag off: it then assumes one API
+          # plus one worker, 2 × (70 + 10) = 160 against the service's 100 − 10 = 90. This boot
+          # is one API process and nothing else, so it says so: 1 × 80 = 80 fits.
           docker run -d --name ${{ env.DOCKER_LOCAL_API_TAG }}-health --network host \
             -e NODE_ENV=development \
             -e HOST=0.0.0.0 \
@@ -453,6 +456,7 @@ jobs:
             -e DATABASE_TLS_ENFORCED=false \
             -e DATABASE_RLS_SAFETY_ENFORCED=false \
             -e DATABASE_CONNECTION_BUDGET_ENFORCED=false \
+            -e DEPLOYMENT_TOTAL_REPLICA_COUNT=1 \
             -e REDIS_TLS_ENFORCED=false \
             -e TRUST_PROXY_REQUIRED=false \
             -e JWT_PRIVATE_KEY="$JWT_PRIVATE_KEY" \

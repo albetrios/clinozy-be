@@ -48,6 +48,13 @@ describe('post-merge API smoke against the built image', () => {
     expect(boot).toContain('-e EMAIL_FROM_ADDRESS=noreply@example.com');
   });
 
+  it('boots as one API process, so the connection budget fits the default CI Postgres', () => {
+    // With the budget flag off and no count, the check assumes one API plus one worker, which
+    // needs more connections than the service's default max_connections (100) leaves.
+    const boot = dockerSteps.get('Boot API container and verify /readyz') ?? '';
+    expect(boot).toContain('-e DEPLOYMENT_TOTAL_REPLICA_COUNT=1');
+  });
+
   it('signs the smoke in as the account the seed creates', () => {
     const account = (step: string): string[] =>
       (dockerSteps.get(step) ?? '').match(/DEMO_(?:EMAIL|PASSWORD): .+/g) ?? [];
