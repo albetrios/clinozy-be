@@ -18,7 +18,7 @@ When you edit a file matching a pattern below, invoke the listed skill(s). Gener
 | `.husky/pre-commit`, `src/scripts/tooling/run-pre-commit-guard.ts` | be-before-commit-guard | The guard steps changed — or a commit failed: read the ✗ FAILED at step N/M line |
 | `.vscode/extensions.json`, `.vscode/settings.json` | be-ide-productivity-guard | Backend-relevant IDE tooling |
 | `CLAUDE.md`, `AGENTS.md`, `agent-os/rules/**`, `agent-os/skills/**`, `agent-os/agents/**`, `agent-os/mcp/**`, `.mcp.example.json`, `.mcp.default.json`, `src/tests/load/k6/**` | be-structure-maintainer | Structure/naming; MCP template mirrors must stay identical (mcp-config test) |
-| `biome.json`, `.biomeignore`, `.husky/pre-commit`, `.husky/pre-push`, `src/scripts/tooling/run-ci-local-guard.ts`, `tooling/ci/run-named-step.sh`, `.gitleaks.toml`, `.semgrepignore` | be-code-quality-guard | Lint/format/pre-commit/pre-push + branch-name policy |
+| `biome.json`, `.biomeignore`, `.husky/pre-commit`, `.husky/pre-push`, `tooling/validate/gates.ts`, `tooling/validate/run-gate.ts`, `tooling/ci/run-named-step.sh`, `.gitleaks.toml`, `.semgrepignore` | be-code-quality-guard | Lint/format/pre-commit/pre-push + branch-name policy |
 | `docs/**/*.md`, `.github/rulesets/*.json` | be-docs-maintainer | Hand-written docs — index + cross-links |
 | `docs/deployment/runbooks/production-go-live.md` | be-path-to-production-gate | Or the user asks for path to production / ready for production — a plan the user approves before any production action |
 | `iterations/*/AS-BUILT.md` | be-kickoff-iteration | Iteration implementation — one ROUTE row at a time; every row's technical decisions go into AS-BUILT.md |

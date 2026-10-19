@@ -6,6 +6,7 @@
  *   pnpm ci:local       # tsx tooling/validate/run-gate.ts local   — stops at the first red
  *   pnpm health         # tsx tooling/validate/run-gate.ts health  — runs every step, then a table
  *   pnpm health:fix     # the same, after `lint:fix` + `format` repair the fixable surface
+ *   tsx tooling/validate/run-gate.ts <gate> --list   # the gate's steps, numbered, without running them
  */
 import { spawnSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
@@ -44,6 +45,13 @@ export function formatGateSummary(options: { gate: GateName; results: readonly S
   return `\n${options.gate} summary\n${rows.join('\n')}\n${verdict}\n`;
 }
 
+/** The gate's steps, numbered, one per line — what `--list` prints. */
+export function formatGateSteps(gate: GateName): string {
+  return stepsFor(gate)
+    .map((step, index) => `${index + 1}. ${step.label} — ${step.command.join(' ')}`)
+    .join('\n');
+}
+
 /**
  * Runs `gate`: `quality` and `local` stop at the first failing step, `health` runs them all.
  *
@@ -69,12 +77,16 @@ export function runGate(options: { gate: GateName; fix: boolean }): number {
 if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {
   const [gate, ...flags] = process.argv.slice(2);
   const known = GATES.find((candidate) => candidate === gate);
-  const unknownFlag = flags.find((flag) => flag !== '--fix');
+  const unknownFlag = flags.find((flag) => flag !== '--fix' && flag !== '--list');
   if (!known || unknownFlag || (flags.includes('--fix') && known !== 'health')) {
     process.stderr.write(
-      `usage: run-gate.ts <${GATES.join(' | ')}> (--fix with health only); got: ${process.argv.slice(2).join(' ')}\n`,
+      `usage: run-gate.ts <${GATES.join(' | ')}> [--list] (--fix with health only); got: ${process.argv.slice(2).join(' ')}\n`,
     );
     process.exit(2);
+  }
+  if (flags.includes('--list')) {
+    process.stdout.write(`${formatGateSteps(known)}\n`);
+    process.exit(0);
   }
   process.exit(runGate({ gate: known, fix: flags.includes('--fix') }));
 }

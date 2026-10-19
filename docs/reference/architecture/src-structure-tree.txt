@@ -2562,7 +2562,6 @@ src/
     │   ├── codemod-import-paths.ts
     │   ├── codemod-test-suffixes.ts
     │   ├── early-checks.util.ts
-    │   ├── run-ci-local-guard.ts
     │   ├── run-pre-commit-guard.ts
     │   └── run-push-semgrep.ts
     └── validators/
@@ -3460,7 +3459,6 @@ src/
     │   │   ├── route-schema-docs-validation.unit.test.ts
     │   │   ├── route-success-coverage.unit.test.ts
     │   │   ├── route-success-status.unit.test.ts
-    │   │   ├── run-ci-local-guard.unit.test.ts
     │   │   ├── run-pre-commit-guard.unit.test.ts
     │   │   ├── settle-check.config.unit.test.ts
     │   │   ├── settle-check.evaluate.unit.test.ts

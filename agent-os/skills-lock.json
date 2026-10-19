@@ -41,7 +41,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-code-quality-guard/SKILL.md",
-      "computedHash": "206582e2292accab68ac8890853f102deddaee7cbff1431a76ac9a0938ec26ba"
+      "computedHash": "454317d74f9e406f1f1e0da051c5c2b0ab0dbddfc4e4ee18f5f2040ee5c573fe"
     },
     "be-code-smells-and-best-practices": {
       "source": "local",

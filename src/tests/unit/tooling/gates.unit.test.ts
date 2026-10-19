@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { GATE_STEPS, stepsFor } from '@tooling/validate/gates.js';
-import { formatGateSummary } from '@tooling/validate/run-gate.js';
+import { formatGateSteps, formatGateSummary } from '@tooling/validate/run-gate.js';
 import { describe, expect, it } from 'vitest';
 
 const scripts = (
@@ -45,6 +45,13 @@ describe('the one gate list', () => {
       const [command, script] = step.command;
       if (command === 'pnpm') expect(scripts[script ?? ''], script).toBeDefined();
     }
+  });
+
+  it('runs the sub-domain unit matrix in ci:local, and lists every step numbered', () => {
+    expect(labels('local')).toContain('Domain unit matrix');
+    const listed = formatGateSteps('local').split('\n');
+    expect(listed).toHaveLength(stepsFor('local').length);
+    expect(listed[0]).toBe('1. Dependency audit (production tree) — pnpm deps:audit:prod');
   });
 
   it('prints one row per step and the verdict', () => {

@@ -118,7 +118,8 @@
         ".biomeignore",
         ".husky/pre-commit",
         ".husky/pre-push",
-        "src/scripts/tooling/run-ci-local-guard.ts",
+        "tooling/validate/gates.ts",
+        "tooling/validate/run-gate.ts",
         "tooling/ci/run-named-step.sh",
         ".gitleaks.toml",
         ".semgrepignore"
