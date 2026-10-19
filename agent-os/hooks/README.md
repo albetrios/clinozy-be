@@ -189,7 +189,7 @@ every session start and names any hook silent 30+ days (or never fired across 50
 in the session briefing, so pruning candidates surface without anyone remembering to run
 the report.
 
-**Behavioral gate:** [`agent-os/evals/guard-eval.ts`](../evals/guard-eval.ts)
+**Behavioral gate:** [`src/tests/unit/tooling/agent-guard-hooks.unit.test.ts`](../../src/tests/unit/tooling/agent-guard-hooks.unit.test.ts)
 (`pnpm agent-os:guards`, Tier 4, wired into `ci:local`/`ci:quality`) feeds adversarial
 payloads to every guard hook and asserts the deny/ask/warn/flag decision — plus a
 fail-open smoke (empty + garbage stdin must exit 0) for every hook in `hooks.json`. A

@@ -34,7 +34,6 @@ const writeMode =
 
 interface HookManifestEntry {
   id: string;
-  runtime: 'bash' | 'node';
   script: string;
   /**
    * `if`: permission rules (`Edit(**)`, `Write(**)`), one handler each — Claude Code spawns the
@@ -77,15 +76,15 @@ const claudeTarget = targets.agents.claude;
 const cursorTarget = targets.agents.cursor;
 const codexTarget = targets.agents.codex;
 
-/** Claude command form: `<runtime> "$CLAUDE_PROJECT_DIR/agent-os/hooks/<script>"`. */
+/** Claude command form: `node "$CLAUDE_PROJECT_DIR/agent-os/hooks/<script>"` — every hook is a Node script. */
 const claudeCommand = (entry: HookManifestEntry): string =>
-  `${entry.runtime} "$CLAUDE_PROJECT_DIR/agent-os/hooks/${entry.script}"`;
-/** Cursor command form, relative to .cursor/: `<runtime> ../agent-os/hooks/<script>`. */
+  `node "$CLAUDE_PROJECT_DIR/agent-os/hooks/${entry.script}"`;
+/** Cursor command form, relative to .cursor/: `node ../agent-os/hooks/<script>`. */
 const cursorCommand = (entry: HookManifestEntry): string =>
-  `${entry.runtime} ../agent-os/hooks/${entry.script}`;
+  `node ../agent-os/hooks/${entry.script}`;
 /** Codex command form: resolve from git root because Codex may start in a subdirectory. */
 const codexCommand = (entry: HookManifestEntry): string =>
-  `CLAUDE_PROJECT_DIR="$(git rev-parse --show-toplevel)" ${entry.runtime} "$(git rev-parse --show-toplevel)/agent-os/hooks/${entry.script}"`;
+  `CLAUDE_PROJECT_DIR="$(git rev-parse --show-toplevel)" node "$(git rev-parse --show-toplevel)/agent-os/hooks/${entry.script}"`;
 
 type ClaudeHookEntry = {
   matcher?: string;

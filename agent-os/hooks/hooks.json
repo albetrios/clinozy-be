@@ -3,7 +3,6 @@
   "hooks": [
     {
       "id": "be-session-start",
-      "runtime": "node",
       "script": "be-session-start.mjs",
       "claude": {
         "event": "SessionStart",
@@ -17,7 +16,6 @@
     },
     {
       "id": "be-prompt-skill-router",
-      "runtime": "node",
       "script": "be-prompt-skill-router.mjs",
       "claude": {
         "event": "UserPromptSubmit"
@@ -29,7 +27,6 @@
     },
     {
       "id": "be-guard-edits",
-      "runtime": "node",
       "script": "be-guard-edits.mjs",
       "claude": {
         "event": "PreToolUse",
@@ -38,7 +35,6 @@
     },
     {
       "id": "be-guardrails",
-      "runtime": "node",
       "script": "be-guardrails.mjs",
       "claude": {
         "event": "PreToolUse",
@@ -52,7 +48,6 @@
     },
     {
       "id": "be-no-unrequested-pr",
-      "runtime": "node",
       "script": "be-no-unrequested-pr.mjs",
       "claude": {
         "event": "PreToolUse",
@@ -61,7 +56,6 @@
     },
     {
       "id": "be-edit-hooks",
-      "runtime": "node",
       "script": "be-edit-hooks.mjs",
       "claude": {
         "event": "PostToolUse",
@@ -74,7 +68,6 @@
     },
     {
       "id": "be-large-read-nudge",
-      "runtime": "node",
       "script": "be-large-read-nudge.mjs",
       "claude": {
         "event": "PostToolUse",
@@ -83,7 +76,6 @@
     },
     {
       "id": "be-injection-scan",
-      "runtime": "node",
       "script": "be-injection-scan.mjs",
       "claude": {
         "event": "PostToolUse",
@@ -97,7 +89,6 @@
     },
     {
       "id": "be-subagent-verify",
-      "runtime": "node",
       "script": "be-subagent-verify.mjs",
       "claude": {
         "event": "PostToolUse",
@@ -106,7 +97,6 @@
     },
     {
       "id": "be-gate-failure-hint",
-      "runtime": "node",
       "script": "be-gate-failure-hint.mjs",
       "claude": {
         "event": "PostToolUseFailure",
@@ -115,7 +105,6 @@
     },
     {
       "id": "be-edit-hooks-stop",
-      "runtime": "node",
       "script": "be-edit-hooks.mjs",
       "claude": {
         "event": "Stop"
@@ -127,7 +116,6 @@
     },
     {
       "id": "be-push-ci-watch",
-      "runtime": "node",
       "script": "be-push-ci-watch.mjs",
       "claude": {
         "event": "PostToolUse",
@@ -139,7 +127,6 @@
     },
     {
       "id": "be-turn-end-tests",
-      "runtime": "node",
       "script": "be-turn-end-tests.mjs",
       "claude": {
         "event": "Stop",
@@ -149,7 +136,6 @@
     },
     {
       "id": "be-pre-compact-preserve",
-      "runtime": "node",
       "script": "be-pre-compact-preserve.mjs",
       "claude": {
         "event": "PreCompact"
@@ -157,7 +143,6 @@
     },
     {
       "id": "be-session-end",
-      "runtime": "node",
       "script": "be-session-end.mjs",
       "claude": {
         "event": "SessionEnd"
@@ -165,7 +150,6 @@
     },
     {
       "id": "be-cursor-shell-guard",
-      "runtime": "node",
       "script": "be-cursor-shell-guard.mjs",
       "cursor": {
         "event": "beforeShellExecution"
@@ -173,7 +157,6 @@
     },
     {
       "id": "be-cursor-edit-guard",
-      "runtime": "node",
       "script": "be-cursor-edit-guard.mjs",
       "cursor": {
         "event": "afterFileEdit"
@@ -181,7 +164,6 @@
     },
     {
       "id": "be-cursor-read-guard",
-      "runtime": "node",
       "script": "be-cursor-read-guard.mjs",
       "cursor": {
         "event": "beforeReadFile"
@@ -189,7 +171,6 @@
     },
     {
       "id": "be-cursor-mcp-guard",
-      "runtime": "node",
       "script": "be-cursor-mcp-guard.mjs",
       "cursor": {
         "event": "beforeMCPExecution"

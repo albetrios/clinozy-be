@@ -11,7 +11,7 @@ Treats the `agent-os/` bundle (skills, rules, agents, docs, hooks) as **tested c
 | **1 — integrity** | [`check.ts`](check.ts) | Is the bundle internally consistent? (deterministic, zero-token) | **Gates** — exits 1 on any error |
 | **2 — triggers** | [`trigger-eval.ts`](trigger-eval.ts) | When file X changes, does the routing map surface the right skill(s)? | **Gates** — `agent-os:triggers:strict` in CI |
 | **3 — outcomes** | [`outcome-eval.ts`](outcome-eval.ts) | In a real session, did the agent actually consult/invoke the skills it should have? | **Gates** — `agent-os:outcomes` (fixtures) in CI |
-| **4 — guards** | [`guard-eval.ts`](guard-eval.ts) | Do the guard hooks actually block/escalate/flag what they claim — and fail open on garbage input? | **Gates** — `agent-os:guards` in CI |
+| **4 — guards** | [`agent-guard-hooks.unit.test.ts`](../../src/tests/unit/tooling/agent-guard-hooks.unit.test.ts) (Vitest, unit lane) | Do the guard hooks actually block/escalate/flag what they claim — and fail open on garbage input? | **Gates** — `agent-os:guards` in CI |
 
 ## Run
 

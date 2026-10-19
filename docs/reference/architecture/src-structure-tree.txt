@@ -3491,6 +3491,7 @@ src/
     │   │   │   └── schema-enricher.unit.test.ts
     │   │   ├── agent-docker-daemon-script.unit.test.ts
     │   │   ├── agent-edit-hooks.unit.test.ts
+    │   │   ├── agent-guard-hooks.unit.test.ts
     │   │   ├── agent-hook-runtime.policy.unit.test.ts
     │   │   ├── agent-install-node.unit.test.ts
     │   │   ├── agent-live-stack.policy.unit.test.ts

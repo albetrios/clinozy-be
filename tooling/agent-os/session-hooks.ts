@@ -16,7 +16,7 @@
  * `deny` lists are merged in beside the root's own (a union without duplicates), and the root's
  * `ask` list is rebuilt from the repositories' on every run; deny still beats ask and allow.
  *
- * Idempotent: the commands it writes (`CLAUDE_PROJECT_DIR="…" <runtime> "…/agent-os/hooks/…"`)
+ * Idempotent: the commands it writes (`CLAUDE_PROJECT_DIR="…" node "…/agent-os/hooks/…"`)
  * are rebuilt on every run, while any other hook and every non-hook key in the file are kept.
  * Before a change, the previous file is copied to `settings.json.bak`. Running it from either
  * repository gives the same file.

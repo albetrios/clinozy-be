@@ -337,7 +337,7 @@ if (existsSync(settingsFile)) {
         `.claude/settings.json hook hardcodes an absolute home path — use "$CLAUDE_PROJECT_DIR": ${command}`,
       );
     const scriptReference = command.match(
-      /agent-os\/hooks\/[A-Za-z0-9._-]+\.sh/,
+      /agent-os\/hooks\/[A-Za-z0-9._-]+\.mjs/,
     )?.[0];
     if (scriptReference && !existsSync(join(repositoryRoot, scriptReference)))
       error(
@@ -814,12 +814,9 @@ for (const file of listFilesWithExtension(join(agentOsDirectory, "rules"), ".mdc
   requirePrefix("rule", basename(file, ".mdc"));
 // Hook scripts and their manifest ids too, so a block message, a telemetry row or a session-root
 // settings entry always names its repository. A helper the hooks import (never registered
-// itself) keeps its leading `_` before the prefix: `_be-telemetry.sh`.
+// itself) keeps its leading `_` before the prefix: `_be-telemetry.mjs`.
 const hooksDirectory = join(agentOsDirectory, "hooks");
-for (const file of [
-  ...listFilesWithExtension(hooksDirectory, ".sh"),
-  ...listFilesWithExtension(hooksDirectory, ".mjs"),
-])
+for (const file of listFilesWithExtension(hooksDirectory, ".mjs"))
   if (!file.replace(/^_/, "").startsWith(repositoryPrefix))
     error(
       "name-prefix",

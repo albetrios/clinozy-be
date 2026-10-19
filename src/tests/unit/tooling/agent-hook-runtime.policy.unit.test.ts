@@ -8,7 +8,7 @@ const HELPER = '_be-hook.mjs';
 /** The hooks' state directory under TMPDIR. */
 const HOOK_STATE = `${PROJECT_SLUG}-hooks`;
 const manifest = JSON.parse(readFileSync(join(HOOKS, 'hooks.json'), 'utf8')) as {
-  hooks: Array<{ id: string; runtime: string; script: string }>;
+  hooks: Array<{ id: string; runtime?: unknown; script: string }>;
 };
 const scripts = readdirSync(HOOKS).filter((name) => /\.(?:mjs|sh)$/.test(name));
 const source = (name: string) => readFileSync(join(HOOKS, name), 'utf8');
@@ -28,7 +28,10 @@ describe('agent hook runtime', () => {
   it('wires every hook as a node script', () => {
     expect(manifest.hooks.length).toBeGreaterThanOrEqual(15);
     for (const hook of manifest.hooks) {
-      expect(hook.runtime, hook.id).toBe('node');
+      expect(
+        hook.runtime,
+        `${hook.id}: no runtime field — every hook runs with node`,
+      ).toBeUndefined();
       expect(hook.script, hook.id).toMatch(/^be-[a-z-]+\.mjs$/);
       expect(scripts, hook.id).toContain(hook.script);
     }
