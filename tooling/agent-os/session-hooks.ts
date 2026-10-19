@@ -13,8 +13,10 @@
  * so each hook still resolves its own repository root, and a relative `if` file rule anchored to
  * the repository (`Edit(**)` → `Edit(//<repository>/**)`), so one repository's edits do not spawn
  * another's hooks. Each repository's `permissions.allow` /
- * `deny` lists are merged in beside the root's own (a union without duplicates), and the root's
- * `ask` list is rebuilt from the repositories' on every run; deny still beats ask and allow.
+ * `deny` lists are merged in beside the root's own (a union without duplicates). The root's `ask`
+ * list is the repositories' asks plus the ones added there by hand: each run records the asks it
+ * took from the repositories in `.claude/session-hooks-asks.json`, so the next run replaces those
+ * and keeps every other one; deny still beats ask and allow.
  *
  * Idempotent: the commands it writes (`CLAUDE_PROJECT_DIR="…" node "…/agent-os/hooks/…"`)
  * are rebuilt on every run, while any other hook and every non-hook key in the file are kept.
@@ -184,20 +186,35 @@ function buildHooks({ existing, repositories }: { existing: HookMap; repositorie
   return { hooks, counts };
 }
 
+/** Every ask rule the repositories declare, each once. */
+function repositoryAsks(repositories: string[]): string[] {
+  return [
+    ...new Set(
+      repositories.flatMap(
+        (repository) => readSettings(join(repository, claudeSettingsPath)).permissions?.ask ?? [],
+      ),
+    ),
+  ];
+}
+
 /**
  * The session root's permission rules merged with every repository's, each list without duplicates.
  *
  * `allow` and `deny` keep the root's own rules (a session-wide approval, a deny no repository may
- * lift) beside the repositories'. `ask` is the repositories' alone, rebuilt on every run: an ask
- * outranks every allow, so a rule a repository has since dropped would otherwise keep prompting
- * for the rest of the session.
+ * lift) beside the repositories'. `ask` keeps the root's hand-added rules beside the repositories':
+ * `recordedAsks` are the asks the previous run took from the repositories, and only those are
+ * replaced, because an ask outranks every allow and a rule a repository has since dropped would
+ * otherwise keep prompting for the rest of the session. With no record (a root no run has written
+ * yet) every ask is rebuilt from the repositories.
  */
 function mergePermissions({
   existing,
   repositories,
+  recordedAsks,
 }: {
   existing: Permissions;
   repositories: string[];
+  recordedAsks: string[] | null;
 }): Permissions {
   const sources = [
     existing,
@@ -205,14 +222,25 @@ function mergePermissions({
       (repository) => readSettings(join(repository, claudeSettingsPath)).permissions ?? {},
     ),
   ];
+  const handAddedAsks =
+    recordedAsks === null
+      ? []
+      : (existing.ask ?? []).filter((rule) => !recordedAsks.includes(rule));
   const merged: Permissions = { ...existing };
   for (const list of permissionLists) {
-    const from = list === 'ask' ? sources.slice(1) : sources;
+    const from = list === 'ask' ? [{ ask: handAddedAsks }, ...sources.slice(1)] : sources;
     const rules = [...new Set(from.flatMap((source) => source[list] ?? []))];
     if (rules.length > 0) merged[list] = rules;
     else delete merged[list];
   }
   return merged;
+}
+
+/** The asks the previous run took from the repositories, or `null` when no run has recorded them. */
+function readRecordedAsks(recordFile: string): string[] | null {
+  if (!existsSync(recordFile)) return null;
+  const record = JSON.parse(readFileSync(recordFile, 'utf8')) as { ask?: unknown };
+  return Array.isArray(record.ask) ? record.ask.filter((rule) => typeof rule === 'string') : null;
 }
 
 function main(): void {
@@ -245,23 +273,32 @@ function main(): void {
 
   const settingsDirectory = join(sessionRoot, '.claude');
   const settingsFile = join(settingsDirectory, 'settings.json');
+  const recordFile = join(settingsDirectory, 'session-hooks-asks.json');
   let current: ClaudeSettings;
+  let recordedAsks: string[] | null;
   try {
     current = readSettings(settingsFile);
+    recordedAsks = readRecordedAsks(recordFile);
   } catch {
     console.error(
-      `session-hooks: ${settingsFile} is not valid JSON — fix or move it, then re-run.`,
+      `session-hooks: ${settingsFile} or ${recordFile} is not valid JSON — fix or move it, then re-run.`,
     );
     process.exit(1);
   }
   const { hooks, counts } = buildHooks({ existing: current.hooks ?? {}, repositories });
-  const permissions = mergePermissions({ existing: current.permissions ?? {}, repositories });
+  const permissions = mergePermissions({
+    existing: current.permissions ?? {},
+    repositories,
+    recordedAsks,
+  });
   const next = `${JSON.stringify({ ...current, permissions, hooks }, null, 2)}\n`;
+  const record = `${JSON.stringify({ ask: repositoryAsks(repositories) }, null, 2)}\n`;
   const summary = repositories
     .map((repository) => `${repository} (${counts.get(repository) ?? 0})`)
     .join(', ');
+  const recordIsCurrent = existsSync(recordFile) && readFileSync(recordFile, 'utf8') === record;
 
-  if (existsSync(settingsFile) && readFileSync(settingsFile, 'utf8') === next) {
+  if (existsSync(settingsFile) && readFileSync(settingsFile, 'utf8') === next && recordIsCurrent) {
     log(`${settingsFile} is up to date — hooks from ${summary}.`);
     return;
   }
@@ -271,10 +308,13 @@ function main(): void {
     return;
   }
   mkdirSync(settingsDirectory, { recursive: true });
-  if (existsSync(settingsFile)) copyFileSync(settingsFile, `${settingsFile}.bak`);
-  const temporaryFile = `${settingsFile}.tmp`;
-  writeFileSync(temporaryFile, next);
-  renameSync(temporaryFile, settingsFile);
+  if (!existsSync(settingsFile) || readFileSync(settingsFile, 'utf8') !== next) {
+    if (existsSync(settingsFile)) copyFileSync(settingsFile, `${settingsFile}.bak`);
+    const temporaryFile = `${settingsFile}.tmp`;
+    writeFileSync(temporaryFile, next);
+    renameSync(temporaryFile, settingsFile);
+  }
+  writeFileSync(recordFile, record);
   log(`wrote ${settingsFile} — hooks from ${summary}.`);
 }
 

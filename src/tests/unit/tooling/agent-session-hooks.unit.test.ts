@@ -104,7 +104,7 @@ describe('tooling/agent-os/session-hooks.ts', () => {
     expect((permissions.allow ?? []).filter((rule) => rule === 'Bash(pnpm test*)')).toHaveLength(1);
   });
 
-  it("rebuilds the root's ask rules from the repositories, and keeps its own allow and deny", () => {
+  it("with no record yet, rebuilds the root's ask rules from the repositories, and keeps its own allow and deny", () => {
     const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other: OTHER_SETTINGS });
     mkdirSync(join(sessionRoot, '.claude'), { recursive: true });
     writeFileSync(
@@ -124,6 +124,43 @@ describe('tooling/agent-os/session-hooks.ts', () => {
     expect(permissions.ask).toContain('Bash(gh pr create *)');
     expect(permissions.allow).toContain('Bash');
     expect(permissions.deny).toContain('Bash(rm -rf /)');
+  });
+
+  it('keeps an ask rule added to the root by hand, and drops one a repository has dropped', () => {
+    const withAsk = (rules: string[]) =>
+      JSON.stringify({ ...JSON.parse(OTHER_SETTINGS), permissions: { ask: rules } });
+    const sessionRoot = makeSessionRoot({
+      own: REAL_SETTINGS,
+      other: withAsk(['Bash(deploy *)', 'Bash(release *)']),
+    });
+    expect(runScript({ sessionRoot }).status).toBe(0);
+    const recorded = JSON.parse(
+      readFileSync(join(sessionRoot, '.claude', 'session-hooks-asks.json'), 'utf8'),
+    ) as { ask: string[] };
+    expect(recorded.ask).toEqual(expect.arrayContaining(['Bash(deploy *)', 'Bash(release *)']));
+
+    // By hand: one more ask in the root. In the repository: `Bash(release *)` dropped.
+    const settings = readSessionSettings(sessionRoot);
+    const permissions = settings.permissions as Record<string, string[]>;
+    writeFileSync(
+      sessionSettingsPath(sessionRoot),
+      JSON.stringify({
+        ...settings,
+        permissions: {
+          ...permissions,
+          ask: [...(permissions.ask ?? []), 'Bash(terraform apply *)'],
+        },
+      }),
+    );
+    writeFileSync(join(sessionRoot, 'other', CLAUDE_SETTINGS), withAsk(['Bash(deploy *)']));
+    expect(runScript({ sessionRoot }).status).toBe(0);
+
+    const ask = (readSessionSettings(sessionRoot).permissions as Record<string, string[]>).ask;
+    expect(ask).toContain('Bash(terraform apply *)');
+    expect(ask).toContain('Bash(deploy *)');
+    expect(ask).not.toContain('Bash(release *)');
+    // The run is still idempotent with the record in place.
+    expect(runScript({ sessionRoot }).stdout).toContain('is up to date');
   });
 
   it('is idempotent', () => {
