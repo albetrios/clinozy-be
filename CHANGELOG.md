@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.3.0](https://github.com/albetrios/clinozy-be/compare/v9.2.1...v9.3.0) (2026-10-19)
+
+
+### Added
+
+* **billing:** read-only mode for an unpaid clinic after its grace period ([#88](https://github.com/albetrios/clinozy-be/issues/88)) ([7c80aa2](https://github.com/albetrios/clinozy-be/commit/7c80aa29d91555692363cd98afad18e3e4808af6))
+* launch phase 0 — green main, keep staff on a lapsed plan, demo medical and stock data ([#86](https://github.com/albetrios/clinozy-be/issues/86)) ([0e52ca2](https://github.com/albetrios/clinozy-be/commit/0e52ca2b67fae54df23a21caaa9f0d84b7a486b7))
+
+
+### Fixed
+
+* **app:** keep a typed pending-credit party on its settlement payments ([#96](https://github.com/albetrios/clinozy-be/issues/96)) ([75f23d7](https://github.com/albetrios/clinozy-be/commit/75f23d728abb33f0a9cd55778a270befe9b81d40)), closes [#94](https://github.com/albetrios/clinozy-be/issues/94)
+* **ci:** smoke a restored copy without wiping it; refuse test wipes off the runner ([#93](https://github.com/albetrios/clinozy-be/issues/93)) ([9f0d8a4](https://github.com/albetrios/clinozy-be/commit/9f0d8a4e9db5a04f211eb1ba5e9861abde591c87))
+
+
+### Documentation
+
+* **auth:** remove leftover organization capabilities mentions ([#92](https://github.com/albetrios/clinozy-be/issues/92)) ([d308af5](https://github.com/albetrios/clinozy-be/commit/d308af5d43c6ddb471e229fb4c2d810147b0d592))
+* correct eight doc and agent-os drifts against the code ([#91](https://github.com/albetrios/clinozy-be/issues/91)) ([e68ce3f](https://github.com/albetrios/clinozy-be/commit/e68ce3f2284670302cc87f199c6fa6e2d5dfe4e5))
+* correct five doc drifts against the code ([#90](https://github.com/albetrios/clinozy-be/issues/90)) ([3a39eae](https://github.com/albetrios/clinozy-be/commit/3a39eaeef53c8fb3f8fec71951dc8a1721016e16))
+
 ## [9.2.1](https://github.com/albetrios/clinozy-be/compare/v9.2.0...v9.2.1) (2026-10-17)
 
 
