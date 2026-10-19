@@ -33,7 +33,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { runGhAuthPreflight } from './auth-preflight.js';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { git } from '@tooling/setup/common/git-environment.js';
 
 const RULESETS_DIRECTORY = resolve(import.meta.dirname, '../../../.github/rulesets');
 
@@ -62,14 +62,9 @@ export class GitHubApiError extends Error {
 
 function repositoryFromGitRemote(): string | undefined {
   try {
-    const remoteUrl = execSync('git remote get-url origin', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 5_000,
-      // This remote decides which repository rulesets are pushed to, so an
-      // inherited GIT_DIR must not be allowed to answer for a different one.
-      env: gitEnvironmentWithoutInheritedRepository(),
-    }).trim();
+    // This remote decides which repository rulesets are pushed to, so `git` sheds an inherited
+    // GIT_DIR that would answer for a different one.
+    const remoteUrl = git({ args: ['remote', 'get-url', 'origin'] });
 
     const sshMatch = remoteUrl.match(/git@github\.com:([^/]+\/[^/.]+?)(?:\.git)?$/);
     if (sshMatch?.[1]) {

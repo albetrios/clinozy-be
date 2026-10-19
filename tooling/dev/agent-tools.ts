@@ -18,6 +18,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tryGit } from '@tooling/setup/common/git-environment.js';
 import { readDefaultTemplateServers } from './mcp-config.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -175,13 +176,12 @@ function fetchText(url: string): string | undefined {
 
 /** The newest stable `x.y.z` tag of a github.com repository, via `git ls-remote`. */
 function findLatestGitTag(repository: string): string | undefined {
-  const result = spawnSync(
-    'git',
-    ['ls-remote', '--tags', '--refs', `https://github.com/${repository}`],
-    { encoding: 'utf8', timeout: LOOKUP_TIMEOUT_MILLISECONDS },
-  );
-  if (result.status !== 0) return undefined;
-  const versions = result.stdout
+  const result = tryGit({
+    args: ['ls-remote', '--tags', '--refs', `https://github.com/${repository}`],
+    timeoutMilliseconds: LOOKUP_TIMEOUT_MILLISECONDS,
+  });
+  if (!result.ok) return undefined;
+  const versions = result.output
     .split('\n')
     .map((line) => /refs\/tags\/v?(\d+\.\d+\.\d+)$/.exec(line.trim())?.[1])
     .filter((version): version is string => version !== undefined);

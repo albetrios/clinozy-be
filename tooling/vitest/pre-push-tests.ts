@@ -16,7 +16,7 @@
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { git, resolveBase } from '@tooling/setup/common/git-environment.js';
 import { selectTests, type TestSelection } from '@tooling/vitest/test-selection.util.js';
 
 /** What pre-push runs: the whole unit project, nothing, or these unit-project files. */
@@ -42,18 +42,15 @@ export function prePushTests(options: { select: () => TestSelection }): PrePushT
 }
 
 function changedFiles(base: string): string[] {
-  const result = spawnSync('git', ['diff', '--name-only', '--no-renames', `${base}...HEAD`], {
-    encoding: 'utf8',
-    env: gitEnvironmentWithoutInheritedRepository(),
-  });
-  if (result.status !== 0) throw new Error(`git diff against ${base}: ${result.stderr.trim()}`);
-  return result.stdout.split('\n').filter((file) => file.trim() !== '');
+  return git({ args: ['diff', '--name-only', '--no-renames', `${base}...HEAD`] })
+    .split('\n')
+    .filter((file) => file.trim() !== '');
 }
 
 function main(): void {
   const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
   const baseIndex = process.argv.indexOf('--base');
-  const base = (baseIndex === -1 ? undefined : process.argv[baseIndex + 1]) ?? 'origin/main';
+  const base = resolveBase({ base: baseIndex === -1 ? undefined : process.argv[baseIndex + 1] });
   const plan = prePushTests({
     select: () => selectTests({ changedFiles: changedFiles(base), repositoryRoot }),
   });

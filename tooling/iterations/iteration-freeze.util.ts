@@ -8,6 +8,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tryGit } from '@tooling/setup/common/git-environment.js';
 import {
   INTAKE_DIRECTORY,
   ITERATIONS_DIRECTORY,
@@ -15,7 +16,6 @@ import {
   parseIterationReadme,
   resolvedIntakeHash,
   resolveIntakeSnapshot,
-  tryGit,
 } from './iteration.util.js';
 
 /** The Status every iteration a branch changes has when it merges. */
@@ -126,13 +126,10 @@ function statusAt(options: {
   readonly iteration: string;
 }): string | undefined {
   const readme = tryGit({
-    repositoryRoot: options.repositoryRoot,
-    gitArguments: [
-      'show',
-      `${options.revision}:${ITERATIONS_DIRECTORY}/${options.iteration}/README.md`,
-    ],
+    args: ['show', `${options.revision}:${ITERATIONS_DIRECTORY}/${options.iteration}/README.md`],
+    cwd: options.repositoryRoot,
   });
-  return readme === undefined ? undefined : (parseIterationReadme(readme).get('Status') ?? '—');
+  return readme.ok ? (parseIterationReadme(readme.output).get('Status') ?? '—') : undefined;
 }
 
 /**
@@ -147,23 +144,22 @@ export function checkIterationFreeze(options: {
   readonly base: string;
 }): FreezeCheck {
   const { repositoryRoot, base } = options;
-  const mergeBase = tryGit({ repositoryRoot, gitArguments: ['merge-base', 'HEAD', base] });
-  const listing =
-    mergeBase === undefined
-      ? undefined
-      : tryGit({
-          repositoryRoot,
-          gitArguments: [
-            'diff',
-            '--name-status',
-            '--no-renames',
-            mergeBase,
-            'HEAD',
-            '--',
-            `${ITERATIONS_DIRECTORY}/`,
-          ],
-        });
-  if (mergeBase === undefined || listing === undefined) {
+  const mergeBase = tryGit({ args: ['merge-base', 'HEAD', base], cwd: repositoryRoot });
+  const listing = mergeBase.ok
+    ? tryGit({
+        args: [
+          'diff',
+          '--name-status',
+          '--no-renames',
+          mergeBase.output,
+          'HEAD',
+          '--',
+          `${ITERATIONS_DIRECTORY}/`,
+        ],
+        cwd: repositoryRoot,
+      })
+    : undefined;
+  if (!mergeBase.ok || listing === undefined || !listing.ok) {
     return {
       touched: [],
       problems: [
@@ -171,7 +167,7 @@ export function checkIterationFreeze(options: {
       ],
     };
   }
-  const changes = listing
+  const changes = listing.output
     .split('\n')
     .filter(Boolean)
     .map((line): ChangedPath => {
@@ -184,7 +180,7 @@ export function checkIterationFreeze(options: {
       repositoryRoot,
       iteration,
       changes: iterationChanges,
-      baseStatus: statusAt({ repositoryRoot, revision: mergeBase, iteration }),
+      baseStatus: statusAt({ repositoryRoot, revision: mergeBase.output, iteration }),
     }),
   );
   return { touched: [...grouped.keys()].sort(), problems };

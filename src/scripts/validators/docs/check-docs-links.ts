@@ -11,9 +11,9 @@
  *
  * Usage: pnpm docs:links:check
  */
-import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { tryGit } from '@tooling/setup/common/git-environment.js';
 
 const REPO_ROOT = resolve(process.cwd());
 
@@ -152,22 +152,15 @@ function collectMarkdownFiles({ path, out }: { path: string; out: string[] }): v
  */
 function withoutGitIgnoredFiles(paths: string[]): string[] {
   if (paths.length === 0) return paths;
-  try {
-    const ignoredOutput = execFileSync('git', ['check-ignore', '--stdin'], {
-      input: paths.join('\n'),
-      encoding: 'utf-8',
-      cwd: REPO_ROOT,
-    });
-    const ignored = new Set(
-      ignoredOutput
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean),
-    );
-    return paths.filter((path) => !ignored.has(path));
-  } catch {
-    return paths;
-  }
+  // `check-ignore` exits 1 when no path is ignored and 128 outside a repository; both print
+  // nothing, so every path is kept.
+  const ignored = new Set(
+    tryGit({ args: ['check-ignore', '--stdin'], cwd: REPO_ROOT, input: paths.join('\n') })
+      .output.split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+  return paths.filter((path) => !ignored.has(path));
 }
 
 function isExternalOrAnchor(target: string): boolean {

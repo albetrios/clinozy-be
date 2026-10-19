@@ -8,18 +8,13 @@
  *
  * Usage:
  *   tsx tooling/agent-os/plan-skills.ts <file> [<file> ...]
- *   tsx tooling/agent-os/plan-skills.ts --diff [base]   # base default: origin/<git.defaultBranch>
+ *   tsx tooling/agent-os/plan-skills.ts --diff [base]   # base default: the upstream, else origin/<trunk>
  */
-import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { resolveGitMetadata } from '@tooling/setup/codegen/project-identity.util.js';
-import { loadConfig } from '@tooling/setup/common/config.js';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { resolveBase, tryGit } from '@tooling/setup/common/git-environment.js';
 
 const repositoryRoot = process.cwd();
-// Resolve the trunk from setup.config.json rather than hardcoding it (no-static-branch-names).
-const DEFAULT_BRANCH = resolveGitMetadata(loadConfig()).defaultBranch;
 
 interface ChainDefinition {
   description?: string;
@@ -42,25 +37,12 @@ function globToRegExp(glob: string): RegExp {
 
 /** Changed files from `git diff <base>...HEAD` plus the uncommitted working tree. */
 function changedFromGit(base: string): string[] {
-  const run = (command: string): string[] => {
-    try {
-      return execSync(command, {
-        cwd: repositoryRoot,
-        encoding: 'utf8',
-        // A hook's GIT_DIR/GIT_PREFIX outrank `cwd`: without the strip this
-        // reports another repository's diff, and `git status --porcelain`
-        // prints paths relative to the prefix rather than the repository root.
-        env: gitEnvironmentWithoutInheritedRepository(),
-      })
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean);
-    } catch {
-      return [];
-    }
-  };
-  const committed = run(`git diff --name-only ${base}...HEAD`);
-  const working = run('git status --porcelain')
+  // The shared git module sheds a hook's GIT_DIR/GIT_PREFIX, so `cwd` decides the repository and
+  // `status --porcelain` prints root-relative paths; its lines keep their leading status column.
+  const lines = (args: string[]): string[] =>
+    tryGit({ args, cwd: repositoryRoot }).output.split('\n').filter(Boolean);
+  const committed = lines(['diff', '--name-only', `${base}...HEAD`]);
+  const working = lines(['status', '--porcelain'])
     .map((line) => line.slice(3))
     .filter(Boolean);
   return [...new Set([...committed, ...working])];
@@ -70,7 +52,7 @@ const args = process.argv.slice(2);
 let files: string[];
 if (args.includes('--diff')) {
   const after = args[args.indexOf('--diff') + 1];
-  const base = after && !after.startsWith('-') ? after : `origin/${DEFAULT_BRANCH}`;
+  const base = resolveBase({ base: after && !after.startsWith('-') ? after : undefined });
   files = changedFromGit(base);
 } else {
   files = args.filter((argument) => !argument.startsWith('-'));

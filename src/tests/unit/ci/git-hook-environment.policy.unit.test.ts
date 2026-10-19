@@ -12,59 +12,56 @@ import {
  * for the hook's repository instead — reading the wrong tree, or, for a write, overwriting the
  * developer's index with a throwaway fixture's contents.
  *
- * `tooling/**\/*.ts` and `src/tests/**\/*.ts` are the scanned surface: a test that builds a
- * throwaway repository runs inside the pre-push hook too, and there its `git init` / `git config`
- * / `git update-ref` rewrite the developer's repository (19 Oct 2026: a linked worktree's push
- * set `core.bare`, an identity and `origin/main` on the shared repository).
- * `src/scripts/tooling/run-pre-commit-guard.ts` is deliberately NOT in it: it stages and inspects
- * the real index from inside the pre-commit hook, which is exactly the inheritance every other
- * call site has to shed.
+ * Two rules:
+ *
+ * - `tooling/` and `src/scripts/` start git only through the one module, `git` / `tryGit` in
+ *   `tooling/setup/common/git-environment.ts`, which always sheds them. The documented exception
+ *   is the pre-commit steps that read the commit's own index (a temporary one for
+ *   `git commit <paths>`) through the inherited GIT_INDEX_FILE — {@link PRE_COMMIT_INDEX_READERS}.
+ * - `src/tests/` strips them on every git call: a test that builds a throwaway repository runs
+ *   inside the pre-push hook too, and there its `git init` / `git config` / `git update-ref`
+ *   rewrite the developer's repository (19 Oct 2026: a linked worktree's push set `core.bare`, an
+ *   identity and `origin/main` on the shared repository).
  */
-const SCANNED_ROOTS = [join(process.cwd(), 'tooling'), join(process.cwd(), 'src', 'tests')];
+const ROOT = process.cwd();
+const MODULE_ONLY_ROOTS = [join(ROOT, 'tooling'), join(ROOT, 'src', 'scripts')];
+const STRIPPED_ROOTS = [join(ROOT, 'src', 'tests')];
 const HELPER_FILE = 'tooling/setup/common/git-environment.ts';
 const HELPER_NAME = 'gitEnvironmentWithoutInheritedRepository';
 
-/** A `git` command handed to a child-process helper, as a string literal. */
-const GIT_COMMAND_PATTERN = /(['"`])git(?:\1|\s)/;
+/** The pre-commit steps that read the commit's own index on purpose. */
+const PRE_COMMIT_INDEX_READERS: readonly string[] = [
+  'src/scripts/tooling/run-pre-commit-guard.ts',
+  'src/scripts/validators/migration/lint-rls-policies.ts',
+  'src/scripts/validators/routes/validate-route-access-diff.ts',
+];
 
-/** Files known to shell out to git — pins the scan against a regex that quietly stops matching. */
-const KNOWN_GIT_CALLERS: readonly string[] = [
-  'tooling/agent-os/plan-skills.ts',
-  'tooling/setup/codegen/validate-project-identity-literals.ts',
-  'tooling/setup/github/rulesets.ts',
-  'tooling/setup/init-project.ts',
+/** Test files known to start git — pins the scan against a regex that quietly stops matching. */
+const KNOWN_TEST_GIT_CALLERS: readonly string[] = [
+  'src/tests/helpers/iteration-repository.helper.ts',
   'src/tests/unit/tooling/agent-push-review-gate.unit.test.ts',
 ];
 
-function collectToolingFiles(directory: string, collected: string[] = []): string[] {
+/** A child-process call whose command is `git` (the literal may sit on the next line). */
+const GIT_CHILD_PROCESS =
+  /\b(?:spawnSync|spawn|execFileSync|execFile|execSync)\(\s*(['"`])git[\s'"`]/;
+
+function collectSourceFiles(directory: string, collected: string[] = []): string[] {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const absolutePath = join(directory, entry.name);
-    if (entry.isDirectory()) collectToolingFiles(absolutePath, collected);
-    else if (entry.name.endsWith('.ts')) collected.push(absolutePath);
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules') collectSourceFiles(absolutePath, collected);
+    } else if (/\.(?:ts|mts|mjs)$/.test(entry.name)) collected.push(absolutePath);
   }
   return collected;
 }
 
-function findGitCallers(): { callers: string[]; unguarded: string[] } {
-  const callers: string[] = [];
-  const unguarded: string[] = [];
-  for (const absolutePath of SCANNED_ROOTS.flatMap((root) => collectToolingFiles(root))) {
-    const relativePath = relative(process.cwd(), absolutePath);
-    if (relativePath === HELPER_FILE) continue;
-    const content = readFileSync(absolutePath, 'utf-8');
-    // Only lines that hand a command to a child process — not prose or a `type: 'git'` field.
-    const invokes = content
-      .split('\n')
-      .some(
-        (line) =>
-          GIT_COMMAND_PATTERN.test(line) &&
-          /exec(?:File)?Sync\(|spawnSync\(|\brun\(/.test(line.replace(/\/\/.*$/, '')),
-      );
-    if (!invokes) continue;
-    callers.push(relativePath);
-    if (!content.includes(HELPER_NAME)) unguarded.push(relativePath);
-  }
-  return { callers, unguarded };
+/** The files under `roots` that start git themselves. */
+function gitCallers(roots: readonly string[]): string[] {
+  return roots
+    .flatMap((root) => collectSourceFiles(root))
+    .filter((absolutePath) => GIT_CHILD_PROCESS.test(readFileSync(absolutePath, 'utf-8')))
+    .map((absolutePath) => relative(ROOT, absolutePath));
 }
 
 describe('git hook environment — inherited repository variables', () => {
@@ -113,10 +110,29 @@ describe('git hook environment — inherited repository variables', () => {
     }
   });
 
-  it('strips the inherited repository in every tooling and test file that shells out to git', () => {
-    const { callers, unguarded } = findGitCallers();
-    // Anti-vacuity: an empty scan would satisfy the assertion below for free.
-    expect(callers).toEqual(expect.arrayContaining([...KNOWN_GIT_CALLERS]));
+  it('starts git in tooling and scripts only through the one git module', () => {
+    const callers = gitCallers(MODULE_ONLY_ROOTS);
+    // Anti-vacuity: the exceptions are found, so an empty scan cannot pass for free.
+    expect(callers).toEqual(expect.arrayContaining([...PRE_COMMIT_INDEX_READERS]));
+    expect(
+      callers.filter((path) => path !== HELPER_FILE && !PRE_COMMIT_INDEX_READERS.includes(path)),
+    ).toEqual([]);
+  });
+
+  it('marks each pre-commit index reader as the documented exception in place', () => {
+    for (const path of PRE_COMMIT_INDEX_READERS) {
+      expect(readFileSync(join(ROOT, path), 'utf-8'), path).toContain(
+        'The documented exception to the shared git module',
+      );
+    }
+  });
+
+  it('strips the inherited repository in every test file that starts git', () => {
+    const callers = gitCallers(STRIPPED_ROOTS);
+    expect(callers).toEqual(expect.arrayContaining([...KNOWN_TEST_GIT_CALLERS]));
+    const unguarded = callers.filter(
+      (path) => !readFileSync(join(ROOT, path), 'utf-8').includes(HELPER_NAME),
+    );
     expect(unguarded).toEqual([]);
   });
 });

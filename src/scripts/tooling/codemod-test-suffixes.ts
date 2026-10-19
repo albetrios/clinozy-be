@@ -5,6 +5,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
+import { git } from '@tooling/setup/common/git-environment.js';
 
 const ROOT = resolve(process.cwd());
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -121,7 +122,7 @@ function executeMoves(): void {
     );
     if (!DRY_RUN) {
       try {
-        execSync(`git mv "${move.from}" "${move.to}"`, { stdio: 'inherit' });
+        git({ args: ['mv', move.from, move.to] });
       } catch {
         renameSync(move.from, move.to);
       }

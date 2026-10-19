@@ -8,11 +8,10 @@
  * `<dir>` holds Vitest JSON reports (`--reporter=json`), one per job or shard. It reports only:
  * annotations, the job summary, a fixture line per miss — and exits 0.
  */
-import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { git, resolveBase } from '@tooling/setup/common/git-environment.js';
 import { selectTests, type TestSelection } from '@tooling/vitest/test-selection.util.js';
 
 /** The part of a Vitest JSON report the detector reads. */
@@ -56,20 +55,11 @@ function option(name: string): string | undefined {
   return index === -1 ? undefined : process.argv[index + 1];
 }
 
-function git(args: string[]): string {
-  const result = spawnSync('git', args, {
-    encoding: 'utf8',
-    env: gitEnvironmentWithoutInheritedRepository(),
-  });
-  if (result.status !== 0) throw new Error(`git ${args.join(' ')}: ${result.stderr.trim()}`);
-  return result.stdout;
-}
-
 function main(): void {
   const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
   const resultsDirectory = option('--results') ?? 'test-results';
-  const base = git(['merge-base', 'HEAD', option('--base') ?? 'origin/main']).trim();
-  const changedFiles = git(['diff', '--name-only', '--no-renames', `${base}...HEAD`])
+  const base = git({ args: ['merge-base', 'HEAD', resolveBase({ base: option('--base') })] });
+  const changedFiles = git({ args: ['diff', '--name-only', '--no-renames', `${base}...HEAD`] })
     .split('\n')
     .filter(Boolean);
   const failed = existsSync(resultsDirectory)

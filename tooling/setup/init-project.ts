@@ -43,7 +43,7 @@ import {
   restoreConfigText,
   saveConfig,
 } from '@tooling/setup/common/config.js';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { git } from '@tooling/setup/common/git-environment.js';
 import type { SetupConfig } from '@tooling/setup/common/types.js';
 import * as log from '@tooling/setup/common/logger.js';
 
@@ -410,12 +410,7 @@ function rewriteProseIdentity(options: {
     return [];
   }
 
-  const tracked = execFileSync('git', ['ls-files', '-z'], {
-    cwd: REPOSITORY_ROOT,
-    encoding: 'utf-8',
-    maxBuffer: 64 * 1024 * 1024,
-    env: gitEnvironmentWithoutInheritedRepository(),
-  })
+  const tracked = git({ args: ['ls-files', '-z'], cwd: REPOSITORY_ROOT })
     .split('\0')
     .filter((entry) => entry.length > 0);
 
@@ -502,12 +497,7 @@ function renameSlugNamedFiles(options: {
   const previousForms = [options.previousSlug, options.previousSlug.replace(/-/g, '_')];
   const nextForms = [options.nextSlug, options.nextSlug.replace(/-/g, '_')];
 
-  const tracked = execFileSync('git', ['ls-files', '-z'], {
-    cwd: REPOSITORY_ROOT,
-    encoding: 'utf-8',
-    maxBuffer: 64 * 1024 * 1024,
-    env: gitEnvironmentWithoutInheritedRepository(),
-  })
+  const tracked = git({ args: ['ls-files', '-z'], cwd: REPOSITORY_ROOT })
     .split('\0')
     .filter((entry) => entry.length > 0);
 
@@ -533,12 +523,9 @@ function renameSlugNamedFiles(options: {
     renamed.push(`${relativePath} → ${nextPath}`);
     if (options.dryRun) continue;
     try {
-      // Without the strip, an inherited GIT_PREFIX is prepended to both
-      // pathspecs and the rename lands outside the repository root.
-      execFileSync('git', ['mv', relativePath, nextPath], {
-        cwd: REPOSITORY_ROOT,
-        env: gitEnvironmentWithoutInheritedRepository(),
-      });
+      // `git` sheds an inherited GIT_PREFIX, which would be prepended to both pathspecs and land
+      // the rename outside the repository root.
+      git({ args: ['mv', relativePath, nextPath], cwd: REPOSITORY_ROOT });
     } catch {
       // Untracked-by-git checkouts fall back to a plain rename.
       renameSync(resolve(REPOSITORY_ROOT, relativePath), resolve(REPOSITORY_ROOT, nextPath));
@@ -578,16 +565,18 @@ function reportResidualLiterals(previousSlug: string, previousOwner: string): vo
       // cite its issue URLs — rewriting them would falsify history, so listing
       // them here is pure noise that buries the lines a human must actually act
       // on. Prose in docs/ is still reported: it describes the fork now.
-      output = execFileSync(
-        'git',
-        ['grep', '-rniI', '--', literal, ':!CHANGELOG.md', ':!docs/reviews/', ':!pnpm-lock.yaml'],
-        {
-          cwd: REPOSITORY_ROOT,
-          encoding: 'utf-8',
-          maxBuffer: 32 * 1024 * 1024,
-          env: gitEnvironmentWithoutInheritedRepository(),
-        },
-      );
+      output = git({
+        args: [
+          'grep',
+          '-rniI',
+          '--',
+          literal,
+          ':!CHANGELOG.md',
+          ':!docs/reviews/',
+          ':!pnpm-lock.yaml',
+        ],
+        cwd: REPOSITORY_ROOT,
+      });
     } catch {
       // git grep exits 1 when there are no matches — that is the success case.
       continue;

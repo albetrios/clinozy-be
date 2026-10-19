@@ -423,7 +423,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" --quiet
-          node tooling/ci/check-patch-coverage.mjs \
+          pnpm exec tsx tooling/ci/check-patch-coverage.mjs \
             --coverage coverage-merged/coverage-final.json \
             --base "origin/${BASE_REF}" \
             --threshold 90

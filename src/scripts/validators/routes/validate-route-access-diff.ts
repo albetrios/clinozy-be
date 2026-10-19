@@ -84,6 +84,9 @@ export function diffRouteAccess(options: { before: string; after: string }): Rou
   return { changes, findings };
 }
 
+// The documented exception to the shared git module (tooling/setup/common/git-environment.ts):
+// run inside the pre-commit hook, this reads the commit's own index — a temporary one for
+// `git commit <paths>` — through the GIT_INDEX_FILE the hook inherits, which the module strips.
 function git(args: string[]): string {
   const result = spawnSync('git', args, { encoding: 'utf8' });
   return result.status === 0 ? result.stdout : '';

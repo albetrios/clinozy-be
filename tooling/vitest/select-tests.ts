@@ -4,7 +4,7 @@
  * `tooling/vitest/test-selection.util.ts`).
  *
  * Usage:
- *   pnpm test:select                    # changes since the merge base with origin/main + the working tree
+ *   pnpm test:select                    # changes since the merge base with the upstream (else origin/<trunk>) + the working tree
  *   pnpm test:select --base <ref>       # another base
  *   pnpm test:select --files a.ts,b.md  # these files instead of git
  *   pnpm test:select --why              # every selected test and why it was selected
@@ -22,7 +22,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { git, resolveBase } from '@tooling/setup/common/git-environment.js';
 import { LANES } from '@tooling/vitest/lanes.js';
 import {
   changedOnly,
@@ -46,24 +46,15 @@ function options(name: string): string[] {
   });
 }
 
-function git(args: string[]): string {
-  // Run from a git hook (the turn-end check), git's own GIT_DIR would outrank `cwd`.
-  const result = spawnSync('git', args, {
-    cwd: REPOSITORY_ROOT,
-    encoding: 'utf8',
-    env: gitEnvironmentWithoutInheritedRepository(),
-  });
-  if (result.status !== 0) throw new Error(`git ${args.join(' ')}: ${result.stderr.trim()}`);
-  return result.stdout;
-}
-
 /** The changed files: `--files`, else everything since the merge base plus untracked files. */
 function changedFiles(): string[] {
   const files = option('--files');
   if (files !== undefined) return files.split(',').map((file) => file.trim());
-  const base = git(['merge-base', 'HEAD', option('--base') ?? 'origin/main']).trim();
-  const tracked = git(['diff', '--name-only', '--no-renames', base]);
-  const untracked = git(['ls-files', '--others', '--exclude-standard']);
+  const cwd = REPOSITORY_ROOT;
+  const ref = resolveBase({ base: option('--base'), cwd });
+  const base = git({ args: ['merge-base', 'HEAD', ref], cwd });
+  const tracked = git({ args: ['diff', '--name-only', '--no-renames', base], cwd });
+  const untracked = git({ args: ['ls-files', '--others', '--exclude-standard'], cwd });
   return `${tracked}\n${untracked}`.split('\n').filter((file) => file.trim() !== '');
 }
 

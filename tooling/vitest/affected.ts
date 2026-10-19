@@ -8,11 +8,10 @@
  * the whole unit project when the selection escalates. The steps mirror `.husky/pre-push`
  * (`src/tests/unit/tooling/affected.policy.unit.test.ts` keeps the two in step).
  */
-import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pushSemgrepTargets } from '@/scripts/tooling/run-push-semgrep.js';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { resolveBase, tryGit } from '@tooling/setup/common/git-environment.js';
 import {
   ALWAYS_RUN_REASON,
   selectTests,
@@ -105,22 +104,11 @@ export function selectionTable(selection: TestSelection): string[] {
   return lines;
 }
 
-function git(args: string[]): { ok: boolean; output: string } {
-  const result = spawnSync('git', args, {
-    encoding: 'utf8',
-    env: gitEnvironmentWithoutInheritedRepository(),
-  });
-  return { ok: result.status === 0, output: result.stdout.trim() };
-}
-
 function main(): void {
   const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
   const baseIndex = process.argv.indexOf('--base');
-  const upstream = git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
-  const base =
-    (baseIndex === -1 ? undefined : process.argv[baseIndex + 1]) ??
-    (upstream.ok ? upstream.output : 'origin/main');
-  const changed = git(['diff', '--name-only', '--no-renames', `${base}...HEAD`]);
+  const base = resolveBase({ base: baseIndex === -1 ? undefined : process.argv[baseIndex + 1] });
+  const changed = tryGit({ args: ['diff', '--name-only', '--no-renames', `${base}...HEAD`] });
   if (!changed.ok) {
     console.error(`Cannot diff against ${base} — pass --base <ref>.`);
     process.exitCode = 1;

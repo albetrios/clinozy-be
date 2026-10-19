@@ -321,6 +321,9 @@ export function touchedTables(options: {
 function main(): void {
   const root = process.cwd();
   const filesArgument = process.argv.indexOf('--files');
+  // The documented exception to the shared git module (tooling/setup/common/git-environment.ts):
+  // run inside the pre-commit hook, this reads the commit's own index — a temporary one for
+  // `git commit <paths>` — through the GIT_INDEX_FILE the hook inherits, which the module strips.
   const changedFiles =
     filesArgument === -1
       ? execSync('git diff --cached --name-only', { encoding: 'utf8' }).split('\n')

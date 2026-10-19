@@ -8,27 +8,17 @@
  * The record is `<git dir>/be-pre-merge-review/<HEAD sha>.clean` — this clone only, never
  * committed. A new commit is a new HEAD, so it needs a new review.
  */
-import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { git } from '@tooling/setup/common/git-environment.js';
 
 /** The record's folder under the git directory, read by the push review gate. */
 const REVIEW_RECORD_DIRECTORY = 'be-pre-merge-review';
 
-function git(args: string[]): string {
-  const result = spawnSync('git', args, {
-    encoding: 'utf8',
-    env: gitEnvironmentWithoutInheritedRepository(),
-  });
-  if (result.status !== 0) throw new Error(`git ${args.join(' ')}: ${result.stderr.trim()}`);
-  return result.stdout.trim();
-}
-
 const noteIndex = process.argv.indexOf('--note');
 const note = noteIndex === -1 ? '' : (process.argv[noteIndex + 1] ?? '');
-const head = git(['rev-parse', 'HEAD']);
-const directory = join(git(['rev-parse', '--absolute-git-dir']), REVIEW_RECORD_DIRECTORY);
+const head = git({ args: ['rev-parse', 'HEAD'] });
+const directory = join(git({ args: ['rev-parse', '--absolute-git-dir'] }), REVIEW_RECORD_DIRECTORY);
 mkdirSync(directory, { recursive: true });
 writeFileSync(
   join(directory, `${head}.clean`),

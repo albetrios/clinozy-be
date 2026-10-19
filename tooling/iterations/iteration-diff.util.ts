@@ -7,11 +7,10 @@
  * whether the PRD, `schema-routes.md` or the prototype changed, and the `schema-routes.md` entities,
  * fields, enums, routes and operations added, removed or changed.
  */
-import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { tryGit } from '@tooling/setup/common/git-environment.js';
 import {
   EMPTY_FIELD,
   INTAKE_DIRECTORY,
@@ -344,12 +343,9 @@ export function rawIntakeDiff(request: {
       return { folder, label: `iterations/${iteration}/${INTAKE_DIRECTORY}` };
     });
     const [before, after] = sides as [(typeof sides)[number], (typeof sides)[number]];
-    const result = spawnSync('git', ['diff', '--no-index', '--', before.folder, after.folder], {
-      encoding: 'utf-8',
-      env: gitEnvironmentWithoutInheritedRepository(),
-    });
-    return (result.stdout ?? '')
-      .replaceAll(before.folder.slice(1), before.label)
+    // `diff --no-index` exits 1 when the folders differ, so its output is read either way.
+    return tryGit({ args: ['diff', '--no-index', '--', before.folder, after.folder] })
+      .output.replaceAll(before.folder.slice(1), before.label)
       .replaceAll(after.folder.slice(1), after.label);
   } finally {
     rmSync(workspace, { recursive: true, force: true });

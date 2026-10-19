@@ -198,6 +198,9 @@ function runShell(command: string): number {
   return result.status ?? 1;
 }
 
+// The documented exception to the shared git module (tooling/setup/common/git-environment.ts):
+// run inside the pre-commit hook, this stages into and reads the commit's own index — a temporary one for
+// `git commit <paths>` — through the GIT_INDEX_FILE the hook inherits, which the module strips.
 function gitAdd(paths: string[]): void {
   if (paths.length === 0) return;
   spawnSync('git', ['add', ...paths], { stdio: 'inherit' });

@@ -10,7 +10,6 @@
  * built on its own Baseline. `--check` is the gate the iteration skills run before planning and
  * building. The contract is shared, byte for byte, with the frontend repository.
  */
-import { spawnSync } from 'node:child_process';
 import {
   copyFileSync,
   existsSync,
@@ -23,7 +22,7 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { tryGit } from '@tooling/setup/common/git-environment.js';
 import {
   BRIEF_FILE,
   checkIntakeSet,
@@ -256,11 +255,10 @@ export function displaySourcePath(location: {
 
 /** Returns the unified diff of two files (`git diff --no-index`), trimmed for the terminal. */
 export function fileDiff(files: { readonly before: string; readonly after: string }): string {
-  const result = spawnSync('git', ['diff', '--no-index', '--', files.before, files.after], {
-    encoding: 'utf-8',
-    env: gitEnvironmentWithoutInheritedRepository(),
-  });
-  const lines = (result.stdout ?? '').split('\n');
+  // `diff --no-index` exits 1 when the files differ, so its output is read either way.
+  const lines = tryGit({
+    args: ['diff', '--no-index', '--', files.before, files.after],
+  }).output.split('\n');
   return lines.length > DIFF_PREVIEW_LINES
     ? [
         ...lines.slice(0, DIFF_PREVIEW_LINES),
@@ -271,18 +269,6 @@ export function fileDiff(files: { readonly before: string; readonly after: strin
 
 function sameBytes(left: string, right: string): boolean {
   return readFileSync(left).equals(readFileSync(right));
-}
-
-function tryGit(command: {
-  readonly repositoryRoot: string;
-  readonly gitArguments: readonly string[];
-}): string | undefined {
-  const result = spawnSync('git', [...command.gitArguments], {
-    cwd: command.repositoryRoot,
-    encoding: 'utf-8',
-    env: gitEnvironmentWithoutInheritedRepository(),
-  });
-  return result.status === 0 ? (result.stdout ?? '').trim() : undefined;
 }
 
 function iterationFolder(location: {
@@ -373,28 +359,27 @@ function gitIntakeChanges(location: {
 }): { readonly details: string[]; readonly restore: string } {
   const { repositoryRoot } = location;
   const path = relativeIntakeFolder(location.iteration);
-  if (!tryGit({ repositoryRoot, gitArguments: ['ls-files', '--', path] })) {
+  if (tryGit({ args: ['ls-files', '--', path], cwd: repositoryRoot }).output === '') {
     return {
       details: [`${path} is not committed yet, so git cannot name the changed file.`],
       restore: '',
     };
   }
-  const tracked = (
-    tryGit({ repositoryRoot, gitArguments: ['diff', '--name-status', 'HEAD', '--', path] }) ?? ''
-  )
-    .split('\n')
+  const tracked = tryGit({
+    args: ['diff', '--name-status', 'HEAD', '--', path],
+    cwd: repositoryRoot,
+  })
+    .output.split('\n')
     .filter(Boolean)
     .map((line) => {
       const [code = '', ...paths] = line.split('\t');
       return `${changeKind(code)} ${basename(paths[0] ?? '')}`;
     });
-  const untracked = (
-    tryGit({
-      repositoryRoot,
-      gitArguments: ['ls-files', '--others', '--exclude-standard', '--', path],
-    }) ?? ''
-  )
-    .split('\n')
+  const untracked = tryGit({
+    args: ['ls-files', '--others', '--exclude-standard', '--', path],
+    cwd: repositoryRoot,
+  })
+    .output.split('\n')
     .filter(Boolean)
     .map((file) => `added ${basename(file)}`);
   const changes = [...tracked, ...untracked];

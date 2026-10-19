@@ -3,7 +3,7 @@
  * database contexts — an early check in `.husky/pre-push`. The PR's SAST lane scans everything.
  *
  * Usage:
- *   pnpm security:semgrep:push                # files changed since the upstream (or origin/main)
+ *   pnpm security:semgrep:push                # files changed since the upstream (or origin/<trunk>)
  *   pnpm security:semgrep:push --base <ref>   # files changed since <ref>
  *
  * Same rules as CI (`--config p/default`, only findings new since the base). Semgrep missing, or
@@ -14,6 +14,7 @@ import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { reportEarlyCheck } from '@/scripts/tooling/early-checks.util.js';
+import { resolveBase, tryGit } from '@tooling/setup/common/git-environment.js';
 
 /** The code Semgrep scans at push: where a missed check leaks another organization's data. */
 export const PUSH_SEMGREP_PATTERNS = [
@@ -30,23 +31,17 @@ export function pushSemgrepTargets(changedFiles: readonly string[]): string[] {
   );
 }
 
-function git(args: string[]): { ok: boolean; output: string } {
-  const result = spawnSync('git', args, { encoding: 'utf8' });
-  return { ok: result.status === 0, output: result.stdout.trim() };
-}
-
 function main(): void {
   const baseIndex = process.argv.indexOf('--base');
-  const upstream = git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
-  const base =
-    (baseIndex === -1 ? undefined : process.argv[baseIndex + 1]) ??
-    (upstream.ok ? upstream.output : 'origin/main');
-  const mergeBase = git(['merge-base', 'HEAD', base]);
+  const base = resolveBase({ base: baseIndex === -1 ? undefined : process.argv[baseIndex + 1] });
+  const mergeBase = tryGit({ args: ['merge-base', 'HEAD', base] });
   if (!mergeBase.ok) {
     console.warn(`⚠ Semgrep at push: cannot find the merge base with ${base}; skipped (CI scans)`);
     return;
   }
-  const changed = git(['diff', '--name-only', '--diff-filter=ACMR', `${mergeBase.output}...HEAD`]);
+  const changed = tryGit({
+    args: ['diff', '--name-only', '--diff-filter=ACMR', `${mergeBase.output}...HEAD`],
+  });
   const targets = pushSemgrepTargets(changed.output.split('\n'));
   if (targets.length === 0) {
     console.log('Semgrep at push: no auth, tenancy, billing or database-context changes.');

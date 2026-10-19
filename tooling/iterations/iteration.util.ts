@@ -6,11 +6,10 @@
  * `iterations/README.md`. The sibling (frontend) repository ships the same commands, names and
  * README template, so a folder created in either repository looks the same in both.
  */
-import { execFileSync } from 'node:child_process';
 import { createHash, randomInt } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { tryGit } from '@tooling/setup/common/git-environment.js';
 
 /** The four iteration types, in the order the docs list them. */
 export const ITERATION_TYPES = ['launch', 'feat', 'change', 'fix'] as const;
@@ -549,35 +548,6 @@ export function readIterationReadme(location: {
 
 // ── git ──────────────────────────────────────────────────────────────────────
 
-function runGit(command: {
-  readonly repositoryRoot: string;
-  readonly gitArguments: readonly string[];
-}): string {
-  return execFileSync('git', [...command.gitArguments], {
-    cwd: command.repositoryRoot,
-    encoding: 'utf-8',
-    env: gitEnvironmentWithoutInheritedRepository(),
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
-}
-
-/**
- * Runs git in `repositoryRoot` (inherited git variables shed) and returns its trimmed output.
- *
- * @remarks
- * Failure modes: never throws — a failed git command returns undefined.
- */
-export function tryGit(command: {
-  readonly repositoryRoot: string;
-  readonly gitArguments: readonly string[];
-}): string | undefined {
-  try {
-    return runGit(command);
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Reads `git config user.name` — who signs History lines and owns new iterations.
  *
@@ -585,7 +555,7 @@ export function tryGit(command: {
  * Failure modes: throws when it is not set.
  */
 export function gitUserName(repositoryRoot: string): string {
-  const owner = tryGit({ repositoryRoot, gitArguments: ['config', 'user.name'] }) ?? '';
+  const owner = tryGit({ args: ['config', 'user.name'], cwd: repositoryRoot }).output;
   if (owner === '') throw new Error('git config user.name is not set — it signs the README.');
   return owner;
 }
@@ -608,18 +578,11 @@ export function baseBranchIterationNames(location: {
   readonly baseBranch: string;
 }): string[] {
   const listing = tryGit({
-    repositoryRoot: location.repositoryRoot,
-    gitArguments: [
-      'ls-tree',
-      '-d',
-      '--name-only',
-      location.baseBranch,
-      '--',
-      `${ITERATIONS_DIRECTORY}/`,
-    ],
+    args: ['ls-tree', '-d', '--name-only', location.baseBranch, '--', `${ITERATIONS_DIRECTORY}/`],
+    cwd: location.repositoryRoot,
   });
-  if (!listing) return [];
-  return listing
+  if (!listing.ok || listing.output === '') return [];
+  return listing.output
     .split('\n')
     .map((path) => path.slice(ITERATIONS_DIRECTORY.length + 1))
     .filter((name) => parseIterationName(name) !== undefined)
@@ -1006,7 +969,7 @@ export function planNewIteration(request: NewIterationRequest): NewIterationPlan
   });
 
   const owner = gitUserName(repositoryRoot);
-  const branch = tryGit({ repositoryRoot, gitArguments: ['branch', '--show-current'] }) ?? '';
+  const branch = tryGit({ args: ['branch', '--show-current'], cwd: repositoryRoot }).output;
   if (branch === '') {
     throw new Error('HEAD is detached — check out the branch this iteration will be built on.');
   }
