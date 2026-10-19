@@ -3296,6 +3296,7 @@ src/
     │   │   ├── supply-chain-sbom.policy.unit.test.ts
     │   │   ├── tooling-command-line.policy.unit.test.ts
     │   │   ├── vitest-cache-path.policy.unit.test.ts
+    │   │   ├── warn-only.policy.unit.test.ts
     │   │   └── worker-pool-budget.policy.unit.test.ts
     │   ├── composition-root/
     │   │   ├── domain-containers-boot.unit.test.ts
