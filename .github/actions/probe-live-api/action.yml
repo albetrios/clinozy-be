@@ -1,8 +1,8 @@
 name: Probe the live API
 description: |
   Security headers, CORS and TLS of a deployed API, from the runner (`pnpm ops:probe-live-api`,
-  src/scripts/ops/probe-live-api.ts). Warn-only until 2026-10-31
-  (src/scripts/tooling/early-checks.util.ts), then a finding fails the step. The caller has
+  src/scripts/ops/probe-live-api.ts). A finding fails the step
+  (src/scripts/tooling/early-checks.util.ts). The caller has
   checked out and run setup-node-pnpm.
 
   Used by reusable-railway-deploy.yml after each deploy and by release-deploy.yml on the

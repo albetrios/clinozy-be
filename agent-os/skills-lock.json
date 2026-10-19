@@ -17,7 +17,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-before-commit-guard/SKILL.md",
-      "computedHash": "65da84073ce7d5415a6257a3cf95b1096a94063fa7d7742bd834bf823ee2768b"
+      "computedHash": "21603522d62f77fd47a1de647acf98facfcecd6a9860cdbd29ff5cf0bca41ac9"
     },
     "be-change-completeness-guard": {
       "source": "local",

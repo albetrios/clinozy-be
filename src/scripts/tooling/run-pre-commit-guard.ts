@@ -467,21 +467,21 @@ export function buildGuardSteps(options: {
       label: 'RLS policy lint',
       when: shouldRunRlsPolicyLint(stagedFiles) ? 'always' : 'conditional',
       description:
-        'pnpm validate:rls-policies — ENABLE + FORCE + tenant WITH CHECK on the tables the staged migrations / schemas touch (warn-only until 2026-10-31)',
+        'pnpm validate:rls-policies — ENABLE + FORCE + tenant WITH CHECK on the tables the staged migrations / schemas touch; a finding blocks',
     },
     {
       id: '19',
       label: 'Route access diff',
       when: 'always',
       description:
-        'pnpm routes:access-diff — staged docs/routes.txt vs HEAD; a widening needs ROUTE_ACCESS_CHANGE_REASON (warn-only until 2026-10-31)',
+        'pnpm routes:access-diff — staged docs/routes.txt vs HEAD; lists each access widening for the PR description (never blocks)',
     },
     {
       id: '20',
       label: 'Dependency audit (lockfile staged)',
       when: shouldRunLockfileAudit(stagedFiles) ? 'always' : 'conditional',
       description:
-        'pnpm deps:audit:prod when pnpm-lock.yaml is staged; an unreachable registry passes (warn-only until 2026-10-31)',
+        'pnpm deps:audit:prod when pnpm-lock.yaml is staged; an unreachable registry passes; an advisory blocks',
     },
   );
 

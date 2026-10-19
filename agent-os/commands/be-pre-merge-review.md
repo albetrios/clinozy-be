@@ -25,8 +25,7 @@ HEAD, and the push review gate (`agent-os/hooks/be-guardrails.mjs`) then lets a 
 billing, migration or route changes through without asking. Never record it while such a finding
 remains; a new commit needs a new review.
 
-**Blocking, from 2026-10-31.** Until then the review only warns — `/be-ship` reports the findings
-and still pushes. When the user says a finding is a false positive, add a row to
-`agent-os/evals/warn-only-false-positives.md` (date, reviewer, `file:line` · check, why it is wrong),
-so the reviewers can be tuned before the switch. From 2026-10-31 a `critical` or `major` finding
-stops `/be-ship` before the push until it is fixed or the user overrides it.
+**Blocking.** A `critical` or `major` finding stops `/be-ship` before the push until it is fixed
+or the user overrides it. When the user says a finding is a false positive, add a row to
+`agent-os/evals/false-positives.md` (date, reviewer, `file:line` · check, why it is wrong), so the
+reviewers get tuned.

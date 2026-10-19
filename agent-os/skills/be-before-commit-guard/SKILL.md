@@ -50,9 +50,9 @@ How it runs: the steps that change the working tree, the index or `node_modules`
 | 15 | Conflict markers | Resolve `<<<<<<<` / `>>>>>>>` in staged files. |
 | 16 | Large files (>3MB; iterations/ exempt) | Unstage or use LFS. |
 | 17 | When deployed-surface `src/**/*.ts` staged: `pnpm sonar:scan` | SonarQube quality gate — blocks the commit on any unresolved issue/hotspot. **Mandatory — no bypass.** Run `pnpm sonar:up && pnpm sonar:scan` locally and fix every finding (or mark a genuine false positive resolved in the SonarQube UI at <http://localhost:9000>). |
-| 18 | When a migration or `*.schema.ts` is staged: `pnpm validate:rls-policies` | RLS policy lint on the tables they touch: ENABLE + FORCE row level security, WITH CHECK on every tenant write policy, a migration for every declared table. Early check — **warn-only until 2026-10-31**, then it blocks. |
-| 19 | `pnpm routes:access-diff` | Who may call each route: the staged `docs/routes.txt` against HEAD's. A widening (new PUBLIC / TOKEN route, weaker gate, changed permission, team-only → both, idempotency dropped) is a finding; if it is meant, commit with `ROUTE_ACCESS_CHANGE_REASON="<why>"`. Early check — warn-only until 2026-10-31. |
-| 20 | When `pnpm-lock.yaml` is staged: `pnpm deps:audit:prod` | Advisories in the production tree; fix with an `overrides` entry (**be-dependency-security**). An unreachable registry passes (the PR audits). Early check — warn-only until 2026-10-31. |
+| 18 | When a migration or `*.schema.ts` is staged: `pnpm validate:rls-policies` | RLS policy lint on the tables they touch: ENABLE + FORCE row level security, WITH CHECK on every tenant write policy, a migration for every declared table. Early check — a finding blocks. |
+| 19 | `pnpm routes:access-diff` | Who may call each route: the staged `docs/routes.txt` against HEAD's. A widening (new PUBLIC / TOKEN route, weaker gate, changed permission, team-only → both, idempotency dropped) is listed for the PR description to explain; it never blocks the commit. |
+| 20 | When `pnpm-lock.yaml` is staged: `pnpm deps:audit:prod` | Advisories in the production tree; fix with an `overrides` entry (**be-dependency-security**). An unreachable registry passes (the PR audits). Early check — an advisory blocks. |
 
 ## Pre-push hook (`.husky/pre-push`)
 
@@ -65,7 +65,7 @@ Runs before `git push` (fast compile gate; full suite is CI):
 | 3    | `pnpm build:check` | Fix unresolved `@/` path aliases in `dist/`.    |
 | 4    | `pnpm test:unit`   | Fix failing unit tests under `src/tests/unit/`. |
 | 5    | Markdown lint: `pnpm docs:lint:changed` (conditional) | runs when pushed commits include `*.md` changes |
-| 6    | `pnpm security:semgrep:push` | Semgrep (`p/default`, new findings only) on the pushed auth, tenancy, billing and database-context code. Early check — warn-only until 2026-10-31; no semgrep installed → a warning. |
+| 6    | `pnpm security:semgrep:push` | Semgrep (`p/default`, new findings only) on the pushed auth, tenancy, billing and database-context code. Early check — a finding blocks; no semgrep installed → a warning (CI still scans). |
 
 > The SonarQube quality gate runs at **pre-commit** (guard step 17, `SonarQube quality gate`), not pre-push. It is mandatory and has no bypass.
 

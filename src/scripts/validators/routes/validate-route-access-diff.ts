@@ -1,23 +1,21 @@
 /**
- * Route access diff — an early check at commit: what a change does to who may call each route,
- * read from `docs/routes.txt` (the staged catalog against HEAD's).
+ * Route access diff — a report at commit: what a change does to who may call each route, read
+ * from `docs/routes.txt` (the staged catalog against HEAD's).
  *
  * Usage:
  *   pnpm routes:access-diff                    # staged catalog vs HEAD (the pre-commit step)
  *   pnpm routes:access-diff --base origin/main # working-tree catalog vs a ref
  *
- * Every added, removed or changed route is listed; a change that widens access is a finding: a
+ * Every added, removed or changed route is listed; a change that widens access is called out: a
  * new route without a JWT (PUBLIC or TOKEN), a weaker gate (PERM / ROLE → AUTH → TOKEN / PUBLIC),
  * a changed permission or role, team-only → both, a write that no longer requires
- * `X-Idempotency-Key`. A finding that is meant states its reason —
- * `ROUTE_ACCESS_CHANGE_REASON="<why>" git commit` — and passes. Warn-only until
- * `EARLY_CHECKS_BLOCK_FROM` (`src/scripts/tooling/early-checks.util.ts`).
+ * `X-Idempotency-Key`. It never blocks: the PR description says why a widening is meant, and the
+ * review checks it.
  */
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { reportEarlyCheck } from '@/scripts/tooling/early-checks.util.js';
 import {
   type CatalogRoute,
   parseRouteCatalog,
@@ -102,16 +100,14 @@ function main(): void {
     console.log(`Route access changes (${changes.length}):`);
     for (const change of changes) console.log(`  ${change}`);
   }
-  const reason = process.env.ROUTE_ACCESS_CHANGE_REASON?.trim();
-  if (reason && findings.length > 0) {
-    console.log(`✓ Route access diff: ${findings.length} widening(s), reason given: ${reason}`);
-    for (const finding of findings) console.log(`  - ${finding}`);
+  if (findings.length === 0) {
+    console.log('✓ Route access diff: no widening');
     return;
   }
-  process.exitCode = reportEarlyCheck({ check: 'Route access diff', findings });
-  if (process.exitCode !== 0 || findings.length > 0) {
-    console.error('  Meant? Commit again with ROUTE_ACCESS_CHANGE_REASON="<why>".');
-  }
+  console.log(
+    `ℹ Route access diff: ${findings.length} widening(s) — say why in the PR description:`,
+  );
+  for (const finding of findings) console.log(`  - ${finding}`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {

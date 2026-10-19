@@ -15,7 +15,7 @@
  * (ALL, INSERT, UPDATE), and a declared table must have a migration that creates it. A partition
  * is checked through its parent. Policies built inside a `DO` block are not seen.
  *
- * Warn-only until `EARLY_CHECKS_BLOCK_FROM` (`src/scripts/tooling/early-checks.util.ts`).
+ * A finding blocks (`src/scripts/tooling/early-checks.util.ts`).
  */
 import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';

@@ -75,7 +75,7 @@ Granular procedures live in **skills** (invoked by name); these commands are **w
 | `/be-open-pr [title]` | Push the branch + open a PR to `main` (the explicit PR opt-in). |
 | `/be-watch-pr <n>` | Subscribe to a PR; triage CI + review comments on PR events until green, then `/be-merge-pr`. |
 | `/be-merge-pr <n>` | Turn on GitHub auto-merge (squash): GitHub merges when every required check passes and the approvals are in; no up-to-date requirement, never `--admin`. |
-| `/be-ship [title]` | The full flow: pre-merge-review (warn-only until 2026-10-31, then a critical or major finding stops the push) → open-pr → watch-pr → merge-pr. |
+| `/be-ship [title]` | The full flow: pre-merge-review (a critical or major finding stops the push) → open-pr → watch-pr → merge-pr. |
 
 **Maintenance**
 

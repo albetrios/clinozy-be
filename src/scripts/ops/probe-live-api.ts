@@ -11,7 +11,7 @@
  * resource policy, no `X-Powered-By`. CORS: a preflight from an origin the API must not trust
  * gets no `Access-Control-Allow-Origin` for it (nor `*`); the allowed origin, when given, gets
  * itself back with credentials. TLS: 1.2 or 1.3, a trusted certificate, at least 14 days left.
- * Warn-only until `EARLY_CHECKS_BLOCK_FROM` (`src/scripts/tooling/early-checks.util.ts`).
+ * A finding blocks (`src/scripts/tooling/early-checks.util.ts`).
  */
 import { connect } from 'node:tls';
 import { resolve } from 'node:path';

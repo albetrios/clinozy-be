@@ -8,7 +8,7 @@
  *
  * Same rules as CI (`--config p/default`, only findings new since the base). Semgrep missing, or
  * a Semgrep error (no network for the registry rules), warns and passes — CI still scans.
- * Warn-only until `EARLY_CHECKS_BLOCK_FROM` (`src/scripts/tooling/early-checks.util.ts`).
+ * A finding blocks (`src/scripts/tooling/early-checks.util.ts`).
  */
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';

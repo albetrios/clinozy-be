@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  EARLY_CHECKS_BLOCK_FROM,
-  isEarlyCheckWarnOnly,
-  reportEarlyCheck,
-} from '@/scripts/tooling/early-checks.util.js';
+import { reportEarlyCheck } from '@/scripts/tooling/early-checks.util.js';
 import { pushSemgrepTargets } from '@/scripts/tooling/run-push-semgrep.js';
 import {
   buildRlsState,
@@ -16,24 +12,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The last second of 30 Oct and the first of 31 Oct, Asia/Calcutta (UTC+5:30). */
-const LAST_WARN_ONLY_MOMENT = new Date('2026-10-30T18:29:59Z');
-const FIRST_BLOCKING_MOMENT = new Date('2026-10-30T18:30:00Z');
-
-describe('early checks — the warn-only window', () => {
-  it('warns until the block date in Asia/Calcutta, then blocks', () => {
-    expect(EARLY_CHECKS_BLOCK_FROM).toBe('2026-10-31');
-    expect(isEarlyCheckWarnOnly(LAST_WARN_ONLY_MOMENT)).toBe(true);
-    expect(isEarlyCheckWarnOnly(FIRST_BLOCKING_MOMENT)).toBe(false);
-  });
-
-  it('passes with no finding, warns while warn-only, fails once it blocks', () => {
+describe('early checks — a finding blocks', () => {
+  it('passes with no finding and fails with one, naming the false-positive log', () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    expect(reportEarlyCheck({ check: 'x', findings: [], now: FIRST_BLOCKING_MOMENT })).toBe(0);
-    expect(reportEarlyCheck({ check: 'x', findings: ['f'], now: LAST_WARN_ONLY_MOMENT })).toBe(0);
-    expect(reportEarlyCheck({ check: 'x', findings: ['f'], now: FIRST_BLOCKING_MOMENT })).toBe(1);
-    expect(error.mock.calls.flat().join('\n')).toContain('warn-only-false-positives.md');
+    expect(reportEarlyCheck({ check: 'x', findings: [] })).toBe(0);
+    expect(reportEarlyCheck({ check: 'x', findings: ['f'] })).toBe(1);
+    expect(error.mock.calls.flat().join('\n')).toContain('agent-os/evals/false-positives.md');
   });
 });
 
