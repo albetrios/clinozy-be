@@ -23,8 +23,8 @@
  * Inputs:
  *   --coverage  Path to an istanbul-format `coverage-final.json` (the merged
  *               report is preferred so integration/e2e hits are included).
- *   --base      Git ref to diff against (the PR base, e.g. `origin/main`); default the
- *               upstream, else origin/<trunk> (`resolveBase`). The added/modified lines are
+ *   --base      Git ref to diff against (the PR base, e.g. `origin/main`); default
+ *               origin/<trunk>, as the PR measures (`resolveBase`, from: 'trunk'). The added/modified lines are
  *               taken from `git diff <base>...HEAD`.
  *   --threshold Minimum percentage of changed coverable lines that must be
  *               covered. Default 90.
@@ -222,7 +222,9 @@ function computePatchCoverage(coverage, addedLines) {
 function main() {
   const options = parseArguments(process.argv.slice(2));
   const { coveragePath, threshold, reportOnly } = options;
-  const base = resolveBase({ base: options.base });
+  // Measured as the pull request is: the whole branch against the trunk (or --base).
+  const base = resolveBase({ base: options.base, from: 'trunk' });
+  console.log(`Patch coverage measured against ${base}.`);
 
   const coverage = JSON.parse(readFileSync(resolve(process.cwd(), coveragePath), 'utf8'));
   const diffText = git({ args: ['diff', '--unified=0', '--no-color', `${base}...HEAD`] });

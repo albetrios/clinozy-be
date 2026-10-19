@@ -119,7 +119,7 @@ measured surface, and enforces a stricter threshold (default **90%**).
 pnpm test:coverage            # writes coverage/coverage-final.json
 
 # 2. check the coverage of your branch's changes vs the base
-pnpm coverage:patch                       # base: the upstream, else origin/<trunk>
+pnpm coverage:patch                       # base: origin/<trunk>, as the PR measures
 pnpm coverage:patch --base origin/main    # or name the base
 ```
 

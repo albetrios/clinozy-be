@@ -172,13 +172,23 @@ export function trunkBranch(): string {
  * branch's first push — the trunk stands in, so a gate never diffs against nothing and skips.
  * CI always passes `base` (the pull request's base).
  *
- * Failure modes: throws only when no `base` is given, there is no upstream and the manifest
- * cannot be read ({@link trunkBranch}).
+ * `from: 'trunk'` skips the upstream: the local copies of a pull-request check (patch coverage,
+ * the iteration freeze check, the selector misses) measure what the pull request will — the
+ * whole branch against the trunk. From the upstream, a pushed branch with nothing new would diff
+ * against nothing and pass.
+ *
+ * Failure modes: throws only when no `base` is given, there is no upstream (or `from: 'trunk'`)
+ * and the manifest cannot be read ({@link trunkBranch}).
  */
 export function resolveBase(
-  options: { readonly base?: string | undefined; readonly cwd?: string | undefined } = {},
+  options: {
+    readonly base?: string | undefined;
+    readonly cwd?: string | undefined;
+    readonly from?: 'upstream' | 'trunk' | undefined;
+  } = {},
 ): string {
   if (options.base) return options.base;
+  if (options.from === 'trunk') return `origin/${trunkBranch()}`;
   const upstream = tryGit({
     args: ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'],
     cwd: options.cwd,

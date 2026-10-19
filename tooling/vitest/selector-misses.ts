@@ -58,7 +58,9 @@ function main(): void {
   });
   const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
   const resultsDirectory = values.results ?? 'test-results';
-  const base = git({ args: ['merge-base', 'HEAD', resolveBase({ base: values.base })] });
+  const base = git({
+    args: ['merge-base', 'HEAD', resolveBase({ base: values.base, from: 'trunk' })],
+  });
   const changedFiles = git({ args: ['diff', '--name-only', '--no-renames', `${base}...HEAD`] })
     .split('\n')
     .filter(Boolean);

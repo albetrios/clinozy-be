@@ -35,7 +35,8 @@ function main(): void {
     console.log(USAGE);
     return;
   }
-  const base = resolveBase({ base: values.base, cwd: REPOSITORY_ROOT });
+  // As the pull request's freeze check measures: the whole branch against the trunk.
+  const base = resolveBase({ base: values.base, from: 'trunk', cwd: REPOSITORY_ROOT });
   const { touched, problems } = checkIterationFreeze({ repositoryRoot: REPOSITORY_ROOT, base });
   if (problems.length === 0) {
     console.log(

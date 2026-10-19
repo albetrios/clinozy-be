@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -87,5 +87,18 @@ describe('resolveBase', () => {
     run(['config', 'branch.work.remote', 'origin']);
     run(['config', 'branch.work.merge', 'refs/heads/work']);
     expect(resolveBase({ cwd })).toBe('origin/work');
+    // A local copy of a pull-request check skips the upstream, as the pull request does.
+    expect(resolveBase({ cwd, from: 'trunk' })).toBe(`origin/${trunkBranch()}`);
+    expect(resolveBase({ base: 'given', cwd, from: 'trunk' })).toBe('given');
+  });
+
+  it('measures the local copies of a pull-request check from the trunk', () => {
+    for (const path of [
+      'tooling/ci/check-patch-coverage.mjs',
+      'tooling/iterations/check-iteration-freeze.ts',
+      'tooling/vitest/selector-misses.ts',
+    ]) {
+      expect(readFileSync(path, 'utf8'), path).toContain("from: 'trunk'");
+    }
   });
 });
