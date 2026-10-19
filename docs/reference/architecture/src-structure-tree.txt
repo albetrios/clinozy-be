@@ -3269,6 +3269,7 @@ src/
     │   │   ├── github-sync-only-keys.policy.unit.test.ts
     │   │   ├── governance-mode.policy.unit.test.ts
     │   │   ├── hosted-docs-publish.policy.unit.test.ts
+    │   │   ├── image-database-step.policy.unit.test.ts
     │   │   ├── k6-coverage.policy.unit.test.ts
     │   │   ├── openapi-drift-check.policy.unit.test.ts
     │   │   ├── patched-dependencies.policy.unit.test.ts

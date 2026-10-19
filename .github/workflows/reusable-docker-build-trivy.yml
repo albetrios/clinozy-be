@@ -418,6 +418,8 @@ jobs:
       - name: Boot API container and verify /readyz
         run: |
           set -euo pipefail
+          # The one database step, compiled (create if missing, migrate; no seed): the same command
+          # clinozy-fe's e2e-backend job runs in this image with --seed minimal.
           docker run --rm --network host \
             -e NODE_ENV=development \
             -e DATABASE_URL="$DATABASE_URL" \
@@ -431,7 +433,7 @@ jobs:
             -e AUTH_SESSION_RETENTION_DAYS="$AUTH_SESSION_RETENTION_DAYS" \
             -e METRICS_SCRAPE_TOKEN="$METRICS_SCRAPE_TOKEN" \
             -e SECRETS_ENCRYPTION_KEY="$SECRETS_ENCRYPTION_KEY" \
-            ${{ env.DOCKER_LOCAL_API_TAG }}:ci node dist/src/infrastructure/database/migration/migrate.js
+            ${{ env.DOCKER_LOCAL_API_TAG }}:ci node dist/src/scripts/ops/db-prepare.js
           # Boot-time safety checks default HARDENED (see the Policy-flags section of
           # .env.example); relax them here like local dev does — this smoke boot runs
           # against the plaintext CI Postgres (superuser role, no TLS, no proxy, no

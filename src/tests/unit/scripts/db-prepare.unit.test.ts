@@ -136,6 +136,12 @@ describe('prepareDatabase', () => {
     process.env.DATABASE_MIGRATION_URL = 'postgresql://owner:secret@db.example.com:5432/production';
     await prepareDatabase({ seed: 'minimal', reset: true, enableLocalLogins: false });
     expect(calls).toEqual(['migrate', 'seed minimal', 'close pool']);
+    // From the sources the runner starts through tsx; from dist/ it is the compiled migrate.js.
+    const childProcess = await import('node:child_process');
+    expect(vi.mocked(childProcess.spawnSync).mock.calls.at(-1)?.slice(0, 2)).toEqual([
+      'pnpm',
+      ['exec', 'tsx', 'src/infrastructure/database/migration/migrate.ts'],
+    ]);
   });
 
   it('seeds the permission catalog only for the test harness level', async () => {

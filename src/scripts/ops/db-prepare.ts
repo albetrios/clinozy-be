@@ -20,8 +20,20 @@ import { enableLocalDatabaseLogins } from '@tooling/dev/local-database-logins.js
 import { workerDatabaseName } from '@tooling/vitest/worker-databases.js';
 import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
 
-/** The migration runner {@link prepareDatabase} starts as a child process. */
+/** The migration runner {@link prepareDatabase} starts as a child process, from the sources. */
 const MIGRATION_RUNNER = 'src/infrastructure/database/migration/migrate.ts';
+
+/**
+ * The migration runner of this build: the compiled `migrate.js` beside this file when it runs
+ * from `dist/` (an image has no tsx and no sources), else the TypeScript source through tsx.
+ */
+function migrationCommand(): { readonly command: string; readonly args: readonly string[] } {
+  if (fileURLToPath(import.meta.url).endsWith('.js')) {
+    const compiled = new URL('../../infrastructure/database/migration/migrate.js', import.meta.url);
+    return { command: process.execPath, args: [fileURLToPath(compiled)] };
+  }
+  return { command: 'pnpm', args: ['exec', 'tsx', MIGRATION_RUNNER] };
+}
 
 /**
  * How far {@link prepareDatabase} seeds, each level including the one before: `permissions` (the
@@ -121,7 +133,8 @@ function migrate(
   options: Pick<PrepareDatabaseOptions, 'migrationEnvironment' | 'migrationOutput'>,
 ): string {
   const output = options.migrationOutput ?? 'inherit';
-  const result = spawnSync('pnpm', ['exec', 'tsx', MIGRATION_RUNNER], {
+  const { command, args } = migrationCommand();
+  const result = spawnSync(command, [...args], {
     stdio: output === 'inherit' ? 'inherit' : 'pipe',
     encoding: 'utf8',
     env: options.migrationEnvironment ?? process.env,
