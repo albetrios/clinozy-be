@@ -1,12 +1,14 @@
 /**
- * Live probe of a deployed API: security headers, CORS and TLS, from outside — after each
+ * Live probe of a deployed API: liveness, the error envelope, security headers, CORS and TLS,
+ * from outside — after each
  * Railway deploy and, for the development API, before a production release
  * (`.github/actions/probe-live-api`).
  *
  * Usage:
  *   pnpm ops:probe-live-api --url https://api.example.com [--allowed-origin https://app.example.com]
  *
- * Headers come from an unknown API route (it passes the whole plugin chain): HSTS of at least 180
+ * `/livez` must answer 200. An unknown API route (it passes the whole plugin chain) must answer a
+ * JSON 404 — the error handler and serialization are live — and its headers are checked: HSTS of at least 180
  * days, `nosniff`, a CSP with `frame-ancestors 'none'`, a referrer policy, a cross-origin
  * resource policy, no `X-Powered-By`. CORS: a preflight from an origin the API must not trust
  * gets no `Access-Control-Allow-Origin` for it (nor `*`); the allowed origin, when given, gets
@@ -51,6 +53,29 @@ export function checkSecurityHeaders(headers: ResponseHeaders): string[] {
   if (!headers['cross-origin-resource-policy'])
     findings.push('no Cross-Origin-Resource-Policy header');
   if (headers['x-powered-by']) findings.push(`X-Powered-By is sent (${headers['x-powered-by']})`);
+  return findings;
+}
+
+/** The findings on the unknown-route answer: a 404 whose body is the JSON error envelope. */
+export function checkErrorEnvelope(options: {
+  status: number;
+  contentType: string | undefined;
+  body: string;
+}): string[] {
+  const findings: string[] = [];
+  if (options.status !== 404) {
+    findings.push(`an unknown API route answered HTTP ${options.status} (want a JSON 404)`);
+  }
+  if (!options.contentType?.toLowerCase().startsWith('application/json')) {
+    findings.push(
+      `the unknown-route answer is ${options.contentType ?? 'untyped'}, not JSON — error handler not active`,
+    );
+  }
+  try {
+    JSON.parse(options.body);
+  } catch {
+    findings.push('the unknown-route body is not valid JSON — error envelope broken');
+  }
   return findings;
 }
 
@@ -166,11 +191,24 @@ async function probe(options: {
   }
   const apiUrl = (path: string) => new URL(path, target).toString();
   try {
+    const live = await fetch(apiUrl('/livez'), {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
+    });
+    if (live.status !== 200) findings.push(`/livez answered HTTP ${live.status}`);
     const response = await fetch(apiUrl('/api/v1/__post_deploy_probe__'), {
       redirect: 'manual',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
     });
-    findings.push(...checkSecurityHeaders(headersOf(response)));
+    const headers = headersOf(response);
+    findings.push(
+      ...checkErrorEnvelope({
+        status: response.status,
+        contentType: headers['content-type'],
+        body: await response.text(),
+      }),
+    );
+    findings.push(...checkSecurityHeaders(headers));
     const untrusted = await preflight({
       url: apiUrl('/api/v1/auth/refresh'),
       origin: UNTRUSTED_ORIGIN,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   checkCorsPreflight,
+  checkErrorEnvelope,
   checkSecurityHeaders,
   checkTls,
 } from '@/scripts/ops/probe-live-api.js';
@@ -64,6 +65,21 @@ describe('live API probe', () => {
     expect(checkCorsPreflight({ origin: app, headers: {}, isAllowed: true })).toEqual([
       `CORS does not grant the allowed origin ${app} (got none)`,
       `CORS does not allow credentials for ${app}`,
+    ]);
+  });
+
+  it('wants a JSON 404 from an unknown API route, and names what is wrong', () => {
+    expect(
+      checkErrorEnvelope({
+        status: 404,
+        contentType: 'application/json; charset=utf-8',
+        body: '{"title":"Not Found"}',
+      }),
+    ).toEqual([]);
+    expect(checkErrorEnvelope({ status: 200, contentType: 'text/html', body: '<html>' })).toEqual([
+      'an unknown API route answered HTTP 200 (want a JSON 404)',
+      'the unknown-route answer is text/html, not JSON — error handler not active',
+      'the unknown-route body is not valid JSON — error envelope broken',
     ]);
   });
 
