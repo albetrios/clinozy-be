@@ -34,6 +34,7 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { TSDocParser } from '@microsoft/tsdoc';
 import { parseCommandLine } from '@tooling/setup/common/script.js';
+import { localDate } from '@tooling/setup/common/date.js';
 
 const REPO_ROOT = resolve(process.cwd());
 const SRC_ROOT = resolve(REPO_ROOT, 'src');
@@ -256,7 +257,7 @@ function writeBudget(budget: Budget): void {
   const payload = {
     _comment:
       'Locked TSDoc-coverage budget. The gate (`pnpm tsdoc:check`) fails when either count exceeds these numbers. PRs may LOWER counts (and refresh this file via `pnpm tsdoc:check --refresh-budget`); they may not raise them.',
-    _recordedAt: new Date().toISOString().slice(0, 10),
+    _recordedAt: localDate(),
     tokens: budget.tokens,
   };
   writeFileSync(BUDGET_FILE, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8');

@@ -34,7 +34,6 @@ import {
   buildIterationName,
   formatIterationTable,
   ITERATION_STATUSES,
-  localDate,
   MAXIMUM_NAME_ATTEMPTS,
   parseIterationName,
   parseIterationReadme,
@@ -59,6 +58,7 @@ import {
   validateTypeAndTopic,
   writePlannedFiles,
 } from '@tooling/iterations/iteration.util.js';
+import { localDate } from '@tooling/setup/common/date.js';
 
 const WORK_BRANCH = 'feat/iteration-work';
 /** The required set — an iteration needs it to serve as a Baseline. */

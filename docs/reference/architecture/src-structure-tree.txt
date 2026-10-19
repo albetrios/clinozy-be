@@ -3533,6 +3533,7 @@ src/
     │   │   ├── run-parallel.unit.test.ts
     │   │   ├── script.unit.test.ts
     │   │   ├── selector-misses.unit.test.ts
+    │   │   ├── terminal-output.policy.unit.test.ts
     │   │   ├── test-selection.unit.test.ts
     │   │   └── validate-environment-runtime.unit.test.ts
     │   ├── utils/

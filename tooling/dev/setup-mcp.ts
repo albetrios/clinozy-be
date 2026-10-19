@@ -25,6 +25,8 @@
  * `docs/integrations/claude-code-web-environment.md`.
  */
 import { parseCommandLine } from '@tooling/setup/common/script.js';
+import chalk from 'chalk';
+import { muted } from '@tooling/setup/common/logger.js';
 import {
   type EnsureResult,
   ensureDefaultMcpServers,
@@ -33,18 +35,9 @@ import {
   MCP_CONFIG_PATH,
 } from './mcp-config.js';
 
-const ANSI = {
-  reset: '\x1b[0m',
-  bold: '\x1b[1m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  gray: '\x1b[90m',
-  cyan: '\x1b[36m',
-} as const;
-
 function printHelp(): void {
   process.stdout.write(
-    `${ANSI.bold}pnpm mcp:setup${ANSI.reset} — scaffold .mcp.json from .mcp.example.json\n\n` +
+    `${chalk.bold(`pnpm mcp:setup`)} — scaffold .mcp.json from .mcp.example.json\n\n` +
       `  pnpm mcp:setup            scaffold ALL template servers (on-demand integrations)\n` +
       `  pnpm mcp:setup <name>...  scaffold only the named servers (e.g. stripe sentry)\n` +
       `  pnpm mcp:setup:default    scaffold only be-codegraph + be-headroom (auto-start pair)\n` +
@@ -58,45 +51,37 @@ function printHelp(): void {
 }
 
 function printList(): void {
-  process.stdout.write(`${ANSI.bold}MCP servers in .mcp.example.json${ANSI.reset}\n`);
+  process.stdout.write(`${chalk.bold(`MCP servers in .mcp.example.json`)}\n`);
   for (const { key, declared, isDefault } of listMcpServers()) {
-    const mark = declared
-      ? `${ANSI.green}✓ declared${ANSI.reset}`
-      : `${ANSI.gray}· absent${ANSI.reset}`;
-    const tag = isDefault ? ` ${ANSI.cyan}(default)${ANSI.reset}` : '';
+    const mark = declared ? `${chalk.green(`✓ declared`)}` : `${muted(`· absent`)}`;
+    const tag = isDefault ? ` ${chalk.cyan(`(default)`)}` : '';
     process.stdout.write(`  ${mark}  ${key}${tag}\n`);
   }
-  process.stdout.write(
-    `\n${ANSI.gray}default = auto-start pair (be-codegraph + be-headroom)${ANSI.reset}\n`,
-  );
+  process.stdout.write(`\n${muted(`default = auto-start pair (be-codegraph + be-headroom)`)}\n`);
 }
 
 function reportResult(result: EnsureResult, dryRun: boolean): void {
   if (result.missingFromTemplate.length > 0) {
     process.stdout.write(
-      `${ANSI.yellow}!${ANSI.reset} unknown server(s) ignored: ${result.missingFromTemplate.join(', ')} — run \`pnpm mcp:setup --list\` for valid names\n`,
+      `${chalk.yellow(`!`)} unknown server(s) ignored: ${result.missingFromTemplate.join(', ')} — run \`pnpm mcp:setup --list\` for valid names\n`,
     );
   }
   if (result.alreadyPresent.length > 0) {
-    process.stdout.write(
-      `${ANSI.gray}○ already declared: ${result.alreadyPresent.join(', ')}${ANSI.reset}\n`,
-    );
+    process.stdout.write(`${muted(`○ already declared: ${result.alreadyPresent.join(', ')}`)}\n`);
   }
   if (!result.changed) {
-    process.stdout.write(
-      `${ANSI.green}✓${ANSI.reset} .mcp.json already up to date — nothing to do.\n`,
-    );
+    process.stdout.write(`${chalk.green(`✓`)} .mcp.json already up to date — nothing to do.\n`);
     return;
   }
   if (result.renamed.length > 0)
     process.stdout.write(
-      `${ANSI.green}✓${ANSI.reset} ${dryRun ? 'would rename' : 'renamed'}: ${result.renamed.join(', ')}\n`,
+      `${chalk.green(`✓`)} ${dryRun ? 'would rename' : 'renamed'}: ${result.renamed.join(', ')}\n`,
     );
   if (result.added.length > 0)
     process.stdout.write(
-      `${ANSI.green}✓${ANSI.reset} ${dryRun ? 'would add' : 'added'}: ${result.added.join(', ')}\n`,
+      `${chalk.green(`✓`)} ${dryRun ? 'would add' : 'added'}: ${result.added.join(', ')}\n`,
     );
-  if (!dryRun) process.stdout.write(`${ANSI.gray}wrote ${MCP_CONFIG_PATH}${ANSI.reset}\n`);
+  if (!dryRun) process.stdout.write(`${muted(`wrote ${MCP_CONFIG_PATH}`)}\n`);
 }
 
 function main(): void {
@@ -127,7 +112,7 @@ function main(): void {
   else if (defaultOnly) scope = 'default pair (be-codegraph + be-headroom)';
 
   process.stdout.write(
-    `${ANSI.bold}Scaffolding .mcp.json — ${scope}${dryRun ? ' (dry run)' : ''}${ANSI.reset}\n`,
+    `${chalk.bold(`Scaffolding .mcp.json — ${scope}${dryRun ? ' (dry run)' : ''}`)}\n`,
   );
   try {
     let result: EnsureResult;
@@ -137,7 +122,7 @@ function main(): void {
     reportResult(result, dryRun);
   } catch (error) {
     process.stderr.write(
-      `${ANSI.yellow}mcp:setup failed${ANSI.reset}: ${error instanceof Error ? error.message : String(error)}\n`,
+      `${chalk.yellow(`mcp:setup failed`)}: ${error instanceof Error ? error.message : String(error)}\n`,
     );
     process.exit(1);
   }

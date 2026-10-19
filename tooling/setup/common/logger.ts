@@ -9,7 +9,7 @@ let activeSpinner: Ora | null = null;
  * ramp (232–255) is fixed RGB and NOT theme-remapped, so `ansi256(243)` (~#767676) renders as a
  * real mid-gray — readable on both light and dark backgrounds. Use this everywhere instead of gray.
  */
-const muted = chalk.ansi256(243);
+export const muted = chalk.ansi256(243);
 
 /**
  * Max printed line width for streaming process logs. Longer messages wrap with a hanging indent so

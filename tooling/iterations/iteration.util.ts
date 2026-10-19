@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join, resolve } from 'node:path';
 import { tryGit } from '@tooling/setup/common/git-environment.js';
 import { parseCommandLine } from '@tooling/setup/common/script.js';
+import { localDate } from '@tooling/setup/common/date.js';
 
 /** The four iteration types, in the order the docs list them. */
 export const ITERATION_TYPES = ['launch', 'feat', 'change', 'fix'] as const;
@@ -380,13 +381,6 @@ export function randomIterationSuffix(): string {
     suffix += SUFFIX_ALPHABET[randomInt(SUFFIX_ALPHABET.length)];
   }
   return suffix;
-}
-
-/** Formats a date as local `YYYY-MM-DD` — the day as the person running the command sees it. */
-export function localDate(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 // ── README ───────────────────────────────────────────────────────────────────

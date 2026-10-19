@@ -38,7 +38,6 @@ import {
   isIterationStatus,
   LAYERED_INTAKE_MODES,
   LOCKED_INTAKE_STATUSES,
-  localDate,
   missingBriefSections,
   NO_BASELINE,
   parseIterationName,
@@ -53,6 +52,7 @@ import {
   setReadmeField,
   snapshotFingerprint,
 } from './iteration.util.js';
+import { localDate } from '@tooling/setup/common/date.js';
 
 /** Where the `BRIEF.md` template lives (shared byte for byte with the frontend repository). */
 export const BRIEF_TEMPLATE = 'tooling/iterations/templates/BRIEF.md';

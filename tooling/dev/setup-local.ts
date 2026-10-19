@@ -59,6 +59,8 @@ import dotenv from 'dotenv';
 import { resolveDerivedNames } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
 import { parseCommandLine } from '@tooling/setup/common/script.js';
+import chalk from 'chalk';
+import { muted } from '@tooling/setup/common/logger.js';
 
 const PROJECT_ROOT = process.cwd();
 /** The machine-local env file every env step reads and updates. */
@@ -99,27 +101,16 @@ interface BootstrapOptions {
   withToxiproxy: boolean;
 }
 
-const ANSI = {
-  reset: '\x1b[0m',
-  dim: '\x1b[2m',
-  bold: '\x1b[1m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  red: '\x1b[31m',
-  cyan: '\x1b[36m',
-  gray: '\x1b[90m',
-} as const;
-
 function symbolForStatus(status: StepStatus): string {
   switch (status) {
     case 'done':
-      return `${ANSI.green}✓${ANSI.reset}`;
+      return `${chalk.green(`✓`)}`;
     case 'skipped':
-      return `${ANSI.gray}○${ANSI.reset}`;
+      return `${muted(`○`)}`;
     case 'warning':
-      return `${ANSI.yellow}!${ANSI.reset}`;
+      return `${chalk.yellow(`!`)}`;
     case 'failed':
-      return `${ANSI.red}✗${ANSI.reset}`;
+      return `${chalk.red(`✗`)}`;
   }
 }
 
@@ -128,7 +119,7 @@ function logInfo(message: string): void {
 }
 
 function logHeading(message: string): void {
-  process.stdout.write(`\n${ANSI.bold}${ANSI.cyan}${message}${ANSI.reset}\n`);
+  process.stdout.write(`\n${chalk.bold.cyan(message)}\n`);
 }
 
 function logBanner(): void {
@@ -139,7 +130,7 @@ function logBanner(): void {
   const title = `${PROJECT_DISPLAY_NAME} — local bootstrap (pnpm setup:local)`;
   process.stdout.write(`\n╔${line}╗\n`);
   process.stdout.write(
-    `║  ${ANSI.bold}${title}${ANSI.reset}${' '.repeat(Math.max(0, width - title.length - 3))}║\n`,
+    `║  ${chalk.bold(`${title}`)}${' '.repeat(Math.max(0, width - title.length - 3))}║\n`,
   );
   process.stdout.write(`║  Docker + env + migrate + dev in one command             ║\n`);
   process.stdout.write(`╚${line}╝\n`);
@@ -159,8 +150,8 @@ function reportStep(
     elapsedMs,
     ...(detail !== undefined ? { detail } : {}),
   });
-  const elapsedLabel = elapsedMs < 100 ? '' : `${ANSI.dim}(${elapsedMs}ms)${ANSI.reset}`;
-  const detailLabel = detail ? ` ${ANSI.dim}— ${detail}${ANSI.reset}` : '';
+  const elapsedLabel = elapsedMs < 100 ? '' : `${chalk.dim(`(${elapsedMs}ms)`)}`;
+  const detailLabel = detail ? ` ${chalk.dim(`— ${detail}`)}` : '';
   process.stdout.write(`  ${symbolForStatus(status)} ${phase}${detailLabel} ${elapsedLabel}\n`);
 }
 
@@ -1004,15 +995,15 @@ async function runDevServer(
 }
 
 function printReadyBanner(): void {
-  process.stdout.write(`\n${ANSI.bold}${ANSI.green}Ready — starting pnpm dev${ANSI.reset}\n`);
-  logInfo(`API           ${ANSI.cyan}http://localhost:${DEFAULT_DEV_PORT}${ANSI.reset}`);
-  logInfo(`Liveness      ${ANSI.cyan}http://localhost:${DEFAULT_DEV_PORT}/livez${ANSI.reset}`);
-  logInfo(`Readiness     ${ANSI.cyan}http://localhost:${DEFAULT_DEV_PORT}/readyz${ANSI.reset}`);
+  process.stdout.write(`\n${chalk.bold.green('Ready — starting pnpm dev')}\n`);
+  logInfo(`API           ${chalk.cyan(`http://localhost:${DEFAULT_DEV_PORT}`)}`);
+  logInfo(`Liveness      ${chalk.cyan(`http://localhost:${DEFAULT_DEV_PORT}/livez`)}`);
+  logInfo(`Readiness     ${chalk.cyan(`http://localhost:${DEFAULT_DEV_PORT}/readyz`)}`);
   logInfo(
-    `Scalar docs   ${ANSI.cyan}http://localhost:${DEFAULT_DEV_PORT}/api/reference${ANSI.reset} (if ENABLE_API_REFERENCE)`,
+    `Scalar docs   ${chalk.cyan(`http://localhost:${DEFAULT_DEV_PORT}/api/reference`)} (if ENABLE_API_REFERENCE)`,
   );
   logInfo(
-    `Queues        ${ANSI.cyan}http://localhost:${DEFAULT_DEV_PORT}/admin/queues${ANSI.reset} (if ENABLE_QUEUE_DASHBOARD)`,
+    `Queues        ${chalk.cyan(`http://localhost:${DEFAULT_DEV_PORT}/admin/queues`)} (if ENABLE_QUEUE_DASHBOARD)`,
   );
   process.stdout.write('\n');
 }
@@ -1026,7 +1017,7 @@ function printSummary(reports: StepReport[]): void {
     totalMs += r.elapsedMs;
   }
   logInfo(
-    `${ANSI.green}${counts.done} done${ANSI.reset}  ·  ${ANSI.gray}${counts.skipped} skipped${ANSI.reset}  ·  ${ANSI.yellow}${counts.warning} warning${ANSI.reset}  ·  ${ANSI.red}${counts.failed} failed${ANSI.reset}  ·  total ${Math.round(totalMs)}ms`,
+    `${chalk.green(`${counts.done} done`)}  ·  ${muted(`${counts.skipped} skipped`)}  ·  ${chalk.yellow(`${counts.warning} warning`)}  ·  ${chalk.red(`${counts.failed} failed`)}  ·  total ${Math.round(totalMs)}ms`,
   );
   process.stdout.write('\n');
 }
@@ -1036,7 +1027,7 @@ async function main(): Promise<void> {
   const reports: StepReport[] = [];
 
   logBanner();
-  if (options.check) logInfo(`${ANSI.yellow}--check mode: read-only, no mutations${ANSI.reset}`);
+  if (options.check) logInfo(`${chalk.yellow(`--check mode: read-only, no mutations`)}`);
 
   ensureDevDirectoriesExist();
 
@@ -1064,7 +1055,7 @@ function ensureDevDirectoriesExist(): void {
 
 main().catch((error) => {
   process.stderr.write(
-    `\n${ANSI.red}setup:local failed${ANSI.reset}: ${error instanceof Error ? error.message : String(error)}\n`,
+    `\n${chalk.red(`setup:local failed`)}: ${error instanceof Error ? error.message : String(error)}\n`,
   );
   process.exit(1);
 });
