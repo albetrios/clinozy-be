@@ -41,7 +41,8 @@ describe('the pre-push steps', () => {
     expect(labels(['tooling/ci/check-load-coverage.mjs'])).toContain('pnpm test:pre-push');
     expect(labels(['docs/x.md'])).not.toContain('pnpm test:pre-push');
     // The CI policy tests read the workflows, so a workflow-only push runs the ones naming it.
-    expect(labels(['.github/workflows/post-merge-ci.yml'])).toContain('pnpm test:pre-push');
+    for (const file of ['.github/workflows/post-merge-ci.yml', 'pnpm-workspace.yaml'])
+      expect(labels([file]), file).toContain('pnpm test:pre-push');
     expect(labels(['src/domains/auth/auth.service.ts'])).toEqual(
       expect.arrayContaining([
         'pnpm security:semgrep:push',
