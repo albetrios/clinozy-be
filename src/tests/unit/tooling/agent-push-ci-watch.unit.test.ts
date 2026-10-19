@@ -10,6 +10,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const HOOK = join(process.cwd(), 'agent-os', 'hooks', 'be-push-ci-watch.mjs');
@@ -26,7 +27,14 @@ function fixture(options: { runs: object[]; authenticated?: boolean }) {
   const root = mkdtempSync(join(tmpdir(), 'push-ci-watch-'));
   const state = mkdtempSync(join(tmpdir(), 'push-ci-watch-state-'));
   temporaryDirectories.push(root, state);
-  const git = (...args: string[]) => spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  // Run from a git hook (pre-push), the inherited GIT_DIR would outrank `cwd` and these calls
+  // would rewrite the hook's own repository — its config and the checked-out branch.
+  const git = (...args: string[]) =>
+    spawnSync('git', args, {
+      cwd: root,
+      encoding: 'utf8',
+      env: gitEnvironmentWithoutInheritedRepository(),
+    });
   git('init', '--quiet');
   git('config', 'user.email', 'watch@example.com');
   git('config', 'user.name', 'watch');
@@ -60,7 +68,7 @@ function runHook(options: { root: string; state: string; bin: string; command?: 
     }),
     encoding: 'utf8',
     env: {
-      ...process.env,
+      ...gitEnvironmentWithoutInheritedRepository(),
       CLAUDE_PROJECT_DIR: options.root,
       TMPDIR: options.state,
       PATH: `${options.bin}:${process.env.PATH ?? ''}`,

@@ -10,6 +10,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PROJECT_SLUG } from '@/shared/constants/project-identity.constants.js';
 
@@ -32,7 +33,14 @@ function repository(): { root: string; state: string; runs: string } {
   const root = mkdtempSync(join(tmpdir(), 'turn-end-tests-'));
   const state = mkdtempSync(join(tmpdir(), 'turn-end-tests-state-'));
   temporaryDirectories.push(root, state);
-  const git = (...args: string[]) => spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  // Run from a git hook (pre-push), the inherited GIT_DIR would outrank `cwd` and these calls
+  // would rewrite the hook's own repository — its config and the checked-out branch.
+  const git = (...args: string[]) =>
+    spawnSync('git', args, {
+      cwd: root,
+      encoding: 'utf8',
+      env: gitEnvironmentWithoutInheritedRepository(),
+    });
   git('init', '--quiet');
   git('config', 'user.email', 'hook@example.com');
   git('config', 'user.name', 'hook');
@@ -71,7 +79,7 @@ function runHook(options: {
     input: JSON.stringify({ session_id: 's', hook_event_name: 'Stop' }),
     encoding: 'utf8',
     env: {
-      ...process.env,
+      ...gitEnvironmentWithoutInheritedRepository(),
       CLAUDE_PROJECT_DIR: options.root,
       TMPDIR: options.state,
       AGENT_TURN_END_TESTS: options.switchValue ?? '1',

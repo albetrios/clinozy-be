@@ -12,11 +12,15 @@ import {
  * for the hook's repository instead — reading the wrong tree, or, for a write, overwriting the
  * developer's index with a throwaway fixture's contents.
  *
- * `tooling/**\/*.ts` is the scanned surface. `src/scripts/tooling/run-pre-commit-guard.ts` is
- * deliberately NOT in it: it stages and inspects the real index from inside the pre-commit hook,
- * which is exactly the inheritance every other call site has to shed.
+ * `tooling/**\/*.ts` and `src/tests/**\/*.ts` are the scanned surface: a test that builds a
+ * throwaway repository runs inside the pre-push hook too, and there its `git init` / `git config`
+ * / `git update-ref` rewrite the developer's repository (19 Oct 2026: a linked worktree's push
+ * set `core.bare`, an identity and `origin/main` on the shared repository).
+ * `src/scripts/tooling/run-pre-commit-guard.ts` is deliberately NOT in it: it stages and inspects
+ * the real index from inside the pre-commit hook, which is exactly the inheritance every other
+ * call site has to shed.
  */
-const TOOLING_ROOT = join(process.cwd(), 'tooling');
+const SCANNED_ROOTS = [join(process.cwd(), 'tooling'), join(process.cwd(), 'src', 'tests')];
 const HELPER_FILE = 'tooling/setup/common/git-environment.ts';
 const HELPER_NAME = 'gitEnvironmentWithoutInheritedRepository';
 
@@ -29,6 +33,7 @@ const KNOWN_GIT_CALLERS: readonly string[] = [
   'tooling/setup/codegen/validate-project-identity-literals.ts',
   'tooling/setup/github/rulesets.ts',
   'tooling/setup/init-project.ts',
+  'src/tests/unit/tooling/agent-push-review-gate.unit.test.ts',
 ];
 
 function collectToolingFiles(directory: string, collected: string[] = []): string[] {
@@ -43,7 +48,7 @@ function collectToolingFiles(directory: string, collected: string[] = []): strin
 function findGitCallers(): { callers: string[]; unguarded: string[] } {
   const callers: string[] = [];
   const unguarded: string[] = [];
-  for (const absolutePath of collectToolingFiles(TOOLING_ROOT)) {
+  for (const absolutePath of SCANNED_ROOTS.flatMap((root) => collectToolingFiles(root))) {
     const relativePath = relative(process.cwd(), absolutePath);
     if (relativePath === HELPER_FILE) continue;
     const content = readFileSync(absolutePath, 'utf-8');
@@ -108,7 +113,7 @@ describe('git hook environment — inherited repository variables', () => {
     }
   });
 
-  it('strips the inherited repository in every tooling file that shells out to git', () => {
+  it('strips the inherited repository in every tooling and test file that shells out to git', () => {
     const { callers, unguarded } = findGitCallers();
     // Anti-vacuity: an empty scan would satisfy the assertion below for free.
     expect(callers).toEqual(expect.arrayContaining([...KNOWN_GIT_CALLERS]));

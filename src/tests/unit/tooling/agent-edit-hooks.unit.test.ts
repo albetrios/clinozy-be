@@ -10,6 +10,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const HOOK = join(process.cwd(), 'agent-os', 'hooks', 'be-edit-hooks.mjs');
@@ -20,7 +21,12 @@ function makeRepository(): { repository: string; state: string; biomeCalls: stri
   const repository = mkdtempSync(join(tmpdir(), 'edit-hooks-repository-'));
   const state = mkdtempSync(join(tmpdir(), 'edit-hooks-state-'));
   temporaryDirectories.push(repository, state);
-  spawnSync('git', ['init', '-q'], { cwd: repository });
+  // Run from a git hook (pre-push), the inherited GIT_DIR would outrank `cwd` and re-initialize
+  // the hook's own repository instead.
+  spawnSync('git', ['init', '-q'], {
+    cwd: repository,
+    env: gitEnvironmentWithoutInheritedRepository(),
+  });
   mkdirSync(join(repository, 'src'), { recursive: true });
   mkdirSync(join(repository, 'docs'), { recursive: true });
   writeFileSync(join(repository, 'src', 'first.ts'), 'export const first = 1;\n');
@@ -38,7 +44,11 @@ function runHook(options: { repository: string; state: string; payload: object }
   return spawnSync('node', [HOOK], {
     input: JSON.stringify(options.payload),
     encoding: 'utf8',
-    env: { ...process.env, CLAUDE_PROJECT_DIR: options.repository, TMPDIR: options.state },
+    env: {
+      ...gitEnvironmentWithoutInheritedRepository(),
+      CLAUDE_PROJECT_DIR: options.repository,
+      TMPDIR: options.state,
+    },
   });
 }
 

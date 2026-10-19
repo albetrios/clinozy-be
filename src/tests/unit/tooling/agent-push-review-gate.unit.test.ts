@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const GUARDRAILS = join(process.cwd(), 'agent-os', 'hooks', 'be-guardrails.mjs');
@@ -19,7 +20,14 @@ afterEach(() => {
 function repository(changedFile: string): string {
   const root = mkdtempSync(join(tmpdir(), 'push-review-gate-'));
   temporaryDirectories.push(root);
-  const git = (...args: string[]) => spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  // Run from a git hook (pre-push), the inherited GIT_DIR would outrank `cwd` and these calls
+  // would rewrite the hook's own repository — its config, `origin/main` and branches.
+  const git = (...args: string[]) =>
+    spawnSync('git', args, {
+      cwd: root,
+      encoding: 'utf8',
+      env: gitEnvironmentWithoutInheritedRepository(),
+    });
   git('init', '--quiet', '--initial-branch', 'main');
   git('config', 'user.email', 'gate@example.com');
   git('config', 'user.name', 'gate');
@@ -44,7 +52,7 @@ function decision(options: { root: string; command: string }): string {
       cwd: options.root,
     }),
     encoding: 'utf8',
-    env: { ...process.env, CLAUDE_PROJECT_DIR: options.root },
+    env: { ...gitEnvironmentWithoutInheritedRepository(), CLAUDE_PROJECT_DIR: options.root },
   });
   const output = result.stdout.trim();
   if (!output.startsWith('{"hookSpecificOutput"')) return '';
@@ -67,6 +75,7 @@ describe('be-guardrails.mjs push review gate', () => {
       {
         cwd: root,
         encoding: 'utf8',
+        env: gitEnvironmentWithoutInheritedRepository(),
       },
     );
     expect(recorded.status).toBe(0);
