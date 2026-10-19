@@ -23,6 +23,7 @@ import {
 import { homedir } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { tryGit } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import {
   BRIEF_FILE,
   checkIntakeSet,
@@ -172,64 +173,55 @@ export const INTAKE_USAGE = `Usage:
  * `--check`. `--sibling` implies `--both`.
  */
 export function parseIntakeArguments(commandLine: readonly string[]): IntakeArguments {
-  const positionals: string[] = [];
-  const values = new Map<string, string>();
-  let createInSibling = false;
-  let siblingPath: string | undefined;
-  let replace = false;
-  let dryRun = false;
-  let check = false;
-  let compact = false;
-  let help = false;
-  for (let index = 0; index < commandLine.length; index += 1) {
-    const token = commandLine[index] ?? '';
-    if (token === '--both') createInSibling = true;
-    else if (token === '--compact') compact = true;
-    else if (token === '--replace') replace = true;
-    else if (token === '--dry-run') dryRun = true;
-    else if (token === '--check') check = true;
-    else if (token === '--help' || token === '-h') help = true;
-    else if (token === '--sibling' || token === '--mode' || token === '--baseline') {
-      const value = commandLine[index + 1];
-      if (value === undefined || value.startsWith('--')) {
-        throw new Error(`${token} needs a value.`);
-      }
-      if (token === '--sibling') {
-        siblingPath = value;
-        createInSibling = true;
-      } else values.set(token, value);
-      index += 1;
-    } else if (token.startsWith('-')) throw new Error(`Unknown option "${token}".`);
-    else positionals.push(token);
-  }
-  if (positionals.length > 2) {
-    throw new Error(
-      `Too many arguments: ${positionals.join(' ')} — expected <iteration> <source>, or <iteration> --check.`,
-    );
-  }
-  const mode = values.get('--mode') ?? DEFAULT_INTAKE_MODE;
+  const { values, positionals } = parseCommandLine({
+    args: commandLine,
+    options: {
+      both: { type: 'boolean' },
+      compact: { type: 'boolean' },
+      replace: { type: 'boolean' },
+      'dry-run': { type: 'boolean' },
+      check: { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+      sibling: { type: 'string' },
+      mode: { type: 'string' },
+      baseline: { type: 'string' },
+    },
+    maxPositionals: 2,
+    usage: 'expected <iteration> <source>, or <iteration> --check.',
+    messages: { needsValue: (option) => `${option} needs a value.` },
+  });
+  const compact = values.compact === true;
+  const mode = values.mode ?? DEFAULT_INTAKE_MODE;
   if (!isIntakeMode(mode)) {
     throw new Error(`Unknown --mode "${mode}" — use ${INTAKE_MODES.join(', ')}.`);
   }
+  const check = values.check === true;
+  const createInSibling = values.both === true || values.sibling !== undefined;
+  const replace = values.replace === true;
+  const dryRun = values['dry-run'] === true;
   const options: IntakeArguments = {
     iteration: positionals[0],
     source: positionals[1],
     mode,
     check,
     compact,
-    baseline: values.get('--baseline'),
+    baseline: values.baseline,
     createInSibling,
-    siblingPath,
+    siblingPath: values.sibling,
     replace,
     dryRun,
-    help,
+    help: values.help === true,
   };
   const intakeOptions =
-    options.source !== undefined || values.has('--mode') || createInSibling || replace || dryRun;
+    options.source !== undefined ||
+    values.mode !== undefined ||
+    createInSibling ||
+    replace ||
+    dryRun;
   if (check && intakeOptions)
     throw new Error('--check takes only <iteration> [--baseline <iteration>].');
   const placeOptions =
-    options.source !== undefined || values.has('--mode') || createInSibling || replace;
+    options.source !== undefined || values.mode !== undefined || createInSibling || replace;
   if (compact && (check || placeOptions || options.baseline !== undefined))
     throw new Error('--compact takes only <iteration> [--dry-run].');
   if (!check && options.baseline !== undefined) {

@@ -21,6 +21,7 @@ import { getStripeClient } from '@/infrastructure/payment/stripe.client.js';
 import { plans } from '@/domains/billing/sub-domains/plan/plan.schema.js';
 import { env } from '@/shared/config/env.config.js';
 import { closeDatabase } from './helpers.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import {
   assertStripeSandboxKey,
   type CatalogPlan,
@@ -64,7 +65,9 @@ async function writePlanUpdates(updates: readonly CatalogPlanUpdate[]): Promise<
 }
 
 async function main(): Promise<void> {
-  const dryRun = process.argv.includes('--dry-run');
+  const dryRun =
+    parseCommandLine({ args: process.argv.slice(2), options: { 'dry-run': { type: 'boolean' } } })
+      .values['dry-run'] === true;
   assertStripeSandboxKey(env.STRIPE_SECRET_KEY);
   const catalog = await readActivePlans();
   const { updates, outcomes } = await syncStripeCatalog({

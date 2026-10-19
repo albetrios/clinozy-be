@@ -44,6 +44,7 @@ import {
   type QueueDepthSnapshot,
   type SettleCheckSnapshot,
 } from './settle-check.evaluate.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** Default ceiling on how long to wait for the throughput backlog to drain (milliseconds). */
 const DEFAULT_TIMEOUT_MILLISECONDS = 120_000;
@@ -71,6 +72,7 @@ async function readInFlight(queues: Queue[]): Promise<InFlightSnapshot> {
 }
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   const timeoutMilliseconds = parsePositiveIntegerEnv({
     rawValue: process.env.SETTLE_CHECK_TIMEOUT_MS,
     fallback: DEFAULT_TIMEOUT_MILLISECONDS,

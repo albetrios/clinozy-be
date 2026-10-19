@@ -8,6 +8,7 @@
  */
 import '@/shared/config/load-env-files.js';
 import { signInOverApi } from '@/scripts/admin/api-sign-in.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
 const API_PREFIX = `${BASE_URL}/api/v1`;
@@ -15,6 +16,7 @@ const EMAIL = process.env.DEMO_EMAIL ?? 'demo@example.com';
 const PASSWORD = process.env.DEMO_PASSWORD ?? 'DemoPassword123!';
 
 async function main() {
+  parseCommandLine({ args: process.argv.slice(2) });
   const token = await signInOverApi({ apiPrefix: API_PREFIX, email: EMAIL, password: PASSWORD });
 
   const organizationsResponse = await fetch(`${API_PREFIX}/users/me/organizations`, {

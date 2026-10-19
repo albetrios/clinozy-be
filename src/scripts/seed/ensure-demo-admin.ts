@@ -36,6 +36,9 @@ import {
   seedMembership,
 } from '@/domains/tenancy/seed/tenancy.seed.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
+
+parseCommandLine({ args: process.argv.slice(2) });
 
 const DEMO_EMAIL = process.env.DEMO_EMAIL || 'demo@example.com';
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'DemoPassword123!';

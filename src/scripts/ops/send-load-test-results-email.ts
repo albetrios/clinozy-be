@@ -9,6 +9,7 @@ import { PROJECT_DISPLAY_NAME } from '@/shared/constants/project-identity.consta
 import { spawn } from 'node:child_process';
 import { sendEmail, isMailConfigured } from '@/infrastructure/mail/mail.service.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
 
@@ -51,6 +52,7 @@ function lastLines({ text, count }: { text: string; count: number }): string {
 }
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   if (!isMailConfigured()) {
     logger.warn('Mail service not configured (RESEND_API_KEY missing); skipping load test email.');
     process.exitCode = 1;

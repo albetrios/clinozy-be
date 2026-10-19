@@ -66,7 +66,7 @@ describe('setup:local macOS prerequisites installer policy', () => {
     expect(SETUP_LOCAL).toContain("process.platform === 'darwin'");
     expect(SETUP_LOCAL).toContain('options.skipMacTools');
     expect(SETUP_LOCAL).toContain('tooling/dev/setup-mac-tools.sh');
-    expect(SETUP_LOCAL).toContain("has('--skip-mac-tools')");
+    expect(SETUP_LOCAL).toContain("'skip-mac-tools': { type: 'boolean' }");
   });
 
   it('exposes a standalone pnpm setup:mac-tools script', () => {

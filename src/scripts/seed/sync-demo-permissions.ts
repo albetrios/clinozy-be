@@ -18,12 +18,14 @@ import {
 import { seedRolePermissions } from '@/domains/tenancy/seed/tenancy.seed.js';
 import { invalidateOrganizationPermissions } from '@/domains/tenancy/sub-domains/permission/permission-cache.service.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const DEMO_EMAIL = 'demo@example.com';
 const DEMO_ORGANIZATION_SLUG = 'demo-org';
 const ADMIN_ROLE_NAME = 'Admin';
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   logger.info('seed.sync-demo: starting');
 
   await seedPermissions();

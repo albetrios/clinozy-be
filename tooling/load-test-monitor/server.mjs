@@ -18,6 +18,7 @@
 import http from 'node:http';
 import { URL } from 'node:url';
 import { tryGit } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import { LOOPBACK_HOST, createLoopbackGuard } from '../dev/loopback-guard.mjs';
 import { redactBody, redactHeaders, redactQuery } from './lib/recording-redaction.mjs';
 
@@ -52,6 +53,8 @@ function readBranch() {
   branchName = result.ok ? result.output.trim() || null : null;
   return branchName;
 }
+
+parseCommandLine({ args: process.argv.slice(2) });
 
 const PORT = 4985;
 const UPSTREAM = process.env.LOAD_MONITOR_UPSTREAM || 'http://localhost:3000';

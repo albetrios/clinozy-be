@@ -14,9 +14,9 @@
  */
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
 import pg from 'pg';
 import { enableLocalDatabaseLogins } from '@tooling/dev/local-database-logins.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 import { workerDatabaseName } from '@tooling/vitest/worker-databases.js';
 import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
 
@@ -256,10 +256,12 @@ export async function prepareDatabase(options: PrepareDatabaseOptions): Promise<
 /** `pnpm db:migrate` / `db:seed` / `db:seed:full`: `--seed <level>` and `--reset`. */
 async function main(): Promise<void> {
   await import('@/shared/config/load-env-files.js');
-  const { values } = parseArgs({
-    options: { seed: { type: 'string', default: 'none' }, reset: { type: 'boolean' } },
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { seed: { type: 'string' }, reset: { type: 'boolean' } },
   });
-  const level = SEED_LEVELS.find((candidate) => candidate === values.seed);
+  const seed = values.seed ?? 'none';
+  const level = SEED_LEVELS.find((candidate) => candidate === seed);
   if (!level) throw new Error(`--seed must be one of ${SEED_LEVELS.join(', ')}`);
   await prepareDatabase({
     seed: level,
@@ -269,7 +271,7 @@ async function main(): Promise<void> {
   });
 }
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMain(import.meta.url)) {
   main()
     .then(() => process.exit(0))
     .catch((error: unknown) => {

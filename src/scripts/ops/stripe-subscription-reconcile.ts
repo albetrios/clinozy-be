@@ -24,6 +24,7 @@ import type Stripe from 'stripe';
 import { getStripeClient, isStripeConfigured } from '@/infrastructure/payment/stripe.client.js';
 import { closeDatabase } from '@/infrastructure/database/connection.js';
 import { subscriptions } from '@/domains/billing/sub-domains/subscription/subscription.schema.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** Stripe subscription status treated as the canonical "active" state for reconciliation. */
 const STRIPE_ACTIVE_STATUS = 'active';
@@ -192,6 +193,7 @@ function printReport(report: ReconciliationReport): number {
 }
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   if (!isStripeConfigured()) {
     console.error('STRIPE_SECRET_KEY is not configured — cannot reconcile.');
     process.exitCode = 1;

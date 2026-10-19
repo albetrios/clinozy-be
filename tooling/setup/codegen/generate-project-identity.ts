@@ -29,6 +29,7 @@ import {
   mcpTemplateRules,
   TEXT_REWRITE_TARGETS,
 } from './text-identity-rewrites.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 import { validateWorkflowLiteralsAgainstManifest } from './validate-project-identity-workflows.js';
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -732,17 +733,15 @@ export function generateAllProjectIdentityArtifacts(options?: {
 }
 
 function main(): void {
-  const checkOnly = process.argv.includes('--check');
+  const checkOnly =
+    parseCommandLine({ args: process.argv.slice(2), options: { check: { type: 'boolean' } } })
+      .values.check === true;
   const ok = generateAllProjectIdentityArtifacts({ checkOnly });
   if (!ok) {
     process.exit(1);
   }
 }
 
-const isMain =
-  process.argv[1]?.endsWith('generate-project-identity.ts') ||
-  process.argv[1]?.includes('generate-project-identity');
-
-if (isMain) {
+if (isMain(import.meta.url)) {
   main();
 }

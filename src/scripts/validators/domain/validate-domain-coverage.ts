@@ -4,6 +4,7 @@
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const DOMAINS_DIRECTORY = resolve(process.cwd(), 'src/domains');
 
@@ -32,7 +33,9 @@ function listIntegrationTestFiles(domainPath: string): string[] {
 }
 
 function main(): void {
-  const strictMode = process.argv.includes('--strict');
+  const strictMode =
+    parseCommandLine({ args: process.argv.slice(2), options: { strict: { type: 'boolean' } } })
+      .values.strict === true;
   let hasFailures = false;
 
   const domains = readdirSync(DOMAINS_DIRECTORY).filter((name) => {

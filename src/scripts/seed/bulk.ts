@@ -7,7 +7,6 @@
  */
 import '@/shared/config/load-env-files.js';
 import '@/scripts/seed/seed-runtime-url.js';
-import { fileURLToPath } from 'node:url';
 import { faker } from '@faker-js/faker';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { resolveCounts } from './bulk-config.js';
@@ -17,6 +16,7 @@ import { SEED_MODULES } from './modules.js';
 import { assertBulkSeedAllowed } from './production-guard.js';
 import { createSeedRegistry } from './seed-registry.js';
 import { orderModules, type SeedContext } from './seed-contract.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /**
  * Runs the full bulk seed: guard, resolve config, seed reference data then bulk rows in
@@ -57,7 +57,8 @@ export async function runBulkSeed(environment: NodeJS.ProcessEnv): Promise<void>
  * test can import {@link runBulkSeed} without triggering a seed. `closeDatabase` always runs so the
  * database pool drains before the process exits.
  */
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMain(import.meta.url)) {
+  parseCommandLine({ args: process.argv.slice(2) });
   runBulkSeed(process.env)
     .catch((error) => {
       logger.error({ error }, 'seed.bulk: failed');

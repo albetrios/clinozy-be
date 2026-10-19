@@ -10,6 +10,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import {
   ITERATIONS_DIRECTORY,
   readIterationReadme,
@@ -329,24 +330,30 @@ export interface FrontendMapArguments {
   readonly iteration: string;
   /** `--check`: compare only, write nothing, fail when the map is stale. */
   readonly isCheck: boolean;
+  /** `--help` / `-h`: print the usage and stop (`iteration` is then empty). */
+  readonly isHelp?: true;
 }
 
 /**
- * Parses `<iteration> [--check]`.
+ * Parses `<iteration> [--check]`, or `--help`.
  *
  * @remarks
- * Failure modes: throws on a missing iteration, a second one or an unknown flag.
+ * Failure modes: throws on a missing iteration, a second one or an unknown flag (`--help` needs
+ * no iteration).
  */
 export function parseFrontendMapArguments(commandLine: readonly string[]): FrontendMapArguments {
-  const positional = commandLine.filter((argument) => !argument.startsWith('--'));
-  const flags = commandLine.filter((argument) => argument.startsWith('--'));
-  const unknown = flags.filter((flag) => flag !== '--check');
-  if (unknown.length > 0) throw new Error(`Unknown option ${unknown.join(', ')}.`);
-  const [iteration, extra] = positional;
+  const { values, positionals } = parseCommandLine({
+    args: commandLine,
+    options: { check: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
+    maxPositionals: Number.POSITIVE_INFINITY,
+    messages: { unknownOption: (option) => `Unknown option ${option}.` },
+  });
+  if (values.help) return { iteration: '', isCheck: false, isHelp: true };
+  const [iteration, extra] = positionals;
   if (iteration === undefined || extra !== undefined) {
     throw new Error('Name one iteration: pnpm iteration:frontend-map <iteration> [--check].');
   }
-  return { iteration, isCheck: flags.includes('--check') };
+  return { iteration, isCheck: values.check === true };
 }
 
 /** What `pnpm iteration:frontend-map` decided to write. */

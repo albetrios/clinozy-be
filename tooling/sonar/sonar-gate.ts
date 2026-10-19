@@ -18,6 +18,7 @@ import { formatEnvValue, upsertEnvAssignment } from '@tooling/dev/env-file.util.
 import { resolveDerivedNames } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
 import { requireTool } from '@tooling/setup/common/require-tool.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const DERIVED_NAMES = resolveDerivedNames(loadConfig());
 const SONAR_URL = process.env.SONAR_HOST_URL ?? 'http://localhost:9000';
@@ -335,6 +336,7 @@ function reportAndExit(issues: SonarIssue[], hotspots: number): never {
 }
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   await ensureServerUp();
   const token = await ensureToken();
   const scanOutput = runScanner(token);

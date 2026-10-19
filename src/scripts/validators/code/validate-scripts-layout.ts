@@ -4,6 +4,7 @@
  */
 import { readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const SCRIPTS_ROOT = resolve(process.cwd(), 'src/scripts');
 
@@ -24,6 +25,7 @@ function collectRootTypeScriptFiles(): string[] {
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const rootFiles = collectRootTypeScriptFiles();
 
   if (rootFiles.length > 0) {

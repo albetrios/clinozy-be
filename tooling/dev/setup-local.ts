@@ -58,6 +58,7 @@ import { listProcessTree, signalProcesses } from '@/scripts/ops/process-tree.uti
 import dotenv from 'dotenv';
 import { resolveDerivedNames } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const PROJECT_ROOT = process.cwd();
 /** The machine-local env file every env step reads and updates. */
@@ -163,44 +164,52 @@ function reportStep(
   process.stdout.write(`  ${symbolForStatus(status)} ${phase}${detailLabel} ${elapsedLabel}\n`);
 }
 
-function parseArgs(): BootstrapOptions {
-  const argv = process.argv.slice(2);
-  const has = (flag: string): boolean => argv.includes(flag);
-  const valueForFlag = (flag: string): string | undefined => {
-    const inline = argv.find((arg) => arg.startsWith(`${flag}=`));
-    if (inline) return inline.slice(flag.length + 1);
-    const positional = argv.indexOf(flag);
-    if (positional >= 0) {
-      const next = argv[positional + 1];
-      if (next && !next.startsWith('--')) return next;
-    }
-    return undefined;
-  };
+function parseBootstrapOptions(): BootstrapOptions {
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: {
+      check: { type: 'boolean' },
+      'no-start': { type: 'boolean' },
+      'skip-deps': { type: 'boolean' },
+      'skip-docker': { type: 'boolean' },
+      'skip-migrate': { type: 'boolean' },
+      'skip-codegraph': { type: 'boolean' },
+      'skip-mcp': { type: 'boolean' },
+      'skip-mac-tools': { type: 'boolean' },
+      'force-env-local': { type: 'boolean' },
+      'only-env': { type: 'boolean' },
+      'with-captcha': { type: 'boolean' },
+      'without-captcha': { type: 'boolean' },
+      seed: { type: 'string' },
+      'with-worker': { type: 'boolean' },
+      'with-toxiproxy': { type: 'boolean' },
+    },
+    usage: 'pnpm setup:local --seed minimal | full',
+  });
 
-  const rawSeed = valueForFlag('--seed');
+  const rawSeed = values.seed;
   let seed: BootstrapOptions['seed'] = 'none';
-  if (has('--seed') && rawSeed === undefined) seed = 'minimal';
-  else if (rawSeed === 'minimal' || rawSeed === 'full') seed = rawSeed;
+  if (rawSeed === 'minimal' || rawSeed === 'full') seed = rawSeed;
   else if (rawSeed !== undefined) {
     process.stderr.write(`Invalid --seed value: ${rawSeed}. Expected minimal | full.\n`);
     process.exit(2);
   }
 
   return {
-    check: has('--check'),
-    noStart: has('--no-start'),
-    skipDeps: has('--skip-deps'),
-    skipDocker: has('--skip-docker'),
-    skipMigrate: has('--skip-migrate'),
-    skipCodegraph: has('--skip-codegraph'),
-    skipMcp: has('--skip-mcp'),
-    skipMacTools: has('--skip-mac-tools'),
-    forceEnvLocal: has('--force-env-local'),
-    onlyEnv: has('--only-env'),
-    captcha: has('--with-captcha') ? 'on' : has('--without-captcha') ? 'off' : 'unchanged',
+    check: values.check === true,
+    noStart: values['no-start'] === true,
+    skipDeps: values['skip-deps'] === true,
+    skipDocker: values['skip-docker'] === true,
+    skipCodegraph: values['skip-codegraph'] === true,
+    skipMigrate: values['skip-migrate'] === true,
+    skipMcp: values['skip-mcp'] === true,
+    skipMacTools: values['skip-mac-tools'] === true,
+    forceEnvLocal: values['force-env-local'] === true,
+    onlyEnv: values['only-env'] === true,
+    captcha: values['with-captcha'] ? 'on' : values['without-captcha'] ? 'off' : 'unchanged',
     seed,
-    withWorker: has('--with-worker'),
-    withToxiproxy: has('--with-toxiproxy'),
+    withWorker: values['with-worker'] === true,
+    withToxiproxy: values['with-toxiproxy'] === true,
   };
 }
 
@@ -1023,7 +1032,7 @@ function printSummary(reports: StepReport[]): void {
 }
 
 async function main(): Promise<void> {
-  const options = parseArgs();
+  const options = parseBootstrapOptions();
   const reports: StepReport[] = [];
 
   logBanner();

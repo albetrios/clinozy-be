@@ -19,6 +19,7 @@ import { isAbsolute, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { shouldSkipHostedUpload } from './hosted-docs-upload.util.js';
 import { SCALAR_SLUG_DEFAULT } from '@/shared/constants/project-identity.constants.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const PACKAGE_JSON_PATH = join(process.cwd(), 'package.json');
 const DEFAULT_OPENAPI_SPEC_PATH = join(process.cwd(), 'docs', 'openapi', 'openapi.json');
@@ -68,6 +69,7 @@ function runScalarCommand(argumentsList: string[]): void {
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   if (
     shouldSkipHostedUpload({
       targetName: 'Scalar Registry',

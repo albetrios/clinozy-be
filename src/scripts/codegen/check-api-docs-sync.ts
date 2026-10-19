@@ -6,6 +6,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const OPENAPI_DIRECTORY = join(process.cwd(), 'docs', 'openapi');
 const POSTMAN_COLLECTION_PATH = join(process.cwd(), 'docs', 'postman-collection.json');
@@ -162,6 +163,7 @@ function checkPostmanDrift(): string[] {
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const openApiDrifted = checkOpenApiDrift();
   const postmanDrifted = checkPostmanDrift();
   const allDrifted = [...openApiDrifted, ...postmanDrifted];

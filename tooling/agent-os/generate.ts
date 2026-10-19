@@ -21,11 +21,16 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import { generateDocs } from './generate-docs.js';
 
 const repositoryRoot = process.cwd();
 const agentOsDirectory = join(repositoryRoot, 'agent-os');
-const writeMode = process.argv.includes('--write');
+const writeMode =
+  parseCommandLine({
+    args: process.argv.slice(2),
+    options: { write: { type: 'boolean' }, check: { type: 'boolean' } },
+  }).values.write === true;
 
 interface HookManifestEntry {
   id: string;

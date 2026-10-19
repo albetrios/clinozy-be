@@ -34,9 +34,9 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { resolveGitMetadata } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const projectRoot = resolve(import.meta.dirname, '../../..');
 // Resolve the trunk ruleset filename from the canonical config — never a static
@@ -398,9 +398,14 @@ function runCheck(inputs: GovernanceInputs): never {
 
 /** CLI entry point — status (no args), apply a mode, or `--check` the committed files. */
 export function main(): void {
-  const argumentsList = process.argv.slice(2);
+  const { values, positionals } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { help: { type: 'boolean', short: 'h' }, check: { type: 'boolean' } },
+    maxPositionals: 1,
+    usage: 'Usage: pnpm github:tool:governance-mode [personal | team | --check]',
+  });
 
-  if (argumentsList.includes('--help') || argumentsList.includes('-h')) {
+  if (values.help) {
     console.log('Usage: pnpm github:tool:governance-mode [personal | team | --check]');
     console.log('');
     console.log('  (no args)   Print the current mode, CODEOWNERS roster, and next step');
@@ -412,11 +417,11 @@ export function main(): void {
 
   const inputs = loadGovernanceInputs();
 
-  if (argumentsList.includes('--check')) {
+  if (values.check) {
     runCheck(inputs);
   }
 
-  const modeArgument = argumentsList.find((argument) => !argument.startsWith('-'));
+  const [modeArgument] = positionals;
   if (modeArgument === undefined) {
     printStatus(inputs);
     return;
@@ -428,8 +433,7 @@ export function main(): void {
   runApply(modeArgument, inputs);
 }
 
-const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
-if (isMainModule) {
+if (isMain(import.meta.url)) {
   try {
     main();
   } catch (error) {

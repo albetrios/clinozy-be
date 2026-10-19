@@ -7,7 +7,10 @@
  * this listing is the index. The model: iterations/README.md.
  */
 import { resolve } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import { formatIterationTable, readIterationListings } from './iteration.util.js';
+
+parseCommandLine({ args: process.argv.slice(2) });
 
 const REPOSITORY_ROOT = resolve(import.meta.dirname, '../..');
 

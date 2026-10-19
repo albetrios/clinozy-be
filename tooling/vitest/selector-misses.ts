@@ -9,9 +9,10 @@
  * annotations, the job summary, a fixture line per miss — and exits 0.
  */
 import { appendFileSync, existsSync, readdirSync, readFileSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { git, resolveBase } from '@tooling/setup/common/git-environment.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 import { selectTests, type TestSelection } from '@tooling/vitest/test-selection.util.js';
 
 /** The part of a Vitest JSON report the detector reads. */
@@ -50,15 +51,14 @@ export function fixtureFor(options: { changedFiles: readonly string[]; test: str
   return JSON.stringify({ name: `miss: ${options.test}`, changed, mustSelect: [options.test] });
 }
 
-function option(name: string): string | undefined {
-  const index = process.argv.indexOf(name);
-  return index === -1 ? undefined : process.argv[index + 1];
-}
-
 function main(): void {
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { results: { type: 'string' }, base: { type: 'string' } },
+  });
   const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
-  const resultsDirectory = option('--results') ?? 'test-results';
-  const base = git({ args: ['merge-base', 'HEAD', resolveBase({ base: option('--base') })] });
+  const resultsDirectory = values.results ?? 'test-results';
+  const base = git({ args: ['merge-base', 'HEAD', resolveBase({ base: values.base })] });
   const changedFiles = git({ args: ['diff', '--name-only', '--no-renames', `${base}...HEAD`] })
     .split('\n')
     .filter(Boolean);
@@ -97,6 +97,6 @@ function main(): void {
   }
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   main();
 }

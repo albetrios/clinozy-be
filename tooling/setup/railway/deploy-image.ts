@@ -95,10 +95,9 @@
  *   1   Any validation, GraphQL, polling, terminal-failure or boot-verification
  *       error.
  */
-import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
 import * as logger from '@tooling/setup/common/logger.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const RAILWAY_API_URL = 'https://backboard.railway.com/graphql/v2';
 const RAILWAY_GRAPHQL_TIMEOUT_MS = 20_000;
@@ -814,10 +813,11 @@ async function waitForTerminalStatus({
  *
  * @remarks
  * Failure modes: throws when `--service` or `--image` is absent, or when a numeric flag is not a
- * positive number. `argv` is injectable for tests; the CLI passes `process.argv.slice(2)`.
+ * positive number, and (through {@link parseCommandLine}) on an unknown flag or a positional.
+ * `argv` is injectable for tests; the CLI passes `process.argv.slice(2)`.
  */
-export function parseOptions(argv: string[] = process.argv.slice(2)): RailwayDeployImageOptions {
-  const { values } = parseArgs({
+export function parseOptions(argv: readonly string[]): RailwayDeployImageOptions {
+  const { values } = parseCommandLine({
     args: argv,
     options: {
       service: { type: 'string' },
@@ -827,13 +827,11 @@ export function parseOptions(argv: string[] = process.argv.slice(2)): RailwayDep
       'environment-id': { type: 'string' },
       'timeout-seconds': { type: 'string' },
       'poll-interval-seconds': { type: 'string' },
-      'skip-wait': { type: 'boolean', default: false },
+      'skip-wait': { type: 'boolean' },
       'boot-ready-marker': { type: 'string' },
       'boot-crash-marker': { type: 'string', multiple: true },
       'boot-window-seconds': { type: 'string' },
     },
-    allowPositionals: false,
-    strict: true,
   });
 
   const serviceId = (values.service ?? '').trim();
@@ -883,7 +881,7 @@ export function parseOptions(argv: string[] = process.argv.slice(2)): RailwayDep
 }
 
 async function main(): Promise<void> {
-  const options = parseOptions();
+  const options = parseOptions(process.argv.slice(2));
   const token = (
     process.env.RAILWAY_API_TOKEN ??
     process.env.RAILWAY_GRAPHQL_TOKEN ??
@@ -1003,9 +1001,7 @@ async function main(): Promise<void> {
 }
 
 // Run as CLI only when invoked directly (not when imported by tests).
-const invokedDirectly =
-  process.argv[1] !== undefined && process.argv[1] === fileURLToPath(import.meta.url);
-if (invokedDirectly) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     logger.error(message);

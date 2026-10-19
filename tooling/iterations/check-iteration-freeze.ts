@@ -11,6 +11,7 @@
  */
 import { resolve } from 'node:path';
 import { resolveBase } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import { checkIterationFreeze } from './iteration-freeze.util.js';
 
 const REPOSITORY_ROOT = resolve(import.meta.dirname, '../..');
@@ -19,19 +20,22 @@ const USAGE = `Usage:
   pnpm iteration:freeze-check [--base <ref>]`;
 
 function main(): void {
-  const commandLine = process.argv.slice(2);
-  if (commandLine.includes('--help') || commandLine.includes('-h')) {
-    console.log(USAGE);
-    return;
-  }
-  const baseIndex = commandLine.indexOf('--base');
-  const given = baseIndex === -1 ? undefined : commandLine[baseIndex + 1];
-  if (baseIndex !== -1 && (given === undefined || given.startsWith('--'))) {
-    console.error(USAGE);
+  let values: { help?: boolean; base?: string };
+  try {
+    ({ values } = parseCommandLine({
+      args: process.argv.slice(2),
+      options: { help: { type: 'boolean', short: 'h' }, base: { type: 'string' } },
+    }));
+  } catch (error) {
+    console.error(`${(error as Error).message}\n${USAGE}`);
     process.exitCode = 1;
     return;
   }
-  const base = resolveBase({ base: given, cwd: REPOSITORY_ROOT });
+  if (values.help) {
+    console.log(USAGE);
+    return;
+  }
+  const base = resolveBase({ base: values.base, cwd: REPOSITORY_ROOT });
   const { touched, problems } = checkIterationFreeze({ repositoryRoot: REPOSITORY_ROOT, base });
   if (problems.length === 0) {
     console.log(

@@ -14,7 +14,6 @@
  */
 import '@/shared/config/load-env-files.js';
 import '@/scripts/seed/seed-runtime-url.js';
-import { fileURLToPath } from 'node:url';
 import { fakerEN_IN } from '@faker-js/faker';
 import { closeDatabase } from './helpers.js';
 import { assertBulkSeedAllowed } from './production-guard.js';
@@ -123,6 +122,7 @@ import {
 import { runTaskRulesJob } from '@/domains/app/sub-domains/tasks/workers/task-rules.processor.js';
 import { runOrganizationScopedWorkerJob } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const DEMO_EMAIL = 'demo@example.com';
 const DEFAULT_SEED = 12_345;
@@ -1271,8 +1271,12 @@ class DemoClinicWriter {
  * Auto-run only when executed directly (`tsx src/scripts/seed/demo-clinic.ts`), never on import —
  * `full.ts` imports {@link runDemoClinicSeed}. `closeDatabase` always runs so the pool drains.
  */
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {
-  runDemoClinicSeed({ fresh: process.argv.includes('--fresh') })
+if (isMain(import.meta.url)) {
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { fresh: { type: 'boolean' } },
+  });
+  runDemoClinicSeed({ fresh: values.fresh === true })
     .catch((error) => {
       logger.error({ error }, 'seed.demo-clinic: failed');
       process.exitCode = 1;

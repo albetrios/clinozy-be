@@ -11,6 +11,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { tryGit } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import {
   EMPTY_FIELD,
   INTAKE_DIRECTORY,
@@ -359,20 +360,14 @@ export function parseDiffArguments(commandLine: readonly string[]): {
   readonly json: boolean;
   readonly help: boolean;
 } {
-  const positionals: string[] = [];
-  let json = false;
-  let help = false;
-  for (const token of commandLine) {
-    if (token === '--json') json = true;
-    else if (token === '--help' || token === '-h') help = true;
-    else if (token.startsWith('-')) throw new Error(`Unknown option "${token}".`);
-    else positionals.push(token);
-  }
-  if (positionals.length > 2) {
-    throw new Error(
-      `Too many arguments: ${positionals.join(' ')} — expected [<baseline>] <current>.`,
-    );
-  }
+  const { values, positionals } = parseCommandLine({
+    args: commandLine,
+    options: { json: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
+    maxPositionals: 2,
+    usage: 'expected [<baseline>] <current>.',
+  });
+  const json = values.json === true;
+  const help = values.help === true;
   return positionals.length === 2
     ? { baseline: positionals[0], current: positionals[1], json, help }
     : { baseline: undefined, current: positionals[0], json, help };

@@ -22,6 +22,7 @@
  */
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const repositoryRoot = process.cwd();
 const agentOsDirectory = join(repositoryRoot, 'agent-os');
@@ -375,8 +376,12 @@ export function generateDocs(writeMode: boolean): string[] {
   return drift;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const writeMode = process.argv.includes('--write');
+if (isMain(import.meta.url)) {
+  const writeMode =
+    parseCommandLine({
+      args: process.argv.slice(2),
+      options: { write: { type: 'boolean' }, check: { type: 'boolean' } },
+    }).values.write === true;
   const drift = generateDocs(writeMode);
   for (const message of drift) console.log(`  • ${message}`);
   if (!writeMode && drift.length) process.exit(1);

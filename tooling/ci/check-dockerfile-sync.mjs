@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseCommandLine } from '../setup/common/script.ts';
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -103,6 +104,7 @@ function toolchainPinDrift() {
 }
 
 function main() {
+  parseCommandLine({ args: process.argv.slice(2) });
   const drift = toolchainPinDrift();
   if (drift.length > 0) {
     for (const line of drift) console.error(line);

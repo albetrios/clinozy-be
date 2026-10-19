@@ -37,6 +37,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const claudeSettingsPath = join('agent-os', 'platforms', 'claude', 'settings.json');
 const projectDirectoryToken = '$CLAUDE_PROJECT_DIR';
@@ -215,14 +216,13 @@ function mergePermissions({
 }
 
 function main(): void {
-  const options = process.argv.slice(2);
-  const dryRun = options.includes('--dry-run');
-  const sessionRootIndex = options.indexOf('--session-root');
-  const sessionRootOption = sessionRootIndex >= 0 ? options[sessionRootIndex + 1] : undefined;
-  if (sessionRootIndex >= 0 && !sessionRootOption) {
-    console.error('session-hooks: --session-root needs a directory');
-    process.exit(2);
-  }
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { 'dry-run': { type: 'boolean' }, 'session-root': { type: 'string' } },
+    messages: { needsValue: () => 'session-hooks: --session-root needs a directory' },
+  });
+  const dryRun = values['dry-run'] === true;
+  const sessionRootOption = values['session-root'];
   const sessionRoot = resolve(sessionRootOption ?? dirname(process.cwd()));
 
   if (isInsideGitCheckout(sessionRoot)) {

@@ -4,6 +4,7 @@
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const DOMAINS_DIR = resolve(process.cwd(), 'src/domains');
 const FLAT_DOMAINS = new Set(['audit', 'upload']);
@@ -285,6 +286,7 @@ function walkSubDomains({ domainPath, errors }: { domainPath: string; errors: st
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const errors: string[] = [];
 
   for (const domainName of readdirSync(DOMAINS_DIR)) {

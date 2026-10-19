@@ -13,6 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveBase, tryGit } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const repositoryRoot = process.cwd();
 
@@ -48,14 +49,23 @@ function changedFromGit(base: string): string[] {
   return [...new Set([...committed, ...working])];
 }
 
-const args = process.argv.slice(2);
+const PLAN_SKILLS_USAGE =
+  'usage: tsx tooling/agent-os/plan-skills.ts <file> [<file> ...] | --diff [base]';
+const commandLine = parseCommandLine({
+  args: process.argv.slice(2),
+  options: { diff: { type: 'boolean' } },
+  maxPositionals: Number.POSITIVE_INFINITY,
+  usage: PLAN_SKILLS_USAGE,
+});
 let files: string[];
-if (args.includes('--diff')) {
-  const after = args[args.indexOf('--diff') + 1];
-  const base = resolveBase({ base: after && !after.startsWith('-') ? after : undefined });
-  files = changedFromGit(base);
+if (commandLine.values.diff) {
+  const [after, ...rest] = commandLine.positionals;
+  if (rest.length > 0) {
+    throw new Error(`Too many arguments: ${rest.join(' ')} — ${PLAN_SKILLS_USAGE}`);
+  }
+  files = changedFromGit(resolveBase({ base: after }));
 } else {
-  files = args.filter((argument) => !argument.startsWith('-'));
+  files = commandLine.positionals;
 }
 
 const chains =

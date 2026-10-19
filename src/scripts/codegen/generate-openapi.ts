@@ -11,9 +11,14 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildOpenApiDocument, countRoutes } from '@tooling/openapi/emitters/openapi-document.js';
 import { getOpenApiLocale, loadOpenApiStrings } from '@tooling/openapi/extractors/locale-loader.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 function main(): void {
-  const locale = getOpenApiLocale();
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { locale: { type: 'string' } },
+  });
+  const locale = getOpenApiLocale({ argument: values.locale });
   const localeStrings = loadOpenApiStrings(locale);
   const openapi = buildOpenApiDocument(localeStrings);
 

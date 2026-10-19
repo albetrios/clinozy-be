@@ -4,6 +4,7 @@
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const ROOT = resolve(process.cwd(), 'src');
 
@@ -114,6 +115,7 @@ function walk({ directory, collector }: { directory: string; collector: string[]
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const errors: string[] = [];
   const testFiles: string[] = [];
   walk({ directory: ROOT, collector: testFiles });
@@ -159,4 +161,6 @@ function main(): void {
   console.log(`✅ validate-test-naming passed (${testFiles.length} test files)`);
 }
 
-main();
+if (isMain(import.meta.url)) {
+  main();
+}

@@ -22,6 +22,7 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import { loadRouteRegistryFromCatalog } from '@/tests/helpers/route-catalog-registry.js';
 import {
   loadRouteSuccessStatusMap,
@@ -40,29 +41,20 @@ type CoverageBudget = {
   maxUncoveredRoutes: number;
 };
 
-function parseArguments(argv: string[]): { observedDirectories: string[]; reportOnly: boolean } {
-  const observedDirectories: string[] = [];
-  let reportOnly = false;
-  for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index];
-    if (argument === '--report-only') {
-      reportOnly = true;
-      continue;
-    }
-    if (argument === '--observed-dir') {
-      const value = argv[index + 1];
-      if (!value) {
-        console.error('--observed-dir requires a path argument');
-        process.exit(1);
-      }
-      observedDirectories.push(value);
-      index += 1;
-    }
-  }
-  if (observedDirectories.length === 0) {
-    observedDirectories.push(ROUTE_COVERAGE_OBSERVED_DIRECTORY_NAME);
-  }
-  return { observedDirectories, reportOnly };
+function parseArguments(argv: readonly string[]): {
+  observedDirectories: string[];
+  reportOnly: boolean;
+} {
+  const { values } = parseCommandLine({
+    args: argv,
+    options: {
+      'report-only': { type: 'boolean' },
+      'observed-dir': { type: 'string', multiple: true },
+    },
+    messages: { needsValue: () => '--observed-dir requires a path argument' },
+  });
+  const observedDirectories = values['observed-dir'] ?? [ROUTE_COVERAGE_OBSERVED_DIRECTORY_NAME];
+  return { observedDirectories, reportOnly: values['report-only'] === true };
 }
 
 function collectObservedFiles({

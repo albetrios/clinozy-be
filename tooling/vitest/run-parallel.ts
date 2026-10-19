@@ -26,6 +26,7 @@ import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { ROUTE_COVERAGE_OBSERVED_DIRECTORY_NAME } from '@tooling/route-coverage/constants.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** One lane's outcome: its display name, process exit code, and wall-clock duration. */
 export type LaneResult = { name: string; code: number; ms: number };
@@ -38,8 +39,8 @@ const COVERAGE_DISABLE_THRESHOLD_FLAGS = [
   '--coverage.thresholds.branches=0',
 ];
 
-const passthroughArgs = process.argv.slice(2);
-const coverageEnabled = passthroughArgs.includes(COVERAGE_FLAG);
+/** Set by {@link main} from `--coverage`; stays off when a test imports this module. */
+let coverageEnabled = false;
 
 function buildLaneArgs(lane: Lane): string[] {
   if (!coverageEnabled) return lane.args;
@@ -216,6 +217,9 @@ async function main(): Promise<void> {
 
 // Guarded so a test can import `formatRunSummary` without the import launching the entire
 // test suite as a side effect. Matches tooling/agent-os/skills-lock.ts.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
+  coverageEnabled =
+    parseCommandLine({ args: process.argv.slice(2), options: { coverage: { type: 'boolean' } } })
+      .values.coverage === true;
   void main();
 }

@@ -10,11 +10,14 @@ export interface OpenApiLocaleStrings {
   responses?: Record<string, string>;
 }
 
-export function getOpenApiLocale(): string {
+/**
+ * The locale to generate: `OPENAPI_LOCALE`, else the `--locale` the generator's command line
+ * gave (`argument`), else `en`.
+ */
+export function getOpenApiLocale(options: { argument?: string | undefined } = {}): string {
   const fromEnvironment = process.env.OPENAPI_LOCALE;
   if (fromEnvironment) return fromEnvironment;
-  const argument = process.argv.find((value) => value.startsWith('--locale='));
-  if (argument) return argument.slice('--locale='.length);
+  if (options.argument) return options.argument;
   return 'en';
 }
 

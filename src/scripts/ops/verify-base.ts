@@ -20,6 +20,7 @@ import dotenv from 'dotenv';
 import { DATABASE_URL_KEYS } from '@/infrastructure/database/utils/connection-url.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { listProcessTree, signalProcesses } from './process-tree.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const BASE_URL_FOR_HEALTH = (process.env.BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const HEALTH_URL = `${BASE_URL_FOR_HEALTH}/readyz`;
@@ -195,6 +196,7 @@ async function ensureServerRunning(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   registerSignalHandlersForTeardown();
 
   logger.info('verify.base: starting gate');

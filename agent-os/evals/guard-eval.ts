@@ -21,6 +21,9 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseCommandLine } from '../../tooling/setup/common/script.ts';
+
+parseCommandLine({ args: process.argv.slice(2) });
 
 const repositoryRoot = process.cwd();
 const hooksDirectory = join(repositoryRoot, 'agent-os', 'hooks');

@@ -38,10 +38,10 @@
 import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import dotenv from 'dotenv';
 import sodium from 'libsodium-wrappers';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 import { envSchemaDefaults } from '@/shared/config/env-schema.js';
 import { runGhAuthPreflight } from './auth-preflight.js';
@@ -1206,9 +1206,19 @@ export async function previewEnvironmentSync(options: {
 }
 
 async function main(): Promise<void> {
-  const argv = process.argv.slice(2);
+  const { values, positionals } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: {
+      help: { type: 'boolean', short: 'h' },
+      'dry-run': { type: 'boolean', short: 'n' },
+      'no-create': { type: 'boolean' },
+      'keep-schema-defaults': { type: 'boolean' },
+    },
+    maxPositionals: 1,
+    usage: 'Usage: pnpm github:sync <environment> [--dry-run] [--no-create]',
+  });
 
-  if (argv.includes('--help') || argv.includes('-h')) {
+  if (values.help) {
     console.log(
       'Usage: pnpm github:sync <environment> [--dry-run] [--no-create] [--keep-schema-defaults]',
     );
@@ -1221,10 +1231,10 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const dryRun = argv.includes('--dry-run') || argv.includes('-n');
-  const skipCreate = argv.includes('--no-create');
-  const keepSchemaDefaults = argv.includes('--keep-schema-defaults');
-  const env = argv.find((a) => !a.startsWith('--') && a !== '-n');
+  const dryRun = values['dry-run'] === true;
+  const skipCreate = values['no-create'] === true;
+  const keepSchemaDefaults = values['keep-schema-defaults'] === true;
+  const [env] = positionals;
 
   if (!env) {
     console.error('Missing required argument: <environment>');
@@ -1235,9 +1245,7 @@ async function main(): Promise<void> {
   await syncEnvironmentToGitHub({ environment: env, dryRun, skipCreate, keepSchemaDefaults });
 }
 
-const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
-
-if (isMainModule) {
+if (isMain(import.meta.url)) {
   main().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);

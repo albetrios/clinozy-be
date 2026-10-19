@@ -14,6 +14,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const PROJECT_ROOT = resolve(import.meta.dirname, '../../../');
 const SCHEMA_PATH = resolve(PROJECT_ROOT, 'src/shared/config/env-schema.ts');
@@ -28,9 +29,47 @@ interface AddEnvOptions {
   optional: boolean;
 }
 
-function parseArgs(): AddEnvOptions | null {
-  const args = process.argv.slice(2);
-  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+interface ParsedEnvAddArguments {
+  /** The options to add with, or `null` when there are none (usage shown, or an invalid value). */
+  options: AddEnvOptions | null;
+  /** Whether anything was given on the command line (none → interactive mode). */
+  given: boolean;
+  help: boolean;
+}
+
+function parseEnvAddArguments(): ParsedEnvAddArguments {
+  const { values, positionals } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: {
+      help: { type: 'boolean', short: 'h' },
+      type: { type: 'string' },
+      section: { type: 'string' },
+      desc: { type: 'string' },
+      default: { type: 'string' },
+      required: { type: 'boolean' },
+    },
+    maxPositionals: 1,
+    usage: 'Usage: pnpm env:add <KEY_NAME> [options]',
+  });
+  const given = positionals.length > 0 || Object.keys(values).length > 0;
+  const help = values.help === true;
+  return { options: readEnvAddOptions({ values, key: positionals[0], given, help }), given, help };
+}
+
+function readEnvAddOptions(commandLine: {
+  values: {
+    type?: string;
+    section?: string;
+    desc?: string;
+    default?: string;
+    required?: boolean;
+  };
+  key: string | undefined;
+  given: boolean;
+  help: boolean;
+}): AddEnvOptions | null {
+  const { values, key, given, help } = commandLine;
+  if (!given || help) {
     console.log('Usage: pnpm env:add <KEY_NAME> [options]');
     console.log('');
     console.log('Options:');
@@ -44,8 +83,8 @@ function parseArgs(): AddEnvOptions | null {
     return null;
   }
 
-  const key = args[0];
   if (key === undefined) {
+    console.error('Usage: pnpm env:add <KEY_NAME> [options]');
     return null;
   }
   if (!/^[A-Z][A-Z0-9_]*$/.test(key)) {
@@ -53,31 +92,26 @@ function parseArgs(): AddEnvOptions | null {
     return null;
   }
 
-  const getFlag = (flag: string): string | undefined => {
-    const idx = args.indexOf(flag);
-    return idx >= 0 ? args[idx + 1] : undefined;
-  };
-
-  const type = (getFlag('--type') ?? 'string') as AddEnvOptions['type'];
+  const type = (values.type ?? 'string') as AddEnvOptions['type'];
   if (!['string', 'number', 'boolean'].includes(type)) {
     console.error('--type must be string, number, or boolean');
     return null;
   }
 
-  const section = (getFlag('--section') ?? 'variable') as AddEnvOptions['section'];
+  const section = (values.section ?? 'variable') as AddEnvOptions['section'];
   if (!['secret', 'variable'].includes(section)) {
     console.error('--section must be secret or variable');
     return null;
   }
 
-  const defaultValue = getFlag('--default');
+  const defaultValue = values.default;
 
   return {
     key,
     type,
     section,
-    description: getFlag('--desc') ?? '',
-    optional: !args.includes('--required'),
+    description: values.desc ?? '',
+    optional: values.required !== true,
     ...(defaultValue !== undefined ? { defaultValue } : {}),
   };
 }
@@ -234,14 +268,12 @@ function addToEnvExample(options: AddEnvOptions): boolean {
 }
 
 async function main(): Promise<void> {
-  let options = parseArgs();
+  const commandLine = parseEnvAddArguments();
+  let options = commandLine.options;
 
-  if (options === null && process.argv.slice(2).length > 0) {
+  if (options === null && commandLine.given) {
     // Had args but parsing failed (e.g. --help)
-    if (process.argv.includes('--help') || process.argv.includes('-h')) {
-      process.exit(0);
-    }
-    process.exit(1);
+    process.exit(commandLine.help ? 0 : 1);
   }
 
   if (options === null) {
@@ -274,4 +306,7 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+});

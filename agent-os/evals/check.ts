@@ -19,11 +19,16 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { hashSkill } from "../../tooling/agent-os/skills-lock.ts";
+import { parseCommandLine } from "../../tooling/setup/common/script.ts";
 import { checkSelectorFixtures } from "../../tooling/vitest/selector-fixtures.check.ts";
 
 const repositoryRoot = process.cwd();
 const agentOsDirectory = join(repositoryRoot, "agent-os");
-const reportMode = process.argv.includes("--report");
+const reportMode =
+  parseCommandLine({
+    args: process.argv.slice(2),
+    options: { report: { type: "boolean" } },
+  }).values.report === true;
 
 type Level = "error" | "warn";
 interface Finding {

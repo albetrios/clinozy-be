@@ -15,7 +15,7 @@
  * Usage: `node tooling/ci/slsa-provenance-predicate.mjs > provenance.slsa.json`.
  */
 
-import { pathToFileURL } from 'node:url';
+import { isMain, parseCommandLine } from '../setup/common/script.ts';
 
 export const BUILD_TYPE = 'https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1';
 
@@ -72,6 +72,7 @@ export function provenancePredicate(environment) {
   };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMain(import.meta.url)) {
+  parseCommandLine({ args: process.argv.slice(2) });
   process.stdout.write(`${JSON.stringify(provenancePredicate(process.env), null, 2)}\n`);
 }

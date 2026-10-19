@@ -6,9 +6,8 @@
  * the push. `pnpm test:affected` previews the same list.
  */
 import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { git, resolveBase, trunkBranch } from '@tooling/setup/common/git-environment.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 import { branchNameProblem, prePushSteps } from '@tooling/validate/pre-push-steps.js';
 
 function main(): number {
@@ -50,6 +49,7 @@ function main(): number {
   return 0;
 }
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
+  parseCommandLine({ args: process.argv.slice(2) });
   process.exitCode = main();
 }

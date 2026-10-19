@@ -46,6 +46,7 @@ import {
 import { git } from '@tooling/setup/common/git-environment.js';
 import type { SetupConfig } from '@tooling/setup/common/types.js';
 import * as log from '@tooling/setup/common/logger.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const REPOSITORY_ROOT = resolve(import.meta.dirname, '../..');
 
@@ -132,25 +133,35 @@ interface InitOptions {
 }
 
 function parseArguments(argv: readonly string[]): InitOptions {
-  const value = (flag: string): string | undefined => {
-    const index = argv.indexOf(flag);
-    if (index === -1) return undefined;
-    const next = argv[index + 1];
-    return next && !next.startsWith('--') ? next : undefined;
-  };
-  const owners = value('--owners');
+  const { values } = parseCommandLine({
+    args: argv,
+    options: {
+      name: { type: 'string' },
+      'display-name': { type: 'string' },
+      'brand-name': { type: 'string' },
+      'package-name': { type: 'string' },
+      description: { type: 'string' },
+      repository: { type: 'string' },
+      owners: { type: 'string' },
+      'reset-history': { type: 'boolean' },
+      'keep-docs': { type: 'boolean' },
+      'dry-run': { type: 'boolean' },
+      yes: { type: 'boolean' },
+    },
+  });
+  const owners = values.owners;
   const options: InitOptions = {
-    name: value('--name'),
-    displayName: value('--display-name'),
-    brandName: value('--brand-name'),
-    packageName: value('--package-name'),
-    description: value('--description'),
-    repository: value('--repository'),
+    name: values.name,
+    displayName: values['display-name'],
+    brandName: values['brand-name'],
+    packageName: values['package-name'],
+    description: values.description,
+    repository: values.repository,
     ...(owners ? { owners: owners.split(',').map((owner) => owner.trim()) } : {}),
-    resetHistory: argv.includes('--reset-history'),
-    keepDocs: argv.includes('--keep-docs'),
-    dryRun: argv.includes('--dry-run'),
-    assumeYes: argv.includes('--yes'),
+    resetHistory: values['reset-history'] === true,
+    keepDocs: values['keep-docs'] === true,
+    dryRun: values['dry-run'] === true,
+    assumeYes: values.yes === true,
   };
   return options;
 }

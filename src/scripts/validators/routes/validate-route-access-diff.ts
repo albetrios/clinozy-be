@@ -14,12 +14,11 @@
  */
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   type CatalogRoute,
   parseRouteCatalog,
 } from '@tooling/iterations/iteration-frontend-map.util.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const ROUTES_CATALOG = 'docs/routes.txt';
 
@@ -93,8 +92,10 @@ function git(args: string[]): string {
 }
 
 function main(): void {
-  const baseIndex = process.argv.indexOf('--base');
-  const base = baseIndex === -1 ? undefined : process.argv[baseIndex + 1];
+  const base = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { base: { type: 'string' } },
+  }).values.base;
   const before = git(['show', `${base ?? 'HEAD'}:${ROUTES_CATALOG}`]);
   const after =
     base === undefined ? git(['show', `:${ROUTES_CATALOG}`]) : readFileSync(ROUTES_CATALOG, 'utf8');
@@ -113,6 +114,6 @@ function main(): void {
   for (const finding of findings) console.log(`  - ${finding}`);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+if (isMain(import.meta.url)) {
   main();
 }

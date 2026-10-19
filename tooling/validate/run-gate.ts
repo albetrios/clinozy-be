@@ -10,7 +10,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
-import { fileURLToPath } from 'node:url';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 import { type GateName, type GateStep, stepsFor } from '@tooling/validate/gates.js';
 
 /** One step's outcome. */
@@ -74,19 +74,29 @@ export function runGate(options: { gate: GateName; fix: boolean }): number {
   return results.every((result) => result.passed) ? 0 : 1;
 }
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const [gate, ...flags] = process.argv.slice(2);
-  const known = GATES.find((candidate) => candidate === gate);
-  const unknownFlag = flags.find((flag) => flag !== '--fix' && flag !== '--list');
-  if (!known || unknownFlag || (flags.includes('--fix') && known !== 'health')) {
-    process.stderr.write(
-      `usage: run-gate.ts <${GATES.join(' | ')}> [--list] (--fix with health only); got: ${process.argv.slice(2).join(' ')}\n`,
-    );
+if (isMain(import.meta.url)) {
+  const usage = `usage: run-gate.ts <${GATES.join(' | ')}> [--list] (--fix with health only)`;
+  let commandLine: { values: { fix?: boolean; list?: boolean }; positionals: string[] };
+  try {
+    commandLine = parseCommandLine({
+      args: process.argv.slice(2),
+      options: { fix: { type: 'boolean' }, list: { type: 'boolean' } },
+      maxPositionals: 1,
+    });
+  } catch (error) {
+    process.stderr.write(`${usage}; ${(error as Error).message}\n`);
     process.exit(2);
   }
-  if (flags.includes('--list')) {
+  const { values, positionals } = commandLine;
+  const [gate] = positionals;
+  const known = GATES.find((candidate) => candidate === gate);
+  if (!known || (values.fix && known !== 'health')) {
+    process.stderr.write(`${usage}; got: ${gate ?? '(no gate)'}${values.fix ? ' --fix' : ''}\n`);
+    process.exit(2);
+  }
+  if (values.list) {
     process.stdout.write(`${formatGateSteps(known)}\n`);
     process.exit(0);
   }
-  process.exit(runGate({ gate: known, fix: flags.includes('--fix') }));
+  process.exit(runGate({ gate: known, fix: values.fix === true }));
 }

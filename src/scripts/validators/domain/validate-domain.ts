@@ -14,6 +14,7 @@
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, resolve, join } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const DOMAINS_DIR = resolve(process.cwd(), 'src/domains');
 
@@ -254,8 +255,14 @@ function validateDomain(domainName: string): ValidationResult {
 }
 
 function main() {
-  const strictMode = process.argv.includes('--strict');
-  const targetDomain = process.argv.slice(2).find((argument) => !argument.startsWith('-'));
+  const { values, positionals } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { strict: { type: 'boolean' } },
+    maxPositionals: 1,
+    usage: 'usage: tsx src/scripts/validators/domain/validate-domain.ts [domain] [--strict]',
+  });
+  const strictMode = values.strict === true;
+  const [targetDomain] = positionals;
 
   const domains = targetDomain
     ? [targetDomain]

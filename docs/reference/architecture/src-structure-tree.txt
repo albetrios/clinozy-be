@@ -3294,6 +3294,7 @@ src/
     │   │   ├── stryker-config.policy.unit.test.ts
     │   │   ├── supply-chain-attestations.policy.unit.test.ts
     │   │   ├── supply-chain-sbom.policy.unit.test.ts
+    │   │   ├── tooling-command-line.policy.unit.test.ts
     │   │   ├── vitest-cache-path.policy.unit.test.ts
     │   │   └── worker-pool-budget.policy.unit.test.ts
     │   ├── composition-root/
@@ -3526,6 +3527,7 @@ src/
     │   │   ├── rotate-live-image-tags.unit.test.ts
     │   │   ├── route-catalog-auth.unit.test.ts
     │   │   ├── run-parallel.unit.test.ts
+    │   │   ├── script.unit.test.ts
     │   │   ├── selector-misses.unit.test.ts
     │   │   ├── test-selection.unit.test.ts
     │   │   └── validate-environment-runtime.unit.test.ts

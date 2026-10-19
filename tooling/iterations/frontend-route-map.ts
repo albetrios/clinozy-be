@@ -34,12 +34,11 @@ const USAGE = `Usage:
   pnpm iteration:frontend-map <iteration> [--check]`;
 
 function main(): void {
-  const commandLine = process.argv.slice(2);
-  if (commandLine.includes('--help') || commandLine.includes('-h')) {
+  const { iteration, isCheck, isHelp } = parseFrontendMapArguments(process.argv.slice(2));
+  if (isHelp) {
     console.log(USAGE);
     return;
   }
-  const { iteration, isCheck } = parseFrontendMapArguments(commandLine);
   const routes = parseRouteCatalog(
     readFileSync(resolve(REPOSITORY_ROOT, 'docs/routes.txt'), 'utf-8'),
   );

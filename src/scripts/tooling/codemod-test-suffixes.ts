@@ -6,9 +6,12 @@ import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { git } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const ROOT = resolve(process.cwd());
-const DRY_RUN = process.argv.includes('--dry-run');
+const DRY_RUN =
+  parseCommandLine({ args: process.argv.slice(2), options: { 'dry-run': { type: 'boolean' } } })
+    .values['dry-run'] === true;
 
 type PlannedMove = { from: string; to: string };
 

@@ -11,12 +11,14 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { git } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** The record's folder under the git directory, read by the push review gate. */
 const REVIEW_RECORD_DIRECTORY = 'be-pre-merge-review';
 
-const noteIndex = process.argv.indexOf('--note');
-const note = noteIndex === -1 ? '' : (process.argv[noteIndex + 1] ?? '');
+const note =
+  parseCommandLine({ args: process.argv.slice(2), options: { note: { type: 'string' } } }).values
+    .note ?? '';
 const head = git({ args: ['rev-parse', 'HEAD'] });
 const directory = join(git({ args: ['rev-parse', '--absolute-git-dir'] }), REVIEW_RECORD_DIRECTORY);
 mkdirSync(directory, { recursive: true });

@@ -35,9 +35,9 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { fileURLToPath } from 'node:url';
 
 import { loadConfig } from '@tooling/setup/common/config.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 import type { SetupConfig } from '@tooling/setup/common/types.js';
 import { runGithubInit } from './init.js';
 import {
@@ -68,36 +68,42 @@ interface CliOptions {
 }
 
 function parseArguments(): CliOptions {
-  const rawArguments = process.argv.slice(2);
+  const { values, positionals } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: {
+      help: { type: 'boolean', short: 'h' },
+      check: { type: 'boolean' },
+      'dry-run': { type: 'boolean' },
+      diff: { type: 'boolean' },
+      yes: { type: 'boolean', short: 'y' },
+      prune: { type: 'boolean' },
+      'keep-schema-defaults': { type: 'boolean' },
+      only: { type: 'string' },
+    },
+    maxPositionals: Number.POSITIVE_INFINITY,
+    messages: {
+      unknownOption: (option) => `Unknown argument "${option}". Use --help for options.`,
+      needsValue: () => '--only needs comma-separated KEY names.',
+    },
+  });
   const environments: string[] = [];
 
-  // `--only KEY,KEY` or `--only=KEY,KEY` — taken out before the flag/environment checks below.
+  // `--only KEY,KEY` or `--only=KEY,KEY`.
   let onlyKeys: string[] | undefined;
-  const argumentsList: string[] = [];
-  for (let index = 0; index < rawArguments.length; index += 1) {
-    const argument = rawArguments[index] ?? '';
-    if (argument === '--only' || argument.startsWith('--only=')) {
-      let value = argument.slice('--only='.length);
-      if (argument === '--only') {
-        index += 1;
-        value = rawArguments[index] ?? '';
-      }
-      onlyKeys = value
-        .split(',')
-        .map((key) => key.trim())
-        .filter(Boolean);
-      const invalid = onlyKeys.filter((key) => !/^[A-Z][A-Z0-9_]*$/.test(key));
-      if (onlyKeys.length === 0 || invalid.length > 0) {
-        throw new Error(
-          `--only needs comma-separated KEY names${invalid.length > 0 ? ` (invalid: ${invalid.join(', ')})` : ''}.`,
-        );
-      }
-      continue;
+  if (values.only !== undefined) {
+    onlyKeys = values.only
+      .split(',')
+      .map((key) => key.trim())
+      .filter(Boolean);
+    const invalid = onlyKeys.filter((key) => !/^[A-Z][A-Z0-9_]*$/.test(key));
+    if (onlyKeys.length === 0 || invalid.length > 0) {
+      throw new Error(
+        `--only needs comma-separated KEY names${invalid.length > 0 ? ` (invalid: ${invalid.join(', ')})` : ''}.`,
+      );
     }
-    argumentsList.push(argument);
   }
 
-  if (argumentsList.includes('--help') || argumentsList.includes('-h')) {
+  if (values.help) {
     console.log(
       'Usage: pnpm github:sync [environment...] [--check | --dry-run] [--yes] [--prune] [--keep-schema-defaults] [--only KEY,KEY]',
     );
@@ -119,29 +125,16 @@ function parseArguments(): CliOptions {
     process.exit(0);
   }
 
-  const allowed = new Set([
-    '--check',
-    '--dry-run',
-    '--diff',
-    '--yes',
-    '-y',
-    '--prune',
-    '--keep-schema-defaults',
-  ]);
-  for (const argument of argumentsList) {
-    if (allowed.has(argument)) continue;
-    if (argument.startsWith('--')) {
-      throw new Error(`Unknown argument "${argument}". Use --help for options.`);
-    }
+  for (const argument of positionals) {
     if (!/^[a-z][a-z0-9-]*$/.test(argument)) {
       throw new Error(`Invalid environment "${argument}". Use lowercase letters, digits, dashes.`);
     }
     environments.push(argument);
   }
 
-  const readOnlyModes = ['--check', '--dry-run', '--diff'].filter((flag) =>
-    argumentsList.includes(flag),
-  );
+  const readOnlyModes = (['check', 'dry-run', 'diff'] as const)
+    .filter((flag) => values[flag] === true)
+    .map((flag) => `--${flag}`);
   if (readOnlyModes.length > 1) {
     throw new Error(
       `Use only one of --check / --dry-run / --diff (got ${readOnlyModes.join(', ')}).`,
@@ -149,12 +142,12 @@ function parseArguments(): CliOptions {
   }
 
   return {
-    checkOnly: argumentsList.includes('--check'),
-    dryRun: argumentsList.includes('--dry-run'),
-    diff: argumentsList.includes('--diff'),
-    skipConfirmation: argumentsList.includes('--yes') || argumentsList.includes('-y'),
-    prune: argumentsList.includes('--prune'),
-    keepSchemaDefaults: argumentsList.includes('--keep-schema-defaults'),
+    checkOnly: values.check === true,
+    dryRun: values['dry-run'] === true,
+    diff: values.diff === true,
+    skipConfirmation: values.yes === true,
+    prune: values.prune === true,
+    keepSchemaDefaults: values['keep-schema-defaults'] === true,
     onlyKeys,
     environments,
   };
@@ -493,9 +486,7 @@ async function main(): Promise<void> {
   }
 }
 
-const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
-
-if (isMainModule) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);

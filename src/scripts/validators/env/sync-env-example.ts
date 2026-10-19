@@ -14,6 +14,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { envSchemaKeys } from '@/shared/config/env-schema.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const projectRoot = resolve(import.meta.dirname, '../../../..');
 const envExamplePath = resolve(projectRoot, '.env.example');
@@ -78,7 +79,9 @@ function checkTopLevelHalves(content: string): string[] {
 }
 
 function main(): void {
-  const fix = process.argv.includes('--fix');
+  const fix =
+    parseCommandLine({ args: process.argv.slice(2), options: { fix: { type: 'boolean' } } }).values
+      .fix === true;
   const schemaKeys = new Set<string>(envSchemaKeys);
 
   if (!existsSync(envExamplePath)) {

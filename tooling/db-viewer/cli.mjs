@@ -8,6 +8,7 @@
 
 import { resolveProject, DEFAULT_PORT } from './lib/project.mjs';
 import { startServer } from './server.mjs';
+import { parseCommandLine } from '../setup/common/script.ts';
 
 function usage() {
   console.log(`
@@ -33,46 +34,11 @@ function usage() {
 `);
 }
 
-function takeValue(argv, i, flag) {
-  const v = argv[i + 1];
-  if (v == null || v.startsWith('-')) {
-    console.error(`Missing value for ${flag}`);
-    return { error: true, value: null, next: i };
-  }
-  return { error: false, value: v, next: i + 1 };
-}
-
 /**
- * Switches that take no value. Keyed by flag; each applies its effect to the
- * accumulating result.
- *
- * A Map rather than an object literal so an argument like `--constructor`
- * cannot resolve to an inherited `Object.prototype` member.
+ * Reads the command line. A bad argument (unknown, a value option without its value, a port that
+ * is not a positive number) prints its message and the usage and stops startup.
  */
-const BOOLEAN_FLAGS = new Map([
-  ['-h', ['help', true]],
-  ['--help', ['help', true]],
-  ['--no-open', ['open', false]],
-  ['--open', ['open', true]],
-  ['--fresh', ['fresh', true]],
-]);
-
-/** Options that consume the following argv entry, keyed by flag → result property. */
-const VALUE_OPTIONS = new Map([
-  ['--port', 'port'],
-  ['-p', 'port'],
-  ['--schema', 'schema'],
-  ['--migrations', 'migrations'],
-  ['--iterations', 'iterations'],
-]);
-
-/** A bad argument aborts startup and prints usage. */
-function rejectArgs(out) {
-  out.bad = true;
-  out.help = true;
-}
-
-function parseArgs(argv) {
+function parseViewerArguments(argv) {
   const out = {
     port: null,
     schema: null,
@@ -83,48 +49,50 @@ function parseArgs(argv) {
     help: false,
     bad: false,
   };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-
-    const booleanFlag = BOOLEAN_FLAGS.get(a);
-    if (booleanFlag) {
-      const [property, value] = booleanFlag;
-      out[property] = value;
-      continue;
-    }
-
-    const property = VALUE_OPTIONS.get(a);
-    if (!property) {
-      console.error(`Unknown argument: ${a}`);
-      rejectArgs(out);
-      continue;
-    }
-
-    const { error, value, next } = takeValue(argv, i, a);
-    i = next;
-    if (error) {
-      rejectArgs(out);
-      continue;
-    }
-
-    if (property !== 'port') {
-      out[property] = value;
-      continue;
-    }
-
-    const port = Number(value);
+  let values;
+  try {
+    ({ values } = parseCommandLine({
+      args: argv,
+      options: {
+        help: { type: 'boolean', short: 'h' },
+        'no-open': { type: 'boolean' },
+        open: { type: 'boolean' },
+        fresh: { type: 'boolean' },
+        port: { type: 'string', short: 'p' },
+        schema: { type: 'string' },
+        migrations: { type: 'string' },
+        iterations: { type: 'string' },
+      },
+      messages: {
+        unknownOption: (option) => `Unknown argument: ${option}`,
+        needsValue: (option) => `Missing value for ${option}`,
+      },
+    }));
+  } catch (error) {
+    console.error(error.message);
+    return { ...out, help: true, bad: true };
+  }
+  out.help = values.help === true;
+  out.open = values['no-open'] !== true;
+  out.fresh = values.fresh === true;
+  out.schema = values.schema ?? null;
+  out.migrations = values.migrations ?? null;
+  out.iterations = values.iterations ?? null;
+  if (values.port !== undefined) {
+    const port = Number(values.port);
     if (Number.isFinite(port) && port > 0) {
       out.port = port;
     } else {
-      console.error(`Invalid port: ${value}`);
-      rejectArgs(out);
+      console.error(`Invalid port: ${values.port}`);
+      out.help = true;
+      out.bad = true;
     }
   }
   return out;
 }
 
 function main() {
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseViewerArguments(process.argv.slice(2));
   if (args.help) {
     usage();
     process.exit(args.bad ? 1 : 0);

@@ -21,8 +21,10 @@ import {
   loadRouteSuccessStatusMap,
   routeSuccessStatusKey,
 } from '@/tests/helpers/route-success-status.helper.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const registry = loadRouteRegistryFromCatalog();
   const successStatusMap = loadRouteSuccessStatusMap();
 

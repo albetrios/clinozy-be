@@ -4,6 +4,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const REPOSITORY_ROOT = process.cwd();
 
@@ -108,6 +109,7 @@ function verifyPackageScripts(): string[] {
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const failures = [...verifyRequiredFiles(), ...verifyPackageScripts()];
 
   if (failures.length > 0) {

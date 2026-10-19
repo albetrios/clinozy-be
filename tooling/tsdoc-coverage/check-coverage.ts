@@ -33,6 +33,7 @@
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { TSDocParser } from '@microsoft/tsdoc';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const REPO_ROOT = resolve(process.cwd());
 const SRC_ROOT = resolve(REPO_ROOT, 'src');
@@ -306,9 +307,12 @@ function summariseCounts(missing: MissingEntry[]): {
 }
 
 function main(): void {
-  const argv = process.argv.slice(2);
-  const isRefresh = argv.includes('--refresh-budget');
-  const isReport = argv.includes('--report');
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { 'refresh-budget': { type: 'boolean' }, report: { type: 'boolean' } },
+  });
+  const isRefresh = values['refresh-budget'] === true;
+  const isReport = values.report === true;
 
   const missing = collectMissing();
   const counts = summariseCounts(missing);

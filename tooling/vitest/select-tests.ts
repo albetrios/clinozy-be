@@ -23,6 +23,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { git, resolveBase } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import { LANES } from '@tooling/vitest/lanes.js';
 import {
   changedOnly,
@@ -33,25 +34,26 @@ import {
 
 const REPOSITORY_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
-function option(name: string): string | undefined {
-  const index = process.argv.indexOf(name);
-  return index === -1 ? undefined : process.argv[index + 1];
-}
-
-/** Every value of a repeatable option. */
-function options(name: string): string[] {
-  return process.argv.flatMap((argument, index) => {
-    const value = process.argv[index + 1];
-    return argument === name && value !== undefined ? [value] : [];
-  });
-}
+const { values: commandLine } = parseCommandLine({
+  args: process.argv.slice(2),
+  options: {
+    base: { type: 'string' },
+    files: { type: 'string' },
+    why: { type: 'boolean' },
+    json: { type: 'boolean' },
+    run: { type: 'boolean' },
+    'changed-only': { type: 'boolean' },
+    lane: { type: 'string' },
+    exclude: { type: 'string', multiple: true },
+  },
+});
 
 /** The changed files: `--files`, else everything since the merge base plus untracked files. */
 function changedFiles(): string[] {
-  const files = option('--files');
+  const files = commandLine.files;
   if (files !== undefined) return files.split(',').map((file) => file.trim());
   const cwd = REPOSITORY_ROOT;
-  const ref = resolveBase({ base: option('--base'), cwd });
+  const ref = resolveBase({ base: commandLine.base, cwd });
   const base = git({ args: ['merge-base', 'HEAD', ref], cwd });
   const tracked = git({ args: ['diff', '--name-only', '--no-renames', base], cwd });
   const untracked = git({ args: ['ls-files', '--others', '--exclude-standard'], cwd });
@@ -66,13 +68,13 @@ function select(): TestSelection {
     const reason = `cannot list the changed files, so everything runs: ${(error as Error).message}`;
     selection = { mode: 'all', reasons: [reason], projects: {}, why: {} };
   }
-  if (process.argv.includes('--changed-only')) selection = changedOnly(selection);
-  return withoutTests({ selection, globs: options('--exclude') });
+  if (commandLine['changed-only']) selection = changedOnly(selection);
+  return withoutTests({ selection, globs: commandLine.exclude ?? [] });
 }
 
 function print(selection: TestSelection): void {
   console.log(`Test selection: ${selection.mode} — ${selection.reasons.join('; ')}`);
-  if (!process.argv.includes('--why')) return;
+  if (!commandLine.why) return;
   for (const [project, tests] of Object.entries(selection.projects)) {
     console.log(`\n${project} (${tests.length})`);
     for (const test of tests) console.log(`  ${test} — ${(selection.why[test] ?? []).join('; ')}`);
@@ -95,7 +97,7 @@ function run(selection: TestSelection): number {
   if (selection.mode === 'all') {
     return spawnSync('pnpm', ['test'], { cwd: REPOSITORY_ROOT, stdio: 'inherit' }).status ?? 1;
   }
-  const onlyLane = option('--lane');
+  const onlyLane = commandLine.lane;
   const lanes = onlyLane === undefined ? LANES : LANES.filter((lane) => lane.name === onlyLane);
   if (lanes.length === 0) {
     console.error(`No lane ${onlyLane} — one of ${LANES.map((lane) => lane.name).join(', ')}.`);
@@ -125,6 +127,6 @@ function run(selection: TestSelection): number {
 }
 
 const selection = select();
-if (process.argv.includes('--json')) console.log(JSON.stringify(selection, null, 2));
+if (commandLine.json) console.log(JSON.stringify(selection, null, 2));
 else print(selection);
-if (process.argv.includes('--run')) process.exitCode = run(selection);
+if (commandLine.run) process.exitCode = run(selection);

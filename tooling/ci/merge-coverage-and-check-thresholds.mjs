@@ -26,6 +26,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
+import { parseCommandLine } from '../setup/common/script.ts';
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 /**
@@ -36,36 +37,26 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const sharedThresholdsPath = resolve(scriptDirectory, 'coverage-thresholds.json');
 const DEFAULT_THRESHOLDS = JSON.parse(readFileSync(sharedThresholdsPath, 'utf8'));
 
+const THRESHOLD_KEYS = ['lines', 'branches', 'statements', 'functions'];
+
 function parseArguments(argv) {
-  const inputs = [];
+  // An empty token (an unset shell variable passed quoted) is skipped, as before.
+  const { values, positionals: inputs } = parseCommandLine({
+    args: argv.filter((token) => token !== ''),
+    options: {
+      output: { type: 'string', short: 'o' },
+      'report-only': { type: 'boolean' },
+      ...Object.fromEntries(THRESHOLD_KEYS.map((key) => [key, { type: 'string' }])),
+    },
+    maxPositionals: Number.POSITIVE_INFINITY,
+    messages: { unknownOption: (option) => `Unknown flag: ${option}` },
+  });
   const thresholds = { ...DEFAULT_THRESHOLDS };
-  let outputPath = null;
-  let reportOnly = false;
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-    if (token === '') continue;
-    if (token === '--output' || token === '-o') {
-      outputPath = argv[index + 1];
-      index += 1;
-      continue;
-    }
-    if (token === '--report-only') {
-      reportOnly = true;
-      continue;
-    }
-    const thresholdKey = ['lines', 'branches', 'statements', 'functions'].find(
-      (key) => token === `--${key}`,
-    );
-    if (thresholdKey) {
-      thresholds[thresholdKey] = Number(argv[index + 1]);
-      index += 1;
-      continue;
-    }
-    if (token.startsWith('--')) {
-      throw new Error(`Unknown flag: ${token}`);
-    }
-    inputs.push(token);
+  for (const key of THRESHOLD_KEYS) {
+    if (values[key] !== undefined) thresholds[key] = Number(values[key]);
   }
+  const outputPath = values.output ?? null;
+  const reportOnly = values['report-only'] === true;
   if (inputs.length === 0) {
     throw new Error('No coverage inputs provided. Pass one or more `coverage-final.json` paths.');
   }

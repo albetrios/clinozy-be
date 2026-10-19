@@ -16,9 +16,8 @@
  * A finding blocks (`src/scripts/tooling/early-checks.util.ts`).
  */
 import { connect } from 'node:tls';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { reportEarlyCheck } from '@/scripts/tooling/early-checks.util.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** 180 days — the shortest HSTS max-age the probe accepts (the API sends one year). */
 const MINIMUM_HSTS_MAX_AGE_SECONDS = 180 * 24 * 60 * 60;
@@ -239,14 +238,13 @@ async function probe(options: {
   return findings;
 }
 
-function option(name: string): string | undefined {
-  const index = process.argv.indexOf(name);
-  const value = index === -1 ? undefined : process.argv[index + 1];
+/** A given value, trimmed; blank counts as not given. */
+function given(value: string | undefined): string | undefined {
   return value?.trim() ? value.trim() : undefined;
 }
 
-async function main(): Promise<void> {
-  const baseUrl = option('--url') ?? process.env.API_BASE_URL;
+async function main(commandLine: { url?: string; 'allowed-origin'?: string }): Promise<void> {
+  const baseUrl = given(commandLine.url) ?? process.env.API_BASE_URL;
   if (!baseUrl) {
     console.error(
       'Usage: pnpm ops:probe-live-api --url <https://api…> [--allowed-origin <origin>]',
@@ -254,7 +252,7 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const allowedOrigin = option('--allowed-origin');
+  const allowedOrigin = given(commandLine['allowed-origin']);
   const findings = await probe({ baseUrl, allowedOrigin });
   process.exitCode = reportEarlyCheck({
     check: `Live API probe (${new URL(baseUrl).host})`,
@@ -262,6 +260,10 @@ async function main(): Promise<void> {
   });
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
-  void main();
+if (isMain(import.meta.url)) {
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { url: { type: 'string' }, 'allowed-origin': { type: 'string' } },
+  });
+  void main(values);
 }

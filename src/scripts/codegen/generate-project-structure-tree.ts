@@ -14,6 +14,7 @@ import {
   SRC_STRUCTURE_TREE_OUTPUT_PATH,
   STRUCTURE_TREE_HEADER,
 } from '@/scripts/codegen/project-structure-tree.constants.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** Options controlling whether `__tests__` directories appear in the tree output. */
 export interface BuildSrcStructureTreeOptions {
@@ -118,8 +119,12 @@ export function buildSrcStructureTree(options: BuildSrcStructureTreeOptions): st
 }
 
 function main(): void {
-  const checkOnly = process.argv.includes('--check');
-  const stdoutOnly = process.argv.includes('--stdout');
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { check: { type: 'boolean' }, stdout: { type: 'boolean' } },
+  });
+  const checkOnly = values.check === true;
+  const stdoutOnly = values.stdout === true;
   const includeTests = !stdoutOnly;
   const treeContent = buildSrcStructureTree({ includeTests });
 
@@ -146,4 +151,6 @@ function main(): void {
   console.log(`Wrote ${lineCount} lines to ${SRC_STRUCTURE_TREE_OUTPUT_PATH}`);
 }
 
-main();
+if (isMain(import.meta.url)) {
+  main();
+}

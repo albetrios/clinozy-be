@@ -18,6 +18,7 @@
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DBML_OUTPUT_PATH } from '@/shared/constants/project-identity.constants.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const REPOSITORY_ROOT = path.resolve(import.meta.dirname, '../../..');
 const MIGRATIONS_DIRECTORY = path.join(REPOSITORY_ROOT, 'migrations');
@@ -570,6 +571,7 @@ function renderDbml(): string {
 }
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   const migrationFiles = (await readdir(MIGRATIONS_DIRECTORY))
     .filter((fileName) => fileName.endsWith('.sql'))
     .sort((a, b) => a.localeCompare(b));

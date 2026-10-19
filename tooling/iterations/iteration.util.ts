@@ -10,6 +10,7 @@ import { createHash, randomInt } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tryGit } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** The four iteration types, in the order the docs list them. */
 export const ITERATION_TYPES = ['launch', 'feat', 'change', 'fix'] as const;
@@ -285,39 +286,27 @@ export interface ReadmeChangePlan {
  * `--sibling` implies `--both`.
  */
 export function parseNewIterationArguments(commandLine: readonly string[]): NewIterationArguments {
-  const positionals: string[] = [];
-  let createInSibling = false;
-  let siblingPath: string | undefined;
-  let lite = false;
-  let dryRun = false;
-  let help = false;
-  for (let index = 0; index < commandLine.length; index += 1) {
-    const token = commandLine[index] ?? '';
-    if (token === '--both') createInSibling = true;
-    else if (token === '--lite') lite = true;
-    else if (token === '--dry-run') dryRun = true;
-    else if (token === '--help' || token === '-h') help = true;
-    else if (token === '--sibling') {
-      siblingPath = commandLine[index + 1];
-      if (siblingPath === undefined || siblingPath.startsWith('--')) {
-        throw new Error('--sibling needs a path, e.g. --sibling ../clinozy-fe');
-      }
-      createInSibling = true;
-      index += 1;
-    } else if (token.startsWith('-')) throw new Error(`Unknown option "${token}".`);
-    else positionals.push(token);
-  }
-  if (positionals.length > 2) {
-    throw new Error(`Too many arguments: ${positionals.join(' ')} — expected <type> [topic].`);
-  }
+  const { values, positionals } = parseCommandLine({
+    args: commandLine,
+    options: {
+      both: { type: 'boolean' },
+      lite: { type: 'boolean' },
+      'dry-run': { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+      sibling: { type: 'string' },
+    },
+    maxPositionals: 2,
+    usage: 'expected <type> [topic].',
+    messages: { needsValue: () => '--sibling needs a path, e.g. --sibling ../clinozy-fe' },
+  });
   return {
     type: positionals[0],
     topic: positionals[1],
-    createInSibling,
-    siblingPath,
-    lite,
-    dryRun,
-    help,
+    createInSibling: values.both === true || values.sibling !== undefined,
+    siblingPath: values.sibling,
+    lite: values.lite === true,
+    dryRun: values['dry-run'] === true,
+    help: values.help === true,
   };
 }
 
@@ -1123,30 +1112,22 @@ export function parseStatusArguments(commandLine: readonly string[]): {
   readonly reason: string | undefined;
   readonly help: boolean;
 } {
-  const positionals: string[] = [];
-  let reason: string | undefined;
-  let help = false;
-  for (let index = 0; index < commandLine.length; index += 1) {
-    const token = commandLine[index] ?? '';
-    if (token === '--help' || token === '-h') help = true;
-    else if (token === '--reason') {
-      reason = commandLine[index + 1]?.trim();
-      if (reason === undefined || reason === '' || reason.startsWith('--')) {
-        throw new Error('--reason needs text, e.g. --reason "scope changed after review"');
-      }
-      index += 1;
-    } else if (token.startsWith('--reason=')) {
-      reason = token.slice('--reason='.length).trim();
-      if (reason === '') throw new Error('--reason needs text.');
-    } else if (token.startsWith('-')) throw new Error(`Unknown option "${token}".`);
-    else positionals.push(token);
-  }
-  if (positionals.length > 2) {
-    throw new Error(
-      `Too many arguments: ${positionals.join(' ')} — expected <iteration> <status>.`,
-    );
-  }
-  return { iteration: positionals[0], status: positionals[1], reason, help };
+  const needsText = '--reason needs text, e.g. --reason "scope changed after review"';
+  const { values, positionals } = parseCommandLine({
+    args: commandLine,
+    options: { help: { type: 'boolean', short: 'h' }, reason: { type: 'string' } },
+    maxPositionals: 2,
+    usage: 'expected <iteration> <status>.',
+    messages: { needsValue: () => needsText },
+  });
+  const reason = values.reason?.trim();
+  if (reason === '') throw new Error(needsText);
+  return {
+    iteration: positionals[0],
+    status: positionals[1],
+    reason,
+    help: values.help === true,
+  };
 }
 
 /**

@@ -15,8 +15,8 @@
  * Usage (pr-ci.yml `early-failure-alert` job): `node tooling/ci/early-failure-alert.mjs`.
  */
 
-import { pathToFileURL } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { isMain, parseCommandLine } from '../setup/common/script.ts';
 
 export const ALERT_CONTEXT = 'Early failure alert';
 
@@ -99,7 +99,9 @@ async function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMain(import.meta.url)) {
+  // An unknown option is a broken workflow step, not an alert that could not post: it stops here.
+  parseCommandLine({ args: process.argv.slice(2) });
   main().catch((error) => {
     // An alert that cannot post must not fail the run; the lanes and Quality gate still gate.
     console.log(`early-failure-alert: ${error.message}`);

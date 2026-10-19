@@ -23,11 +23,13 @@ import {
   evaluateRouteHttpCoverage,
 } from '@/scripts/validators/routes/route-http-coverage-validation.util.js';
 import { ROUTE_HTTP_COVERAGE_ALLOWLIST } from './route-http-coverage.allowlist.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const SRC_DIR = resolve(process.cwd(), 'src');
 const DOMAINS_DIR = join(SRC_DIR, 'domains');
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const registry = loadRouteRegistryFromCatalog();
   const sources: string[] = [];
   collectHttpTestSources({ directory: SRC_DIR, sources });

@@ -35,6 +35,7 @@ import { ROUTE_COVERAGE_OBSERVED_DIRECTORY_NAME } from '@tooling/route-coverage/
 import { ROUTE_EXAMPLES_PATH } from '@tooling/openapi/route-examples/constants.js';
 import { PROJECT_BRAND_NAME } from '@/shared/constants/project-identity.constants.js';
 import { PUBLIC_ID_PREFIXES } from '@/shared/utils/identity/public-id.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 type CapturedExample = { request_body?: unknown; response_body?: unknown };
 type RouteExamples = {
@@ -197,6 +198,7 @@ function sanitize({
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const observedDirectory = resolve(process.cwd(), ROUTE_COVERAGE_OBSERVED_DIRECTORY_NAME);
   if (!existsSync(observedDirectory)) {
     console.error(

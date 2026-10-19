@@ -10,6 +10,7 @@
  */
 import { writeFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import { planBaselineChange } from './iteration.util.js';
 
 const REPOSITORY_ROOT = resolve(import.meta.dirname, '../..');
@@ -18,12 +19,16 @@ const USAGE = `Usage:
   pnpm iteration:baseline <iteration> <baseline|none>`;
 
 function main(): void {
-  const commandLine = process.argv.slice(2);
-  if (commandLine.includes('--help') || commandLine.includes('-h') || commandLine.length !== 2) {
+  const { values, positionals } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { help: { type: 'boolean', short: 'h' } },
+    maxPositionals: Number.POSITIVE_INFINITY,
+  });
+  const [iteration, baseline] = positionals;
+  if (values.help || iteration === undefined || baseline === undefined || positionals.length > 2) {
     console.log(USAGE);
-    process.exit(commandLine.length === 2 ? 0 : 1);
+    process.exit(values.help ? 0 : 1);
   }
-  const [iteration, baseline] = commandLine;
   const plan = planBaselineChange({ repositoryRoot: REPOSITORY_ROOT, iteration, baseline });
   writeFileSync(plan.readmePath, plan.content);
   console.log(

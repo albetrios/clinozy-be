@@ -14,6 +14,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tryGit } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const REPO_ROOT = resolve(process.cwd());
 
@@ -231,6 +232,7 @@ function citedPathExists(cited: string): boolean {
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const collected: string[] = [];
   for (const root of SCAN_ROOTS) {
     try {

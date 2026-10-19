@@ -10,6 +10,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
+import { parseCommandLine } from '../setup/common/script.ts';
 
 const REQUIRED_FIELDS = ['id', 'organization_id', 'action', 'created_at'];
 
@@ -24,8 +25,7 @@ const PUBLIC_ID_FIELDS = {
   target_user_id: /^usr_[a-z0-9]{21}$/,
 };
 
-function readInputBuffer() {
-  const filePath = process.argv[2];
+function readInputBuffer(filePath) {
   if (filePath) {
     const raw = readFileSync(filePath);
     return filePath.endsWith('.gz') ? gunzipSync(raw) : raw;
@@ -72,7 +72,12 @@ function validateNdjson(buffer) {
 }
 
 try {
-  const { lineCount } = validateNdjson(readInputBuffer());
+  const [filePath] = parseCommandLine({
+    args: process.argv.slice(2),
+    maxPositionals: 1,
+    usage: 'usage: node tooling/audit/verify-export-ndjson.mjs [path/to/part-uuid.jsonl.gz]',
+  }).positionals;
+  const { lineCount } = validateNdjson(readInputBuffer(filePath));
   console.log(`OK: ${lineCount} NDJSON line(s) validated`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

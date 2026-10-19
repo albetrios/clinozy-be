@@ -16,8 +16,10 @@
  */
 import { collectAllRouteSchemaEntries } from '@tooling/openapi/extractors/route-schema-metadata.js';
 import { findRouteSchemaDocProblems } from './route-schema-docs-validation.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const entries = collectAllRouteSchemaEntries();
   const problems = findRouteSchemaDocProblems(entries);
 

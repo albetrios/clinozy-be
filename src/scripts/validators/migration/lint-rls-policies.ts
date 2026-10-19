@@ -19,10 +19,10 @@
  */
 import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { reportEarlyCheck } from '@/scripts/tooling/early-checks.util.js';
 import { splitSqlStatements } from '@/scripts/validators/migration/lint-migrations.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** One policy on a table, as the migrations leave it. */
 export interface RlsPolicy {
@@ -320,14 +320,17 @@ export function touchedTables(options: {
 
 function main(): void {
   const root = process.cwd();
-  const filesArgument = process.argv.indexOf('--files');
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { files: { type: 'string' } },
+  });
   // The documented exception to the shared git module (tooling/setup/common/git-environment.ts):
   // run inside the pre-commit hook, this reads the commit's own index — a temporary one for
   // `git commit <paths>` — through the GIT_INDEX_FILE the hook inherits, which the module strips.
   const changedFiles =
-    filesArgument === -1
+    values.files === undefined
       ? execSync('git diff --cached --name-only', { encoding: 'utf8' }).split('\n')
-      : (process.argv[filesArgument + 1] ?? '').split(',');
+      : values.files.split(',');
   const existing = changedFiles
     .map((file) => file.trim())
     .filter((file) => file !== '' && existsSync(join(root, file)));
@@ -347,6 +350,6 @@ function main(): void {
   });
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+if (isMain(import.meta.url)) {
   main();
 }

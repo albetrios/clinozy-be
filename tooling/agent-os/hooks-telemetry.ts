@@ -12,6 +12,9 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
+
+parseCommandLine({ args: process.argv.slice(2) });
 
 const repositoryRoot = process.cwd();
 const logPath = join(repositoryRoot, 'agent-os', 'hooks', '.telemetry.log');

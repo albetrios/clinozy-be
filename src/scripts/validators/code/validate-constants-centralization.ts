@@ -4,8 +4,10 @@
  * Usage: pnpm validate:constants
  */
 import { findDuplicateLiteralViolations } from './constants-centralization.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const violations = findDuplicateLiteralViolations();
 
   if (violations.length === 0) {

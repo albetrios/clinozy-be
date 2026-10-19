@@ -15,7 +15,6 @@
  *   pnpm ops:worker:drain --resume       # resume all queues, then exit
  */
 import '@/shared/config/load-env-files.js';
-import { parseArgs } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Queue } from 'bullmq';
 import {
@@ -25,6 +24,7 @@ import {
   getBullMQKeyPrefix,
 } from '@/infrastructure/queue/connection.js';
 import { getWorkerQueueRegistrationDefinitions } from '@/infrastructure/queue/worker-runtime/worker-registration.registry.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** Maximum time to wait for active jobs to finish before reporting a timeout (milliseconds). */
 const DRAIN_TIMEOUT_MS = 60_000;
@@ -134,7 +134,10 @@ async function runResume(queues: Queue[]): Promise<number> {
 }
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({ options: { resume: { type: 'boolean', default: false } } });
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { resume: { type: 'boolean' } },
+  });
 
   await connectBullMqRedis();
   const queues = createQueues(getRegisteredQueueNames());

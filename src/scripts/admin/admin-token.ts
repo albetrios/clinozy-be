@@ -13,6 +13,7 @@
  */
 import '@/shared/config/load-env-files.js';
 import { signInOverApi } from '@/scripts/admin/api-sign-in.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
 const API_PREFIX = `${BASE_URL}/api/v1`;
@@ -37,6 +38,7 @@ function roleClaimOf(token: string): string | undefined {
 }
 
 async function main() {
+  parseCommandLine({ args: process.argv.slice(2) });
   const token = await signInOverApi({
     apiPrefix: API_PREFIX,
     email: ADMIN_EMAIL,

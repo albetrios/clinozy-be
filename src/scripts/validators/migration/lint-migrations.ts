@@ -12,9 +12,9 @@
 import chalk from 'chalk';
 import { readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { parseMigrationExecutionMode } from '@/infrastructure/database/migration/migration-execution-mode.js';
 import { EXPECTED_FORCE_RLS_TABLES } from '@/infrastructure/database/utils/force-rls-tables.constants.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** Identifiers of every rule {@link lintMigrationFileContent} can report; used for header-comment allow-lists. */
 export const migrationSafetyRuleIds = [
@@ -1317,7 +1317,11 @@ export async function lintMigrationsDirectory(migrationsFolder: string): Promise
 }
 
 async function main(): Promise<void> {
-  const migrationsArgument = process.argv[2];
+  const [migrationsArgument] = parseCommandLine({
+    args: process.argv.slice(2),
+    maxPositionals: 1,
+    usage: 'usage: pnpm db:migrate:lint [migrations-folder]',
+  }).positionals;
   const migrationsFolder = migrationsArgument
     ? resolve(process.cwd(), migrationsArgument)
     : resolve(process.cwd(), 'migrations');
@@ -1335,9 +1339,6 @@ async function main(): Promise<void> {
   }
 }
 
-const currentScriptPath = resolve(fileURLToPath(import.meta.url));
-const invokedEntryPath = process.argv[1] ? resolve(process.argv[1]) : '';
-const isDirectExecution = invokedEntryPath === currentScriptPath;
-if (isDirectExecution) {
+if (isMain(import.meta.url)) {
   void main();
 }

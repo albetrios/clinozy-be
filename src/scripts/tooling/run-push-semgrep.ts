@@ -11,11 +11,10 @@
  * A finding blocks (`src/scripts/tooling/early-checks.util.ts`).
  */
 import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { reportEarlyCheck } from '@/scripts/tooling/early-checks.util.js';
 import { resolveBase, tryGit } from '@tooling/setup/common/git-environment.js';
 import { requireTool } from '@tooling/setup/common/require-tool.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** The code Semgrep scans at push: where a missed check leaks another organization's data. */
 export const PUSH_SEMGREP_PATTERNS = [
@@ -33,8 +32,11 @@ export function pushSemgrepTargets(changedFiles: readonly string[]): string[] {
 }
 
 function main(): void {
-  const baseIndex = process.argv.indexOf('--base');
-  const base = resolveBase({ base: baseIndex === -1 ? undefined : process.argv[baseIndex + 1] });
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { base: { type: 'string' } },
+  });
+  const base = resolveBase({ base: values.base });
   const mergeBase = tryGit({ args: ['merge-base', 'HEAD', base] });
   if (!mergeBase.ok) {
     console.warn(`⚠ Semgrep at push: cannot find the merge base with ${base}; skipped (CI scans)`);
@@ -81,6 +83,6 @@ function main(): void {
   });
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+if (isMain(import.meta.url)) {
   main();
 }

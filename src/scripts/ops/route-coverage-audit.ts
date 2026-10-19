@@ -28,6 +28,7 @@
 import { readFileSync } from 'node:fs';
 import { mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 interface RouteEntry {
   method: string;
@@ -55,7 +56,9 @@ const SMOKE_FILE_FRAGMENT = 'src/scripts/ops/api-smoke-test.ts';
 
 const SMOKE_FILE = join(REPO_ROOT, SMOKE_FILE_FRAGMENT);
 
-const CHECK_MODE = process.argv.includes('--check');
+const CHECK_MODE =
+  parseCommandLine({ args: process.argv.slice(2), options: { check: { type: 'boolean' } } }).values
+    .check === true;
 
 /**
  * Routes that are explicitly allowed to lack a dedicated e2e/integration

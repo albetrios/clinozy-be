@@ -28,10 +28,9 @@
  * {@link resolveBase}'s answer, `… trunk` the trunk branch.
  */
 import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { resolveGitMetadata } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from './config.js';
+import { isMain, parseCommandLine } from './script.js';
 
 /** The variables git exports into hooks that pin a child `git` process to a repository. */
 export const INHERITED_GIT_REPOSITORY_VARIABLES: readonly string[] = [
@@ -194,10 +193,16 @@ const COMMAND_LINE_ANSWERS = new Map<string, () => string>([
   ['trunk', trunkBranch],
 ]);
 
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  const answer = COMMAND_LINE_ANSWERS.get(process.argv[2] ?? '');
+if (isMain(import.meta.url)) {
+  const usage = 'Usage: tsx tooling/setup/common/git-environment.ts <base|trunk>';
+  const [question] = parseCommandLine({
+    args: process.argv.slice(2),
+    maxPositionals: 1,
+    usage,
+  }).positionals;
+  const answer = COMMAND_LINE_ANSWERS.get(question ?? '');
   if (answer === undefined) {
-    console.error('Usage: tsx tooling/setup/common/git-environment.ts <base|trunk>');
+    console.error(usage);
     process.exitCode = 2;
   } else process.stdout.write(answer());
 }

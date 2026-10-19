@@ -7,6 +7,7 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const DEFAULT_OPENAPI_SPEC_PATH = join(process.cwd(), 'docs', 'openapi', 'openapi.json');
 
@@ -19,6 +20,7 @@ function resolveOpenApiSpecPath(): string {
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const openApiSpecPath = resolveOpenApiSpecPath();
 
   if (!existsSync(openApiSpecPath)) {

@@ -515,6 +515,7 @@ import {
   PARAM_NAME_TO_ENTITY,
   publicIdPlaceholderFor,
 } from '@/shared/utils/identity/public-id.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 function sweepPlaceholderFor(paramName: string): string {
   const entity = PARAM_NAME_TO_ENTITY[paramName as keyof typeof PARAM_NAME_TO_ENTITY];
@@ -576,6 +577,7 @@ function buildCatalogReadOnlySweepProbes(organizationId: string): RouteProbe[] {
 }
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   console.log(`API smoke tests (all domains) → ${BASE_URL}`);
   console.log(`User: ${EMAIL}\n`);
 

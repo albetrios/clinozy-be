@@ -23,7 +23,6 @@ import '@/shared/config/load-env-files.js';
 import { randomUUID } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import {
   resolveDatabaseSsl,
@@ -42,6 +41,7 @@ import {
   buildPublicApiPrefix,
   PUBLIC_API_VERSION_SEGMENT_V1,
 } from '@/shared/utils/http/api-versioning.util.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** Every schema the app's tables live in: `public` (the migration ledger, permissions) and each `pgSchema`. */
 export const RESTORE_SMOKE_SCHEMA_NAMES: readonly string[] = [
@@ -310,6 +310,11 @@ export async function runSignInRoundTrip(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  const databaseOnly =
+    parseCommandLine({
+      args: process.argv.slice(2),
+      options: { 'database-only': { type: 'boolean' } },
+    }).values['database-only'] === true;
   const connectionUrl = process.env.DATABASE_URL;
   if (!connectionUrl) {
     console.error('DATABASE_URL is required');
@@ -374,7 +379,7 @@ async function main(): Promise<void> {
     for (const failure of failures) console.error(failure);
     process.exit(1);
   }
-  if (process.argv.includes('--database-only')) return;
+  if (databaseOnly) return;
 
   await runSignInRoundTrip();
   console.log(
@@ -384,9 +389,7 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-const currentScriptPath = resolve(fileURLToPath(import.meta.url));
-
-if (process.argv[1] && resolve(process.argv[1]) === currentScriptPath) {
+if (isMain(import.meta.url)) {
   main().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);

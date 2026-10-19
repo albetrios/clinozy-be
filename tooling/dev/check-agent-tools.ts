@@ -15,6 +15,7 @@
  * Exit code: 1 when a tool is missing, off its pin, or fails its smoke test — 0 otherwise.
  * An unavailable newer-release lookup (offline, blocked host) never fails the run.
  */
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import {
   AGENT_TOOLS,
   type AgentTool,
@@ -26,9 +27,12 @@ import {
   smokeTestMcpServer,
 } from './agent-tools.js';
 
-const argumentsList = process.argv.slice(2);
-const runSmoke = argumentsList.includes('--smoke');
-const runOutdated = argumentsList.includes('--outdated');
+const { values: commandLineValues } = parseCommandLine({
+  args: process.argv.slice(2),
+  options: { smoke: { type: 'boolean' }, outdated: { type: 'boolean' } },
+});
+const runSmoke = commandLineValues.smoke === true;
+const runOutdated = commandLineValues.outdated === true;
 
 function reportPin(options: { tool: AgentTool; pinned: string | undefined }): boolean {
   const { tool, pinned } = options;
