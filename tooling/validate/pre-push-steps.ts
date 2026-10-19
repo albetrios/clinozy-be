@@ -21,13 +21,15 @@ export interface PrePushStep {
 
 /**
  * The pushed files that make pre-push run the selected tests (`pnpm test:pre-push`): source and
- * tests, tooling, the workflows, and the dependency and Vitest config. `.github/` counts because
- * the CI policy tests (`src/tests/unit/ci`) read the workflows and actions, so a push that changes
- * only a workflow runs the ones that name it; a changed test selects itself. The same rule as
+ * tests, tooling, the workflows, the agent hooks, and the dependency and Vitest config. `.github/`
+ * counts because the CI policy tests (`src/tests/unit/ci`) read the workflows and actions, so a
+ * push that changes only a workflow runs the ones that name it; `agent-os/` counts because the
+ * hook tests (`src/tests/unit/tooling`) spawn the hooks, so a hooks-only push runs them; a changed
+ * test selects itself. The same rule as
  * clinozy-fe's `tooling/ci/affected.mjs`, on this repository's paths (its tests live under `src/`).
  */
 export const UNIT_RELEVANT =
-  /^(src\/|tooling\/|\.github\/|vitest\.config\.ts$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$)/;
+  /^(src\/|tooling\/|\.github\/|agent-os\/|vitest\.config\.ts$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$)/;
 
 /**
  * The files that make pre-push run the generated-doc drift checks: source, tooling, and a hand
