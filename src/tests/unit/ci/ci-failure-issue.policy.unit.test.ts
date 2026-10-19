@@ -44,6 +44,7 @@ function jobBlocks(text: string): Array<[string, string]> {
 
 /** The `title:` of each action step in the given mode. */
 function titles(text: string, mode: 'open' | 'close'): string[] {
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — test helper: mode is the literal 'open' or 'close'
   return [...text.matchAll(new RegExp(`mode: ${mode}\\n\\s+title: (.+)`, 'g'))].map(
     (match) => match[1] ?? '',
   );

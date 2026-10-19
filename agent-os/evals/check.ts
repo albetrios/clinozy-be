@@ -302,6 +302,7 @@ for (const file of agentFiles) {
   }
   // An explicit denylist as well, so a later `tools` edit cannot quietly hand back a write tool.
   const disallowed = frontmatterField(text, "disallowedTools") ?? "";
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — the names come from the fixed writeTools list
   const missing = writeTools.filter((tool) => !new RegExp(`\\b${tool}\\b`).test(disallowed));
   if (missing.length)
     error(

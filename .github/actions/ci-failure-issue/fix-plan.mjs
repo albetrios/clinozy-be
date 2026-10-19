@@ -109,6 +109,7 @@ export function globToRegExp(glob) {
     else if (character === '?') pattern += '[^/]';
     else pattern += character.replace(/[.+^${}()|[\]\\]/g, '\\$&');
   }
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — a committed path glob, every special character escaped above
   return new RegExp(`^${pattern}$`);
 }
 

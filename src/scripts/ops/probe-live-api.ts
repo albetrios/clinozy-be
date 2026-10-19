@@ -130,7 +130,8 @@ function handshake(target: URL): Promise<Parameters<typeof checkTls>[0]> {
       host: target.hostname,
       port: Number(target.port || 443),
       servername: target.hostname,
-      rejectUnauthorized: false,
+      // Verification stays on: an untrusted certificate fails the handshake, and probe() reports
+      // that failure with its reason (e.g. an expired or self-signed certificate).
       timeout: REQUEST_TIMEOUT_MILLISECONDS,
     });
     socket.once('secureConnect', () => {

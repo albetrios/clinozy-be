@@ -10,7 +10,7 @@
 // cancelled run counts only while HEAD is still the pushed commit (a newer push cancels the older
 // runs and starts its own watch). One watch per commit. Switch: AGENT_PUSH_CI_WATCH=0 turns it off.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isInRepository, pushDirectory } from "./_be-push-target.mjs";
@@ -67,8 +67,13 @@ async function watch(payload) {
 
   mkdirSync(stateRoot, { recursive: true });
   const lock = join(stateRoot, `${HOOK_ID}-${sha}.lock`);
-  if (existsSync(lock)) return "busy";
-  writeFileSync(lock, String(process.pid));
+  // `wx` takes the lock or fails when another watch holds it, in one step (no check-then-write race).
+  try {
+    writeFileSync(lock, String(process.pid), { flag: "wx" });
+  } catch (error) {
+    if (error?.code === "EEXIST") return "busy";
+    throw error;
+  }
   try {
     const started = Date.now();
     while (Date.now() - started < FINISH_WITHIN_MILLISECONDS) {

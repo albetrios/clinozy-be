@@ -695,6 +695,7 @@ function selectTestsOrThrow(options: {
         if (!(booting.has(test) && test.startsWith('src/domains/app/'))) continue;
         const { source } = testText(test);
         const named = subDomains.find((subDomain) =>
+          // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — a sub-domain folder name from the repository, dashes escaped
           new RegExp(`\\b${subDomain.replace(/-/g, '\\-')}\\b`).test(source),
         );
         if (named) select(test, `an app test that names ${named} (${changed})`);

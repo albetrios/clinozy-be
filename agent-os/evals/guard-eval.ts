@@ -473,6 +473,7 @@ function isRouted(guardCase: GuardCase): boolean {
     guardCase.expect === 'silent' ||
     typeof toolName !== 'string' ||
     matcher === undefined ||
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — a matcher from the committed hooks.json, as Claude Code applies it
     new RegExp(`^(?:${matcher})$`).test(toolName)
   );
 }

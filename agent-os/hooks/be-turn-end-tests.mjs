@@ -33,6 +33,15 @@ const stateRoot = join(process.env.TMPDIR || "/tmp", "clinozy-be-hooks");
 const lockPath = join(stateRoot, `${HOOK_ID}.lock`);
 const passedPath = join(stateRoot, `${HOOK_ID}.passed`);
 
+/** A small state file's text, or "" when it is not there — read directly, never exists-then-read. */
+function readText(path) {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return "";
+  }
+}
+
 function isSwitchedOn() {
   const value = process.env.AGENT_TURN_END_TESTS?.trim();
   if (value === "1") return true;
@@ -44,8 +53,16 @@ function isSwitchedOn() {
 /** Holds the one-run lock, or returns false while a live run holds it. */
 function takeLock() {
   mkdirSync(stateRoot, { recursive: true });
-  if (existsSync(lockPath)) {
-    const holder = Number(readFileSync(lockPath, "utf8"));
+  // `wx` takes the lock or fails when it is held, in one step (no check-then-write race). A lock
+  // whose holder is gone is removed and taken once more; losing that second race means a live run.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      writeFileSync(lockPath, String(process.pid), { flag: "wx" });
+      return true;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+    }
+    const holder = Number(readText(lockPath));
     try {
       if (holder > 0) {
         process.kill(holder, 0);
@@ -54,9 +71,9 @@ function takeLock() {
     } catch {
       /* the holder is gone: take the lock over */
     }
+    rmSync(lockPath, { force: true });
   }
-  writeFileSync(lockPath, String(process.pid));
-  return true;
+  return false;
 }
 
 function git(args) {
@@ -107,7 +124,7 @@ function run() {
     const files = changedFiles();
     if (files.length === 0) return "silent";
     const tree = fingerprint(files);
-    if (existsSync(passedPath) && readFileSync(passedPath, "utf8") === tree) return "already-passed";
+    if (readText(passedPath) === tree) return "already-passed";
     const selection = select(files);
     if (!selection || selection.mode !== "selected") return "silent";
     const projects = UNIT_LEVEL_PROJECTS.filter((project) => selection.projects[project]?.length);

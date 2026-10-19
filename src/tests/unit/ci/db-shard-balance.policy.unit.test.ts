@@ -82,6 +82,7 @@ describe('DB test shards', () => {
       (match) => match[2] as string,
     );
     const field = (group: string, key: string) =>
+      // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — test helper: key is a literal field name of the workflow
       group.match(new RegExp(`^ {12}${key}: (.+)$`, 'm'))?.[1] ?? '';
     const covered = groups
       .filter((group) => field(group, 'suite') === 'e2e-integration')

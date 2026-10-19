@@ -57,6 +57,7 @@ function globPattern(glob) {
     else if (character === "?") source += "[^/]";
     else source += character.replace(/[.+^${}()|[\]\\]/g, "\\$&");
   }
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — a committed skill-routing glob, every special character escaped above
   return new RegExp(`^${source}$`);
 }
 
@@ -70,7 +71,7 @@ const GATE_REMINDERS = [
   [/\.(validator|serializer)\.ts$/, "validator/serializer → be-test-generator (add/refresh tests)"],
   [/\/(events|workers|queues)\/.*\.ts$/, "events/workers/queues → be-workers-events"],
   [/\.worker\.ts$|\/database\/contexts\//, "tenant data path → be-rls-tenant-isolation-guard (RLS + GUC + context wrappers)"],
-  [/idempotency|stripe\.client\.ts$/, "idempotency/stripe writes → be-idempotency-guard"],
+  [/(?:idempotency.*|stripe\.client\.ts)$/, "idempotency/stripe writes → be-idempotency-guard"],
   [/\.mdc$|^agent-os\/|agent-os\/|CLAUDE\.md$/, "agent-os, rules or docs changed → pnpm agent-os:check (be-structure-maintainer)"],
 ];
 
@@ -99,9 +100,10 @@ function turnOnce(session, key) {
   try {
     mkdirSync(directory, { recursive: true });
     const marker = join(directory, `${HOOK_ID}-${createHash("sha1").update(key).digest("hex")}`);
-    if (existsSync(marker)) return false;
-    writeFileSync(marker, "");
-  } catch {
+    // `wx` creates the record or fails when it is already there, in one step (no check-then-write race).
+    writeFileSync(marker, "", { flag: "wx" });
+  } catch (error) {
+    if (error?.code === "EEXIST") return false;
     /* every reminder counts as new when the record cannot be written */
   }
   return true;
