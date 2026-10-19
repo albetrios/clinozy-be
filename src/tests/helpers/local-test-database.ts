@@ -1,8 +1,4 @@
-import pg from 'pg';
-import {
-  isParallelDatabaseRun,
-  parallelDatabaseWorkers,
-} from '@tooling/vitest/parallel-databases.js';
+import { workerDatabaseName } from '@tooling/vitest/worker-databases.js';
 import { sql } from 'drizzle-orm';
 import type { PostgresDatabaseHandle } from '@/infrastructure/database/utils/database-handle.types.js';
 import {
@@ -17,7 +13,8 @@ import {
 /**
  * The database the Vitest harness uses on a developer machine: `<project>_test` — the project slug
  * in snake_case, the same `<project>_` stem as the database roles — beside, never inside, the
- * database `pnpm dev` serves.
+ * database `pnpm dev` serves. It is the template every worker's own database is cloned from
+ * (`<project>_test_worker_<pool id>`); no test runs on it.
  *
  * @remarks
  * Suites truncate every table with `RESTART IDENTITY` between files. Pointed at the `pnpm dev`
@@ -103,8 +100,8 @@ export function pointHarnessAtLocalTestDatabase(): void {
  * @remarks
  * - **Algorithm:** with `ALLOW_HOSTED_TEST_DATABASE=true`, passes. On a GitHub Actions runner,
  *   passes only when every `DATABASE_*URL` is on the runner itself (its service container, reached
- *   over loopback). Otherwise asks the server for `current_database()` and compares it with
- *   {@link LOCAL_TEST_DATABASE_NAME}.
+ *   over loopback). Otherwise asks the server for `current_database()` and accepts only a worker's
+ *   own database, `<{@link LOCAL_TEST_DATABASE_NAME}>_worker_<pool id>`.
  * - **Failure modes:** throws, naming the database or the env variable it refused, so no suite can
  *   `TRUNCATE` the database `pnpm dev` serves — or a remote one — whatever an env file or a
  *   workflow says. The restore drills once ran an integration suite on a runner against a restored
@@ -134,53 +131,17 @@ export async function assertConnectedToTestDatabase(
   const [row] = Array.isArray(result)
     ? (result as { name: string }[])
     : ((result as { rows?: { name: string }[] }).rows ?? []);
-  if (row?.name !== LOCAL_TEST_DATABASE_NAME && !isWorkerTestDatabase(row?.name)) {
+  if (!isWorkerTestDatabase(row?.name)) {
     throw new Error(
       `Refusing to wipe database "${String(row?.name)}": on a developer machine test cleanup only ` +
-        `runs against "${LOCAL_TEST_DATABASE_NAME}". Check the DATABASE_*URL values in your env ` +
+        `runs against a worker's "${LOCAL_TEST_DATABASE_NAME}_worker_<n>". Check the DATABASE_*URL values in your env ` +
         'files, or set ALLOW_HOSTED_TEST_DATABASE=true for a dedicated hosted test database.',
     );
   }
 }
 
 /**
- * Creates {@link LOCAL_TEST_DATABASE_NAME} on the local server when it does not exist yet.
- *
- * @remarks
- * - **Algorithm:** connect to the server's `postgres` database with the migration login (the
- *   Compose superuser) and `CREATE DATABASE` when `pg_database` has no such row. A concurrent run
- *   that created it first (`42P04 duplicate_database`) counts as success.
- * - **Failure modes:** connection errors propagate.
- * - **Side effects:** may create one database.
- * - **Notes:** a no-op when {@link isHarnessOnProvidedDatabase} and when the migration URL is not
- *   local.
- */
-export async function ensureLocalTestDatabaseExists(): Promise<void> {
-  if (isHarnessOnProvidedDatabase()) return;
-  const migrationUrl = process.env.DATABASE_MIGRATION_URL ?? LOCAL_TEST_DATABASE_URL;
-  if (!isLocalDatabaseUrl(migrationUrl)) return;
-
-  const serverUrl = new URL(migrationUrl);
-  serverUrl.pathname = '/postgres';
-  const client = new pg.Client({ connectionString: serverUrl.toString() });
-  client.on('error', () => undefined);
-  try {
-    await client.connect();
-    const existing = await client.query('SELECT 1 FROM pg_database WHERE datname = $1', [
-      LOCAL_TEST_DATABASE_NAME,
-    ]);
-    if (existing.rowCount === 0) {
-      await client.query(`CREATE DATABASE ${client.escapeIdentifier(LOCAL_TEST_DATABASE_NAME)}`);
-    }
-  } catch (error) {
-    if ((error as { code?: string }).code !== '42P04') throw error;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
-}
-
-/**
- * Environment for the `pnpm db:migrate` child a Vitest global setup spawns.
+ * Environment for the migration child a Vitest global setup's `prepareDatabase` starts.
  *
  * @remarks
  * - **Algorithm:** the child re-runs the env-file loader. Under the harness's `NODE_ENV` it layers
@@ -196,32 +157,17 @@ export function buildMigrationChildEnvironment(): NodeJS.ProcessEnv {
   return isHarnessOnProvidedDatabase() ? process.env : { ...process.env, NODE_ENV: 'local' };
 }
 
-/**
- * One worker's clone of a test database: `<database>_worker_<pool id>`.
- *
- * @remarks
- * The pool id is a value (Vitest's `VITEST_POOL_ID`, 1 to the worker count), not a name we own.
- */
-export function workerDatabaseName(options: { database: string; worker: string }): string {
-  return `${options.database}_worker_${options.worker}`;
-}
-
-/**
- * Whether `name` is a worker clone of {@link LOCAL_TEST_DATABASE_NAME} in a parallel run — the
- * one other database the wipe guard accepts.
- */
+/** Whether `name` is a worker's own clone of {@link LOCAL_TEST_DATABASE_NAME}: the only database the wipe guard accepts. */
 function isWorkerTestDatabase(name: string | undefined): boolean {
-  if (!isParallelDatabaseRun() || name === undefined) return false;
+  if (name === undefined) return false;
   return new RegExp(`^${LOCAL_TEST_DATABASE_NAME}_worker_[0-9]+$`).test(name);
 }
 
-/** This worker's Vitest pool id, or a thrown error naming the switch when it is missing. */
+/** This worker's Vitest pool id, or a thrown error when the code runs outside a Vitest worker. */
 function workerPoolId(): string {
   const worker = process.env.VITEST_POOL_ID;
   if (!(worker && /^[0-9]+$/.test(worker))) {
-    throw new Error(
-      'TEST_PARALLEL_DATABASES=true needs a Vitest worker (VITEST_POOL_ID); run pnpm test:parallel-db.',
-    );
+    throw new Error('The test harness runs in a Vitest worker only (VITEST_POOL_ID is unset).');
   }
   return worker;
 }
@@ -230,19 +176,14 @@ function workerPoolId(): string {
  * Points this worker's `DATABASE_*URL`s at its own clone of the test database.
  *
  * @remarks
- * - **Algorithm:** a no-op unless {@link isParallelDatabaseRun}. Each set URL keeps its login
- *   (roles are cluster-wide, so every login works in the clone) and gets
- *   {@link workerDatabaseName} of its own database.
- * - **Failure modes:** throws without a Vitest pool id; refuses a hosted test database
- *   (`ALLOW_HOSTED_TEST_DATABASE=true`), where the clones would be created on a shared server.
+ * - **Algorithm:** each set URL keeps its login (roles are cluster-wide, so every login works in
+ *   the clone) and gets `workerDatabaseName` of its own database — the clone the global setup made
+ *   for this pool id.
+ * - **Failure modes:** throws outside a Vitest worker (no pool id).
  * - **Side effects:** rewrites `process.env.DATABASE_URL`, `DATABASE_MIGRATION_URL`,
  *   `DATABASE_MAINTENANCE_URL` and `DATABASE_OPERATOR_URL` when set.
  */
 export function pointWorkerAtItsOwnDatabase(): void {
-  if (!isParallelDatabaseRun()) return;
-  if (process.env.ALLOW_HOSTED_TEST_DATABASE === 'true') {
-    throw new Error('A parallel database run never runs on a hosted test database.');
-  }
   const worker = workerPoolId();
   for (const key of DATABASE_URL_KEYS) {
     const value = process.env[key];
@@ -254,48 +195,9 @@ export function pointWorkerAtItsOwnDatabase(): void {
 }
 
 /**
- * The test Redis key prefix: `<stem>:test:`, or `<stem>:worker-<pool id>:test:` in a parallel
- * run — still ending in `:test:`, which the Redis cleanup requires.
+ * The test Redis key prefix of this worker: `<stem>:worker-<pool id>:test:` — its own namespace,
+ * still ending in `:test:`, which the Redis cleanup requires.
  */
 export function testRedisKeyPrefix(stem: string): string {
-  return isParallelDatabaseRun() ? `${stem}:worker-${workerPoolId()}:test:` : `${stem}:test:`;
-}
-
-/**
- * Clones the migrated test database once per worker for a parallel database run.
- *
- * @remarks
- * - **Algorithm:** a no-op unless {@link isParallelDatabaseRun}. Connects to the server's
- *   `postgres` database with the migration login, then for each worker drops its old clone
- *   (`WITH (FORCE)`) and creates it again with `CREATE DATABASE … TEMPLATE` the migrated, seeded
- *   test database — so every clone starts from the same schema, policies, grants and reference
- *   rows.
- * - **Failure modes:** throws on a hosted test database, and when the template still has open
- *   connections (`55006`): every global-setup connection is closed before this runs.
- * - **Side effects:** drops and creates {@link parallelDatabaseWorkers} databases.
- */
-export async function cloneTestDatabaseForWorkers(): Promise<void> {
-  if (!isParallelDatabaseRun()) return;
-  if (process.env.ALLOW_HOSTED_TEST_DATABASE === 'true') {
-    throw new Error('A parallel database run never runs on a hosted test database.');
-  }
-  const templateUrl =
-    process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL ?? LOCAL_TEST_DATABASE_URL;
-  const serverUrl = new URL(templateUrl);
-  const template = serverUrl.pathname.slice(1);
-  serverUrl.pathname = '/postgres';
-  const client = new pg.Client({ connectionString: serverUrl.toString() });
-  client.on('error', () => undefined);
-  try {
-    await client.connect();
-    for (let worker = 1; worker <= parallelDatabaseWorkers(); worker += 1) {
-      const clone = client.escapeIdentifier(
-        workerDatabaseName({ database: template, worker: String(worker) }),
-      );
-      await client.query(`DROP DATABASE IF EXISTS ${clone} WITH (FORCE)`);
-      await client.query(`CREATE DATABASE ${clone} TEMPLATE ${client.escapeIdentifier(template)}`);
-    }
-  } finally {
-    await client.end().catch(() => undefined);
-  }
+  return `${stem}:worker-${workerPoolId()}:test:`;
 }

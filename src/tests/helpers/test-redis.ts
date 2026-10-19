@@ -23,7 +23,8 @@ function isRedisWipeAllowed(): boolean {
  *   commit-dispatch tasks, rate-limit counters — so a key family added later is cleared too.
  *   BullMQ keys stay: a suite's queues and workers live across its cases.
  * - **Failure modes:** throws unless the prefix ends in `:test:` (the harness forces
- *   `<stem>:test:`), so this can never empty a running `pnpm dev`'s namespace.
+ *   `<stem>:worker-<n>:test:`, the chaos bootstrap `<stem>:test:`), so this can never empty a
+ *   running `pnpm dev`'s namespace.
  * - **Notes:** clearing per key family (`perm:*`, `idempotency:*`, …) is what let keys leak
  *   between cases: a SCAN pattern needs the prefix ioredis does not add, and a family list goes
  *   stale the day a new family is added.
@@ -34,7 +35,7 @@ async function deleteHarnessKeys(): Promise<void> {
   if (!keyPrefix.endsWith(':test:')) {
     throw new Error(
       `Refusing to clear Redis keys under "${keyPrefix}": the test harness only clears its own ` +
-        '`<stem>:test:` namespace (src/tests/setup.ts and the chaos bootstrap force it).',
+        '`…:test:` namespace (src/tests/setup.ts and the chaos bootstrap force it).',
     );
   }
   for await (const keys of scanLogicalKeys({ redis: redisConnection, logicalPattern: '*' })) {

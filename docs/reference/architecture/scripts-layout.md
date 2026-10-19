@@ -9,8 +9,8 @@ Build-time and operational scripts live under `src/scripts/`, grouped by concern
 | `codegen/` | OpenAPI, Postman, route catalog, project tree, docs drift checks, layered-docs generator | `generate-openapi.ts`, `generate-feature-docs.ts`, `generate-route-catalog.ts`, `generate-migration.ts`, `check-api-docs-sync.ts` |
 | `validators/` | CI gates, env example sync, migration lint, doc link checks | `validate-domain.ts`, `sync-env-example.ts`, `lint-migrations.ts` |
 | `admin/` | Operator tools, secrets, DLQ replay, worker probes | `admin-token.ts`, `dlq-replay.ts`, `worker-readiness.ts` |
-| `ops/` | Smoke tests, verify gate, contract fixture recording, soak tests | `verify-base.ts`, `api-smoke-test.ts` |
-| `seed/` | Database seed orchestration (minimal / full / demo sync) | `minimal.ts`, `full.ts` |
+| `ops/` | The one database step, smoke tests, verify gate, contract fixture recording, soak tests | `db-prepare.ts`, `verify-base.ts`, `api-smoke-test.ts` |
+| `seed/` | Database seed orchestration (minimal / full / demo sync); `ops/db-prepare.ts` runs the minimal and full seeds | `minimal.ts`, `full.ts` |
 | `tooling/` | One-off codemods and repo maintenance | `codemod-test-suffixes.ts` |
 
 **Companion tooling outside `src/scripts/`:** `tooling/tsdoc-coverage/` hosts the TSDoc coverage gate (`pnpm tsdoc:check`). See [documentation-system.md](./documentation-system.md) for the in-source documentation system.
@@ -30,6 +30,7 @@ Build-time and operational scripts live under `src/scripts/`, grouped by concern
 | `pnpm ci:quality` | Includes scripts layout check + TSDoc coverage gate (`tsdoc:check`) |
 | `pnpm tool:project-structure-tree` | `codegen/generate-project-structure-tree.ts` |
 | `pnpm verify:base` | `ops/verify-base.ts` |
+| `pnpm db:migrate` / `db:seed` / `db:seed:full` | `ops/db-prepare.ts` (`--seed none` / `minimal` / `full`) |
 | `pnpm tsdoc:check` | `tooling/tsdoc-coverage/check-coverage.ts` (budget-driven ratchet against [`tooling/tsdoc-coverage/budget.json`](../../../tooling/tsdoc-coverage/budget.json)) |
 | `pnpm tsdoc:check:report` | Same gate, plus a `<file>\t<symbol>\t<needs>` line for every missing pair |
 | `pnpm tsdoc:check:refresh-budget` | Rewrites the budget once missing counts have decreased |

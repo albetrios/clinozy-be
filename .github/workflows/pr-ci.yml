@@ -350,8 +350,6 @@ jobs:
       - uses: ./.github/actions/tune-ci-postgres
         with:
           container: ${{ job.services.postgres.id }}
-      - name: Run migrations
-        run: pnpm db:migrate
       # The RLS tests run in their own lanes (rls-security, rls-application-role), as in the matrix.
       - name: The database tests this change selects
         env:
@@ -505,9 +503,6 @@ jobs:
         with:
           container: ${{ job.services.postgres.id }}
 
-      - name: Run migrations
-        run: pnpm db:migrate
-
       - name: Run non-superuser RLS security tests
         run: |
           set -euo pipefail
@@ -598,9 +593,6 @@ jobs:
       - uses: ./.github/actions/tune-ci-postgres
         with:
           container: ${{ job.services.postgres.id }}
-
-      - name: Run migrations
-        run: pnpm db:migrate
 
       # The harness opens the pool under test as clinozy_be_app and the maintenance pool as
       # clinozy_be_maintenance (`-c role=` on each URL), so both run the production RLS posture.

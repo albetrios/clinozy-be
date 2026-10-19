@@ -127,10 +127,7 @@ jobs:
           sudo bash tooling/setup/agent/install-k6.sh
           k6 version
 
-      - name: Run migrations
-        run: pnpm db:migrate
-
-      - name: Seed full demo data
+      - name: Prepare the database with the full demo data (migrations included)
         run: pnpm db:seed:full
 
       - name: Seed the super_admin the admin scenarios sign in as

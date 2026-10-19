@@ -56,7 +56,7 @@ bash tooling/setup/agent/healthcheck.sh
 ```bash
 export PATH="/opt/node24/bin:$HOME/.local/bin:$PATH"
 SONAR=0 pnpm compose:up && pnpm compose:wait
-pnpm db:migrate && pnpm setup:local --only-env && pnpm db:seed
+pnpm db:seed   # the database step: create, migrate, logins, reference rows
 pnpm dev &
 bash tooling/setup/agent/healthcheck.sh
 ```

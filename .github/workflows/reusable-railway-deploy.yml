@@ -495,27 +495,19 @@ jobs:
           wait_for_image "${API_IMAGE_REF}" "api"
           wait_for_image "${WORKER_IMAGE_REF}" "worker"
 
-      - name: Run database migrations
-        # `pnpm db:migrate` only needs DATABASE_URL/DATABASE_MIGRATION_URL,
-        # but the migrate script transitively imports `env.config.ts` which
-        # boot-validates the entire Zod env schema — so every required key
-        # must be present in `process.env`. The "Export GitHub Environment
-        # to runner" step has already populated all of them; we only force
-        # METRICS_ENABLED=false here so the migration runner does not start
-        # the metrics endpoint (step env: overrides $GITHUB_ENV).
-        env:
-          METRICS_ENABLED: 'false'
-        run: pnpm db:migrate
-
-      - name: Seed reference data
-        # `pnpm db:seed` (minimal) inserts the idempotent reference/bootstrap rows the app
-        # HARD-depends on — chiefly the `tenancy.permissions` codes that owner-role
-        # provisioning FK-references (plus billing `plans`). Migrations create the schema but
-        # never seed these, so without this step a fresh environment provisions NO
-        # personal/team organization: every provision rolls back on the missing permission
-        # FK and the read-path self-heal swallows it to `personal_organization_id: null`.
-        # Idempotent (onConflictDoNothing), so it is safe to run on every deploy. Same env
-        # requirements as the migrate step above (env.config boot-validates the schema).
+      - name: Prepare the database (migrations, then the reference rows)
+        # `pnpm db:seed` is the one database step (`src/scripts/ops/db-prepare.ts`): it applies the
+        # pending migrations, then the minimal seed — the idempotent reference/bootstrap rows the
+        # app HARD-depends on, chiefly the `tenancy.permissions` codes that owner-role provisioning
+        # FK-references (plus billing `plans`). Migrations create the schema but never seed these,
+        # so without the seed a fresh environment provisions NO personal/team organization: every
+        # provision rolls back on the missing permission FK and the read-path self-heal swallows it
+        # to `personal_organization_id: null`. On a remote database it never creates or drops one,
+        # and turns on no local logins; the seed upserts, so it is safe on every deploy. The seed
+        # imports `env.config.ts`, which boot-validates the entire Zod env schema — the "Export
+        # GitHub Environment to runner" step has already populated every required key; only
+        # METRICS_ENABLED=false is forced so no metrics endpoint starts (step env: overrides
+        # $GITHUB_ENV).
         env:
           METRICS_ENABLED: 'false'
         run: pnpm db:seed

@@ -93,8 +93,8 @@ jobs:
     env:
       # Pin the harness runtime like every other vitest workflow (see
       # reusable-vitest-postgres-redis.yml): without it Vitest injects NODE_ENV=test
-      # into its own process, the `pnpm db:migrate` child spawned by
-      # src/tests/global-setup.ts inherits it, and the env schema
+      # into its own process, the migration child the database step (src/scripts/ops/db-prepare.ts)
+      # spawns from src/tests/global-setup.ts inherits it, and the env schema
       # (local | development | production) fails the run before any suite executes.
       # CI has no .env files to rescue it the way a developer's .env.local does.
       NODE_ENV: development

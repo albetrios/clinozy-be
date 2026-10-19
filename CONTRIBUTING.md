@@ -17,9 +17,7 @@ One command (Docker + env + migrate + dev): `pnpm setup:local`. Full clone-to-ru
 pnpm install
 pnpm compose:up
 pnpm compose:wait
-pnpm db:migrate
-pnpm setup:local --only-env   # turn on the database logins the migrations created
-pnpm db:seed
+pnpm db:seed   # create, migrate, the database logins, the reference rows
 pnpm dev
 ```
 

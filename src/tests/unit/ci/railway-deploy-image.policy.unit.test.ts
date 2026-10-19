@@ -131,18 +131,15 @@ describe('Railway deploy tooling (policy)', () => {
     expect(envValidator).toContain('process.exit(runEnvironmentValidation(');
   });
 
-  it('seeds reference data after migrate so a fresh environment can provision orgs', () => {
+  it('prepares the database with the reference seed so a fresh environment can provision orgs', () => {
     // Migrations create the schema but never insert the `tenancy.permissions` reference
     // rows that owner-role provisioning FK-references. Without the seed, a fresh
     // environment provisions NO personal/team organization — every provision rolls back on the
     // missing permission FK and the read-path self-heal swallows it to
-    // `personal_organization_id: null`. The reference seed must run, and AFTER migrate
-    // (the schema must exist first).
-    const migrateAt = deployWorkflow.indexOf('pnpm db:migrate');
-    const seedAt = deployWorkflow.indexOf('pnpm db:seed');
-    expect(migrateAt).toBeGreaterThan(-1);
-    expect(seedAt).toBeGreaterThan(-1);
-    expect(migrateAt).toBeLessThan(seedAt);
+    // `personal_organization_id: null`. `pnpm db:seed` is the one database step: it migrates,
+    // then seeds (the order `src/tests/unit/scripts/db-prepare.unit.test.ts` pins).
+    expect(deployWorkflow).toMatch(/run: pnpm db:seed$/m);
+    expect(deployWorkflow).not.toMatch(/run: pnpm db:migrate$/m);
   });
 
   it('declares no dead target_branch input (single-trunk keeps one branch control)', () => {

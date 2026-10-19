@@ -25,8 +25,9 @@
  * Never overwrites a real credential. A missing `.env.local` is scaffolded self-contained
  * (`.env.example` + a generated RS256 JWT keypair + SECRETS_ENCRYPTION_KEY + localhost DB/Redis
  * URLs); an existing one is only rewritten with `--force-env-local`, and otherwise just gets the
- * targeted updates below. `--only-env` runs the env steps (and the database logins when the local
- * database is up) and exits — used by the cloud-agent bootstrap (`tooling/setup/agent/bootstrap.sh`).
+ * targeted updates below. `--only-env` runs the env steps and exits — used by the cloud-agent
+ * bootstrap (`tooling/setup/agent/bootstrap.sh`). The database — create, migrate, the logins, the
+ * seed — is one step, `pnpm db:migrate` / `db:seed` / `db:seed:full` (`src/scripts/ops/db-prepare.ts`).
  *
  * Targeted `.env.local` updates, every run:
  * - Third-party API keys (Stripe, Resend, S3, PostHog — `external-credentials.ts`)
@@ -34,7 +35,7 @@
  *   file, else from the process environment; key names are printed, never values.
  * - `--with-captcha` / `--without-captcha` turn local CAPTCHA on (Cloudflare test keys) or off.
  * - The database logins the migrations create (`local-database-logins.ts`) are enabled and their
- *   URLs written.
+ *   URLs written — by the database step, which runs after the migrations create those roles.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -51,21 +52,11 @@ import {
 } from './external-credentials.js';
 import { upsertEnvAssignment } from './env-file.util.js';
 import { applyLocalCaptcha, TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY } from './local-captcha.js';
-import {
-  alterRoleStatement,
-  applyLocalDatabaseLogins,
-  environmentConnectionUrlProblems,
-  localDatabaseLogins,
-  planLocalDatabaseLogins,
-} from './local-database-logins.js';
+import { environmentConnectionUrlProblems, localDatabase } from './local-database-logins.js';
 import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
 import { listProcessTree, signalProcesses } from '@/scripts/ops/process-tree.util.js';
 import dotenv from 'dotenv';
-import pg from 'pg';
-import {
-  resolveDerivedNames,
-  resolveSqlIdentifierStem,
-} from '@tooling/setup/codegen/project-identity.util.js';
+import { resolveDerivedNames } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
 
 const PROJECT_ROOT = process.cwd();
@@ -74,17 +65,8 @@ const ENV_LOCAL_PATH = resolve(PROJECT_ROOT, '.env.local');
 const REQUIRED_NODE_MAJOR = 24;
 const SETUP_CONFIG = loadConfig();
 const PROJECT_DISPLAY_NAME = SETUP_CONFIG.project.displayName;
-const {
-  containers: LOCAL_CONTAINERS,
-  databaseName: LOCAL_DATABASE_NAME,
-  databaseAppRole: LOCAL_DATABASE_APP_ROLE,
-  databaseMaintenanceRole: LOCAL_DATABASE_MAINTENANCE_ROLE,
-} = resolveDerivedNames(SETUP_CONFIG);
-const LOCAL_DATABASE_LOGINS = localDatabaseLogins({
-  appRole: LOCAL_DATABASE_APP_ROLE,
-  maintenanceRole: LOCAL_DATABASE_MAINTENANCE_ROLE,
-  sqlStem: resolveSqlIdentifierStem(SETUP_CONFIG),
-});
+const { containers: LOCAL_CONTAINERS } = resolveDerivedNames(SETUP_CONFIG);
+const { superuserUrl: LOCAL_DATABASE_URL, logins: LOCAL_DATABASE_LOGINS } = localDatabase();
 const POSTGRES_CONTAINER = LOCAL_CONTAINERS.postgres;
 const REDIS_CONTAINER = LOCAL_CONTAINERS.redis;
 const DEFAULT_DEV_PORT = 3000;
@@ -280,7 +262,7 @@ function inspectContainer(name: string): ContainerState {
 }
 
 function runPreflight(reports: StepReport[], options: BootstrapOptions): void {
-  logHeading('1/9 Preflight');
+  logHeading('1/8 Preflight');
 
   const nodeStartedAt = performance.now();
   const nodeMajor = Number(process.versions.node.split('.')[0] ?? 0);
@@ -366,7 +348,7 @@ function fetchLatestPnpmVersion(): string | null {
 }
 
 function runInstallDependencies(reports: StepReport[], options: BootstrapOptions): void {
-  logHeading('2/9 Dependencies');
+  logHeading('2/8 Dependencies');
   const startedAt = performance.now();
   if (options.skipDeps) {
     reportStep(reports, 'pnpm install', 'skipped', startedAt, '--skip-deps');
@@ -402,7 +384,7 @@ function runInstallDependencies(reports: StepReport[], options: BootstrapOptions
 }
 
 function runEnvScaffolding(reports: StepReport[], options: BootstrapOptions): void {
-  logHeading('3/9 Environment (.env.local)');
+  logHeading('3/8 Environment (.env.local)');
   scaffoldEnvLocal(reports, options);
   checkEnvironmentConnectionUrls(reports, options);
   syncExternalCredentials(reports, options);
@@ -553,7 +535,6 @@ function injectGeneratedSecrets(content: string): string {
 // adopted project could never migrate. Local Postgres/Redis are plaintext (no TLS).
 // The runtime and maintenance URLs start on the superuser too; once the migrations have
 // created the roles, the login step rewrites both onto their RLS-subject logins.
-const LOCAL_DATABASE_URL = `postgresql://${LOCAL_DATABASE_NAME}:${LOCAL_DATABASE_NAME}@localhost:5432/${LOCAL_DATABASE_NAME}`;
 function injectLocalhostOverrides(content: string): string {
   let updated = content;
   updated = upsertEnvAssignment(updated, 'DATABASE_URL', LOCAL_DATABASE_URL);
@@ -648,134 +629,8 @@ function checkEnvironmentConnectionUrls(reports: StepReport[], options: Bootstra
   if (!options.check) process.exit(1);
 }
 
-/**
- * Turns on the three database logins `.env.local` connects as — runtime (`clinozy_be_app`),
- * maintenance and operator — and writes their URLs (docs/deployment/runbooks/
- * maintenance-database-role.md). The migrations create those roles `NOLOGIN`; this grants LOGIN
- * (+ BYPASSRLS for the operator) as the compose superuser — each password taken from `.env.local`,
- * else the process environment, else generated — then logs in as each to prove the URL works.
- * Local database only; the cloud environments provision their own logins.
- */
-async function provisionLocalDatabaseLogins(
-  reports: StepReport[],
-  options: BootstrapOptions,
-): Promise<void> {
-  const startedAt = performance.now();
-  const phase = 'database logins';
-  if (!existsSync(ENV_LOCAL_PATH)) {
-    reportStep(reports, phase, 'skipped', startedAt, 'no .env.local yet');
-    return;
-  }
-  const envLocal = readFileSync(ENV_LOCAL_PATH, 'utf8');
-  const currentDatabaseUrl = dotenv.parse(envLocal).DATABASE_URL;
-  if (currentDatabaseUrl && !isLocalDatabaseUrl(currentDatabaseUrl)) {
-    reportStep(reports, phase, 'skipped', startedAt, 'DATABASE_URL points at a remote database');
-    return;
-  }
-  const logins = LOCAL_DATABASE_LOGINS;
-  const superuser = new pg.Client({
-    connectionString: LOCAL_DATABASE_URL,
-    connectionTimeoutMillis: 5_000,
-  });
-  // A dropped connection fails the query in flight; without a listener it would also be uncaught.
-  superuser.on('error', () => undefined);
-  try {
-    let existingRoles: string[];
-    try {
-      await superuser.connect();
-      const { rows } = await superuser.query<{ rolname: string }>(
-        'select rolname from pg_roles where rolname = any($1::text[])',
-        [logins.map((login) => login.role)],
-      );
-      existingRoles = rows.map((row) => row.rolname);
-    } catch {
-      reportStep(
-        reports,
-        phase,
-        'warning',
-        startedAt,
-        'local Postgres not reachable — pnpm compose:up, then re-run',
-      );
-      return;
-    }
-    const missingRoles = logins.filter((login) => !existingRoles.includes(login.role));
-    if (missingRoles.length > 0) {
-      reportStep(
-        reports,
-        phase,
-        'warning',
-        startedAt,
-        `roles not created yet (${missingRoles.map((login) => login.role).join(', ')}) — pnpm db:migrate, then re-run`,
-      );
-      return;
-    }
-    const planned = planLocalDatabaseLogins({
-      envLocal,
-      environment: process.env,
-      superuserUrl: LOCAL_DATABASE_URL,
-      logins,
-    });
-    if (options.check) {
-      reportStep(
-        reports,
-        phase,
-        'warning',
-        startedAt,
-        `--check mode (would enable ${planned.map((login) => login.role).join(', ')})`,
-      );
-      return;
-    }
-    for (const login of planned) await superuser.query(alterRoleStatement(login));
-    writeFileSync(
-      ENV_LOCAL_PATH,
-      applyLocalDatabaseLogins({ envLocal, superuserUrl: LOCAL_DATABASE_URL, planned }),
-    );
-    for (const login of planned) {
-      const connection = new pg.Client({
-        connectionString: login.url,
-        connectionTimeoutMillis: 5_000,
-      });
-      connection.on('error', () => undefined);
-      try {
-        await connection.connect();
-        const {
-          rows: [row],
-        } = await connection.query<{ current_user: string }>('select current_user');
-        if (row?.current_user !== login.role) throw new Error(`connected as ${row?.current_user}`);
-      } finally {
-        await connection.end().catch(() => undefined);
-      }
-    }
-    reportStep(
-      reports,
-      phase,
-      'done',
-      startedAt,
-      planned
-        .map(
-          (login) =>
-            `${login.envKey} → ${login.role}${login.passwordSource === 'environment' ? ' (from the environment)' : ''}`,
-        )
-        .join(', '),
-    );
-    logInfo(
-      '      Each login verified. Restart pnpm dev (and pnpm dev:worker) to connect with them.',
-    );
-  } catch (error) {
-    reportStep(
-      reports,
-      phase,
-      'failed',
-      startedAt,
-      error instanceof Error ? error.message : String(error),
-    );
-  } finally {
-    await superuser.end().catch(() => undefined);
-  }
-}
-
 function runDocker(reports: StepReport[], options: BootstrapOptions): void {
-  logHeading('4/9 Docker Compose (postgres + redis)');
+  logHeading('4/8 Docker Compose (postgres + redis)');
   if (options.skipDocker) {
     const startedAt = performance.now();
     reportStep(reports, 'docker compose', 'skipped', startedAt, '--skip-docker');
@@ -873,46 +728,26 @@ function startOrSkipContainer(
   if (status === 'failed') process.exit(1);
 }
 
-function runMigrations(reports: StepReport[], options: BootstrapOptions): void {
-  logHeading('5/9 Migrations');
+/**
+ * Prepares the local database the one way every database is set up (`src/scripts/ops/db-prepare.ts`):
+ * create, migrate, the database logins, then the seed `--seed` asks for — `pnpm db:migrate`,
+ * `pnpm db:seed` or `pnpm db:seed:full`.
+ */
+function runPrepareDatabase(reports: StepReport[], options: BootstrapOptions): void {
+  logHeading('5/8 Database (create, migrate, logins, seed)');
   const startedAt = performance.now();
+  const script = { none: 'db:migrate', minimal: 'db:seed', full: 'db:seed:full' }[options.seed];
   if (options.skipMigrate) {
-    reportStep(reports, 'db:migrate', 'skipped', startedAt, '--skip-migrate');
+    reportStep(reports, script, 'skipped', startedAt, '--skip-migrate');
     return;
   }
   if (options.check) {
-    reportStep(reports, 'db:migrate', 'skipped', startedAt, '--check mode');
+    reportStep(reports, script, 'skipped', startedAt, `--check mode (would run pnpm ${script})`);
     return;
   }
-  const result = runCommand('pnpm', ['db:migrate']);
-  if (result.code !== 0) {
-    reportStep(reports, 'db:migrate', 'failed', startedAt, 'pnpm db:migrate failed');
-    process.exit(1);
-  }
-  reportStep(reports, 'db:migrate', 'done', startedAt);
-}
-
-function runSeed(reports: StepReport[], options: BootstrapOptions): void {
-  logHeading('6/9 Seed');
-  const startedAt = performance.now();
-  if (options.seed === 'none') {
-    reportStep(reports, 'seed', 'skipped', startedAt, 'pass --seed minimal | --seed full to seed');
-    return;
-  }
-  if (options.check) {
-    reportStep(
-      reports,
-      'seed',
-      'skipped',
-      startedAt,
-      `--check mode (would run db:seed${options.seed === 'full' ? ':full' : ''})`,
-    );
-    return;
-  }
-  const script = options.seed === 'full' ? 'db:seed:full' : 'db:seed';
   const result = runCommand('pnpm', [script]);
   if (result.code !== 0) {
-    reportStep(reports, script, 'failed', startedAt, 'seed script failed');
+    reportStep(reports, script, 'failed', startedAt, `pnpm ${script} failed`);
     process.exit(1);
   }
   reportStep(reports, script, 'done', startedAt);
@@ -921,7 +756,7 @@ function runSeed(reports: StepReport[], options: BootstrapOptions): void {
 const CODEGRAPH_PACKAGE = '@colbymchenry/codegraph';
 
 function runMcpSetup(reports: StepReport[], options: BootstrapOptions): void {
-  logHeading('7/9 MCP servers (CodeGraph index + default set)');
+  logHeading('6/8 MCP servers (CodeGraph index + default set)');
   if (options.skipMcp) {
     const startedAt = performance.now();
     reportStep(reports, 'mcp', 'skipped', startedAt, '--skip-mcp');
@@ -1074,7 +909,7 @@ function installHeadroomCli(reports: StepReport[], options: BootstrapOptions): v
 }
 
 function runOptionalWorker(reports: StepReport[], options: BootstrapOptions): ChildProcess | null {
-  logHeading('8/9 Background worker');
+  logHeading('7/8 Background worker');
   const startedAt = performance.now();
   if (!options.withWorker) {
     reportStep(reports, 'dev:worker', 'skipped', startedAt, 'pass --with-worker to spawn');
@@ -1104,7 +939,7 @@ async function runDevServer(
   options: BootstrapOptions,
   worker: ChildProcess | null,
 ): Promise<void> {
-  logHeading('9/9 Dev server');
+  logHeading('8/8 Dev server');
   const startedAt = performance.now();
   if (options.check) {
     reportStep(reports, 'dev', 'skipped', startedAt, '--check mode');
@@ -1198,7 +1033,6 @@ async function main(): Promise<void> {
 
   if (options.onlyEnv) {
     runEnvScaffolding(reports, options);
-    await provisionLocalDatabaseLogins(reports, options);
     printSummary(reports);
     return;
   }
@@ -1207,10 +1041,7 @@ async function main(): Promise<void> {
   runInstallDependencies(reports, options);
   runEnvScaffolding(reports, options);
   runDocker(reports, options);
-  runMigrations(reports, options);
-  // After migrations: they create the roles (NOLOGIN) this step turns on.
-  await provisionLocalDatabaseLogins(reports, options);
-  runSeed(reports, options);
+  runPrepareDatabase(reports, options);
   runMcpSetup(reports, options);
   const worker = runOptionalWorker(reports, options);
   printSummary(reports);

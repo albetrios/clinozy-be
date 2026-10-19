@@ -3,6 +3,9 @@ import { resetEnvCacheForTests } from '@/shared/config/env.config.js';
 import { resolveRedisKeyPrefix } from '@/infrastructure/cache/redis-prefix.util.js';
 import { REDIS_KEY_PREFIX_STEM } from '@/shared/constants/project-identity.constants.js';
 
+/** The worker's harness prefix (`<stem>:worker-<n>:test:`, src/tests/setup.ts), restored after each case. */
+const HARNESS_PREFIX = process.env.REDIS_KEY_PREFIX;
+
 describe('resolveRedisKeyPrefix', () => {
   beforeEach(() => {
     delete process.env.REDIS_KEY_PREFIX;
@@ -11,8 +14,8 @@ describe('resolveRedisKeyPrefix', () => {
   });
 
   afterEach(() => {
-    // Restore the harness prefix (src/tests/setup.ts sets `<stem>:test:`) so other suites stay isolated.
-    process.env.REDIS_KEY_PREFIX = `${REDIS_KEY_PREFIX_STEM}:test:`;
+    // Restore the harness prefix so other suites stay isolated.
+    process.env.REDIS_KEY_PREFIX = HARNESS_PREFIX;
     process.env.NODE_ENV = 'development';
     resetEnvCacheForTests();
   });

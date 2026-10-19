@@ -181,7 +181,9 @@ bootstrap reports "⬆ k6 2.3.0 → 2.4.0 available" + the lines to paste
 **Tests need none.** [`src/tests/setup.ts`](../../src/tests/setup.ts) bakes in test RS256 JWT PEMs
 and sets every other value (`??=` or hard override), and
 [`src/tests/global-setup.ts`](../../src/tests/global-setup.ts) forces `DATABASE_URL` to the local
-Docker DB and runs `pnpm db:migrate`. So the full suite runs with **only Postgres + Redis up**.
+Docker DB and prepares it the one way every database is set up (`src/scripts/ops/db-prepare.ts`:
+create, migrate, the permission catalog, one database per test worker). So the full suite runs
+with **only Postgres + Redis up**.
 
 The full variable surface and how to obtain real values: [`.env.example`](../../.env.example) and
 [credentials-and-env.md](credentials-and-env.md).
@@ -195,9 +197,7 @@ Use the repo's compose scripts — the **same ones you run locally** — so the 
 ```bash
 pnpm compose:up      # start Postgres + Redis (same as local)
 pnpm compose:wait    # block until Postgres accepts connections
-pnpm db:migrate
-pnpm setup:local --only-env   # turn on the database logins the migrations created
-pnpm db:seed         # or pnpm db:seed:full
+pnpm db:seed         # create, migrate, the database logins, the reference rows (or pnpm db:seed:full)
 ```
 
 `pnpm compose:up` also starts the local SonarQube container unless you set `SONAR=0`; a cloud session rarely needs it, so `SONAR=0 pnpm compose:up` brings up just Postgres + Redis. Stop everything with `pnpm compose:down`.

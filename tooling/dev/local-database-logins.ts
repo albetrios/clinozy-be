@@ -1,5 +1,13 @@
 import { randomBytes } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import dotenv from 'dotenv';
+import pg from 'pg';
+import {
+  resolveDerivedNames,
+  resolveSqlIdentifierStem,
+} from '@tooling/setup/codegen/project-identity.util.js';
+import { loadConfig } from '@tooling/setup/common/config.js';
 import { upsertEnvAssignment } from './env-file.util.js';
 import {
   DATABASE_URL_KEYS,
@@ -201,5 +209,141 @@ function parseUrl(value: string | undefined): URL | undefined {
     return new URL(value);
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * This machine's database as the project's manifest names it: the Compose superuser URL (the
+ * project's local database name as user, password and database) and the three logins.
+ */
+export function localDatabase(): { superuserUrl: string; logins: readonly LocalDatabaseLogin[] } {
+  const config = loadConfig();
+  const { databaseName, databaseAppRole, databaseMaintenanceRole } = resolveDerivedNames(config);
+  return {
+    superuserUrl: `postgresql://${databaseName}:${databaseName}@localhost:5432/${databaseName}`,
+    logins: localDatabaseLogins({
+      appRole: databaseAppRole,
+      maintenanceRole: databaseMaintenanceRole,
+      sqlStem: resolveSqlIdentifierStem(config),
+    }),
+  };
+}
+
+/** What turning on the logins did, for the caller to report. */
+export type LocalDatabaseLoginsOutcome = {
+  status: 'done' | 'skipped' | 'warning' | 'failed';
+  detail: string;
+  /** The URL each login's variable now holds (`DATABASE_URL`, …), when the logins were turned on. */
+  urls: Readonly<Record<string, string>>;
+};
+
+/**
+ * Turns on the three database logins `.env.local` connects as — runtime (`clinozy_be_app`),
+ * maintenance and operator — and writes their URLs (docs/deployment/runbooks/
+ * maintenance-database-role.md).
+ *
+ * @remarks
+ * - **Algorithm:** the migrations create those roles `NOLOGIN`; this grants LOGIN (+ BYPASSRLS for
+ *   the operator) as the Compose superuser — each password taken from `.env.local`, else the
+ *   process environment, else generated — writes the URLs into `.env.local`, then logs in as each
+ *   to prove the URL works.
+ * - **Failure modes:** `skipped` without `.env.local` or when its `DATABASE_URL` is remote;
+ *   `warning` when Postgres is unreachable, a role does not exist yet, or under `check`; `failed`
+ *   when a login does not work. Never throws.
+ * - **Side effects:** `ALTER ROLE` on the local server and a rewrite of `.env.local`.
+ * - **Notes:** the local database only; the cloud environments provision their own logins. The
+ *   logins step of `prepareDatabase` (`src/scripts/ops/db-prepare.ts`).
+ */
+export async function enableLocalDatabaseLogins(
+  options: { envLocalPath?: string; check?: boolean } = {},
+): Promise<LocalDatabaseLoginsOutcome> {
+  const envLocalPath = options.envLocalPath ?? resolve(process.cwd(), '.env.local');
+  if (!existsSync(envLocalPath))
+    return { status: 'skipped', detail: 'no .env.local yet', urls: {} };
+  const envLocal = readFileSync(envLocalPath, 'utf8');
+  const currentDatabaseUrl = dotenv.parse(envLocal).DATABASE_URL;
+  if (currentDatabaseUrl && !isLocalDatabaseUrl(currentDatabaseUrl)) {
+    return { status: 'skipped', detail: 'DATABASE_URL points at a remote database', urls: {} };
+  }
+  const { superuserUrl, logins } = localDatabase();
+  const superuser = new pg.Client({
+    connectionString: superuserUrl,
+    connectionTimeoutMillis: 5_000,
+  });
+  // A dropped connection fails the query in flight; without a listener it would also be uncaught.
+  superuser.on('error', () => undefined);
+  try {
+    let existingRoles: string[];
+    try {
+      await superuser.connect();
+      const { rows } = await superuser.query<{ rolname: string }>(
+        'select rolname from pg_roles where rolname = any($1::text[])',
+        [logins.map((login) => login.role)],
+      );
+      existingRoles = rows.map((row) => row.rolname);
+    } catch {
+      return {
+        status: 'warning',
+        detail: 'local Postgres not reachable — pnpm compose:up, then re-run',
+        urls: {},
+      };
+    }
+    const missingRoles = logins.filter((login) => !existingRoles.includes(login.role));
+    if (missingRoles.length > 0) {
+      return {
+        status: 'warning',
+        detail: `roles not created yet (${missingRoles.map((login) => login.role).join(', ')})`,
+        urls: {},
+      };
+    }
+    const planned = planLocalDatabaseLogins({
+      envLocal,
+      environment: process.env,
+      superuserUrl,
+      logins,
+    });
+    if (options.check) {
+      return {
+        status: 'warning',
+        detail: `--check mode (would enable ${planned.map((login) => login.role).join(', ')})`,
+        urls: {},
+      };
+    }
+    for (const login of planned) await superuser.query(alterRoleStatement(login));
+    writeFileSync(envLocalPath, applyLocalDatabaseLogins({ envLocal, superuserUrl, planned }));
+    for (const login of planned) await assertLoginWorks(login);
+    return {
+      status: 'done',
+      detail: planned
+        .map(
+          (login) =>
+            `${login.envKey} → ${login.role}${login.passwordSource === 'environment' ? ' (from the environment)' : ''}`,
+        )
+        .join(', '),
+      urls: Object.fromEntries(planned.map((login) => [login.envKey, login.url])),
+    };
+  } catch (error) {
+    return {
+      status: 'failed',
+      detail: error instanceof Error ? error.message : String(error),
+      urls: {},
+    };
+  } finally {
+    await superuser.end().catch(() => undefined);
+  }
+}
+
+/** Logs in with a planned login's URL and throws unless the session runs as its role. */
+async function assertLoginWorks(login: PlannedLogin): Promise<void> {
+  const connection = new pg.Client({ connectionString: login.url, connectionTimeoutMillis: 5_000 });
+  connection.on('error', () => undefined);
+  try {
+    await connection.connect();
+    const {
+      rows: [row],
+    } = await connection.query<{ current_user: string }>('select current_user');
+    if (row?.current_user !== login.role) throw new Error(`connected as ${row?.current_user}`);
+  } finally {
+    await connection.end().catch(() => undefined);
   }
 }

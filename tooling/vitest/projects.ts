@@ -1,9 +1,5 @@
 import type { TestProjectConfiguration } from 'vitest/config';
-import {
-  isParallelDatabaseRun,
-  PARALLEL_DATABASE_PROJECT,
-  parallelDatabaseWorkers,
-} from './parallel-databases.js';
+import { databaseProjectParallelism } from './worker-databases.js';
 
 /**
  * Named Vitest projects — run a tier with `vitest run --project <name>`.
@@ -14,8 +10,11 @@ import {
  * Parallelism rules:
  *   - Pure-unit projects (`unit`, `property`, `global`, `security`, `performance`)
  *     enable file parallelism — handlers and validators are fully mocked.
- *   - DB-bound projects (`unit-db`, `e2e`, `integration`) keep `fileParallelism: false`
- *     because tests share a Postgres database and call `cleanupDatabase()`.
+ *   - Every Vitest worker that reaches Postgres runs on its own database, a clone of the
+ *     migrated test database (`tooling/vitest/worker-databases.ts`), so `cleanupDatabase()` in
+ *     one file never races another. `e2e` and `integration` run their files in parallel (one at
+ *     a time under coverage), in their own `sequence.groupOrder` so their worker count never has
+ *     to match the unit tiers'; `unit-db`, `security` and `performance` run one file at a time.
  *
  * Run a slice in parallel (CI matrix shards): `vitest run --project unit --shard=1/3`.
  *
@@ -179,7 +178,8 @@ export const vitestProjects = [
 
   /**
    * DB-bound unit tests (repository / replay / atomic-consume specs).
-   * Use a real Postgres database via `cleanupDatabase()` — must run files serially.
+   * Use a real Postgres database via `cleanupDatabase()` — one file at a time, on the worker's own
+   * database (parallel is proven only for `e2e` + `integration` so far).
    */
   {
     extends: true,
@@ -196,8 +196,8 @@ export const vitestProjects = [
 
   /**
    * Bundled domain e2e + dedicated `*.e2e.test.ts` suites + worker tests.
-   * All hit the live test app and database; files share `cleanupDatabase()`
-   * and must run sequentially.
+   * All hit the live test app and database; files run in parallel, each worker on its own
+   * database (`databaseProjectParallelism`).
    *
    * `include` honors `VITEST_DOMAIN_FILTER` (see top of file).
    */
@@ -213,8 +213,8 @@ export const vitestProjects = [
         'src/**/events/__tests__/**',
       ],
       pool: 'forks',
-      fileParallelism: false,
-      maxWorkers: 1,
+      ...databaseProjectParallelism(),
+      sequence: { groupOrder: 1 },
       testTimeout: 60_000,
       hookTimeout: 60_000,
     },
@@ -222,7 +222,8 @@ export const vitestProjects = [
 
   /**
    * Integration tests — `src/tests/integration/**` and per-domain
-   * `__tests__/integration/**`. Postgres-backed; sequential.
+   * `__tests__/integration/**`. Postgres-backed; files in parallel, each worker on its own
+   * database, like `e2e`.
    *
    * `include` honors `VITEST_DOMAIN_FILTER` (see top of file).
    *
@@ -242,16 +243,16 @@ export const vitestProjects = [
       name: 'integration',
       include: buildIntegrationIncludes(),
       pool: 'forks',
-      fileParallelism: false,
-      maxWorkers: 1,
+      ...databaseProjectParallelism(),
+      sequence: { groupOrder: 1 },
       testTimeout: 60_000,
       hookTimeout: 60_000,
     },
   },
 
   /**
-   * Security tests — almost all use `cleanupDatabase()` or a live app.
-   * Sequential to avoid DB cleanup races.
+   * Security tests — almost all use `cleanupDatabase()` or a live app. One file at a time, on the
+   * worker's own database: parallel is proven only for `e2e` + `integration` so far.
    */
   {
     extends: true,
@@ -266,7 +267,7 @@ export const vitestProjects = [
     },
   },
 
-  /** Performance tests — live app + DB; sequential. */
+  /** Performance tests — live app + DB; one file at a time, so a file's timings are its own. */
   {
     extends: true,
     test: {
@@ -322,33 +323,4 @@ export const vitestProjects = [
       execArgv: ['--import=nock'],
     },
   },
-
-  /**
-   * The parallel database run (`pnpm test`'s e2e + integration step, and `pnpm test:parallel-db`):
-   * the e2e and integration suites with files in parallel, each worker on its own clone of the
-   * migrated test database and its own Redis namespace (`src/tests/helpers/local-test-database.ts`).
-   * It exists only when a launcher turns it on, so a plain `vitest run` never runs it beside the
-   * e2e and integration projects against one database. Proven equal to serial on 18 Oct 2026.
-   */
-  ...(isParallelDatabaseRun()
-    ? [
-        {
-          extends: true,
-          test: {
-            name: PARALLEL_DATABASE_PROJECT,
-            include: [...buildE2eIncludes(), ...buildIntegrationIncludes()],
-            exclude: [
-              'src/**/__tests__/unit/**',
-              'src/**/__tests__/factories/**',
-              'src/**/events/__tests__/**',
-            ],
-            pool: 'forks',
-            fileParallelism: true,
-            maxWorkers: parallelDatabaseWorkers(),
-            testTimeout: 60_000,
-            hookTimeout: 60_000,
-          },
-        } satisfies TestProjectConfiguration,
-      ]
-    : []),
 ] satisfies TestProjectConfiguration[];

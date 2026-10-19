@@ -206,13 +206,7 @@ async function main(): Promise<void> {
   const gateStartedAt = performance.now();
 
   try {
-    await runPnpmStep({ stepName: 'db:migrate', pnpmArguments: ['db:migrate'] });
-    // The migrations create the role logins NOLOGIN; turn them on before anything connects.
-    await runPnpmStep({
-      stepName: 'database logins',
-      pnpmArguments: ['setup:local', '--only-env'],
-    });
-    await runPnpmStep({ stepName: 'db:seed', pnpmArguments: ['db:seed'] });
+    // The one database step: create, migrate, the logins the migrations create, the full seed.
     await runPnpmStep({ stepName: 'db:seed:full', pnpmArguments: ['db:seed:full'] });
     await ensureServerRunning();
     await runPnpmStep({ stepName: 'test:api-smoke', pnpmArguments: ['test:api-smoke'] });

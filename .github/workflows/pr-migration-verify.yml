@@ -6,7 +6,8 @@ name: Migration verify
 # ~12-minute DB test matrix.
 #
 # What it adds over the existing gates:
-#   - The integration matrix already applies migrations (each shard runs `pnpm db:migrate`),
+#   - The integration matrix already applies migrations (each shard's Vitest global setup runs
+#     the database step, `src/scripts/ops/db-prepare.ts`),
 #     so "applies cleanly" is already merge-blocking — this lane just surfaces it FAST and in
 #     isolation on the PRs where it matters.
 #   - Idempotency (a second `db:migrate` must be a no-op) is NOT checked anywhere else. A

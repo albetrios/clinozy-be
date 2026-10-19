@@ -76,7 +76,7 @@ describe('redis client lifecycle (mocked ioredis)', () => {
     await expect(connectRedis()).rejects.toThrow('ECONNREFUSED');
   });
 
-  it('redisConnection uses keyPrefix from env (<stem>:test: set by the test harness)', async () => {
+  it('redisConnection uses keyPrefix from env (<stem>:worker-<pool id>:test: set by the test harness)', async () => {
     await importRedisClient();
 
     expect(redisConstructorCalls).toHaveLength(1);
@@ -85,7 +85,7 @@ describe('redis client lifecycle (mocked ioredis)', () => {
       lazyConnect: true,
       enableOfflineQueue: false,
       maxRetriesPerRequest: null,
-      keyPrefix: `${REDIS_KEY_PREFIX_STEM}:test:`,
+      keyPrefix: `${REDIS_KEY_PREFIX_STEM}:worker-${process.env.VITEST_POOL_ID}:test:`,
     });
     expect(typeof options.retryStrategy).toBe('function');
   });

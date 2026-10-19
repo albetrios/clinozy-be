@@ -10,16 +10,8 @@
 type Lane = {
   name: string;
   args: string[];
-  /** Lanes that run sequentially together — useful when DB cleanup races would happen across forks. */
+  /** Run the lane one project per Vitest process, in order, so one local Postgres serves one process at a time. */
   serial?: boolean;
-  /**
-   * Projects of a serial lane that `pnpm test` runs as one `db-parallel` process instead, where
-   * they come in the lane: files in parallel, each worker on its own database clone. Proven equal
-   * to serial, test by test, on 18 Oct 2026 (docs/reference/testing/testing-conventions.md ›
-   * Parallel database tests). `pnpm test:coverage`, `pnpm test:select --run` and CI still run
-   * them one by one.
-   */
-  parallelDatabaseProjects?: string[];
 };
 
 export type { Lane };
@@ -35,8 +27,9 @@ export const LANES: Lane[] = [
   },
   /**
    * DB-bound: unit-db, e2e, integration, security, performance — one process at a time, after
-   * `fast`, so a single local Postgres is never driven by two processes at once. Each project runs
-   * its files serially, except e2e + integration, which run together in parallel (`db-parallel`).
+   * `fast`, so a single local Postgres is never driven by two processes at once. Every worker runs
+   * on its own database; e2e and integration run their files in parallel
+   * (`tooling/vitest/worker-databases.ts`).
    */
   {
     name: 'db-bound',
@@ -54,6 +47,5 @@ export const LANES: Lane[] = [
       'performance',
     ],
     serial: true,
-    parallelDatabaseProjects: ['e2e', 'integration'],
   },
 ];

@@ -71,9 +71,7 @@ the emails, which stay on `example.com`.
 
 ```bash
 pnpm compose:up && pnpm compose:wait
-pnpm db:migrate
-pnpm setup:local --only-env   # turn on the database logins the migrations created
-pnpm db:seed:full
+pnpm db:seed:full   # create, migrate, the database logins, then the full seed
 pnpm dev
 ```
 

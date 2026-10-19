@@ -73,9 +73,6 @@ jobs:
       - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
         uses: ./.github/actions/test-env
 
-      - name: Run migrations
-        run: pnpm db:migrate
-
       - name: Run mutation tests
         run: pnpm test:mutation
 

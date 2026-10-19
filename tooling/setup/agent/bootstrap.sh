@@ -6,9 +6,10 @@
 # gitleaks, semgrep, k6 — each at the version pinned in tool-versions.sh — and scaffolds a
 # self-contained `.env.local` (`pnpm setup:local --only-env`, which first stops on a
 # DATABASE_*_URL in the environment that is remote or the wrong login, or a remote
-# REDIS_URL). Then brings the playground fully live: Postgres + Redis, migrations, the
-# database logins the migrations create (`pnpm setup:local --only-env` again), the full demo
-# seed, and the API (12) and the worker (13) started in their own sessions and LEFT RUNNING.
+# REDIS_URL). Then brings the playground fully live: Postgres + Redis, the database
+# (`pnpm db:migrate`: create, migrate, the logins the migrations create), the full demo seed
+# (`pnpm db:seed:full`), and the API (12) and the worker (13) started in their own sessions and
+# LEFT RUNNING.
 #
 #   bash tooling/setup/agent/bootstrap.sh                 # the session: setup → live stack
 #   bash tooling/setup/agent/bootstrap.sh --install-only  # environment Setup script:
@@ -16,8 +17,9 @@
 #   bash tooling/setup/agent/bootstrap.sh --reset-database
 #                                     # pnpm dev:stack:reset-db — a scratch database again:
 #                                     # skips the installs (2-8), stops the API + worker,
-#                                     # drops and recreates the Compose database, then
-#                                     # migrate → logins → seed → API → worker (9-13)
+#                                     # then `pnpm db:migrate --reset` drops and recreates
+#                                     # the local database: migrate → logins → seed → API →
+#                                     # worker (9-13)
 #
 # The session-start hook launches the default mode (detached) in every web session, so the
 # stack is live before the work starts. Each step is written to
@@ -273,27 +275,22 @@ fi
 pnpm compose:wait >&2 || die "Postgres did not become ready"
 ok "[9/${TOTAL}] Postgres + Redis healthy"
 
-# --reset-database: the API and worker hold connections, so they stop first. The database's
-# name and owner come from the Postgres container's own POSTGRES_DB / POSTGRES_USER, so only the
-# local Compose database can be dropped — never one a DATABASE_URL points at.
+# --reset-database: the API and worker hold connections, so they stop first; the database step
+# below then drops and recreates the database (`--reset`, which refuses one that is not local).
 if [ "${reset_database}" = 1 ]; then
-  step "[9/${TOTAL}] Reset the Compose database (--reset-database)"
+  step "[9/${TOTAL}] Stop the API + worker for the reset (--reset-database)"
   bash "${AGENT_DIR}/stack.sh" stop >&2
-  # shellcheck disable=SC2016 # expanded by the container's shell, from its own environment
-  docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE IF EXISTS \"$POSTGRES_DB\" WITH (FORCE)" -c "CREATE DATABASE \"$POSTGRES_DB\" OWNER \"$POSTGRES_USER\""' >&2 \
-    || die "database reset failed (docker compose exec postgres)"
-  ok "[9/${TOTAL}] Compose database dropped and recreated"
+  ok "[9/${TOTAL}] API + worker stopped"
 fi
 
-# 10) Migrations + database logins --------------------------------------------
-step "[10/${TOTAL}] Database migrations + logins"
-pnpm db:migrate >&2 || die "db:migrate failed"
-# Step 7 ran before Postgres was up, so it could not turn on the logins the
-# migrations just created NOLOGIN. Re-run it now (the same order `pnpm setup:local`
-# uses): otherwise a fresh database with a `.env.local` that already carries the
-# login URLs fails the seed, and a fresh `.env.local` leaves the app on the superuser.
-pnpm setup:local --only-env >&2 || die "database logins failed (pnpm setup:local --only-env)"
-ok "[10/${TOTAL}] migrations applied, database logins enabled"
+# 10) The database: create, migrate, the logins the migrations create ---------
+step "[10/${TOTAL}] Database: create, migrate, logins (pnpm db:migrate)"
+if [ "${reset_database}" = 1 ]; then
+  pnpm db:migrate --reset >&2 || die "db:migrate --reset failed"
+else
+  pnpm db:migrate >&2 || die "db:migrate failed"
+fi
+ok "[10/${TOTAL}] database migrated, logins enabled"
 
 # 11) Seed, with the API and worker already starting -------------------------
 # Neither needs the demo data to boot, so both start before the seed and their start-up

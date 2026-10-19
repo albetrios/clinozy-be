@@ -99,13 +99,12 @@ describe('DB test shards', () => {
     expect(rlsParity).toMatch(/^ {6}fail-fast: false$/m);
   });
 
-  it('every DB lane turns off Postgres durability before it migrates', () => {
+  it('every DB lane turns off Postgres durability on its Postgres service', () => {
     for (const workflow of [integrationWorkflow, prCi, rlsParity]) {
-      // `pnpm db:migrate` itself, not `pnpm db:migrate:lint` (a static check, no database).
-      const migrations = workflow.match(/pnpm db:migrate$/gm)?.length ?? 0;
-      expect(migrations).toBeGreaterThan(0);
+      const services = workflow.match(/image: postgres:/g)?.length ?? 0;
+      expect(services).toBeGreaterThan(0);
       const tuned = workflow.split('uses: ./.github/actions/tune-ci-postgres').length - 1;
-      expect(tuned).toBe(migrations);
+      expect(tuned).toBe(services);
     }
   });
 });

@@ -150,9 +150,6 @@ jobs:
         with:
           container: ${{ job.services.postgres.id }}
 
-      - name: Run migrations
-        run: pnpm db:migrate
-
       - name: Run ${{ matrix.shard.id }} test shard with coverage
         id: run-tests
         env:

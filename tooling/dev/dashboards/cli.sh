@@ -113,11 +113,9 @@ cmd_up() {
   log "→ Postgres / Redis${SONAR:+/ SonarQube}…"
   pnpm compose:up   >/dev/null 2>&1 && ok "containers up"   || warn "compose:up reported issues"
   pnpm compose:wait >/dev/null 2>&1 && ok "postgres ready"  || warn "postgres wait timed out"
-  log "→ migrations…"
-  pnpm db:migrate   >/dev/null 2>&1 && ok "migrations applied" || warn "migrate failed (run: pnpm db:migrate)"
-  # The migrations create the role logins NOLOGIN; turn them on before the seed and the API connect.
-  pnpm setup:local --only-env >/dev/null 2>&1 && ok "database logins enabled" \
-    || warn "database logins failed (run: pnpm setup:local --only-env)"
+  log "→ database (create, migrate, logins)…"
+  pnpm db:migrate   >/dev/null 2>&1 && ok "database migrated, logins enabled" \
+    || warn "database step failed (run: pnpm db:migrate)"
   log "→ demo super_admin (the user the proxy logs in as for Bull Board)…"
   pnpm db:seed:demo-admin >/dev/null 2>&1 \
     && ok "demo super_admin ready" \

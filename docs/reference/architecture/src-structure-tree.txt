@@ -2520,6 +2520,7 @@ src/
     ├── ops/
     │   ├── api-smoke-test.ts
     │   ├── db-migrate-dry-run.ts
+    │   ├── db-prepare.ts
     │   ├── db-restore-smoke.ts
     │   ├── db-sequences-advance.ts
     │   ├── memory-soak.ts
@@ -3442,6 +3443,7 @@ src/
     │   │   │   ├── production-guard.unit.test.ts
     │   │   │   ├── seed-contract.unit.test.ts
     │   │   │   └── stripe-catalog-sync.unit.test.ts
+    │   │   ├── db-prepare.unit.test.ts
     │   │   ├── db-restore-smoke.db.unit.test.ts
     │   │   ├── db-sequences-advance.db.unit.test.ts
     │   │   ├── early-checks.unit.test.ts
