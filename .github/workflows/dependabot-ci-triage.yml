@@ -120,6 +120,7 @@ jobs:
           mode: open
           title: ${{ steps.describe.outputs.title }}
           body: ${{ steps.describe.outputs.body }}
+          labels: dependencies
           run-id: ${{ github.event.workflow_run.id }}
           head-sha: ${{ github.event.workflow_run.head_sha }}
 
