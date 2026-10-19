@@ -26,6 +26,9 @@ runs:
         DATABASE_TLS_ENFORCED: 'false'
         DATABASE_RLS_SAFETY_ENFORCED: 'false'
         DATABASE_CONNECTION_BUDGET_ENFORCED: 'false'
+        # The budget is still checked with that flag off, assuming one API plus one worker —
+        # more than the default service Postgres allows. This is one API and no worker.
+        DEPLOYMENT_TOTAL_REPLICA_COUNT: '1'
         REDIS_TLS_ENFORCED: 'false'
         TRUST_PROXY_REQUIRED: 'false'
         # Inputs reach the script through env, never expanded into it (zizmor template-injection).
