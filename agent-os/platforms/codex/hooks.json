@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" bash \"$(git rev-parse --show-toplevel)/agent-os/hooks/be-session-start.sh\"",
+            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" node \"$(git rev-parse --show-toplevel)/agent-os/hooks/be-session-start.mjs\"",
             "statusMessage": "Loading clinozy-be session context"
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" bash \"$(git rev-parse --show-toplevel)/agent-os/hooks/be-prompt-skill-router.sh\"",
+            "command": "CLAUDE_PROJECT_DIR=\"$(git rev-parse --show-toplevel)\" node \"$(git rev-parse --show-toplevel)/agent-os/hooks/be-prompt-skill-router.mjs\"",
             "statusMessage": "Checking clinozy-be skill routing"
           }
         ]

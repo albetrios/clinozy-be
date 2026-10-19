@@ -88,7 +88,7 @@ Granular procedures live in **skills** (invoked by name); these commands are **w
 The session-start and guardrail follow-up is implemented — see
 [`agent-os/hooks/README.md`](../hooks/README.md):
 
-- **SessionStart** (`agent-os/hooks/be-session-start.sh`) — on Claude Code on the web,
+- **SessionStart** (`agent-os/hooks/be-session-start.mjs`) — on Claude Code on the web,
   verifies Node/deps/codegraph, installs deps, and prints the skill-trigger map.
 - **Guardrails** — block destructive shell, secret writes and skipping the git hooks
   (`--no-verify`, `git commit -n`, `HUSKY=0`); warn on protected paths

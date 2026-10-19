@@ -9,7 +9,7 @@
 // .cursor/rules/be-ai-guardrails.mdc).
 //
 // Reads the hook payload on stdin; prints { "permission": "allow" | "deny", ... }.
-import { readFileSync } from "node:fs";
+import { readHookPayload } from "./_be-hook.mjs";
 import { destructiveShellReason } from "./_be-guard-rules.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
@@ -24,19 +24,7 @@ function deny(message) {
   process.exit(0);
 }
 
-let raw = "";
-try {
-  raw = readFileSync(0, "utf8");
-} catch {
-  allow();
-}
-
-let payload = {};
-try {
-  payload = JSON.parse(raw);
-} catch {
-  allow();
-}
+const payload = readHookPayload() ?? allow();
 
 const command = payload.command || (payload.tool_input && payload.tool_input.command) || payload.shellCommand || "";
 if (!command) allow();

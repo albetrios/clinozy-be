@@ -7,13 +7,14 @@
 //     be-guardrails.mjs;
 //   - deny destructive shell smuggled through an MCP tool's command-like input
 //     (rm -rf, git push --force, mkfs/dd), same patterns as cursor-shell-guard;
-//   - escalate GitHub PR creation to the user (parity with be-no-unrequested-pr.sh)
+//   - escalate GitHub PR creation to the user (parity with be-no-unrequested-pr.mjs)
 //     — deny with an instruction to ask the user, since Cursor hooks have no
 //     native "ask" decision.
 //
 // Reads the hook payload on stdin; prints { permission: "allow" | "deny" }.
 // Fail-open: any error allows the call.
-import { readFileSync } from "node:fs";
+import { readHookPayload } from "./_be-hook.mjs";
+import { isReadableSecretPath } from "./_be-guard-rules.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
 function allow() {
@@ -29,12 +30,7 @@ function deny(message) {
   process.exit(0);
 }
 
-let payload = {};
-try {
-  payload = JSON.parse(readFileSync(0, "utf8"));
-} catch {
-  allow();
-}
+const payload = readHookPayload() ?? allow();
 
 const toolName = payload.tool_name || payload.toolName || payload.name || "";
 const input = payload.tool_input || payload.toolInput || payload.input || {};
@@ -45,21 +41,14 @@ try {
   allow();
 }
 
-// PR creation must be user-requested (parity with be-no-unrequested-pr.sh).
+// PR creation must be user-requested (parity with be-no-unrequested-pr.mjs).
 if (/create_pull_request/i.test(toolName)) {
   deny(
     "clinozy-be guardrail: opening a GitHub PR via MCP requires an explicit user request. Confirm with the user, then have them approve the PR creation.",
   );
 }
 
-// Secrets file referenced anywhere in the MCP input.
-function isReadableSecretPath(p) {
-  if (!p) return false;
-  if (/(^|\/)\.setup-credentials$/.test(p)) return true;
-  if (/(^|\/)\.setup-state\.(json|lock|audit\.log)$/.test(p)) return true;
-  if (/(^|\/)\.env\.example$/.test(p) || /(^|\/)\.env\.setup\.example$/.test(p)) return false;
-  return /(^|\/)\.env(\.[\w.-]+)?$/.test(p);
-}
+// Secrets file referenced anywhere in the MCP input (the one rule set, _be-guard-rules.mjs).
 const touchesSecret = inputText
   .split(/[\s;|&><()'"`,[\]{}]+/)
   .some((token) => isReadableSecretPath(token.replace(/^['"]|['"]$/g, "")));

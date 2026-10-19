@@ -1,14 +1,15 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import {
+  createScratchFolder,
+  removeScratchFolders,
+} from '@/tests/helpers/git-repository.helper.js';
 
 const HOOKS = join(process.cwd(), 'agent-os', 'hooks');
-const temporaryDirectories: string[] = [];
 
 function runHook(options: { script: string; state: string; payload: object }) {
-  return spawnSync('bash', [join(HOOKS, options.script)], {
+  return spawnSync('node', [join(HOOKS, options.script)], {
     input: JSON.stringify(options.payload),
     encoding: 'utf8',
     env: { ...process.env, CLAUDE_PROJECT_DIR: process.cwd(), TMPDIR: options.state },
@@ -18,7 +19,7 @@ function runHook(options: { script: string; state: string; payload: object }) {
 /** The PR guard's answer for one MCP PR creation in `session`: `ask`, or nothing. */
 function prDecision(options: { state: string; session: string }): string {
   const result = runHook({
-    script: 'be-no-unrequested-pr.sh',
+    script: 'be-no-unrequested-pr.mjs',
     state: options.state,
     payload: {
       session_id: options.session,
@@ -32,23 +33,18 @@ function prDecision(options: { state: string; session: string }): string {
     .hookSpecificOutput.permissionDecision;
 }
 
-afterEach(() => {
-  for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
+afterEach(removeScratchFolders);
 
 /**
  * Locks in that /be-ship and /be-open-pr are the explicit PR request: the turn they start opens
  * its PR without a second confirmation, every other turn still asks, and the next prompt clears it.
  */
-describe('be-no-unrequested-pr.sh honours /be-ship', () => {
+describe('be-no-unrequested-pr.mjs honours /be-ship', () => {
   it('asks in an ordinary turn and lets a /be-ship or /be-open-pr turn through', () => {
-    const state = mkdtempSync(join(tmpdir(), 'pr-request-hooks-'));
-    temporaryDirectories.push(state);
+    const state = createScratchFolder('pr-request-hooks-');
     const prompt = (session: string, text: string) =>
       runHook({
-        script: 'be-prompt-skill-router.sh',
+        script: 'be-prompt-skill-router.mjs',
         state,
         payload: { session_id: session, prompt: text },
       });

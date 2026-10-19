@@ -9,9 +9,7 @@
 //
 // Reads the hook payload on stdin; prints { agentMessage } when a rule is hit (advisory — Cursor
 // applies no permission semantics to afterFileEdit). Fail-open: any error exits 0 silently.
-import { readFileSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { isInsideRepository, readHookPayload } from "./_be-hook.mjs";
 import { editRuleViolations } from "./_be-guard-rules.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
@@ -21,12 +19,7 @@ function done(status, message) {
   process.exit(0);
 }
 
-let payload = {};
-try {
-  payload = JSON.parse(readFileSync(0, "utf8"));
-} catch {
-  done("silent");
-}
+const payload = readHookPayload() ?? done("silent");
 
 const filePath =
   payload.file_path || payload.filePath || (payload.tool_input && payload.tool_input.file_path) || "";
@@ -41,9 +34,7 @@ const content = [
   .filter(Boolean)
   .join("\n");
 
-const root = process.env.CLAUDE_PROJECT_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const inRepository = !isAbsolute(filePath) || filePath.startsWith(`${root}/`);
-const violations = editRuleViolations({ filePath, content, inRepository });
+const violations = editRuleViolations({ filePath, content, inRepository: isInsideRepository(filePath) });
 
 if (violations.length) {
   done(

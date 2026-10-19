@@ -10,11 +10,11 @@
 // cancelled run counts only while HEAD is still the pushed commit (a newer push cancels the older
 // runs and starts its own watch). One watch per commit.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { isInRepository, pushDirectory } from "./_be-push-target.mjs";
+import { hookStateDirectory as stateRoot, isInsideRepository, readHookPayload, repositoryRoot } from "./_be-hook.mjs";
+import { pushDirectory } from "./_be-push-target.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
 const HOOK_ID = "be-push-ci-watch";
@@ -23,17 +23,6 @@ const APPEAR_WITHIN_MILLISECONDS = 5 * 60_000;
 const FINISH_WITHIN_MILLISECONDS = 40 * 60_000;
 const FAILED_CONCLUSIONS = new Set(["failure", "timed_out", "startup_failure"]);
 
-const repositoryRoot =
-  process.env.CLAUDE_PROJECT_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const stateRoot = join(process.env.TMPDIR || "/tmp", "clinozy-be-hooks");
-
-function readPayload() {
-  try {
-    return JSON.parse(readFileSync(0, "utf8"));
-  } catch {
-    return null;
-  }
-}
 
 function run(command, args) {
   const result = spawnSync(command, args, { cwd: repositoryRoot, encoding: "utf8" });
@@ -58,7 +47,7 @@ async function watch(payload) {
   const command = payload.tool_input?.command || "";
   if (!/\bgit\s+(?:-C\s+\S+\s+)?push\b/.test(command)) return "silent";
   const directory = pushDirectory({ command, cwd: payload.cwd || repositoryRoot });
-  if (!isInRepository({ directory, repositoryRoot })) return "silent";
+  if (!isInsideRepository(directory)) return "silent";
   if (!run("gh", ["auth", "status"]).ok) return "no-gh";
   const sha = run("git", ["rev-parse", "HEAD"]).output;
   if (!sha) return "silent";
@@ -105,7 +94,7 @@ async function watch(payload) {
 
 let outcome = "error";
 try {
-  const payload = readPayload();
+  const payload = readHookPayload();
   outcome = payload ? await watch(payload) : "silent";
 } catch {
   /* fail-open */

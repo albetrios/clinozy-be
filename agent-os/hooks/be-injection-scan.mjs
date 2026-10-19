@@ -12,27 +12,16 @@
 // false positive costs one warning line, a false negative costs nothing that
 // wasn't already true. Non-blocking by design: PostToolUse cannot veto a call
 // that already ran. Fails OPEN: any error exits 0 silently.
-import { readFileSync } from "node:fs";
+import { addModelContext, readHookPayload } from "./_be-hook.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
 function done(status, context) {
+  if (context) addModelContext({ event: "PostToolUse", context });
   recordTelemetry("be-injection-scan", "PostToolUse", status);
-  if (context) {
-    process.stdout.write(
-      JSON.stringify({
-        hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: context },
-      }),
-    );
-  }
   process.exit(0);
 }
 
-let payload = {};
-try {
-  payload = JSON.parse(readFileSync(0, "utf8"));
-} catch {
-  done("silent");
-}
+const payload = readHookPayload() ?? done("silent");
 
 const tool = payload.tool_name || payload.toolName || "";
 // Only external-content tools; the settings matcher already scopes this, but

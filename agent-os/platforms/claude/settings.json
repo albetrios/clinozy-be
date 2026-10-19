@@ -70,7 +70,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-session-start.sh\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-session-start.mjs\""
           }
         ]
       }
@@ -80,7 +80,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-prompt-skill-router.sh\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-prompt-skill-router.mjs\""
           }
         ]
       }
@@ -109,7 +109,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-no-unrequested-pr.sh\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-no-unrequested-pr.mjs\""
           }
         ]
       }
@@ -135,7 +135,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-large-read-nudge.sh\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-large-read-nudge.mjs\""
           }
         ]
       },
@@ -153,7 +153,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-subagent-verify.sh\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-subagent-verify.mjs\""
           }
         ]
       },
@@ -176,7 +176,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-gate-failure-hint.sh\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-gate-failure-hint.mjs\""
           }
         ]
       }
@@ -206,7 +206,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-pre-compact-preserve.sh\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-pre-compact-preserve.mjs\""
           }
         ]
       }
@@ -216,7 +216,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-session-end.sh\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-session-end.mjs\""
           }
         ]
       }

@@ -5,7 +5,7 @@
 # Why this exists: the cloud image ships Node 20/21/22 (under /opt/nodeXX via
 # nvm), but this project requires the version pinned in .nvmrc (>=24). This installs
 # that version into /opt/node<major> — the same layout the image uses and exactly
-# where agent-os/hooks/be-session-start.sh looks — so the SessionStart hook switches
+# where agent-os/hooks/be-session-start.mjs looks — so the SessionStart hook switches
 # PATH to it and runs `pnpm install` automatically. No repo changes required.
 #
 # Runs from three places: the environment's cached *Setup script* (via

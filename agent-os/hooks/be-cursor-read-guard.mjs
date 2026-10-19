@@ -8,7 +8,7 @@
 //
 // Reads the hook payload on stdin; prints { permission: "allow" | "deny" }.
 // Fail-open: any error allows the read.
-import { readFileSync } from "node:fs";
+import { readHookPayload } from "./_be-hook.mjs";
 import { isReadableSecretPath } from "./_be-guard-rules.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
@@ -25,12 +25,7 @@ function deny(message) {
   process.exit(0);
 }
 
-let payload = {};
-try {
-  payload = JSON.parse(readFileSync(0, "utf8"));
-} catch {
-  allow();
-}
+const payload = readHookPayload() ?? allow();
 
 const filePath =
   payload.file_path || payload.filePath || payload.path || (payload.tool_input && payload.tool_input.file_path) || "";

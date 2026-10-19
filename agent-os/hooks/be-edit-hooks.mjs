@@ -7,7 +7,7 @@
 // - PostToolUse queues the edited file for formatting and adds, as additionalContext (a
 //   PostToolUse hook's plain stdout never reaches the model), the skill reminders its path implies
 //   and the gates the uncommitted changes imply. Each reminder appears once per turn: the record
-//   lives in the _be-turn-once.sh directory, which be-prompt-skill-router.sh clears at every prompt.
+//   is _be-turn-once.mjs's, which be-prompt-skill-router.mjs clears at every prompt.
 // - Stop formats every file queued during the turn with one Biome call, so a turn of many edits
 //   formats once, then prints the gate checklist on stdout — Codex shows it; Claude does not pass a
 //   Stop hook's stdout to the model, and the hook never blocks the stop.
@@ -18,12 +18,19 @@
 // Only files in this repository are judged: a session that holds several repositories runs every
 // repository's hooks (tooling/agent-os/session-hooks.ts). Fails open: any error exits 0 with no
 // output — a hook must never block or fail an edit.
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  addModelContext,
+  hookStateDirectory as stateRoot,
+  isInsideRepository,
+  readHookPayload,
+  repositoryRoot,
+} from "./_be-hook.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
+import { turnOnce } from "./_be-turn-once.mjs";
 
 const HOOK_ID = "be-edit-hooks";
 const SKILL_MAP = "Full map: agent-os/docs/skill-triggers.md";
@@ -75,38 +82,12 @@ const GATE_REMINDERS = [
   [/\.mdc$|^agent-os\/|agent-os\/|CLAUDE\.md$/, "agent-os, rules or docs changed → pnpm agent-os:check (be-structure-maintainer)"],
 ];
 
-const repositoryRoot =
-  process.env.CLAUDE_PROJECT_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const stateRoot = join(process.env.TMPDIR || "/tmp", "clinozy-be-hooks");
-
-function readPayload() {
-  try {
-    return JSON.parse(readFileSync(0, "utf8"));
-  } catch {
-    return null;
-  }
-}
 
 /** The edited file as an absolute path in this repository, or "" when it is elsewhere. */
 function repositoryFile(filePath) {
-  if (!filePath) return "";
-  const absolute = isAbsolute(filePath) ? filePath : join(repositoryRoot, filePath);
-  return absolute.startsWith(`${repositoryRoot}/`) ? absolute : "";
-}
-
-/** Succeeds the first time `key` is seen this turn (the _be-turn-once.sh record); fails open. */
-function turnOnce(session, key) {
-  const directory = join(stateRoot, session);
-  try {
-    mkdirSync(directory, { recursive: true });
-    const marker = join(directory, `${HOOK_ID}-${createHash("sha1").update(key).digest("hex")}`);
-    // `wx` creates the record or fails when it is already there, in one step (no check-then-write race).
-    writeFileSync(marker, "", { flag: "wx" });
-  } catch (error) {
-    if (error?.code === "EEXIST") return false;
-    /* every reminder counts as new when the record cannot be written */
-  }
-  return true;
+  if (!filePath || !isInsideRepository(filePath)) return "";
+  const absolute = resolve(repositoryRoot, filePath);
+  return absolute === repositoryRoot ? "" : absolute;
 }
 
 /** The queue of files to format at Stop — outside the turn record, so a missed Stop formats later. */
@@ -156,14 +137,14 @@ function afterEdit(payload, session) {
       const optional = route.optional?.length ? ` (+ ${route.optional.join(", ")})` : "";
       return `${route.skills.join(" → ")}${optional}${route.chain ? ` — the ${route.chain} chain` : ""}`;
     })
-    .filter((reminder) => turnOnce(session, `skill-reminder:${reminder}`));
+    .filter((reminder) => turnOnce({ session, key: `skill-reminder:${reminder}` }));
   if (skills.length > 0) {
     sections.push([`⚡ Skill reminders for ${basename(file)}:`, ...skills.map((reminder) => `  • ${reminder}`), `  ${SKILL_MAP}`].join("\n"));
   }
   // Tracked changes plus this file (a new one is untracked): the untracked scan is a third of
   // the hook's time, and the Stop checklist still reads the whole tree.
   const gates = gateReminders({ untracked: false, extraPaths: [relative] }).filter((reminder) =>
-    turnOnce(session, `stop-gate-reminder:${reminder}`),
+    turnOnce({ session, key: `stop-gate-reminder:${reminder}` }),
   );
   if (gates.length > 0) {
     sections.push(
@@ -175,9 +156,7 @@ function afterEdit(payload, session) {
     );
   }
   if (sections.length === 0) return "silent";
-  process.stdout.write(
-    `${JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: sections.join("\n\n") } })}\n`,
-  );
+  addModelContext({ event: "PostToolUse", context: sections.join("\n\n") });
   return "fired";
 }
 
@@ -209,7 +188,7 @@ function atStop(session) {
   return "silent";
 }
 
-const payload = readPayload();
+const payload = readHookPayload();
 if (payload) {
   const event = payload.hook_event_name || "Stop";
   const session = payload.session_id || "unknown-session";

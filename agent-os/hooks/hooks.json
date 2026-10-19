@@ -3,8 +3,8 @@
   "hooks": [
     {
       "id": "be-session-start",
-      "runtime": "bash",
-      "script": "be-session-start.sh",
+      "runtime": "node",
+      "script": "be-session-start.mjs",
       "claude": {
         "event": "SessionStart",
         "matcher": "startup|resume"
@@ -17,8 +17,8 @@
     },
     {
       "id": "be-prompt-skill-router",
-      "runtime": "bash",
-      "script": "be-prompt-skill-router.sh",
+      "runtime": "node",
+      "script": "be-prompt-skill-router.mjs",
       "claude": {
         "event": "UserPromptSubmit"
       },
@@ -52,8 +52,8 @@
     },
     {
       "id": "be-no-unrequested-pr",
-      "runtime": "bash",
-      "script": "be-no-unrequested-pr.sh",
+      "runtime": "node",
+      "script": "be-no-unrequested-pr.mjs",
       "claude": {
         "event": "PreToolUse",
         "matcher": "mcp__github__create_pull_request"
@@ -74,8 +74,8 @@
     },
     {
       "id": "be-large-read-nudge",
-      "runtime": "bash",
-      "script": "be-large-read-nudge.sh",
+      "runtime": "node",
+      "script": "be-large-read-nudge.mjs",
       "claude": {
         "event": "PostToolUse",
         "matcher": "Read|Grep"
@@ -97,8 +97,8 @@
     },
     {
       "id": "be-subagent-verify",
-      "runtime": "bash",
-      "script": "be-subagent-verify.sh",
+      "runtime": "node",
+      "script": "be-subagent-verify.mjs",
       "claude": {
         "event": "PostToolUse",
         "matcher": "Agent|Task"
@@ -106,8 +106,8 @@
     },
     {
       "id": "be-gate-failure-hint",
-      "runtime": "bash",
-      "script": "be-gate-failure-hint.sh",
+      "runtime": "node",
+      "script": "be-gate-failure-hint.mjs",
       "claude": {
         "event": "PostToolUseFailure",
         "matcher": "Bash"
@@ -149,16 +149,16 @@
     },
     {
       "id": "be-pre-compact-preserve",
-      "runtime": "bash",
-      "script": "be-pre-compact-preserve.sh",
+      "runtime": "node",
+      "script": "be-pre-compact-preserve.mjs",
       "claude": {
         "event": "PreCompact"
       }
     },
     {
       "id": "be-session-end",
-      "runtime": "bash",
-      "script": "be-session-end.sh",
+      "runtime": "node",
+      "script": "be-session-end.mjs",
       "claude": {
         "event": "SessionEnd"
       }

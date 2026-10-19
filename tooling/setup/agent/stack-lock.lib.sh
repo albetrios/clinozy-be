@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 # The live bring-up's lock (`$AGENT_STACK_DIR/lock/`), shared by bootstrap.sh (takes it),
-# stack.sh (reports it) and agent-os/hooks/be-session-start.sh (decides whether to launch one).
+# stack.sh (reports it) and agent-os/hooks/be-session-start.mjs (decides whether to launch one).
 #
 # A lock outlives its bring-up when the container stops mid-run: the cached environment of
 # a cloud session can carry a `lock/pid` from another boot, and that pid can name an

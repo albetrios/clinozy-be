@@ -125,7 +125,7 @@ NODE_INSTALL_PREFIX="${node_prefix}" bash "${AGENT_DIR}/install-node.sh" >&2 \
 # in a child process and so cannot change THIS shell's PATH. Activate it here so
 # every pnpm step below runs on the pinned Node; otherwise the image default
 # (e.g. Node 22) trips pnpm's engineStrict gate at the compose:up step. The
-# SessionStart hook (agent-os/hooks/be-session-start.sh) does the same switch for
+# SessionStart hook (agent-os/hooks/be-session-start.mjs) does the same switch for
 # interactive sessions, but does not run when bootstrap.sh is the Setup script.
 current_major="$(node -v 2>/dev/null | tr -dc '0-9.' | cut -d. -f1)"
 current_major="${current_major:-0}"

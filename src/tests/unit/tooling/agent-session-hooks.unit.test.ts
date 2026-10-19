@@ -52,7 +52,7 @@ const OTHER_SETTINGS = JSON.stringify({
         hooks: [
           {
             type: 'command',
-            command: 'bash "$CLAUDE_PROJECT_DIR/agent-os/hooks/be-session-start.sh"',
+            command: 'node "$CLAUDE_PROJECT_DIR/agent-os/hooks/be-session-start.mjs"',
           },
         ],
       },

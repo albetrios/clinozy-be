@@ -13,9 +13,9 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
+import { hookStateDirectory as stateRoot, repositoryRoot } from "./_be-hook.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
 const HOOK_ID = "be-turn-end-tests";
@@ -24,9 +24,6 @@ const SELECTION_BUDGET_MILLISECONDS = 20_000;
 const UNIT_LEVEL_PROJECTS = ["unit", "property", "global"];
 const FAILURE_LINES = 40;
 
-const repositoryRoot =
-  process.env.CLAUDE_PROJECT_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const stateRoot = join(process.env.TMPDIR || "/tmp", "clinozy-be-hooks");
 const lockPath = join(stateRoot, `${HOOK_ID}.lock`);
 const passedPath = join(stateRoot, `${HOOK_ID}.passed`);
 

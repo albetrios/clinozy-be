@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const sessionStart = readFileSync('agent-os/hooks/be-session-start.sh', 'utf8');
+const sessionStart = readFileSync('agent-os/hooks/be-session-start.mjs', 'utf8');
 const bootstrap = readFileSync('tooling/setup/agent/bootstrap.sh', 'utf8');
 const installNode = readFileSync('tooling/setup/agent/install-node.sh', 'utf8');
 const stack = readFileSync('tooling/setup/agent/stack.sh', 'utf8');
@@ -16,17 +16,25 @@ const packageScripts = (
  */
 describe('live playground stack policy', () => {
   it('the session-start hook launches the bring-up detached, on web sessions only', () => {
-    expect(sessionStart).toContain(`if [ "\${CLAUDE_CODE_REMOTE:-}" = "true" ]; then`);
+    expect(sessionStart).toContain('const isRemote = process.env.CLAUDE_CODE_REMOTE === "true";');
+    expect(sessionStart).toContain('if (!isRemote) return "on demand (local session)');
+    // Its own session (setsid), its log in the stack directory, and not waited for.
     expect(sessionStart).toContain(
-      `setsid nohup bash tooling/setup/agent/bootstrap.sh >"\${stack_directory}/bootstrap.log"`,
+      'spawn("bash", ["tooling/setup/agent/bootstrap.sh"], { cwd: repositoryRoot, detached: true, stdio: ["ignore", log, log] }).unref();',
     );
-    expect(sessionStart).toContain('disown');
+    expect(sessionStart).toContain('openSync(join(stackDirectory, "bootstrap.log"), "w")');
   });
 
   it('a web session with no pinned Node on disk installs it before the dependency install', () => {
-    const installNodeCall = sessionStart.indexOf('bash tooling/setup/agent/install-node.sh >&2');
-    expect(installNodeCall).toBeGreaterThan(-1);
-    expect(installNodeCall).toBeLessThan(sessionStart.indexOf('pnpm install --prefer-offline'));
+    expect(sessionStart).toContain('const installer = "tooling/setup/agent/install-node.sh";');
+    expect(sessionStart).toContain(
+      'runToStderr("bash", [installer]) && activateRequiredNode(requiredMajor)',
+    );
+    const provision = sessionStart.indexOf('const node = provisionNode(requiredMajor);');
+    expect(provision).toBeGreaterThan(-1);
+    expect(provision).toBeLessThan(
+      sessionStart.indexOf('installDependencies({ node, requiredMajor });'),
+    );
     // The installer elevates itself, so the hook and bootstrap.sh call it the same way.
     expect(installNode).toContain('sudo -n env NODE_INSTALL_PREFIX=');
     expect(bootstrap).not.toContain('sudo -n env NODE_INSTALL_PREFIX=');
@@ -36,7 +44,9 @@ describe('live playground stack policy', () => {
     expect(sessionStart).not.toContain('AGENT_AUTO_STACK');
     // An API that already answers (a resumed session) or a bring-up holding the lock is left alone.
     expect(sessionStart).toContain('/livez');
-    expect(sessionStart).toContain(`stack_lock_holder "\${stack_directory}"`);
+    expect(sessionStart).toContain(
+      'stack_lock_holder "$1"\', "tooling/setup/agent/stack-lock.lib.sh", stackDirectory]',
+    );
   });
 
   it('session start runs on startup and resume only, with the slow probes in the background', () => {
@@ -47,12 +57,18 @@ describe('live playground stack policy', () => {
     expect(manifest.hooks.find((hook) => hook.id === 'be-session-start')?.claude?.matcher).toBe(
       'startup|resume',
     );
-    expect(sessionStart).toContain(`pnpm agent-os:check >"\${probe_directory}/agent-os-check.log"`);
-    expect(sessionStart.match(/\) <\/dev\/null >\/dev\/null 2>&1 &/g)).toHaveLength(2);
+    // Both probes are this script again with `--probe <name>`, detached and not waited for.
+    expect(sessionStart).toContain('spawnSync("pnpm", ["agent-os:check"]');
+    expect(sessionStart).toContain(
+      'const PROBES = { "agent-os-check": probeAgentOsCheck, "tool-pins": probeToolPins };',
+    );
+    expect(sessionStart.match(/startProbe\("[a-z-]+"\)/g)).toHaveLength(2);
+    expect(sessionStart).toContain('detached: true,\n      stdio: "ignore",\n    }).unref();');
   });
 
   it('the banner tells the agent to wait for "live" before database/API work', () => {
-    expect(sessionStart).toContain('- Stack: %s');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal template in be-session-start.mjs
+    expect(sessionStart).toContain('`- Stack: ${stack}`');
     expect(sessionStart).toContain('wait until pnpm dev:stack:status says live');
   });
 

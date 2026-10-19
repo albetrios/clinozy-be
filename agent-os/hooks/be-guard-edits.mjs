@@ -9,27 +9,19 @@
 // (be-cursor-edit-guard.mjs), so the two platforms enforce one set.
 //
 // Fails OPEN: any read or parse error allows the edit. A hook bug must never brick a session.
-import { readFileSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { isInsideRepository, readHookPayload, writePermissionDecision } from "./_be-hook.mjs";
 import { editRuleViolations } from "./_be-guard-rules.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
-function finish(status, output) {
+function finish(status, violation) {
+  if (violation) writePermissionDecision({ decision: violation.decision, reason: violation.reason });
   recordTelemetry("be-guard-edits", "PreToolUse", status);
-  if (output) process.stdout.write(JSON.stringify(output));
   process.exit(0);
 }
 
-let payload = {};
-try {
-  payload = JSON.parse(readFileSync(0, "utf8"));
-} catch {
-  finish("silent");
-}
-
+const payload = readHookPayload() ?? finish("silent");
 const input = payload.tool_input || {};
-const filePath = input.file_path || "";
+const filePath = typeof input.file_path === "string" ? input.file_path : "";
 if (!filePath) finish("silent");
 
 const edits = Array.isArray(input.edits) ? input.edits.map((edit) => edit?.new_string) : [];
@@ -37,15 +29,5 @@ const content = [input.content, input.new_string, ...edits].filter(Boolean).join
 
 // A session that holds several repositories runs every repository's hooks on every edit
 // (tooling/agent-os/session-hooks.ts); another repository's files are its own hooks' to judge.
-const root = process.env.CLAUDE_PROJECT_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const inRepository = !isAbsolute(filePath) || filePath.startsWith(`${root}/`);
-
-const [violation] = editRuleViolations({ filePath, content, inRepository });
-if (!violation) finish("silent");
-finish("fired", {
-  hookSpecificOutput: {
-    hookEventName: "PreToolUse",
-    permissionDecision: violation.decision,
-    permissionDecisionReason: violation.reason,
-  },
-});
+const [violation] = editRuleViolations({ filePath, content, inRepository: isInsideRepository(filePath) });
+finish(violation ? "fired" : "silent", violation);

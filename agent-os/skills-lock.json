@@ -11,7 +11,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-auto-implement/SKILL.md",
-      "computedHash": "92791dd17d5ea63dd6ba16547e952037fa6ed40641b09d401e75b0d143ad3e09"
+      "computedHash": "43c06758af61e9ce57248079351a93b0f657747afead1f088ae28ec854f49c71"
     },
     "be-before-commit-guard": {
       "source": "local",

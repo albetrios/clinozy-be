@@ -3,7 +3,7 @@
 //
 // BLOCK (deny): reading or writing secret files, secret content, destructive shell commands,
 //   skipping the git hooks (--no-verify, `git commit -n`, HUSKY=0).
-// ASK: `gh pr create` — a PR only when the user asked (be-no-unrequested-pr.sh covers the MCP tool).
+// ASK: `gh pr create` — a PR only when the user asked (be-no-unrequested-pr.mjs covers the MCP tool).
 //   `git push` of auth, RLS, billing, migration or route changes with no clean
 //   /be-pre-merge-review recorded for HEAD (`pnpm agent-os:review-clean` records it).
 // WARN (systemMessage): edits to protected paths, cross-domain imports in a service.
@@ -11,26 +11,20 @@
 // Reads the PreToolUse payload on stdin. Fail-open by design: any parse/read
 // error allows the tool (exit 0) so a guardrail bug can never brick the agent.
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import {
+  isInsideRepository,
+  readHookPayload,
+  repositoryRoot,
+  showSystemMessage,
+  writePermissionDecision,
+} from "./_be-hook.mjs";
 import { destructiveShellReason, isReadableSecretPath, withoutQuotedText } from "./_be-guard-rules.mjs";
-import { isInRepository, pushDirectory } from "./_be-push-target.mjs";
+import { pushDirectory } from "./_be-push-target.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
-let raw = "";
-try {
-  raw = readFileSync(0, "utf8");
-} catch {
-  process.exit(0);
-}
-
-let payload;
-try {
-  payload = JSON.parse(raw);
-} catch {
-  process.exit(0);
-}
+const payload = readHookPayload() ?? process.exit(0);
 
 const tool = payload.tool_name || "";
 const input = payload.tool_input || {};
@@ -43,8 +37,7 @@ const content = [input.content, input.new_string, ...edits].filter(Boolean).join
 // The WARN rules are clinozy-be's conventions, so they judge only files in this repository; the
 // BLOCK rules (destructive shell, secrets) guard every path. A session that holds several
 // repositories runs every repository's hooks on every call (tooling/agent-os/session-hooks.ts).
-const repositoryRoot = process.env.CLAUDE_PROJECT_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const inRepository = !isAbsolute(filePath) || filePath.startsWith(`${repositoryRoot}/`);
+const inRepository = isInsideRepository(filePath);
 
 const warnings = [];
 
@@ -78,7 +71,7 @@ function gitIn(directory, args) {
  */
 function unreviewedSensitivePush(scan) {
   const directory = pushDirectory({ command: scan, cwd: payload.cwd || repositoryRoot });
-  if (!isInRepository({ directory, repositoryRoot })) return "";
+  if (!isInsideRepository(directory)) return "";
   const head = gitIn(repositoryRoot, ["rev-parse", "HEAD"]);
   const gitDirectory = gitIn(repositoryRoot, ["rev-parse", "--absolute-git-dir"]);
   if (!(head && gitDirectory)) return "";
@@ -97,29 +90,14 @@ function unreviewedSensitivePush(scan) {
   );
 }
 
-function ask(reason) {
+function decide(decision, reason) {
+  writePermissionDecision({ decision, reason });
   recordTelemetry("be-guardrails", "PreToolUse", "fired");
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: reason },
-    }),
-  );
   process.exit(0);
 }
 
-function deny(reason) {
-  recordTelemetry("be-guardrails", "PreToolUse", "fired");
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: reason,
-      },
-    }),
-  );
-  process.exit(0);
-}
+const ask = (reason) => decide("ask", reason);
+const deny = (reason) => decide("deny", reason);
 
 // --- BLOCK: agent reading secrets files --------------------------------------
 if ((tool === "Read" || tool === "Grep") && isReadableSecretPath(filePath)) {
@@ -227,7 +205,7 @@ if (isWrite && inRepository && /src\/domains\/[^/]+\/.*\.service\.ts$/.test(file
 }
 
 if (warnings.length) {
-  process.stdout.write(JSON.stringify({ systemMessage: "⚠️ clinozy-be guardrail:\n- " + warnings.join("\n- ") }));
+  showSystemMessage(`⚠️ clinozy-be guardrail:\n- ${warnings.join("\n- ")}`);
 }
 recordTelemetry("be-guardrails", "PreToolUse", warnings.length ? "fired" : "silent");
 process.exit(0);

@@ -38,7 +38,7 @@ there is no separate per-surface configuration.
 
 Install the toolchain once via [`SETUP.md`](../../SETUP.md) (Node, pnpm, gitleaks,
 Docker, …). From then on, the
-[`be-session-start.sh`](../../agent-os/hooks/be-session-start.sh) hook makes each session
+[`be-session-start.mjs`](../../agent-os/hooks/be-session-start.mjs) hook makes each session
 self-sufficient: it **installs anything still missing and skips whatever is already
 present** (`command -v gitleaks`, the dependencies check, …), and it is
 **fail-open** — so a session is ready with no manual per-session setup.
