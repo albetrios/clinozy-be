@@ -8,6 +8,9 @@
 // It skips a tree it already passed (same changes), a selection that runs everything (the push
 // does), and a change no unit-level test reaches.
 //
+// Telemetry: `fired` when it wakes the model, else `silent`, with the outcome in the detail column
+// (`no-changes`, `passed`, `selects-everything`, …) so the hooks report can say why it stayed quiet.
+//
 // Only this repository is judged: a session that holds several repositories runs every
 // repository's hooks, each with its own CLAUDE_PROJECT_DIR (tooling/agent-os/session-hooks.ts).
 import { createHash } from "node:crypto";
@@ -107,14 +110,15 @@ function run() {
   if (!takeLock()) return "busy";
   try {
     const files = changedFiles();
-    if (files.length === 0) return "silent";
+    if (files.length === 0) return "no-changes";
     const tree = fingerprint(files);
     if (readText(passedPath) === tree) return "already-passed";
     const selection = select(files);
-    if (!selection || selection.mode !== "selected") return "silent";
+    if (!selection) return "no-selection";
+    if (selection.mode !== "selected") return "selects-everything";
     const projects = UNIT_LEVEL_PROJECTS.filter((project) => selection.projects[project]?.length);
     const tests = projects.flatMap((project) => selection.projects[project]);
-    if (tests.length === 0) return "silent";
+    if (tests.length === 0) return "no-unit-tests";
 
     const result = spawnSync(
       bin("vitest"),
@@ -159,7 +163,7 @@ try {
   /* fail-open */
 }
 try {
-  recordTelemetry(HOOK_ID, "Stop", outcome);
+  recordTelemetry(HOOK_ID, "Stop", outcome === "failed" ? "fired" : "silent", outcome);
 } catch {
   /* telemetry never changes the outcome */
 }

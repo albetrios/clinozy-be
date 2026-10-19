@@ -16,7 +16,11 @@ afterEach(removeScratchFolders);
 function fixture(options: { runs: object[]; authenticated?: boolean }) {
   const root = createTestGitRepository({
     prefix: 'push-ci-watch-',
-    files: { 'README.md': '# fixture\n' },
+    files: {
+      'README.md': '# fixture\n',
+      '.gitignore': 'agent-os/hooks/.telemetry.log\n',
+      'agent-os/hooks/.gitkeep': '',
+    },
   });
   const state = createScratchFolder('push-ci-watch-state-');
   const bin = join(state, 'bin');
@@ -55,6 +59,12 @@ function runHook(options: { root: string; state: string; bin: string; command?: 
   });
 }
 
+/** The last telemetry row's status and detail columns (`fired,failed`), as the readers see them. */
+function lastTelemetry(root: string): string {
+  const rows = readFileSync(join(root, 'agent-os', 'hooks', '.telemetry.log'), 'utf8').trim();
+  return rows.split('\n').at(-1)?.split(',').slice(2).join(',') ?? '';
+}
+
 const run = (name: string, conclusion: string) => ({
   databaseId: 1,
   name,
@@ -83,6 +93,20 @@ describe('be-push-ci-watch.mjs', () => {
     const unauthenticated = fixture({ runs: [run('PR CI', 'failure')], authenticated: false });
     expect(runHook(unauthenticated).status).toBe(0);
     expect(readFileSync(unauthenticated.calls, 'utf8')).not.toContain('run list');
+  });
+
+  it('records fired when it wakes the model, else silent with why, for the hooks report', () => {
+    const failed = fixture({ runs: [run('PR CI', 'failure')] });
+    runHook(failed);
+    expect(lastTelemetry(failed.root)).toBe('PostToolUse,fired,failed');
+    const green = fixture({ runs: [run('PR CI', 'success')] });
+    runHook(green);
+    expect(lastTelemetry(green.root)).toBe('PostToolUse,silent,green');
+    runHook({ ...green, command: 'for x in a; do echo "$x"; done | sort' });
+    expect(lastTelemetry(green.root)).toBe('PostToolUse,silent,not-a-push');
+    const unauthenticated = fixture({ runs: [], authenticated: false });
+    runHook(unauthenticated);
+    expect(lastTelemetry(unauthenticated.root)).toBe('PostToolUse,silent,no-gh');
   });
 
   it('judges only pushes in its own repository', () => {

@@ -22,7 +22,11 @@ afterEach(removeScratchFolders);
 function repository(): { root: string; state: string; runs: string } {
   const root = createTestGitRepository({
     prefix: 'turn-end-tests-',
-    files: { 'src/a.ts': 'export const a = 1;\n' },
+    files: {
+      'src/a.ts': 'export const a = 1;\n',
+      '.gitignore': 'agent-os/hooks/.telemetry.log\n',
+      'agent-os/hooks/.gitkeep': '',
+    },
   });
   const state = createScratchFolder('turn-end-tests-state-');
   writeFileSync(join(root, 'src', 'a.ts'), 'export const a = 2;\n');
@@ -59,6 +63,12 @@ function runHook(options: { root: string; state: string; exitCode?: number }) {
   });
 }
 
+/** The last telemetry row's status and detail columns (`fired,failed`), as the readers see them. */
+function lastTelemetry(root: string): string {
+  const rows = readFileSync(join(root, 'agent-os', 'hooks', '.telemetry.log'), 'utf8').trim();
+  return rows.split('\n').at(-1)?.split(',').slice(2).join(',') ?? '';
+}
+
 function runCount(runs: string): number {
   return existsSync(runs) ? readFileSync(runs, 'utf8').trim().split('\n').length : 0;
 }
@@ -87,6 +97,16 @@ describe('be-turn-end-tests.mjs', () => {
     writeFileSync(join(root, 'src', 'a.ts'), 'export const a = 3;\n');
     expect(runHook({ root, state }).status).toBe(0);
     expect(runCount(runs)).toBe(2);
+  });
+
+  it('records fired when it wakes the model, else silent with why, for the hooks report', () => {
+    const { root, state } = repository();
+    runHook({ root, state, exitCode: 1 });
+    expect(lastTelemetry(root)).toBe('Stop,fired,failed');
+    runHook({ root, state });
+    expect(lastTelemetry(root)).toBe('Stop,silent,passed');
+    runHook({ root, state });
+    expect(lastTelemetry(root)).toBe('Stop,silent,already-passed');
   });
 
   it('skips while another run holds the lock', () => {

@@ -319,7 +319,8 @@ function mcpStatus() {
 /**
  * Hook health from telemetry: the README's monthly ritual (prune hooks silent 30+ days), enforced
  * passively — names any hook whose last `fired` row is older than 30 days, or that never fired
- * across 50+ runs. Empty when telemetry is absent (fresh clone).
+ * across 50+ runs, with why it stayed quiet (the detail column, e.g. `not-a-push 519, no-gh 18`),
+ * so a dead hook and a too-narrow trigger read differently. Empty when telemetry is absent.
  */
 function hookHealth() {
   let rows;
@@ -331,16 +332,23 @@ function hookHealth() {
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const hooks = new Map();
   for (const row of rows) {
-    const [timestamp, hook, , status] = row.split(",");
+    const [timestamp, hook, , status, detail] = row.split(",");
     if (status === undefined) continue;
-    const entry = hooks.get(hook) ?? { runs: 0, lastFired: 0 };
+    const entry = hooks.get(hook) ?? { runs: 0, lastFired: 0, quiet: new Map() };
     entry.runs += 1;
     if (status === "fired") entry.lastFired = Math.max(entry.lastFired, Date.parse(timestamp) || 0);
+    else entry.quiet.set(detail || status, (entry.quiet.get(detail || status) ?? 0) + 1);
     hooks.set(hook, entry);
   }
+  const why = (quiet) =>
+    [...quiet]
+      .sort((first, second) => second[1] - first[1])
+      .slice(0, 3)
+      .map(([reason, count]) => `${reason} ${count}`)
+      .join(", ");
   const candidates = [...hooks]
-    .map(([hook, { runs, lastFired }]) => {
-      if (lastFired === 0 && runs >= 50) return `${hook} (never fired, ${runs} runs)`;
+    .map(([hook, { runs, lastFired, quiet }]) => {
+      if (lastFired === 0 && runs >= 50) return `${hook} (never fired, ${runs} runs: ${why(quiet)})`;
       if (lastFired !== 0 && lastFired < cutoff) return `${hook} (silent >30d)`;
       return "";
     })
