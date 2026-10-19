@@ -20,6 +20,7 @@ import {
   constants,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readdirSync,
@@ -34,6 +35,10 @@ import { recordTelemetry } from "./_be-telemetry.mjs";
 const DEFAULT_NODE_MAJOR = 24;
 const isRemote = process.env.CLAUDE_CODE_REMOTE === "true";
 const probeDirectory = join(hookStateDirectory, "probes");
+/** Exits 0 while a live bring-up holds the stack lock (stack-lock.lib.sh), with bootstrap.sh's default. */
+const STACK_LOCK_HOLDER_COMMAND =
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: a shell parameter expansion, not a template.
+  'source tooling/setup/agent/stack-lock.lib.sh && stack_lock_holder "${AGENT_STACK_DIR:-/tmp/agent-stack}"';
 /** The agent tools the banner checks against tooling/setup/agent/tool-versions.sh. */
 const AGENT_TOOLS = [
   "codegraph:CODEGRAPH_VERSION:--version",
@@ -368,14 +373,18 @@ async function stackStatus() {
   } catch {
     /* not live */
   }
-  const lockHolder = spawnSync("bash", ["-c", 'source "$0" && stack_lock_holder "$1"', "tooling/setup/agent/stack-lock.lib.sh", stackDirectory], {
-    cwd: repositoryRoot,
-    stdio: "ignore",
-  });
+  // The shell reads AGENT_STACK_DIR itself, as bootstrap.sh and stack.sh do: no value of it is
+  // ever part of a command line.
+  const lockHolder = spawnSync("bash", ["-c", STACK_LOCK_HOLDER_COMMAND], { cwd: repositoryRoot, stdio: "ignore" });
   if (lockHolder.status === 0) return `starting (bring-up already running) — tail -f ${stackDirectory}/bootstrap.log`;
   if (!dependenciesInstalled()) return "not started (dependencies missing) — bash tooling/setup/agent/bootstrap.sh";
-  mkdirSync(stackDirectory, { recursive: true });
-  const log = openSync(join(stackDirectory, "bootstrap.log"), "w");
+  mkdirSync(stackDirectory, { recursive: true, mode: 0o700 });
+  // A stack directory another user made in /tmp, or a link, could aim this log anywhere: refuse it.
+  const directory = lstatSync(stackDirectory);
+  if (!directory.isDirectory() || directory.uid !== process.getuid?.()) {
+    return `not started (${stackDirectory} is not this user's directory) — bash tooling/setup/agent/bootstrap.sh`;
+  }
+  const log = openSync(join(stackDirectory, "bootstrap.log"), "w", 0o600);
   // detached: its own session (setsid), so it outlives this hook and the agent's process group.
   spawn("bash", ["tooling/setup/agent/bootstrap.sh"], { cwd: repositoryRoot, detached: true, stdio: ["ignore", log, log] }).unref();
   return `starting in the background — follow: tail -f ${stackDirectory}/bootstrap.log`;

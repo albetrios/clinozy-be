@@ -22,7 +22,13 @@ describe('live playground stack policy', () => {
     expect(sessionStart).toContain(
       'spawn("bash", ["tooling/setup/agent/bootstrap.sh"], { cwd: repositoryRoot, detached: true, stdio: ["ignore", log, log] }).unref();',
     );
-    expect(sessionStart).toContain('openSync(join(stackDirectory, "bootstrap.log"), "w")');
+    expect(sessionStart).toContain('openSync(join(stackDirectory, "bootstrap.log"), "w", 0o600)');
+    // The log goes only into a stack directory this user owns: never one another user planted.
+    expect(sessionStart).toContain('mkdirSync(stackDirectory, { recursive: true, mode: 0o700 });');
+    expect(sessionStart).toContain('directory.uid !== process.getuid?.()');
+    // AGENT_STACK_DIR reaches the lock check through the environment, never the command line.
+    expect(sessionStart).toContain('spawnSync("bash", ["-c", STACK_LOCK_HOLDER_COMMAND]');
+    expect(sessionStart).not.toMatch(/stack_lock_holder "\$1"/);
   });
 
   it('a web session with no pinned Node on disk installs it before the dependency install', () => {
@@ -45,7 +51,8 @@ describe('live playground stack policy', () => {
     // An API that already answers (a resumed session) or a bring-up holding the lock is left alone.
     expect(sessionStart).toContain('/livez');
     expect(sessionStart).toContain(
-      'stack_lock_holder "$1"\', "tooling/setup/agent/stack-lock.lib.sh", stackDirectory]',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the shell parameter expansion.
+      'source tooling/setup/agent/stack-lock.lib.sh && stack_lock_holder "${AGENT_STACK_DIR:-/tmp/agent-stack}"',
     );
   });
 
