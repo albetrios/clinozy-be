@@ -12,6 +12,7 @@ const SIBLING = join(process.cwd(), '..', 'clinozy-fe');
  * repository's own formatter, helpers and doc links — and is not listed here.
  */
 const COPIES = [
+  'agent-os/shared-contract.json',
   'tooling/setup/agent/ensure-docker-daemon.sh',
   'tooling/ci/early-failure-alert.d.mts',
 ] as const;
@@ -33,7 +34,10 @@ describe('files mirrored in clinozy-fe', () => {
   it.skipIf(!existsSync(join(SIBLING, '.git')))(
     'matches the sibling checkout byte for byte',
     () => {
-      for (const path of COPIES) {
+      // A copy the sibling checkout does not have yet is on its way there (its branch, or its
+      // main before the sibling PR merges); its own "keeps every listed copy" test holds it to the
+      // list once it lands. Every copy both checkouts have must match.
+      for (const path of COPIES.filter((copy) => existsSync(join(SIBLING, copy)))) {
         expect(normalised(join(SIBLING, path)), path).toBe(normalised(path));
       }
     },

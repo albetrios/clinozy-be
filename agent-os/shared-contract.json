@@ -1,0 +1,110 @@
+{
+  "about": "The rules clinozy-be and clinozy-fe share, as data. A true copy in both repositories (the mirror tests keep the two identical); each repository has a conformance test that checks its own code against it: clinozy-be src/tests/unit/ci/shared-contract.policy.unit.test.ts, clinozy-fe tests/ci/shared-contract.policy.test.ts. <prefix> is be or fe; <this-repository> and <other-repository> are the two repository names, from the reader side.",
+  "sharedHooks": {
+    "session-start": {
+      "claude": {
+        "event": "SessionStart",
+        "matcher": "startup|resume"
+      },
+      "codex": {
+        "event": "SessionStart",
+        "matcher": "startup|resume",
+        "statusMessage": "Loading <this-repository> session context"
+      }
+    },
+    "prompt-skill-router": {
+      "claude": {
+        "event": "UserPromptSubmit"
+      },
+      "codex": {
+        "event": "UserPromptSubmit",
+        "statusMessage": "Checking <this-repository> skill routing"
+      }
+    },
+    "guard-edits": {
+      "claude": {
+        "event": "PreToolUse",
+        "matcher": "Edit|Write|MultiEdit"
+      }
+    },
+    "guardrails": {
+      "claude": {
+        "event": "PreToolUse",
+        "matcher": "Bash|Read|Grep|Edit|Write|MultiEdit"
+      },
+      "codex": {
+        "event": "PreToolUse",
+        "matcher": "^Bash$",
+        "statusMessage": "Checking <this-repository> shell guardrails"
+      }
+    },
+    "no-unrequested-pr": {
+      "claude": {
+        "event": "PreToolUse",
+        "matcher": "mcp__github__create_pull_request"
+      }
+    },
+    "edit-hooks": {
+      "claude": {
+        "event": "PostToolUse",
+        "matcher": "Edit|Write",
+        "if": ["Edit(**)", "Write(**)"]
+      }
+    },
+    "gate-failure-hint": {
+      "claude": {
+        "event": "PostToolUseFailure",
+        "matcher": "Bash"
+      }
+    },
+    "edit-hooks-stop": {
+      "claude": {
+        "event": "Stop"
+      },
+      "codex": {
+        "event": "Stop",
+        "statusMessage": "Checking <this-repository> completion gates"
+      }
+    },
+    "push-ci-watch": {
+      "claude": {
+        "event": "PostToolUse",
+        "matcher": "Bash",
+        "if": ["Bash(git push*)"],
+        "asyncRewake": true,
+        "timeout": 2700
+      }
+    },
+    "turn-end-tests": {
+      "claude": {
+        "event": "Stop",
+        "asyncRewake": true,
+        "timeout": 120
+      }
+    },
+    "session-end": {
+      "claude": {
+        "event": "SessionEnd"
+      }
+    },
+    "cursor-shell-guard": {
+      "cursor": {
+        "event": "beforeShellExecution"
+      }
+    }
+  },
+  "prePushRelevant": {
+    "runs": [
+      ".github/workflows/post-merge-ci.yml",
+      "agent-os/hooks/<prefix>-push-ci-watch.mjs",
+      "src/a.ts",
+      "tooling/ci/a.mjs",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "vitest.config.ts"
+    ],
+    "skips": ["docs/a.md", "README.md", "iterations/feat-a-2026-10-19-abcd/README.md"]
+  },
+  "sameTaskSection": "## Same task, same pattern in both repositories\n\n<this-repository> and <other-repository> share many tasks: CI actions, pre-push test selection, session hooks, agent-os tooling, failure issues. A task both repositories have uses **the same pattern in both**: the same rule shape, comment wording, test shape and PR title. The two differ only where a repository needs a different step (its own paths, language or file layout), and the PR says what differs and why. Before finishing a change here, check whether <other-repository> has the same task; if it does, make the same change there in a sibling PR. The files kept byte-identical in both are listed in [`<mirror-test>`](<mirror-test>); everything else that shares a shape is a parallel implementation that follows this rule."
+}
