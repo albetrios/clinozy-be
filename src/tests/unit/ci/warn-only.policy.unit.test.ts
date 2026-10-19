@@ -50,8 +50,9 @@ function stepName(options: {
   const indent = (match[1] ?? '').length;
   for (const next of lines.slice(index + 1)) {
     if (next.trim() !== '' && indentOf(next) <= indent) break;
-    const nameMatch = new RegExp(`^\\s{${indent + 2}}name:\\s*(.+)$`).exec(next);
-    if (nameMatch) return unquote(nameMatch[1] ?? '');
+    const key = next.trimStart();
+    const value = key.startsWith('name:') ? key.slice('name:'.length).trim() : '';
+    if (indentOf(next) === indent + 2 && value !== '') return unquote(value);
   }
   return `${match[2]}: ${unquote(match[3] ?? '')}`;
 }

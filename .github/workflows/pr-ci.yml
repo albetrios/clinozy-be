@@ -902,7 +902,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
-          sparse-checkout: tooling/ci
+          # tooling/setup/common holds script.ts, the command-line helper the watcher imports.
+          sparse-checkout: |
+            tooling/ci
+            tooling/setup/common
       - name: Watch the lanes; post a status on the first failure
         env:
           GITHUB_TOKEN: ${{ github.token }}

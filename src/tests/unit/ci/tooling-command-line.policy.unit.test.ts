@@ -93,7 +93,8 @@ function resolveImport(options: { from: string; specifier: string }): string | u
 function definingFile(options: { file: string; name: string }): string | undefined {
   const { file, name } = options;
   const source = code(file);
-  if (new RegExp(String.raw`function\s+${name}\s*\(`).test(source)) return file;
+  const declared = [...source.matchAll(/function\s+([\w$]+)\s*\(/g)].map((match) => match[1]);
+  if (declared.includes(name)) return file;
   for (const match of source.matchAll(/import\s*\{([^}]*)\}\s*from\s*'([^']+)'/g)) {
     const names = (match[1] ?? '').split(',').map((part) => part.trim().split(/\s+/)[0]);
     if (names.includes(name)) return resolveImport({ from: file, specifier: match[2] ?? '' });

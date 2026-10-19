@@ -180,7 +180,7 @@
     "agent-os:review-clean": "tsx tooling/agent-os/review-marker.ts",
     "agent-os:outcomes": "tsx agent-os/evals/outcome-eval.ts",
     "agent-os:outcomes:live": "tsx agent-os/evals/outcome-eval.ts --live",
-    "agent-os:guards": "vitest run --project unit src/tests/unit/tooling/agent-guard-hooks.unit.test.ts",
+    "agent-os:guards": "VITEST_SKIP_DATABASE=true vitest run --project unit src/tests/unit/tooling/agent-guard-hooks.unit.test.ts",
     "tool:agent-tools": "tsx tooling/dev/check-agent-tools.ts",
     "tool:sync-env-example": "tsx src/scripts/validators/env/sync-env-example.ts",
     "tool:generate-project-identity": "tsx tooling/setup/codegen/generate-project-identity.ts",
