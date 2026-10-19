@@ -9,6 +9,7 @@
 // Reads the hook payload on stdin; prints { permission: "allow" | "deny" }.
 // Fail-open: any error allows the read.
 import { readFileSync } from "node:fs";
+import { isReadableSecretPath } from "./_be-guard-rules.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
 function allow() {
@@ -34,15 +35,6 @@ try {
 const filePath =
   payload.file_path || payload.filePath || payload.path || (payload.tool_input && payload.tool_input.file_path) || "";
 if (!filePath) allow();
-
-// Same predicate as be-guardrails.mjs isReadableSecretPath().
-function isReadableSecretPath(p) {
-  if (!p) return false;
-  if (/(^|\/)\.setup-credentials$/.test(p)) return true;
-  if (/(^|\/)\.setup-state\.(json|lock|audit\.log)$/.test(p)) return true;
-  if (/(^|\/)\.env\.example$/.test(p) || /(^|\/)\.env\.setup\.example$/.test(p)) return false;
-  return /(^|\/)\.env(\.[\w.-]+)?$/.test(p);
-}
 
 if (isReadableSecretPath(filePath)) {
   deny(

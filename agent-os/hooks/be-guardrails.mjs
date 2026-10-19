@@ -14,6 +14,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { destructiveShellReason, isReadableSecretPath, withoutQuotedText } from "./_be-guard-rules.mjs";
 import { isInRepository, pushDirectory } from "./_be-push-target.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
@@ -47,16 +48,6 @@ const inRepository = !isAbsolute(filePath) || filePath.startsWith(`${repositoryR
 
 const warnings = [];
 
-// A real secrets file the agent must not read or write: app `.env.<env>`, setup-tooling
-// credentials `.setup-credentials` (or legacy `.env.setup`), and `.setup-state.*` — but
-// NOT the committed template (`.env.example`).
-function isReadableSecretPath(p) {
-  if (!p) return false;
-  if (/(^|\/)\.setup-credentials$/.test(p)) return true; // setup-tooling input credentials
-  if (/(^|\/)\.setup-state\.(json|lock|audit\.log)$/.test(p)) return true;
-  if (/(^|\/)\.env\.example$/.test(p) || /(^|\/)\.env\.setup\.example$/.test(p)) return false;
-  return /(^|\/)\.env(\.[\w.-]+)?$/.test(p);
-}
 
 const SECRET_READ_DENIAL =
   "Blocked by clinozy-be guardrail: reading secrets files (.env.<env> / .setup-credentials / .setup-state.*) " +
@@ -144,31 +135,10 @@ if (tool === "Bash" && command) {
 
 // --- BLOCK: destructive shell ------------------------------------------------
 if (tool === "Bash" && command) {
-  // Scan with quoted strings + heredoc bodies removed, so destructive patterns
-  // that merely appear in a message/echo (e.g. a commit message) don't trigger.
-  const scan = command
-    .replace(/<<-?\s*['"]?[A-Za-z_]\w*['"]?[\s\S]*$/, " ")
-    .replace(/'[^']*'/g, " ")
-    .replace(/"[^"]*"/g, " ");
-  let why = "";
-  if (/\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r/i.test(scan)) {
-    why = "recursive force delete (rm -rf)";
-  } else if (
-    /\bgit\s+push\b/i.test(scan) &&
-    (/--force(?!-with-lease)/i.test(scan) || /\s-f(?:\s|$)/.test(scan))
-  ) {
-    why = "git push --force (use --force-with-lease, or push it yourself)";
-  } else if (/:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/.test(scan)) {
-    why = "fork bomb";
-  } else if (/\bmkfs\b|\bdd\s+if=/i.test(scan)) {
-    why = "filesystem-destroying command";
-  } else if (
-    /\bgit(?:\s+-[cC]\s+\S+)*\s+(?:commit|push)\b[^;&|]*--no-verify\b/i.test(scan) ||
-    /\bgit(?:\s+-[cC]\s+\S+)*\s+commit\b[^;&|]*\s-[a-zA-Z]*n[a-zA-Z]*(?=\s|$)/.test(scan) ||
-    /(?:^|[\s;&|])HUSKY=0\b/.test(scan)
-  ) {
-    why = "skipping the git hooks (--no-verify, git commit -n, HUSKY=0) — the pre-commit and pre-push gates are mandatory; fix what they report";
-  }
+  // Quoted strings and heredoc bodies are blanked first, so a pattern that merely appears in a
+  // message (e.g. a commit message) never triggers. The rules are shared with the Cursor mirror.
+  const scan = withoutQuotedText(command);
+  const why = destructiveShellReason(command);
   if (why) {
     deny(
       `Blocked by clinozy-be guardrail: ${why}. Command: "${command.slice(0, 160)}". If you truly intend this, run it yourself in a terminal.`,

@@ -29,8 +29,8 @@
     },
     {
       "id": "be-guard-edits",
-      "runtime": "bash",
-      "script": "be-guard-edits.sh",
+      "runtime": "node",
+      "script": "be-guard-edits.mjs",
       "claude": {
         "event": "PreToolUse",
         "matcher": "Edit|Write|MultiEdit"

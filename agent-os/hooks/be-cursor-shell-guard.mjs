@@ -10,6 +10,7 @@
 //
 // Reads the hook payload on stdin; prints { "permission": "allow" | "deny", ... }.
 import { readFileSync } from "node:fs";
+import { destructiveShellReason } from "./_be-guard-rules.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
 function allow() {
@@ -40,32 +41,8 @@ try {
 const command = payload.command || (payload.tool_input && payload.tool_input.command) || payload.shellCommand || "";
 if (!command) allow();
 
-// Scan with quoted strings + heredoc bodies removed, so destructive patterns
-// that merely appear in a message/echo don't trigger a false block.
-const scan = command
-  .replace(/<<-?\s*['"]?[A-Za-z_]\w*['"]?[\s\S]*$/, " ")
-  .replace(/'[^']*'/g, " ")
-  .replace(/"[^"]*"/g, " ");
-let why = "";
-if (/\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r/i.test(scan)) {
-  why = "recursive force delete (rm -rf)";
-} else if (
-  /\bgit\s+push\b/i.test(scan) &&
-  (/--force(?!-with-lease)/i.test(scan) || /\s-f(?:\s|$)/.test(scan))
-) {
-  why = "git push --force";
-} else if (/:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/.test(scan)) {
-  why = "fork bomb";
-} else if (/\bmkfs\b|\bdd\s+if=/i.test(scan)) {
-  why = "filesystem-destroying command";
-} else if (
-  /\bgit(?:\s+-[cC]\s+\S+)*\s+(?:commit|push)\b[^;&|]*--no-verify\b/i.test(scan) ||
-  /\bgit(?:\s+-[cC]\s+\S+)*\s+commit\b[^;&|]*\s-[a-zA-Z]*n[a-zA-Z]*(?=\s|$)/.test(scan) ||
-  /(?:^|[\s;&|])HUSKY=0\b/.test(scan)
-) {
-  why = "skip of the git hooks (--no-verify, git commit -n, HUSKY=0) — the gates are mandatory; fix what they report";
-}
-
+// The same rules as the Claude guardrail, from one module (quoted text and heredocs are ignored).
+const why = destructiveShellReason(command);
 if (why) {
   deny(`clinozy-be guardrail blocked a ${why}: "${command.slice(0, 160)}". Run it yourself in a terminal if you truly intend this.`);
 }

@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 // Cursor `afterFileEdit` guardrail for clinozy-be (Cursor agent hooks, beta).
 //
-// Cursor cannot veto a file edit before it lands, so this is the after-the-fact
-// mirror of the Claude `be-guard-edits.sh` PreToolUse rules: when an edit that just
-// landed violates a hard rule (R1 worker getRequestDatabase, R2 `../` import
-// under src/, R3 generated file, R4 removed NODE_ENV value, R5 enforcement
-// wiring), it tells the agent to revert/fix NOW instead of at pre-commit/CI.
+// Cursor cannot veto a file edit before it lands, so this is the after-the-fact mirror of the
+// Claude `be-guard-edits.mjs` PreToolUse rules — the same rules, from _be-guard-rules.mjs: when an
+// edit that just landed violates a hard rule (R1 worker getRequestDatabase, R2 `../` import under
+// src/, R3 generated file, R4 removed NODE_ENV value, R5 enforcement wiring), it tells the agent
+// to revert/fix NOW instead of at pre-commit/CI.
 //
-// Reads the hook payload on stdin; prints { agentMessage } when a rule is hit
-// (advisory — Cursor applies no permission semantics to afterFileEdit).
-// Fail-open: any error exits 0 silently.
+// Reads the hook payload on stdin; prints { agentMessage } when a rule is hit (advisory — Cursor
+// applies no permission semantics to afterFileEdit). Fail-open: any error exits 0 silently.
 import { readFileSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { editRuleViolations } from "./_be-guard-rules.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
 function done(status, message) {
@@ -39,60 +41,14 @@ const content = [
   .filter(Boolean)
   .join("\n");
 
-const violations = [];
-
-// R3 — generated / do-not-edit files.
-if (
-  /(pnpm-lock\.yaml|docs\/routes\.txt|docs\/openapi\/openapi[^/]*\.json|docs\/postman-collection\.json|project-identity\.constants\.ts|docs\/database\/clinozy-be\.dbml|\.codex\/hooks\.json)$/.test(
-    filePath,
-  )
-) {
-  violations.push(
-    "this file is GENERATED — revert the hand-edit, change the source, and run the generator (agent-os/docs/skill-triggers.md).",
-  );
-}
-
-// R5 — enforcement wiring (hook manifest / platform hook configs / guard scripts).
-if (
-  /(agent-os\/hooks\/hooks\.json|agent-os\/platforms\/targets\.json|agent-os\/platforms\/claude\/settings\.json|\.claude\/settings(\.local)?\.json|\.cursor\/hooks\.json|agent-os\/hooks\/(be-guard-edits\.sh|be-guardrails\.mjs|be-cursor-shell-guard\.mjs|be-cursor-edit-guard\.mjs|be-cursor-read-guard\.mjs|be-cursor-mcp-guard\.mjs|be-injection-scan\.mjs))$/.test(
-    filePath,
-  )
-) {
-  violations.push(
-    "this file is part of the agent-guard enforcement wiring — do not weaken or disable hooks without explicit user approval (agent-os/hooks/README.md).",
-  );
-}
-
-// R1 — workers/processors must not call getRequestDatabase().
-if (/\.(worker|processor)\.ts$/.test(filePath) && /getRequestDatabase/.test(content)) {
-  violations.push(
-    "workers/processors must not call getRequestDatabase() (RLS) — bind a handle via a context wrapper (withOrganizationContext / runOrganizationScopedWorkerJob).",
-  );
-}
-
-// R2 — no `../` parent-relative imports under src/.
-if (
-  /(^|\/)src\/.*\.tsx?$/.test(filePath) &&
-  /(from|require|import)\s*\(?\s*['"]\.\.\//.test(content)
-) {
-  violations.push("relative parent import ('../') is banned under src/ — use the '@/' alias (be-import-paths.mdc).");
-}
-
-// R4 — NODE_ENV set/compared to a REMOVED value (test|staging; docs are exempt). `local` is a valid
-// runtime (the developer's machine, primary file `.env.local`) so it is NOT blocked.
-if (
-  !/\.(md|mdc|txt)$/.test(filePath) &&
-  /NODE_ENV\s*[:=]+\s*['"`]?(test|staging)\b/i.test(content)
-) {
-  violations.push(
-    "NODE_ENV must never be 'test' or 'staging' (the enum is 'local' | 'development' | 'production') — use an explicit env flag with a static default instead (be-env-schema-add skill).",
-  );
-}
+const root = process.env.CLAUDE_PROJECT_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const inRepository = !isAbsolute(filePath) || filePath.startsWith(`${root}/`);
+const violations = editRuleViolations({ filePath, content, inRepository });
 
 if (violations.length) {
   done(
     "fired",
-    `clinozy-be guard (afterFileEdit) — the edit to "${filePath}" violates a hard rule; fix it NOW, before pre-commit/CI:\n- ${violations.join("\n- ")}`,
+    `clinozy-be guard (afterFileEdit) — the edit to "${filePath}" violates a hard rule; fix it NOW, before pre-commit/CI:\n- ${violations.map((violation) => violation.reason).join("\n- ")}`,
   );
 }
 done("silent");

@@ -91,7 +91,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-guard-edits.sh\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-guard-edits.mjs\""
           }
         ]
       },
