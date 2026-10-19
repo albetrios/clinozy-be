@@ -36,7 +36,7 @@ pnpm dev:stack:stop                   # stop the API + worker (Postgres + Redis 
 pnpm dev:stack:reset-db               # drop + recreate the Compose database, migrate, seed, restart
 ```
 
-Run it yourself (another platform, after a stop, or with `AGENT_AUTO_STACK=0`):
+Run it yourself (another platform, or after a stop):
 
 ```bash
 export PATH="/opt/node24/bin:$HOME/.local/bin:$PATH"

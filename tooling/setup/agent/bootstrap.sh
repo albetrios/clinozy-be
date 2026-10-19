@@ -19,8 +19,8 @@
 #                                     # drops and recreates the Compose database, then
 #                                     # migrate → logins → seed → API → worker (9-13)
 #
-# The session-start hook launches the default mode (detached) in every web session unless
-# AGENT_AUTO_STACK=0, so the stack is live before the work starts. Each step is written to
+# The session-start hook launches the default mode (detached) in every web session, so the
+# stack is live before the work starts. Each step is written to
 # $AGENT_STACK_DIR/status (default /tmp/agent-stack) as it runs, with the full log beside it;
 # a lock keeps two bring-ups from racing; a re-run is safe (live services are kept).
 # `pnpm dev:stack:status` / `pnpm dev:stack:stop` (tooling/setup/agent/stack.sh).
@@ -154,14 +154,14 @@ fi
 # an earlier bring-up in this container. Redoing them costs minutes, and step 4 restarts dockerd,
 # which stops every running container. The stamp hashes what the installs depend on (the Node
 # version, .nvmrc, the lockfile, .env.example and every script in this directory, pins
-# included), so a changed input runs them again; AGENT_REINSTALL=1 forces them.
+# included), so a changed input runs them again.
 install_stamp_file="node_modules/.agent-install-stamp"
 install_stamp() {
   { node -v; cat .nvmrc pnpm-lock.yaml .env.example "${AGENT_DIR}"/*.sh 2>/dev/null; } \
     | { sha256sum 2>/dev/null || shasum -a 256; } | cut -d' ' -f1
 }
 installs_cached=0
-if [ "${live}" = 1 ] && [ "${reset_database}" = 0 ] && [ "${AGENT_REINSTALL:-0}" != 1 ] \
+if [ "${live}" = 1 ] && [ "${reset_database}" = 0 ] \
   && [ -f "${install_stamp_file}" ] && [ "$(cat "${install_stamp_file}")" = "$(install_stamp)" ]; then
   installs_cached=1
 fi
@@ -234,7 +234,7 @@ if [ "${reset_database}" = 0 ] && [ "${installs_cached}" = 0 ]; then
     exit 0
   fi
 elif [ "${installs_cached}" = 1 ]; then
-  skip "[2-8/${TOTAL}] installs skipped — done with the same inputs (${install_stamp_file}); AGENT_REINSTALL=1 runs them"
+  skip "[2-8/${TOTAL}] installs skipped — done with the same inputs (${install_stamp_file})"
   # Step 5's index refresh is the one part that follows the code, not the inputs.
   if command -v codegraph >/dev/null 2>&1 && [ -d .codegraph ]; then
     codegraph sync >&2 2>&1 || skip "codegraph sync failed (non-fatal)"

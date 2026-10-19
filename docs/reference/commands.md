@@ -2,7 +2,7 @@
 
 Every `pnpm` script beyond the everyday ones in the root [`CLAUDE.md`](../../CLAUDE.md) → Commands (moved from there); the design-iteration commands are in [`iterations/CLAUDE.md`](../../iterations/CLAUDE.md). List all scripts: `pnpm run`.
 
-- `pnpm dev:stack:status` / `pnpm dev:stack:stop` — the live playground stack `tooling/setup/agent/bootstrap.sh` brings up (the session-start hook launches it in every Claude Code web session; `AGENT_AUTO_STACK=0` opts out): the running step or `live`, API + worker health, logs / stop the API + worker
+- `pnpm dev:stack:status` / `pnpm dev:stack:stop` — the live playground stack `tooling/setup/agent/bootstrap.sh` brings up (the session-start hook launches it in every Claude Code web session): the running step or `live`, API + worker health, logs / stop the API + worker
 - `pnpm dev:stack:reset-db` — a scratch database again (`bootstrap.sh --reset-database`): skips the installs, stops the API + worker, drops and recreates the **local Compose** database (its own `POSTGRES_DB`), then migrate → logins → full seed → API → worker; the step after editing an existing migration in place
 - `pnpm knip` — dead-code gate (unused files / dependencies / binaries; config `knip.jsonc`). Blocking on those high-signal categories; the noisy `exports`/`types` analysis is deferred. Own PR-CI lane, folded into the `quality-gate` aggregate.
 - `pnpm health` / `pnpm health:fix` — phased local health orchestrator (`tooling/validate/health-check.sh`): runs every gate, **continues through failures**, prints a PASS/FAIL table; `--fix` auto-repairs lint + format first. Complements the fail-fast `pnpm ci:local`. `pnpm quality` = `health` + `sonar:scan`.

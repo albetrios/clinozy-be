@@ -25,7 +25,7 @@ operators copy into each platform's environment config.
 | **Cursor** | [`.cursor/environment.json`](../../.cursor/environment.json) → symlink here | `install` runs `bootstrap.sh --install-only`; optional `start` / `terminals` from `environment.json` |
 | **Cursor dashboard** | Cloud Agents → Environment → Install script | `bash tooling/setup/agent/bootstrap.sh --install-only` |
 | **Claude Code on the web** | Environment → Setup script field | `bash tooling/setup/agent/bootstrap.sh --install-only` (see [claude-code-web-environment.md](../../docs/integrations/claude-code-web-environment.md)) |
-| **All agents** | [`AGENTS.md`](../../AGENTS.md) → [`agents-cloud.md`](agents-cloud.md) | `bootstrap.sh` (no flag) brings the stack fully live — launched automatically by the session-start hook in Claude Code web sessions (`AGENT_AUTO_STACK=0` opts out) |
+| **All agents** | [`AGENTS.md`](../../AGENTS.md) → [`agents-cloud.md`](agents-cloud.md) | `bootstrap.sh` (no flag) brings the stack fully live — launched automatically by the session-start hook in Claude Code web sessions |
 
 > In the cached `install` / Setup step, always pass **`--install-only`**: it stops before
 > Docker, because a Docker failure there marks the whole environment as failed and no

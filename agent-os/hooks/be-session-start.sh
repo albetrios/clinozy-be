@@ -233,8 +233,7 @@ fi
 # A web session is a playground: `bootstrap.sh` (setup → Postgres + Redis → migrate → demo
 # seed → API + worker kept running) is launched detached, so the session starts at once and
 # the stack goes live in the background; the banner tells the agent to wait for "live"
-# before database/API work. Opt out per cloud environment with AGENT_AUTO_STACK=0. Local
-# sessions are untouched. Fail-open, like everything above.
+# before database/API work. Local sessions are untouched. Fail-open, like everything above.
 stack_directory="${AGENT_STACK_DIR:-/tmp/agent-stack}"
 stack_status="on demand (local session) — bash tooling/setup/agent/bootstrap.sh"
 if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
@@ -242,9 +241,7 @@ if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
   # container launches a fresh bring-up instead of waiting on it forever.
   # shellcheck source=../../tooling/setup/agent/stack-lock.lib.sh
   source tooling/setup/agent/stack-lock.lib.sh 2>/dev/null || stack_lock_holder() { return 1; }
-  if [ "${AGENT_AUTO_STACK:-1}" = "0" ]; then
-    stack_status="off (AGENT_AUTO_STACK=0) — bash tooling/setup/agent/bootstrap.sh"
-  elif [ "$(curl -s -o /dev/null -m 2 -w '%{http_code}' "http://127.0.0.1:${PORT:-3000}/livez" 2>/dev/null)" = "200" ]; then
+  if [ "$(curl -s -o /dev/null -m 2 -w '%{http_code}' "http://127.0.0.1:${PORT:-3000}/livez" 2>/dev/null)" = "200" ]; then
     stack_status="live — pnpm dev:stack:status"
   elif stack_lock_holder "${stack_directory}" >/dev/null; then
     stack_status="starting (bring-up already running) — tail -f ${stack_directory}/bootstrap.log"
@@ -275,7 +272,7 @@ map_file="$ROOT/agent-os/docs/skill-triggers.md"
 map_section=""
 [ -f "$map_file" ] && map_section="$(cat "$map_file")"
 
-context="$(printf 'clinozy-be session ready (hooks from %s) — environment provisioned: %s.\n- Node %s (need >=%s) · deps %s · gh %s · codegraph %s · mcp %s · gitleaks %s · tools %s · agent-os %s · docker %s%s%s\n- Stack: %s\n- Web sessions go fully live on their own: bootstrap.sh (setup → Postgres + Redis → migrate → demo seed → API :3000 + worker :9090, kept running). Before any database/API work, wait until pnpm dev:stack:status says live. Opt out per environment: AGENT_AUTO_STACK=0.\n- Gates: pnpm validate · pnpm ci:local   (pre-commit: pnpm guard:pre-commit)\n- Custom commands: /be-validate · /be-ci-local · /be-new-domain · /be-routes-sync\n\nagent-os skill routing — consult be-skill-index FIRST, then run the listed skill(s) for the files you change:\n\n%s' \
+context="$(printf 'clinozy-be session ready (hooks from %s) — environment provisioned: %s.\n- Node %s (need >=%s) · deps %s · gh %s · codegraph %s · mcp %s · gitleaks %s · tools %s · agent-os %s · docker %s%s%s\n- Stack: %s\n- Web sessions go fully live on their own: bootstrap.sh (setup → Postgres + Redis → migrate → demo seed → API :3000 + worker :9090, kept running). Before any database/API work, wait until pnpm dev:stack:status says live.\n- Gates: pnpm validate · pnpm ci:local   (pre-commit: pnpm guard:pre-commit)\n- Custom commands: /be-validate · /be-ci-local · /be-new-domain · /be-routes-sync\n\nagent-os skill routing — consult be-skill-index FIRST, then run the listed skill(s) for the files you change:\n\n%s' \
   "$ROOT" "$provisioned" "$node_version" "$required_major" "$deps" "$gh_cli" "$codegraph" "$mcp_status" "$gitleaks_status" "$tools_status" "$agent_os_status" "$docker_status" "$node_note" "$hook_health" "$stack_status" "$map_section")"
 
 # Prefer the structured additionalContext envelope; fall back to plain stdout

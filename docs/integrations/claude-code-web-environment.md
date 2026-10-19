@@ -98,8 +98,8 @@ both repos runs from `/home/user`, so it takes hooks from `/home/user/.claude/se
 a repo's own `.claude/settings.json`. The script writes there every hook of both repos, with absolute
 paths and `CLAUDE_PROJECT_DIR` set to the hook's own repo, and both repos' permission rules (a
 repo's own settings contribute none in that layout either). It keeps any other hook in that file and
-backs the file up to `settings.json.bak` before a change. `AGENT_SESSION_HOOKS=0` turns it off, and
-`--dry-run` prints the file without writing it. In a single-repo checkout it writes nothing.
+backs the file up to `settings.json.bak` before a change, and `--dry-run` prints the file without
+writing it. In a single-repo checkout it writes nothing.
 
 - **Each repo's hooks judge only its own files.** clinozy-be's import, `NODE_ENV` and generated-file
   rules and clinozy-fe's Prettier pass never touch the other repo. The secret and destructive-command
@@ -110,7 +110,7 @@ backs the file up to `settings.json.bak` before a change. `AGENT_SESSION_HOOKS=0
   Whether a cloud session reads `/home/user/.claude/settings.json` is not documented, which is why
   the canary exists.
 - **The live stack starts too.** Once hooks load, a two-repo session brings the stack up in the
-  background like a single-repo one; `AGENT_AUTO_STACK=0` turns that off.
+  background like a single-repo one.
 
 On the first session the cached Node 24 is already on disk, [`be-session-start.sh`](../../agent-os/hooks/be-session-start.sh) switches `PATH` to `/opt/node24`, and runs `pnpm install`. Do **not** start Postgres / Redis here — setup-script processes do not persist; start them per session (below).
 
@@ -210,13 +210,13 @@ pnpm db:seed         # or pnpm db:seed:full
 
 ### One-command bring-up + verify
 
-The session-start hook runs this for you in every web session (below). To run it yourself — after `pnpm dev:stack:stop`, or with `AGENT_AUTO_STACK=0` — use the orchestrator; it logs a ✓/✗ after each step and records the running step for `pnpm dev:stack:status`:
+The session-start hook runs this for you in every web session (below). To run it yourself — after `pnpm dev:stack:stop` — use the orchestrator; it logs a ✓/✗ after each step and records the running step for `pnpm dev:stack:status`:
 
 ```bash
 bash tooling/setup/agent/bootstrap.sh        # setup → Postgres + Redis → migrate → demo seed → API + worker, left running
 ```
 
-A re-run is safe: a lock stops a second bring-up from racing the first, and an API or worker that already answers is kept. A lock whose bring-up is gone — or that came from another boot inside a cached environment — is stale: `pnpm dev:stack:status` says so and the next run clears it ([`stack-lock.lib.sh`](../../tooling/setup/agent/stack-lock.lib.sh)). A live run after an install with the same inputs (the Setup script, or an earlier run in this container) skips steps 2–8, so it neither redoes the installs nor restarts dockerd; `AGENT_REINSTALL=1` runs them anyway. Measured on 17 Oct on a resumed container (API and worker stopped, containers down, volumes kept): 82 s before these changes, 41 s on the first run after them (installs run, stamp written; warmer caches), 18 s once the stamp matches — with a stale lock planted whose pid named another process, which the old code waited on forever. To verify health on its own, run [`healthcheck.sh`](../../tooling/setup/agent/healthcheck.sh): it polls `GET /livez` then `GET /readyz` (set `HEALTHCHECK_URL=http://127.0.0.1:9090` for the worker) and exits non-zero unless Postgres + Redis + BullMQ are all reachable. Only `--install-only` belongs in the Setup-script *field* (that runs before any service can be running).
+A re-run is safe: a lock stops a second bring-up from racing the first, and an API or worker that already answers is kept. A lock whose bring-up is gone — or that came from another boot inside a cached environment — is stale: `pnpm dev:stack:status` says so and the next run clears it ([`stack-lock.lib.sh`](../../tooling/setup/agent/stack-lock.lib.sh)). A live run after an install with the same inputs (the Setup script, or an earlier run in this container) skips steps 2–8, so it neither redoes the installs nor restarts dockerd; a changed input runs them again. Measured on 17 Oct on a resumed container (API and worker stopped, containers down, volumes kept): 82 s before these changes, 41 s on the first run after them (installs run, stamp written; warmer caches), 18 s once the stamp matches — with a stale lock planted whose pid named another process, which the old code waited on forever. To verify health on its own, run [`healthcheck.sh`](../../tooling/setup/agent/healthcheck.sh): it polls `GET /livez` then `GET /readyz` (set `HEALTHCHECK_URL=http://127.0.0.1:9090` for the worker) and exits non-zero unless Postgres + Redis + BullMQ are all reachable. Only `--install-only` belongs in the Setup-script *field* (that runs before any service can be running).
 
 ## Tiers — what to enable for which goal
 
@@ -254,7 +254,6 @@ session starts → session-start hook (returns at once) → bootstrap.sh, detach
 | Bring it back | `bash tooling/setup/agent/bootstrap.sh` |
 | A scratch database again | `pnpm dev:stack:reset-db` — drops and recreates the local Compose database, then migrate, logins, seed, API and worker (the installs are skipped) |
 | A known demo password | set `DEMO_PASSWORD` in the environment's variables (`demo@example.com`) |
-| No auto-start for an environment | set `AGENT_AUTO_STACK=0` in its variables |
 
 The banner shows `Stack: starting…` / `live` and tells the agent to wait for `live` before any
 database or API work. A resumed session whose API already answers, or a bring-up already

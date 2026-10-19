@@ -8,7 +8,7 @@
 // 40 minutes for them to finish. A failed run exits 2 (wakes the model), naming each failed run
 // and asking for be-ci-investigator on it; all green, nothing to watch or a timeout exits 0. A
 // cancelled run counts only while HEAD is still the pushed commit (a newer push cancels the older
-// runs and starts its own watch). One watch per commit. Switch: AGENT_PUSH_CI_WATCH=0 turns it off.
+// runs and starts its own watch). One watch per commit.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -56,7 +56,6 @@ function listRuns(sha) {
 const sleep = (milliseconds) => new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds));
 
 async function watch(payload) {
-  if (process.env.AGENT_PUSH_CI_WATCH?.trim() === "0") return "off";
   const command = payload.tool_input?.command || "";
   if (!/\bgit\s+(?:-C\s+\S+\s+)?push\b/.test(command)) return "silent";
   const directory = pushDirectory({ command, cwd: payload.cwd || repositoryRoot });

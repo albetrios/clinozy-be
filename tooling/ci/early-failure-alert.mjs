@@ -10,7 +10,7 @@
  * It posts nothing when every lane passes. It is not a required check.
  *
  * Environment: GITHUB_TOKEN (actions: read, statuses: write), GITHUB_REPOSITORY, GITHUB_RUN_ID,
- * HEAD_SHA, optional GITHUB_API_URL, EARLY_ALERT_POLL_SECONDS (15), EARLY_ALERT_MAX_MINUTES (40).
+ * HEAD_SHA, optional GITHUB_API_URL. It reads the run's jobs every 15 s and gives up after 40 min.
  *
  * Usage (pr-ci.yml `early-failure-alert` job): `node tooling/ci/early-failure-alert.mjs`.
  */
@@ -23,6 +23,9 @@ export const ALERT_CONTEXT = 'Early failure alert';
 export const NOT_LANES = new Set([ALERT_CONTEXT, 'Quality gate']);
 
 const FAILED = new Set(['failure', 'timed_out']);
+/** How often the run's jobs are read, and how long the alert waits for a lane to fail. */
+const POLL_MILLISECONDS = 15_000;
+const MAX_WAIT_MILLISECONDS = 40 * 60_000;
 
 /** The first lane of the run that failed, or null. */
 export function findFailedLane(jobs) {
@@ -63,8 +66,7 @@ async function main() {
   const repository = process.env.GITHUB_REPOSITORY;
   const runId = process.env.GITHUB_RUN_ID;
   const headSha = process.env.HEAD_SHA;
-  const pollMilliseconds = Number(process.env.EARLY_ALERT_POLL_SECONDS ?? 15) * 1000;
-  const deadline = Date.now() + Number(process.env.EARLY_ALERT_MAX_MINUTES ?? 40) * 60_000;
+  const deadline = Date.now() + MAX_WAIT_MILLISECONDS;
   for (;;) {
     let jobs = [];
     try {
@@ -92,7 +94,7 @@ async function main() {
       console.log('early-failure-alert: stopped watching at the time limit');
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, pollMilliseconds));
+    await new Promise((resolve) => setTimeout(resolve, POLL_MILLISECONDS));
   }
 }
 

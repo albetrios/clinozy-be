@@ -69,12 +69,7 @@ function repository(): { root: string; state: string; runs: string } {
   return { root, state, runs };
 }
 
-function runHook(options: {
-  root: string;
-  state: string;
-  switchValue?: string;
-  exitCode?: number;
-}) {
+function runHook(options: { root: string; state: string; exitCode?: number }) {
   return spawnSync('node', [HOOK], {
     input: JSON.stringify({ session_id: 's', hook_event_name: 'Stop' }),
     encoding: 'utf8',
@@ -82,7 +77,6 @@ function runHook(options: {
       ...gitEnvironmentWithoutInheritedRepository(),
       CLAUDE_PROJECT_DIR: options.root,
       TMPDIR: options.state,
-      AGENT_TURN_END_TESTS: options.switchValue ?? '1',
       VITEST_STUB_EXIT: String(options.exitCode ?? 0),
     },
   });
@@ -93,17 +87,11 @@ function runCount(runs: string): number {
 }
 
 /**
- * Locks in the turn-end test hook: off by switch, it runs only the unit-level files of the
+ * Locks in the turn-end test hook: it runs only the unit-level files of the
  * selection, a failure exits 2 (asyncRewake wakes the model with the failing tests), a passed
  * tree is not run again, and a live run's lock makes the next one skip.
  */
 describe('be-turn-end-tests.mjs', () => {
-  it('does nothing when switched off', () => {
-    const { root, state, runs } = repository();
-    expect(runHook({ root, state, switchValue: '0', exitCode: 1 }).status).toBe(0);
-    expect(runCount(runs)).toBe(0);
-  });
-
   it('runs the unit-level files only and wakes the model on a failure', () => {
     const { root, state, runs } = repository();
     const result = runHook({ root, state, exitCode: 1 });

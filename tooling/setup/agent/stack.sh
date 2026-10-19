@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Status and stop for the live playground stack that `bootstrap.sh` brings up (the session-
-# start hook launches it in every web session unless AGENT_AUTO_STACK=0).
+# start hook launches it in every web session).
 #
 #   bash tooling/setup/agent/stack.sh status   # pnpm dev:stack:status — the bring-up step
 #                                              #   (or "live"), API + worker health, logs

@@ -5,9 +5,8 @@
 // failure exits 2, which wakes the model with the failing tests; a pass, a timeout, a skip or
 // any error exits 0 and says nothing. App-level database tests stay at push and in the PR.
 //
-// Switch: AGENT_TURN_END_TESTS=1 runs it, =0 never; unset, it is off until 2026-10-24
-// (Asia/Calcutta) and on from then. It skips a tree it already passed (same changes), a
-// selection that runs everything (the push does), and a change no unit-level test reaches.
+// It skips a tree it already passed (same changes), a selection that runs everything (the push
+// does), and a change no unit-level test reaches.
 //
 // Only this repository is judged: a session that holds several repositories runs every
 // repository's hooks, each with its own CLAUDE_PROJECT_DIR (tooling/agent-os/session-hooks.ts).
@@ -20,8 +19,6 @@ import { stripVTControlCharacters } from "node:util";
 import { recordTelemetry } from "./_be-telemetry.mjs";
 
 const HOOK_ID = "be-turn-end-tests";
-/** The first day (Asia/Calcutta) the hook runs without AGENT_TURN_END_TESTS=1. */
-const ON_BY_DEFAULT_FROM = "2026-10-24";
 const TEST_BUDGET_MILLISECONDS = 60_000;
 const SELECTION_BUDGET_MILLISECONDS = 20_000;
 const UNIT_LEVEL_PROJECTS = ["unit", "property", "global"];
@@ -40,14 +37,6 @@ function readText(path) {
   } catch {
     return "";
   }
-}
-
-function isSwitchedOn() {
-  const value = process.env.AGENT_TURN_END_TESTS?.trim();
-  if (value === "1") return true;
-  if (value === "0") return false;
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
-  return today >= ON_BY_DEFAULT_FROM;
 }
 
 /** Holds the one-run lock, or returns false while a live run holds it. */
@@ -118,7 +107,6 @@ function select(files) {
 }
 
 function run() {
-  if (!isSwitchedOn()) return "off";
   if (!takeLock()) return "busy";
   try {
     const files = changedFiles();

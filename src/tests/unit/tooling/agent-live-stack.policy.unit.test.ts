@@ -32,8 +32,8 @@ describe('live playground stack policy', () => {
     expect(bootstrap).not.toContain('sudo -n env NODE_INSTALL_PREFIX=');
   });
 
-  it('the hook can be switched off per environment and never launches twice', () => {
-    expect(sessionStart).toContain(`"\${AGENT_AUTO_STACK:-1}" = "0"`);
+  it('the hook never launches twice, and has no switch to turn it off', () => {
+    expect(sessionStart).not.toContain('AGENT_AUTO_STACK');
     // An API that already answers (a resumed session) or a bring-up holding the lock is left alone.
     expect(sessionStart).toContain('/livez');
     expect(sessionStart).toContain(`stack_lock_holder "\${stack_directory}"`);
@@ -89,7 +89,7 @@ describe('live playground stack policy', () => {
     expect(bootstrap).toContain(
       `if [ "\${reset_database}" = 0 ] && [ "\${installs_cached}" = 0 ]; then`,
     );
-    expect(bootstrap).toContain(`[ "\${AGENT_REINSTALL:-0}" != 1 ]`);
+    expect(bootstrap).not.toContain('AGENT_REINSTALL');
   });
 
   it('one bring-up at a time, and each step is recorded as it runs', () => {
