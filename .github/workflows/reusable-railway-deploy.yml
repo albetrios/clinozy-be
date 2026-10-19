@@ -713,16 +713,13 @@ jobs:
             local label="$2"
             local output_file="$3"
             local service="${4:-}"
-            local health_url="${base_url}/readyz"
-            local deadline=$(( $(date +%s) + 300 ))
-            until curl -sfS "$health_url" -o "$output_file"; do
-              if [ "$(date +%s)" -ge "$deadline" ]; then
-                echo "::error::${label} /readyz timeout"
-                dump_service_deploy_logs "$service" "$label"
-                exit 1
-              fi
-              sleep 5
-            done
+            # The one wait for readiness (tooling/ci/wait-for-ready.sh).
+            if ! bash tooling/ci/wait-for-ready.sh --url "${base_url}/readyz" --timeout 300 \
+              --interval 5 --output "$output_file"; then
+              echo "::error::${label} /readyz timeout"
+              dump_service_deploy_logs "$service" "$label"
+              exit 1
+            fi
             node -e "const health = require(process.argv[1]); if (health.status !== 'ok') { console.error('${label} health status is not ok:', health.status ?? 'unknown'); process.exit(1); }" "$output_file"
           }
 

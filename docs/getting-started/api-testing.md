@@ -195,7 +195,7 @@ Optional env: `BASE_URL`, `DEMO_EMAIL`, `DEMO_PASSWORD` (defaults `demo@example.
 
 **CI:** Every PR runs the same probes against ephemeral Postgres + Redis after migrate + full seed ([CI/CD and deployment](../deployment/ci-cd/cicd-and-deployment.md)).
 
-**macOS:** GNU `timeout` is not installed by default; if you copy the CI readiness wait locally, use an `until curl …` loop with a deadline or `gtimeout` from Homebrew `coreutils`.
+**Waiting for the API locally:** CI's readiness wait is one script, `tooling/ci/wait-for-ready.sh`, and it needs only bash and curl (no GNU `timeout`), so it runs as-is on macOS too: `bash tooling/ci/wait-for-ready.sh --url http://localhost:3000/readyz --timeout 90`.
 
 ## Get token + organization for Postman / k6
 

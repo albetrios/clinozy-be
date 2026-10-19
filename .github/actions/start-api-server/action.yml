@@ -40,34 +40,12 @@ runs:
       env:
         READY_TIMEOUT_SECONDS: ${{ inputs.ready-timeout-seconds }}
         SERVER_LOG_FILE: ${{ inputs.log-file }}
+      # The one wait for readiness (tooling/ci/wait-for-ready.sh); it stops at once if the server exits.
       run: |
-        case "$READY_TIMEOUT_SECONDS" in
-          '' | *[!0-9]*) echo "::error::ready-timeout-seconds must be a whole number"; exit 1 ;;
-        esac
-        deadline=$((SECONDS + READY_TIMEOUT_SECONDS))
-        while [ "$SECONDS" -lt "$deadline" ]; do
-          if [ -f server.pid ] && ! kill -0 "$(tr -d '\n' < server.pid)" 2>/dev/null; then
-            echo "API server exited before readiness."
-            echo "--- ${SERVER_LOG_FILE} (tail 200) ---"
-            tail -n 200 "$SERVER_LOG_FILE" || true
-            exit 1
-          fi
-
-          if curl -sf http://localhost:3000/readyz; then
-            exit 0
-          fi
-
-          if [ $((SECONDS % 10)) -eq 0 ]; then
-            echo "Waiting for API readiness..."
-            curl -s http://localhost:3000/readyz || true
-            echo
-          fi
-
-          sleep 1
-        done
-
-        echo "API server did not become ready within ${READY_TIMEOUT_SECONDS} seconds."
-        echo "--- ${SERVER_LOG_FILE} (tail 200) ---"
-        tail -n 200 "$SERVER_LOG_FILE" || true
-        exit 1
+        if ! bash tooling/ci/wait-for-ready.sh --url http://localhost:3000/readyz \
+          --timeout "$READY_TIMEOUT_SECONDS" --interval 1 --pid-file server.pid; then
+          echo "--- ${SERVER_LOG_FILE} (tail 200) ---"
+          tail -n 200 "$SERVER_LOG_FILE" || true
+          exit 1
+        fi
       shell: bash
