@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs';
 import {
   type CatalogRoute,
   parseRouteCatalog,
-} from '@tooling/iterations/iteration-frontend-map.util.js';
+} from '@tooling/openapi/route-catalog/catalog-reader.js';
 import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const ROUTES_CATALOG = 'docs/routes.txt';
@@ -49,7 +49,7 @@ function describe(route: CatalogRoute): string {
  * Routes are matched by `METHOD path`; a renamed path reads as one removed and one added route.
  */
 export function diffRouteAccess(options: { before: string; after: string }): RouteAccessDiff {
-  const key = (route: CatalogRoute) => `${route.method} ${route.path}`;
+  const key = (route: CatalogRoute) => `${route.method} ${route.apiPath}`;
   const before = new Map(parseRouteCatalog(options.before).map((route) => [key(route), route]));
   const after = new Map(parseRouteCatalog(options.after).map((route) => [key(route), route]));
   const changes: string[] = [];

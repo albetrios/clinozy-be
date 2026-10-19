@@ -28,6 +28,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { parseRouteCatalog } from '../openapi/route-catalog/catalog-reader.ts';
 
 const ROOT = resolve(new URL('.', import.meta.url).pathname, '../..');
 const ROUTES_FILE = join(ROOT, 'docs/routes.txt');
@@ -39,16 +40,9 @@ const DEFAULT_THRESHOLD = 50; // % of required routes that must appear in ≥1 s
 // Route catalog
 // --------------------------------------------------------------------------
 
-// METHOD  PATH  S(tatus)  I(dempotency)  O(rganization scope)  AUTH — AUTH may contain spaces.
-const ROUTE_LINE_RE = /^\s+(GET|POST|PUT|PATCH|DELETE)\s+(\/\S+)\s+\d{3}\s+\S+\s+\S+\s+(.+?)\s*$/;
-
-/** Parses the catalog table: one `{ method, path, auth }` per route line. */
+/** The catalog's routes — read by the one catalog parser — as `{ method, path, auth }`. */
 export function parseRoutes(content) {
-  return content
-    .split('\n')
-    .map((line) => ROUTE_LINE_RE.exec(line))
-    .filter(Boolean)
-    .map((match) => ({ method: match[1], path: match[2], auth: match[3] }));
+  return parseRouteCatalog(content).map(({ method, path, gate }) => ({ method, path, auth: gate }));
 }
 
 const PUBLIC_INFRASTRUCTURE_PATHS = [

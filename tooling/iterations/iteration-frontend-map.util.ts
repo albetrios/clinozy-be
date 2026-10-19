@@ -10,6 +10,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseRouteCatalog } from '@tooling/openapi/route-catalog/catalog-reader.js';
 import { parseCommandLine } from '@tooling/setup/common/script.js';
 import {
   ITERATIONS_DIRECTORY,
@@ -46,8 +47,8 @@ const SUMMARY_FALLBACKS: Readonly<Record<string, string>> = {
   'GET /readyz': 'Readiness probe',
 };
 
-/** One route of `docs/routes.txt`. */
-export interface CatalogRoute {
+/** One route of `docs/routes.txt` as the map lists it. */
+export interface FrontendMapRoute {
   /** `GET`, `POST`, `PATCH`, `PUT` or `DELETE`. */
   readonly method: string;
   /** The path without `/api/v1`, with `:param` segments. */
@@ -125,35 +126,27 @@ const ROUTE_MODULES: readonly RouteModule[] = [
   { name: 'Platform administration and operations', holds: () => true },
 ];
 
-const CATALOG_ROUTE_LINE =
-  /^ {2}(GET|POST|PATCH|PUT|DELETE) +(\/\S+) +\d{3} +(req|-) +(both|team) +(.+)$/;
 const REVIEW_SECTION_HEADING = /^## (\d+)\. /;
 const REVIEW_ROUTE_ROW = /^\| ([0-9.]+) \| (GET|POST|PATCH|PUT|DELETE) \| `([^`]+)` \|/;
 
 /**
- * Reads every route of `docs/routes.txt`, from its domain sections (the summary after them repeats
- * routes and is skipped).
+ * The catalog's routes as the map lists them: `docs/routes.txt` read by the one catalog parser,
+ * with the `/api/v1` prefix dropped.
  *
  * @remarks
- * Paths lose the `/api/v1` prefix; the health and operations routes keep their own root paths.
+ * The health and operations routes keep their own root paths; the summary after the domain
+ * sections repeats routes and is skipped (by the parser).
  */
-export function parseRouteCatalog(catalog: string): CatalogRoute[] {
-  const routes: CatalogRoute[] = [];
-  for (const line of catalog.split('\n')) {
-    if (line.trim() === 'SUMMARY') break;
-    const match = CATALOG_ROUTE_LINE.exec(line.trimEnd());
-    if (!match) continue;
-    const [, method, path, idempotency, scope, gate] = match;
-    if (!(method && path && gate)) continue;
-    routes.push({
+export function frontendMapRoutes(catalog: string): FrontendMapRoute[] {
+  return parseRouteCatalog(catalog).map(
+    ({ method, apiPath, isIdempotencyRequired, isTeamOnly, gate }) => ({
       method,
-      path: path.startsWith(API_PREFIX) ? path.slice(API_PREFIX.length) : path,
-      isIdempotencyRequired: idempotency === 'req',
-      isTeamOnly: scope === 'team',
-      gate: gate.trim(),
-    });
-  }
-  return routes;
+      path: apiPath,
+      isIdempotencyRequired,
+      isTeamOnly,
+      gate,
+    }),
+  );
 }
 
 /**
@@ -191,7 +184,7 @@ export function parseRouteReviewNumbers(review: string): ReadonlyMap<string, str
  */
 export function routeReviewNumber(lookup: {
   readonly numbers: ReadonlyMap<string, string>;
-  readonly route: Pick<CatalogRoute, 'method' | 'path'>;
+  readonly route: Pick<FrontendMapRoute, 'method' | 'path'>;
 }): string {
   const { method, path } = lookup.route;
   const spellings = [path];
@@ -262,11 +255,13 @@ function tableCell(text: string): string {
  * Pure: the same catalog, summaries and review give the same text, which is what `--check` compares.
  */
 export function renderRouteSection(source: {
-  readonly routes: readonly CatalogRoute[];
+  readonly routes: readonly FrontendMapRoute[];
   readonly summaries: ReadonlyMap<string, string>;
   readonly reviewNumbers: ReadonlyMap<string, string>;
 }): string {
-  const grouped = new Map<string, CatalogRoute[]>(ROUTE_MODULES.map((module) => [module.name, []]));
+  const grouped = new Map<string, FrontendMapRoute[]>(
+    ROUTE_MODULES.map((module) => [module.name, []]),
+  );
   for (const route of source.routes) {
     const module = ROUTE_MODULES.find((candidate) => candidate.holds(route.path));
     if (module) grouped.get(module.name)?.push(route);

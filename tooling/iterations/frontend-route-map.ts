@@ -21,7 +21,7 @@ import { loadOpenApiStrings } from '@tooling/openapi/extractors/locale-loader.js
 import {
   openApiSummaries,
   parseFrontendMapArguments,
-  parseRouteCatalog,
+  frontendMapRoutes,
   parseRouteReviewNumbers,
   planFrontendRouteMap,
   readRouteReview,
@@ -39,7 +39,7 @@ function main(): void {
     console.log(USAGE);
     return;
   }
-  const routes = parseRouteCatalog(
+  const routes = frontendMapRoutes(
     readFileSync(resolve(REPOSITORY_ROOT, 'docs/routes.txt'), 'utf-8'),
   );
   const block = renderRouteSection({
