@@ -253,14 +253,19 @@ function dockerStatus() {
   if (!isRemote || !onPath("docker")) return "n/a";
   if (spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0) return "up";
   diagnose("Docker daemon down — starting it (best-effort)…");
-  const log = openSync("/tmp/dockerd-session-start.log", "w");
+  // In the hook's own probe directory, beside the other probe logs — not a fixed name in /tmp.
+  mkdirSync(probeDirectory, { recursive: true });
+  const logPath = join(probeDirectory, "dockerd-session-start.log");
+  const log = openSync(logPath, "w");
   const started = spawnSync("bash", [join(repositoryRoot, "tooling/setup/agent/ensure-docker-daemon.sh")], {
     cwd: repositoryRoot,
     env: { ...process.env, DOCKERD_WAIT_SECONDS: "10" },
     stdio: ["ignore", log, log],
     timeout: 90_000,
   });
-  return started.status === 0 ? "started" : "start-failed (run: bash tooling/setup/agent/ensure-docker-daemon.sh)";
+  return started.status === 0
+    ? "started"
+    : `start-failed (log: ${logPath}; run: bash tooling/setup/agent/ensure-docker-daemon.sh)`;
 }
 
 /**
