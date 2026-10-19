@@ -3275,6 +3275,7 @@ src/
     │   │   ├── hosted-docs-publish.policy.unit.test.ts
     │   │   ├── image-database-step.policy.unit.test.ts
     │   │   ├── k6-coverage.policy.unit.test.ts
+    │   │   ├── mirrored-files.policy.unit.test.ts
     │   │   ├── openapi-drift-check.policy.unit.test.ts
     │   │   ├── patched-dependencies.policy.unit.test.ts
     │   │   ├── post-merge-ci.policy.unit.test.ts
