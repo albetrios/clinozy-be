@@ -14,7 +14,10 @@ export function recordTelemetry(hookId, event, status, detail) {
     // Commas and newlines would break the CSV shape; readers that take 4 columns ignore a 5th.
     const extra = detail ? `,${String(detail).replace(/[,\n]/g, "")}` : "";
     const line = `${new Date().toISOString()},${hookId},${event},${status}${extra}\n`;
-    appendFileSync(join(repositoryRoot, "agent-os", "hooks", ".telemetry.log"), line);
+    // HOOK_TELEMETRY_LOG moves the log: the hook tests point it at a scratch file, so a test run
+    // that spawns the real hooks against this checkout never counts in the real log.
+    const log = process.env.HOOK_TELEMETRY_LOG || join(repositoryRoot, "agent-os", "hooks", ".telemetry.log");
+    appendFileSync(log, line);
   } catch {
     /* fail-open — telemetry must never break a hook */
   }
