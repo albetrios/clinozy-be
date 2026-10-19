@@ -1,42 +1,23 @@
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  git,
-  gitEnvironmentWithoutInheritedRepository,
-  resolveBase,
-  trunkBranch,
-  tryGit,
-} from '@tooling/setup/common/git-environment.js';
-
-const repositories: string[] = [];
+  createTestGitRepository,
+  removeScratchFolders,
+  runTestGit,
+} from '@/tests/helpers/git-repository.helper.js';
+import { git, resolveBase, trunkBranch, tryGit } from '@tooling/setup/common/git-environment.js';
 
 /** A throwaway repository with one commit of `a.txt` (built with the inherited repository shed). */
 function repository(): string {
-  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'git-environment-')));
-  repositories.push(directory);
-  const run = (args: string[]) =>
-    execFileSync('git', args, {
-      cwd: directory,
-      env: gitEnvironmentWithoutInheritedRepository(),
-      stdio: 'ignore',
-    });
-  run(['init', '--quiet', '--initial-branch', 'work']);
-  run(['config', 'user.name', 'Test']);
-  run(['config', 'user.email', 'test@example.com']);
-  writeFileSync(join(directory, 'a.txt'), 'one\n');
-  run(['add', 'a.txt']);
-  run(['commit', '--quiet', '-m', 'first']);
-  return directory;
+  return createTestGitRepository({
+    prefix: 'git-environment-',
+    branch: 'work',
+    files: { 'a.txt': 'one\n' },
+  });
 }
 
-afterEach(() => {
-  for (const directory of repositories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
+afterEach(removeScratchFolders);
 
 describe('git', () => {
   it('drops the trailing newline only, so the porcelain status column survives', () => {
@@ -100,8 +81,7 @@ describe('resolveBase', () => {
 
   it('prefers the upstream when the branch has one', () => {
     const cwd = repository();
-    const run = (args: string[]) =>
-      execFileSync('git', args, { cwd, env: gitEnvironmentWithoutInheritedRepository() });
+    const run = (gitArguments: string[]) => runTestGit({ repositoryRoot: cwd, gitArguments });
     run(['remote', 'add', 'origin', cwd]);
     run(['update-ref', 'refs/remotes/origin/work', 'HEAD']);
     run(['config', 'branch.work.remote', 'origin']);

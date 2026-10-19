@@ -11,14 +11,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  createScratchFolder,
+  removeScratchFolders,
+  runTestGit,
+  TEST_GIT_OWNER,
+  TEST_GIT_TRUNK,
+} from '@/tests/helpers/git-repository.helper.js';
+import {
   addTestIteration,
   createIterationRepository,
-  createScratchFolder,
-  ITERATION_TEST_BASE_BRANCH,
-  ITERATION_TEST_OWNER,
   ITERATION_TEST_TODAY,
-  removeIterationRepositories,
-  runTestGit,
 } from '@/tests/helpers/iteration-repository.helper.js';
 import {
   appendHistoryEntry,
@@ -63,7 +65,7 @@ const WORK_BRANCH = 'feat/iteration-work';
 const COMPLETE_INTAKE = { 'PRD.md': '# PRD\n', 'schema-routes.md': '# schema-routes\n' };
 
 afterEach(() => {
-  removeIterationRepositories();
+  removeScratchFolders();
 });
 
 function suffixSequence(suffixes: readonly string[]): () => string {
@@ -142,7 +144,7 @@ describe('README', () => {
     type: 'feat',
     process: 'full',
     topic: 'pharmacy-returns',
-    owner: ITERATION_TEST_OWNER,
+    owner: TEST_GIT_OWNER,
     opened: '2026-10-06',
     branch: 'feat/pharmacy-returns',
     baseline: 'launch-2026-09-30-jxmr',
@@ -201,7 +203,7 @@ describe('README', () => {
         date: '2026-10-07',
         change: 'approved → planning',
         reason: 'scope\n changed',
-        owner: ITERATION_TEST_OWNER,
+        owner: TEST_GIT_OWNER,
       }),
     ).toBe('- 2026-10-07 · approved → planning · scope changed · Test Owner');
     const first = appendHistoryEntry({ readme: '# x\n\n| Status | a |\n', historyEntry: '- one' });
@@ -228,7 +230,7 @@ describe('schemaRoutesHash', () => {
 describe('planNewIteration', () => {
   const request = (repositoryRoot: string) => ({
     repositoryRoot,
-    baseBranch: ITERATION_TEST_BASE_BRANCH,
+    baseBranch: TEST_GIT_TRUNK,
     siblingRoot: undefined,
     today: ITERATION_TEST_TODAY,
   });
@@ -276,7 +278,7 @@ describe('planNewIteration', () => {
     expect(plan.fields).toMatchObject({
       baseline: 'none',
       status: 'planning',
-      owner: ITERATION_TEST_OWNER,
+      owner: TEST_GIT_OWNER,
       dropPlaced: '—',
       schemaRoutes: '—',
     });
@@ -548,7 +550,7 @@ describe('iteration:status', () => {
       today: ITERATION_TEST_TODAY,
     });
     expect(plan.historyEntry).toBe(
-      `- ${ITERATION_TEST_TODAY} · approved → planning · scope changed · ${ITERATION_TEST_OWNER}`,
+      `- ${ITERATION_TEST_TODAY} · approved → planning · scope changed · ${TEST_GIT_OWNER}`,
     );
     expect(parseIterationReadme(plan.content).get('Status')).toBe('planning');
     expect(plan.content).toContain(`## History\n\n${plan.historyEntry}\n`);
@@ -603,7 +605,7 @@ describe('iteration:baseline', () => {
     });
     expect(parseIterationReadme(plan.content).get('Baseline')).toBe('launch-2026-09-30-jxmr');
     expect(plan.historyEntry).toBe(
-      `- ${ITERATION_TEST_TODAY} · Baseline — → launch-2026-09-30-jxmr · — · ${ITERATION_TEST_OWNER}`,
+      `- ${ITERATION_TEST_TODAY} · Baseline — → launch-2026-09-30-jxmr · — · ${TEST_GIT_OWNER}`,
     );
     const toNone = planBaselineChange({
       repositoryRoot,

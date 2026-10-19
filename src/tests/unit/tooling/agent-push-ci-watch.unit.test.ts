@@ -1,46 +1,24 @@
 import { spawnSync } from 'node:child_process';
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  createScratchFolder,
+  createTestGitRepository,
+  removeScratchFolders,
+} from '@/tests/helpers/git-repository.helper.js';
 import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const HOOK = join(process.cwd(), 'agent-os', 'hooks', 'be-push-ci-watch.mjs');
-const temporaryDirectories: string[] = [];
-
-afterEach(() => {
-  for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
+afterEach(removeScratchFolders);
 
 /** A repository with one commit, and a stub `gh` that answers `run list` with `runs`. */
 function fixture(options: { runs: object[]; authenticated?: boolean }) {
-  const root = mkdtempSync(join(tmpdir(), 'push-ci-watch-'));
-  const state = mkdtempSync(join(tmpdir(), 'push-ci-watch-state-'));
-  temporaryDirectories.push(root, state);
-  // Run from a git hook (pre-push), the inherited GIT_DIR would outrank `cwd` and these calls
-  // would rewrite the hook's own repository — its config and the checked-out branch.
-  const git = (...args: string[]) =>
-    spawnSync('git', args, {
-      cwd: root,
-      encoding: 'utf8',
-      env: gitEnvironmentWithoutInheritedRepository(),
-    });
-  git('init', '--quiet');
-  git('config', 'user.email', 'watch@example.com');
-  git('config', 'user.name', 'watch');
-  writeFileSync(join(root, 'README.md'), '# fixture\n');
-  git('add', '.');
-  git('commit', '--quiet', '-m', 'init');
+  const root = createTestGitRepository({
+    prefix: 'push-ci-watch-',
+    files: { 'README.md': '# fixture\n' },
+  });
+  const state = createScratchFolder('push-ci-watch-state-');
   const bin = join(state, 'bin');
   mkdirSync(bin);
   const calls = join(state, 'gh-calls');
@@ -109,8 +87,7 @@ describe('be-push-ci-watch.mjs', () => {
 
   it('judges only pushes in its own repository', () => {
     const watched = fixture({ runs: [run('PR CI', 'failure')] });
-    const elsewhere = mkdtempSync(join(tmpdir(), 'push-ci-elsewhere-'));
-    temporaryDirectories.push(elsewhere);
+    const elsewhere = createScratchFolder('push-ci-elsewhere-');
     expect(runHook({ ...watched, command: `cd ${elsewhere} && git push` }).status).toBe(0);
     expect(existsSync(watched.calls)).toBe(false);
   });

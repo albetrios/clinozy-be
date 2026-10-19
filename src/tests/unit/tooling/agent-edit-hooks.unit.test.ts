@@ -1,32 +1,20 @@
 import { spawnSync } from 'node:child_process';
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  createScratchFolder,
+  createTestGitRepository,
+  removeScratchFolders,
+} from '@/tests/helpers/git-repository.helper.js';
 import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const HOOK = join(process.cwd(), 'agent-os', 'hooks', 'be-edit-hooks.mjs');
-const temporaryDirectories: string[] = [];
 
 /** A repository with a stand-in `biome` that records its arguments, one call per line. */
 function makeRepository(): { repository: string; state: string; biomeCalls: string } {
-  const repository = mkdtempSync(join(tmpdir(), 'edit-hooks-repository-'));
-  const state = mkdtempSync(join(tmpdir(), 'edit-hooks-state-'));
-  temporaryDirectories.push(repository, state);
-  // Run from a git hook (pre-push), the inherited GIT_DIR would outrank `cwd` and re-initialize
-  // the hook's own repository instead.
-  spawnSync('git', ['init', '-q'], {
-    cwd: repository,
-    env: gitEnvironmentWithoutInheritedRepository(),
-  });
+  const repository = createTestGitRepository({ prefix: 'edit-hooks-repository-' });
+  const state = createScratchFolder('edit-hooks-state-');
   mkdirSync(join(repository, 'src'), { recursive: true });
   mkdirSync(join(repository, 'docs'), { recursive: true });
   writeFileSync(join(repository, 'src', 'first.ts'), 'export const first = 1;\n');
@@ -59,11 +47,7 @@ const edit = (filePath: string) => ({
   tool_input: { file_path: filePath },
 });
 
-afterEach(() => {
-  for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
+afterEach(removeScratchFolders);
 
 /**
  * Locks in format-once-at-Stop: a turn's edits queue their files, and Stop formats them with one

@@ -1,39 +1,28 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import {
+  createScratchFolder,
+  createTestGitRepository,
+  removeScratchFolders,
+  runTestGit,
+} from '@/tests/helpers/git-repository.helper.js';
 import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const GUARDRAILS = join(process.cwd(), 'agent-os', 'hooks', 'be-guardrails.mjs');
 const REVIEW_MARKER = join(process.cwd(), 'tooling', 'agent-os', 'review-marker.ts');
 const TSX = join(process.cwd(), 'node_modules', '.bin', 'tsx');
-const temporaryDirectories: string[] = [];
-
-afterEach(() => {
-  for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
+afterEach(removeScratchFolders);
 
 /** A repository whose branch commits `changedFile` on top of `origin/main`. */
 function repository(changedFile: string): string {
-  const root = mkdtempSync(join(tmpdir(), 'push-review-gate-'));
-  temporaryDirectories.push(root);
-  // Run from a git hook (pre-push), the inherited GIT_DIR would outrank `cwd` and these calls
-  // would rewrite the hook's own repository — its config, `origin/main` and branches.
-  const git = (...args: string[]) =>
-    spawnSync('git', args, {
-      cwd: root,
-      encoding: 'utf8',
-      env: gitEnvironmentWithoutInheritedRepository(),
-    });
-  git('init', '--quiet', '--initial-branch', 'main');
-  git('config', 'user.email', 'gate@example.com');
-  git('config', 'user.name', 'gate');
-  writeFileSync(join(root, 'README.md'), '# fixture\n');
-  git('add', '.');
-  git('commit', '--quiet', '-m', 'init');
+  const root = createTestGitRepository({
+    prefix: 'push-review-gate-',
+    branch: 'main',
+    files: { 'README.md': '# fixture\n' },
+  });
+  const git = (...gitArguments: string[]) => runTestGit({ repositoryRoot: root, gitArguments });
   git('update-ref', 'refs/remotes/origin/main', 'HEAD');
   git('switch', '--quiet', '-c', 'feat/change');
   mkdirSync(dirname(join(root, changedFile)), { recursive: true });
@@ -99,8 +88,7 @@ describe('be-guardrails.mjs push review gate', () => {
 
   it('judges only pushes in its own repository', () => {
     const root = repository('src/domains/billing/billing.service.ts');
-    const elsewhere = mkdtempSync(join(tmpdir(), 'push-review-elsewhere-'));
-    temporaryDirectories.push(elsewhere);
+    const elsewhere = createScratchFolder('push-review-elsewhere-');
     expect(decision({ root, command: `cd ${elsewhere} && git push` })).toBe('');
     expect(decision({ root, command: `git -C ${elsewhere} push` })).toBe('');
   });

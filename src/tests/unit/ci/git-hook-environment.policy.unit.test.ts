@@ -18,9 +18,10 @@ import {
  *   `tooling/setup/common/git-environment.ts`, which always sheds them. The documented exception
  *   is the pre-commit steps that read the commit's own index (a temporary one for
  *   `git commit <paths>`) through the inherited GIT_INDEX_FILE — {@link PRE_COMMIT_INDEX_READERS}.
- * - `src/tests/` strips them on every git call: a test that builds a throwaway repository runs
- *   inside the pre-push hook too, and there its `git init` / `git config` / `git update-ref`
- *   rewrite the developer's repository (19 Oct 2026: a linked worktree's push set `core.bare`, an
+ * - `src/tests/` starts git only through the one fixture, `src/tests/helpers/git-repository.helper.ts`,
+ *   which sheds them on every call: a test that builds a throwaway repository runs inside the
+ *   pre-push hook too, and there its `git init` / `git config` / `git update-ref` would rewrite
+ *   the developer's repository (19 Oct 2026: a linked worktree's push set `core.bare`, an
  *   identity and `origin/main` on the shared repository).
  */
 const ROOT = process.cwd();
@@ -36,11 +37,8 @@ const PRE_COMMIT_INDEX_READERS: readonly string[] = [
   'src/scripts/validators/routes/validate-route-access-diff.ts',
 ];
 
-/** Test files known to start git — pins the scan against a regex that quietly stops matching. */
-const KNOWN_TEST_GIT_CALLERS: readonly string[] = [
-  'src/tests/helpers/iteration-repository.helper.ts',
-  'src/tests/unit/tooling/agent-push-review-gate.unit.test.ts',
-];
+/** The one test file that starts git: every throwaway repository is built through it. */
+const TEST_GIT_FIXTURE = 'src/tests/helpers/git-repository.helper.ts';
 
 /** A child-process call whose command is `git` (the literal may sit on the next line). */
 const GIT_CHILD_PROCESS =
@@ -127,12 +125,9 @@ describe('git hook environment — inherited repository variables', () => {
     }
   });
 
-  it('strips the inherited repository in every test file that starts git', () => {
-    const callers = gitCallers(STRIPPED_ROOTS);
-    expect(callers).toEqual(expect.arrayContaining([...KNOWN_TEST_GIT_CALLERS]));
-    const unguarded = callers.filter(
-      (path) => !readFileSync(join(ROOT, path), 'utf-8').includes(HELPER_NAME),
-    );
-    expect(unguarded).toEqual([]);
+  it('starts git in tests only through the one fixture, which strips the inherited repository', () => {
+    // Exact, so the fixture being found is also the anti-vacuity check on the regex.
+    expect(gitCallers(STRIPPED_ROOTS)).toEqual([TEST_GIT_FIXTURE]);
+    expect(readFileSync(join(ROOT, TEST_GIT_FIXTURE), 'utf-8')).toContain(HELPER_NAME);
   });
 });

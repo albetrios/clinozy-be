@@ -1,15 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  createScratchFolder,
+  createTestGitRepository,
+  removeScratchFolders,
+} from '@/tests/helpers/git-repository.helper.js';
 import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PROJECT_SLUG } from '@/shared/constants/project-identity.constants.js';
@@ -17,37 +13,18 @@ import { PROJECT_SLUG } from '@/shared/constants/project-identity.constants.js';
 const HOOK = join(process.cwd(), 'agent-os', 'hooks', 'be-turn-end-tests.mjs');
 /** The hook's state folder under TMPDIR. */
 const HOOK_STATE = `${PROJECT_SLUG}-hooks`;
-const temporaryDirectories: string[] = [];
-
-afterEach(() => {
-  for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
+afterEach(removeScratchFolders);
 
 /**
  * A repository with one uncommitted source file and stub `tsx` (the selection: one unit test) and
  * `vitest` (exits with `VITEST_STUB_EXIT`, counts its runs) — the hook's whole world.
  */
 function repository(): { root: string; state: string; runs: string } {
-  const root = mkdtempSync(join(tmpdir(), 'turn-end-tests-'));
-  const state = mkdtempSync(join(tmpdir(), 'turn-end-tests-state-'));
-  temporaryDirectories.push(root, state);
-  // Run from a git hook (pre-push), the inherited GIT_DIR would outrank `cwd` and these calls
-  // would rewrite the hook's own repository — its config and the checked-out branch.
-  const git = (...args: string[]) =>
-    spawnSync('git', args, {
-      cwd: root,
-      encoding: 'utf8',
-      env: gitEnvironmentWithoutInheritedRepository(),
-    });
-  git('init', '--quiet');
-  git('config', 'user.email', 'hook@example.com');
-  git('config', 'user.name', 'hook');
-  mkdirSync(join(root, 'src'), { recursive: true });
-  writeFileSync(join(root, 'src', 'a.ts'), 'export const a = 1;\n');
-  git('add', '.');
-  git('commit', '--quiet', '-m', 'init');
+  const root = createTestGitRepository({
+    prefix: 'turn-end-tests-',
+    files: { 'src/a.ts': 'export const a = 1;\n' },
+  });
+  const state = createScratchFolder('turn-end-tests-state-');
   writeFileSync(join(root, 'src', 'a.ts'), 'export const a = 2;\n');
 
   const bin = join(root, 'node_modules', '.bin');

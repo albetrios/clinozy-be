@@ -7,10 +7,10 @@
  * message when no Baseline is given.
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import { removeScratchFolders } from '@/tests/helpers/git-repository.helper.js';
 import {
   addTestIteration,
   createIterationRepository,
-  removeIterationRepositories,
 } from '@/tests/helpers/iteration-repository.helper.js';
 import {
   compareSchemaRoutes,
@@ -23,7 +23,7 @@ import {
 } from '@tooling/iterations/iteration-diff.util.js';
 
 afterEach(() => {
-  removeIterationRepositories();
+  removeScratchFolders();
 });
 
 const BASELINE_SCHEMA = `# schema-routes.md

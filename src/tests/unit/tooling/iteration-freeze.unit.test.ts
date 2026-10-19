@@ -10,11 +10,13 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  removeScratchFolders,
+  runTestGit,
+  TEST_GIT_TRUNK,
+} from '@/tests/helpers/git-repository.helper.js';
+import {
   addTestIteration,
   createIterationRepository,
-  ITERATION_TEST_BASE_BRANCH,
-  removeIterationRepositories,
-  runTestGit,
 } from '@/tests/helpers/iteration-repository.helper.js';
 import {
   changesByIteration,
@@ -28,7 +30,7 @@ const PRD = '# PRD\n';
 const SCHEMA_ROUTES = '# schema-routes\n\n## Entity: Patient\n';
 
 afterEach(() => {
-  removeIterationRepositories();
+  removeScratchFolders();
 });
 
 function commit(repositoryRoot: string, message: string): void {
@@ -52,7 +54,7 @@ function repositoryWithMergedLaunch(): string {
 }
 
 function check(repositoryRoot: string) {
-  return checkIterationFreeze({ repositoryRoot, base: ITERATION_TEST_BASE_BRANCH });
+  return checkIterationFreeze({ repositoryRoot, base: TEST_GIT_TRUNK });
 }
 
 describe('iteration freeze — paths', () => {
@@ -138,7 +140,7 @@ describe('iteration freeze — the branch', () => {
       const repositoryRoot = repositoryWithMergedLaunch();
       runTestGit({
         repositoryRoot,
-        gitArguments: ['switch', '-q', ITERATION_TEST_BASE_BRANCH],
+        gitArguments: ['switch', '-q', TEST_GIT_TRUNK],
       });
       addTestIteration({
         repositoryRoot,

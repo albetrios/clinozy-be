@@ -37,6 +37,8 @@ Triggered by `be-testing-conventions.mdc` when test-related or pure-layer files 
 
 Use `injectAuthenticated`, `injectUnauthenticated`, or `injectWithCookies` (for session cookies) from `src/tests/helpers/test-http-inject.helper.ts`. Each one waits for the response's `onResponse` work (idempotency entry, post-commit dispatch) before returning — a bare `app.inject()` does not.
 
+A throwaway **git** repository (tooling and hook tests) comes from `createTestGitRepository()` in `src/tests/helpers/git-repository.helper.ts`, never a hand-run `git init`: its git calls shed the inherited `GIT_DIR` and friends, because a test runs inside the pre-push hook too. Pinned by `src/tests/unit/ci/git-hook-environment.policy.unit.test.ts`.
+
 ## Test layout (non-negotiable)
 
 Vitest tests live under `src/` in **two places only**. Do not mix responsibilities.

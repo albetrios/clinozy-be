@@ -9,10 +9,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { removeScratchFolders } from '@/tests/helpers/git-repository.helper.js';
 import {
   addTestIteration,
   createIterationRepository,
-  removeIterationRepositories,
 } from '@/tests/helpers/iteration-repository.helper.js';
 import {
   GENERATED_BLOCK_END,
@@ -28,7 +28,7 @@ import {
 } from '@tooling/iterations/iteration-frontend-map.util.js';
 
 afterEach(() => {
-  removeIterationRepositories();
+  removeScratchFolders();
 });
 
 const ITERATION = 'launch-2026-09-30-jxmr';

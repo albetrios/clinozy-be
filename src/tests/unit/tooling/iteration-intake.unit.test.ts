@@ -11,12 +11,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  createScratchFolder,
+  removeScratchFolders,
+  runTestGit,
+} from '@/tests/helpers/git-repository.helper.js';
+import {
   addTestIteration,
   createIterationRepository,
-  createScratchFolder,
   ITERATION_TEST_TODAY,
-  removeIterationRepositories,
-  runTestGit,
 } from '@/tests/helpers/iteration-repository.helper.js';
 import {
   applyIntake,
@@ -46,7 +48,7 @@ const COMPLETE = { 'PRD.md': PRD, 'schema-routes.md': SCHEMA_ROUTES };
 const BRIEF = `# Brief — returns\n\n${BRIEF_SECTIONS.map((section) => `## ${section}\n\nnone\n`).join('\n')}`;
 
 afterEach(() => {
-  removeIterationRepositories();
+  removeScratchFolders();
 });
 
 function drop(files: Readonly<Record<string, string>>): string {
