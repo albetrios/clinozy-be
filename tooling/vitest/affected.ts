@@ -1,88 +1,21 @@
 #!/usr/bin/env tsx
 /**
  * `pnpm test:affected [--base <ref>]` — behind `/be-validate --affected`: what `git push` will
- * run for the commits it pushes (the steps of `.husky/pre-push`, each with why it runs or not),
- * then the tests `pnpm test:select` picks for them, with why each was picked.
+ * run for the commits it pushes (the one pre-push step list, `tooling/validate/pre-push-steps.ts`,
+ * each step with why it runs or not), then the tests `pnpm test:select` picks for them, with why.
  *
  * Pre-push runs the unit-project files of that selection (`tooling/vitest/pre-push-tests.ts`), or
- * the whole unit project when the selection escalates. The steps mirror `.husky/pre-push`
- * (`src/tests/unit/tooling/affected.policy.unit.test.ts` keeps the two in step).
+ * the whole unit project when the selection escalates.
  */
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pushSemgrepTargets } from '@/scripts/tooling/run-push-semgrep.js';
 import { resolveBase, tryGit } from '@tooling/setup/common/git-environment.js';
+import { prePushSteps } from '@tooling/validate/pre-push-steps.js';
 import {
   ALWAYS_RUN_REASON,
   selectTests,
   type TestSelection,
 } from '@tooling/vitest/test-selection.util.js';
-
-/** One pre-push step: the command, and whether the pushed files make it run. */
-export interface PushStep {
-  command: string;
-  runs: boolean;
-  why: string;
-}
-
-/** The files that make pre-push run the unit project (its `PUSHED_UNIT_RELEVANT` pattern). */
-export const UNIT_RELEVANT =
-  /^(src\/|tooling\/vitest\/|vitest\.config\.ts$|package\.json$|pnpm-lock\.yaml$)/;
-
-/**
- * The files that make pre-push run the generated-doc drift checks (its
- * `PUSHED_GENERATED_DOC_RELEVANT` pattern): source, tooling, and a hand edit of a generated doc.
- */
-export const GENERATED_DOC_RELEVANT =
-  /^(src\/|tooling\/|docs\/routes\.txt$|docs\/reference\/architecture\/src-structure-tree\.txt$)/;
-
-/** The steps of `.husky/pre-push` for the pushed files, in its order. */
-export function pushSteps(changedFiles: readonly string[]): PushStep[] {
-  const markdown = changedFiles.some((file) => file.endsWith('.md'));
-  const generatedDocRelevant = changedFiles.some((file) => GENERATED_DOC_RELEVANT.test(file));
-  const semgrep = pushSemgrepTargets(changedFiles);
-  const unitRelevant = changedFiles.some((file) => UNIT_RELEVANT.test(file));
-  const always = (command: string): PushStep => ({ command, runs: true, why: 'always' });
-  return [
-    always('branch-name policy'),
-    always('pnpm typecheck'),
-    always('pnpm build'),
-    always('pnpm build:check'),
-    {
-      command: 'pnpm docs:lint:changed',
-      runs: markdown,
-      why: markdown ? 'pushed Markdown' : 'no Markdown pushed',
-    },
-    ...[
-      'pnpm tool:project-structure-tree:check',
-      'pnpm routes:catalog:check',
-      'pnpm validate:route-organization-scope',
-    ].map(
-      (command): PushStep => ({
-        command,
-        runs: generatedDocRelevant,
-        why: generatedDocRelevant
-          ? 'pushed src/, tooling/ or a generated doc'
-          : 'no src/, tooling/ or generated doc pushed',
-      }),
-    ),
-    {
-      command: 'pnpm security:semgrep:push',
-      runs: semgrep.length > 0,
-      why:
-        semgrep.length > 0
-          ? `${semgrep.length} auth / tenancy / billing / database-context file(s)`
-          : 'none of auth, tenancy, billing, database contexts',
-    },
-    {
-      command: 'pnpm test:pre-push',
-      runs: unitRelevant,
-      why: unitRelevant
-        ? 'pushed unit-relevant files — the unit-project files selected below (all of them when the selection escalates)'
-        : 'nothing unit-relevant pushed',
-    },
-  ];
-}
 
 /** The selection as Markdown: tests picked for a reason of their own, then the always-run counts. */
 export function selectionTable(selection: TestSelection): string[] {
@@ -120,8 +53,8 @@ function main(): void {
     '',
     '| Step | Runs | Why |',
     '| --- | --- | --- |',
-    ...pushSteps(changedFiles).map(
-      (step) => `| \`${step.command}\` | ${step.runs ? 'yes' : 'no'} | ${step.why} |`,
+    ...prePushSteps({ changedFiles, base }).map(
+      (step) => `| \`${step.label}\` | ${step.runs ? 'yes' : 'no'} | ${step.why} |`,
     ),
     '',
     '## The tests pnpm test:select picks',

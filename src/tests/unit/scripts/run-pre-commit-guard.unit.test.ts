@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  buildGuardSteps,
   buildRunnableSteps,
   findOversizedStagedFiles,
   hasPackageScript,
@@ -10,7 +9,6 @@ import {
   shouldRunMigrationCheck,
   shouldRunOpenApiCheck,
   shouldRunRlsPolicyLint,
-  shouldRunSonarScan,
   shouldRunStructureTreeCheck,
   type RunnableStep,
   runStepPool,
@@ -75,18 +73,13 @@ describe('run-pre-commit-guard conditionals', () => {
     expect(shouldRunLockfileCheck(['src/domains/auth/auth.service.ts'])).toBe(false);
   });
 
-  it('marks the lockfile step always/conditional based on staged manifest/lockfile', () => {
-    const withManifest = buildGuardSteps({
-      stagedFiles: ['package.json'],
-      scripts: baseScripts,
-    });
-    expect(withManifest.find((step) => step.id === '1b')?.when).toBe('always');
-
-    const withoutManifest = buildGuardSteps({
-      stagedFiles: ['docs/README.md'],
-      scripts: baseScripts,
-    });
-    expect(withoutManifest.find((step) => step.id === '1b')?.when).toBe('conditional');
+  it('applies the lockfile step only when a manifest or the lockfile is staged', () => {
+    const lockfileStep = (stagedFiles: string[]) =>
+      buildRunnableSteps({ stagedFiles, scripts: baseScripts }).find(
+        (step) => step.label === 'Lockfile in sync',
+      );
+    expect(lockfileStep(['package.json'])?.applies).toBe(true);
+    expect(lockfileStep(['docs/README.md'])?.applies).toBe(false);
   });
 
   it('runs the global suite for domains, env-schema, harness, workflows, and Docker changes', () => {
@@ -103,32 +96,12 @@ describe('run-pre-commit-guard conditionals', () => {
     expect(shouldRunGlobalTests(['src/shared/utils/text/slug.util.ts'])).toBe(false);
   });
 
-  it('detects deployed-surface staged paths for the SonarQube gate', () => {
-    expect(shouldRunSonarScan(['src/domains/auth/auth.service.ts'])).toBe(true);
-    expect(shouldRunSonarScan(['src/shared/utils/http/response.util.ts'])).toBe(true);
-    // Tests, scripts, and tooling are excluded from Sonar analysis.
-    expect(shouldRunSonarScan(['src/domains/auth/__tests__/auth.test.ts'])).toBe(false);
-    expect(shouldRunSonarScan(['src/domains/auth/auth.service.test.ts'])).toBe(false);
-    expect(shouldRunSonarScan(['src/tests/unit/scripts/run-pre-commit-guard.unit.test.ts'])).toBe(
-      false,
-    );
-    expect(shouldRunSonarScan(['src/scripts/tooling/run-pre-commit-guard.ts'])).toBe(false);
-    expect(shouldRunSonarScan(['tooling/sonar/sonar-gate.ts'])).toBe(false);
-    expect(shouldRunSonarScan(['docs/README.md'])).toBe(false);
-  });
-
-  it('marks the SonarQube step always/conditional based on staged runtime code', () => {
-    const withRuntime = buildGuardSteps({
+  it('leaves the SonarQube gate to pre-push (tooling/validate/pre-push-steps.ts)', () => {
+    const labels = buildRunnableSteps({
       stagedFiles: ['src/domains/auth/auth.service.ts'],
       scripts: baseScripts,
-    });
-    expect(withRuntime.find((step) => step.id === '17')?.when).toBe('always');
-
-    const withoutRuntime = buildGuardSteps({
-      stagedFiles: ['docs/README.md'],
-      scripts: baseScripts,
-    });
-    expect(withoutRuntime.find((step) => step.id === '17')?.when).toBe('conditional');
+    }).map((step) => step.label);
+    expect(labels).not.toContain('SonarQube quality gate');
   });
 
   it('includes optional steps only when package scripts exist', () => {
@@ -139,14 +112,15 @@ describe('run-pre-commit-guard conditionals', () => {
       hasPackageScript({ scripts: baseScripts, scriptName: 'tool:project-structure-tree:check' }),
     ).toBe(false);
 
-    const stepsWithoutCheck = buildGuardSteps({
+    const labels = (steps: RunnableStep[]) => steps.map((step) => step.label);
+    const stepsWithoutCheck = buildRunnableSteps({
       stagedFiles: ['src/domains/auth/auth.routes.ts'],
       scripts: baseScripts,
     });
-    expect(stepsWithoutCheck.some((step) => step.id === '9')).toBe(true);
-    expect(stepsWithoutCheck.some((step) => step.id === '6c')).toBe(false);
+    expect(labels(stepsWithoutCheck)).toContain('Test filename suffixes');
+    expect(labels(stepsWithoutCheck)).not.toContain('Source tree drift check');
 
-    const stepsWithCheck = buildGuardSteps({
+    const stepsWithCheck = buildRunnableSteps({
       stagedFiles: ['docs/README.md'],
       scripts: {
         ...baseScripts,
@@ -154,23 +128,23 @@ describe('run-pre-commit-guard conditionals', () => {
           'tsx src/scripts/codegen/generate-project-structure-tree.ts --check',
       },
     });
-    expect(stepsWithCheck.some((step) => step.id === '6c')).toBe(true);
+    expect(labels(stepsWithCheck)).toContain('Source tree drift check');
   });
 
   it('labels the large-file step with the 3MB limit and the iterations/ exemption', () => {
-    const largeFileStep = buildGuardSteps({ stagedFiles: [], scripts: baseScripts }).find(
-      (step) => step.id === '16',
+    const largeFileStep = buildRunnableSteps({ stagedFiles: [], scripts: baseScripts }).find(
+      (step) => step.label.startsWith('Large staged files'),
     );
     expect(largeFileStep?.label).toBe('Large staged files (>3MB; iterations/ exempt)');
-    expect(largeFileStep?.when).toBe('always');
+    expect(largeFileStep?.applies).toBe(true);
   });
 
   it('omits validate:test-naming when script is missing', () => {
-    const steps = buildGuardSteps({
+    const steps = buildRunnableSteps({
       stagedFiles: [],
       scripts: { 'tool:project-structure-tree': 'tsx ...' },
     });
-    expect(steps.some((step) => step.id === '9')).toBe(false);
+    expect(steps.some((step) => step.label === 'Test filename suffixes')).toBe(false);
   });
 });
 
@@ -240,6 +214,8 @@ describe('run-pre-commit-guard parallel runner', () => {
     const { label, calls, exitCode = 0, lock } = options;
     return {
       label,
+      description: label,
+      applies: true,
       phase: 'check',
       ...(lock === undefined ? {} : { lock }),
       run: () => {
@@ -250,11 +226,21 @@ describe('run-pre-commit-guard parallel runner', () => {
     };
   }
 
-  it('keeps the step list: the same steps, in the order --list prints them', () => {
+  it('describes every step it runs, so --list prints the one list', () => {
     const stagedFiles = ['src/domains/auth/auth.routes.ts', 'migrations/20260531000001_test.sql'];
-    const listed = buildGuardSteps({ stagedFiles, scripts }).map((step) => step.label);
-    const runnable = buildRunnableSteps({ stagedFiles, scripts }).map((step) => step.label);
-    expect(runnable).toEqual(listed);
+    for (const step of buildRunnableSteps({ stagedFiles, scripts })) {
+      expect(step.description.trim(), step.label).not.toBe('');
+    }
+  });
+
+  it('scans the staged files with the same gitleaks flags as clinozy-fe', () => {
+    const scan = buildRunnableSteps({ stagedFiles: [], scripts }).find(
+      (step) => step.label === 'Staged secrets scan',
+    );
+    expect(scan?.command).toEqual({
+      file: 'gitleaks',
+      args: ['protect', '--staged', '--redact', '--verbose', '--config', '.gitleaks.toml'],
+    });
   });
 
   it('runs the steps that write the tree, the index or node_modules one at a time', () => {
@@ -275,7 +261,6 @@ describe('run-pre-commit-guard parallel runner', () => {
     const steps = buildRunnableSteps({ stagedFiles: ['docs/README.md'], scripts });
     const commandOf = (label: string) => steps.find((step) => step.label === label)?.command;
     expect(commandOf('Architecture policy tests')).toBeNull();
-    expect(commandOf('SonarQube quality gate')).toBeNull();
     expect(commandOf('TypeScript typecheck')).toEqual({ file: 'pnpm', args: ['typecheck'] });
   });
 
@@ -315,6 +300,8 @@ describe('run-pre-commit-guard parallel runner', () => {
       check({ label: 'typecheck', calls }),
       {
         label: 'regenerate',
+        description: 'regenerate',
+        applies: true,
         phase: 'write',
         run: () => {
           calls.push('serial regenerate');
@@ -375,7 +362,13 @@ describe('run-pre-commit-guard parallel runner', () => {
     const started: string[] = [];
     const exitCode = await runStepsInParallel({
       steps: [
-        { label: 'lint-staged', phase: 'write', run: () => 1 },
+        {
+          label: 'lint-staged',
+          description: 'lint-staged',
+          applies: true,
+          phase: 'write',
+          run: () => 1,
+        },
         check({ label: 'typecheck', calls: [] }),
       ],
       concurrency: 2,

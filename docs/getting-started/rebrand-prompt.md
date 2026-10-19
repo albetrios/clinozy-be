@@ -235,7 +235,7 @@ account.
    git commit -m "chore: initial commit"
    ```
 
-2. The pre-commit guard runs 25 steps including gitleaks and SonarQube (needs Docker). Never
+2. The pre-commit guard runs 24 steps including gitleaks; pre-push adds SonarQube (needs Docker). Never
    `--no-verify`. Confirm `git config core.hooksPath` prints `.husky/_` **before** committing — the
    first rename committed twice with no guard at all because the re-created `.git` had no hooks.
 3. Later fixes are **amended into that commit** so the repo starts as one scratch commit. Verify:

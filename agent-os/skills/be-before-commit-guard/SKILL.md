@@ -49,7 +49,6 @@ How it runs: the steps that change the working tree, the index or `node_modules`
 | 14 | No secret/state files staged | Hard-rejects a force-added `.env.<environment>` / `.setup-credentials` / `.setup-state.*` / `setup.secrets.json` (only `.env.example` is allowed). Unstage it — `git restore --staged <file>`. |
 | 15 | Conflict markers | Resolve `<<<<<<<` / `>>>>>>>` in staged files. |
 | 16 | Large files (>3MB; iterations/ exempt) | Unstage or use LFS. |
-| 17 | When deployed-surface `src/**/*.ts` staged: `pnpm sonar:scan` | SonarQube quality gate — blocks the commit on any unresolved issue/hotspot. **Mandatory — no bypass.** Run `pnpm sonar:up && pnpm sonar:scan` locally and fix every finding (or mark a genuine false positive resolved in the SonarQube UI at <http://localhost:9000>). |
 | 18 | When a migration or `*.schema.ts` is staged: `pnpm validate:rls-policies` | RLS policy lint on the tables they touch: ENABLE + FORCE row level security, WITH CHECK on every tenant write policy, a migration for every declared table. Early check — a finding blocks. |
 | 19 | `pnpm routes:access-diff` | Who may call each route: the staged `docs/routes.txt` against HEAD's. A widening (new PUBLIC / TOKEN route, weaker gate, changed permission, team-only → both, idempotency dropped) is listed for the PR description to explain; it never blocks the commit. |
 | 20 | When `pnpm-lock.yaml` is staged: `pnpm deps:audit:prod` | Advisories in the production tree; fix with an `overrides` entry (**be-dependency-security**). An unreachable registry passes (the PR audits). Early check — an advisory blocks. |
@@ -58,16 +57,22 @@ How it runs: the steps that change the working tree, the index or `node_modules`
 
 Runs before `git push` (fast compile gate; full suite is CI):
 
-| Step | Command            | What to do if it fails                          |
-| ---- | ------------------ | ----------------------------------------------- |
-| 1    | `pnpm typecheck`   | Fix TypeScript errors in `src/`.                |
-| 2    | `pnpm build`       | Fix compile errors (`tsc` + `tsc-alias`).       |
-| 3    | `pnpm build:check` | Fix unresolved `@/` path aliases in `dist/`.    |
-| 4    | `pnpm test:unit`   | Fix failing unit tests under `src/tests/unit/`. |
-| 5    | Markdown lint: `pnpm docs:lint:changed` (conditional) | runs when pushed commits include `*.md` changes |
-| 6    | `pnpm security:semgrep:push` | Semgrep (`p/default`, new findings only) on the pushed auth, tenancy, billing and database-context code. Early check — a finding blocks; no semgrep installed → a warning (CI still scans). |
+| Step | Command | What it catches |
+| ---- | ------- | --------------- |
+| 1 | branch-name policy | Branch names outside the allowed prefixes (`main`/`claude/*` + `<type>/…`) — fail-fast; bypass once: `SKIP_BRANCH_CHECK=1 git push` (see `agent-os/rules/be-git-branch-naming.mdc`) |
+| 2–4 | `pnpm typecheck`, `pnpm build`, `pnpm build:check` | Type errors, compile failures, unresolved `@/` aliases in `dist/` |
+| 5 | `pnpm docs:lint:changed --base <push base>` | Markdown lint — when Markdown is pushed |
+| 6–8 | `pnpm tool:project-structure-tree:check`, `routes:catalog:check`, `validate:route-organization-scope` | Generated-doc drift — when `src/`, `tooling/` or a generated doc is pushed |
+| 9 | `pnpm security:semgrep:push --base <push base>` | Semgrep on pushed auth / tenancy / billing / database-context code (a finding blocks; no semgrep → a warning) |
+| 10 | `pnpm test:pre-push --base <push base>` | The unit tests `pnpm test:select` picks — when unit-relevant files are pushed |
+| 11 | `pnpm sonar:scan` | SonarQube quality gate — when deployed-surface `src/**/*.ts` is pushed; any unresolved issue blocks. **Mandatory — no bypass.** |
 
-> The SonarQube quality gate runs at **pre-commit** (guard step 17, `SonarQube quality gate`), not pre-push. It is mandatory and has no bypass.
+One list, `tooling/validate/pre-push-steps.ts`: `.husky/pre-push` is `pnpm guard:pre-push`
+(`tooling/validate/run-pre-push.ts`), and `pnpm test:affected` previews the same steps with why
+each runs. Every step measures the push from one base (`resolveBase`: the upstream, else
+`origin/<trunk>`).
+
+> The SonarQube quality gate runs at **pre-push** (`pnpm guard:pre-push`, the last step), as in clinozy-fe. It is mandatory and has no bypass.
 
 Full PR gate: `pnpm ci:local` or wait for CI (`quality` + `test` + `api-smoke` + …).
 
@@ -92,7 +97,7 @@ pnpm docs:lint:fix             # auto-fix the markdown nits markdownlint can rep
 pnpm db:migrate:lint           # when editing migrations/*.sql (CI always runs full migrations/)
 pnpm tool:generate-project-identity:check  # manifest ↔ constants ↔ workflows
 pnpm tool:sync-env-example     # .env.example vs env schema
-pnpm sonar:up && pnpm sonar:scan  # SonarQube gate (final pre-commit guard step; when deployed-surface src/**/*.ts staged) — mandatory, no bypass
+pnpm sonar:up && pnpm sonar:scan  # SonarQube gate (last pre-push step; when deployed-surface src/**/*.ts pushed) — mandatory, no bypass
 pnpm deps:audit                # optional; CI runs this (may have known moderate in dev deps)
 ```
 

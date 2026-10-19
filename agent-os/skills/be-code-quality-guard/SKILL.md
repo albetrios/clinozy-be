@@ -25,7 +25,7 @@ Layer 3 (CI)      -- Full validation, Semgrep SAST, Gitleaks full-repo, tests
 | `biome.json`                        | 1 + 2 | Biome lint + format rules and per-path overrides                                                                                                                                                              |
 | `.biomeignore`                      | 1 + 2 | Paths Biome skips (e.g. migrations, lockfile)                                                                                                                                                                 |
 | `.vscode/settings.json`             | 1     | Editor format on save, Biome fix on save                                                                                                                                                                      |
-| `.husky/pre-commit`                 | 2     | Pre-commit hook script (static sync checks + local SonarQube quality gate)                                                                                                                                    |
+| `.husky/pre-commit`                 | 2     | Pre-commit hook script (`pnpm guard:pre-commit` — static sync checks + gitleaks)                                                                                                                                                |
 | `.husky/pre-push`                   | 2     | Pre-push: typecheck, build, build:check, changed-markdown lint, generated-doc drift checks (tree/routes/organization-scope), unit tests                                                                                |
 | `.husky/commit-msg`                 | 2     | Validates commit messages with commitlint (conventional commits)                                                                                                                                              |
 | `commitlint.config.cjs`             | 2 + 3 | Commitlint rules (extends `@commitlint/config-conventional`); same config as CI on push to `main`                                                                                                             |
@@ -93,21 +93,25 @@ Pre-commit mirrors a **subset** of the static checks in [`.github/workflows/pr-c
 | 12 | `pnpm tool:sync-env-example` | `.env.example` drift |
 | 13 | `gitleaks protect --staged` | Secrets in staged files (**required** locally) |
 | 14–15 | Conflict markers + large files | Accidental merges / >3MB staged files (iterations/ exempt) |
-| 16 | `pnpm sonar:scan` (conditional) | SonarQube quality gate — blocks the commit on any unresolved issue/hotspot; runs when deployed-surface `src/**/*.ts` is staged. **Mandatory — no bypass.** |
 
 ### Pre-push (`.husky/pre-push`)
 
-| Step | Command            | What it catches                    |
-| ---- | ------------------ | ---------------------------------- |
-| 0    | branch-name policy | Branch names outside the allowed prefixes (`main`/`claude/*` + `<type>/…`) — runs first, fail-fast; bypass: `SKIP_BRANCH_CHECK=1 git push` (see `agent-os/rules/be-git-branch-naming.mdc`) |
-| 1    | `pnpm typecheck`   | Type errors before push            |
-| 2    | `pnpm build`       | Compile failures                   |
-| 3    | `pnpm build:check` | Unresolved `@/` aliases in `dist/` |
-| 4    | `pnpm docs:lint:changed` | Markdown lint (changed files only) — conditional on pushed markdown file changes |
-| 5    | `pnpm tool:project-structure-tree:check` + `pnpm routes:catalog:check` + `pnpm validate:route-organization-scope` | Generated-doc drift (`src-structure-tree.txt`, `docs/routes.txt`, organization-scope catalog) left behind by `--no-verify` commits that skipped pre-commit steps 5/6b/6c — conditional on pushed `src/`/`tooling/` changes; check-only, never mutates the tree |
-| 6    | `pnpm test:unit`   | Failing shared unit tests — conditional on pushed unit-relevant changes |
+| Step | Command | What it catches |
+| ---- | ------- | --------------- |
+| 1 | branch-name policy | Branch names outside the allowed prefixes (`main`/`claude/*` + `<type>/…`) — fail-fast; bypass once: `SKIP_BRANCH_CHECK=1 git push` (see `agent-os/rules/be-git-branch-naming.mdc`) |
+| 2–4 | `pnpm typecheck`, `pnpm build`, `pnpm build:check` | Type errors, compile failures, unresolved `@/` aliases in `dist/` |
+| 5 | `pnpm docs:lint:changed --base <push base>` | Markdown lint — when Markdown is pushed |
+| 6–8 | `pnpm tool:project-structure-tree:check`, `routes:catalog:check`, `validate:route-organization-scope` | Generated-doc drift — when `src/`, `tooling/` or a generated doc is pushed |
+| 9 | `pnpm security:semgrep:push --base <push base>` | Semgrep on pushed auth / tenancy / billing / database-context code (a finding blocks; no semgrep → a warning) |
+| 10 | `pnpm test:pre-push --base <push base>` | The unit tests `pnpm test:select` picks — when unit-relevant files are pushed |
+| 11 | `pnpm sonar:scan` | SonarQube quality gate — when deployed-surface `src/**/*.ts` is pushed; any unresolved issue blocks. **Mandatory — no bypass.** |
 
-> The SonarQube quality gate runs at **pre-commit** (`pnpm guard:pre-commit`, the final guard step), not pre-push. It is mandatory and has no bypass.
+One list, `tooling/validate/pre-push-steps.ts`: `.husky/pre-push` is `pnpm guard:pre-push`
+(`tooling/validate/run-pre-push.ts`), and `pnpm test:affected` previews the same steps with why
+each runs. Every step measures the push from one base (`resolveBase`: the upstream, else
+`origin/<trunk>`).
+
+> The SonarQube quality gate runs at **pre-push** (`pnpm guard:pre-push`, the last step), as in clinozy-fe. It is mandatory and has no bypass.
 
 ### Commit message hook (`.husky/commit-msg`)
 
@@ -187,6 +191,6 @@ one-line PR there (owner: **be-dependency-security**); never a version in the wo
 
 When adding a new pre-commit check:
 
-1. Add the check to `src/scripts/tooling/run-pre-commit-guard.ts`: `buildGuardSteps` (the `--list` table) and `buildRunnableSteps` (the run) — `phase: 'write'` when it changes the working tree, the index or `node_modules`, a `lock` when it shares files with another check
+1. Add the check to `src/scripts/tooling/run-pre-commit-guard.ts`: `buildRunnableSteps`, the one list — its `description` is what `--list` prints, `applies` whether the staged files need it — `phase: 'write'` when it changes the working tree, the index or `node_modules`, a `lock` when it shares files with another check
 2. Update this skill's Layer 2 table above
 3. Test with a manual commit

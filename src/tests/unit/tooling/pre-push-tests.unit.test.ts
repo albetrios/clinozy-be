@@ -1,10 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { prePushSteps } from '@tooling/validate/pre-push-steps.js';
 import { prePushTests } from '@tooling/vitest/pre-push-tests.js';
 import type { TestSelection } from '@tooling/vitest/test-selection.util.js';
-import { describe, expect, it } from 'vitest';
-
-const PRE_PUSH = readFileSync(join(process.cwd(), '.husky', 'pre-push'), 'utf8');
 
 const selected = (projects: Record<string, string[]>): TestSelection => ({
   mode: 'selected',
@@ -65,7 +62,12 @@ describe('pre-push unit tests', () => {
   });
 
   it('is what the hook runs, against the push base', () => {
-    expect(PRE_PUSH).toContain('pnpm test:pre-push --base "$PUSH_BASE"');
-    expect(PRE_PUSH).not.toMatch(/^\s*pnpm test:unit\b/m);
+    const steps = prePushSteps({ changedFiles: ['src/a.ts'], base: 'origin/main' });
+    expect(steps.find((step) => step.label === 'pnpm test:pre-push')?.pnpmArguments).toEqual([
+      'test:pre-push',
+      '--base',
+      'origin/main',
+    ]);
+    expect(steps.some((step) => step.label === 'pnpm test:unit')).toBe(false);
   });
 });

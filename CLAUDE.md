@@ -142,7 +142,7 @@ Every directory under `src/` participates in the in-source documentation system.
 | TSDoc on exports (canonical)        | every `*.ts` file's `export <kind> <name>` declaration                  | **be-tsdoc-export-guard**          |
 | Route schema (drives OpenAPI)       | `schema: { summary, description, tags }` on Fastify route registrations | **be-route-schema-doc-guard**      |
 
-The hard gate is `pnpm tsdoc:check` — a **budget-driven ratchet** at [`tooling/tsdoc-coverage/budget.json`](tooling/tsdoc-coverage/budget.json). Counts of `MISSING_DESCRIPTION` and `MISSING_REMARKS` may decrease but may not increase; the budget is at 0/0, so the gate now holds full coverage — any new undocumented export fails. Runs on pre-commit (step 8) and CI (`ci:local`, `ci:quality`).
+The hard gate is `pnpm tsdoc:check` — a **budget-driven ratchet** at [`tooling/tsdoc-coverage/budget.json`](tooling/tsdoc-coverage/budget.json). Counts of `MISSING_DESCRIPTION` and `MISSING_REMARKS` may decrease but may not increase; the budget is at 0/0, so the gate now holds full coverage — any new undocumented export fails. Runs on pre-commit (the `TSDoc coverage gate` step) and CI (`ci:local`, `ci:quality`).
 
 See [docs/reference/architecture/documentation-system.md](docs/reference/architecture/documentation-system.md) for the full system, including why the auto-generated DOCS.md aggregator was retired.
 
@@ -174,7 +174,7 @@ Working branches are `<type>/<short-description>`; `main` is the only long-lived
 
 Script namespaces: `ci:*`, `compose:*`, `test:*`, `validate:*`, `db:*`, `docs:*`, `routes:*`, `load:*`, `chaos:*`, `tool:*`, `setup:*`, `mcp:*`, `security:*`, `sonar:*`, `deps:*`, `agent-os:*`, `github:*`, `tsdoc:*`, `docker:*`, `dashboards:*`, `ops:*`, `sbom:*`, `guard:*`, `dev:*`, `build:*`, `lint:*`, `format:*`, `health:*`, `coverage:*`, `env:*`, `start:*`, `verify:*`, `iteration:*`. List all: `pnpm run`.
 
-Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `sonar:down` / `sonar:reset`. The pre-commit hook (`pnpm guard:pre-commit`, step 17) blocks a commit when SonarQube has any open issue on the deployed-app surface; the gate is mandatory — there is no bypass, every issue must be resolved. PR CI runs the same gate in its `SonarQube` lane (in the `Quality gate`, source changes only). See **`docs/reference/quality/sonarqube-local.md`**.
+Local SonarQube quality gate (pre-push, as in clinozy-fe): `pnpm sonar:up` / `sonar:scan` / `sonar:down` / `sonar:reset`. The pre-push hook (`pnpm guard:pre-push`, the last step of the one pre-push list, `tooling/validate/pre-push-steps.ts`) blocks a push when SonarQube has any open issue on the deployed-app surface; the gate is mandatory — there is no bypass, every issue must be resolved. PR CI runs the same gate in its `SonarQube` lane (in the `Quality gate`, source changes only). See **`docs/reference/quality/sonarqube-local.md`**.
 
 - `pnpm build` — compile to `dist/` (`tsc` + `tsc-alias`, plus the circuit breaker's Redis Lua scripts, so `dist/` runs as-is); `pnpm build:check` fails if `@/` aliases remain
 - `pnpm dev` — run Fastify server (tsx watch)

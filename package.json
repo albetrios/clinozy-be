@@ -60,6 +60,7 @@
     "validate:domain:unit-matrix": "tsx src/scripts/validators/tests/validate-subdomain-unit-matrix.ts",
     "guard:pre-commit": "tsx src/scripts/tooling/run-pre-commit-guard.ts",
     "guard:pre-commit:list": "tsx src/scripts/tooling/run-pre-commit-guard.ts --list",
+    "guard:pre-push": "tsx tooling/validate/run-pre-push.ts",
     "ci:local": "tsx tooling/validate/run-gate.ts local",
     "ci:quality": "tsx tooling/validate/run-gate.ts quality",
     "compose:up": "docker compose up -d && { [ \"${SONAR:-1}\" = 0 ] || docker compose -f docker-compose.sonar.yml up -d sonarqube; }",

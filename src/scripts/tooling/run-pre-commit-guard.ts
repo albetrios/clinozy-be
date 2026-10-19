@@ -28,14 +28,6 @@ const STAGED_FILE_LIMIT_BYTES = 3 * 1024 * 1024;
  */
 const SIZE_LIMIT_EXEMPT_PREFIX = 'iterations/';
 
-/** One labeled step in the pre-commit guard sequence. */
-export interface GuardStep {
-  id: string;
-  label: string;
-  when: 'always' | 'conditional';
-  description: string;
-}
-
 /** Options for {@link runPreCommitGuard} — used by tests to stub staged files and scripts. */
 export interface RunGuardOptions {
   listOnly?: boolean;
@@ -167,19 +159,6 @@ export function shouldRunGlobalTests(stagedFiles: string[]): boolean {
   );
 }
 
-/**
- * Returns whether staged files include deployed-surface runtime code that SonarQube analyzes —
- * `src/**\/*.ts` excluding tests (`__tests__/`, `*.test.ts`, `*.spec.ts`, `src/tests/`) and
- * `src/scripts/`. Mirrors the scoping in `sonar-project.properties`.
- */
-export function shouldRunSonarScan(stagedFiles: string[]): boolean {
-  return stagedFiles.some(
-    (file) =>
-      /^src\/.*\.ts$/.test(file) &&
-      !/(__tests__\/|\.test\.ts$|\.spec\.ts$|^src\/tests\/|^src\/scripts\/)/.test(file),
-  );
-}
-
 function runPnpm({
   scriptName,
   scriptArgs = [],
@@ -300,207 +279,22 @@ function checkEnvExampleSync(): number {
   return result.status ?? 1;
 }
 
-/** Builds the ordered pre-commit guard step list (always + conditional steps). */
-export function buildGuardSteps(options: {
-  stagedFiles: string[];
-  scripts: Record<string, string>;
-}): GuardStep[] {
-  const { stagedFiles, scripts } = options;
-  const steps: GuardStep[] = [
-    {
-      id: '1',
-      label: 'lint-staged (Biome + markdownlint)',
-      when: 'always',
-      description: 'pnpm lint-staged',
-    },
-    {
-      id: '1b',
-      label: 'Lockfile in sync',
-      when: shouldRunLockfileCheck(stagedFiles) ? 'always' : 'conditional',
-      description:
-        'pnpm validate:lockfile (when package.json / pnpm-lock.yaml / pnpm-workspace.yaml staged)',
-    },
-    {
-      id: '2',
-      label: 'TypeScript typecheck',
-      when: 'always',
-      description: 'pnpm typecheck',
-    },
-    {
-      id: '3',
-      label: 'Domain structure (strict)',
-      when: 'always',
-      description: 'pnpm validate:domain:strict',
-    },
-    {
-      id: '3b',
-      label: 'Architecture policy tests',
-      when: shouldRunGlobalTests(stagedFiles) ? 'always' : 'conditional',
-      description:
-        'pnpm test:global (service boundary, no direct DB, import paths, no NODE_ENV branching — when domains / env-schema / harness / workflows / Docker staged)',
-    },
-    {
-      id: '4',
-      label: 'Scripts layout',
-      when: 'always',
-      description: 'pnpm validate:scripts-layout',
-    },
-    {
-      id: '5',
-      label: 'Route catalog regenerate',
-      when: 'always',
-      description: 'pnpm routes:catalog + git add docs/routes.txt',
-    },
-    {
-      id: '6',
-      label: 'Route catalog drift check',
-      when: 'always',
-      description: 'pnpm routes:catalog:check',
-    },
-  ];
-
-  if (hasPackageScript({ scripts, scriptName: 'tool:project-structure-tree' })) {
-    steps.push({
-      id: '6b',
-      label: 'Source tree regenerate',
-      when: shouldRunStructureTreeCheck(stagedFiles) ? 'always' : 'conditional',
-      description: `pnpm tool:project-structure-tree + git add ${SRC_STRUCTURE_TREE_PATH} (when src/** or tooling/** staged)`,
-    });
-  }
-
-  if (hasPackageScript({ scripts, scriptName: 'tool:project-structure-tree:check' })) {
-    steps.push({
-      id: '6c',
-      label: 'Source tree drift check',
-      when: shouldRunStructureTreeCheck(stagedFiles) ? 'always' : 'conditional',
-      description: 'pnpm tool:project-structure-tree:check (when src/** or tooling/** staged)',
-    });
-  }
-
-  steps.push(
-    {
-      id: '7',
-      label: 'OpenAPI / Postman drift',
-      when: shouldRunOpenApiCheck(stagedFiles) ? 'always' : 'conditional',
-      description: 'pnpm docs:check (when OpenAPI inputs staged)',
-    },
-    {
-      id: '8',
-      label: 'TSDoc coverage gate',
-      when: 'always',
-      description: 'pnpm tsdoc:check',
-    },
-  );
-
-  if (hasPackageScript({ scripts, scriptName: 'validate:test-naming' })) {
-    steps.push({
-      id: '9',
-      label: 'Test filename suffixes',
-      when: 'always',
-      description: 'pnpm validate:test-naming',
-    });
-  }
-
-  steps.push(
-    {
-      id: '10',
-      label: 'Migration SQL safety',
-      when: shouldRunMigrationCheck(stagedFiles) ? 'always' : 'conditional',
-      description: 'pnpm db:migrate:lint (when migrations/*.sql staged)',
-    },
-    {
-      id: '10b',
-      label: 'DBML regenerate',
-      when: shouldRunMigrationCheck(stagedFiles) ? 'always' : 'conditional',
-      description: `pnpm tool:generate-dbdiagram + git add ${DBML_PATH} (when migrations staged)`,
-    },
-    {
-      id: '11',
-      label: 'Project identity drift',
-      when: 'always',
-      description: 'pnpm tool:generate-project-identity:check',
-    },
-    {
-      id: '12',
-      label: 'Env example sync',
-      when: 'always',
-      description: 'pnpm tool:sync-env-example',
-    },
-    {
-      id: '13',
-      label: 'Staged secrets scan',
-      when: 'always',
-      description: 'gitleaks protect --staged --verbose --redact',
-    },
-    {
-      id: '14',
-      label: 'No secret/state files staged',
-      when: 'always',
-      description:
-        'reject staged .env.<env> / .setup-credentials / .setup-state.* / setup.secrets.json (force-add guard)',
-    },
-    {
-      id: '15',
-      label: 'Merge conflict markers',
-      when: 'always',
-      description: 'grep staged files for conflict markers',
-    },
-    {
-      id: '16',
-      label: 'Large staged files (>3MB; iterations/ exempt)',
-      when: 'always',
-      description: 'reject staged files over 3MB (iterations/ design exports exempt)',
-    },
-    {
-      id: '17',
-      label: 'SonarQube quality gate',
-      when: shouldRunSonarScan(stagedFiles) ? 'always' : 'conditional',
-      description:
-        'pnpm sonar:scan — blocks the commit on any unresolved SonarQube issue/hotspot (when deployed-surface src/**/*.ts staged)',
-    },
-    {
-      id: '18',
-      label: 'RLS policy lint',
-      when: shouldRunRlsPolicyLint(stagedFiles) ? 'always' : 'conditional',
-      description:
-        'pnpm validate:rls-policies — ENABLE + FORCE + tenant WITH CHECK on the tables the staged migrations / schemas touch; a finding blocks',
-    },
-    {
-      id: '19',
-      label: 'Route access diff',
-      when: 'always',
-      description:
-        'pnpm routes:access-diff — staged docs/routes.txt vs HEAD; lists each access widening for the PR description (never blocks)',
-    },
-    {
-      id: '20',
-      label: 'Dependency audit (lockfile staged)',
-      when: shouldRunLockfileAudit(stagedFiles) ? 'always' : 'conditional',
-      description:
-        'pnpm deps:audit:prod when pnpm-lock.yaml is staged; an unreachable registry passes; an advisory blocks',
-    },
-  );
-
-  return steps;
-}
-
-function printStepTable(steps: GuardStep[]): void {
-  console.log('| Step | Label | When |');
-  console.log('|------|-------|------|');
-  for (const step of steps) {
-    console.log(`| ${step.id} | ${step.label} | ${step.description} |`);
-  }
-}
-
 /** A child process the parallel phase spawns: `file` with `args`, no shell. */
 export interface StepCommand {
   file: string;
   args: string[];
 }
 
-/** One step the guard executes — its serial form, and the process it runs as in parallel. */
+/**
+ * One step of the guard — the one list: what `--list` prints and what runs, its serial form and
+ * the process it runs as in parallel.
+ */
 export interface RunnableStep {
   label: string;
+  /** What the step runs, and when it applies — the `--list` table's last column. */
+  description: string;
+  /** Whether the step applies to the staged files (it is a no-op when it does not). */
+  applies: boolean;
   /**
    * `write` changes the working tree, the index or `node_modules`, so it runs serially, before
    * every check; `check` only reads them.
@@ -534,6 +328,7 @@ const PARALLEL_OUTPUT_TAIL_LINES = 20;
 function pnpmStep(options: {
   label: string;
   scriptName: string;
+  description?: string;
   applies?: boolean;
   lock?: string;
   slow?: boolean;
@@ -541,6 +336,8 @@ function pnpmStep(options: {
   const { label, scriptName, applies = true } = options;
   return {
     label,
+    description: options.description ?? `pnpm ${scriptName}`,
+    applies,
     phase: 'check',
     ...(options.lock === undefined ? {} : { lock: options.lock }),
     ...(options.slow === undefined ? {} : { slow: options.slow }),
@@ -562,12 +359,17 @@ export function buildRunnableSteps(options: {
   const steps: RunnableStep[] = [
     {
       label: 'lint-staged (Biome + markdownlint)',
+      description: 'pnpm lint-staged',
+      applies: true,
       phase: 'write',
       run: () => runPnpm({ scriptName: 'lint-staged', scriptArgs: ['--no-stash'] }),
     },
     {
       // `pnpm install --frozen-lockfile` rewrites node_modules under every other check.
       label: 'Lockfile in sync',
+      description:
+        'pnpm validate:lockfile (when package.json / pnpm-lock.yaml / pnpm-workspace.yaml staged)',
+      applies: shouldRunLockfileCheck(stagedFiles),
       phase: 'write',
       run: () =>
         shouldRunLockfileCheck(stagedFiles) ? runPnpm({ scriptName: 'validate:lockfile' }) : 0,
@@ -577,6 +379,8 @@ export function buildRunnableSteps(options: {
     pnpmStep({
       label: 'Architecture policy tests',
       scriptName: 'test:global',
+      description:
+        'pnpm test:global (service boundary, no direct DB, import paths, no NODE_ENV branching — when domains / env-schema / harness / workflows / Docker staged)',
       applies: shouldRunGlobalTests(stagedFiles),
       lock: apiDocsLock,
       slow: true,
@@ -584,6 +388,8 @@ export function buildRunnableSteps(options: {
     pnpmStep({ label: 'Scripts layout', scriptName: 'validate:scripts-layout' }),
     {
       label: 'Route catalog regenerate',
+      description: 'pnpm routes:catalog + git add docs/routes.txt',
+      applies: true,
       phase: 'write',
       run: () => {
         const code = runPnpm({ scriptName: 'routes:catalog' });
@@ -598,6 +404,8 @@ export function buildRunnableSteps(options: {
   if (hasPackageScript({ scripts, scriptName: 'tool:project-structure-tree' })) {
     steps.push({
       label: 'Source tree regenerate',
+      description: `pnpm tool:project-structure-tree + git add ${SRC_STRUCTURE_TREE_PATH} (when src/** or tooling/** staged)`,
+      applies: shouldRunStructureTreeCheck(stagedFiles),
       phase: 'write',
       run: () => {
         if (!shouldRunStructureTreeCheck(stagedFiles)) return 0;
@@ -614,6 +422,7 @@ export function buildRunnableSteps(options: {
       pnpmStep({
         label: 'Source tree drift check',
         scriptName: 'tool:project-structure-tree:check',
+        description: 'pnpm tool:project-structure-tree:check (when src/** or tooling/** staged)',
         applies: shouldRunStructureTreeCheck(stagedFiles),
       }),
     );
@@ -623,6 +432,7 @@ export function buildRunnableSteps(options: {
     pnpmStep({
       label: 'OpenAPI / Postman drift',
       scriptName: 'docs:check',
+      description: 'pnpm docs:check (when OpenAPI inputs staged)',
       applies: shouldRunOpenApiCheck(stagedFiles),
       lock: apiDocsLock,
       slow: true,
@@ -638,10 +448,13 @@ export function buildRunnableSteps(options: {
     pnpmStep({
       label: 'Migration SQL safety',
       scriptName: 'db:migrate:lint',
+      description: 'pnpm db:migrate:lint (when migrations/*.sql staged)',
       applies: shouldRunMigrationCheck(stagedFiles),
     }),
     {
       label: 'DBML regenerate',
+      description: `pnpm tool:generate-dbdiagram + git add ${DBML_PATH} (when migrations staged)`,
+      applies: shouldRunMigrationCheck(stagedFiles),
       phase: 'write',
       run: () => {
         if (!shouldRunMigrationCheck(stagedFiles)) return 0;
@@ -657,6 +470,8 @@ export function buildRunnableSteps(options: {
     }),
     {
       label: 'Env example sync',
+      description: 'pnpm tool:sync-env-example',
+      applies: true,
       phase: 'check',
       run: () => checkEnvExampleSync(),
       command: { file: 'pnpm', args: ['tool:sync-env-example'] },
@@ -667,6 +482,9 @@ export function buildRunnableSteps(options: {
     steps.push(
       {
         label: 'Staged secrets scan',
+        description:
+          'gitleaks protect --staged --redact --verbose --config .gitleaks.toml (the same flags as clinozy-fe)',
+        applies: true,
         phase: 'check',
         run: () => {
           if (
@@ -674,31 +492,35 @@ export function buildRunnableSteps(options: {
           ) {
             return 1;
           }
-          return runShell('gitleaks protect --staged --verbose --redact');
+          return runShell('gitleaks protect --staged --redact --verbose --config .gitleaks.toml');
         },
-        command: { file: 'gitleaks', args: ['protect', '--staged', '--verbose', '--redact'] },
+        command: {
+          file: 'gitleaks',
+          args: ['protect', '--staged', '--redact', '--verbose', '--config', '.gitleaks.toml'],
+        },
       },
       {
         label: 'No secret/state files staged',
+        description:
+          'reject staged .env.<env> / .setup-credentials / .setup-state.* / setup.secrets.json (force-add guard)',
+        applies: true,
         phase: 'check',
         run: () => checkSecretFilesStaged(stagedFiles),
       },
       {
         label: 'Merge conflict markers',
+        description: 'grep staged files for conflict markers',
+        applies: true,
         phase: 'check',
         run: () => checkConflictMarkers(stagedFiles),
       },
       {
         label: 'Large staged files (>3MB; iterations/ exempt)',
+        description: 'reject staged files over 3MB (iterations/ design exports exempt)',
+        applies: true,
         phase: 'check',
         run: () => checkLargeStagedFiles(stagedFiles),
       },
-      pnpmStep({
-        label: 'SonarQube quality gate',
-        scriptName: 'sonar:scan',
-        applies: shouldRunSonarScan(stagedFiles),
-        slow: true,
-      }),
     );
   }
 
@@ -707,23 +529,41 @@ export function buildRunnableSteps(options: {
   steps.push(
     {
       label: 'RLS policy lint',
+      description:
+        'pnpm validate:rls-policies — ENABLE + FORCE + tenant WITH CHECK on the tables the staged migrations / schemas touch; a finding blocks',
+      applies: shouldRunRlsPolicyLint(stagedFiles),
       phase: 'check',
       run: () =>
         shouldRunRlsPolicyLint(stagedFiles) ? runPnpm({ scriptName: 'validate:rls-policies' }) : 0,
     },
     {
       label: 'Route access diff',
+      description:
+        'pnpm routes:access-diff — staged docs/routes.txt vs HEAD; lists each access widening for the PR description (never blocks)',
+      applies: true,
       phase: 'check',
       run: () => runPnpm({ scriptName: 'routes:access-diff' }),
     },
     {
       label: 'Dependency audit (lockfile staged)',
+      description:
+        'pnpm deps:audit:prod when pnpm-lock.yaml is staged; an unreachable registry passes; an advisory blocks',
+      applies: shouldRunLockfileAudit(stagedFiles),
       phase: 'check',
       run: () => (shouldRunLockfileAudit(stagedFiles) ? runLockfileAudit() : 0),
     },
   );
 
   return steps;
+}
+
+/** The `--list` table: the steps that run, numbered as the runner numbers them. */
+function printStepTable(steps: readonly RunnableStep[]): void {
+  console.log('| Step | Label | When |');
+  console.log('|------|-------|------|');
+  steps.forEach((step, index) => {
+    console.log(`| ${index + 1} | ${step.label} | ${step.description} |`);
+  });
 }
 
 function runStep(options: {
@@ -914,7 +754,7 @@ export async function runPreCommitGuard(options: RunGuardOptions = {}): Promise<
   const stagedFiles = options.stagedFiles ?? getStagedFiles();
 
   if (options.listOnly) {
-    printStepTable(buildGuardSteps({ stagedFiles, scripts }));
+    printStepTable(buildRunnableSteps({ stagedFiles, scripts }));
     return 0;
   }
 
