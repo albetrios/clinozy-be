@@ -16,9 +16,9 @@
  *   tsx agent-os/evals/check.ts            # gate: exits 1 on any ERROR
  *   tsx agent-os/evals/check.ts --report   # verbose: list every check + WARNs
  */
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { hashSkill } from "../../tooling/agent-os/skills-lock.ts";
 import { checkSelectorFixtures } from "../../tooling/vitest/selector-fixtures.check.ts";
 
 const repositoryRoot = process.cwd();
@@ -173,10 +173,8 @@ if (!existsSync(lockFile)) {
         );
         continue;
       }
-      const computedHash = createHash("sha256")
-        .update(readFileSync(skillFile))
-        .digest("hex");
-      if (computedHash !== entry.computedHash)
+      // The lock tool's own hash, so the check and `pnpm agent-os:lock` can never disagree.
+      if (hashSkill(skill) !== entry.computedHash)
         error(
           "skills-lock",
           `skill "${skill}" SKILL.md changed since it was locked — run \`pnpm agent-os:lock\``,
