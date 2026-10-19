@@ -55,6 +55,18 @@ describe('post-merge API smoke against the built image', () => {
     expect(boot).toContain('-e DEPLOYMENT_TOTAL_REPLICA_COUNT=1');
   });
 
+  it('every CI boot that relaxes the connection budget states its process count', () => {
+    // The flag off does not skip the check; without a count it assumes one API plus one worker.
+    for (const path of [
+      join(WORKFLOWS, 'reusable-docker-build-trivy.yml'),
+      join(process.cwd(), '.github', 'actions', 'start-api-server', 'action.yml'),
+    ]) {
+      const text = readFileSync(path, 'utf8');
+      expect(text, path).toMatch(/DATABASE_CONNECTION_BUDGET_ENFORCED(=|: )'?false/);
+      expect(text, path).toMatch(/DEPLOYMENT_TOTAL_REPLICA_COUNT(=|: )'?1\b/);
+    }
+  });
+
   it('signs the smoke in as the account the seed creates', () => {
     const account = (step: string): string[] =>
       (dockerSteps.get(step) ?? '').match(/DEMO_(?:EMAIL|PASSWORD): .+/g) ?? [];
