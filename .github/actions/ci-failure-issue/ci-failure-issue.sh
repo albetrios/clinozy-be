@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The logic of the ci-failure-issue action (action.yml): MODE=open|close, TITLE, BODY,
+# The logic of the ci-failure-issue action (action.yml): MODE=open|close, TITLE, BODY, LABELS,
 # CLOSE_COMMENT, WORKFLOW_URL, GH_REPOSITORY, and GH_TOKEN for `gh`; RUN_ID and HEAD_SHA for the
 # fix plan (fix-plan.mjs) an `open` adds below the body — empty when it cannot build one.
 set -euo pipefail
@@ -24,7 +24,12 @@ case "${MODE}" in
       gh issue comment "${existing}" --repo "${GH_REPOSITORY}" --body "${issue_body}"
       echo "Commented on existing ci-failure issue #${existing}."
     else
-      gh issue create --repo "${GH_REPOSITORY}" --title "${TITLE}" --label ci-failure --body "${issue_body}"
+      IFS=',' read -ra extra_labels <<< "${LABELS:-}"
+      for label in "${extra_labels[@]}"; do
+        gh label create "${label}" --repo "${GH_REPOSITORY}" 2>/dev/null || true
+      done
+      gh issue create --repo "${GH_REPOSITORY}" --title "${TITLE}" \
+        --label "ci-failure${LABELS:+,${LABELS}}" --body "${issue_body}"
     fi
     ;;
   close)

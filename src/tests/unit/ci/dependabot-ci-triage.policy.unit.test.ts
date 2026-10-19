@@ -23,6 +23,12 @@ describe('dependabot CI triage policy', () => {
     expect(workflow).not.toContain('--auto');
   });
 
+  it('files its issue with the dependencies label beside ci-failure', () => {
+    // The same line as clinozy-fe's triage: the shared action takes more labels.
+    const workflow = readFileSync(join(ROOT, '.github/workflows/dependabot-ci-triage.yml'), 'utf8');
+    expect(workflow).toMatch(/mode: open[\s\S]*?labels: dependencies\n[\s\S]*?mode: close/);
+  });
+
   it('does not run main->dev sync automation in post-merge', () => {
     const postMerge = readFileSync(join(ROOT, '.github/workflows/post-merge-ci.yml'), 'utf8');
     expect(postMerge).not.toContain('sync-main-into-dev');
