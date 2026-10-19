@@ -56,11 +56,11 @@ jobs:
       - name: Export shared CI test env
         uses: ./.github/actions/test-env
 
-      - name: Cache Vitest
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+      - name: Cache Vitest (restore the newest main-branch copy)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: node_modules/.vite/vitest
-          key: vitest-unit-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'tooling/vitest/**') }}
+          key: vitest-unit-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             vitest-unit-${{ runner.os }}-
 
@@ -84,3 +84,12 @@ jobs:
           name: test-results-unit-global
           path: test-results/
           retention-days: 7
+
+      # Only main saves (as in clinozy-fe): cleanup-cache.yml drops every PR-scoped cache when the
+      # PR's run ends, so a PR-saved copy never reached the next run.
+      - name: Save the Vitest cache (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-unit-${{ runner.os }}-${{ github.run_id }}

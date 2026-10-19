@@ -122,11 +122,11 @@ jobs:
       # result, so a run starts the slowest and the last-failed files first. It holds no
       # transforms — each job transforms its files cold, the way every CI lane does. One key
       # per group, so the seven jobs do not race to save one entry.
-      - name: Cache Vitest
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+      - name: Cache Vitest (restore the newest main-branch copy)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: node_modules/.vite/vitest
-          key: vitest-rls-parity-${{ runner.os }}-${{ matrix.group }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: vitest-rls-parity-${{ runner.os }}-${{ matrix.group }}-${{ github.run_id }}
           restore-keys: |
             vitest-rls-parity-${{ runner.os }}-${{ matrix.group }}-
 
@@ -177,6 +177,15 @@ jobs:
         env:
           VITEST_SECURITY_SLICE: ${{ matrix.security_slice }}
         run: pnpm test:security
+
+      # Only main saves (as in clinozy-fe): cleanup-cache.yml drops every PR-scoped cache when the
+      # PR's run ends, so a PR-saved copy never reached the next run.
+      - name: Save the Vitest cache (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-rls-parity-${{ runner.os }}-${{ matrix.group }}-${{ github.run_id }}
 
   resolve-success:
     name: Close ci-failure issue

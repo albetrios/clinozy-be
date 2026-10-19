@@ -134,14 +134,13 @@ jobs:
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Cache Vitest
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+      - name: Cache Vitest (restore the newest main-branch copy)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: node_modules/.vite/vitest
-          key: vitest-integration-${{ runner.os }}-${{ matrix.shard.id }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: vitest-integration-${{ runner.os }}-${{ matrix.shard.id }}-${{ github.run_id }}
           restore-keys: |
             vitest-integration-${{ runner.os }}-${{ matrix.shard.id }}-
-            vitest-integration-${{ runner.os }}-
 
       - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
         uses: ./.github/actions/test-env
@@ -220,6 +219,15 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
         run: pnpm tool:test-report-email
 
+      # Only main saves (as in clinozy-fe): cleanup-cache.yml drops every PR-scoped cache when the
+      # PR's run ends, so a PR-saved copy never reached the next run.
+      - name: Save the Vitest cache (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-integration-${{ runner.os }}-${{ matrix.shard.id }}-${{ github.run_id }}
+
   unit-coverage:
     # Runs the pure-unit/global projects WITH coverage so the merged gate reflects
     # the true union (unit + DB-bound), not just the DB-bound shards. Mirrors the
@@ -259,11 +267,11 @@ jobs:
       - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
         uses: ./.github/actions/test-env
 
-      - name: Cache Vitest
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+      - name: Cache Vitest (restore the newest main-branch copy)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: node_modules/.vite/vitest
-          key: vitest-unit-cov-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'tooling/vitest/**') }}
+          key: vitest-unit-cov-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             vitest-unit-cov-${{ runner.os }}-
 
@@ -308,6 +316,15 @@ jobs:
           name: route-observed-unit
           path: route-observed-unit/
           retention-days: ${{ github.event_name == 'pull_request' && 30 || 14 }}
+
+      # Only main saves (as in clinozy-fe): cleanup-cache.yml drops every PR-scoped cache when the
+      # PR's run ends, so a PR-saved copy never reached the next run.
+      - name: Save the Vitest cache (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-unit-cov-${{ runner.os }}-${{ github.run_id }}
 
   coverage-gate:
     name: Coverage

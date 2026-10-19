@@ -84,6 +84,10 @@ jobs:
 
       - name: Export shared CI test env (JWT keys + secrets-encryption)
         uses: ./.github/actions/test-env
+      # Like every DB lane: no crash safety on a throwaway database (.github/ci-services.yml).
+      - uses: ./.github/actions/tune-ci-postgres
+        with:
+          container: ${{ job.services.postgres.id }}
 
       - name: Apply migrations from scratch
         run: pnpm db:migrate

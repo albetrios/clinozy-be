@@ -1,0 +1,29 @@
+# The one Postgres and Redis service definition for every CI job that needs them.
+#
+# GitHub Actions cannot share a `services:` block between workflows, so each job carries a copy of
+# these lines, and src/tests/unit/ci/ci-services.policy.unit.test.ts holds every copy to this file:
+# bump an image here and in every job together. Every job with Postgres also runs
+# .github/actions/tune-ci-postgres (no crash safety on a throwaway database) — except the k6 load
+# job, which measures latency and so keeps production durability.
+postgres:
+  image: postgres:17.10-alpine
+  ports:
+    - 5432:5432
+  env:
+    POSTGRES_USER: clinozy
+    POSTGRES_PASSWORD: clinozy
+    POSTGRES_DB: clinozy
+  options: >-
+    --health-cmd="pg_isready -U clinozy -d clinozy"
+    --health-interval=5s
+    --health-timeout=5s
+    --health-retries=20
+redis:
+  image: redis:8.6.3-alpine
+  ports:
+    - 6379:6379
+  options: >-
+    --health-cmd="redis-cli ping"
+    --health-interval=5s
+    --health-timeout=5s
+    --health-retries=20

@@ -103,6 +103,10 @@ jobs:
         with:
           rate-limit-max: '1000'
           rate-limit-window-ms: '60000'
+      # Like every DB lane: no crash safety on a throwaway database (.github/ci-services.yml).
+      - uses: ./.github/actions/tune-ci-postgres
+        with:
+          container: ${{ job.services.postgres.id }}
 
       - name: Provision chaos Toxiproxy listeners
         run: pnpm chaos:provision

@@ -34,11 +34,11 @@ jobs:
         ports:
           - 5432:5432
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: clinozy
+          POSTGRES_PASSWORD: clinozy
           POSTGRES_DB: clinozy
         options: >-
-          --health-cmd="pg_isready -U postgres -d clinozy"
+          --health-cmd="pg_isready -U clinozy -d clinozy"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
@@ -60,8 +60,8 @@ jobs:
       LOG_LEVEL: warn
       HOST: 0.0.0.0
       PORT: 3000
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
-      DATABASE_MAINTENANCE_URL: postgresql://postgres:postgres@localhost:5432/clinozy
+      DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
       REDIS_URL: redis://localhost:6379
       ENABLE_MCP_SERVER: 'true'
       BASE_URL: http://localhost:3000

@@ -23,12 +23,34 @@ describe('Vitest cache path', () => {
     const steps = workflows.flatMap(([name, text]) =>
       text
         .split('\n      - name: ')
-        .filter((step) => step.startsWith('Cache Vitest'))
+        .filter(
+          (step) => step.startsWith('Cache Vitest') || step.startsWith('Save the Vitest cache'),
+        )
         .map((step) => [name, step] as const),
     );
     expect(steps.length).toBeGreaterThanOrEqual(4);
     for (const [name, step] of steps) {
       expect(step, name).toContain('path: node_modules/.vite/vitest');
+    }
+  });
+
+  // One scheme, as in clinozy-fe: every run restores the newest main-branch copy; only main saves
+  // (cleanup-cache.yml drops every PR-scoped cache when the PR's run ends).
+  it('restores on every run and saves on main only, under one run-scoped key', () => {
+    for (const [name, text] of workflows) {
+      if (!text.includes('node_modules/.vite/vitest')) continue;
+      expect(text, name).not.toMatch(/uses: actions\/cache@/);
+      const restores = [
+        ...text.matchAll(/actions\/cache\/restore@[\s\S]*?key: (vitest-[^\n]+)/g),
+      ].map((match) => match[1]);
+      const saves = [
+        ...text.matchAll(
+          /github\.ref == 'refs\/heads\/main' \}\}\n\s+uses: actions\/cache\/save@[\s\S]*?key: (vitest-[^\n]+)/g,
+        ),
+      ].map((match) => match[1]);
+      expect(restores.length, name).toBeGreaterThan(0);
+      expect(saves, name).toEqual(restores);
+      for (const key of restores) expect(key, name).toMatch(/-\$\{\{ github\.run_id \}\}$/);
     }
   });
 });
