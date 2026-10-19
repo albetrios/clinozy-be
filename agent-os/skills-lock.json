@@ -233,7 +233,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-structure-maintainer/SKILL.md",
-      "computedHash": "9165509682026712c5d2469aec3736bddd8e98bb805e996bac4548adec8a3f70"
+      "computedHash": "55ba06dc2cab17e65b4bfc9852e9bfe6f225b2ca4d7b91d59984c7a6ead55683"
     },
     "be-supabase-porting": {
       "source": "local",

@@ -6,6 +6,7 @@ import {
   propertyAssertOptions,
 } from '@/tests/helpers/fast-check-property.util.js';
 import { vitestProjects } from '@tooling/vitest/projects.js';
+import { stepsFor } from '@tooling/validate/gates.js';
 
 const propertyTestFiles = [
   'src/tests/unit/validators/idempotency-key.property.unit.test.ts',
@@ -30,7 +31,9 @@ describe('fast-check property testing policy (#69)', () => {
       scripts: Record<string, string>;
     };
     expect(packageJson.scripts['test:property']).toContain('--project property');
-    expect(packageJson.scripts['ci:quality']).toContain('pnpm test:property');
+    expect(stepsFor('quality').map((step) => step.command.join(' '))).toContain(
+      'pnpm test:property',
+    );
 
     // Read the config, don't grep its source: asserting on `name: 'property'` as
     // text made this fail the moment a formatter switched the file to double

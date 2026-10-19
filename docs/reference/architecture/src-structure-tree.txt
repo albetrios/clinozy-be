@@ -2587,9 +2587,7 @@ src/
     │   ├── locale/
     │       ├── locale-key-parity.util.ts
     │       ├── locale-key-usage.util.ts
-    │       ├── validate-locale-hardcoded-fallbacks.ts
-    │       ├── validate-locale-key-parity.ts
-    │       └── validate-locale-keys.ts
+    │       └── validate-locale-hardcoded-fallbacks.ts
     │   ├── migration/
     │       ├── lint-migrations.ts
     │       └── lint-rls-policies.ts
@@ -3507,6 +3505,7 @@ src/
     │   │   ├── db-viewer.unit.test.ts
     │   │   ├── env-file.unit.test.ts
     │   │   ├── external-credentials.unit.test.ts
+    │   │   ├── gates.unit.test.ts
     │   │   ├── iteration-diff.unit.test.ts
     │   │   ├── iteration-freeze.unit.test.ts
     │   │   ├── iteration-frontend-map.unit.test.ts

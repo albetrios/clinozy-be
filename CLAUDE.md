@@ -191,7 +191,7 @@ Local SonarQube quality gate (pre-commit): `pnpm sonar:up` / `sonar:scan` / `son
 - `pnpm test:global` — global regression (`src/tests/global`; alias `pnpm test:regression`)
 - `pnpm test:rls-role` — runs the **e2e** and **integration** lanes with the pool under test opened as the RLS-subject `clinozy_be_app` role. Every other lane connects as a role that BYPASSES row-level security (Compose's `POSTGRES_USER: clinozy` is a superuser; the local operator role carries `rolbypassrls`), so a path reaching a FORCE RLS table without a database context reads rows there and **none** in production. Harness fixtures use the operator connection (`src/tests/helpers/operator-database.ts`). CI job: `RLS application role (whole connection)`
 - `pnpm routes:catalog` / `pnpm routes:catalog:check` — regenerate or verify `docs/routes.txt`
-- `pnpm ci:local` — PR gate: validate + domain + routes + migrate lint + env example + full test
+- `pnpm ci:local` — PR gate: every `pnpm ci:quality` step, then the build and the full test suite — one step list, `tooling/validate/gates.ts`, which `pnpm health` reads too
 - `pnpm validate` — lint + typecheck + markdown lint (`biome check` covers lint + formatting; `docs:lint` is folded in because markdownlint otherwise runs only at pre-commit/pre-push, and a `--no-verify` commit skips it)
 - `pnpm validate:domain` — validate domain structure (CI gate)
 - `pnpm db:seed` — `pnpm db:migrate`, then the minimal reference/bootstrap rows (permissions, plans)

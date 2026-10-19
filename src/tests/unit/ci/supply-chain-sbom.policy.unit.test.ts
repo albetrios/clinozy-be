@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { stepsFor } from '@tooling/validate/gates.js';
 
 const ROOT = process.cwd();
 
@@ -15,7 +16,9 @@ describe('supply chain SBOM policy (#94 p3-sbom-syft)', () => {
     };
     expect(packageJson.scripts['deps:audit']).toBe('pnpm audit');
     expect(packageJson.scripts['deps:audit:prod']).toBe('pnpm audit --prod');
-    expect(packageJson.scripts['ci:quality']).toMatch(/pnpm deps:audit/);
+    expect(stepsFor('quality').map((step) => step.command.join(' '))).toContain(
+      'pnpm deps:audit:prod',
+    );
   });
 
   it('runs dependency audit in the PR CI security-scan job', () => {
@@ -39,12 +42,11 @@ describe('supply chain SBOM policy (#94 p3-sbom-syft)', () => {
     expect(fullTreeStep).toContain('continue-on-error: true');
     expect(fullTreeStep).toContain('run: pnpm deps:audit');
 
-    const packageJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
-      scripts: Record<string, string>;
-    };
-    expect(packageJson.scripts['ci:quality']).toMatch(
-      /^pnpm deps:audit:prod && pnpm deps:audit:report && /,
-    );
+    expect(
+      stepsFor('quality')
+        .map((step) => step.command.join(' '))
+        .slice(0, 2),
+    ).toEqual(['pnpm deps:audit:prod', 'pnpm deps:audit:report']);
   });
 
   it('accepts an advisory only with its reason, and only when no fix exists', () => {

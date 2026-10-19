@@ -159,7 +159,7 @@ tooling/
   route-coverage/     # Route success-coverage budget (route-success-coverage-budget.json)
   sonar/              # Local SonarQube gate scripts
   tsdoc-coverage/     # TSDoc coverage ratchet (budget.json)
-  validate/           # health-check.sh, lockfile-sync.sh
+  validate/           # gates.ts (the one gate list) + run-gate.ts, lockfile-sync.sh
   vitest/             # Vitest project configs (projects.ts, chaos/contract configs)
 ```
 
