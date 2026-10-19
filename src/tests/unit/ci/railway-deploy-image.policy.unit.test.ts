@@ -149,4 +149,15 @@ describe('Railway deploy tooling (policy)', () => {
     // control on a single-trunk repo.
     expect(deployWorkflow).not.toContain('target_branch');
   });
+
+  it('selects the environment explicitly (single trunk: environment, never branch)', () => {
+    // The explicit github_environment input takes precedence over any branch mapping —
+    // callers (post-merge-ci → development, release-deploy → production) choose the
+    // environment directly; it is never derived from the branch on a single trunk.
+    expect(deployWorkflow).toContain('github_environment:');
+    expect(deployWorkflow).toContain('GITHUB_ENVIRONMENT_INPUT');
+    // Both environments form the validated allow-list, and no dev-branch case survives.
+    expect(deployWorkflow).toContain('development|production');
+    expect(deployWorkflow).not.toContain('dev) echo "environment=development"');
+  });
 });

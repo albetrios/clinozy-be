@@ -3516,7 +3516,6 @@ src/
     │   │   ├── local-database-logins.unit.test.ts
     │   │   ├── mcp-previous-server-keys.unit.test.ts
     │   │   ├── pre-push-tests.unit.test.ts
-    │   │   ├── project-identity.policy.unit.test.ts
     │   │   ├── railway-deploy-image.unit.test.ts
     │   │   ├── require-tool.unit.test.ts
     │   │   ├── rotate-live-image-tags.unit.test.ts
