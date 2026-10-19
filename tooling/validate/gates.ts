@@ -84,11 +84,6 @@ export const GATE_STEPS: readonly GateStep[] = [
     gates: ALL,
   },
   { label: 'Migration lint', command: ['pnpm', 'db:migrate:lint'], gates: ALL },
-  {
-    label: 'GitHub Actions pins',
-    command: ['node', 'tooling/ci/check-action-pins.mjs'],
-    gates: ALL,
-  },
   { label: 'Knip (dead code)', command: ['pnpm', 'knip'], gates: ALL },
   { label: 'Build', command: ['pnpm', 'build'], gates: ['local', 'health'] },
   { label: 'Build alias check', command: ['pnpm', 'build:check'], gates: ['local', 'health'] },

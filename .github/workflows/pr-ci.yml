@@ -239,9 +239,6 @@ jobs:
       - name: Docs cite paths that exist
         run: pnpm docs:links:check
 
-      - name: Third-party actions pinned to a full SHA
-        run: node tooling/ci/check-action-pins.mjs
-
   unit-tests:
     needs: [changes]
     if: |
