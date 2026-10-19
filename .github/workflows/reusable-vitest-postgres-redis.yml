@@ -1,12 +1,13 @@
 name: Reusable — integration tests with Postgres and Redis
 
-# Post-merge integration gate: five parallel DB shards (no unit/global — those run on PR).
-# Domain e2e/integration is split across three domain shards; the cross-cutting projects
-# (unit-db + security + performance + non-domain `rest` e2e/integration) are the heaviest single
-# group (~150 files, ~277s of module import alone), so they are split in HALF with vitest
-# `--shard=1/2` / `2/2` — an even by-file-count split across the two runners. Both halves carry
-# route-exercising tests (security + e2e/integration span both), so each still emits its
-# route-status observation and the shard-completeness guard holds.
+# Integration gate: six parallel DB shards (no unit/global — those run in their own lanes),
+# balanced by recorded test time (CI run 39035942120, 17 Oct: 39 min of test time). The
+# permission route matrix is one file of about 9 minutes, so it gets a shard of its own
+# (`VITEST_SECURITY_SLICE=matrix`; the other security files are `rest`); the domain
+# e2e/integration files are grouped by `VITEST_DOMAIN_FILTER`; unit-db, performance and the
+# non-domain `rest` files sit where the time fits. Every shard exercises routes, so each emits its
+# route-status observation and the shard-completeness guard holds. The groups must cover every
+# file exactly once — pinned by src/tests/unit/ci/db-shard-balance.policy.unit.test.ts.
 # Always migrates against ephemeral Postgres + Redis and enforces merged coverage thresholds.
 
 on:
@@ -61,7 +62,7 @@ jobs:
         id: config
         run: |
           set -euo pipefail
-          shards_compact='[{"name":"tenancy + billing","id":"db-tenancy-billing","projects":"--project e2e --project integration","domain_filter":"tenancy,billing"},{"name":"auth + user","id":"db-auth-user","projects":"--project e2e --project integration","domain_filter":"auth,user"},{"name":"notify + audit + upload + app","id":"db-notify-audit-upload","projects":"--project e2e --project integration","domain_filter":"notify,audit,upload,app"},{"name":"cross-cutting 1/2","id":"db-crosscutting-1","projects":"--project unit-db --project e2e --project integration --project security --project performance --shard=1/2","domain_filter":"rest"},{"name":"cross-cutting 2/2","id":"db-crosscutting-2","projects":"--project unit-db --project e2e --project integration --project security --project performance --shard=2/2","domain_filter":"rest"}]'
+          shards_compact='[{"name":"permission route matrix","id":"db-permission-matrix","projects":"--project security","domain_filter":"","security_slice":"matrix"},{"name":"security + performance","id":"db-security","projects":"--project security --project performance","domain_filter":"","security_slice":"rest"},{"name":"app","id":"db-app","projects":"--project e2e --project integration","domain_filter":"app","security_slice":""},{"name":"tenancy + billing + upload","id":"db-tenancy-billing-upload","projects":"--project e2e --project integration","domain_filter":"tenancy,billing,upload","security_slice":""},{"name":"auth + user + notify","id":"db-auth-user-notify","projects":"--project e2e --project integration","domain_filter":"auth,user,notify","security_slice":""},{"name":"unit-db + audit + cross-cutting","id":"db-unit-db-audit-rest","projects":"--project unit-db --project e2e --project integration","domain_filter":"audit,rest","security_slice":""}]'
           echo "shards=${shards_compact}" >> "$GITHUB_OUTPUT"
           echo "Selected shards:"
           jq . <<<"${shards_compact}"
@@ -133,25 +134,27 @@ jobs:
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Cache Vitest
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+      - name: Cache Vitest (restore the newest main-branch copy)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
-          path: node_modules/.vitest
-          key: vitest-integration-${{ runner.os }}-${{ matrix.shard.id }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: node_modules/.vite/vitest
+          key: vitest-integration-${{ runner.os }}-${{ matrix.shard.id }}-${{ github.run_id }}
           restore-keys: |
             vitest-integration-${{ runner.os }}-${{ matrix.shard.id }}-
-            vitest-integration-${{ runner.os }}-
 
       - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
         uses: ./.github/actions/test-env
 
-      - name: Run migrations
-        run: pnpm db:migrate
+      - uses: ./.github/actions/tune-ci-postgres
+        with:
+          container: ${{ job.services.postgres.id }}
 
       - name: Run ${{ matrix.shard.id }} test shard with coverage
         id: run-tests
         env:
           VITEST_DOMAIN_FILTER: ${{ matrix.shard.domain_filter }}
+          VITEST_SECURITY_SLICE: ${{ matrix.shard.security_slice }}
+          SHARD_ID: ${{ matrix.shard.id }}
         run: |
           set -euo pipefail
           pnpm exec vitest run \
@@ -162,7 +165,18 @@ jobs:
             --coverage.thresholds.branches=0 \
             --passWithNoTests \
             --exclude 'src/tests/security/rls/**' \
+            --reporter=default --reporter=github-actions \
+            --reporter=json --outputFile.json="test-results/${SHARD_ID}.json" \
             ${{ matrix.shard.projects }}
+
+      # Read by the PR's selector miss check: the failed files pnpm test:select would have skipped.
+      - name: Upload test results
+        if: always() && hashFiles('test-results/**') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-results-${{ matrix.shard.id }}
+          path: test-results/
+          retention-days: 7
 
       - name: Rename coverage report for shard
         if: always() && hashFiles('coverage/**') != ''
@@ -205,6 +219,15 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
         run: pnpm tool:test-report-email
 
+      # Only main saves (as in clinozy-fe): cleanup-cache.yml drops every PR-scoped cache when the
+      # PR's run ends, so a PR-saved copy never reached the next run.
+      - name: Save the Vitest cache (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-integration-${{ runner.os }}-${{ matrix.shard.id }}-${{ github.run_id }}
+
   unit-coverage:
     # Runs the pure-unit/global projects WITH coverage so the merged gate reflects
     # the true union (unit + DB-bound), not just the DB-bound shards. Mirrors the
@@ -244,11 +267,11 @@ jobs:
       - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
         uses: ./.github/actions/test-env
 
-      - name: Cache Vitest
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+      - name: Cache Vitest (restore the newest main-branch copy)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
-          path: node_modules/.vitest
-          key: vitest-unit-cov-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'tooling/vitest/**') }}
+          path: node_modules/.vite/vitest
+          key: vitest-unit-cov-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             vitest-unit-cov-${{ runner.os }}-
 
@@ -293,6 +316,15 @@ jobs:
           name: route-observed-unit
           path: route-observed-unit/
           retention-days: ${{ github.event_name == 'pull_request' && 30 || 14 }}
+
+      # Only main saves (as in clinozy-fe): cleanup-cache.yml drops every PR-scoped cache when the
+      # PR's run ends, so a PR-saved copy never reached the next run.
+      - name: Save the Vitest cache (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-unit-cov-${{ runner.os }}-${{ github.run_id }}
 
   coverage-gate:
     name: Coverage
@@ -408,7 +440,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" --quiet
-          node tooling/ci/check-patch-coverage.mjs \
+          pnpm exec tsx tooling/ci/check-patch-coverage.mjs \
             --coverage coverage-merged/coverage-final.json \
             --base "origin/${BASE_REF}" \
             --threshold 90

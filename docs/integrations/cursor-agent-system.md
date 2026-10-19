@@ -44,7 +44,7 @@ Common chains:
 
 Two **always-on** rules: [be-engineering-principles.mdc](../../agent-os/rules/be-engineering-principles.mdc), [be-project-identity.mdc](../../agent-os/rules/be-project-identity.mdc).
 
-All others are **glob-scoped** — they auto-attach when matching files are edited. Full table: [be-skill-index → Auto-trigger rules](../../agent-os/skills/be-skill-index/SKILL.md#auto-trigger-rules).
+All others are **glob-scoped** — they auto-attach when matching files are edited. Full table: [be-skill-index → Rules](../../agent-os/skills/be-skill-index/SKILL.md#rules).
 
 Policy rules (architecture, import paths, naming, object params) attach on `src/**/*.ts` without invoking a skill — they hold non-negotiable detail.
 
@@ -86,13 +86,13 @@ Configure once — all platforms read the same file.
 
 | Server | Purpose |
 | --- | --- |
-| **codegraph** | Local semantic index — see [codegraph.md](codegraph.md) |
-| **context7** | Version-specific backend library docs |
+| **be-codegraph** | Local semantic index — see [codegraph.md](codegraph.md) |
+| **be-context7** | Version-specific backend library docs |
 | **clinozy-be:api** | Local Fastify MCP at `/api/v1/mcp` |
-| **headroom** | Context compression — compress large tool output / logs / files before loading into context |
-| **neon**, **sentry**, **railway**, **aws**, **stripe**, **semgrep**, **sonarqube**, **redis**, **postman**, **resend** | On-demand hosted integrations — scaffold with `pnpm mcp:setup` |
+| **be-headroom** | Context compression — compress large tool output / logs / files before loading into context |
+| **neon**, **sentry**, **railway**, **aws**, **stripe**, **be-semgrep**, **be-sonarqube**, **redis**, **postman**, **resend** | On-demand hosted integrations — scaffold with `pnpm mcp:setup` |
 
-`codegraph` + `headroom` are the **default auto-start pair** (zero-config, no token), provisioned in `pnpm setup:local` (phase 7/9); the on-demand servers above are opt-in via `pnpm mcp:setup`. The `github`, `composio`, `descript`, and `slack` MCPs are intentionally not part of this project.
+`be-codegraph` + `be-headroom` are the **default auto-start pair** (zero-config, no token), provisioned in `pnpm setup:local` (phase 7/9); the on-demand servers above are opt-in via `pnpm mcp:setup`. The `github`, `composio`, `descript`, and `slack` MCPs are intentionally not part of this project.
 
 ---
 

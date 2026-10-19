@@ -2,14 +2,14 @@
 
 How a design iteration becomes built, verified backend work — two phases: **planning** writes the
 plan (no code), **kickoff** implements it one ROUTE row at a time. The iteration rules (naming,
-folder, Baseline, lifecycle, commands) are in [iterations/README.md](../../../iterations/README.md);
+folder, Baseline, lifecycle — the lite one for a small `fix` included — commands) are in [iterations/README.md](../../../iterations/README.md);
 every step with its questions is in the [step-by-step guide](iteration-guide.md).
 
 ## The flow
 
 ```mermaid
 flowchart TB
-  NEW["pnpm iteration:new<br/>Status: planning"] --> INTAKE["pnpm iteration:intake --mode full|overlay|brief<br/>full snapshot → intake-files/ · --check gate"]
+  NEW["pnpm iteration:new<br/>Status: planning"] --> INTAKE["pnpm iteration:intake --mode full|overlay|brief<br/>what arrived → intake-files/ · --check gate"]
   INTAKE --> PLAN["be-iteration-planning — no code<br/>Steps 0–7 → routes-final.md (sub-domain by sub-domain)<br/>+ KICKOFF.md + plans/"]
   PLAN --> READY["Status: ready-for-approval"]
   READY -->|your go-ahead| APPROVED["Status: approved<br/>KICKOFF.md + intake-files/ freeze"]
@@ -24,13 +24,13 @@ flowchart TB
 | Step | Who / what | Output | Stops for |
 | --- | --- | --- | --- |
 | Open | `pnpm iteration:new <type> [topic]` | the folder + README (`Status: planning`) | the opening questions ([guide](iteration-guide.md)) |
-| Intake | `pnpm iteration:intake <iteration> <source> [--mode full\|overlay\|brief]` | a full snapshot in `intake-files/`; the README's Drop, Intake and Schema-routes rows | a missing mandatory file; a different snapshot already there |
+| Intake | `pnpm iteration:intake <iteration> <source> [--mode full\|overlay\|brief]` | what arrived in `intake-files/` (the snapshot resolves from it); the README's Drop, Intake and Schema-routes rows | a missing mandatory file; a different snapshot already there |
 | Plan | **be-iteration-planning**, [prompt](../prompts/iteration-planning-prompt.md) | `plans/routes-final.md` (the route review, [template](routes-final-template.md)), `KICKOFF.md` (plan + ROUTE ledger) and `plans/`; `Status: ready-for-approval` | which iteration and Baseline (Step 0); every step; RED questions; your OK on each sub-domain of the route review |
 | Approve | you — `pnpm iteration:status <iteration> approved` | `Status: approved`, logged in `plans/decisions.md` | — |
 | Kick off | **be-kickoff-iteration**, [prompt](../prompts/kickoff-iteration-prompt.md) | `Status: implementing` | which iteration (Step 0) |
 | Build | one ROUTE row at a time | code, migrations, tests; one `AS-BUILT.md` row each | your review after every row; any scope change |
 | Close | the gates, `/be-pre-merge-review` (review only) | `plans/acceptance.md` filled, `AS-BUILT.md` summary, `plans/frontend-route-map.md` (`pnpm iteration:frontend-map`); `Status: done` | — |
-| Freeze | the last commit before the merge | `Status: frozen`; never edited again | — |
+| Freeze | the last commit before the merge | `Status: frozen`; never edited again | PR CI's Iteration freeze lane (`pnpm iteration:freeze-check`): an iteration the PR changes that is not `frozen`; an edit to a merged frozen one |
 
 ## Document ownership — write once, reference elsewhere
 
@@ -83,12 +83,12 @@ credentials out of records. The user review contains the same concise informatio
   that the notes omit is a finding.
 - **The gate comes first.** Planning and kickoff run `pnpm iteration:intake <iteration> --check`
   before anything else and stop when it fails: a missing mandatory file or an Intake hash that no
-  longer matches goes back to whoever placed the drop.
+  longer matches goes back to whoever placed the drop. A lite fix with no drop has nothing to gate,
+  so both skip it there.
 - **Deviations are carried forward.** `AS-BUILT.md` › Standing deviations lists where the code
   differs from the drop; the next iteration copies it and plans against what was actually built.
-- **The user confirms the Baseline.** Planning Step 0 suggests the latest `done` / `frozen`
-  iteration in this repository; the user confirms it or picks another
-  (`pnpm iteration:baseline`).
+- **Baseline `none` unless the user names one.** Nothing suggests or asks for a Baseline; when the
+  user says "build on <iteration>", it is recorded with `pnpm iteration:baseline`.
 - **Confirm the iteration first.** Both skills start with a `pnpm iteration:list` table of which
   iterations are eligible and why, recommend the earliest-opened one (the launch always first), and
   wait for your confirmation — never pick silently.

@@ -2,8 +2,9 @@
 /**
  * Test driver behind `pnpm test` — runs the `fast` lane (unit, property, global; files run
  * concurrently inside it), then the `db-bound` lane, one after the other so a single local
- * Postgres is never driven by two processes. It stops at the first failing lane, so a unit
- * failure skips the DB lanes.
+ * Postgres is never driven by two processes; every worker in it runs on its own database, and
+ * e2e + integration run their files in parallel (`tooling/vitest/worker-databases.ts`).
+ * It stops at the first failing lane, so a unit failure skips the DB lanes.
  *
  * CI uses a matrix split (`.github/workflows/reusable-vitest-postgres-redis.yml`) with the same
  * project filters so each shard runs on its own runner, in parallel.
@@ -25,6 +26,7 @@ import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { ROUTE_COVERAGE_OBSERVED_DIRECTORY_NAME } from '@tooling/route-coverage/constants.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** One lane's outcome: its display name, process exit code, and wall-clock duration. */
 export type LaneResult = { name: string; code: number; ms: number };
@@ -37,8 +39,8 @@ const COVERAGE_DISABLE_THRESHOLD_FLAGS = [
   '--coverage.thresholds.branches=0',
 ];
 
-const passthroughArgs = process.argv.slice(2);
-const coverageEnabled = passthroughArgs.includes(COVERAGE_FLAG);
+/** Set by {@link main} from `--coverage`; stays off when a test imports this module. */
+let coverageEnabled = false;
 
 function buildLaneArgs(lane: Lane): string[] {
   if (!coverageEnabled) return lane.args;
@@ -50,7 +52,11 @@ function buildLaneArgs(lane: Lane): string[] {
   ];
 }
 
-function splitSerialProjectArgs(lane: Lane): string[][] {
+/**
+ * The Vitest invocations of one lane, in order: the whole lane at once, or — for a serial lane —
+ * one per project.
+ */
+export function splitSerialProjectArgs(lane: Lane, coverage = coverageEnabled): string[][] {
   if (!lane.serial) return [buildLaneArgs(lane)];
 
   const command = lane.args[0] ?? 'run';
@@ -65,7 +71,7 @@ function splitSerialProjectArgs(lane: Lane): string[][] {
 
   return projects.map((project) => {
     const args = [command, '--project', project];
-    if (!coverageEnabled) return args;
+    if (!coverage) return args;
     return [
       ...args,
       COVERAGE_FLAG,
@@ -211,6 +217,9 @@ async function main(): Promise<void> {
 
 // Guarded so a test can import `formatRunSummary` without the import launching the entire
 // test suite as a side effect. Matches tooling/agent-os/skills-lock.ts.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
+  coverageEnabled =
+    parseCommandLine({ args: process.argv.slice(2), options: { coverage: { type: 'boolean' } } })
+      .values.coverage === true;
   void main();
 }

@@ -84,13 +84,14 @@ pnpm setup:local --only-env     # self-contained .env.local: DB/Redis URLs, JWT 
 pnpm compose:up
 pnpm compose:wait               # exits non-zero if Postgres never becomes healthy
 
-# 3. Apply migrations, then turn on the database logins they create
-pnpm db:migrate
-pnpm setup:local --only-env     # DATABASE_URL → clinozy_be_app, maintenance, operator logins
+# 3. The database: create, migrate, turn on the logins the migrations create
+#    (DATABASE_URL → clinozy_be_app, maintenance, operator), then seed — one step
+pnpm db:migrate                 # no seed
+pnpm db:seed                    # or: minimal seed
+pnpm db:seed:full               # or: full demo (demo@example.com / DemoPassword123!)
 
-# 4. (Optional) seed data
-pnpm db:seed                    # minimal
-pnpm db:seed:full               # full demo (demo@example.com / DemoPassword123!)
+# 4. (Re)start from an empty local database: any of the three with --reset
+pnpm db:seed:full --reset
 
 # 5. Run the API and worker (two terminals)
 pnpm dev                        # API at http://localhost:3000
@@ -168,7 +169,7 @@ Full detail (branch naming, PR flow, hotfixes, protected branches): [trunk-based
 
 Tests live under `src/tests/` (cross-cutting) and co-located `__tests__/` inside each domain. See [CLAUDE.md](CLAUDE.md) § Testing for the full layout.
 
-Local test runs use their own database, `<local database>_test` (the Compose database name plus `_test`), on the Compose Postgres — created and migrated automatically on the first run. Every suite truncates all tables with `RESTART IDENTITY`, so your `pnpm dev` data is never touched and `pnpm dev` can keep running while tests do. Test Redis keys use their own prefix (`<stem>:test:`) too. CI keeps its own service-container database.
+Local test runs use their own database, `<local database>_test` (the Compose database name plus `_test`), on the Compose Postgres — prepared automatically on every run (`prepareDatabase`) and cloned once per test worker, so each worker runs on its own `<local database>_test_worker_<n>`. Every suite truncates all tables with `RESTART IDENTITY`, so your `pnpm dev` data is never touched and `pnpm dev` can keep running while tests do. Test Redis keys use each worker's own prefix (`<stem>:worker-<n>:test:`) too. CI keeps its own service-container database.
 
 | Category                | Command                 | When to run                                         |
 | ----------------------- | ----------------------- | --------------------------------------------------- |
@@ -252,7 +253,7 @@ Covers: what runs in CI, branch-to-environment mapping (`dev` → development, `
 
 | Goal                  | Command                                                                                      |
 | --------------------- | -------------------------------------------------------------------------------------------- |
-| Local run (manual)    | `pnpm compose:up` → `pnpm compose:wait` → `pnpm db:migrate` → `pnpm setup:local --only-env` → `pnpm dev` + `pnpm dev:worker` |
+| Local run (manual)    | `pnpm compose:up` → `pnpm compose:wait` → `pnpm db:migrate` → `pnpm dev` + `pnpm dev:worker` |
 | Fast feedback         | `pnpm test:unit`                                                                             |
 | Before PR             | `pnpm validate && pnpm test` (full gate: `pnpm ci:local`)                                    |
 | Stop local stack      | `pnpm compose:down`                                                                          |

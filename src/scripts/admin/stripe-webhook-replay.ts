@@ -19,6 +19,7 @@ import {
   closeStripeWebhookQueue,
   enqueueStripeWebhookByEventIdForReclaim,
 } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const repository = new StripeWebhookEventRepository();
 
@@ -74,18 +75,26 @@ async function retryEvent({
 }
 
 async function main(): Promise<void> {
-  const argumentsList = process.argv.slice(2);
-  const dryRun = argumentsList.includes('--dry-run');
+  const usage = 'Usage: pnpm tool:stripe-webhook-replay -- --list | --retry <id> [--dry-run]';
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: {
+      list: { type: 'boolean' },
+      retry: { type: 'string' },
+      'dry-run': { type: 'boolean' },
+    },
+    messages: { needsValue: () => usage },
+  });
+  const dryRun = values['dry-run'] === true;
 
-  if (argumentsList.includes('--list') || argumentsList.length === 0) {
+  if (values.list || Object.keys(values).length === 0) {
     await listUnprocessedEvents();
     return;
   }
 
-  const retryIndex = argumentsList.indexOf('--retry');
-  const stripeEventId = retryIndex >= 0 ? argumentsList[retryIndex + 1] : undefined;
-  if (!stripeEventId || stripeEventId.startsWith('--')) {
-    console.error('Usage: pnpm tool:stripe-webhook-replay -- --list | --retry <id> [--dry-run]');
+  const stripeEventId = values.retry;
+  if (!stripeEventId) {
+    console.error(usage);
     process.exitCode = 1;
     return;
   }

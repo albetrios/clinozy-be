@@ -28,37 +28,24 @@ runs:
         DATABASE_CONNECTION_BUDGET_ENFORCED: 'false'
         REDIS_TLS_ENFORCED: 'false'
         TRUST_PROXY_REQUIRED: 'false'
+        # Inputs reach the script through env, never expanded into it (zizmor template-injection).
+        RATE_LIMIT_MAX: ${{ inputs.rate-limit-max }}
+        SERVER_LOG_FILE: ${{ inputs.log-file }}
       run: |
-        RATE_LIMIT_MAX=${{ inputs.rate-limit-max }} pnpm exec tsx src/server.ts > "${{ inputs.log-file }}" 2>&1 &
+        pnpm exec tsx src/server.ts > "$SERVER_LOG_FILE" 2>&1 &
         echo $! > server.pid
       shell: bash
 
     - name: Wait for server readiness
+      env:
+        READY_TIMEOUT_SECONDS: ${{ inputs.ready-timeout-seconds }}
+        SERVER_LOG_FILE: ${{ inputs.log-file }}
+      # The one wait for readiness (tooling/ci/wait-for-ready.sh); it stops at once if the server exits.
       run: |
-        deadline=$((SECONDS + ${{ inputs.ready-timeout-seconds }}))
-        while [ "$SECONDS" -lt "$deadline" ]; do
-          if [ -f server.pid ] && ! kill -0 "$(tr -d '\n' < server.pid)" 2>/dev/null; then
-            echo "API server exited before readiness."
-            echo "--- ${{ inputs.log-file }} (tail 200) ---"
-            tail -n 200 "${{ inputs.log-file }}" || true
-            exit 1
-          fi
-
-          if curl -sf http://localhost:3000/readyz; then
-            exit 0
-          fi
-
-          if [ $((SECONDS % 10)) -eq 0 ]; then
-            echo "Waiting for API readiness..."
-            curl -s http://localhost:3000/readyz || true
-            echo
-          fi
-
-          sleep 1
-        done
-
-        echo "API server did not become ready within ${{ inputs.ready-timeout-seconds }} seconds."
-        echo "--- ${{ inputs.log-file }} (tail 200) ---"
-        tail -n 200 "${{ inputs.log-file }}" || true
-        exit 1
+        if ! bash tooling/ci/wait-for-ready.sh --url http://localhost:3000/readyz \
+          --timeout "$READY_TIMEOUT_SECONDS" --interval 1 --pid-file server.pid; then
+          echo "--- ${SERVER_LOG_FILE} (tail 200) ---"
+          tail -n 200 "$SERVER_LOG_FILE" || true
+          exit 1
+        fi
       shell: bash

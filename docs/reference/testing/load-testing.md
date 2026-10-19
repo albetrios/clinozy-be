@@ -86,7 +86,7 @@ Artifacts (`k6-*.json` summaries and `server.log`) are uploaded for 14 days. Opt
 
 **Route coverage.** `pnpm load:coverage` matches every request the scenario files make — method and path — against `docs/routes.txt`; `pnpm load:coverage --nightly` counts only the files this workflow runs. It skips ROLE and TOKEN routes and public infrastructure routes (OAuth, email sign-in, WebAuthn, the Stripe webhook, health). The nightly count is a ratchet: `tooling/ci/load-coverage-budget.json` records it, and `k6-coverage.policy.unit.test.ts` fails when the nightly load-tests fewer routes — raise the budget when a change adds coverage. The nightly workflow references 79 eligible catalog routes; this static inventory does not prove every route passed at runtime. Stripe-backed writes (the nightly subscribes only with no payment provider configured), signed outbound webhook delivery, account deletion, organization leave/ownership transfer and S3 transport writes are covered by the Vitest lanes (see [Lifecycle journeys](#lifecycle-journeys)), not by load.
 
-**Reproduce locally:** `pnpm compose:up`, `pnpm db:migrate`, `pnpm setup:local --only-env`, `DEMO_PASSWORD=DemoPassword123! pnpm db:seed:full`, `pnpm dev:loadtest`, then `pnpm tool:load-test-credentials`, export `TEST_TOKEN` / `TEST_ORG_ID`, and run `pnpm load:stress` and `pnpm load:stress:api` (same thresholds as CI).
+**Reproduce locally:** `pnpm compose:up`, `DEMO_PASSWORD=DemoPassword123! pnpm db:seed:full` (create, migrate, the database logins, the full seed), `pnpm dev:loadtest`, then `pnpm tool:load-test-credentials`, export `TEST_TOKEN` / `TEST_ORG_ID`, and run `pnpm load:stress` and `pnpm load:stress:api` (same thresholds as CI).
 
 ### Seats for the member steps
 

@@ -19,12 +19,12 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const repositoryRoot = process.cwd();
 const agentOsDirectory = join(repositoryRoot, 'agent-os');
 const skillsDirectory = join(agentOsDirectory, 'skills');
 const lockPath = join(agentOsDirectory, 'skills-lock.json');
-const writeMode = process.argv.includes('--write');
 
 /** Skills vendored from an upstream repository (everything else is home-grown/local). */
 const KNOWN_EXTERNAL_SOURCES: Record<string, { source: string; sourceType: 'github' }> = {
@@ -91,7 +91,12 @@ function previousExternal(
   return undefined;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
+  const writeMode =
+    parseCommandLine({
+      args: process.argv.slice(2),
+      options: { write: { type: 'boolean' }, check: { type: 'boolean' } },
+    }).values.write === true;
   const previous = readLock();
   const next = buildLock(previous);
   if (writeMode) {

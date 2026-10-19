@@ -30,20 +30,20 @@ import {
   slugSpellings,
   TEXT_REWRITE_TARGETS,
 } from '@tooling/setup/codegen/text-identity-rewrites.js';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   identityLiterals,
   previousIdentityPatterns,
   scanProjectIdentityLiterals,
 } from '@tooling/setup/codegen/validate-project-identity-literals.js';
-import {
-  gitEnvironmentWithoutInheritedRepository,
-  INHERITED_GIT_REPOSITORY_VARIABLES,
-} from '@tooling/setup/common/git-environment.js';
+import { INHERITED_GIT_REPOSITORY_VARIABLES } from '@tooling/setup/common/git-environment.js';
 import type { SetupConfig } from '@tooling/setup/common/types.js';
+import {
+  createTestGitRepository,
+  removeScratchFolders,
+  runTestGit,
+} from '@/tests/helpers/git-repository.helper.js';
 
 function buildConfig(overrides?: {
   name?: string;
@@ -120,20 +120,14 @@ describe('project identity — brand name', () => {
   it('flags the brand typed out as a word, but not identifiers built from the same stem', () => {
     // A throwaway repository: the fixture brand appears nowhere in this one, so scanning the
     // real tree would pass whatever the scanner did.
-    const scratch = mkdtempSync(join(tmpdir(), 'identity-brand-'));
+    const scratch = createTestGitRepository({
+      prefix: 'identity-brand-',
+      files: {
+        'sender.ts': "export const sender = 'Acme';\n",
+        'helper.ts': 'export function executeAsAcmeBeAppTenant() {}\n',
+      },
+    });
     try {
-      const git = (...arguments_: string[]): void => {
-        execFileSync('git', arguments_, {
-          cwd: scratch,
-          stdio: 'ignore',
-          env: gitEnvironmentWithoutInheritedRepository(),
-        });
-      };
-      git('init', '-q');
-      writeFileSync(join(scratch, 'sender.ts'), "export const sender = 'Acme';\n");
-      writeFileSync(join(scratch, 'helper.ts'), 'export function executeAsAcmeBeAppTenant() {}\n');
-      git('add', '-A');
-
       const { violations } = scanProjectIdentityLiterals({
         snapshot: buildProjectIdentitySnapshot(buildConfig({ brandName: 'Acme' })),
         projectRoot: scratch,
@@ -143,29 +137,19 @@ describe('project identity — brand name', () => {
       expect(flagged).toContain('sender.ts:Acme');
       expect(flagged.some((entry) => entry.startsWith('helper.ts'))).toBe(false);
     } finally {
-      rmSync(scratch, { recursive: true, force: true });
+      removeScratchFolders();
     }
   });
 
   it("leaves a design iteration's prototype export alone", () => {
-    const scratch = mkdtempSync(join(tmpdir(), 'identity-iteration-'));
+    const scratch = createTestGitRepository({
+      prefix: 'identity-iteration-',
+      files: {
+        'iterations/launch-x/intake-files/Prototype.html': '<span aria-label="Acme">Acme</span>\n',
+        'sender.ts': "export const sender = 'Acme';\n",
+      },
+    });
     try {
-      const git = (...arguments_: string[]): void => {
-        execFileSync('git', arguments_, {
-          cwd: scratch,
-          stdio: 'ignore',
-          env: gitEnvironmentWithoutInheritedRepository(),
-        });
-      };
-      git('init', '-q');
-      mkdirSync(join(scratch, 'iterations', 'launch-x', 'intake-files'), { recursive: true });
-      writeFileSync(
-        join(scratch, 'iterations', 'launch-x', 'intake-files', 'Prototype.html'),
-        '<span aria-label="Acme">Acme</span>\n',
-      );
-      writeFileSync(join(scratch, 'sender.ts'), "export const sender = 'Acme';\n");
-      git('add', '-A');
-
       const { violations } = scanProjectIdentityLiterals({
         snapshot: buildProjectIdentitySnapshot(buildConfig({ brandName: 'Acme' })),
         projectRoot: scratch,
@@ -175,7 +159,7 @@ describe('project identity — brand name', () => {
       expect(files).toContain('sender.ts');
       expect(files.some((file) => file.startsWith('iterations/'))).toBe(false);
     } finally {
-      rmSync(scratch, { recursive: true, force: true });
+      removeScratchFolders();
     }
   });
 });
@@ -777,25 +761,16 @@ describe('project identity — text rewrites', () => {
     // the developer's own repository, whose index it overwrites), and an unsanitized `git ls-files`
     // inside the scanner would list the decoy's files, none of which resolve under `scratch` —
     // leaving the symlink assertion below passing vacuously, over zero scanned files.
-    const scratch = mkdtempSync(join(tmpdir(), 'identity-symlink-'));
-    const decoy = mkdtempSync(join(tmpdir(), 'identity-decoy-'));
     const restoreGitEnvironment = new Map(
       INHERITED_GIT_REPOSITORY_VARIABLES.map((variable) => [variable, process.env[variable]]),
     );
     try {
-      const git = (cwd: string, ...arguments_: string[]): void => {
-        execFileSync('git', arguments_, {
-          cwd,
-          stdio: 'ignore',
-          env: gitEnvironmentWithoutInheritedRepository(),
-        });
-      };
-
       // A real repository with its own tracked file, so a regression re-targets somewhere
       // plausible rather than just making `git` error out.
-      git(decoy, 'init', '-q');
-      writeFileSync(join(decoy, 'decoy.json'), '{ "server": "decoy" }\n');
-      git(decoy, 'add', '-A');
+      const decoy = createTestGitRepository({
+        prefix: 'identity-decoy-',
+        files: { 'decoy.json': '{ "server": "decoy" }\n' },
+      });
 
       // The exact shape `git` hands a hook running inside a worktree (git 2.54).
       process.env.GIT_DIR = join(decoy, '.git');
@@ -805,12 +780,13 @@ describe('project identity — text rewrites', () => {
       process.env.GIT_OBJECT_DIRECTORY = join(decoy, '.git', 'objects');
       process.env.GIT_PREFIX = '';
 
-      git(scratch, 'init', '-q');
+      // Built under the poisoned environment: the fixture's git calls must shed it too.
+      const scratch = createTestGitRepository({ prefix: 'identity-symlink-' });
       writeFileSync(join(scratch, 'private.json'), '{ "server": "acme-api" }\n');
       writeFileSync(join(scratch, 'tracked.json'), '{ "server": "acme-api" }\n');
       writeFileSync(join(scratch, '.gitignore'), 'private.json\n');
       symlinkSync('private.json', join(scratch, 'link.json'));
-      git(scratch, 'add', '-A');
+      runTestGit({ repositoryRoot: scratch, gitArguments: ['add', '-A'] });
 
       const { violations } = scanProjectIdentityLiterals({
         snapshot: buildProjectIdentitySnapshot(buildConfig()),
@@ -831,8 +807,7 @@ describe('project identity — text rewrites', () => {
         if (value === undefined) delete process.env[variable];
         else process.env[variable] = value;
       }
-      rmSync(scratch, { recursive: true, force: true });
-      rmSync(decoy, { recursive: true, force: true });
+      removeScratchFolders();
     }
   });
 

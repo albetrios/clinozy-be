@@ -8,6 +8,8 @@ indexNote: diagnose one failing PR CI check → root cause + fix plan
 
 Produce a **short root-cause summary** for **one** failing check (not full PR babysit — see **be-pr-babysit** for the full loop).
 
+Run it through the **be-ci-investigator** agent: CI logs are large and noisy, and the agent keeps them out of the main conversation and returns only the summary below. This skill is the one copy of the steps, the job map and the output format — the agent holds none of them.
+
 ## Steps
 
 1. Identify the failing job:
@@ -17,13 +19,18 @@ Produce a **short root-cause summary** for **one** failing check (not full PR ba
    gh run view <run-id> --log-failed
    ```
 
+   A scheduled or post-merge failure has a `ci-failure` issue: its **Fix plan** (written by
+   `.github/actions/ci-failure-issue/fix-plan.mjs`) already names the failed jobs and steps, the
+   log tail up to the last error, the owning area and the skills the routing map names for the
+   files in it. Start from it, then confirm against the log — it reads paths, not causes.
+
 2. Map the job to local commands:
 
    | CI job name | Workflow | Local reproduction |
    | --- | --- | --- |
    | PR CI (lint, security, …) | `pr-ci.yml` | `pnpm ci:quality` (local aggregate; CI splits jobs) |
    | Tests | `reusable-vitest-postgres-redis.yml` | `pnpm compose:up` → `pnpm db:migrate` → `pnpm test` |
-   | API smoke (local only) | CD post-deploy or local verify | `pnpm verify:base` or `pnpm test:api-smoke` |
+   | Docker → API smoke against the container | `reusable-docker-build-trivy.yml` (post-merge, `api_smoke: true`) | `pnpm db:seed:full` (`DEMO_PASSWORD=DemoPassword123!`) then `pnpm test:api-smoke` against a running API — or `pnpm verify:base` |
    | Chaos (Toxiproxy) | `reusable-chaos-toxiproxy.yml` | `pnpm chaos:up` → `pnpm chaos:provision` → `pnpm test:chaos` |
    | Docker | `reusable-docker-build-trivy.yml` | `node tooling/ci/check-dockerfile-sync.mjs` + docker build |
    | API Docs (post-merge publish) | `reusable-openapi-postman-publish.yml` | `pnpm docs:all` / `pnpm docs:check` |

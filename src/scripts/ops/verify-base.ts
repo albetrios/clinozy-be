@@ -15,10 +15,12 @@ import '@/shared/config/load-env-files.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import dotenv from 'dotenv';
 import { DATABASE_URL_KEYS } from '@/infrastructure/database/utils/connection-url.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { listProcessTree, signalProcesses } from './process-tree.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const BASE_URL_FOR_HEALTH = (process.env.BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const HEALTH_URL = `${BASE_URL_FOR_HEALTH}/readyz`;
@@ -54,12 +56,6 @@ let didRegisterSignalHandlers = false;
 
 function isVerboseDevLogs(): boolean {
   return process.env.VERIFY_BASE_VERBOSE === '1';
-}
-
-async function sleep(milliseconds: number): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
 }
 
 /** Every process under the spawned dev server and worker, roots included. */
@@ -200,19 +196,14 @@ async function ensureServerRunning(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   registerSignalHandlersForTeardown();
 
   logger.info('verify.base: starting gate');
   const gateStartedAt = performance.now();
 
   try {
-    await runPnpmStep({ stepName: 'db:migrate', pnpmArguments: ['db:migrate'] });
-    // The migrations create the role logins NOLOGIN; turn them on before anything connects.
-    await runPnpmStep({
-      stepName: 'database logins',
-      pnpmArguments: ['setup:local', '--only-env'],
-    });
-    await runPnpmStep({ stepName: 'db:seed', pnpmArguments: ['db:seed'] });
+    // The one database step: create, migrate, the logins the migrations create, the full seed.
     await runPnpmStep({ stepName: 'db:seed:full', pnpmArguments: ['db:seed:full'] });
     await ensureServerRunning();
     await runPnpmStep({ stepName: 'test:api-smoke', pnpmArguments: ['test:api-smoke'] });

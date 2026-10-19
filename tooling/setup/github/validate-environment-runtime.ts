@@ -18,11 +18,11 @@
  *   0   All required keys present and non-empty (conditional keys may warn).
  *   1   One or more required keys missing or empty.
  */
-import { fileURLToPath } from 'node:url';
 import {
   envSchemaConditionallyRequiredKeys,
   envSchemaRequiredKeys,
 } from '@/shared/config/env-schema.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /**
  * Returns the subset of `keys` that are absent, empty, or whitespace-only in `environmentValues`.
@@ -90,8 +90,7 @@ export function runEnvironmentValidation(environmentValues: NodeJS.ProcessEnv): 
 }
 
 // Run as CLI only when invoked directly (not when imported by tests).
-const invokedDirectly =
-  process.argv[1] !== undefined && process.argv[1] === fileURLToPath(import.meta.url);
-if (invokedDirectly) {
+if (isMain(import.meta.url)) {
+  parseCommandLine({ args: process.argv.slice(2) });
   process.exit(runEnvironmentValidation(process.env));
 }

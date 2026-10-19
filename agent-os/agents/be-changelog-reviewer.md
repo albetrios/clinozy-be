@@ -6,14 +6,20 @@ description: >
   follows the project's Keep a Changelog / conventional-commits format. Flags
   missing entries, wrong version bumps, and unreleased sections that are stale.
   Does NOT write commits or push — produces a gap report only.
-model: haiku
-modelRationale: mechanical diff/log/PR-title scan — no deep reasoning
+model: inherit
+background: true
+omitClaudeMd: true
 wrapsSkill: "*(inline)*"
 useWhen: Verify CHANGELOG.md vs git log / merged PR titles — gap report
 tools:
   - Read
   - Bash
 readonly: true
+disallowedTools:
+  - Edit
+  - Write
+  - MultiEdit
+  - NotebookEdit
 ---
 
 # Changelog reviewer

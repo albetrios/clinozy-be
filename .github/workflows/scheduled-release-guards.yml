@@ -158,54 +158,64 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
         run: pnpm github:sync --check
 
-  notify-failure:
-    name: Notify failure
+  resolve-success:
+    name: Close ci-failure issue
     needs: [ruleset-liveness-drift, release-token, repo-settings-drift]
+    # The open half existed alone, so a guard that went green left its issue open.
     if: |
       always() &&
-      (needs.ruleset-liveness-drift.result == 'failure' || needs.release-token.result == 'failure' || needs.repo-settings-drift.result == 'failure')
+      needs.ruleset-liveness-drift.result == 'success' && needs.release-token.result == 'success' && needs.repo-settings-drift.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
       issues: write
     steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
+      - name: Close the open ci-failure issue
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: close
+          title: Release-flow guard failing
+          close-comment: Every release-flow guard is green again — closing automatically.
+
+  notify-failure:
+    name: Notify failure
+    needs: [ruleset-liveness-drift, release-token, repo-settings-drift]
+    if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read # the fix plan reads the failed jobs and their logs
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
       - name: Open or update ci-failure issue
         # A failed guard on a schedule is invisible unless someone checks the
         # Actions tab; an issue produces a real notification. One open issue per
-        # guard collects repeats as comments; closing it acknowledges the drift.
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          DRIFT_RESULT: ${{ needs.ruleset-liveness-drift.result }}
-          TOKEN_RESULT: ${{ needs.release-token.result }}
-          SETTINGS_RESULT: ${{ needs.repo-settings-drift.result }}
-          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          gh label create ci-failure --repo "$GH_REPOSITORY" \
-            --color FFAB91 --description "Automated post-merge/guard failure notification" \
-            2>/dev/null || true
-          title="Release-flow guard failing"
-          body="$(printf '%s\n' \
-            "Run: ${WORKFLOW_URL}" \
-            "" \
-            "| guard | result |" \
-            "| --- | --- |" \
-            "| environment/ruleset drift | ${DRIFT_RESULT} |" \
-            "| RELEASE_PLEASE_TOKEN canary | ${TOKEN_RESULT} |" \
-            "| repo settings drift (github:sync --check) | ${SETTINGS_RESULT} |" \
-            "" \
-            "Drift red → align GitHub environment settings with .github/environments/*.json and re-apply .github/rulesets/*.json." \
-            "Token red → rotate the RELEASE_PLEASE_TOKEN PAT and update both environment copies (pnpm github:sync)." \
-            "Settings red → run pnpm github:sync --check locally and reconcile with pnpm github:sync." \
-            "" \
-            "Close this issue once the guard is green again.")"
-          existing="$(gh issue list --repo "$GH_REPOSITORY" --state open --label ci-failure \
-            --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
-          if [ -n "$existing" ]; then
-            gh issue comment "$existing" --repo "$GH_REPOSITORY" --body "$body"
-            echo "Commented on existing ci-failure issue #${existing}."
-          else
-            gh issue create --repo "$GH_REPOSITORY" --title "$title" --label ci-failure --body "$body"
-          fi
+        # guard collects repeats as comments; the next all-green run closes it.
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: open
+          title: Release-flow guard failing
+          body: |
+            | guard | result |
+            | --- | --- |
+            | environment/ruleset drift | ${{ needs.ruleset-liveness-drift.result }} |
+            | RELEASE_PLEASE_TOKEN canary | ${{ needs.release-token.result }} |
+            | repo settings drift (github:sync --check) | ${{ needs.repo-settings-drift.result }} |
+
+            Drift red → align GitHub environment settings with .github/environments/*.json and re-apply .github/rulesets/*.json.
+            Token red → rotate the RELEASE_PLEASE_TOKEN PAT and update both environment copies (pnpm github:sync).
+            Settings red → run pnpm github:sync --check locally and reconcile with pnpm github:sync.
+
+            Close this issue once the guard is green again.

@@ -5,15 +5,14 @@ import { LANES } from '@tooling/vitest/lanes.js';
 import { formatRunSummary } from '@tooling/vitest/run-parallel.js';
 
 /**
- * Policy: any set of Vitest projects launched in ONE process must agree on
- * `maxWorkers`.
+ * Policy: the Vitest projects launched in ONE process that run their files in parallel and share
+ * a `sequence.groupOrder` must agree on `maxWorkers`.
  *
- * No project sets an explicit `sequence.groupOrder`, so every project shares the
- * default group. Vitest refuses to start when two projects in the same group
- * disagree on `maxWorkers` ("Projects X and Y have different 'maxWorkers' but
- * same 'sequence.groupOrder'"), and it fails as an *unhandled error* before any
- * file runs — the lane reports "no tests" rather than a failure anyone reads as
- * a config bug.
+ * Vitest refuses to start when two such projects disagree ("Projects X and Y have different
+ * 'maxWorkers' but same 'sequence.groupOrder'"), and it fails as an *unhandled error* before any
+ * file runs — the lane reports "no tests" rather than a failure anyone reads as a config bug.
+ * Projects with `fileParallelism: false` run one at a time after the rest and are outside that
+ * check, and `e2e` + `integration` take their own group order (Vitest 5.0.3, measured 19 Oct).
  *
  * This bit `pnpm test` / `pnpm test:fast`: `property` was added to the fast lane
  * without the `maxWorkers: '50%'` that `unit` and `global` carry, so the whole
@@ -62,19 +61,35 @@ function collectGroupings(): ProjectGrouping[] {
   return groupings;
 }
 
-/** `maxWorkers` as configured for a project name (undefined = Vitest default). */
-function maxWorkersByProject(): Map<string, unknown> {
-  const byName = new Map<string, unknown>();
+/** How a project runs its files, as configured (undefined `maxWorkers` = Vitest default). */
+type ProjectParallelism = { maxWorkers: unknown; parallel: boolean; groupOrder: number };
+
+function parallelismByProject(): Map<string, ProjectParallelism> {
+  const byName = new Map<string, ProjectParallelism>();
   for (const project of vitestProjects) {
-    const test = (project as { test?: { name?: string; maxWorkers?: unknown } }).test;
-    if (test?.name !== undefined) byName.set(test.name, test.maxWorkers);
+    const test = (
+      project as {
+        test?: {
+          name?: string;
+          maxWorkers?: unknown;
+          fileParallelism?: boolean;
+          sequence?: { groupOrder?: number };
+        };
+      }
+    ).test;
+    if (test?.name === undefined) continue;
+    byName.set(test.name, {
+      maxWorkers: test.maxWorkers,
+      parallel: test.fileParallelism !== false,
+      groupOrder: test.sequence?.groupOrder ?? 0,
+    });
   }
   return byName;
 }
 
 describe('Global: vitest project grouping', () => {
   const groupings = collectGroupings();
-  const maxWorkers = maxWorkersByProject();
+  const parallelism = parallelismByProject();
 
   it('finds the multi-project launchers it is meant to guard', () => {
     expect(groupings.length).toBeGreaterThan(0);
@@ -84,20 +99,30 @@ describe('Global: vitest project grouping', () => {
   it('names only projects that exist in the vitest config', () => {
     for (const { source, projects } of groupings) {
       for (const project of projects) {
-        expect(maxWorkers.has(project), `${source} names unknown project "${project}"`).toBe(true);
+        expect(parallelism.has(project), `${source} names unknown project "${project}"`).toBe(true);
       }
     }
   });
 
-  it('runs no two projects with different maxWorkers in one process', () => {
+  it('runs no two parallel projects of one group order with different maxWorkers in one process', () => {
     for (const { source, projects } of groupings) {
-      const distinct = [...new Set(projects.map((project) => maxWorkers.get(project)))];
-      expect(
-        distinct.length,
-        `${source} runs [${projects.join(', ')}] in one vitest process, but their maxWorkers differ ` +
-          `(${projects.map((project) => `${project}=${String(maxWorkers.get(project))}`).join(', ')}). ` +
-          'Vitest aborts the run before any test executes — give them the same maxWorkers.',
-      ).toBe(1);
+      const groups = new Map<number, string[]>();
+      for (const project of projects) {
+        const settings = parallelism.get(project);
+        if (!settings?.parallel) continue;
+        groups.set(settings.groupOrder, [...(groups.get(settings.groupOrder) ?? []), project]);
+      }
+      for (const [groupOrder, members] of groups) {
+        const distinct = [
+          ...new Set(members.map((project) => parallelism.get(project)?.maxWorkers)),
+        ];
+        expect(
+          distinct.length,
+          `${source} runs [${members.join(', ')}] in parallel in group order ${groupOrder} of one ` +
+            `vitest process, but their maxWorkers differ (${members.map((project) => `${project}=${String(parallelism.get(project)?.maxWorkers)}`).join(', ')}). ` +
+            'Vitest aborts the run before any test executes — give them the same maxWorkers.',
+        ).toBe(1);
+      }
     }
   });
 });

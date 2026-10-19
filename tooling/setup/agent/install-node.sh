@@ -5,7 +5,7 @@
 # Why this exists: the cloud image ships Node 20/21/22 (under /opt/nodeXX via
 # nvm), but this project requires the version pinned in .nvmrc (>=24). This installs
 # that version into /opt/node<major> — the same layout the image uses and exactly
-# where agent-os/hooks/session-start.sh looks — so the SessionStart hook switches
+# where agent-os/hooks/be-session-start.mjs looks — so the SessionStart hook switches
 # PATH to it and runs `pnpm install` automatically. No repo changes required.
 #
 # Runs from three places: the environment's cached *Setup script* (via
@@ -35,20 +35,19 @@
 # pinned version is present (Setup scripts re-run on cache rebuilds).
 set -euo pipefail
 
-readonly DEFAULT_VERSION="24.21.0"
 readonly INSTALL_PREFIX="${NODE_INSTALL_PREFIX:-/opt}"
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
-# Resolve the pinned version from .nvmrc (e.g. 24.21.0); fall back when it is
-# missing or not a full x.y.z (the dist tarball URL needs the full version).
-version="${DEFAULT_VERSION}"
-if [ -f "${repository_root}/.nvmrc" ]; then
-  parsed="$(tr -dc '0-9.' < "${repository_root}/.nvmrc")"
-  case "${parsed}" in
-    *.*.*) version="${parsed}" ;;
-  esac
-fi
+# The version is .nvmrc — the one Node pin — as a full x.y.z (the dist tarball URL needs it).
+version="$(tr -dc '0-9.' < "${repository_root}/.nvmrc" 2>/dev/null || true)"
+case "${version}" in
+  *.*.*) ;;
+  *)
+    echo "install-node: .nvmrc must pin an exact Node x.y.z (found '${version}')." >&2
+    exit 1
+    ;;
+esac
 readonly version
 major="${version%%.*}"
 readonly target_dir="${INSTALL_PREFIX}/node${major}"

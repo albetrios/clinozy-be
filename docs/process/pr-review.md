@@ -38,6 +38,11 @@ flowchart LR
 
 ## Section A — Human reviewer checklist
 
+**An iteration's PR** (`iterations/<iteration>/` in the diff) was reviewed as it was built: each
+ROUTE row's review is its review of record — the `Reviewed` cell of its `AS-BUILT.md` row (date ·
+who · commit). Check that every row has one, then review only what changed after each row's
+reviewed commit and the close; do not re-review a reviewed row.
+
 Check only what the PR touches. Skip categories marked **none** in the PR **Reviewer notes** section.
 
 ### Architecture and layers
@@ -223,7 +228,7 @@ flowchart LR
 | ---- | -------------------- |
 | `docs/README.md` index completeness | **be-docs-maintainer** when docs change |
 | Cross-links in hand-written docs | Author + **be-docs-maintainer**; advisory link check in **pr-docs-lane** |
-| i18n keys across locales | **be-i18n-message-guard**; partial `validate:locale-keys` in `ci:quality` |
+| i18n keys across locales | **be-i18n-message-guard**; `locale-parity.global.test.ts` + `locale-hardcoded-fallbacks.policy.unit.test.ts` in the unit lane |
 | Seed vs routes | **be-seed-maintainer** + tests |
 | Review snapshots under `docs/reviews/` | Dated files; do not rewrite history |
 

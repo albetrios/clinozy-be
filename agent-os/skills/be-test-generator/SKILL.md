@@ -1,7 +1,7 @@
 ---
 name: be-test-generator
 description: Decides which test layer to add and writes tests following clinozy-be conventions — unit for pure layers (validators, serializers, shared/utils, errors) and domain e2e via fastify.inject. Use when adding or changing routes, controllers, services, workers, validators, or serializers, after creating a domain/sub-domain, or when tests are missing.
-trigger: src/domains/**/*.validator.ts, src/domains/**/*.serializer.ts
+trigger: src/domains/**/*.validator.ts, src/domains/**/*.serializer.ts, src/shared/utils/**, src/domains/**/__tests__/**, src/tests/unit/**
 triggerNote: Pure-layer units + domain e2e per the testing pyramid
 indexNote: pick the test layer + write unit / domain-e2e per the testing pyramid
 ---
@@ -36,6 +36,8 @@ Triggered by `be-testing-conventions.mdc` when test-related or pure-layer files 
 - **fastify.inject()** — in-process HTTP via helpers in `src/tests/helpers/test-http-inject.helper.ts` (`createTestApp()` in `src/tests/helpers/test-app.ts`)
 
 Use `injectAuthenticated`, `injectUnauthenticated`, or `injectWithCookies` (for session cookies) from `src/tests/helpers/test-http-inject.helper.ts`. Each one waits for the response's `onResponse` work (idempotency entry, post-commit dispatch) before returning — a bare `app.inject()` does not.
+
+A throwaway **git** repository (tooling and hook tests) comes from `createTestGitRepository()` in `src/tests/helpers/git-repository.helper.ts`, never a hand-run `git init`: its git calls shed the inherited `GIT_DIR` and friends, because a test runs inside the pre-push hook too. Pinned by `src/tests/unit/ci/git-hook-environment.policy.unit.test.ts`.
 
 ## Test layout (non-negotiable)
 

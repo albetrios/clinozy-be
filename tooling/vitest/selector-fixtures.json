@@ -1,0 +1,4 @@
+{
+  "$comment": "pnpm test:select fixtures: for each entry, the selection for `changed` must include every file in `mustSelect`. A failed test the selection would have skipped (pnpm test:selector-misses, after a PR's full suite) becomes an entry here.",
+  "fixtures": []
+}

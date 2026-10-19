@@ -9,17 +9,17 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { removeScratchFolders } from '@/tests/helpers/git-repository.helper.js';
 import {
   addTestIteration,
   createIterationRepository,
-  removeIterationRepositories,
 } from '@/tests/helpers/iteration-repository.helper.js';
 import {
   GENERATED_BLOCK_END,
   GENERATED_BLOCK_START,
   openApiSummaries,
   parseFrontendMapArguments,
-  parseRouteCatalog,
+  frontendMapRoutes,
   parseRouteReviewNumbers,
   planFrontendRouteMap,
   renderRouteSection,
@@ -28,7 +28,7 @@ import {
 } from '@tooling/iterations/iteration-frontend-map.util.js';
 
 afterEach(() => {
-  removeIterationRepositories();
+  removeScratchFolders();
 });
 
 const ITERATION = 'launch-2026-09-30-jxmr';
@@ -75,9 +75,9 @@ const REVIEW = `# Final routes
 | 7 | GET | \`/leads\` | Repeated in a nested table | \`lead:read\` | |
 `;
 
-describe('parseRouteCatalog', () => {
+describe('frontendMapRoutes', () => {
   it('reads the domain sections, drops /api/v1 and stops at the summary', () => {
-    const routes = parseRouteCatalog(CATALOG);
+    const routes = frontendMapRoutes(CATALOG);
     expect(routes.map((route) => `${route.method} ${route.path}`)).toEqual([
       'GET /app/leads',
       'POST /app/leads',
@@ -131,7 +131,7 @@ describe('openApiSummaries', () => {
 describe('renderRouteSection', () => {
   it('groups routes into modules with their gate, flags, review number and escaped summary', () => {
     const block = renderRouteSection({
-      routes: parseRouteCatalog(CATALOG),
+      routes: frontendMapRoutes(CATALOG),
       summaries: new Map([
         ['POST /app/leads', 'Create lead | or contact'],
         ['POST /auth/login', 'Login with email and password'],
@@ -165,7 +165,7 @@ describe('renderRouteSection — a route that requires several codes (launch D83
   POST   /api/v1/app/patients/:patient_id/clinical-notes          200  req  both  PERM: patient:update + patient:clinical_record:read
 `;
     const block = renderRouteSection({
-      routes: parseRouteCatalog(catalog),
+      routes: frontendMapRoutes(catalog),
       summaries: new Map(),
       reviewNumbers: new Map(),
     });

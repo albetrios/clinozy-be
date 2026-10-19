@@ -1,3 +1,4 @@
+import { availableParallelism } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   assertConnectedToTestDatabase,
@@ -6,7 +7,15 @@ import {
   LOCAL_TEST_DATABASE_NAME,
   LOCAL_TEST_DATABASE_URL,
   pointHarnessAtLocalTestDatabase,
+  pointWorkerAtItsOwnDatabase,
+  testRedisKeyPrefix,
 } from '@/tests/helpers/local-test-database.js';
+import {
+  databaseProjectParallelism,
+  isCoverageRun,
+  workerDatabaseCount,
+  workerDatabaseName,
+} from '@tooling/vitest/worker-databases.js';
 
 const MANAGED_KEYS = [
   'DATABASE_URL',
@@ -16,6 +25,7 @@ const MANAGED_KEYS = [
   'GITHUB_ACTIONS',
   'ALLOW_HOSTED_TEST_DATABASE',
   'CI',
+  'VITEST_POOL_ID',
 ] as const;
 
 /** A Drizzle `execute` stand-in answering `current_database()` with `databaseName`. */
@@ -113,9 +123,14 @@ describe('local test database harness', () => {
   });
 
   describe('assertConnectedToTestDatabase', () => {
-    it('passes on the local test database', async () => {
-      const { sql } = fakeQuery(LOCAL_TEST_DATABASE_NAME);
+    it("passes on a worker's own clone of the local test database", async () => {
+      const { sql } = fakeQuery(`${LOCAL_TEST_DATABASE_NAME}_worker_1`);
       await expect(assertConnectedToTestDatabase(sql)).resolves.toBeUndefined();
+    });
+
+    it('refuses the test database itself: it is only the template', async () => {
+      const { sql } = fakeQuery(LOCAL_TEST_DATABASE_NAME);
+      await expect(assertConnectedToTestDatabase(sql)).rejects.toThrow(/Refusing to wipe/);
     });
 
     it('refuses any other database, naming it', async () => {
@@ -152,6 +167,75 @@ describe('local test database harness', () => {
       const { query, sql } = fakeQuery('test');
       await assertConnectedToTestDatabase(sql);
       expect(query).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('worker databases', () => {
+    it('points each worker at its own clone and Redis namespace, logins kept', () => {
+      process.env.VITEST_POOL_ID = '3';
+      process.env.DATABASE_URL = LOCAL_TEST_DATABASE_URL;
+      process.env.DATABASE_OPERATOR_URL = `postgresql://operator:secret@localhost:5432/${LOCAL_TEST_DATABASE_NAME}`;
+      pointWorkerAtItsOwnDatabase();
+      expect(new URL(process.env.DATABASE_URL).pathname).toBe(
+        `/${workerDatabaseName({ database: LOCAL_TEST_DATABASE_NAME, worker: '3' })}`,
+      );
+      const operator = new URL(process.env.DATABASE_OPERATOR_URL ?? '');
+      expect(operator.username).toBe('operator');
+      expect(operator.pathname).toBe(`/${LOCAL_TEST_DATABASE_NAME}_worker_3`);
+      expect(testRedisKeyPrefix('clinozy')).toBe('clinozy:worker-3:test:');
+    });
+
+    it('points a CI worker at its clone of the service container database too', () => {
+      process.env.GITHUB_ACTIONS = 'true';
+      process.env.VITEST_POOL_ID = '2';
+      process.env.DATABASE_URL = 'postgresql://ci:ci@localhost:5432/ci_database';
+      pointWorkerAtItsOwnDatabase();
+      expect(new URL(process.env.DATABASE_URL).pathname).toBe('/ci_database_worker_2');
+    });
+
+    it('lets the wipe guard accept exactly a worker clone of the test database', async () => {
+      await expect(
+        assertConnectedToTestDatabase(fakeQuery(`${LOCAL_TEST_DATABASE_NAME}_worker_12`).sql),
+      ).resolves.toBeUndefined();
+      for (const name of [
+        `${LOCAL_TEST_DATABASE_NAME}_worker_`,
+        `${LOCAL_TEST_DATABASE_NAME}_worker_1x`,
+        'clinozy_be_worker_1',
+        `dev_${LOCAL_TEST_DATABASE_NAME}_worker_1`,
+      ]) {
+        await expect(assertConnectedToTestDatabase(fakeQuery(name).sql)).rejects.toThrow(
+          /Refusing to wipe/,
+        );
+      }
+    });
+
+    it('refuses to run outside a Vitest worker', () => {
+      process.env.DATABASE_URL = LOCAL_TEST_DATABASE_URL;
+      expect(() => pointWorkerAtItsOwnDatabase()).toThrow(/VITEST_POOL_ID/);
+      expect(() => testRedisKeyPrefix('clinozy')).toThrow(/VITEST_POOL_ID/);
+    });
+
+    it('runs e2e and integration files in parallel, one per core up to 4, and one at a time under coverage', () => {
+      expect(databaseProjectParallelism(['node', 'vitest', 'run'])).toEqual({
+        fileParallelism: true,
+        maxWorkers: Math.min(4, availableParallelism()),
+      });
+      for (const flag of ['--coverage', '--coverage.enabled', '--coverage.enabled=true']) {
+        expect(isCoverageRun(['node', 'vitest', 'run', flag])).toBe(true);
+        expect(databaseProjectParallelism(['node', 'vitest', 'run', flag])).toEqual({
+          fileParallelism: false,
+          maxWorkers: 1,
+        });
+      }
+    });
+
+    it('makes a worker database for every pool slot the run can use', () => {
+      expect(workerDatabaseCount({ projectMaxWorkers: [1, undefined, '50%'] })).toBe(
+        availableParallelism(),
+      );
+      const more = availableParallelism() + 3;
+      expect(workerDatabaseCount({ maxWorkers: more, projectMaxWorkers: [1] })).toBe(more);
+      expect(workerDatabaseCount({ projectMaxWorkers: [more, 4] })).toBe(more);
     });
   });
 

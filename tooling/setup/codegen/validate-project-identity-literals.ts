@@ -18,11 +18,10 @@
  *
  * Side effects: none; reads the working tree and returns findings.
  */
-import { execFileSync } from 'node:child_process';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { git } from '@tooling/setup/common/git-environment.js';
 
 import type { ProjectIdentitySnapshot } from './project-identity.util.js';
 import {
@@ -127,17 +126,12 @@ function isExcluded(repositoryRelativePath: string): boolean {
 }
 
 function listTrackedFiles(projectRoot: string): string[] {
-  const stdout = execFileSync('git', ['ls-files', '-z'], {
-    cwd: projectRoot,
-    encoding: 'utf-8',
-    maxBuffer: 64 * 1024 * 1024,
-    // `projectRoot` is only honored once the inherited GIT_DIR/GIT_INDEX_FILE
-    // are gone. Run from a hook (pre-commit, pre-push) they win over `cwd`, and
-    // this lists the hook's repository instead — which makes the gate scan a
-    // tree it was never pointed at, and pass vacuously when no path lines up.
-    env: gitEnvironmentWithoutInheritedRepository(),
-  });
-  return stdout.split('\0').filter((entry) => entry.length > 0);
+  // `git` sheds the inherited GIT_DIR/GIT_INDEX_FILE, so `projectRoot` is honored: run from a hook
+  // (pre-commit, pre-push) they would win over `cwd`, list the hook's repository instead and let
+  // the gate pass vacuously.
+  return git({ args: ['ls-files', '-z'], cwd: projectRoot })
+    .split('\0')
+    .filter((entry) => entry.length > 0);
 }
 
 /**

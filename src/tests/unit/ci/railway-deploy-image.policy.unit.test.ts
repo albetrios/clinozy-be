@@ -131,18 +131,15 @@ describe('Railway deploy tooling (policy)', () => {
     expect(envValidator).toContain('process.exit(runEnvironmentValidation(');
   });
 
-  it('seeds reference data after migrate so a fresh environment can provision orgs', () => {
+  it('prepares the database with the reference seed so a fresh environment can provision orgs', () => {
     // Migrations create the schema but never insert the `tenancy.permissions` reference
     // rows that owner-role provisioning FK-references. Without the seed, a fresh
     // environment provisions NO personal/team organization — every provision rolls back on the
     // missing permission FK and the read-path self-heal swallows it to
-    // `personal_organization_id: null`. The reference seed must run, and AFTER migrate
-    // (the schema must exist first).
-    const migrateAt = deployWorkflow.indexOf('pnpm db:migrate');
-    const seedAt = deployWorkflow.indexOf('pnpm db:seed');
-    expect(migrateAt).toBeGreaterThan(-1);
-    expect(seedAt).toBeGreaterThan(-1);
-    expect(migrateAt).toBeLessThan(seedAt);
+    // `personal_organization_id: null`. `pnpm db:seed` is the one database step: it migrates,
+    // then seeds (the order `src/tests/unit/scripts/db-prepare.unit.test.ts` pins).
+    expect(deployWorkflow).toMatch(/run: pnpm db:seed$/m);
+    expect(deployWorkflow).not.toMatch(/run: pnpm db:migrate$/m);
   });
 
   it('declares no dead target_branch input (single-trunk keeps one branch control)', () => {
@@ -151,5 +148,16 @@ describe('Railway deploy tooling (policy)', () => {
     // `[main]` dropdown beside GitHub's native branch selector, which is the one branch
     // control on a single-trunk repo.
     expect(deployWorkflow).not.toContain('target_branch');
+  });
+
+  it('selects the environment explicitly (single trunk: environment, never branch)', () => {
+    // The explicit github_environment input takes precedence over any branch mapping —
+    // callers (post-merge-ci → development, release-deploy → production) choose the
+    // environment directly; it is never derived from the branch on a single trunk.
+    expect(deployWorkflow).toContain('github_environment:');
+    expect(deployWorkflow).toContain('GITHUB_ENVIRONMENT_INPUT');
+    // Both environments form the validated allow-list, and no dev-branch case survives.
+    expect(deployWorkflow).toContain('development|production');
+    expect(deployWorkflow).not.toContain('dev) echo "environment=development"');
   });
 });

@@ -30,10 +30,10 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { runGhAuthPreflight } from './auth-preflight.js';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { git } from '@tooling/setup/common/git-environment.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const RULESETS_DIRECTORY = resolve(import.meta.dirname, '../../../.github/rulesets');
 
@@ -62,14 +62,9 @@ export class GitHubApiError extends Error {
 
 function repositoryFromGitRemote(): string | undefined {
   try {
-    const remoteUrl = execSync('git remote get-url origin', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 5_000,
-      // This remote decides which repository rulesets are pushed to, so an
-      // inherited GIT_DIR must not be allowed to answer for a different one.
-      env: gitEnvironmentWithoutInheritedRepository(),
-    }).trim();
+    // This remote decides which repository rulesets are pushed to, so `git` sheds an inherited
+    // GIT_DIR that would answer for a different one.
+    const remoteUrl = git({ args: ['remote', 'get-url', 'origin'] });
 
     const sshMatch = remoteUrl.match(/git@github\.com:([^/]+\/[^/.]+?)(?:\.git)?$/);
     if (sshMatch?.[1]) {
@@ -301,9 +296,20 @@ interface CliOptions {
 }
 
 function parseArguments(): CliOptions {
-  const argumentsList = process.argv.slice(2);
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: {
+      help: { type: 'boolean', short: 'h' },
+      check: { type: 'boolean' },
+      'dry-run': { type: 'boolean' },
+    },
+    messages: {
+      unknownOption: (option) => `Unknown argument(s): ${option}. Use --help for options.`,
+    },
+    usage: 'Use --help for options.',
+  });
 
-  if (argumentsList.includes('--help') || argumentsList.includes('-h')) {
+  if (values.help) {
     console.log('Usage: pnpm github:sync [--check | --dry-run]');
     console.log('');
     console.log('  (default)   Create-or-update each .github/rulesets/*.json on the repo');
@@ -312,17 +318,13 @@ function parseArguments(): CliOptions {
     process.exit(0);
   }
 
-  if (argumentsList.includes('--check')) {
+  if (values.check) {
     return { mode: 'check' };
   }
-  if (argumentsList.includes('--dry-run')) {
+  if (values['dry-run']) {
     return { mode: 'dry-run' };
   }
-  if (argumentsList.length === 0) {
-    return { mode: 'sync' };
-  }
-
-  throw new Error(`Unknown argument(s): ${argumentsList.join(' ')}. Use --help for options.`);
+  return { mode: 'sync' };
 }
 
 export async function main(): Promise<void> {
@@ -377,9 +379,7 @@ export async function main(): Promise<void> {
   console.log('Sync complete.');
 }
 
-const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
-
-if (isMainModule) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);

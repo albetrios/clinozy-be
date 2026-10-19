@@ -119,8 +119,8 @@ measured surface, and enforces a stricter threshold (default **90%**).
 pnpm test:coverage            # writes coverage/coverage-final.json
 
 # 2. check the coverage of your branch's changes vs the base
-pnpm coverage:patch                       # base defaults to origin/main
-PATCH_COVERAGE_BASE=origin/main pnpm coverage:patch
+pnpm coverage:patch                       # base: origin/<trunk>, as the PR measures
+pnpm coverage:patch --base origin/main    # or name the base
 ```
 
 The script only counts **executable** changed lines (a line with an

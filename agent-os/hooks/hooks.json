@@ -2,11 +2,11 @@
   "description": "Single source of truth for agent hook wiring. tooling/agent-os/generate.ts derives the platform hook configs under agent-os/platforms/ — claude/settings.json (hooks block), cursor/hooks.json, codex/hooks.json — which .claude/settings.json, .cursor/hooks.json, and .codex/hooks.json symlink to; agent-os:generate:check fails on drift. Each entry may target Claude, Cursor, and/or Codex; the generator emits a hook for an agent only when the agent supports that event (platforms/targets.json).",
   "hooks": [
     {
-      "id": "session-start",
-      "runtime": "bash",
-      "script": "session-start.sh",
+      "id": "be-session-start",
+      "script": "be-session-start.mjs",
       "claude": {
-        "event": "SessionStart"
+        "event": "SessionStart",
+        "matcher": "startup|resume"
       },
       "codex": {
         "event": "SessionStart",
@@ -15,9 +15,8 @@
       }
     },
     {
-      "id": "prompt-skill-router",
-      "runtime": "bash",
-      "script": "prompt-skill-router.sh",
+      "id": "be-prompt-skill-router",
+      "script": "be-prompt-skill-router.mjs",
       "claude": {
         "event": "UserPromptSubmit"
       },
@@ -27,21 +26,19 @@
       }
     },
     {
-      "id": "guard-edits",
-      "runtime": "bash",
-      "script": "guard-edits.sh",
+      "id": "be-guard-edits",
+      "script": "be-guard-edits.mjs",
       "claude": {
         "event": "PreToolUse",
         "matcher": "Edit|Write|MultiEdit"
       }
     },
     {
-      "id": "guardrails",
-      "runtime": "node",
-      "script": "guardrails.mjs",
+      "id": "be-guardrails",
+      "script": "be-guardrails.mjs",
       "claude": {
         "event": "PreToolUse",
-        "matcher": "Bash|Edit|Write"
+        "matcher": "Bash|Read|Grep|Edit|Write|MultiEdit"
       },
       "codex": {
         "event": "PreToolUse",
@@ -50,45 +47,36 @@
       }
     },
     {
-      "id": "no-unrequested-pr",
-      "runtime": "bash",
-      "script": "no-unrequested-pr.sh",
+      "id": "be-no-unrequested-pr",
+      "script": "be-no-unrequested-pr.mjs",
       "claude": {
         "event": "PreToolUse",
         "matcher": "mcp__github__create_pull_request"
       }
     },
     {
-      "id": "format-edits",
-      "runtime": "bash",
-      "script": "format-edits.sh",
+      "id": "be-edit-hooks",
+      "script": "be-edit-hooks.mjs",
       "claude": {
         "event": "PostToolUse",
-        "matcher": "Edit|Write"
+        "matcher": "Edit|Write",
+        "if": [
+          "Edit(**)",
+          "Write(**)"
+        ]
       }
     },
     {
-      "id": "skill-reminder",
-      "runtime": "bash",
-      "script": "skill-reminder.sh",
-      "claude": {
-        "event": "PostToolUse",
-        "matcher": "Edit|Write"
-      }
-    },
-    {
-      "id": "large-read-nudge",
-      "runtime": "bash",
-      "script": "large-read-nudge.sh",
+      "id": "be-large-read-nudge",
+      "script": "be-large-read-nudge.mjs",
       "claude": {
         "event": "PostToolUse",
         "matcher": "Read|Grep"
       }
     },
     {
-      "id": "injection-scan",
-      "runtime": "node",
-      "script": "injection-scan.mjs",
+      "id": "be-injection-scan",
+      "script": "be-injection-scan.mjs",
       "claude": {
         "event": "PostToolUse",
         "matcher": "WebFetch|WebSearch|mcp__.*"
@@ -100,26 +88,24 @@
       }
     },
     {
-      "id": "subagent-verify",
-      "runtime": "bash",
-      "script": "subagent-verify.sh",
+      "id": "be-subagent-verify",
+      "script": "be-subagent-verify.mjs",
       "claude": {
-        "event": "SubagentStop"
+        "event": "PostToolUse",
+        "matcher": "Agent|Task"
       }
     },
     {
-      "id": "gate-failure-hint",
-      "runtime": "bash",
-      "script": "gate-failure-hint.sh",
+      "id": "be-gate-failure-hint",
+      "script": "be-gate-failure-hint.mjs",
       "claude": {
         "event": "PostToolUseFailure",
         "matcher": "Bash"
       }
     },
     {
-      "id": "stop-gate-reminder",
-      "runtime": "bash",
-      "script": "stop-gate-reminder.sh",
+      "id": "be-edit-hooks-stop",
+      "script": "be-edit-hooks.mjs",
       "claude": {
         "event": "Stop"
       },
@@ -129,49 +115,63 @@
       }
     },
     {
-      "id": "pre-compact-preserve",
-      "runtime": "bash",
-      "script": "pre-compact-preserve.sh",
+      "id": "be-push-ci-watch",
+      "script": "be-push-ci-watch.mjs",
+      "claude": {
+        "event": "PostToolUse",
+        "matcher": "Bash",
+        "if": ["Bash(git push*)"],
+        "asyncRewake": true,
+        "timeout": 2700
+      }
+    },
+    {
+      "id": "be-turn-end-tests",
+      "script": "be-turn-end-tests.mjs",
+      "claude": {
+        "event": "Stop",
+        "asyncRewake": true,
+        "timeout": 120
+      }
+    },
+    {
+      "id": "be-pre-compact-preserve",
+      "script": "be-pre-compact-preserve.mjs",
       "claude": {
         "event": "PreCompact"
       }
     },
     {
-      "id": "session-end",
-      "runtime": "bash",
-      "script": "session-end.sh",
+      "id": "be-session-end",
+      "script": "be-session-end.mjs",
       "claude": {
         "event": "SessionEnd"
       }
     },
     {
-      "id": "cursor-shell-guard",
-      "runtime": "node",
-      "script": "cursor-shell-guard.mjs",
+      "id": "be-cursor-shell-guard",
+      "script": "be-cursor-shell-guard.mjs",
       "cursor": {
         "event": "beforeShellExecution"
       }
     },
     {
-      "id": "cursor-edit-guard",
-      "runtime": "node",
-      "script": "cursor-edit-guard.mjs",
+      "id": "be-cursor-edit-guard",
+      "script": "be-cursor-edit-guard.mjs",
       "cursor": {
         "event": "afterFileEdit"
       }
     },
     {
-      "id": "cursor-read-guard",
-      "runtime": "node",
-      "script": "cursor-read-guard.mjs",
+      "id": "be-cursor-read-guard",
+      "script": "be-cursor-read-guard.mjs",
       "cursor": {
         "event": "beforeReadFile"
       }
     },
     {
-      "id": "cursor-mcp-guard",
-      "runtime": "node",
-      "script": "cursor-mcp-guard.mjs",
+      "id": "be-cursor-mcp-guard",
+      "script": "be-cursor-mcp-guard.mjs",
       "cursor": {
         "event": "beforeMCPExecution"
       }

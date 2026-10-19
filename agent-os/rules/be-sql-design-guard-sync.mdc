@@ -6,4 +6,8 @@ alwaysApply: false
 
 # SQL design sync
 
-Created/changed a `*.schema.ts`? Run **[be-sql-design-guard](../skills/be-sql-design-guard/SKILL.md)** (indexes, partitioning, constraint names, column types, soft-delete) alongside **[be-schema-generator](../skills/be-schema-generator/SKILL.md)**, then **[be-db-migration-maintainer](../skills/be-db-migration-maintainer/SKILL.md)**.
+Created/changed a `*.schema.ts`? Run the **schema-change** chain in its order — the
+`src/domains/**/*.schema.ts` row of [`agent-os/docs/skill-triggers.md`](../docs/skill-triggers.md), generated from `agent-os/skills/chains.json` (this rule
+keeps no copy of the steps). This rule's own step is
+**[be-sql-design-guard](../skills/be-sql-design-guard/SKILL.md)**: indexes, partitioning,
+constraint names, column types, soft-delete.

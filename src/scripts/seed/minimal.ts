@@ -1,18 +1,22 @@
 /**
- * Minimal seed — creates the bare minimum data needed for the app to start:
+ * Minimal seed — the bare minimum data the app needs to start:
  * - System permissions (tenancy)
  * - Default plans (billing)
  *
- * Usage: pnpm db:seed
+ * Run by `pnpm db:seed` (`src/scripts/ops/db-prepare.ts`, seed level `minimal`), which migrates
+ * first and drains the pool after.
  */
-import '@/shared/config/load-env-files.js';
-import '@/scripts/seed/seed-runtime-url.js';
-import { closeDatabase } from './helpers.js';
 import { seedPermissions } from '@/domains/tenancy/sub-domains/permission/seed/permission.reference.seed.js';
 import { seedPlans } from '@/domains/billing/sub-domains/plan/seed/plan.reference.seed.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
-async function main() {
+/**
+ * Seeds the permission catalog and the default plans. Idempotent — both upsert.
+ *
+ * @remarks
+ * Does not manage the database connection: the caller drains the pool.
+ */
+export async function runMinimalSeed(): Promise<void> {
   logger.info('seed.minimal: starting');
 
   await seedPermissions();
@@ -23,17 +27,3 @@ async function main() {
 
   logger.info('seed.minimal: done');
 }
-
-/**
- * `closeDatabase` always runs (success or failure). Without it, a thrown error here
- * would `process.exit(1)` before the database pool finishes draining and leave
- * aborted connections behind in Postgres.
- */
-main()
-  .catch((error) => {
-    logger.error({ error }, 'seed.minimal: failed');
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await closeDatabase();
-  });

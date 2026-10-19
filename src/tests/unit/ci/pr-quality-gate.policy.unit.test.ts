@@ -38,10 +38,12 @@ const REQUIRED_LANES = [
   'typecheck',
   'static-sync',
   'agent-os-gate',
+  'iteration-freeze',
   'unit',
   'matrix',
   'migration-lint',
   'knip',
+  'sonarqube',
   'build-verify',
   'security-audit',
   'security-secrets',
@@ -52,6 +54,7 @@ const REQUIRED_LANES = [
   'rls-security',
   'rls-application-role',
   'actionlint',
+  'workflow-security',
 ] as const;
 
 const EXPECTED_REQUIRED_CONTEXTS = ['Checks', 'Quality gate'];

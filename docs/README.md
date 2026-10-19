@@ -11,6 +11,7 @@ Hand-written guides live in **topic subfolders**; generated API artifacts stay a
 | [deployment/](deployment/)                                                                                 | **setup/** · **ci-cd/** · **runbooks/** — see [deployment/README.md](deployment/README.md) |
 | [integrations/](integrations/)                                                                             | Third-party tools (Cursor MCP, cloud agents, credentials)                                  |
 | [reference/](reference/)                                                                                   | Topic folders for architecture, API design, testing, runtime, security, reliability, data  |
+| [reference/commands.md](reference/commands.md)                                                             | Every `pnpm` script beyond the everyday ones in `CLAUDE.md`                                |
 | [reviews/architecture-consistency-roadmap-2026-05.md](reviews/architecture-consistency-roadmap-2026-05.md) | Completed domain-layout program (archival)                                                 |
 | [reference/reliability/observability-log-events.md](reference/reliability/observability-log-events.md)     | Structured log event names / dashboard migrations                                          |
 | [deployment/docker-images.md](deployment/docker-images.md)                                                 | API vs worker images, MCP docs in container                                                |
@@ -185,7 +186,7 @@ Grouped index: **[deployment/README.md](deployment/README.md)** (`setup/`, `ci-c
 | [reference/reliability/scalability-and-capacity.md](reference/reliability/scalability-and-capacity.md) | Measured single-instance throughput ceiling (~1k req/s), the DB-pool bottleneck, and how to scale past it. |
 | [reference/testing/testing-conventions.md](reference/testing/testing-conventions.md) | Test layers, naming, and `fastify.inject` conventions. |
 | [reference/testing/mutation-testing.md](reference/testing/mutation-testing.md) | Mutation testing setup and budgets. |
-| [reference/quality/sonarqube-local.md](reference/quality/sonarqube-local.md) | Local SonarQube quality gate (`pnpm sonar:*`) used in pre-commit. |
+| [reference/quality/sonarqube-local.md](reference/quality/sonarqube-local.md) | Local SonarQube quality gate (`pnpm sonar:*`) used at pre-push. |
 | [reference/quality/test-coverage.md](reference/quality/test-coverage.md) | V8 coverage gates and thresholds. |
 
 ---

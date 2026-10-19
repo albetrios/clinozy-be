@@ -35,9 +35,11 @@ To force a specific version, put a `Release-As: X.Y.Z` footer in the PR body (th
 
 ## The flow
 
-1. PRs squash-merge into `main`. On each merge, post-merge CI's `release-please` job (which reads its
-   PAT via the **development** GitHub Environment) refreshes one open **`chore: release X.Y.Z` Release
-   PR** whose diff previews the version bump + changelog. It is **not** auto-merged.
+1. PRs squash-merge into `main`. When you are ready to ship, dispatch post-merge CI with
+   `release_pr: true` (`gh workflow run post-merge-ci.yml -f release_pr=true -f skip_docker=true -f skip_docs=true`):
+   its `release-please` job (which reads its PAT via the **development** GitHub Environment) opens or
+   refreshes one **`chore(main): release X.Y.Z` Release PR** whose diff previews the version bump +
+   changelog. An ordinary merge no longer refreshes it. It is **not** auto-merged.
 2. **Merge the Release PR** — the ship button. release-please tags `vX.Y.Z`, publishes a GitHub Release
    (created with the PAT so it triggers the next workflow), and attaches the SBOM.
 3. The published release fires [`release-deploy.yml`](../../.github/workflows/release-deploy.yml):

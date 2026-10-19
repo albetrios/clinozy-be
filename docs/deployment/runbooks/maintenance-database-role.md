@@ -126,6 +126,8 @@ canary). A deleted-and-recreated database therefore needs exactly three steps:
 exact role posture provisioned in CI (operator fixtures, RLS-subject maintenance pool,
 `SET LOCAL ROLE clinozy_be_app` suites) — a policy/plan regression that only bites
 RLS-subject roles opens a `ci-failure` issue by morning instead of surfacing at deploy. The
+suites run as seven parallel jobs (unit-db, two security slices, four e2e + integration
+domain groups), each on its own database. The
 PR lane `pnpm test:rls-role` opens the pool under test as `clinozy_be_app` and the maintenance
 pool as `clinozy_be_maintenance` (`-c role=` on each URL).
 

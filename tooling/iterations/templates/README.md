@@ -3,6 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | {{type}} |
+| Process | {{process}} |
 | Topic | {{topic}} |
 | Owner | {{owner}} |
 | Opened | {{opened}} |

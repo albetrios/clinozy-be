@@ -6,7 +6,7 @@ alwaysApply: false
 
 # clinozy-be src architecture
 
-Owner: **CLAUDE.md** (Architecture Rules · Domain Structure · Dependency Rules · Drizzle) + the **[be-domain-generator](../skills/be-domain-generator/SKILL.md)** skill.
+Owner: **CLAUDE.md** (Architecture Rules · Dependency Rules) and **src/domains/CLAUDE.md** (Domain Structure · Drizzle) + the **[be-domain-generator](../skills/be-domain-generator/SKILL.md)** skill.
 
 - Layers: routes → controller → service → repository. Controllers **coordinate**; services express intent (may `withTransaction`) but own no SQL; repositories own SQL. Postgres is the only source of truth.
 - **Cross-domain** access goes through the other domain's **service** only (never its repository/schema). Imports use `@/` / `@tooling/`, never `../` (see be-import-paths).

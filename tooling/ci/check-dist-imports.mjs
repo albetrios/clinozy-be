@@ -5,6 +5,9 @@
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseCommandLine } from '../setup/common/script.ts';
+
+parseCommandLine({ args: process.argv.slice(2) });
 
 const distDirectory = join(process.cwd(), 'dist');
 const unresolvedPattern = /from\s+['"]@\//;

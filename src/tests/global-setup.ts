@@ -1,30 +1,41 @@
 /**
- * Runs once before all test files: creates and migrates the test database and seeds the
- * permission catalog. Requires Postgres (`pnpm compose:up`).
+ * Runs once before all test files: prepares the test database (`prepareDatabase` — create, migrate,
+ * seed the permission catalog, one database per worker). Requires Postgres (`pnpm compose:up`).
  */
 import '@/shared/config/load-env-files.js';
-import { execSync } from 'node:child_process';
+import { workerDatabaseCount } from '@tooling/vitest/worker-databases.js';
+import type { TestProject } from 'vitest/node';
+import { prepareDatabase } from '@/scripts/ops/db-prepare.js';
 import { acquireDatabaseSuiteLock } from '@/tests/database-suite-lock.js';
 import pg from 'pg';
 import {
   buildMigrationChildEnvironment,
-  ensureLocalTestDatabaseExists,
   isHarnessOnProvidedDatabase,
   LOCAL_TEST_DATABASE_URL,
   pointHarnessAtLocalTestDatabase,
 } from '@/tests/helpers/local-test-database.js';
 
 /**
- * Vitest global setup: migrates the test database and seeds the permission catalog. Skipped when
- * the contract / property / unit-only slices set `CONTRACT_TESTS_ENABLED`,
+ * Vitest global setup: prepares the test database the one way every database is set up. Skipped
+ * when the contract / property / unit-only slices set `CONTRACT_TESTS_ENABLED`,
  * `PROPERTY_TESTS_ENABLED` or `VITEST_SKIP_DATABASE`.
  *
  * @remarks
- * A failed migration or seed fails the run — a suite on a half-migrated database tests something
- * that will never ship. Only an unreachable database is tolerated outside a provided database, so
- * unit tests still run without Docker; every database-bound test then fails on its own connection.
+ * - **Algorithm:** {@link prepareDatabase} with the `permissions` seed — `tenancy.permissions` is
+ *   reference data from the seed, not a migration, and `cleanupDatabase()` keeps it between suites,
+ *   so without it the catalog existed only once some suite happened to call `seedAllPermissions()`
+ *   (personal-organization provisioning then failed the `role_permissions` → `permissions` FK and
+ *   the read-safe path swallowed it). Then one clone of the prepared database per pool slot
+ *   ({@link workerDatabaseCount}), which each worker's `src/tests/setup.ts` points itself at.
+ * - **Failure modes:** a failed migration, seed or clone fails the run — a suite on a half-migrated
+ *   database tests something that will never ship. Only an unreachable database is tolerated outside
+ *   a provided database, so unit tests still run without Docker; every database-bound test then
+ *   fails on its own connection.
+ * - **Notes:** the seed reads the `DATABASE_URL` chosen here — the operator role locally, the
+ *   superuser in CI. FORCE ROW LEVEL SECURITY on `tenancy.permissions` would refuse the
+ *   RLS-subject application role.
  */
-export default async function globalSetup(): Promise<() => void> {
+export default async function globalSetup(project: TestProject): Promise<() => void> {
   // Vitest sets its own NODE_ENV before this runs, and the env loader then layers the
   // machine-local env file on top. The test forks run as `development` (src/tests/setup.ts); so
   // does this process, whose permission seed parses the env schema.
@@ -53,66 +64,41 @@ export default async function globalSetup(): Promise<() => void> {
   // they do not need.
   const releaseDatabaseSuiteLock = acquireDatabaseSuiteLock();
 
-  const migrationUrl = process.env.DATABASE_URL;
-  if (!migrationUrl) {
-    throw new Error('DATABASE_URL must be set for test global setup');
-  }
-  const client = new pg.Client({ connectionString: migrationUrl });
-  client.on('error', () => undefined);
-
-  try {
-    // First local run: the test database does not exist yet (CI's service container brings its own).
-    await ensureLocalTestDatabaseExists();
-    await client.connect();
-    await client.query('SELECT 1');
-  } catch (connectionError) {
-    if (isHarnessOnProvidedDatabase()) {
-      throw connectionError;
-    }
+  if (!((await isServerReachable()) || isHarnessOnProvidedDatabase())) {
     console.warn('Test database unavailable — skipping global setup. Start it: pnpm compose:up');
-    await client.end().catch(() => {});
     return releaseDatabaseSuiteLock;
   }
 
-  try {
-    execSync('pnpm db:migrate', {
-      stdio: 'pipe',
-      encoding: 'utf-8',
-      // Keeps the child on the test database: see buildMigrationChildEnvironment.
-      env: buildMigrationChildEnvironment(),
-      cwd: process.cwd(),
-    });
-    await seedPermissionCatalog();
-  } finally {
-    await client.end();
-  }
+  await prepareDatabase({
+    seed: 'permissions',
+    enableLocalLogins: false,
+    workerDatabases: workerDatabaseCount({
+      maxWorkers: project.vitest.config.maxWorkers,
+      projectMaxWorkers: project.vitest.projects.map((selected) => selected.config.maxWorkers),
+    }),
+    // Keeps the child on the test database: see buildMigrationChildEnvironment.
+    migrationEnvironment: buildMigrationChildEnvironment(),
+    migrationOutput: 'pipe',
+  });
 
   return releaseDatabaseSuiteLock;
 }
 
-/**
- * Seeds the permission catalog the way a deploy does: migrate, then the reference seed.
- *
- * `tenancy.permissions` is reference data from `pnpm db:seed`, not a migration, and
- * `cleanupDatabase()` preserves it between suites — so without this the catalog existed only once
- * some suite happened to call `seedAllPermissions()`. Suites that ran first saw a near-empty
- * catalog: personal-organization provisioning failed the `role_permissions` → `permissions` FK,
- * the read-safe path swallowed it, and the user silently had no personal organization.
- *
- * Runs the reference seeder itself (no second code list), imported only now so the app pool it
- * opens reads the `DATABASE_URL` chosen above — the operator role locally, the superuser in CI.
- * FORCE ROW LEVEL SECURITY on `tenancy.permissions` would refuse the RLS-subject application role.
- */
-async function seedPermissionCatalog(): Promise<void> {
-  const { resetEnvCacheForTests } = await import('@/shared/config/env.config.js');
-  resetEnvCacheForTests();
-  const { seedPermissions } = await import(
-    '@/domains/tenancy/sub-domains/permission/seed/permission.reference.seed.js'
+/** Whether the test database's server answers, logging in the way the migrations will. */
+async function isServerReachable(): Promise<boolean> {
+  const server = new URL(
+    process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL ?? LOCAL_TEST_DATABASE_URL,
   );
-  const { closeDatabase } = await import('@/infrastructure/database/connection.js');
+  server.pathname = '/postgres';
+  const client = new pg.Client({ connectionString: server.toString() });
+  client.on('error', () => undefined);
   try {
-    await seedPermissions();
+    await client.connect();
+    await client.query('SELECT 1');
+    return true;
+  } catch {
+    return false;
   } finally {
-    await closeDatabase();
+    await client.end().catch(() => undefined);
   }
 }

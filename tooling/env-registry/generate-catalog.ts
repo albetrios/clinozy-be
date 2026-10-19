@@ -17,6 +17,7 @@ import {
   envSchemaRequiredKeys,
 } from '@/shared/config/env-schema.js';
 import { buildEnvCatalog } from '@/shared/config/env-var-registry.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const OUTPUT_PATH = resolve(process.cwd(), 'docs/reference/env-catalog.md');
 
@@ -58,7 +59,9 @@ export function renderEnvCatalog(): string {
 }
 
 function main(): void {
-  const check = process.argv.includes('--check');
+  const check =
+    parseCommandLine({ args: process.argv.slice(2), options: { check: { type: 'boolean' } } })
+      .values.check === true;
   const rendered = renderEnvCatalog();
   if (check) {
     const current = existsSync(OUTPUT_PATH) ? readFileSync(OUTPUT_PATH, 'utf-8') : '';
@@ -75,6 +78,6 @@ function main(): void {
   console.log(`Wrote ${OUTPUT_PATH}`);
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+if (isMain(import.meta.url)) {
   main();
 }

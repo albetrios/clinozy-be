@@ -86,7 +86,7 @@ describe('agent tool versions policy', () => {
   });
 
   it('the session-start banner checks every tool against its pin', () => {
-    const sessionStart = read('agent-os/hooks/session-start.sh');
+    const sessionStart = read('agent-os/hooks/be-session-start.mjs');
     for (const tool of AGENT_TOOLS) {
       expect(sessionStart, tool.name).toContain(`${tool.name}:${tool.versionKey}:`);
     }

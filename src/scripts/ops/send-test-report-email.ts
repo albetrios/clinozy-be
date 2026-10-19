@@ -8,6 +8,7 @@ import path from 'node:path';
 import { sendEmail, isMailConfigured } from '@/infrastructure/mail/mail.service.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 interface CoverageMetric {
   pct?: number;
@@ -302,6 +303,7 @@ function buildHtmlBody({
 }
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   if (!isMailConfigured()) {
     logger.warn(
       'Mail service not configured (RESEND_API_KEY missing); skipping test report email.',

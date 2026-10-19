@@ -4,10 +4,12 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const MCP_PACKAGE_NAME = '@modelcontextprotocol/sdk';
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const packageJsonPath = resolve(process.cwd(), 'package.json');
   const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
     dependencies?: Record<string, string>;

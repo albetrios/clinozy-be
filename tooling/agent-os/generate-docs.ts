@@ -8,8 +8,11 @@
  *   - agent-os/docs/agents-catalog.md
  *       ← agents/*.md frontmatter (name/description/model/wrapsSkill/useWhen)
  *         + agents/pipelines.json membership
- *   - the trigger table in agent-os/docs/skill-triggers.md
+ *   - the trigger table in agent-os/docs/skill-triggers.md, and the same rows as
+ *     agent-os/hooks/skill-routing.json (read by the edit hook)
  *       ← skills/chains.json triggers (multi-skill rows) + per-skill `trigger`
+ *   - the rules table in skills/be-skill-index/SKILL.md (region `rules`)
+ *       ← rules/*.mdc frontmatter (alwaysApply / globs / description)
  *
  * Only the region between `<!-- GENERATED:START -->` and `<!-- GENERATED:END -->`
  * markers is rewritten; hand-written prose outside the markers survives verbatim.
@@ -17,8 +20,9 @@
  * Invoked by tooling/agent-os/generate.ts (so `pnpm agent-os:generate` /
  * `:generate:check` cover these docs alongside the hook/mcp derivations).
  */
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const repositoryRoot = process.cwd();
 const agentOsDirectory = join(repositoryRoot, 'agent-os');
@@ -86,15 +90,19 @@ function splitTopLevel(pattern: string): string[] {
   return parts.map((part) => part.trim()).filter(Boolean);
 }
 
+/** Split a trigger on top-level commas and expand its `{a,b,c}` groups. */
+function expandTokens(pattern: string): string[] {
+  return splitTopLevel(pattern).flatMap((token) => {
+    const brace = token.match(/^(.*)\{([^}]+)\}(.*)$/);
+    if (!brace) return [token];
+    const [, before = '', group = '', after = ''] = brace;
+    return group.split(',').map((option) => `${before}${option.trim()}${after}`);
+  });
+}
+
 /** Expand `{a,b,c}` groups; backtick path-like tokens, leave prose plain. */
 function backtickedGlobs(pattern: string): string {
-  return splitTopLevel(pattern)
-    .flatMap((token) => {
-      const brace = token.match(/^(.*)\{([^}]+)\}(.*)$/);
-      if (!brace) return [token];
-      const [, before = '', group = '', after = ''] = brace;
-      return group.split(',').map((option) => `${before}${option.trim()}${after}`);
-    })
+  return expandTokens(pattern)
     .map((token) => (isPathLike(token) ? `\`${token}\`` : token))
     .join(', ');
 }
@@ -107,13 +115,19 @@ interface DocResult {
   changed: boolean;
 }
 
-/** Replace the single GENERATED region in `text` with `body`; error if absent. */
-function rewriteRegion(displayPath: string, text: string, body: string): string {
-  const start = text.indexOf(GENERATED_START);
-  const end = text.indexOf(GENERATED_END);
+/**
+ * Replace a GENERATED region in `text` with `body`; error if absent. Without `name` it is the
+ * file's unnamed region (`<!-- GENERATED:START -->`); with one, `<!-- GENERATED:START name -->`,
+ * so one file can hold several.
+ */
+function rewriteRegion(displayPath: string, text: string, body: string, name?: string): string {
+  const startMarker = name ? `<!-- GENERATED:START ${name} -->` : GENERATED_START;
+  const endMarker = name ? `<!-- GENERATED:END ${name} -->` : GENERATED_END;
+  const start = text.indexOf(startMarker);
+  const end = text.indexOf(endMarker);
   if (start === -1 || end === -1 || end < start)
-    throw new Error(`${displayPath}: missing GENERATED:START/END markers`);
-  const before = text.slice(0, start + GENERATED_START.length);
+    throw new Error(`${displayPath}: missing ${startMarker} / ${endMarker} markers`);
+  const before = text.slice(0, start + startMarker.length);
   const after = text.slice(end);
   return `${before}\n${body}\n${after}`;
 }
@@ -199,9 +213,23 @@ function buildAgentsCatalog(): DocResult {
   return { path, displayPath: 'agent-os/docs/agents-catalog.md', next, changed: next !== text };
 }
 
-// ── 3) skill-triggers.md table ──────────────────────────────────────────────
-function buildSkillTriggers(): DocResult {
-  const path = join(agentOsDirectory, 'docs', 'skill-triggers.md');
+// ── 3) the routing map: skill-triggers.md table + skill-routing.json ───────────
+/** One routing row: the files that trigger it, the skills to run (in order), a note. */
+export interface RoutingRoute {
+  trigger: string;
+  globs: string[];
+  skills: string[];
+  optional: string[];
+  note: string;
+  chain?: string;
+}
+
+/**
+ * The routing map, built once: a row per chain (`chains.json`) and a row per skill whose own
+ * `trigger` frontmatter is not a chain's trigger. Chains first, in file order; then the skill
+ * rows sorted the way the table has always rendered them.
+ */
+export function routingRoutes(): RoutingRoute[] {
   const skills = listDirectoryNames(join(agentOsDirectory, 'skills'));
   const chains = readJson<{
     chains: Record<
@@ -209,31 +237,47 @@ function buildSkillTriggers(): DocResult {
       { trigger?: string; steps?: string[]; optional?: string[]; description?: string }
     >;
   }>(join(agentOsDirectory, 'skills', 'chains.json')).chains;
+  const globsOf = (trigger: string) => expandTokens(trigger).filter(isPathLike);
 
-  const chainEntryPatterns = new Set<string>();
-  const chainRows: string[] = [];
-  for (const definition of Object.values(chains)) {
+  const chainRoutes: RoutingRoute[] = [];
+  for (const [chain, definition] of Object.entries(chains)) {
     if (!definition.trigger) continue;
-    chainEntryPatterns.add(definition.trigger);
-    const steps = (definition.steps ?? []).join(' → ');
-    const optional = (definition.optional ?? []).length
-      ? ` (+ ${(definition.optional ?? []).join(', ')})`
-      : '';
-    chainRows.push(
-      `| ${backtickedGlobs(definition.trigger)} | ${steps}${optional} | ${cell(definition.description ?? '')} |`,
-    );
+    chainRoutes.push({
+      trigger: definition.trigger,
+      globs: globsOf(definition.trigger),
+      skills: definition.steps ?? [],
+      optional: definition.optional ?? [],
+      note: definition.description ?? '',
+      chain,
+    });
   }
+  const chainTriggers = new Set(chainRoutes.map((route) => route.trigger));
 
-  // Atomic rows: each skill declaring a `trigger` whose pattern isn't a chain entry.
-  const atomicRows: string[] = [];
+  const skillRoutes: RoutingRoute[] = [];
   for (const skill of skills) {
     const text = readText(join(agentOsDirectory, 'skills', skill, 'SKILL.md'));
     const trigger = frontmatterField(text, 'trigger');
-    if (!trigger || chainEntryPatterns.has(trigger)) continue;
-    const note = frontmatterField(text, 'triggerNote') ?? '';
-    atomicRows.push(`| ${backtickedGlobs(trigger)} | ${skill} | ${cell(note)} |`);
+    if (!trigger || chainTriggers.has(trigger)) continue;
+    skillRoutes.push({
+      trigger,
+      globs: globsOf(trigger),
+      skills: [skill],
+      optional: [],
+      note: frontmatterField(text, 'triggerNote') ?? '',
+    });
   }
-  atomicRows.sort();
+  const rowOf = (route: RoutingRoute) =>
+    `| ${backtickedGlobs(route.trigger)} | ${route.skills[0]} | ${cell(route.note)} |`;
+  skillRoutes.sort((left, right) => (rowOf(left) < rowOf(right) ? -1 : 1));
+  return [...chainRoutes, ...skillRoutes];
+}
+
+function buildSkillTriggers(): DocResult {
+  const path = join(agentOsDirectory, 'docs', 'skill-triggers.md');
+  const rows = routingRoutes().map((route) => {
+    const optional = route.optional.length ? ` (+ ${route.optional.join(', ')})` : '';
+    return `| ${backtickedGlobs(route.trigger)} | ${route.skills.join(' → ')}${optional} | ${cell(route.note)} |`;
+  });
 
   const body = [
     'When you edit a file matching a pattern below, invoke the listed skill(s). Generated from',
@@ -241,8 +285,7 @@ function buildSkillTriggers(): DocResult {
     '',
     '| File pattern | Invoke skill(s) | Notes |',
     '| ------------ | --------------- | ----- |',
-    ...chainRows,
-    ...atomicRows,
+    ...rows,
   ].join('\n');
 
   const text = readText(path);
@@ -250,10 +293,76 @@ function buildSkillTriggers(): DocResult {
   return { path, displayPath: 'agent-os/docs/skill-triggers.md', next, changed: next !== text };
 }
 
-/** Regenerate all three docs. In write mode, persist changes; returns drift list. */
+/** The same rows for the edit hook (`agent-os/hooks/be-edit-hooks.mjs`), so it reminds from the map. */
+function buildSkillRouting(): DocResult {
+  const path = join(agentOsDirectory, 'hooks', 'skill-routing.json');
+  const routes = routingRoutes().map(({ chain, globs, skills, optional, note }) => ({
+    ...(chain ? { chain } : {}),
+    globs,
+    skills,
+    ...(optional.length ? { optional } : {}),
+    note,
+  }));
+  const next = `${JSON.stringify(
+    {
+      description:
+        "GENERATED by `pnpm agent-os:generate` from agent-os/skills/chains.json and each skill's `trigger` / `triggerNote` frontmatter — the rows of agent-os/docs/skill-triggers.md. Do not edit.",
+      routes,
+    },
+    null,
+    2,
+  )}\n`;
+  const text = existsSync(path) ? readText(path) : '';
+  return { path, displayPath: 'agent-os/hooks/skill-routing.json', next, changed: next !== text };
+}
+
+// ── 4) be-skill-index rules table ─────────────────────────────────────────────
+/** Every rule file with when Cursor attaches it, from the rule's own frontmatter. */
+function buildRulesTable(): DocResult {
+  const path = join(agentOsDirectory, 'skills', 'be-skill-index', 'SKILL.md');
+  const rulesDirectory = join(agentOsDirectory, 'rules');
+  const rows = readdirSync(rulesDirectory)
+    .filter((file) => file.endsWith('.mdc'))
+    .sort((left, right) => left.localeCompare(right))
+    .map((file) => {
+      const text = readText(join(rulesDirectory, file));
+      const globs = frontmatterField(text, 'globs');
+      const attaches =
+        frontmatterField(text, 'alwaysApply') === 'true'
+          ? 'always'
+          : globs
+            ? backtickedGlobs(globs)
+            : 'agent-requested (by its description)';
+      const description = unquote(frontmatterField(text, 'description') ?? '');
+      return `| \`${file}\` | ${cell(attaches)} | ${cell(description)} |`;
+    });
+  const body = [
+    'Generated from each `agent-os/rules/*.mdc` frontmatter — `pnpm agent-os:generate`.',
+    '',
+    '| Rule file | Attaches | Description |',
+    '| --------- | -------- | ----------- |',
+    ...rows,
+  ].join('\n');
+  const text = readText(path);
+  const next = rewriteRegion('skills/be-skill-index/SKILL.md', text, body, 'rules');
+  return {
+    path,
+    displayPath: 'agent-os/skills/be-skill-index/SKILL.md',
+    next,
+    changed: next !== text,
+  };
+}
+
+/** Regenerate every derived doc. In write mode, persist changes; returns drift list. */
 export function generateDocs(writeMode: boolean): string[] {
   const drift: string[] = [];
-  for (const build of [buildSkillIndexRegion, buildAgentsCatalog, buildSkillTriggers]) {
+  for (const build of [
+    buildSkillIndexRegion,
+    buildAgentsCatalog,
+    buildSkillTriggers,
+    buildSkillRouting,
+    buildRulesTable,
+  ]) {
     const result = build();
     if (!result.changed) continue;
     if (writeMode) {
@@ -267,8 +376,12 @@ export function generateDocs(writeMode: boolean): string[] {
   return drift;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const writeMode = process.argv.includes('--write');
+if (isMain(import.meta.url)) {
+  const writeMode =
+    parseCommandLine({
+      args: process.argv.slice(2),
+      options: { write: { type: 'boolean' }, check: { type: 'boolean' } },
+    }).values.write === true;
   const drift = generateDocs(writeMode);
   for (const message of drift) console.log(`  • ${message}`);
   if (!writeMode && drift.length) process.exit(1);

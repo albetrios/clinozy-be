@@ -16,7 +16,7 @@ editing the lock deliberately.
 | Maintenance per-kind allowlists | `src/tests/unit/infrastructure/database/maintenance-context-confinement.policy.unit.test.ts` | Each `MAINTENANCE_SCOPE.<kind>` is referenced only from its allowlisted paths. |
 | Table → required-scope map | `src/tests/unit/infrastructure/database/rls-table-scope-map.db.unit.test.ts` | Per FORCE-RLS table, the exact `app.*` GUC set its LIVE policies reference; every GUC must be registry-known (or a documented dead arm — currently none). |
 | FORCE-RLS table set | `src/infrastructure/database/utils/force-rls-tables.constants.ts` + boot guard | The live database's FORCE-RLS tables match the intentional list exactly. |
-| Worker DB import ban | `src/tests/unit/infrastructure/database/worker-database-guard.unit.test.ts` + `agent-os/hooks/guard-edits.sh` (R1) | Workers/processors never call `getRequestDatabase()` or import `database-context-runtime` (one documented exemption: `audit-outbox-drain.processor.ts`). |
+| Worker DB import ban | `src/tests/unit/infrastructure/database/worker-database-guard.unit.test.ts` + `agent-os/hooks/be-guard-edits.mjs` (R1) | Workers/processors never call `getRequestDatabase()` or import `database-context-runtime` (one documented exemption: `audit-outbox-drain.processor.ts`). |
 | Network isolation in contexts | `src/tests/global/rls-context-network-isolation.global.test.ts` | No outbound I/O (Stripe/S3/Resend/fetch) inside `withAppDatabaseContext` / `withMaintenanceDatabaseContext` / `withTransaction` callbacks. |
 | No direct DB in services | `src/tests/global/no-direct-db-in-services.global.test.ts` | Services don't touch `database` / `sql` / `getRequestDatabase` — repositories own SQL. |
 | No global-admin in tenancy | `src/tests/global/no-global-admin-in-tenancy.global.test.ts` | Tenancy domain code never uses `MAINTENANCE_SCOPE.GLOBAL_ADMIN`. |
@@ -30,7 +30,7 @@ editing the lock deliberately.
 | Bypass arm role binding | `src/tests/unit/infrastructure/database/rls-table-scope-map.db.unit.test.ts`, `src/tests/security/rls/bypass-arm-role-binding.security.test.ts` | Every `app.*` bypass arm in `pg_policies` also requires `current_user = 'clinozy_be_maintenance'`; armed on `clinozy_be_app`, each of the five bypass GUCs opens nothing, while the maintenance role opens it (positive control). |
 | Runtime-role system-table policies | `src/tests/security/rls/system-tables-rls.security.test.ts` | Every role-scoped `*_app_access` policy names both runtime roles (`clinozy_be_app`, `clinozy_be_maintenance`), so a maintenance-pool purge never depends on role membership. |
 
-| Nightly RLS parity canary | `.github/workflows/scheduled-rls-parity.yml` | The DB suites re-run every night under the PRODUCTION role posture (operator fixtures, RLS-subject maintenance pool, `SET LOCAL ROLE clinozy_be_app`) — regressions that only bite RLS-subject roles open a `ci-failure` issue by morning. |
+| Nightly RLS parity canary | `.github/workflows/scheduled-rls-parity.yml` | The DB suites re-run every night under the PRODUCTION role posture (operator fixtures, RLS-subject maintenance pool, `SET LOCAL ROLE clinozy_be_app`), as seven parallel jobs — regressions that only bite RLS-subject roles open a `ci-failure` issue by morning. |
 
 ## Owner-decision backlog (not yet locked)
 

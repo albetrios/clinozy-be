@@ -21,7 +21,6 @@
  *   pnpm tool:worker-readiness --url http://127.0.0.1:9090 --mode http
  */
 import '@/shared/config/load-env-files.js';
-import { parseArgs } from 'node:util';
 import { getTotalDeadLetterJobCount } from '@/infrastructure/observability/dlq-depth/dlq-depth.service.js';
 import {
   closeBullMqRedis,
@@ -36,6 +35,7 @@ import {
 import { WORKER_THROUGHPUT_QUEUE_NAMES } from '@/infrastructure/queue/queue-catalog.js';
 import { runDependencyReadinessProbes } from '@/shared/utils/infrastructure/readiness-probes.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const DEFAULT_MAX_DLQ_DEPTH = 500;
 const DEFAULT_MAX_QUEUE_STALE_MS = 10 * 60 * 1000;
@@ -116,12 +116,13 @@ async function probeViaRedis(): Promise<{ heartbeats: WorkerQueueHeartbeat[]; st
 }
 
 function parseOptions(): WorkerReadinessOptions {
-  const { values } = parseArgs({
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
     options: {
       url: { type: 'string' },
       mode: { type: 'string' },
-      'max-dlq': { type: 'string', default: String(DEFAULT_MAX_DLQ_DEPTH) },
-      'max-stale-ms': { type: 'string', default: String(DEFAULT_MAX_QUEUE_STALE_MS) },
+      'max-dlq': { type: 'string' },
+      'max-stale-ms': { type: 'string' },
     },
   });
 

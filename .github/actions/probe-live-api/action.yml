@@ -1,0 +1,36 @@
+name: Probe the live API
+description: |
+  Security headers, CORS and TLS of a deployed API, from the runner (`pnpm ops:probe-live-api`,
+  src/scripts/ops/probe-live-api.ts). A finding fails the step
+  (src/scripts/tooling/early-checks.util.ts). The caller has
+  checked out and run setup-node-pnpm.
+
+  Used by reusable-railway-deploy.yml after each deploy and by release-deploy.yml on the
+  development API before a production release.
+
+inputs:
+  base-url:
+    description: The API's public base URL (https://…)
+    required: true
+  allowed-origins:
+    description: ALLOWED_ORIGINS (comma-separated); the first is probed as an origin CORS must grant
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Probe headers, CORS and TLS
+      shell: bash
+      env:
+        API_BASE_URL: ${{ inputs.base-url }}
+        ALLOWED_ORIGINS_INPUT: ${{ inputs.allowed-origins }}
+      run: |
+        set -euo pipefail
+        allowed_origin="${ALLOWED_ORIGINS_INPUT%%,*}"
+        allowed_origin="${allowed_origin// /}"
+        if [ -n "$allowed_origin" ]; then
+          pnpm ops:probe-live-api --url "$API_BASE_URL" --allowed-origin "$allowed_origin"
+        else
+          pnpm ops:probe-live-api --url "$API_BASE_URL"
+        fi

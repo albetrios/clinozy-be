@@ -100,7 +100,7 @@ agent-os/hooks/.telemetry.log
 .codegraph/
 
 # Local, secret-bearing env backups live here (out of the repo root so they do not
-# pollute agent context). Never committed. See guardrails.mjs .env-backup warning.
+# pollute agent context). Never committed. See be-guardrails.mjs .env-backup warning.
 .backups/
 
 # Claude Code — ignore everything except tracked project config

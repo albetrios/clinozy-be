@@ -21,6 +21,7 @@ import { closeNotificationQueue } from '@/domains/notify/sub-domains/notificatio
 import { closeStripeWebhookQueue } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 import { closeWebhookDeliveryQueue } from '@/domains/notify/sub-domains/webhook/webhook-delivery/queues/webhook-delivery.queue.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 function parseArguments(): {
   listOnly: boolean;
@@ -31,44 +32,31 @@ function parseArguments(): {
   limit: number;
   actorUserPublicId: string | undefined;
 } {
-  const argumentsList = process.argv.slice(2);
-  const listIndex = argumentsList.indexOf('--list');
-  const replayIndex = argumentsList.indexOf('--replay');
-  const replayAll = argumentsList.includes('--replay-all');
-  const dryRun = argumentsList.includes('--dry-run');
-  const limitIndex = argumentsList.indexOf('--limit');
-  const limit = limitIndex >= 0 ? Number.parseInt(argumentsList[limitIndex + 1] ?? '50', 10) : 50;
-  const actorIndex = argumentsList.indexOf('--actor-user-public-id');
-  const actorUserPublicId = actorIndex >= 0 ? argumentsList[actorIndex + 1] : undefined;
-
-  let deadLetterQueueName: string | undefined;
-  const listQueueArgument = listIndex >= 0 ? argumentsList[listIndex + 1] : undefined;
-  if (listQueueArgument && !listQueueArgument.startsWith('--')) {
-    deadLetterQueueName = listQueueArgument;
-  }
-  const replayQueueArgument = replayIndex >= 0 ? argumentsList[replayIndex + 1] : undefined;
-  if (replayQueueArgument && !replayQueueArgument.startsWith('--')) {
-    deadLetterQueueName = replayQueueArgument;
-  }
-  if (replayAll) {
-    const replayAllIndex = argumentsList.indexOf('--replay-all');
-    const candidate = argumentsList[replayAllIndex + 1];
-    if (candidate && !candidate.startsWith('--')) {
-      deadLetterQueueName = candidate;
-    }
-  }
-
-  const replayJobIdIndex = argumentsList.indexOf('--job-id');
-  const replayJobId = replayJobIdIndex >= 0 ? argumentsList[replayJobIdIndex + 1] : undefined;
+  // `--list [queue-dlq]` and `--replay-all [queue-dlq]` take the queue as the one positional.
+  const { values, positionals } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: {
+      list: { type: 'boolean' },
+      replay: { type: 'string' },
+      'replay-all': { type: 'boolean' },
+      'dry-run': { type: 'boolean' },
+      limit: { type: 'string' },
+      'actor-user-public-id': { type: 'string' },
+      'job-id': { type: 'string' },
+    },
+    maxPositionals: 1,
+  });
+  const replayAll = values['replay-all'] === true;
+  const limit = Number.parseInt(values.limit ?? '50', 10);
 
   return {
-    listOnly: listIndex >= 0 && replayIndex < 0 && !replayAll,
-    deadLetterQueueName,
-    replayJobId,
+    listOnly: values.list === true && values.replay === undefined && !replayAll,
+    deadLetterQueueName: values.replay ?? positionals[0],
+    replayJobId: values['job-id'],
     replayAll,
-    dryRun,
+    dryRun: values['dry-run'] === true,
     limit: Number.isFinite(limit) && limit > 0 ? limit : 50,
-    actorUserPublicId,
+    actorUserPublicId: values['actor-user-public-id'],
   };
 }
 

@@ -8,6 +8,7 @@ import { dirname } from 'node:path';
 import { buildCatalogContent } from '@tooling/openapi/route-catalog/catalog-formatter.js';
 import { CATALOG_OUTPUT_PATH } from '@tooling/openapi/route-catalog/constants.js';
 import { collectAllParsedRoutes } from '@tooling/openapi/route-catalog/route-parser.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 export type {
   ParsedRoute,
@@ -29,7 +30,9 @@ export {
 } from '@tooling/openapi/route-catalog/prefix-map.js';
 
 function main(): void {
-  const checkOnly = process.argv.includes('--check');
+  const checkOnly =
+    parseCommandLine({ args: process.argv.slice(2), options: { check: { type: 'boolean' } } })
+      .values.check === true;
   const allRoutes = collectAllParsedRoutes();
   const catalogContent = buildCatalogContent(allRoutes);
 
@@ -51,4 +54,6 @@ function main(): void {
   console.log(`Wrote ${allRoutes.length} routes to ${CATALOG_OUTPUT_PATH}`);
 }
 
-main();
+if (isMain(import.meta.url)) {
+  main();
+}

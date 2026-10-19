@@ -31,6 +31,9 @@ import { memberships } from '@/domains/tenancy/sub-domains/membership/membership
 import { hashPassword } from '@/shared/utils/security/password.util.js';
 import { assertBulkSeedAllowed } from '@/scripts/seed/production-guard.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
+
+parseCommandLine({ args: process.argv.slice(2) });
 
 const BULK_EMAIL_PATTERN = 'bulk-user-%@seed.local';
 const BULK_ORG_SLUG_PATTERN = 'bulk-organization-%';

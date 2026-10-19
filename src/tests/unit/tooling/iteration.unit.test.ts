@@ -11,14 +11,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  createScratchFolder,
+  removeScratchFolders,
+  runTestGit,
+  TEST_GIT_OWNER,
+  TEST_GIT_TRUNK,
+} from '@/tests/helpers/git-repository.helper.js';
+import {
   addTestIteration,
   createIterationRepository,
-  createScratchFolder,
-  ITERATION_TEST_BASE_BRANCH,
-  ITERATION_TEST_OWNER,
   ITERATION_TEST_TODAY,
-  removeIterationRepositories,
-  runTestGit,
 } from '@/tests/helpers/iteration-repository.helper.js';
 import {
   appendHistoryEntry,
@@ -27,11 +29,11 @@ import {
   intakeHash,
   missingBriefSections,
   recordedIntakeMode,
+  recordedProcess,
   snapshotFingerprint,
   buildIterationName,
   formatIterationTable,
   ITERATION_STATUSES,
-  localDate,
   MAXIMUM_NAME_ATTEMPTS,
   parseIterationName,
   parseIterationReadme,
@@ -52,18 +54,18 @@ import {
   schemaRoutesHash,
   setReadmeField,
   siblingPackageName,
-  suggestBaseline,
   validateStatusTransition,
   validateTypeAndTopic,
   writePlannedFiles,
 } from '@tooling/iterations/iteration.util.js';
+import { localDate } from '@tooling/setup/common/date.js';
 
 const WORK_BRANCH = 'feat/iteration-work';
 /** The required set — an iteration needs it to serve as a Baseline. */
 const COMPLETE_INTAKE = { 'PRD.md': '# PRD\n', 'schema-routes.md': '# schema-routes\n' };
 
 afterEach(() => {
-  removeIterationRepositories();
+  removeScratchFolders();
 });
 
 function suffixSequence(suffixes: readonly string[]): () => string {
@@ -79,10 +81,12 @@ describe('parseNewIterationArguments', () => {
         topic: 'pharmacy-returns',
         createInSibling: true,
         siblingPath: undefined,
+        lite: false,
         dryRun: true,
         help: false,
       },
     );
+    expect(parseNewIterationArguments(['fix', 'rounding', '--lite']).lite).toBe(true);
     const parsed = parseNewIterationArguments(['fix', 'rounding', '--sibling', '../other-fe']);
     expect(parsed.createInSibling).toBe(true);
     expect(parsed.siblingPath).toBe('../other-fe');
@@ -138,8 +142,9 @@ describe('names', () => {
 describe('README', () => {
   const fields = {
     type: 'feat',
+    process: 'full',
     topic: 'pharmacy-returns',
-    owner: ITERATION_TEST_OWNER,
+    owner: TEST_GIT_OWNER,
     opened: '2026-10-06',
     branch: 'feat/pharmacy-returns',
     baseline: 'launch-2026-09-30-jxmr',
@@ -198,7 +203,7 @@ describe('README', () => {
         date: '2026-10-07',
         change: 'approved → planning',
         reason: 'scope\n changed',
-        owner: ITERATION_TEST_OWNER,
+        owner: TEST_GIT_OWNER,
       }),
     ).toBe('- 2026-10-07 · approved → planning · scope changed · Test Owner');
     const first = appendHistoryEntry({ readme: '# x\n\n| Status | a |\n', historyEntry: '- one' });
@@ -222,62 +227,10 @@ describe('schemaRoutesHash', () => {
   });
 });
 
-describe('suggestBaseline', () => {
-  it('suggests the done or frozen iteration that finished last, never an unfinished one', () => {
-    const repositoryRoot = createIterationRepository();
-    addTestIteration({
-      repositoryRoot,
-      name: 'launch-2026-09-30-jxmr',
-      intake: COMPLETE_INTAKE,
-      fields: { status: 'frozen' },
-    });
-    addTestIteration({
-      repositoryRoot,
-      name: 'feat-alpha-2026-10-02-aaaa',
-      intake: COMPLETE_INTAKE,
-      fields: { type: 'feat', opened: '2026-10-02', status: 'done' },
-      history: ['- 2026-10-09 · implementing → done · — · Test Owner'],
-    });
-    addTestIteration({
-      repositoryRoot,
-      name: 'feat-beta-2026-10-03-bbbb',
-      intake: COMPLETE_INTAKE,
-      fields: { type: 'feat', opened: '2026-10-03', status: 'done' },
-      history: ['- 2026-10-05 · implementing → done · — · Test Owner'],
-    });
-    addTestIteration({
-      repositoryRoot,
-      name: 'feat-gamma-2026-10-04-cccc',
-      fields: { type: 'feat', opened: '2026-10-04', status: 'implementing' },
-    });
-    expect(suggestBaseline({ repositoryRoot })).toBe('feat-alpha-2026-10-02-aaaa');
-    expect(suggestBaseline({ repositoryRoot, excluding: 'feat-alpha-2026-10-02-aaaa' })).toBe(
-      'feat-beta-2026-10-03-bbbb',
-    );
-  });
-
-  it('skips a done iteration whose intake-files/ lacks the required set', () => {
-    const repositoryRoot = createIterationRepository();
-    addTestIteration({
-      repositoryRoot,
-      name: 'launch-2026-09-30-jxmr',
-      fields: { status: 'done' },
-      intake: { 'PRD.md': '# PRD\n' },
-    });
-    expect(suggestBaseline({ repositoryRoot })).toBeUndefined();
-  });
-
-  it('suggests nothing while no iteration is done or frozen', () => {
-    const repositoryRoot = createIterationRepository();
-    addTestIteration({ repositoryRoot, name: 'launch-2026-09-30-jxmr' });
-    expect(suggestBaseline({ repositoryRoot })).toBeUndefined();
-  });
-});
-
 describe('planNewIteration', () => {
   const request = (repositoryRoot: string) => ({
     repositoryRoot,
-    baseBranch: ITERATION_TEST_BASE_BRANCH,
+    baseBranch: TEST_GIT_TRUNK,
     siblingRoot: undefined,
     today: ITERATION_TEST_TODAY,
   });
@@ -293,6 +246,25 @@ describe('planNewIteration', () => {
     ).toThrow(/only ever one launch/);
   });
 
+  it('opens a lite fix with Process lite, and refuses --lite on anything but a fix', () => {
+    const repositoryRoot = createIterationRepository();
+    addTestIteration({ repositoryRoot, name: 'launch-2026-09-30-jxmr' });
+    const plan = planNewIteration({
+      ...request(repositoryRoot),
+      type: 'fix',
+      topic: 'rounding',
+      lite: true,
+    });
+    expect(plan.fields.process).toBe('lite');
+    expect(
+      planNewIteration({ ...request(repositoryRoot), type: 'fix', topic: 'rounding' }).fields
+        .process,
+    ).toBe('full');
+    expect(() =>
+      planNewIteration({ ...request(repositoryRoot), type: 'feat', topic: 'returns', lite: true }),
+    ).toThrow(/--lite is for a fix only/);
+  });
+
   it('opens a launch with its README only — Baseline none, the drop rows empty', () => {
     const repositoryRoot = createIterationRepository();
     const plan = planNewIteration({
@@ -306,7 +278,7 @@ describe('planNewIteration', () => {
     expect(plan.fields).toMatchObject({
       baseline: 'none',
       status: 'planning',
-      owner: ITERATION_TEST_OWNER,
+      owner: TEST_GIT_OWNER,
       dropPlaced: '—',
       schemaRoutes: '—',
     });
@@ -317,7 +289,7 @@ describe('planNewIteration', () => {
     expect(() => writePlannedFiles(plan.files)).toThrow(/already exists/);
   });
 
-  it('suggests the latest done iteration as Baseline and records the current branch', () => {
+  it('opens from scratch (Baseline none) even after a done iteration, on the current branch', () => {
     const repositoryRoot = createIterationRepository();
     addTestIteration({
       repositoryRoot,
@@ -327,12 +299,12 @@ describe('planNewIteration', () => {
     });
     runTestGit({ repositoryRoot, gitArguments: ['switch', '-q', '-c', WORK_BRANCH] });
     const plan = planNewIteration({ ...request(repositoryRoot), type: 'fix', topic: 'rounding' });
-    expect(plan.fields.baseline).toBe('launch-2026-09-30-jxmr');
+    expect(plan.fields.baseline).toBe('none');
     expect(plan.fields.branch).toBe(WORK_BRANCH);
     expect(plan.name).toMatch(new RegExp(`^fix-rounding-${ITERATION_TEST_TODAY}-[a-z]{4}$`));
   });
 
-  it('leaves the Baseline unconfirmed (—) while nothing is done or frozen', () => {
+  it('opens from scratch while nothing is done or frozen too', () => {
     const repositoryRoot = createIterationRepository();
     addTestIteration({ repositoryRoot, name: 'launch-2026-09-30-jxmr' });
     const plan = planNewIteration({
@@ -340,7 +312,7 @@ describe('planNewIteration', () => {
       type: 'feat',
       topic: 'demo-check',
     });
-    expect(plan.fields.baseline).toBe('—');
+    expect(plan.fields.baseline).toBe('none');
   });
 
   it('draws a new suffix while the name is taken here or in the sibling, then gives up', () => {
@@ -375,7 +347,7 @@ describe('planNewIteration', () => {
     ).toThrow(new RegExp(`after ${MAXIMUM_NAME_ATTEMPTS} attempts`));
   });
 
-  it("opens the sibling folder too under --both, with the sibling's own Baseline suggestion", () => {
+  it('opens the sibling folder too under --both, from scratch as well', () => {
     const repositoryRoot = createIterationRepository();
     const siblingRoot = createIterationRepository('demo-fe');
     addTestIteration({
@@ -391,12 +363,12 @@ describe('planNewIteration', () => {
       type: 'feat',
       topic: 'returns',
     });
-    expect(plan.fields.baseline).toBe('launch-2026-09-30-jxmr');
-    expect(plan.siblingBaseline).toBe('—');
+    expect(plan.fields.baseline).toBe('none');
+    expect(plan.siblingBaseline).toBe('none');
     const siblingReadme = plan.files.find(
       (file) => file.path === join(siblingRoot, 'iterations', plan.name, 'README.md'),
     );
-    expect(parseIterationReadme(siblingReadme?.content ?? '').get('Baseline')).toBe('—');
+    expect(parseIterationReadme(siblingReadme?.content ?? '').get('Baseline')).toBe('none');
   });
 
   it('refuses a detached HEAD', () => {
@@ -491,6 +463,66 @@ describe('iteration:status', () => {
     }
   });
 
+  it('moves a lite fix planning → implementing → done → frozen, and back only with a reason', () => {
+    const lite = { process: 'lite' } as const;
+    for (const [from, to] of [
+      ['planning', 'implementing'],
+      ['implementing', 'done'],
+      ['done', 'frozen'],
+    ] as const) {
+      expect(() =>
+        validateStatusTransition({ from, to, reason: undefined, ...lite }),
+      ).not.toThrow();
+    }
+    expect(() =>
+      validateStatusTransition({
+        from: 'planning',
+        to: 'ready-for-approval',
+        reason: undefined,
+        ...lite,
+      }),
+    ).toThrow(/a lite fix\). From planning the allowed next status is implementing/);
+    expect(() =>
+      validateStatusTransition({
+        from: 'implementing',
+        to: 'planning',
+        reason: undefined,
+        ...lite,
+      }),
+    ).toThrow(/needs --reason/);
+    expect(() =>
+      validateStatusTransition({ from: 'done', to: 'planning', reason: 'reopened', ...lite }),
+    ).not.toThrow();
+    expect(() =>
+      validateStatusTransition({ from: 'planning', to: 'implementing', reason: undefined }),
+    ).toThrow(/allowed next status is ready-for-approval/);
+  });
+
+  it('reads a README without a Process row as full, and a lite one as lite', () => {
+    const repositoryRoot = createIterationRepository();
+    addTestIteration({
+      repositoryRoot,
+      name: 'launch-2026-09-30-jxmr',
+      fields: { status: 'done' },
+    });
+    addTestIteration({
+      repositoryRoot,
+      name: 'fix-rounding-2026-10-06-kqzx',
+      fields: { type: 'fix', process: 'lite', topic: 'rounding' },
+    });
+    const lite = planStatusChange({
+      repositoryRoot,
+      iteration: 'fix-rounding-2026-10-06-kqzx',
+      status: 'implementing',
+      reason: undefined,
+      today: ITERATION_TEST_TODAY,
+    });
+    expect(parseIterationReadme(lite.content).get('Status')).toBe('implementing');
+    const readmePath = join(repositoryRoot, 'iterations', 'launch-2026-09-30-jxmr', 'README.md');
+    writeFileSync(readmePath, readFileSync(readmePath, 'utf-8').replace(/^\| Process \|.*\n/m, ''));
+    expect(recordedProcess(parseIterationReadme(readFileSync(readmePath, 'utf-8')))).toBe('full');
+  });
+
   it('refuses skipped, backward and post-freeze moves', () => {
     expect(() =>
       validateStatusTransition({ from: 'planning', to: 'approved', reason: undefined }),
@@ -518,7 +550,7 @@ describe('iteration:status', () => {
       today: ITERATION_TEST_TODAY,
     });
     expect(plan.historyEntry).toBe(
-      `- ${ITERATION_TEST_TODAY} · approved → planning · scope changed · ${ITERATION_TEST_OWNER}`,
+      `- ${ITERATION_TEST_TODAY} · approved → planning · scope changed · ${TEST_GIT_OWNER}`,
     );
     expect(parseIterationReadme(plan.content).get('Status')).toBe('planning');
     expect(plan.content).toContain(`## History\n\n${plan.historyEntry}\n`);
@@ -573,7 +605,7 @@ describe('iteration:baseline', () => {
     });
     expect(parseIterationReadme(plan.content).get('Baseline')).toBe('launch-2026-09-30-jxmr');
     expect(plan.historyEntry).toBe(
-      `- ${ITERATION_TEST_TODAY} · Baseline — → launch-2026-09-30-jxmr · — · ${ITERATION_TEST_OWNER}`,
+      `- ${ITERATION_TEST_TODAY} · Baseline — → launch-2026-09-30-jxmr · — · ${TEST_GIT_OWNER}`,
     );
     const toNone = planBaselineChange({
       repositoryRoot,

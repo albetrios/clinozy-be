@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readRouteCatalog } from '@tooling/openapi/route-catalog/catalog-reader.js';
 
 export type RouteCatalogAccess = 'AUTH' | 'ROLE' | 'PERM' | 'TOKEN';
 
@@ -10,11 +10,6 @@ export type ProtectedRouteFromCatalog = {
 };
 
 const ROUTE_CATALOG_PATH = join(process.cwd(), 'docs', 'routes.txt');
-
-// Path, then the S/I/O columns (success status · idempotency · organization scope), then the
-// access token — the catalog's `PATH S I O ACCESS` line format.
-const ROUTE_LINE_PATTERN =
-  /^\s+(GET|POST|PATCH|PUT|DELETE)\s+(\S+)\s+(?:\d{3}|\?\?\?)\s+(?:req|-)\s+(?:both|team)\s+(PUBLIC|AUTH|ROLE:|PERM:|TOKEN:)/;
 
 /** Placeholder for path params (21-char public_id style). */
 const PATH_PARAM_PLACEHOLDER = '000000000000000000000';
@@ -32,31 +27,22 @@ export function materializeRouteCatalogPath(path: string): string {
 export function loadProtectedRoutesFromCatalog(
   catalogPath: string = ROUTE_CATALOG_PATH,
 ): ProtectedRouteFromCatalog[] {
-  const content = readFileSync(catalogPath, 'utf-8');
   const routes: ProtectedRouteFromCatalog[] = [];
   const seen = new Set<string>();
 
-  for (const line of content.split('\n')) {
-    const match = ROUTE_LINE_PATTERN.exec(line);
-    if (!match) continue;
-
-    const methodRaw = match[1];
-    const rawPath = match[2];
-    const accessToken = match[3];
-    if (!(methodRaw && rawPath && accessToken)) continue;
-    if (accessToken === 'PUBLIC') continue;
-
-    const method = methodRaw.toLowerCase() as ProtectedRouteFromCatalog['method'];
+  for (const route of readRouteCatalog(catalogPath)) {
+    if (route.gate === 'PUBLIC') continue;
+    const method = route.method.toLowerCase() as ProtectedRouteFromCatalog['method'];
     const access: RouteCatalogAccess =
-      accessToken === 'AUTH'
+      route.gate === 'AUTH'
         ? 'AUTH'
-        : accessToken.startsWith('ROLE')
+        : route.gate.startsWith('ROLE')
           ? 'ROLE'
-          : accessToken.startsWith('TOKEN')
+          : route.gate.startsWith('TOKEN')
             ? 'TOKEN'
             : 'PERM';
 
-    const path = materializeRouteCatalogPath(rawPath);
+    const path = materializeRouteCatalogPath(route.path);
     const key = `${method}:${path}`;
     if (seen.has(key)) continue;
     seen.add(key);

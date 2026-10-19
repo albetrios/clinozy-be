@@ -1,16 +1,17 @@
 /**
  * Design-iteration model behind the `pnpm iteration:*` commands: naming, the README field table and
- * its History, the Status lifecycle, the Baseline suggestion, the generator and the listing.
+ * its History, the Status lifecycle, the generator and the listing.
  *
  * An iteration is a folder `iterations/<type>-<topic>-<YYYY-MM-DD>-<id>/`; the rules live in
  * `iterations/README.md`. The sibling (frontend) repository ships the same commands, names and
  * README template, so a folder created in either repository looks the same in both.
  */
-import { execFileSync } from 'node:child_process';
 import { createHash, randomInt } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { tryGit } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
+import { localDate } from '@tooling/setup/common/date.js';
 
 /** The four iteration types, in the order the docs list them. */
 export const ITERATION_TYPES = ['launch', 'feat', 'change', 'fix'] as const;
@@ -40,6 +41,18 @@ export type IterationStatus = (typeof ITERATION_STATUSES)[number];
 /** Status a freshly opened iteration starts in. */
 export const INITIAL_ITERATION_STATUS: IterationStatus = 'planning';
 
+/**
+ * How an iteration is run: `full`, the whole planning procedure with its approval; or `lite`, for a
+ * `fix` only — planned in one step, then `planning → implementing → done → frozen`.
+ */
+export const ITERATION_PROCESSES = ['full', 'lite'] as const;
+
+/** One of {@link ITERATION_PROCESSES}. */
+export type IterationProcess = (typeof ITERATION_PROCESSES)[number];
+
+/** The process a README without a Process row runs — every iteration opened before lite mode. */
+export const DEFAULT_ITERATION_PROCESS: IterationProcess = 'full';
+
 /** Statuses from which the intake is locked (the approved plan rests on it). */
 export const LOCKED_INTAKE_STATUSES: ReadonlySet<IterationStatus> = new Set([
   'approved',
@@ -47,9 +60,6 @@ export const LOCKED_INTAKE_STATUSES: ReadonlySet<IterationStatus> = new Set([
   'done',
   'frozen',
 ]);
-
-/** Statuses an iteration must have to be suggested as another iteration's Baseline. */
-const BASELINE_STATUSES: ReadonlySet<string> = new Set(['done', 'frozen']);
 
 /** Baseline of an initial iteration — the first one in a repository. */
 export const NO_BASELINE = 'none';
@@ -97,6 +107,7 @@ export const FINGERPRINT_LENGTH = 12;
 /** README field labels, in table order — the template must list exactly these rows. */
 export const README_FIELD_LABELS = [
   'Type',
+  'Process',
   'Topic',
   'Owner',
   'Opened',
@@ -115,6 +126,12 @@ export const README_FIELD_LABELS = [
 /** One of {@link README_FIELD_LABELS}. */
 export type ReadmeFieldLabel = (typeof README_FIELD_LABELS)[number];
 
+/**
+ * Rows a README written before them may lack — they read as their default (`Process` → `full`),
+ * so a frozen iteration, which is never edited, still checks clean.
+ */
+export const OPTIONAL_README_FIELDS: ReadonlySet<ReadmeFieldLabel> = new Set(['Process']);
+
 const TEMPLATES_DIRECTORY = join(import.meta.dirname, 'templates');
 const TOPIC_PATTERN = /^[a-z]+(?:-[a-z]+)*$/;
 const ITERATION_NAME_PATTERN =
@@ -127,7 +144,7 @@ const HISTORY_HEADING = '## History';
 const SIBLING_SUFFIXES: Readonly<Record<string, string>> = { '-be': '-fe', '-fe': '-be' };
 
 /** Forward Status moves: one step along the lifecycle at a time. */
-const FORWARD_TRANSITIONS: ReadonlyMap<IterationStatus, IterationStatus> = new Map([
+const FULL_FORWARD_TRANSITIONS: ReadonlyMap<IterationStatus, IterationStatus> = new Map([
   ['planning', 'ready-for-approval'],
   ['ready-for-approval', 'approved'],
   ['approved', 'implementing'],
@@ -140,16 +157,41 @@ const FORWARD_TRANSITIONS: ReadonlyMap<IterationStatus, IterationStatus> = new M
  * user finds still open goes back into the same iteration until it is `frozen` (merged); a frozen
  * iteration is never edited.
  */
-const BACK_TO_PLANNING: ReadonlySet<IterationStatus> = new Set([
+const FULL_BACK_TO_PLANNING: ReadonlySet<IterationStatus> = new Set([
   'ready-for-approval',
   'approved',
   'implementing',
   'done',
 ]);
 
+/**
+ * A lite fix's lifecycle: the user's go on the one-step plan moves `planning` straight to
+ * `implementing` (where the intake locks); there is no `ready-for-approval` or `approved`.
+ */
+const LITE_FORWARD_TRANSITIONS: ReadonlyMap<IterationStatus, IterationStatus> = new Map([
+  ['planning', 'implementing'],
+  ['implementing', 'done'],
+  ['done', 'frozen'],
+]);
+
+/** The statuses a lite fix may take back to `planning`, with a reason. */
+const LITE_BACK_TO_PLANNING: ReadonlySet<IterationStatus> = new Set(['implementing', 'done']);
+
+/** Returns whether `value` is one of {@link ITERATION_PROCESSES}. */
+export function isIterationProcess(value: string): value is IterationProcess {
+  return (ITERATION_PROCESSES as readonly string[]).includes(value);
+}
+
+/** The process a README records — {@link DEFAULT_ITERATION_PROCESS} when the row is missing. */
+export function recordedProcess(fields: ReadonlyMap<string, string>): IterationProcess {
+  const process = fields.get('Process') ?? '';
+  return isIterationProcess(process) ? process : DEFAULT_ITERATION_PROCESS;
+}
+
 /** The values of an iteration's `README.md` field table, keyed for the template. */
 export interface IterationReadmeFields {
   readonly type: string;
+  readonly process: string;
   readonly topic: string;
   readonly owner: string;
   readonly opened: string;
@@ -174,9 +216,9 @@ export interface IterationListing {
   readonly baseline: string;
   readonly status: string;
   readonly intakeMode: string;
-  /** Live fingerprint of `intake-files/schema-routes.md` ({@link schemaRoutesHash}). */
+  /** Live fingerprint of the resolved snapshot's `schema-routes.md` ({@link schemaRoutesHash}). */
   readonly schemaRoutes: string;
-  /** Live {@link intakeHash}; `<live> ≠ README <recorded>` when it differs from the README's. */
+  /** Live hash of the resolved snapshot; `<live> ≠ README <recorded>` when it differs from the README's. */
   readonly intakeHash: string;
   readonly dropPlaced: string;
 }
@@ -187,6 +229,7 @@ export interface NewIterationArguments {
   readonly topic: string | undefined;
   readonly createInSibling: boolean;
   readonly siblingPath: string | undefined;
+  readonly lite: boolean;
   readonly dryRun: boolean;
   readonly help: boolean;
 }
@@ -203,7 +246,7 @@ export interface NewIterationPlan {
   readonly fields: IterationReadmeFields;
   readonly localFolder: string;
   readonly siblingFolder: string | undefined;
-  /** The sibling README's Baseline — suggested from the sibling's own iterations. */
+  /** The sibling README's Baseline — `none`, like this one's. */
   readonly siblingBaseline: string | undefined;
   readonly files: readonly PlannedFile[];
 }
@@ -216,6 +259,8 @@ export interface NewIterationRequest {
   readonly topic: string | undefined;
   /** Absolute path of the sibling repository when `--both` is passed. */
   readonly siblingRoot: string | undefined;
+  /** `--lite`: a fix planned in one step ({@link ITERATION_PROCESSES}). */
+  readonly lite?: boolean;
   /** `YYYY-MM-DD`; defaults to today's local date. */
   readonly today?: string;
   /** Source of random suffixes; injectable so tests can force a collision. */
@@ -234,43 +279,35 @@ export interface ReadmeChangePlan {
 // ── arguments ────────────────────────────────────────────────────────────────
 
 /**
- * Parses `pnpm iteration:new` arguments: `<type> [topic] [--both] [--sibling <path>] [--dry-run]`.
+ * Parses `pnpm iteration:new` arguments: `<type> [topic] [--both] [--sibling <path>] [--lite]
+ * [--dry-run]`.
  *
  * @remarks
  * Failure modes: throws on an unknown flag, a `--sibling` without a path, or a third positional.
  * `--sibling` implies `--both`.
  */
 export function parseNewIterationArguments(commandLine: readonly string[]): NewIterationArguments {
-  const positionals: string[] = [];
-  let createInSibling = false;
-  let siblingPath: string | undefined;
-  let dryRun = false;
-  let help = false;
-  for (let index = 0; index < commandLine.length; index += 1) {
-    const token = commandLine[index] ?? '';
-    if (token === '--both') createInSibling = true;
-    else if (token === '--dry-run') dryRun = true;
-    else if (token === '--help' || token === '-h') help = true;
-    else if (token === '--sibling') {
-      siblingPath = commandLine[index + 1];
-      if (siblingPath === undefined || siblingPath.startsWith('--')) {
-        throw new Error('--sibling needs a path, e.g. --sibling ../clinozy-fe');
-      }
-      createInSibling = true;
-      index += 1;
-    } else if (token.startsWith('-')) throw new Error(`Unknown option "${token}".`);
-    else positionals.push(token);
-  }
-  if (positionals.length > 2) {
-    throw new Error(`Too many arguments: ${positionals.join(' ')} — expected <type> [topic].`);
-  }
+  const { values, positionals } = parseCommandLine({
+    args: commandLine,
+    options: {
+      both: { type: 'boolean' },
+      lite: { type: 'boolean' },
+      'dry-run': { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+      sibling: { type: 'string' },
+    },
+    maxPositionals: 2,
+    usage: 'expected <type> [topic].',
+    messages: { needsValue: () => '--sibling needs a path, e.g. --sibling ../clinozy-fe' },
+  });
   return {
     type: positionals[0],
     topic: positionals[1],
-    createInSibling,
-    siblingPath,
-    dryRun,
-    help,
+    createInSibling: values.both === true || values.sibling !== undefined,
+    siblingPath: values.sibling,
+    lite: values.lite === true,
+    dryRun: values['dry-run'] === true,
+    help: values.help === true,
   };
 }
 
@@ -344,13 +381,6 @@ export function randomIterationSuffix(): string {
     suffix += SUFFIX_ALPHABET[randomInt(SUFFIX_ALPHABET.length)];
   }
   return suffix;
-}
-
-/** Formats a date as local `YYYY-MM-DD` — the day as the person running the command sees it. */
-export function localDate(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 // ── README ───────────────────────────────────────────────────────────────────
@@ -501,29 +531,6 @@ export function readIterationReadme(location: {
 
 // ── git ──────────────────────────────────────────────────────────────────────
 
-function runGit(command: {
-  readonly repositoryRoot: string;
-  readonly gitArguments: readonly string[];
-}): string {
-  return execFileSync('git', [...command.gitArguments], {
-    cwd: command.repositoryRoot,
-    encoding: 'utf-8',
-    env: gitEnvironmentWithoutInheritedRepository(),
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
-}
-
-function tryGit(command: {
-  readonly repositoryRoot: string;
-  readonly gitArguments: readonly string[];
-}): string | undefined {
-  try {
-    return runGit(command);
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Reads `git config user.name` — who signs History lines and owns new iterations.
  *
@@ -531,7 +538,7 @@ function tryGit(command: {
  * Failure modes: throws when it is not set.
  */
 export function gitUserName(repositoryRoot: string): string {
-  const owner = tryGit({ repositoryRoot, gitArguments: ['config', 'user.name'] }) ?? '';
+  const owner = tryGit({ args: ['config', 'user.name'], cwd: repositoryRoot }).output;
   if (owner === '') throw new Error('git config user.name is not set — it signs the README.');
   return owner;
 }
@@ -554,18 +561,11 @@ export function baseBranchIterationNames(location: {
   readonly baseBranch: string;
 }): string[] {
   const listing = tryGit({
-    repositoryRoot: location.repositoryRoot,
-    gitArguments: [
-      'ls-tree',
-      '-d',
-      '--name-only',
-      location.baseBranch,
-      '--',
-      `${ITERATIONS_DIRECTORY}/`,
-    ],
+    args: ['ls-tree', '-d', '--name-only', location.baseBranch, '--', `${ITERATIONS_DIRECTORY}/`],
+    cwd: location.repositoryRoot,
   });
-  if (!listing) return [];
-  return listing
+  if (!listing.ok || listing.output === '') return [];
+  return listing.output
     .split('\n')
     .map((path) => path.slice(ITERATIONS_DIRECTORY.length + 1))
     .filter((name) => parseIterationName(name) !== undefined)
@@ -590,75 +590,18 @@ export function readAllIterationFields(
 }
 
 /**
- * Lists the required intake files an iteration's `intake-files/` lacks — empty when complete.
+ * Lists the required intake files an iteration's resolved snapshot lacks — empty when complete.
  *
  * @remarks
- * An incremental iteration's delta is a diff of `intake-files/` against its Baseline's, so a
- * Baseline is usable only when this is empty.
+ * An incremental iteration's delta is a diff of its snapshot against its Baseline's, so a
+ * Baseline is usable only when this is empty ({@link resolveIntakeSnapshot}).
  */
 export function missingIntakeFiles(location: {
   readonly repositoryRoot: string;
   readonly iteration: string;
 }): string[] {
-  const folder = join(
-    location.repositoryRoot,
-    ITERATIONS_DIRECTORY,
-    location.iteration,
-    INTAKE_DIRECTORY,
-  );
-  return REQUIRED_INTAKE_FILES.filter((name) => !existsSync(join(folder, name)));
-}
-
-/** The date of the last History line that moved an iteration to `done` (or `frozen`), if any. */
-function finishedDate(readme: string): string {
-  let finished = '';
-  for (const line of readme.split('\n')) {
-    const match = /^- (\d{4}-\d{2}-\d{2}) · \S+ → (done|frozen) · /.exec(line.trim());
-    if (match?.[1] && match[1] > finished) finished = match[1];
-  }
-  return finished;
-}
-
-/**
- * Suggests a Baseline: the latest `done` or `frozen` iteration in this repository.
- *
- * @remarks
- * Algorithm: among working-tree iterations whose Status is `done` or `frozen` and whose
- * `intake-files/` holds the required set (excluding `excluding`), the one that finished last — the latest History date moving it to `done` or
- * `frozen`, then the latest Opened, then the name. The user confirms or picks another at planning
- * Step 0 (`pnpm iteration:baseline`).
- *
- * Failure modes: returns `undefined` when no iteration is done or frozen.
- */
-export function suggestBaseline(location: {
-  readonly repositoryRoot: string;
-  readonly excluding?: string;
-}): string | undefined {
-  const candidates: Array<{ name: string; finished: string; opened: string }> = [];
-  for (const [name, fields] of readAllIterationFields(location.repositoryRoot)) {
-    if (name === location.excluding || !BASELINE_STATUSES.has(fields.get('Status') ?? '')) continue;
-    if (
-      missingIntakeFiles({ repositoryRoot: location.repositoryRoot, iteration: name }).length > 0
-    ) {
-      continue;
-    }
-    const readme = readFileSync(
-      iterationReadmePath({ repositoryRoot: location.repositoryRoot, iteration: name }),
-      'utf-8',
-    );
-    candidates.push({
-      name,
-      finished: finishedDate(readme),
-      opened: fields.get('Opened') ?? parseIterationName(name)?.opened ?? '',
-    });
-  }
-  candidates.sort(
-    (left, right) =>
-      right.finished.localeCompare(left.finished) ||
-      right.opened.localeCompare(left.opened) ||
-      right.name.localeCompare(left.name),
-  );
-  return candidates[0]?.name;
+  const { files } = resolveIntakeSnapshot(location);
+  return REQUIRED_INTAKE_FILES.filter((name) => !files.has(name));
 }
 
 /**
@@ -742,19 +685,148 @@ export function recordedIntakeMode(fields: ReadonlyMap<string, string>): IntakeM
 }
 
 /**
+ * Intake modes whose `intake-files/` stores only what arrived — an overlay's received files, a
+ * brief's `BRIEF.md` — and takes everything else from the Baseline ({@link resolveIntakeSnapshot}).
+ */
+export const LAYERED_INTAKE_MODES: ReadonlySet<IntakeMode> = new Set<IntakeMode>([
+  'overlay',
+  'brief',
+]);
+
+/** An iteration's snapshot, resolved up its Baseline chain ({@link resolveIntakeSnapshot}). */
+export interface ResolvedIntake {
+  /** File name → the path that holds it: the iteration's own file, or a Baseline's. */
+  readonly files: ReadonlyMap<string, string>;
+  /** The files in the iteration's own `intake-files/`. */
+  readonly stored: readonly string[];
+  readonly mode: IntakeMode;
+  /** The iteration the files it does not store come from; undefined for `full` or from scratch. */
+  readonly baseline: string | undefined;
+  /** A brief from scratch (Baseline `none`): its own files are the whole snapshot. */
+  readonly standalone: boolean;
+  /** Why the chain cannot be resolved — then `files` holds the stored files only. */
+  readonly problem: string | undefined;
+}
+
+function intakeFolderOf(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): string {
+  return join(location.repositoryRoot, ITERATIONS_DIRECTORY, location.iteration, INTAKE_DIRECTORY);
+}
+
+/**
+ * Resolves an iteration's snapshot: file name → the path that holds it.
+ *
+ * @remarks
+ * A `full` intake is its own `intake-files/`, and so is a `brief` from scratch (Baseline `none`).
+ * An `overlay`, or a `brief` on a named Baseline, stores only what arrived, so its snapshot is its
+ * Baseline's resolved snapshot (up the Baseline chain) with its own files laid over it. An intake
+ * that still stores copies of its Baseline's files resolves to the same snapshot (`--compact`
+ * removes the copies). Every reader of a snapshot — the gate, the Intake hash, `iteration:diff`,
+ * `iteration:list`, the Baseline checks — goes through here, as in clinozy-fe.
+ *
+ * Failure modes: never throws; a chain that loops, reaches an iteration without a README or an
+ * intake, or a layered intake without a Baseline is reported in `problem`.
+ */
+export function resolveIntakeSnapshot(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): ResolvedIntake {
+  const { repositoryRoot } = location;
+  const visited: string[] = [];
+  const layers: { folder: string; stored: string[]; mode: IntakeMode; baseline: string }[] = [];
+  let current: string | undefined = location.iteration;
+  let problem: string | undefined;
+  while (current !== undefined) {
+    const folder = intakeFolderOf({ repositoryRoot, iteration: current });
+    const stored = flatFileNames(folder);
+    const readmePath = join(repositoryRoot, ITERATIONS_DIRECTORY, current, 'README.md');
+    const fields = existsSync(readmePath)
+      ? parseIterationReadme(readFileSync(readmePath, 'utf-8'))
+      : new Map<string, string>();
+    const mode = recordedIntakeMode(fields);
+    if (visited.length > 0 && stored.length === 0) {
+      problem = `its Baseline chain reaches ${current}, which has no intake`;
+      break;
+    }
+    visited.push(current);
+    const baseline = fields.get('Baseline') ?? EMPTY_FIELD;
+    layers.push({ folder, stored, mode, baseline });
+    if (!LAYERED_INTAKE_MODES.has(mode) || stored.length === 0) break;
+    if (mode === 'brief' && baseline === NO_BASELINE) break;
+    if (baseline === NO_BASELINE || baseline === EMPTY_FIELD) {
+      problem = `${current} is a ${mode} intake with Baseline ${baseline}, so the files it does not store have nowhere to come from`;
+      break;
+    }
+    if (visited.includes(baseline)) {
+      problem = `its Baseline chain loops: ${[...visited, baseline].join(' → ')}`;
+      break;
+    }
+    if (
+      parseIterationName(baseline) === undefined ||
+      !existsSync(join(repositoryRoot, ITERATIONS_DIRECTORY, baseline, 'README.md'))
+    ) {
+      problem = `its Baseline chain reaches ${baseline}, which is not an iteration with a README`;
+      break;
+    }
+    current = baseline;
+  }
+  const own = layers[0] ?? {
+    folder: '',
+    stored: [],
+    mode: DEFAULT_INTAKE_MODE,
+    baseline: EMPTY_FIELD,
+  };
+  const standalone = own.mode === 'brief' && own.baseline === NO_BASELINE;
+  const files = new Map<string, string>();
+  for (const layer of problem === undefined ? [...layers].reverse() : [own]) {
+    for (const name of layer.stored) files.set(name, join(layer.folder, name));
+  }
+  return {
+    files,
+    stored: own.stored,
+    mode: own.mode,
+    baseline: LAYERED_INTAKE_MODES.has(own.mode) && !standalone ? own.baseline : undefined,
+    standalone,
+    problem,
+  };
+}
+
+/** An iteration's resolved snapshot ({@link resolveIntakeSnapshot}) read into file name → bytes. */
+export function readResolvedSnapshot(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): ReadonlyMap<string, Buffer> {
+  return new Map(
+    [...resolveIntakeSnapshot(location).files].map(([name, path]) => [name, readFileSync(path)]),
+  );
+}
+
+/** The Intake hash of an iteration's resolved snapshot ({@link snapshotFingerprint}). */
+export function resolvedIntakeHash(location: {
+  readonly repositoryRoot: string;
+  readonly iteration: string;
+}): string {
+  return snapshotFingerprint(readResolvedSnapshot(location));
+}
+
+/**
  * Checks a backend snapshot against the mandatory set: {@link REQUIRED_INTAKE_FILES}, plus
- * `BRIEF.md` in `brief` mode. {@link OPTIONAL_INTAKE_FILES} are allowed; anything else is an extra.
+ * `BRIEF.md` in `brief` mode — or `BRIEF.md` alone for a brief from scratch (`standalone`).
+ * {@link OPTIONAL_INTAKE_FILES} are allowed; anything else is an extra.
  */
 export function checkIntakeSet(snapshot: {
   readonly names: readonly string[];
   readonly mode?: IntakeMode;
+  readonly standalone?: boolean;
 }): { readonly missing: string[]; readonly extras: string[] } {
   const present = new Set(snapshot.names);
-  const required: string[] = [
-    ...REQUIRED_INTAKE_FILES,
-    ...(snapshot.mode === 'brief' ? [BRIEF_FILE] : []),
-  ];
-  const known = new Set<string>([...required, ...OPTIONAL_INTAKE_FILES]);
+  const standalone = snapshot.mode === 'brief' && snapshot.standalone === true;
+  const required: string[] = standalone
+    ? [BRIEF_FILE]
+    : [...REQUIRED_INTAKE_FILES, ...(snapshot.mode === 'brief' ? [BRIEF_FILE] : [])];
+  const known = new Set<string>([...required, ...REQUIRED_INTAKE_FILES, ...OPTIONAL_INTAKE_FILES]);
   return {
     missing: required
       .filter((name) => !present.has(name))
@@ -826,14 +898,6 @@ function pickUniqueName(choice: {
   throw new Error(`No free iteration name after ${MAXIMUM_NAME_ATTEMPTS} attempts — run it again.`);
 }
 
-function suggestedBaselineFor(location: {
-  readonly repositoryRoot: string;
-  readonly type: IterationType;
-}): string {
-  if (location.type === 'launch') return NO_BASELINE;
-  return suggestBaseline({ repositoryRoot: location.repositoryRoot }) ?? EMPTY_FIELD;
-}
-
 /**
  * Decides everything `pnpm iteration:new` will do, without writing anything.
  *
@@ -841,8 +905,8 @@ function suggestedBaselineFor(location: {
  * Algorithm: validate type + topic; collect existing iterations (this working tree, the base
  * branch, and the sibling's working tree under `--both`); refuse a second launch and refuse any
  * non-launch before an iteration exists; pick a name with a fresh random suffix, retrying while it
- * is taken; suggest each repository's Baseline from its own iterations ({@link suggestBaseline};
- * `none` for the launch, `—` when nothing is done yet — the user confirms it at planning Step 0);
+ * is taken; record Baseline `none` in each repository — every iteration starts from scratch, and
+ * builds on another only when the user names it (`pnpm iteration:baseline`);
  * read Owner and Branch from git; render the README for this repository and, under `--both`, the
  * sibling. An iteration starts with its README only — `iteration:intake` fills `intake-files/`.
  *
@@ -854,6 +918,9 @@ function suggestedBaselineFor(location: {
 export function planNewIteration(request: NewIterationRequest): NewIterationPlan {
   const { repositoryRoot, baseBranch, siblingRoot } = request;
   const { type, topic } = validateTypeAndTopic(request);
+  if (request.lite === true && type !== 'fix') {
+    throw new Error(`--lite is for a fix only; a ${type} runs the full planning procedure.`);
+  }
 
   const localNames = workingTreeIterationNames(repositoryRoot);
   const baseNames = baseBranchIterationNames({ repositoryRoot, baseBranch });
@@ -885,18 +952,19 @@ export function planNewIteration(request: NewIterationRequest): NewIterationPlan
   });
 
   const owner = gitUserName(repositoryRoot);
-  const branch = tryGit({ repositoryRoot, gitArguments: ['branch', '--show-current'] }) ?? '';
+  const branch = tryGit({ args: ['branch', '--show-current'], cwd: repositoryRoot }).output;
   if (branch === '') {
     throw new Error('HEAD is detached — check out the branch this iteration will be built on.');
   }
 
   const fields: IterationReadmeFields = {
     type,
+    process: request.lite === true ? 'lite' : DEFAULT_ITERATION_PROCESS,
     topic: topic ?? EMPTY_FIELD,
     owner,
     opened,
     branch,
-    baseline: suggestedBaselineFor({ repositoryRoot, type }),
+    baseline: NO_BASELINE,
     status: INITIAL_ITERATION_STATUS,
     summary: EMPTY_FIELD,
     dropPlaced: EMPTY_FIELD,
@@ -909,10 +977,7 @@ export function planNewIteration(request: NewIterationRequest): NewIterationPlan
   const localFolder = join(repositoryRoot, ITERATIONS_DIRECTORY, name);
   const siblingFolder =
     siblingRoot === undefined ? undefined : join(siblingRoot, ITERATIONS_DIRECTORY, name);
-  const siblingBaseline =
-    siblingRoot === undefined
-      ? undefined
-      : suggestedBaselineFor({ repositoryRoot: siblingRoot, type });
+  const siblingBaseline = siblingRoot === undefined ? undefined : NO_BASELINE;
   return {
     name,
     fields,
@@ -960,8 +1025,8 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
   return [...readAllIterationFields(repositoryRoot)]
     .map(([name, fields]) => {
       const field = (label: ReadmeFieldLabel): string => fields.get(label) ?? EMPTY_FIELD;
-      const folder = join(repositoryRoot, ITERATIONS_DIRECTORY, name, INTAKE_DIRECTORY);
-      const liveHash = intakeHash(folder);
+      const resolved = resolveIntakeSnapshot({ repositoryRoot, iteration: name });
+      const liveHash = resolvedIntakeHash({ repositoryRoot, iteration: name });
       return {
         name,
         type: field('Type'),
@@ -970,7 +1035,7 @@ export function readIterationListings(repositoryRoot: string): IterationListing[
         baseline: field('Baseline'),
         status: field('Status'),
         intakeMode: field('Intake mode'),
-        schemaRoutes: schemaRoutesHash(join(folder, 'schema-routes.md')),
+        schemaRoutes: schemaRoutesHash(resolved.files.get('schema-routes.md')),
         intakeHash:
           liveHash === field('Intake hash')
             ? liveHash
@@ -1041,30 +1106,22 @@ export function parseStatusArguments(commandLine: readonly string[]): {
   readonly reason: string | undefined;
   readonly help: boolean;
 } {
-  const positionals: string[] = [];
-  let reason: string | undefined;
-  let help = false;
-  for (let index = 0; index < commandLine.length; index += 1) {
-    const token = commandLine[index] ?? '';
-    if (token === '--help' || token === '-h') help = true;
-    else if (token === '--reason') {
-      reason = commandLine[index + 1]?.trim();
-      if (reason === undefined || reason === '' || reason.startsWith('--')) {
-        throw new Error('--reason needs text, e.g. --reason "scope changed after review"');
-      }
-      index += 1;
-    } else if (token.startsWith('--reason=')) {
-      reason = token.slice('--reason='.length).trim();
-      if (reason === '') throw new Error('--reason needs text.');
-    } else if (token.startsWith('-')) throw new Error(`Unknown option "${token}".`);
-    else positionals.push(token);
-  }
-  if (positionals.length > 2) {
-    throw new Error(
-      `Too many arguments: ${positionals.join(' ')} — expected <iteration> <status>.`,
-    );
-  }
-  return { iteration: positionals[0], status: positionals[1], reason, help };
+  const needsText = '--reason needs text, e.g. --reason "scope changed after review"';
+  const { values, positionals } = parseCommandLine({
+    args: commandLine,
+    options: { help: { type: 'boolean', short: 'h' }, reason: { type: 'string' } },
+    maxPositionals: 2,
+    usage: 'expected <iteration> <status>.',
+    messages: { needsValue: () => needsText },
+  });
+  const reason = values.reason?.trim();
+  if (reason === '') throw new Error(needsText);
+  return {
+    iteration: positionals[0],
+    status: positionals[1],
+    reason,
+    help: values.help === true,
+  };
 }
 
 /**
@@ -1073,7 +1130,8 @@ export function parseStatusArguments(commandLine: readonly string[]): {
  * @remarks
  * Allowed: one step forward along `planning → ready-for-approval → approved → implementing →
  * done → frozen`, and `ready-for-approval`, `approved`, `implementing` or `done` back to `planning`
- * with a reason.
+ * with a reason. A `lite` fix moves `planning → implementing → done → frozen`, and `implementing`
+ * or `done` back to `planning` with a reason.
  *
  * Failure modes: throws with the allowed next statuses on any other move, and when a move back to
  * `planning` has no reason.
@@ -1082,21 +1140,25 @@ export function validateStatusTransition(move: {
   readonly from: IterationStatus;
   readonly to: IterationStatus;
   readonly reason: string | undefined;
+  readonly process?: IterationProcess;
 }): void {
   const { from, to, reason } = move;
-  if (FORWARD_TRANSITIONS.get(from) === to) return;
-  if (to === 'planning' && BACK_TO_PLANNING.has(from)) {
+  const lite = move.process === 'lite';
+  const forward = lite ? LITE_FORWARD_TRANSITIONS : FULL_FORWARD_TRANSITIONS;
+  const backToPlanning = lite ? LITE_BACK_TO_PLANNING : FULL_BACK_TO_PLANNING;
+  if (forward.get(from) === to) return;
+  if (to === 'planning' && backToPlanning.has(from)) {
     if (reason === undefined) {
       throw new Error(`Moving ${from} → planning needs --reason "<why it goes back>".`);
     }
     return;
   }
   const allowed = [
-    ...(FORWARD_TRANSITIONS.has(from) ? [FORWARD_TRANSITIONS.get(from)] : []),
-    ...(BACK_TO_PLANNING.has(from) ? ['planning (with --reason)'] : []),
+    ...(forward.has(from) ? [forward.get(from)] : []),
+    ...(backToPlanning.has(from) ? ['planning (with --reason)'] : []),
   ];
   throw new Error(
-    `Cannot move ${from} → ${to}. From ${from} the allowed next status is ${
+    `Cannot move ${from} → ${to}${lite ? ' (a lite fix)' : ''}. From ${from} the allowed next status is ${
       allowed.length === 0 ? 'none — a frozen iteration is never edited' : allowed.join(' or ')
     }.`,
   );
@@ -1133,7 +1195,12 @@ export function planStatusChange(request: {
   if (!isIterationStatus(current)) {
     throw new Error(`${iteration}/README.md has Status "${current}", which is not a known status.`);
   }
-  validateStatusTransition({ from: current, to: status, reason });
+  validateStatusTransition({
+    from: current,
+    to: status,
+    reason,
+    process: recordedProcess(readme.fields),
+  });
   const historyEntry = renderHistoryEntry({
     date: request.today ?? localDate(new Date()),
     change: `${current} → ${status}`,

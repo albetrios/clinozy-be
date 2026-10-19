@@ -8,13 +8,12 @@
  *   DATABASE_URL=postgresql://... pnpm db:sequences:advance
  */
 import '@/shared/config/load-env-files.js';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import {
   resolveDatabaseSsl,
   withoutSslQueryParameters,
 } from '@/infrastructure/database/utils/connection-url.util.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /**
  * How far a restore moves each id sequence: more ids than any lost window could have issued, and
@@ -95,6 +94,7 @@ export async function advanceIdSequences(options: {
 }
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   const connectionUrl = process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL;
   if (!connectionUrl) {
     console.error('DATABASE_URL or DATABASE_MIGRATION_URL is required');
@@ -125,9 +125,7 @@ async function main(): Promise<void> {
   }
 }
 
-const currentScriptPath = resolve(fileURLToPath(import.meta.url));
-
-if (process.argv[1] && resolve(process.argv[1]) === currentScriptPath) {
+if (isMain(import.meta.url)) {
   main().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);

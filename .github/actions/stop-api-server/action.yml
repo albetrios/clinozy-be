@@ -16,9 +16,11 @@ runs:
   steps:
     - name: Print server logs on failure
       if: failure() && inputs.print-log-on-failure == 'true'
+      env:
+        SERVER_LOG_FILE: ${{ inputs.log-file }}
       run: |
-        echo "--- ${{ inputs.log-file }} (tail 200) ---"
-        tail -n 200 "${{ inputs.log-file }}" || true
+        echo "--- ${SERVER_LOG_FILE} (tail 200) ---"
+        tail -n 200 "$SERVER_LOG_FILE" || true
       shell: bash
 
     - name: Stop API server

@@ -6,12 +6,10 @@ alwaysApply: false
 
 ## Route catalog sync
 
-When any `*.routes.ts` file is created or modified:
-
-1. Read `agent-os/skills/be-route-schema-doc-guard/SKILL.md` — add or update `schema: { summary, description, tags }` on each route registration.
-2. For new tags, run **be-openapi-multilingual** (`src/shared/locales/*/openapi.json`).
-3. Read `agent-os/skills/be-route-catalog/SKILL.md` and run `pnpm routes:catalog` once.
-4. Run `pnpm docs:generate:multilang` when operation text changed.
-5. If routes affect seeds, run **be-seed-maintainer** per be-skill-index.
+When any `*.routes.ts` file is created or modified, run the **route-change** chain in its order —
+the `src/domains/**/*.routes.ts` row of [`agent-os/docs/skill-triggers.md`](../docs/skill-triggers.md), generated from `agent-os/skills/chains.json` (this
+rule keeps no copy of the steps). This rule's own step, **be-route-catalog**
+(`agent-os/skills/be-route-catalog/SKILL.md`): run `pnpm routes:catalog` once, and
+`pnpm docs:generate:multilang` when operation text changed.
 
 CI enforces drift via `pnpm routes:catalog:check`.

@@ -21,6 +21,13 @@ name: Post-merge CI
 # are NOT here — they run in release-deploy.yml on `release: published`, pinned to
 # the release tag SHA (D7). release-please only opens/refreshes ONE Release PR and
 # is NOT auto-merged (D1); merging that Release PR is the manual ship button.
+#
+# Release PR on demand: an ordinary merge no longer refreshes the Release PR (each refresh
+# re-ran its PR CI). release-please runs when a Release PR is merged (the push's head commit
+# is `chore(main): release …`, so the tag and GitHub Release are cut as before) or when this
+# workflow is dispatched with `release_pr: true` — to open or refresh the Release PR, and as
+# the fallback that also cuts a release whose commit was not the head of its push:
+#   gh workflow run post-merge-ci.yml -f release_pr=true -f skip_docker=true -f skip_docs=true
 
 on:
   push:
@@ -54,6 +61,16 @@ on:
         default: false
       skip_docs:
         description: Skip API docs generation and publish
+        required: false
+        type: boolean
+        default: false
+      release_pr:
+        description: Open or refresh the Release PR (release-please) — ordinary merges no longer do
+        required: false
+        type: boolean
+        default: false
+      fresh_security_patches:
+        description: Rebuild the image's apk upgrade layer now instead of reusing today's
         required: false
         type: boolean
         default: false
@@ -178,6 +195,8 @@ jobs:
     with:
       merge_commit_sha: ${{ github.sha }}
       target_branch: main
+      fresh_security_patches: ${{ inputs.fresh_security_patches == true }}
+      api_smoke: true
 
   matrix-tests:
     name: Matrix Tests
@@ -272,13 +291,17 @@ jobs:
 
   release-please:
     name: Release Please
-    # Runs every merge (both lanes) to keep the single Release PR current. In the
-    # FAST lane the matrix is skipped (the PR already proved it); in the FULL lane
-    # the matrix must be green before a release can be cut.
+    # On demand (see the header): when a Release PR merges, or when dispatched with
+    # release_pr. In the FAST lane the matrix is skipped (the PR already proved it); in the
+    # FULL lane the matrix must be green before a release can be cut.
     needs: [matrix-tests]
     if: |
       always() &&
-      (needs.matrix-tests.result == 'success' || needs.matrix-tests.result == 'skipped')
+      (needs.matrix-tests.result == 'success' || needs.matrix-tests.result == 'skipped') &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.release_pr) ||
+        startsWith(github.event.head_commit.message, 'chore(main): release ')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # release-please creates GitHub Releases with RELEASE_PLEASE_TOKEN (a PAT with
@@ -488,28 +511,21 @@ jobs:
       contents: read
       issues: write
     steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
       - name: Close the open ci-failure issue
         # `notify-failure` opens one issue per branch and comments repeats onto it,
         # but nothing ever closed it -- a recovered branch left the incident open
         # until a human noticed. Closing on the first clean run makes an open
         # ci-failure issue mean "this branch is red right now".
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          REF_NAME: ${{ github.ref_name }}
-          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          title="Post-merge CI failing on ${REF_NAME}"
-          existing="$(gh issue list --repo "$GH_REPOSITORY" --state open --label ci-failure \
-            --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
-          if [ -z "$existing" ]; then
-            echo "No open ci-failure issue to close."
-            exit 0
-          fi
-          gh issue close "$existing" --repo "$GH_REPOSITORY" \
-            --comment "Post-merge CI is green again on \`${REF_NAME}\` — closing automatically. Run: ${WORKFLOW_URL}"
-          echo "Closed ci-failure issue #${existing}."
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: close
+          title: Post-merge CI failing on ${{ github.ref_name }}
+          close-comment: Post-merge CI is green again on `${{ github.ref_name }}` — closing automatically.
 
   notify-failure:
     name: Notify failure
@@ -518,17 +534,11 @@ jobs:
       - matrix-tests
       - deploy
       - release-please
-    if: |
-      always() &&
-      (
-        needs.docker-build-push.result == 'failure' ||
-        needs.matrix-tests.result == 'failure' ||
-        needs.deploy.result == 'failure' ||
-        needs.release-please.result == 'failure'
-      )
+    if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      actions: read # the fix plan reads the failed jobs and their logs
       contents: read
       issues: write
     steps:
@@ -543,42 +553,26 @@ jobs:
           set -euo pipefail
           echo "::error title=Post-merge CI failed::docker=${DOCKER_RESULT} tests=${TESTS_RESULT} deploy=${DEPLOY_RESULT} release=${RELEASE_RESULT} — ${WORKFLOW_URL}"
 
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
       - name: Open or update ci-failure issue
         # Run annotations only notify someone already looking at the Actions tab.
         # An issue generates a real GitHub notification/email to the owner. One
         # open issue per branch collects repeat failures as comments; closing it
         # acknowledges the incident.
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          REF_NAME: ${{ github.ref_name }}
-          DOCKER_RESULT: ${{ needs.docker-build-push.result }}
-          TESTS_RESULT: ${{ needs.matrix-tests.result }}
-          DEPLOY_RESULT: ${{ needs.deploy.result }}
-          RELEASE_RESULT: ${{ needs.release-please.result }}
-          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          gh label create ci-failure --repo "$GH_REPOSITORY" \
-            --color FFAB91 --description "Automated post-merge/guard failure notification" \
-            2>/dev/null || true
-          title="Post-merge CI failing on ${REF_NAME}"
-          body="$(printf '%s\n' \
-            "Run: ${WORKFLOW_URL}" \
-            "" \
-            "| job | result |" \
-            "| --- | --- |" \
-            "| docker | ${DOCKER_RESULT} |" \
-            "| matrix tests | ${TESTS_RESULT} |" \
-            "| release-please | ${RELEASE_RESULT} |" \
-            "| deploy (development) | ${DEPLOY_RESULT} |" \
-            "" \
-            "Close this issue once the failure is resolved.")"
-          existing="$(gh issue list --repo "$GH_REPOSITORY" --state open --label ci-failure \
-            --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
-          if [ -n "$existing" ]; then
-            gh issue comment "$existing" --repo "$GH_REPOSITORY" --body "$body"
-            echo "Commented on existing ci-failure issue #${existing}."
-          else
-            gh issue create --repo "$GH_REPOSITORY" --title "$title" --label ci-failure --body "$body"
-          fi
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: open
+          title: Post-merge CI failing on ${{ github.ref_name }}
+          body: |
+            | job | result |
+            | --- | --- |
+            | docker | ${{ needs.docker-build-push.result }} |
+            | matrix tests | ${{ needs.matrix-tests.result }} |
+            | release-please | ${{ needs.release-please.result }} |
+            | deploy (development) | ${{ needs.deploy.result }} |
+
+            Close this issue once the failure is resolved.

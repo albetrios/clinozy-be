@@ -35,7 +35,7 @@ export const DOMAINS_EXEMPT_FROM_VALIDATION_STATUS = new Set(['health', 'mcp', '
 /**
  * Sub-domains without `*.routes.ts` that still expose HTTP handlers on a parent routes file.
  * Each must have at least one `__tests__/integration/*.integration.test.ts`.
- * Keep in sync with CLAUDE.md § Domain → sub-domain map (without routes).
+ * Keep in sync with src/domains/CLAUDE.md § Domain and sub-domain mapping (without routes).
  */
 export const SUBDOMAIN_HTTP_INTEGRATION_WITHOUT_ROUTES: ReadonlyArray<{
   domain: string;

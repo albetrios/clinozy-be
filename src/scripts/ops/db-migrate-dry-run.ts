@@ -11,6 +11,9 @@ import '@/shared/config/load-env-files.js';
 import { execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
+
+parseCommandLine({ args: process.argv.slice(2) });
 
 const migrationUrl = process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL;
 

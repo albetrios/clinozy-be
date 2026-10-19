@@ -4,7 +4,7 @@
  *
  * Two committed templates, two tiers (see `docs/integrations/agentic-third-party-tooling.md`):
  *   - **Default auto-start pair** — [`.mcp.default.json`](../../.mcp.default.json):
- *     `codegraph` + `headroom`, two zero-config, agent-only servers. Declared by
+ *     `be-codegraph` + `be-headroom`, two zero-config, agent-only servers. Declared by
  *     `pnpm setup:local`, the session-start hook, and the cloud bootstrap so they are
  *     present before the first prompt.
  *   - **On-demand set** — [`.mcp.example.json`](../../.mcp.example.json): the full set
@@ -46,10 +46,53 @@ interface McpConfig {
   mcpServers: Record<string, McpServerDefinition>;
 }
 
+/**
+ * Server keys this repository used before the `be-` prefix (18 Oct 2026), by their current key.
+ * clinozy-fe declares servers of the same names with other launchers, so a client that loads
+ * both repositories' configs would otherwise run one repository's server for the other.
+ */
+const PREVIOUS_SERVER_KEYS: ReadonlyMap<string, string> = new Map([
+  ['codegraph', 'be-codegraph'],
+  ['context7', 'be-context7'],
+  ['headroom', 'be-headroom'],
+  ['semgrep', 'be-semgrep'],
+  ['sonarqube', 'be-sonarqube'],
+]);
+
+/**
+ * Renames the servers a `.mcp.json` scaffolded before the prefix still declares.
+ *
+ * @remarks
+ * Each definition (and any credential filled into it) is kept. When both keys are present,
+ * the current one wins and the previous one is dropped, so no server is declared twice.
+ *
+ * @param servers - The `mcpServers` map read from `.mcp.json`.
+ * @returns The map with every previous key renamed, and the renames as `previous → current`.
+ */
+export function renamePreviousServerKeys(servers: Record<string, McpServerDefinition>): {
+  servers: Record<string, McpServerDefinition>;
+  renamed: string[];
+} {
+  const renamed: string[] = [];
+  const next: Record<string, McpServerDefinition> = {};
+  for (const [key, definition] of Object.entries(servers)) {
+    const current = PREVIOUS_SERVER_KEYS.get(key);
+    if (current === undefined) {
+      next[key] = definition;
+      continue;
+    }
+    if (!(current in servers)) next[current] = definition;
+    renamed.push(`${key} → ${current}`);
+  }
+  return { servers: next, renamed };
+}
+
 /** Outcome of an {@link ensureMcpServers} / {@link ensureDefaultMcpServers} run. */
 export interface EnsureResult {
   /** Servers newly written into `.mcp.json`. */
   added: string[];
+  /** Servers renamed from a key used before the `be-` prefix, as `previous → current`. */
+  renamed: string[];
   /** Servers already declared in `.mcp.json` (left untouched). */
   alreadyPresent: string[];
   /** Requested keys absent from the source template (ignored). */
@@ -92,6 +135,8 @@ function applyServers(options: {
   const { source } = options;
   const requested = options.keys === 'all' ? Object.keys(source) : [...options.keys];
   const config = readConfig(MCP_CONFIG_PATH);
+  const { servers, renamed } = renamePreviousServerKeys(config.mcpServers);
+  config.mcpServers = servers;
 
   const added: string[] = [];
   const alreadyPresent: string[] = [];
@@ -110,11 +155,11 @@ function applyServers(options: {
     added.push(key);
   }
 
-  const changed = added.length > 0;
+  const changed = added.length > 0 || renamed.length > 0;
   if (changed && !options.dryRun) {
     writeFileSync(MCP_CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
   }
-  return { added, alreadyPresent, missingFromTemplate, changed };
+  return { added, renamed, alreadyPresent, missingFromTemplate, changed };
 }
 
 /**

@@ -23,7 +23,7 @@ That makes `pnpm install` → `pnpm validate` / `pnpm test:unit` / `pnpm agent-o
 
 ## Why a setup script is required
 
-The cloud image ships **Node 20, 21, and 22**; clinozy-be's `engines` require **Node 24+** (pinned in [`.nvmrc`](../../.nvmrc)). Node 24 is **not** pre-installed, so a setup script must install it. [`tooling/setup/agent/install-node.sh`](../../tooling/setup/agent/install-node.sh) installs the `.nvmrc` version into `/opt/node24` — the same layout the image uses and exactly where the [`session-start.sh`](../../agent-os/hooks/session-start.sh) hook looks — so the hook switches `PATH` to it and runs `pnpm install` automatically. The repo's Node version is unchanged.
+The cloud image ships **Node 20, 21, and 22**; clinozy-be's `engines` require **Node 24+** (pinned in [`.nvmrc`](../../.nvmrc)). Node 24 is **not** pre-installed, so a setup script must install it. [`tooling/setup/agent/install-node.sh`](../../tooling/setup/agent/install-node.sh) installs the `.nvmrc` version into `/opt/node24` — the same layout the image uses and exactly where the [`be-session-start.mjs`](../../agent-os/hooks/be-session-start.mjs) hook looks — so the hook switches `PATH` to it and runs `pnpm install` automatically. The repo's Node version is unchanged.
 
 The hook's switch reaches only the Bash tool, and only when the hook loads — a session that holds both repos loads none. So `install-node.sh` also links the pinned `node`, `npm`, `npx`, `corepack` and `pnpm` into `~/.local/bin`, which the image puts ahead of its own `/opt/node22/bin`: every shell runs Node 24, Claude Code's own process (the MCP servers) included. It links only when the `node` on `PATH` is the image's (`/opt/node<major>`), so a Node from nvm is left alone; `NODE_LINK_USER_BIN=0` turns it off.
 
@@ -92,9 +92,29 @@ bash /home/user/clinozy-fe/agent-os/cloud-environment/install.sh
 clinozy-fe's script also builds its codegraph index; the first build takes about 2–3 minutes, later
 runs only sync it.
 
-On the first session the cached Node 24 is already on disk, [`session-start.sh`](../../agent-os/hooks/session-start.sh) switches `PATH` to `/opt/node24`, and runs `pnpm install`. Do **not** start Postgres / Redis here — setup-script processes do not persist; start them per session (below).
+Both scripts also register the session's hooks (`pnpm agent-os:session-hooks`,
+[`tooling/agent-os/session-hooks.ts`](../../tooling/agent-os/session-hooks.ts)). A session that holds
+both repos runs from `/home/user`, so it takes hooks from `/home/user/.claude/settings.json`, never from
+a repo's own `.claude/settings.json`. The script writes there every hook of both repos, with absolute
+paths and `CLAUDE_PROJECT_DIR` set to the hook's own repo, and both repos' permission rules (a
+repo's own settings contribute none in that layout either). It keeps any other hook in that file and
+backs the file up to `settings.json.bak` before a change, and `--dry-run` prints the file without
+writing it. In a single-repo checkout it writes nothing.
 
-**GitHub CLI (optional).** [`install-gh.sh`](../../tooling/setup/agent/install-gh.sh) adds `gh` as an in-session fallback for reading Actions logs, checking CI, and merging (the GitHub MCP tools already cover this). It belongs in the cached **setup script**, not `session-start.sh` — a per-session `apt install` would not cache and would slow every startup. Set `GH_TOKEN` in the environment's **Variables** (least-privilege: `contents` + `pull_requests` + `actions:read`; env vars are not a secrets store). The script first installs the **github.com release binary** (reachable on the default Trusted allowlist, so no extra allowlist entry is normally needed); its `cli.github.com` apt-repo path is only a last resort.
+- **Each repo's hooks judge only its own files.** clinozy-be's import, `NODE_ENV` and generated-file
+  rules and clinozy-fe's Prettier pass never touch the other repo. The secret and destructive-command
+  guards, and the ask on edits to hook wiring, still cover every path.
+- **Check it in a new session (canary).** The session context has one "session ready" line per repo,
+  each naming the root its hooks ran from (`clinozy-be session ready (hooks from /home/user/clinozy-be)`).
+  `grep session-start /home/user/clinozy-*/agent-os/hooks/.telemetry.log` shows one row per repo.
+  Whether a cloud session reads `/home/user/.claude/settings.json` is not documented, which is why
+  the canary exists.
+- **The live stack starts too.** Once hooks load, a two-repo session brings the stack up in the
+  background like a single-repo one.
+
+On the first session the cached Node 24 is already on disk, [`be-session-start.mjs`](../../agent-os/hooks/be-session-start.mjs) switches `PATH` to `/opt/node24`, and runs `pnpm install`. Do **not** start Postgres / Redis here — setup-script processes do not persist; start them per session (below).
+
+**GitHub CLI (optional).** [`install-gh.sh`](../../tooling/setup/agent/install-gh.sh) adds `gh` as an in-session fallback for reading Actions logs, checking CI, and merging (the GitHub MCP tools already cover this). It belongs in the cached **setup script**, not `be-session-start.mjs` — a per-session `apt install` would not cache and would slow every startup. Set `GH_TOKEN` in the environment's **Variables** (least-privilege: `contents` + `pull_requests` + `actions:read`; env vars are not a secrets store). The script first installs the **github.com release binary** (reachable on the default Trusted allowlist, so no extra allowlist entry is normally needed); its `cli.github.com` apt-repo path is only a last resort.
 
 **gitleaks (recommended if you commit).** The pre-commit guard's "Staged secrets scan" step shells out to `gitleaks protect --staged …` and hard-errors when the binary is missing, so a cloud session cannot commit until gitleaks is installed. The cloud image does not ship it. [`install-gitleaks.sh`](../../tooling/setup/agent/install-gitleaks.sh) installs the **github.com release binary** (reachable on the default Trusted allowlist), pinned to the same version as the CI `security-secrets` job. If that download fails it falls back to `go install` — which must use gitleaks's **legacy self-declared module path** `github.com/zricethezav/gitleaks/v8` (the current `github.com/gitleaks` repo path fails Go's module-path check).
 
@@ -161,7 +181,9 @@ bootstrap reports "⬆ k6 2.3.0 → 2.4.0 available" + the lines to paste
 **Tests need none.** [`src/tests/setup.ts`](../../src/tests/setup.ts) bakes in test RS256 JWT PEMs
 and sets every other value (`??=` or hard override), and
 [`src/tests/global-setup.ts`](../../src/tests/global-setup.ts) forces `DATABASE_URL` to the local
-Docker DB and runs `pnpm db:migrate`. So the full suite runs with **only Postgres + Redis up**.
+Docker DB and prepares it the one way every database is set up (`src/scripts/ops/db-prepare.ts`:
+create, migrate, the permission catalog, one database per test worker). So the full suite runs
+with **only Postgres + Redis up**.
 
 The full variable surface and how to obtain real values: [`.env.example`](../../.env.example) and
 [credentials-and-env.md](credentials-and-env.md).
@@ -175,9 +197,7 @@ Use the repo's compose scripts — the **same ones you run locally** — so the 
 ```bash
 pnpm compose:up      # start Postgres + Redis (same as local)
 pnpm compose:wait    # block until Postgres accepts connections
-pnpm db:migrate
-pnpm setup:local --only-env   # turn on the database logins the migrations created
-pnpm db:seed         # or pnpm db:seed:full
+pnpm db:seed         # create, migrate, the database logins, the reference rows (or pnpm db:seed:full)
 ```
 
 `pnpm compose:up` also starts the local SonarQube container unless you set `SONAR=0`; a cloud session rarely needs it, so `SONAR=0 pnpm compose:up` brings up just Postgres + Redis. Stop everything with `pnpm compose:down`.
@@ -190,13 +210,13 @@ pnpm db:seed         # or pnpm db:seed:full
 
 ### One-command bring-up + verify
 
-The session-start hook runs this for you in every web session (below). To run it yourself — after `pnpm dev:stack:stop`, or with `AGENT_AUTO_STACK=0` — use the orchestrator; it logs a ✓/✗ after each step and records the running step for `pnpm dev:stack:status`:
+The session-start hook runs this for you in every web session (below). To run it yourself — after `pnpm dev:stack:stop` — use the orchestrator; it logs a ✓/✗ after each step and records the running step for `pnpm dev:stack:status`:
 
 ```bash
 bash tooling/setup/agent/bootstrap.sh        # setup → Postgres + Redis → migrate → demo seed → API + worker, left running
 ```
 
-A re-run is safe: a lock stops a second bring-up from racing the first, and an API or worker that already answers is kept. To verify health on its own, run [`healthcheck.sh`](../../tooling/setup/agent/healthcheck.sh): it polls `GET /livez` then `GET /readyz` (set `HEALTHCHECK_URL=http://127.0.0.1:9090` for the worker) and exits non-zero unless Postgres + Redis + BullMQ are all reachable. Only `--install-only` belongs in the Setup-script *field* (that runs before any service can be running).
+A re-run is safe: a lock stops a second bring-up from racing the first, and an API or worker that already answers is kept. A lock whose bring-up is gone — or that came from another boot inside a cached environment — is stale: `pnpm dev:stack:status` says so and the next run clears it ([`stack-lock.lib.sh`](../../tooling/setup/agent/stack-lock.lib.sh)). A live run after an install with the same inputs (the Setup script, or an earlier run in this container) skips steps 2–8, so it neither redoes the installs nor restarts dockerd; a changed input runs them again. Measured on 17 Oct on a resumed container (API and worker stopped, containers down, volumes kept): 82 s before these changes, 41 s on the first run after them (installs run, stamp written; warmer caches), 18 s once the stamp matches — with a stale lock planted whose pid named another process, which the old code waited on forever. To verify health on its own, run [`healthcheck.sh`](../../tooling/setup/agent/healthcheck.sh): it polls `GET /livez` then `GET /readyz` (set `HEALTHCHECK_URL=http://127.0.0.1:9090` for the worker) and exits non-zero unless Postgres + Redis + BullMQ are all reachable. Only `--install-only` belongs in the Setup-script *field* (that runs before any service can be running).
 
 ## Tiers — what to enable for which goal
 
@@ -212,13 +232,16 @@ A re-run is safe: a lock stops a second bring-up from racing the first, and an A
 ## Session startup — the live playground
 
 A web session is a playground: it brings itself **fully live** before the work starts, without
-delaying the session. [`session-start.sh`](../../agent-os/hooks/session-start.sh) runs `pnpm install`
-and the `pnpm agent-os:check` gate, then launches `bootstrap.sh` **detached** and returns at once:
+delaying the session. [`be-session-start.mjs`](../../agent-os/hooks/be-session-start.mjs) runs on startup
+and resume (not after `/clear` or a compact), runs `pnpm install` when dependencies are missing,
+starts the `pnpm agent-os:check` gate and the tool-pin probes in the background (the banner shows
+their last result), then launches `bootstrap.sh` **detached** and returns at once:
 
 ```text
 session starts → session-start hook (returns at once) → bootstrap.sh, detached
-  [1–8] tools at their pins, deps, `.env.local`        (seconds — the Setup script cached them)
-  [9] Postgres + Redis  [10] migrate + database logins  [11] full demo seed
+  [1] Node   [2–8] skipped when the install stamp matches (the Setup script ran them)
+  [9] Postgres + Redis  [10] migrate + database logins
+  [11] full demo seed, with the API and worker already starting alongside
   [12] API on :3000 — kept running   [13] worker, health on :9090 — kept running
   → "live" + the playground card (API, /reference, /admin/queues, worker, logs)
 ```
@@ -231,15 +254,15 @@ session starts → session-start hook (returns at once) → bootstrap.sh, detach
 | Bring it back | `bash tooling/setup/agent/bootstrap.sh` |
 | A scratch database again | `pnpm dev:stack:reset-db` — drops and recreates the local Compose database, then migrate, logins, seed, API and worker (the installs are skipped) |
 | A known demo password | set `DEMO_PASSWORD` in the environment's variables (`demo@example.com`) |
-| No auto-start for an environment | set `AGENT_AUTO_STACK=0` in its variables |
 
 The banner shows `Stack: starting…` / `live` and tells the agent to wait for `live` before any
 database or API work. A resumed session whose API already answers, or a bring-up already
-running, is left alone. Local sessions are unchanged (`Stack: on demand`).
+running, is left alone; a stale lock does not count as one, so a resumed container goes live
+with no manual step. Local sessions are unchanged (`Stack: on demand`).
 
 ## How to tell a session is provisioned
 
-The `session-start.sh` banner (top of every session) leads with **`environment provisioned: yes|no`** — `yes` means the cached toolchain the Setup script builds (Node ≥ `.nvmrc` + installed deps) is live in this session. The same line reports `Node`, `deps`, `gh`, `codegraph`, `gitleaks`, `agent-os`, and `docker` status. Manual cross-checks: `node -v` (expect 24.x), `gh --version`, `ls /opt/node24`.
+The `be-session-start.mjs` banner (top of every session) leads with **`environment provisioned: yes|no`** — `yes` means the cached toolchain the Setup script builds (Node ≥ `.nvmrc` + installed deps) is live in this session. The same line reports `Node`, `deps`, `gh`, `codegraph`, `gitleaks`, `agent-os`, and `docker` status. Manual cross-checks: `node -v` (expect 24.x), `gh --version`, `ls /opt/node24`.
 
 A `no` means the Setup script has not built this cache yet (e.g. Node still 22, deps missing) — configure the Setup script + `nodejs.org` allowlist, then start a fresh session.
 
@@ -249,7 +272,7 @@ A `no` means the Setup script has not built this cache yet (e.g. Node still 22, 
 flowchart TD
   create["Create environment"] --> net["Network: Custom + nodejs.org"]
   net --> setupScript["Setup script: install-node.sh (cached)"]
-  setupScript --> hook["session-start.sh: /opt/node24, pnpm install, agent-os:check"]
+  setupScript --> hook["be-session-start.mjs: /opt/node24, pnpm install, agent-os:check"]
   hook --> ready["Session ready (light startup)"]
   ready -->|"your prompt drives work"| prompt["Work starts per prompt"]
   prompt --> staticChecks["validate / test:unit / agent-os:check"]
@@ -264,7 +287,7 @@ flowchart TD
 
 - **Node 24 is not pre-installed** — the setup script is mandatory; without it the session is stuck on Node 22 and `engines` rejects it.
 - **`nodejs.org` is not in the default Trusted allowlist** — the most common miss.
-- **Husky activates after `pnpm install`** (its `prepare` step), so a properly configured session gets the **same** pre-commit / pre-push gates as local — including the pre-commit SonarQube gate (mandatory, no bypass), which needs Docker for `pnpm sonar:up` (the gate auto-starts it on first use). Before deps install (e.g. a session still on Node 22) Husky is inactive and commits skip the hooks.
+- **Husky activates after `pnpm install`** (its `prepare` step), so a properly configured session gets the **same** pre-commit / pre-push gates as local — including the pre-commit SonarQube gate (mandatory, no bypass), which needs Docker for `pnpm sonar:up`: the gate starts SonarQube on first use, and starts the Docker daemon first when it is down; the Setup script pre-pulls the SonarQube and scanner images (about 1 GB) so the first commit that touches `src/` does not wait on the download. Before deps install (e.g. a session still on Node 22) Husky is inactive and commits skip the hooks.
 - **Branch creates are allowed; branch deletes are not.** The git proxy accepts a push to any branch name, but refuses every form of branch delete. Rename the session's `claude/*` branch **before the first push** — see [be-git-branch-naming.mdc](../../agent-os/rules/be-git-branch-naming.mdc).
 
 ---
@@ -285,7 +308,7 @@ In Claude Code on the web the live MCP server set is loaded by the **platform at
 
 The repo splits the MCP set into two tiers:
 
-- **Default auto-start pair — `codegraph` + `headroom`** (committed in [`.mcp.default.json`](../../.mcp.default.json)). Two zero-config, agent-only servers (local CLIs, no token): CodeGraph (semantic code index) and Headroom (context compression). `pnpm setup:local` and the cloud bootstrap ([`install-codegraph.sh`](../../tooling/setup/agent/install-codegraph.sh) + [`install-headroom.sh`](../../tooling/setup/agent/install-headroom.sh)) install their CLIs and declare both in `.mcp.json`, so a session is useful with no setup.
+- **Default auto-start pair — `be-codegraph` + `be-headroom`** (committed in [`.mcp.default.json`](../../.mcp.default.json)). Two zero-config, agent-only servers (local CLIs, no token): CodeGraph (semantic code index) and Headroom (context compression). `pnpm setup:local` and the cloud bootstrap ([`install-codegraph.sh`](../../tooling/setup/agent/install-codegraph.sh) + [`install-headroom.sh`](../../tooling/setup/agent/install-headroom.sh)) install their CLIs and declare both in `.mcp.json`, so a session is useful with no setup.
 - **On-demand set — everything else.** [`.mcp.example.json`](../../.mcp.example.json) (mirrored at [`agent-os/mcp/mcp.example.json`](../../agent-os/mcp/mcp.example.json)) lists the full set: `context7`, `clinozy-be:api`, `neon`, `sentry`, `railway`, `aws`, `stripe`, `semgrep`, `sonarqube`, `redis`, `postman`, `resend`, `codegraph`, `headroom`. Most need a provider token (put them in the environment **Variables**) and several need `uvx` / `docker`, so connect only the subset a task needs. Scaffold them into a local `.mcp.json` with **`pnpm mcp:setup`** — all, or a subset by name (`pnpm mcp:setup stripe sentry`); `pnpm mcp:setup:default` for just the pair, `pnpm mcp:setup --list` to see status. The full catalog (per-server runtime + token) is in [agentic-third-party-tooling.md](agentic-third-party-tooling.md#setting-up-mcp-locally-pnpm-mcpsetup).
 
 ### Configure the web environment (one-time, in the web UI)

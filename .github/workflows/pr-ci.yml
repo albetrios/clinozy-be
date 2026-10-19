@@ -32,6 +32,7 @@ jobs:
       docker: ${{ steps.filter.outputs.docker }}
       ci-config: ${{ steps.filter.outputs.ci-config }}
       agent-os: ${{ steps.filter.outputs.agent-os }}
+      iterations: ${{ steps.filter.outputs.iterations }}
       docs-only-md: ${{ steps.filter.outputs.docs-only-md == 'true' && steps.filter.outputs.src-code == 'false' && steps.filter.outputs.docker == 'false' && steps.filter.outputs.ci-config == 'false' }}
 
     steps:
@@ -68,6 +69,10 @@ jobs:
             agent-os:
               - 'agent-os/**'
               - '.claude/**'
+              - 'tooling/agent-os/**'
+            iterations:
+              - 'iterations/**'
+              - 'tooling/iterations/**'
             docs-only-md:
               - '**/*.md'
               - 'docs/**'
@@ -91,6 +96,31 @@ jobs:
         # A contributor who skips the local gate cannot land drifted
         # .cursor/.claude/.codex adapters — they must match agent-os/ source.
         run: pnpm agent-os:generate:check
+      # These two ran only in the nightly `ci:quality`.
+      - name: Outcome evals (expected skill routing per fixture)
+        run: pnpm agent-os:outcomes
+      - name: Guard evals (hook decisions + fail-open smokes)
+        run: pnpm agent-os:guards
+
+  iteration-freeze:
+    name: Iteration freeze
+    # Merge-time half of the iteration lifecycle: every iteration this PR changes merges frozen,
+    # and a merged frozen iteration takes no edit but a hash-keeping --compact
+    # (tooling/iterations/iteration-freeze.util.ts). Skipped — a pass — when no iteration changed.
+    needs: [changes]
+    if: needs.changes.outputs.iterations == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Every changed iteration merges frozen
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: pnpm iteration:freeze-check --base "$BASE_SHA"
 
   lint:
     name: Lint
@@ -177,6 +207,38 @@ jobs:
       - name: Sub-domain unit-test matrix
         run: pnpm validate:domain:unit-matrix
 
+      # The rest ran only in `ci:quality` (the nightly canary on main), so a PR that broke one
+      # merged green and reddened main the next night — validate:api-docs-hub did, after the
+      # docs steps moved into composite actions. About a second each.
+      - name: TSDoc coverage budget
+        run: pnpm tsdoc:check
+
+      - name: Test filename suffixes
+        run: pnpm validate:test-naming
+
+      - name: API version prefix in tests
+        run: pnpm validate:test-api-prefix
+
+      - name: API docs hub wiring
+        run: pnpm validate:api-docs-hub
+
+      - name: Route schema docs (summary, description, tags)
+        run: pnpm validate:route-schema-docs
+
+      - name: Route param schemas
+        run: pnpm validate:route-param-schemas
+
+      - name: Route organization-scope map in sync
+        run: pnpm validate:route-organization-scope
+
+      - name: Source tree doc in sync
+        run: pnpm tool:project-structure-tree:check
+
+      # After "OpenAPI specs in sync": docs:check generates the gitignored Postman collection
+      # the docs cite.
+      - name: Docs cite paths that exist
+        run: pnpm docs:links:check
+
   unit-tests:
     needs: [changes]
     if: |
@@ -223,6 +285,102 @@ jobs:
     with:
       matrix-tests-result: ${{ needs.matrix-tests.result }}
 
+  # Not a gate — an early signal beside the matrix: the database tests pnpm test:select picks for
+  # this PR's changed and connected domains (--changed-only: no always-run tests; nothing when the
+  # change selects everything, as a core-domain one does). It starts with the matrix and runs a
+  # fraction of it, so a red result arrives first; the matrix above still decides the merge.
+  affected-db-tests:
+    name: Affected database tests (early signal)
+    needs: [changes]
+    if: |
+      needs.changes.outputs.docs-only-md != 'true' &&
+      needs.changes.outputs.src-code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.10-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: clinozy
+          POSTGRES_PASSWORD: clinozy
+          POSTGRES_DB: clinozy
+        options: >-
+          --health-cmd="pg_isready -U clinozy -d clinozy"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:8.6.3-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      NODE_ENV: development
+      LOG_LEVEL: warn
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      REDIS_URL: redis://localhost:6379
+      RATE_LIMIT_MAX: 1000
+      RATE_LIMIT_WINDOW_MS: 60000
+      RUN_DB_TESTS: 1
+      RUN_REDIS_TESTS: 1
+      ENABLE_MCP_SERVER: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
+        uses: ./.github/actions/test-env
+      - uses: ./.github/actions/tune-ci-postgres
+        with:
+          container: ${{ job.services.postgres.id }}
+      # The RLS tests run in their own lanes (rls-security, rls-application-role), as in the matrix.
+      - name: The database tests this change selects
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: >-
+          pnpm test:select --base "$BASE_SHA" --changed-only --exclude 'src/tests/security/rls/**'
+          --lane db-bound --why --run
+
+  # Not a gate: after the full suite, the failed test files pnpm test:select would have skipped for
+  # this PR's changes — each is a selector miss (or a flake); its fixture line goes into
+  # tooling/vitest/selector-fixtures.json so the selection includes it next time.
+  selector-miss-check:
+    name: Selector miss check
+    needs: [unit-tests, matrix-tests]
+    if: always() && (needs.unit-tests.result == 'failure' || needs.matrix-tests.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Download the test results of every job and shard
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: test-results-*
+          path: test-results
+          merge-multiple: true
+
+      - name: Failed tests the selection would have skipped
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: pnpm test:selector-misses --base "$BASE_SHA" --results test-results
+
   migration-lint:
     name: Migration lint
     needs: [changes]
@@ -251,6 +409,26 @@ jobs:
       # rules (files, dependencies, binaries, duplicates); the noisy cross-file
       # exports/types analysis is deferred (see knip.jsonc).
       - run: pnpm knip
+
+  sonarqube:
+    name: SonarQube
+    needs: [changes]
+    # The SonarQube Community Build and rules the pre-commit gate uses: the same
+    # docker-compose.sonar.yml server and the same `pnpm sonar:scan` (tooling/sonar/sonar-gate.ts),
+    # which fails on any open issue or hotspot on the deployed-app surface. Free on a private
+    # repository, unlike SonarQube Cloud. Only on source changes: the server takes 1-2 min to start.
+    # The Elasticsearch index sits on tmpfs (docker-compose.sonar.yml), so no runner sysctl or disk
+    # headroom is needed.
+    if: needs.changes.outputs.src-code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: SonarQube gate (start the server, scan, fail on any issue)
+        run: pnpm sonar:scan
 
   rls-security:
     name: RLS security (non-superuser)
@@ -315,8 +493,9 @@ jobs:
       - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
         uses: ./.github/actions/test-env
 
-      - name: Run migrations
-        run: pnpm db:migrate
+      - uses: ./.github/actions/tune-ci-postgres
+        with:
+          container: ${{ job.services.postgres.id }}
 
       - name: Run non-superuser RLS security tests
         run: |
@@ -324,7 +503,7 @@ jobs:
           pnpm exec vitest run --project security src/tests/security/rls
 
   rls-application-role:
-    name: RLS application role (whole connection) ${{ matrix.shard }}/4
+    name: RLS application role (whole connection) ${{ matrix.shard }}/4 (${{ matrix.domains }})
     needs: [changes]
     if: |
       needs.changes.outputs.docs-only-md != 'true' &&
@@ -332,13 +511,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # The whole e2e + integration suite no longer fits one runner's budget, so it runs in four
-    # even by-file-count shards (vitest `--shard`, as the cross-cutting integration shards do).
-    # Every shard migrates its own database and runs as the application role; the aggregate
-    # result is red if any shard is.
+    # shards of domain groups (`VITEST_DOMAIN_FILTER`), balanced by recorded test time (CI run
+    # 39035942120, 17 Oct: 17.8 min; the even by-file-count `--shard` split ran 2.8-5.7 min).
+    # The groups must cover every domain plus `rest` exactly once — pinned by
+    # src/tests/unit/ci/db-shard-balance.policy.unit.test.ts. Every shard migrates its own
+    # database and runs as the application role; the aggregate result is red if any shard is.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        include:
+          - shard: 1
+            domains: app
+          - shard: 2
+            domains: tenancy,upload,audit
+          - shard: 3
+            domains: auth,billing
+          - shard: 4
+            domains: rest,user,notify
     # The job above proves the POLICIES are right. This one proves the APPLICATION obeys them.
     # The pool under test is opened as `clinozy_be_app` via libpq's `options=-c role=...`, so the
     # role applies to every statement — including ones inside the app's own transactions —
@@ -395,15 +584,18 @@ jobs:
 
       # Migrations run on the superuser URL above, BEFORE the role is applied — the application
       # role is deliberately not a schema owner.
-      - name: Run migrations
-        run: pnpm db:migrate
+      - uses: ./.github/actions/tune-ci-postgres
+        with:
+          container: ${{ job.services.postgres.id }}
 
       # The harness opens the pool under test as clinozy_be_app and the maintenance pool as
       # clinozy_be_maintenance (`-c role=` on each URL), so both run the production RLS posture.
       - name: Run e2e + integration as the RLS-subject application role
+        env:
+          VITEST_DOMAIN_FILTER: ${{ matrix.domains }}
         run: |
           set -euo pipefail
-          pnpm test:rls-role --project e2e --project integration --shard=${{ matrix.shard }}/4
+          pnpm test:rls-role --project e2e --project integration
 
   build-verify:
     name: Build verify
@@ -647,6 +839,32 @@ jobs:
       - name: Run actionlint
         uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
 
+  # Workflow injection scan: template injection (a `${{ }}` expanded into a script), dangerous
+  # triggers, GITHUB_ENV writes, broad permissions. High findings fail the job; a meant one
+  # carries `# zizmor: ignore[<audit>]` with its reason on the flagged line.
+  workflow-security:
+    name: Workflow security (zizmor)
+    needs: [changes]
+    if: needs.changes.outputs.ci-config == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+
+      # CI-only, so the pin lives here (1.30.1, released 2026-09-09); bump it by hand.
+      - name: Install zizmor
+        run: pip install "zizmor==1.30.1"
+
+      - name: Scan workflows and actions
+        run: zizmor --offline --min-severity high --format github .github/
+
   contract-property:
     name: Contract + property
     needs: [changes]
@@ -667,6 +885,32 @@ jobs:
         env:
           FAST_CHECK_NUM_RUNS: 50
         run: pnpm test:property
+
+  early-failure-alert:
+    name: Early failure alert
+    # Advisory, NOT in the Quality gate: starts with the run, watches its lanes, and the moment one
+    # fails posts a red `Early failure alert` commit status on the PR head (the lane's name and a
+    # link). Every lane still runs to the end, and `Quality gate` still decides the merge
+    # (tooling/ci/early-failure-alert.mjs). Posts nothing when every lane passes.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          # tooling/setup/common holds script.ts, the command-line helper the watcher imports.
+          sparse-checkout: |
+            tooling/ci
+            tooling/setup/common
+      - name: Watch the lanes; post a status on the first failure
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node tooling/ci/early-failure-alert.mjs
 
   quality-gate:
     name: Quality gate
@@ -692,10 +936,12 @@ jobs:
       - typecheck
       - static-sync
       - agent-os-gate
+      - iteration-freeze
       - unit
       - matrix
       - migration-lint
       - knip
+      - sonarqube
       - build-verify
       - security-audit
       - security-secrets
@@ -706,6 +952,7 @@ jobs:
       - rls-security
       - rls-application-role
       - actionlint
+      - workflow-security
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

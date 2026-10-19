@@ -1,7 +1,7 @@
 ---
 name: be-structure-maintainer
 description: Keeps clinozy-be project structure standards up to date. Use after any directory/file naming changes, new layers, or moving code across domains/infrastructure/shared/tooling/tests.
-trigger: CLAUDE.md, AGENTS.md, agent-os/rules/**, agent-os/skills/**, agent-os/agents/**, agent-os/mcp/**, .mcp.example.json, .mcp.default.json
+trigger: CLAUDE.md, AGENTS.md, agent-os/rules/**, agent-os/skills/**, agent-os/agents/**, agent-os/mcp/**, .mcp.example.json, .mcp.default.json, src/tests/load/k6/**
 triggerNote: Structure/naming; MCP template mirrors must stay identical (mcp-config test)
 indexNote: keep project structure/naming standards + docs/rules in sync
 ---
@@ -27,7 +27,7 @@ Whenever you change code structure (e.g. add a domain, rename layers, add infras
   - `agent-os/skills/be-overview-doc-maintainer/SKILL.md` (if a new folder role appears that needs a new `<folder>.overview.md` template)
   - `agent-os/skills/be-tsdoc-export-guard/SKILL.md` (if the TSDoc coverage gate inputs changed)
   - Any other `agent-os/skills/*/SKILL.md` that references paths or layer names
-- **Docs:** `CLAUDE.md` (architecture and domain layout), `README.md` (project structure and diagrams), `AGENTS.md` (agent entry + custom subagents).
+- **Docs:** `CLAUDE.md` (root rules; ≤ 200 lines) and its nested files — `src/domains/CLAUDE.md` (domain layout, map, nesting, queues/events, Drizzle, seeding), `src/domains/app/CLAUDE.md`, `src/infrastructure/CLAUDE.md`, `src/shared/CLAUDE.md`, `iterations/CLAUDE.md`, `.github/CLAUDE.md` — plus `docs/reference/commands.md`, `README.md` (project structure and diagrams), `AGENTS.md` (agent entry + custom subagents). A section moves to the nested file of the folder it governs; the root keeps a pointer.
 - **Agents:** `agent-os/agents/be-*.md` (every agent file carries the `be-` prefix) — keep in sync with **AGENTS.md** custom subagents table when adding or renaming subagents.
 - **System narratives**: when a new domain folder appears under `src/domains/`, also invoke **be-system-narrative-maintainer** to add the row to `src/OVERVIEW.md` Domains table.
 
@@ -159,7 +159,7 @@ tooling/
   route-coverage/     # Route success-coverage budget (route-success-coverage-budget.json)
   sonar/              # Local SonarQube gate scripts
   tsdoc-coverage/     # TSDoc coverage ratchet (budget.json)
-  validate/           # health-check.sh, lockfile-sync.sh
+  validate/           # gates.ts (the one gate list) + run-gate.ts, lockfile-sync.sh
   vitest/             # Vitest project configs (projects.ts, chaos/contract configs)
 ```
 
@@ -170,7 +170,7 @@ src/scripts/    # Build-time + operational scripts (may import @/, unlike toolin
   admin/        # admin-token, load-test-credentials, dlq-replay, worker-health, …
   codegen/      # generate-openapi.ts → docs/openapi/openapi.json, generate-route-catalog.ts,
                 # generate-project-structure-tree.ts, generate-dbdiagram.ts, Postman/Scalar uploads, …
-  ops/          # api-smoke-test, db-migrate-dry-run, jwt/secrets key rotation, memory-soak, settle-check, …
+  ops/          # api-smoke-test, db-prepare (the one database step), db-migrate-dry-run, jwt/secrets key rotation, memory-soak, settle-check, …
   seed/         # seed orchestrator + contract (bulk.ts, bulk-config.ts, seed-contract.ts,
                 # production-guard.ts, seed-registry.ts, minimal.ts, full.ts); <folder>.overview.md
   tooling/      # run-pre-commit-guard.ts and other repo-tooling entry points
@@ -208,8 +208,8 @@ src/scripts/    # Build-time + operational scripts (may import @/, unlike toolin
 
 When any of the above conventions change, update these files so they remain accurate:
 
-- `agent-os/skills/be-skill-index/SKILL.md` (master skill trigger map and enforcement layers — update when adding skills or changing pre-commit/CI checks)
-- `CLAUDE.md` (human-facing architecture rules)
+- `agent-os/skills/be-skill-index/SKILL.md` (master skill index — its routing and rules tables are generated; enforcement layers — update when adding skills or changing pre-commit/CI checks)
+- `CLAUDE.md` (human-facing architecture rules) and the nested `CLAUDE.md` of the folder that changed (`src/domains/`, `src/infrastructure/`, `src/shared/`)
 - `README.md` (high-level structure overview + Architecture Diagrams: API Request Flow, Event-Bus and BullMQ Flow)
 - `agent-os/rules/be-src-architecture.mdc` (Cursor rule enforcement hints)
 - `agent-os/skills/be-domain-generator/SKILL.md` (scaffolding conventions)

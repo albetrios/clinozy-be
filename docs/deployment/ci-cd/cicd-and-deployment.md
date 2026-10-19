@@ -80,7 +80,9 @@ All jobs run **in parallel** (~2–3 min target). Caching: `actions/setup-node` 
 | --- | ---- |
 | **Lint** | `pnpm lint` (Biome) |
 | **Typecheck** | `pnpm typecheck` |
-| **Static sync** | `pnpm validate:domain:strict`, `pnpm validate:domain:coverage`, `pnpm validate:scripts-layout`, route catalog, docs sync, env example sync |
+| **Static sync** | `pnpm validate:domain:strict`, `pnpm validate:domain:coverage`, `pnpm validate:scripts-layout`, route catalog, docs sync, env example sync, project identity, constants, the sub-domain unit-test matrix, `pnpm tsdoc:check`, locale keys, test naming and API prefix, the API docs hub, route schema docs / param schemas / organization scope, the source tree doc, `pnpm docs:links:check`, action pins — every static check of the nightly `ci:quality` but its two report-only ones (full-tree dependency audit, k6 coverage) |
+| **agent-os evals** | on `agent-os/`, `.claude/` or `tooling/agent-os/` changes: `pnpm agent-os:check`, `agent-os:triggers:strict`, `agent-os:generate:check`, `agent-os:outcomes`, `agent-os:guards` |
+| **Iteration freeze** | on `iterations/` or `tooling/iterations/` changes: `pnpm iteration:freeze-check` — every iteration the PR changes is `frozen`, and a merged frozen iteration takes no edit but a hash-keeping `pnpm iteration:intake <iteration> --compact` |
 | **Unit** | `vitest --project unit --project global --changed origin/{base}` (no DB) |
 | **Migration lint** | `pnpm db:migrate:lint` (static migration safety) |
 | **Build verify** | `pnpm build` + Docker API/worker build (`load: true`, no push, no Trivy) |
@@ -88,6 +90,9 @@ All jobs run **in parallel** (~2–3 min target). Caching: `actions/setup-node` 
 | **Security secrets** | gitleaks full-history scan |
 | **Security SAST** | semgrep |
 | **Contract + property** | `pnpm test:contract`, `pnpm test:property` |
+| **Affected database tests (early signal)** | not a gate; on source changes, beside the DB matrix: the database tests `pnpm test:select` picks for the changed and connected domains (`--changed-only --lane db-bound`, RLS tests excluded as in the matrix) — nothing when the change selects everything; red arrives before the matrix finishes |
+| **Selector miss check** | not a gate; when the unit job or the DB matrix fails: the failed files `pnpm test:select` would have skipped (`pnpm test:selector-misses`, from each job's JSON report) |
+| **Workflow security** | on `.github/**` changes: zizmor 1.30.1 (`--min-severity high`) — template injection, dangerous triggers, `GITHUB_ENV` writes, broad permissions; a meant finding carries `# zizmor: ignore[<audit>]` with its reason |
 
 ### Post-merge lane ([post-merge-ci.yml](../../../.github/workflows/post-merge-ci.yml))
 
@@ -96,12 +101,12 @@ Runs when a PR **merges** into `main` (or manual dispatch). Does **not** re-run 
 | Job | Order | When | What |
 | --- | --- | ---- | ---- |
 | **Commitlint** | parallel | Every merge | Conventional commit messages on merged commits |
-| **Docker** | parallel | `src-code`, `docker`, or `ci-config` | Build + Trivy + ephemeral Postgres/Redis container smoke + push `ghcr.io/.../clinozy-be-api:{sha}` (and `:latest` on `main`) |
+| **Docker** | parallel | `src-code`, `docker`, or `ci-config` | Build + Trivy + ephemeral Postgres/Redis container boot (`/readyz`), then the full seed and `pnpm test:api-smoke` against the container (post-merge only) + push `ghcr.io/.../clinozy-be-api:{sha}` (and `:latest` on `main`) |
 | **SBOM** | parallel | `src-code` | CycloneDX artifact (workflow artifact) |
 | **API docs** | parallel | `src-code` or openapi paths | `pnpm docs:all`, Postman + Scalar publish |
 | **Release Please** | after Docker | Every merge | Opens/updates release PR; may publish GitHub Release |
 | **Release SBOM** | after SBOM + Release Please | Release Please published a release | Downloads `sbom` artifact and attaches it to the GitHub Release |
-| **Deploy** | last | Docker green + gates green | Reusable [reusable-railway-deploy.yml](../../../.github/workflows/reusable-railway-deploy.yml) → resolve env → migrate → seed reference data → **pin Railway service to fresh GHCR image + new deployment** (`pnpm tool:railway-deploy-image`: terminal SUCCESS **+ boot verification** from the container logs) → API `/readyz` → worker deployment SUCCESS + boot verification (`Worker started` logged, no crash marker) → **`pnpm test:api-smoke`** → **fully live** |
+| **Deploy** | last | Docker green + gates green | Reusable [reusable-railway-deploy.yml](../../../.github/workflows/reusable-railway-deploy.yml) → resolve env → migrate → seed reference data → **pin Railway service to fresh GHCR image + new deployment** (`pnpm tool:railway-deploy-image`: terminal SUCCESS **+ boot verification** from the container logs) → API `/readyz` + surface probe → **live probe** (`.github/actions/probe-live-api`: HSTS, CSP, nosniff, CORS for an untrusted and the allowed origin, TLS protocol and certificate days; a finding fails the step) → worker deployment SUCCESS + boot verification (`Worker started` logged, no crash marker) → **`pnpm test:api-smoke`** → **fully live** |
 
 **Local-only (not in CI):** `pnpm test:integration`, `pnpm test:chaos` — run before pushing when touching DB/worker paths.
 
@@ -144,7 +149,7 @@ Both environments run the **same scanned image**, promoted by SHA (build-once-pr
 
 ## 4. Release and versioning (release-please)
 
-Release-please turns **conventional commits** into a standing **Release PR** (`chore: release X.Y.Z` — CHANGELOG + version bump in `package.json`). **Merging that Release PR is the ship button**: it creates the **GitHub Release** and tag `vX.Y.Z`, which fires [release-deploy.yml](../../../.github/workflows/release-deploy.yml) to deploy production. No npm publish (the package is private). We use the maintained [googleapis/release-please](https://github.com/googleapis/release-please) action.
+Release-please turns **conventional commits** into a **Release PR** (`chore(main): release X.Y.Z` — CHANGELOG + version bump in `package.json`), **on demand**: dispatch post-merge CI with `release_pr: true` (`gh workflow run post-merge-ci.yml -f release_pr=true -f skip_docker=true -f skip_docs=true`) to open or refresh it — an ordinary merge no longer does, so its PR CI does not re-run on every merge. **Merging that Release PR is the ship button**: it creates the **GitHub Release** and tag `vX.Y.Z`, which fires [release-deploy.yml](../../../.github/workflows/release-deploy.yml) to deploy production. No npm publish (the package is private). We use the maintained [googleapis/release-please](https://github.com/googleapis/release-please) action.
 
 **Single stable channel** — one config + one manifest, no prerelease channel:
 
@@ -160,7 +165,7 @@ Local commits are validated by **commitlint** via [.husky/commit-msg](../../../.
 
 | What | Where |
 | --- | --- |
-| **Runs on** | Push to **main** — `Release Please` job inside [post-merge-ci.yml](../../../.github/workflows/post-merge-ci.yml) |
+| **Runs on** | A push to **main** whose head commit is a merged Release PR (cuts the tag + GitHub Release), or a dispatch of [post-merge-ci.yml](../../../.github/workflows/post-merge-ci.yml) with `release_pr: true` (opens or refreshes the Release PR; also cuts a release whose commit was not the head of its push) |
 | **Token** | **`RELEASE_PLEASE_TOKEN`** (PAT), read from the **development** GitHub Environment — a `github.token`-created release would not trigger `release-deploy.yml` |
 
 ### 4.1 Release and deploy cycle
@@ -171,15 +176,16 @@ flowchart TB
   PR --> Gate[Quality gate + Checks]
   Gate --> Merge[Squash-merge to main]
   Merge --> DevDeploy[post-merge-ci: build image + deploy development]
-  Merge --> ReleasePR[release-please refreshes the standing Release PR]
+  Merge --> Dispatch[on demand: dispatch post-merge-ci with release_pr]
+  Dispatch --> ReleasePR[release-please opens or refreshes the Release PR]
   ReleasePR -->|human merges = ship| Tag[Tag vX.Y.Z + publish GitHub Release]
   Tag --> ProdDeploy[release-deploy.yml: deploy production reviewer-gated]
 ```
 
 1. **Feature → PR → gate:** every PR runs the `Quality gate` aggregate + `Checks`; the PR title must follow conventional commits.
-2. **Squash-merge to `main`:** post-merge CI builds + pushes the SHA-tagged image and deploys the **development** environment; release-please refreshes the standing Release PR (`chore: release X.Y.Z`).
-3. **Merge the Release PR (ship):** tags `vX.Y.Z` + publishes the GitHub Release, which fires [release-deploy.yml](../../../.github/workflows/release-deploy.yml) to deploy **production** — pinned to the tag SHA, behind the environment reviewer approval, promoting the exact scanned image (build-once-promote). The release SBOM is attached on publish.
-4. **Hotfix:** an ordinary `fix/*` PR to `main`, released immediately by merging the Release PR — **fix-forward** (see [hotfix-release.md](../runbooks/hotfix-release.md)). There is no promotion PR or back-merge.
+2. **Squash-merge to `main`:** post-merge CI builds + pushes the SHA-tagged image and deploys the **development** environment. When you are ready to ship, dispatch post-merge CI with `release_pr: true`: release-please opens or refreshes the Release PR (`chore(main): release X.Y.Z`).
+3. **Merge the Release PR (ship):** tags `vX.Y.Z` + publishes the GitHub Release, which fires [release-deploy.yml](../../../.github/workflows/release-deploy.yml) to deploy **production** — pinned to the tag SHA, behind the environment reviewer approval, promoting the exact scanned image (build-once-promote). That **one approval** covers the production API docs too: they are generated in a job with no environment and published by the deploy job once production is live (GitHub asks for a separate approval for every job that names a protected environment). The release SBOM is attached on publish.
+4. **Hotfix:** an ordinary `fix/*` PR to `main`, released immediately by dispatching `release_pr` and merging the Release PR — **fix-forward** (see [hotfix-release.md](../runbooks/hotfix-release.md)). There is no promotion PR or back-merge.
 
 ### Verify release-please
 
@@ -231,7 +237,7 @@ Steps in each deploy workflow:
 >
 > **Railway token auth:** Deploy CI uses the Railway **project token** from the GitHub Environment's `RAILWAY_TOKEN`. Project tokens are scoped to one Railway environment and must be sent to GraphQL as `Project-Access-Token`, not `Authorization: Bearer`. Account/workspace tokens may be supplied as `RAILWAY_API_TOKEN` / `RAILWAY_GRAPHQL_TOKEN` for local diagnostics; those use Bearer auth and can usually poll deployment status directly.
 
-**GHCR images (CI):** On push to **`main`**, the reusable [reusable-docker-build-trivy.yml](../../../.github/workflows/reusable-docker-build-trivy.yml) job builds API + worker images, runs Trivy (CRITICAL/HIGH, `exit-code: 1`), then pushes to GHCR. PRs build and scan only (no push).
+**GHCR images (CI):** On push to **`main`**, the reusable [reusable-docker-build-trivy.yml](../../../.github/workflows/reusable-docker-build-trivy.yml) job builds API + worker images, runs Trivy (CRITICAL/HIGH, `exit-code: 1`), then pushes to GHCR. PRs build and scan only (no push). The images' `apk upgrade` layer is rebuilt once per UTC day (`SECURITY_PATCH_EPOCH` is the day), so later builds that day reuse it and every layer after it; Trivy still scans every build. When Trivy flags a fix published since that day's first build, dispatch post-merge CI with `fresh_security_patches: true` (`gh workflow run post-merge-ci.yml -f fresh_security_patches=true`), which passes the run id instead.
 
 **Railway pull access:** Each Railway service must be allowed to pull from `ghcr.io` (package visibility + deploy token or linked registry). Images are public within the organization or use Railway’s registry credentials for private GHCR packages.
 

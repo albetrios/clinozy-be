@@ -4,6 +4,7 @@
  */
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, normalize, relative, resolve } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const PROJECT_ROOT = process.cwd();
 const SCAN_ROOTS = ['src', 'tooling'] as const;
@@ -72,6 +73,7 @@ function rewriteFile(filePath: string): boolean {
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const changedFiles: string[] = [];
 
   for (const root of SCAN_ROOTS) {

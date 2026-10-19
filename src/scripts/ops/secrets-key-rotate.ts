@@ -24,7 +24,6 @@
  *   5. Once no v1 rows remain, drop v1 from SECRETS_ENCRYPTION_KEYS (and SECRETS_ENCRYPTION_KEY).
  */
 import '@/shared/config/load-env-files.js';
-import { parseArgs } from 'node:util';
 import { eq, isNotNull, sql as drizzleSql } from 'drizzle-orm';
 import { database, closeDatabase } from '@/infrastructure/database/connection.js';
 import { mfa_methods } from '@/domains/auth/sub-domains/auth-mfa/auth-mfa-method.schema.js';
@@ -35,16 +34,16 @@ import {
   encryptFieldSecret,
 } from '@/shared/utils/security/field-secret-encryption.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 interface RotateOptions {
   apply: boolean;
 }
 
 function parseOptions(): RotateOptions {
-  const { values } = parseArgs({
-    options: {
-      apply: { type: 'boolean', default: false },
-    },
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { apply: { type: 'boolean' } },
   });
   return { apply: values.apply === true };
 }

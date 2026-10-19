@@ -1,6 +1,8 @@
 ---
 name: be-workers-events
 description: Implements and maintains clinozy-be patterns for domain events, BullMQ queues, and worker processes (Redis-backed). Use when adding event emission in services, registering handlers, defining queues/jobs, implementing workers, or handling graceful shutdown and retries.
+trigger: src/infrastructure/queue/bootstrap.ts, src/infrastructure/queue/scheduler.ts, src/infrastructure/queue/worker-runtime/**
+triggerNote: Queue wiring outside a domain — register the worker in worker-registration.registry.ts (family, usesPostgres, resolvePostgresConcurrency)
 indexNote: domain events + BullMQ queues/workers (Redis, retries, graceful shutdown)
 ---
 

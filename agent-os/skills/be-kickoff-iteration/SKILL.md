@@ -7,7 +7,7 @@ description: >
   deviations → check the impact on upcoming rows → stop for the user's review → next — and close
   with the gates, plans/acceptance.md and Status done. Use when the user says 'kickoff', 'kickoff
   iteration <name>', 'kickoff <iteration>' or 'start implementing <iteration>'. Requires README
-  Status approved.
+  Status approved, or a lite fix (Process lite) in planning once the user gave the go.
 indexNote: implement an approved iteration — follow the KICKOFF.md ROUTE row by row, record AS-BUILT.md, stop for review after each row
 trigger: iterations/*/AS-BUILT.md
 triggerNote: Iteration implementation — one ROUTE row at a time; every row's technical decisions go into AS-BUILT.md
@@ -52,7 +52,8 @@ Run `pnpm iteration:list` and show:
 | --- | --- | --- | --- | --- | --- |
 
 - Eligible = Status `approved`, not yet `implementing`, and Baseline `none` or an iteration that is
-  `done` / `frozen`.
+  `done` / `frozen` — or a **lite** fix (README Process `lite`) in `planning` whose `KICKOFF.md` the
+  user gave the go on (be-iteration-planning › Lite mode).
 - Recommend the earliest-opened eligible iteration (the launch always comes first). If the user
   named one, check it against the rule.
 - Always ask with **AskUserQuestion** — never pick silently.
@@ -65,11 +66,30 @@ pnpm iteration:intake <iteration> --check
 
 **Gate rule:** if it exits non-zero, stop now — write nothing, change no status, ask nothing else;
 print the command's output and end the turn. The intake has to be fixed (and the plan re-approved
-if it changed) before any build.
+if it changed) before any build. A lite fix with no drop placed (Drop placed `—`) has no intake to
+gate — the gate would only say "no intake yet" — so it is skipped; with a drop it runs.
 
-When it passes: `pnpm iteration:status <iteration> implementing`, and start `AS-BUILT.md` from the
+When it passes: `pnpm iteration:status <iteration> implementing` (a lite fix moves there straight
+from `planning`), and start `AS-BUILT.md` from the
 shape below, dated today, with the Baseline's Standing deviations copied in as the starting list
 (empty for an initial iteration).
+
+**Offer the goal.** Show the user one `/goal` line they can set to let the build run on without a
+stop after every row (Claude Code keeps working until its condition holds). Its condition is this
+iteration's Close, named concretely:
+
+```text
+/goal iteration <iteration> is done: every KICKOFF.md ROUTE row done (or deferred with my OK) with
+its AS-BUILT.md row; pnpm validate and pnpm ci:local green; plans/acceptance.md has a Result and
+Evidence for every item; pnpm iteration:frontend-map <iteration> --check passes; Status done.
+Stop and ask on a scope change or a RED question.
+```
+
+Setting it is the user's choice — never set it yourself. Under a goal: a row ends with its
+`AS-BUILT.md` row and a one-line report instead of a stop, its `Reviewed` cell stays `—` until
+Close; a decision the plan left open is taken as the recommendation and logged in
+`plans/decisions.md` as AMBER, sourced `user /goal <date>`; a scope change or a RED question still
+stops and asks — a goal never widens the scope.
 
 ## Before the first row — read
 
@@ -117,7 +137,9 @@ for what each record owns. Keep the approved row order and scope; a preflight fi
 authorize changing either.
 
 1. **Do** — mark the row `in progress` in `KICKOFF.md` and build it through its driver.
-2. **Verify** — the row's acceptance, its tests, `pnpm validate` — by the README's Intake mode:
+2. **Verify** — the row's acceptance, its tests (`pnpm test:select --run`; for a NEW table the
+   staged-build prompt's Stage 3 has run them — read its Stage 4 test run), `pnpm validate` — by
+   the README's Intake mode:
    `full` / `overlay` → the acceptance traced to the PRD; `brief` → the `BRIEF.md` acceptance
    criteria the row covers, and the parts it touches still match the carried-forward PRD and
    `schema-routes.md` except where the brief changes them. MODE incremental, every mode: re-run the
@@ -128,8 +150,8 @@ authorize changing either.
    and job names); any difference goes into the AS-BUILT row.
 3. **Record** — add the row to `AS-BUILT.md`:
 
-   | # | Planned | Actually built | Difference | Why | Decision | Commit |
-   | --- | --- | --- | --- | --- | --- | --- |
+   | # | Planned | Actually built | Difference | Why | Decision | Commit | Reviewed |
+   | --- | --- | --- | --- | --- | --- | --- | --- |
 
    Every technical decision the row made (table and column design, endpoints, permission codes,
    queue names) is recorded here or referenced from its approved specification or decision.
@@ -154,13 +176,23 @@ authorize changing either.
      `AS-BUILT.md` › Revisions to upcoming rows (the revised row text), and mark the affected
      `KICKOFF.md` row "revised → AS-BUILT #n". Never rewrite `KICKOFF.md` otherwise — it is frozen.
 5. **Stop** — mark the row `done`, show the user what was built and the AS-BUILT row, and wait for
-   their review before the next row. Use the review summary from the linked row execution guidance:
+   their review before the next row (under a `/goal`, a one-line report instead — Step 0). Use the review summary from the linked row execution guidance:
    changes and contracts, verification evidence, deviations or blockers, impact, and the next row.
+   **This review is the row's review of record:** on the user's OK, fill the row's `Reviewed` cell
+   (date · who · the commit reviewed). A change they ask for is made, verified and shown again
+   before the cell is filled.
 
 ## Close
 
 - Run the repository's gates: `pnpm validate`, `pnpm ci:local`, and the route and domain gates.
 - Run `/be-pre-merge-review` as a review only — report its findings, change nothing on its say-so.
+- **The goal's condition.** When a `/goal` was set, check each of its criteria now, one line each
+  with its evidence (the command and its result, or the file and section), before
+  `pnpm iteration:status <iteration> done`. A criterion not met is work to finish, not a note; the
+  goal is met only when every line is. The rows built under it are reviewed now (next item).
+- **The per-row reviews are the review of record.** Every `AS-BUILT.md` row has its `Reviewed`
+  cell; a row without one is reviewed now, before close. The PR's human review then covers what
+  changed after each row's reviewed commit (and the close), not the rows again.
 - Every ROUTE row is `done`, or `deferred` with the user's explicit OK.
 - Fill `plans/acceptance.md` — a Result and Evidence for every item.
 - Write the frontend's route map, `plans/frontend-route-map.md`: section 1 the contract changes, section 2
@@ -172,7 +204,8 @@ authorize changing either.
   of where the code now differs from the drop (the Baseline's list, minus what this iteration
   resolved, plus its new ones). The next iteration plans against it.
 - Run `pnpm iteration:status <iteration> done`. `pnpm iteration:status <iteration> frozen` goes in
-  the last commit before the merge.
+  the last commit before the merge — PR CI's Iteration freeze lane (`pnpm iteration:freeze-check`)
+  fails until it does.
 - **Never push, open a PR or merge** — the user raises PRs.
 
 ## AS-BUILT.md — the shape

@@ -77,17 +77,16 @@ process.env.BLOCK_DISPOSABLE_EMAIL ??= 'false';
  * sets direct `localhost:5432` / `6379` URLs; `||=` would skip the override and chaos traffic
  * would bypass proxies, so toxins and administrative proxy disables would not affect the app.
  * The credentials are Compose's (the project's local database name as user and password); the CI
- * chaos job's Postgres service creates the same role. Locally the database is the harness's own
- * `<project>_test` — keep it equal to LOCAL_TEST_DATABASE_NAME in
- * src/tests/helpers/local-test-database.ts, which this alias-free file cannot import. Chaos suites
- * run cleanupDatabase()
- * too, which must never truncate the database `pnpm dev` serves; CI's service container only has
- * the primary one.
+ * chaos job's Postgres service creates the same role. The database is this worker's own clone the
+ * global setup made, `<test database>_worker_<pool id>` — the test database is the harness's own
+ * `<project>_test` locally (keep it equal to LOCAL_TEST_DATABASE_NAME in
+ * src/tests/helpers/local-test-database.ts, and the suffix equal to `workerDatabaseName` in
+ * tooling/vitest/worker-databases.ts, which this alias-free file cannot import) and the service
+ * container's primary one on CI. Chaos suites run cleanupDatabase() too, which must never truncate
+ * the database `pnpm dev` serves, and only ever accepts a worker's own database.
  */
-process.env.DATABASE_URL =
-  process.env.GITHUB_ACTIONS === 'true'
-    ? 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy'
-    : 'postgresql://clinozy:clinozy@127.0.0.1:25432/clinozy_be_test';
+const chaosTestDatabase = process.env.GITHUB_ACTIONS === 'true' ? 'clinozy' : 'clinozy_be_test';
+process.env.DATABASE_URL = `postgresql://clinozy:clinozy@127.0.0.1:25432/${chaosTestDatabase}_worker_${String(process.env.VITEST_POOL_ID)}`;
 
 process.env.REDIS_URL = 'redis://127.0.0.1:26379';
 

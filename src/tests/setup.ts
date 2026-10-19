@@ -8,6 +8,8 @@ import {
 import {
   LOCAL_TEST_DATABASE_URL,
   pointHarnessAtLocalTestDatabase,
+  pointWorkerAtItsOwnDatabase,
+  testRedisKeyPrefix,
 } from '@/tests/helpers/local-test-database.js';
 
 /**
@@ -125,6 +127,7 @@ function withConnectionRole(url: string, role: string): string {
 }
 
 pointHarnessAtLocalTestDatabase();
+pointWorkerAtItsOwnDatabase();
 applyRequestedDatabaseRole();
 process.env.DATABASE_SSL_ENABLED = 'false';
 /**
@@ -167,7 +170,7 @@ process.env.OAUTH_GOOGLE_REDIRECT_URI ??= `${DEFAULT_FRONTEND_URL}/callback/goog
 process.env.OAUTH_GITHUB_REDIRECT_URI ??= `${DEFAULT_FRONTEND_URL}/callback/github`;
 // Isolate the test Redis keyspace from a running `pnpm dev` (both are NODE_ENV=development); a hard
 // set (not the developer's `.env.local` value) keeps the test prefix deterministic and isolated.
-process.env.REDIS_KEY_PREFIX = `${REDIS_KEY_PREFIX_STEM}:test:`;
+process.env.REDIS_KEY_PREFIX = testRedisKeyPrefix(REDIS_KEY_PREFIX_STEM);
 // The overload guard sheds a request with 503 when the last event-loop sample's p99 delay reached
 // OVERLOAD_MAX_EVENT_LOOP_DELAY_MS (default 250). The suite runs the app in-process, so the loop
 // it samples also carries Vitest's own module transforms and fixture work — on a busy machine one

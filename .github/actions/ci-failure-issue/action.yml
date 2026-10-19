@@ -1,0 +1,62 @@
+name: CI failure issue
+description: |
+  Opens (or comments on) one `ci-failure` issue per check when it fails, and closes it on the
+  next green run, so an open ci-failure issue means "this check is red right now". A failure on a
+  schedule or after a merge is invisible unless someone opens the Actions tab; an issue sends a
+  real notification. One open issue per title collects repeats as comments. Every scheduled and
+  post-merge check uses this one action; clinozy-fe reuses it from here.
+
+  An `open` adds a fix plan below the body (fix-plan.mjs): each failed job and step with its log
+  tail up to the last error, the area the paths in it belong to, and the skills the repository's
+  `agent-os/hooks/skill-routing.json` names for them. It needs `actions: read`; without it, or on
+  any error, the issue opens without a plan.
+
+  The job needs `issues: write`, and a checkout of this folder (a local action is read from the
+  workspace): `sparse-checkout: .github/actions/ci-failure-issue`. The `open` job runs on a failed
+  or a cancelled job — one past its timeout-minutes ends cancelled, not failed:
+  `if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))`.
+
+inputs:
+  mode:
+    description: '`open` on failure (create, or comment on the open issue), `close` on success'
+    required: true
+  title:
+    description: The issue title; one open issue per title
+    required: true
+  body:
+    description: Markdown for the issue or the comment (`open`); the run link is added above it
+    required: false
+    default: ''
+  close-comment:
+    description: The comment the issue is closed with (`close`); the run link is added after it
+    required: false
+    default: Green again — closing automatically.
+  token:
+    description: A token with issues:write on this repository
+    required: false
+    default: ${{ github.token }}
+  run-id:
+    description: The run the issue reports — linked and read for the fix plan; this run by default (a workflow_run job passes the run it was triggered by)
+    required: false
+    default: ${{ github.run_id }}
+  head-sha:
+    description: The commit whose skill-routing map the fix plan reads; this run's by default
+    required: false
+    default: ${{ github.sha }}
+
+runs:
+  using: composite
+  steps:
+    - name: ${{ inputs.mode == 'close' && 'Close the open ci-failure issue' || 'Open or update the ci-failure issue' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        GH_REPOSITORY: ${{ github.repository }}
+        MODE: ${{ inputs.mode }}
+        TITLE: ${{ inputs.title }}
+        BODY: ${{ inputs.body }}
+        CLOSE_COMMENT: ${{ inputs.close-comment }}
+        WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.run-id }}
+        RUN_ID: ${{ inputs.run-id }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+      run: bash "${GITHUB_ACTION_PATH}/ci-failure-issue.sh"

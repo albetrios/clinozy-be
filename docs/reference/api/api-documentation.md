@@ -100,7 +100,9 @@ pnpm docs:upload:hosted        # Postman + Scalar Registry (needs secrets)
 
 **Before merge (PR):** Run `pnpm routes:catalog:check` and `pnpm docs:check` locally when changing routes or OpenAPI; post-merge **API docs** publishes on push. Pre-commit also regenerates `docs/routes.txt` when routes change.
 
-**After merge (push):** CI ([`.github/workflows/reusable-openapi-postman-publish.yml`](../../../.github/workflows/reusable-openapi-postman-publish.yml)) runs `docs:all`, `docs:validate:openapi`, then uploads to Postman and Scalar Registry when environment secrets are set.
+**After merge (push):** CI ([`.github/workflows/reusable-openapi-postman-publish.yml`](../../../.github/workflows/reusable-openapi-postman-publish.yml)) generates the docs ([`generate-api-docs`](../../../.github/actions/generate-api-docs/action.yml): `docs:all`, `docs:check`), then uploads them to Postman and Scalar Registry ([`upload-api-docs`](../../../.github/actions/upload-api-docs/action.yml)) when the environment's secrets are set.
+
+**On a release:** [`release-deploy.yml`](../../../.github/workflows/release-deploy.yml) generates the production docs in a job with no environment, and the production deploy job uploads them once the deploy is live — so the one production approval covers both, and docs never go out for a failed deploy.
 
 ---
 

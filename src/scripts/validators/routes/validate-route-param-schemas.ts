@@ -14,6 +14,7 @@ import {
   collectAllRouteSchemaEntries,
   type RouteSchemaEntry,
 } from '@tooling/openapi/extractors/route-schema-metadata.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** A `:segment` (Fastify path param) anywhere in the route template. */
 const PATH_PARAM_PATTERN = /:[A-Za-z0-9_]+/;
@@ -26,6 +27,7 @@ export function findRoutesMissingParamSchema(entries: RouteSchemaEntry[]): Route
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const entries = collectAllRouteSchemaEntries();
   const offenders = findRoutesMissingParamSchema(entries);
 
@@ -50,6 +52,6 @@ function main(): void {
   );
 }
 
-if (import.meta.url === new URL(process.argv[1] ?? '', 'file:').href) {
+if (isMain(import.meta.url)) {
   main();
 }

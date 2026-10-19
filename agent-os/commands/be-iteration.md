@@ -16,7 +16,8 @@ needs the user, then continue or change.
    - No argument and the user wants a new iteration → step 2.
    - An iteration is named (or picked) → read its README and jump to the matching step of the
      guide: `planning` without `intake-files/` → place the drop (Step 3); `planning` with it →
-     plan (Step 4); `ready-for-approval` → approve (Step 5); `approved` → kick off (Step 6);
+     plan (Step 4; a lite fix — README Process `lite` — plans in one step, then kicks off
+     straight from `planning`); `ready-for-approval` → approve (Step 5); `approved` → kick off (Step 6);
      `implementing` → the next open ROUTE row, or close (Step 7); `done` → freeze (Step 8);
      `frozen` → nothing to do — a correction is a new `fix` iteration.
 2. **Opening questions** — ask with **AskUserQuestion** (at most 4 per call, one recommended
@@ -28,14 +29,14 @@ needs the user, then continue or change.
    - Branch: is the current branch `<type>/<topic>`? If not, offer to create it.
    - The drop: which folder holds the **full** drop (`PRD.md`, `schema-routes.md`)?
 3. **Open it** — `pnpm iteration:new <type> [topic] [--both] --dry-run`, show the name and the
-   suggested Baseline, and run it for real only after the user confirms. Write the Summary.
+   Baseline (`none` — from scratch), and run it for real only after the user confirms. Write the Summary.
 4. **Place the drop** — ask what arrived: the whole drop (`full`), only the changed files
    (`--mode overlay`) or only a `BRIEF.md` (`--mode brief`, template
    `tooling/iterations/templates/BRIEF.md`). Run `pnpm iteration:intake <iteration> <source>
    [--mode …] [--both] --dry-run`, show the report, then run it for real after the user confirms,
    and check it with `pnpm iteration:intake <iteration> --check`.
 5. **Continue step by step** through the guide — **be-iteration-planning** (Steps 0–7; Step 0
-   confirms the Baseline with `pnpm iteration:baseline`; Step 5 is the route review, one sub-domain at a
+   records a Baseline only if the user names one, `pnpm iteration:baseline`; Step 5 is the route review, one sub-domain at a
    time) → approval → **be-kickoff-iteration**
    (one ROUTE row at a time, `AS-BUILT.md`) → close → freeze. Both skills stop after each of their
    own steps; keep those stops.

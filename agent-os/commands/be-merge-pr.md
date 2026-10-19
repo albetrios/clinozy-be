@@ -1,14 +1,18 @@
 ---
 description: Merge a PR once CI is green and approvals are in
 argument-hint: <pr-number>
-allowed-tools: Bash(git*)
+allowed-tools: Bash(git*), Bash(gh pr merge*)
 ---
 
-Merge PR **$ARGUMENTS** safely:
+Merge PR **$ARGUMENTS** on green, through GitHub's own auto-merge:
 
-1. Confirm CI is green (all required checks pass) and the required approvals are present.
-2. Confirm there are no merge conflicts and the branch is up to date with `main`.
-3. Merge via the GitHub MCP (`merge_pull_request`) using the repo's merge strategy (squash unless told otherwise); keep the conventional title.
-4. Report the merge result.
+1. Confirm there is no merge conflict. The branch need not be up to date with `main` — the `main`
+   ruleset does not require it (`strict` is off).
+2. Turn on auto-merge with squash: `gh pr merge --auto --squash <pr>`, or the GitHub MCP
+   `enable_pr_auto_merge` (merge method `SQUASH`); keep the conventional title. GitHub then merges
+   the moment every required check passes and the required approvals are in — it waits on its own,
+   so there is nothing to poll.
+3. Report that auto-merge is on, and the merge when the PR event arrives (/be-watch-pr).
 
-Do not merge if any required check is failing or approvals are missing — report what is blocking instead.
+Never merge around a red or pending required check: no `--admin`, no merge API call that skips a
+gate. A check that stays red is fixed or re-run, never bypassed.

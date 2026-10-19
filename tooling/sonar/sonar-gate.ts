@@ -13,13 +13,18 @@ import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
+import dotenv from 'dotenv';
+import { formatEnvValue, upsertEnvAssignment } from '@tooling/dev/env-file.util.js';
 import { resolveDerivedNames } from '@tooling/setup/codegen/project-identity.util.js';
 import { loadConfig } from '@tooling/setup/common/config.js';
+import { requireTool } from '@tooling/setup/common/require-tool.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const DERIVED_NAMES = resolveDerivedNames(loadConfig());
 const SONAR_URL = process.env.SONAR_HOST_URL ?? 'http://localhost:9000';
 const PROJECT_KEY = DERIVED_NAMES.sonarProjectKey;
 const COMPOSE_FILE = 'docker-compose.sonar.yml';
+const DOCKER_DAEMON_SCRIPT = 'tooling/setup/agent/ensure-docker-daemon.sh';
 const ENV_LOCAL = '.env.local';
 const TOKEN_NAME = DERIVED_NAMES.sonarTokenName;
 const ADMIN_LOGIN = 'admin';
@@ -36,29 +41,32 @@ function die(message: string): never {
   process.exit(1);
 }
 
-/** Parses `.env.local` into a key→value map (quotes stripped); returns {} when absent. */
+/** The `.env.local` values (dotenv syntax, the one parser); {} when the file is absent. */
 function readEnvLocal(): Record<string, string> {
-  if (!existsSync(ENV_LOCAL)) return {};
-  const out: Record<string, string> = {};
-  for (const rawLine of readFileSync(ENV_LOCAL, 'utf8').split('\n')) {
-    const match = /^([A-Z0-9_]+)=(.*)$/.exec(rawLine.trim());
-    if (match?.[1]) out[match[1]] = (match[2] ?? '').replace(/^["']|["']$/g, '');
-  }
-  return out;
+  return existsSync(ENV_LOCAL) ? dotenv.parse(readFileSync(ENV_LOCAL, 'utf8')) : {};
 }
 
-/** Inserts/updates the given keys in `.env.local`, preserving all other lines. */
+/** The comment above the keys this gate writes. */
+const SONAR_SECTION_COMMENT = '# SonarQube local quality gate (generated; gitignored)';
+
+/**
+ * Sets the given keys in `.env.local` with the shared line editor: a key's line is replaced in
+ * place, a new key is appended under the section comment (written once), every other line is kept.
+ */
 function upsertEnvLocal(updates: Record<string, string>): void {
-  const existing = existsSync(ENV_LOCAL) ? readFileSync(ENV_LOCAL, 'utf8').split('\n') : [];
-  const updateKeys = new Set(Object.keys(updates));
-  const kept = existing.filter((line) => {
-    const match = /^([A-Z0-9_]+)=/.exec(line.trim());
-    return !(match?.[1] && updateKeys.has(match[1]));
-  });
-  while (kept.length > 0 && kept[kept.length - 1] === '') kept.pop();
-  if (kept.length > 0) kept.push('# SonarQube local quality gate (generated; gitignored)');
-  for (const [key, value] of Object.entries(updates)) kept.push(`${key}=${value}`);
-  writeFileSync(ENV_LOCAL, `${kept.join('\n')}\n`);
+  const existing = existsSync(ENV_LOCAL) ? readFileSync(ENV_LOCAL, 'utf8') : '';
+  const present = dotenv.parse(existing);
+  let content = existing;
+  if (
+    !content.includes(SONAR_SECTION_COMMENT) &&
+    Object.keys(updates).some((key) => !(key in present))
+  ) {
+    content = `${content}${content === '' || content.endsWith('\n') ? '' : '\n'}${SONAR_SECTION_COMMENT}\n`;
+  }
+  for (const [key, value] of Object.entries(updates)) {
+    content = upsertEnvAssignment(content, key, formatEnvValue(value));
+  }
+  writeFileSync(ENV_LOCAL, content);
 }
 
 interface ApiOptions {
@@ -92,6 +100,22 @@ function dockerCompose(args: string[], extraEnv: Record<string, string> = {}): n
   return result.status ?? 1;
 }
 
+/**
+ * Starts the Docker daemon when it is not reachable, so the gate never stops on "is Docker
+ * running?" — through `tooling/setup/agent/ensure-docker-daemon.sh`, the one way tooling starts
+ * Docker (OrbStack or Docker Desktop on a Mac; dockerd, with its restricted-network fallback, on
+ * Linux).
+ */
+function ensureDockerDaemon(): void {
+  if (!requireTool({ name: 'docker', mode: 'block', purpose: 'the SonarQube gate' })) {
+    throw new Error('Docker is required for the SonarQube gate.');
+  }
+  if (spawnSync('docker', ['info'], { stdio: 'ignore' }).status === 0) return;
+  if (!existsSync(DOCKER_DAEMON_SCRIPT)) return;
+  log('Docker daemon not reachable — starting it (tooling/setup/agent/ensure-docker-daemon.sh)…');
+  spawnSync('/bin/bash', [DOCKER_DAEMON_SCRIPT], { stdio: 'inherit' });
+}
+
 /** Starts the SonarQube container if it is not already accepting requests, then waits for UP. */
 async function ensureServerUp(): Promise<void> {
   const status = await sonarApi('/api/system/status');
@@ -101,6 +125,7 @@ async function ensureServerUp(): Promise<void> {
   }
 
   log('SonarQube not ready — starting it (first boot can take ~2 min)…');
+  ensureDockerDaemon();
   if (dockerCompose(['up', '-d', 'sonarqube']) !== 0) {
     die('failed to start SonarQube (is Docker running?). Start it with `pnpm sonar:up`.');
   }
@@ -311,6 +336,7 @@ function reportAndExit(issues: SonarIssue[], hotspots: number): never {
 }
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   await ensureServerUp();
   const token = await ensureToken();
   const scanOutput = runScanner(token);

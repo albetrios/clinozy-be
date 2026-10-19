@@ -16,6 +16,7 @@ import {
   PROJECT_DISPLAY_NAME,
   SCALAR_SLUG_DEFAULT,
 } from '@/shared/constants/project-identity.constants.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const require = createRequire(import.meta.url);
 
@@ -153,6 +154,7 @@ function buildScalarRegistryUrl(): string | undefined {
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const openapiData = readFileSync(OPENAPI_PATH, 'utf-8');
   const version = getPackageVersion();
 

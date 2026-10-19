@@ -22,7 +22,7 @@ agent-os/cloud-environment/  environment.json, agents-cloud.md  ──▶ .curso
 
 ## Hook wiring
 
-[`agent-os/hooks/hooks.json`](../hooks/hooks.json) is the single manifest: each entry names a `script`, a `runtime`, and which agent event it targets (`claude` and/or `cursor`). The generator emits the Claude `settings.json` hooks block and the Cursor `hooks.json` block from it, skipping events an agent does not support. Scripts are fail-open (`$CLAUDE_PROJECT_DIR`, exit 0 on error).
+[`agent-os/hooks/hooks.json`](../hooks/hooks.json) is the single manifest: each entry names a `script` (a Node `.mjs` file, run with `node`) and which agent event it targets (`claude` and/or `cursor`). The generator emits the Claude `settings.json` hooks block and the Cursor `hooks.json` block from it, skipping events an agent does not support. Scripts are fail-open (`$CLAUDE_PROJECT_DIR`, exit 0 on error).
 
 ## Orchestration
 
@@ -41,7 +41,7 @@ Fill the full-slice template in [`docs/getting-started/requirement-intake.md`](.
 
 ## Continuous context
 
-`pre-compact-preserve.sh` (PreCompact) emits a resume card before compaction; `session-end.sh` (SessionEnd) flags uncommitted work. Together with `codegraph + headroom` (the default MCP pair, declared per agent in `targets.json`) and subagent fan-out, a long unattended build keeps its thread.
+`be-pre-compact-preserve.mjs` (PreCompact) emits a resume card before compaction; `be-session-end.mjs` (SessionEnd) flags uncommitted work. Together with `codegraph + headroom` (the default MCP pair, declared per agent in `targets.json`) and subagent fan-out, a long unattended build keeps its thread.
 
 ## Onboarding a new (or upgraded) agent
 

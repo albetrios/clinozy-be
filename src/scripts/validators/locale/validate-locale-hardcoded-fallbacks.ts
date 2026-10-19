@@ -1,6 +1,6 @@
 /**
  * Flags user-facing English fallback strings on throws that already use a translation messageKey.
- * Usage: part of pnpm validate:locale-keys
+ * Run by `src/tests/unit/validators/locale-hardcoded-fallbacks.policy.unit.test.ts` (the unit lane).
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -127,26 +127,4 @@ export function findHardcodedFallbackViolations(): HardcodedFallbackViolation[] 
   }
 
   return violations;
-}
-
-function main(): void {
-  const violations = findHardcodedFallbackViolations();
-
-  if (violations.length === 0) {
-    console.log('✅ validate-locale-hardcoded-fallbacks passed');
-    return;
-  }
-
-  console.error('\n❌ Hardcoded user-facing error fallbacks:\n');
-  for (const violation of violations) {
-    console.error(`  ${violation.file}:${violation.line} [${violation.kind}] ${violation.detail}`);
-  }
-  console.error(
-    '\nRule: throw with messageKey only; error handler translates via request.t(messageKey).',
-  );
-  process.exit(1);
-}
-
-if (import.meta.url === new URL(process.argv[1] ?? '', 'file:').href) {
-  main();
 }

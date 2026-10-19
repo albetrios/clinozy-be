@@ -6,4 +6,7 @@ alwaysApply: false
 
 # Domain + routes sync
 
-New domain/sub-domain, `*.container.ts`, `*.routes.ts`, or `src/routes.ts` wiring? Run **[be-domain-generator](../skills/be-domain-generator/SKILL.md)**; for routes also **[be-route-schema-doc-guard](../skills/be-route-schema-doc-guard/SKILL.md)** + **[be-route-catalog](../skills/be-route-catalog/SKILL.md)**. Full chains: `new-domain` / `route-change` in `agent-os/skills/chains.json`.
+New domain/sub-domain, `*.container.ts`, `*.routes.ts`, or `src/routes.ts` wiring? Run
+**[be-domain-generator](../skills/be-domain-generator/SKILL.md)**. A new domain runs the
+**new-domain** chain and a route change the **route-change** chain, each in its order — their rows
+of [`agent-os/docs/skill-triggers.md`](../docs/skill-triggers.md), generated from `agent-os/skills/chains.json` (this rule keeps no copy of the steps).

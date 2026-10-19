@@ -1,38 +1,41 @@
 import '@/shared/config/load-env-files.js';
-import { execFileSync } from 'node:child_process';
 import { waitProvisionAndGloballyClearChaosProxyListeners } from '@/tests/chaos/helpers/toxiproxy.client.js';
+import { workerDatabaseCount } from '@tooling/vitest/worker-databases.js';
+import type { TestProject } from 'vitest/node';
+import { prepareDatabase } from '@/scripts/ops/db-prepare.js';
 import { acquireDatabaseSuiteLock } from '@/tests/database-suite-lock.js';
 import {
   buildMigrationChildEnvironment,
-  ensureLocalTestDatabaseExists,
-  isHarnessOnProvidedDatabase,
   pointHarnessAtLocalTestDatabase,
 } from '@/tests/helpers/local-test-database.js';
 
 /**
- * Provision Toxiproxy routes before forks import database/redis singletons pointing at proxies.
+ * Prepares the test database, then provisions the Toxiproxy routes before forks import database
+ * and Redis singletons pointing at the proxies.
  *
  * @remarks
- * Locally it also creates and migrates the harness's own test database first — the chaos config
- * replaces the root global setup, and `bootstrap-env.ts` points every chaos fork at that database
- * (never the one `pnpm dev` serves). Migrations go over the direct connection, not the proxy, so
- * no leftover toxin can fail them. CI migrates its service-container database in the workflow.
- * It takes the same database lock as the main suite: both truncate the one test database.
+ * The chaos config replaces the root global setup, so it prepares the database the same one way
+ * (`prepareDatabase`: create, migrate, the permission catalog, one database per worker) — locally
+ * and on CI's service container alike. `bootstrap-env.ts` then points each chaos fork at its own
+ * worker database through the proxy (never the one `pnpm dev` serves). Migrations go over the
+ * direct connection, not the proxy, so no leftover toxin can fail them. It takes the same database
+ * lock as the main suite: both use the one test database.
  */
-export default async function globalSetupForVitestChaosSuite(): Promise<() => void> {
-  if (!isHarnessOnProvidedDatabase()) {
-    pointHarnessAtLocalTestDatabase();
-  }
+export default async function globalSetupForVitestChaosSuite(
+  project: TestProject,
+): Promise<() => void> {
+  pointHarnessAtLocalTestDatabase();
   const releaseDatabaseSuiteLock = acquireDatabaseSuiteLock();
-  if (!isHarnessOnProvidedDatabase()) {
-    await ensureLocalTestDatabaseExists();
-    execFileSync('pnpm', ['db:migrate'], {
-      stdio: 'pipe',
-      encoding: 'utf-8',
-      env: buildMigrationChildEnvironment(),
-      cwd: process.cwd(),
-    });
-  }
+  await prepareDatabase({
+    seed: 'permissions',
+    enableLocalLogins: false,
+    workerDatabases: workerDatabaseCount({
+      maxWorkers: project.vitest.config.maxWorkers,
+      projectMaxWorkers: project.vitest.projects.map((selected) => selected.config.maxWorkers),
+    }),
+    migrationEnvironment: buildMigrationChildEnvironment(),
+    migrationOutput: 'pipe',
+  });
   await waitProvisionAndGloballyClearChaosProxyListeners();
   return releaseDatabaseSuiteLock;
 }

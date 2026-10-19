@@ -32,9 +32,41 @@ concurrency:
 
 jobs:
   parity:
-    name: DB suites as RLS-subject roles
+    name: DB suites as RLS-subject roles (${{ matrix.group }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
+    # The four suites ran one after another in one job and outgrew its 45-minute budget (run
+    # 39008877908, 17 Oct: unit-db 4.9 min, e2e 4.8, integration 24.4, security cut off after
+    # 10.6), so they run as parallel jobs: unit-db; security as the PR DB lanes slice it
+    # (`VITEST_SECURITY_SLICE`: the permission route matrix, then the rest); and e2e +
+    # integration in the PR application-role lane's four domain groups (`VITEST_DOMAIN_FILTER`).
+    # The groups cover every domain plus `rest` exactly once — pinned by
+    # src/tests/unit/ci/db-shard-balance.policy.unit.test.ts. Each job migrates and provisions
+    # its own database; the canary is red if any job is.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: unit-db
+            suite: unit-db
+          - group: security-permission-matrix
+            suite: security
+            security_slice: matrix
+          - group: security-rest
+            suite: security
+            security_slice: rest
+          - group: app
+            suite: e2e-integration
+            domains: app
+          - group: tenancy-upload-audit
+            suite: e2e-integration
+            domains: tenancy,upload,audit
+          - group: auth-billing
+            suite: e2e-integration
+            domains: auth,billing
+          - group: rest-user-notify
+            suite: e2e-integration
+            domains: rest,user,notify
     services:
       postgres:
         image: postgres:17.10-alpine
@@ -61,8 +93,8 @@ jobs:
     env:
       # Pin the harness runtime like every other vitest workflow (see
       # reusable-vitest-postgres-redis.yml): without it Vitest injects NODE_ENV=test
-      # into its own process, the `pnpm db:migrate` child spawned by
-      # src/tests/global-setup.ts inherits it, and the env schema
+      # into its own process, the migration child the database step (src/scripts/ops/db-prepare.ts)
+      # spawns from src/tests/global-setup.ts inherits it, and the env schema
       # (local | development | production) fails the run before any suite executes.
       # CI has no .env files to rescue it the way a developer's .env.local does.
       NODE_ENV: development
@@ -86,22 +118,26 @@ jobs:
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup-node-pnpm
 
-      # Same transform cache as the PR vitest lanes. Cold Vite transforms stall the
-      # event loop during each suite's app boots; the overload-guard valve (250 ms
-      # p99) reads those stalls as saturation and sheds real test requests as 503s —
-      # verified locally with an instrumented guard on a cold cache (posture-
-      # independent: identical sheds as superuser). Warm transforms keep boot stalls
-      # under the valve, the way the green PR lanes run.
-      - name: Cache Vitest
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+      # Vitest's results cache, as in the PR vitest lanes: each file's last duration and
+      # result, so a run starts the slowest and the last-failed files first. It holds no
+      # transforms — each job transforms its files cold, the way every CI lane does. One key
+      # per group, so the seven jobs do not race to save one entry.
+      - name: Cache Vitest (restore the newest main-branch copy)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
-          path: node_modules/.vitest
-          key: vitest-rls-parity-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: node_modules/.vite/vitest
+          key: vitest-rls-parity-${{ runner.os }}-${{ matrix.group }}-${{ github.run_id }}
           restore-keys: |
-            vitest-rls-parity-${{ runner.os }}-
+            vitest-rls-parity-${{ runner.os }}-${{ matrix.group }}-
 
       - name: Export shared CI test env (JWT keys + secrets-encryption + origins)
         uses: ./.github/actions/test-env
+
+      # Like every DB lane: no crash safety on a throwaway database. Durability is not part of
+      # the role posture this canary checks.
+      - uses: ./.github/actions/tune-ci-postgres
+        with:
+          container: ${{ job.services.postgres.id }}
 
       - name: Run migrations (bootstrap superuser — creates the role taxonomy)
         run: pnpm db:migrate
@@ -121,16 +157,35 @@ jobs:
           SQL
 
       - name: unit-db (RLS-subject maintenance pool + operator fixtures)
+        if: matrix.suite == 'unit-db'
         run: pnpm vitest run --project unit-db
 
       - name: e2e
+        if: matrix.suite == 'e2e-integration'
+        env:
+          VITEST_DOMAIN_FILTER: ${{ matrix.domains }}
         run: pnpm test:e2e
 
       - name: integration
+        if: matrix.suite == 'e2e-integration'
+        env:
+          VITEST_DOMAIN_FILTER: ${{ matrix.domains }}
         run: pnpm test:integration
 
       - name: security (SET LOCAL ROLE clinozy_be_app suites)
+        if: matrix.suite == 'security'
+        env:
+          VITEST_SECURITY_SLICE: ${{ matrix.security_slice }}
         run: pnpm test:security
+
+      # Only main saves (as in clinozy-fe): cleanup-cache.yml drops every PR-scoped cache when the
+      # PR's run ends, so a PR-saved copy never reached the next run.
+      - name: Save the Vitest cache (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: node_modules/.vite/vitest
+          key: vitest-rls-parity-${{ runner.os }}-${{ matrix.group }}-${{ github.run_id }}
 
   resolve-success:
     name: Close ci-failure issue
@@ -142,63 +197,47 @@ jobs:
       contents: read
       issues: write
     steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
       - name: Close the open ci-failure issue
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          title="RLS parity canary failing"
-          existing="$(gh issue list --repo "$GH_REPOSITORY" --state open --label ci-failure \
-            --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
-          if [ -z "$existing" ]; then
-            echo "No open ci-failure issue to close."
-            exit 0
-          fi
-          gh issue close "$existing" --repo "$GH_REPOSITORY" \
-            --comment "RLS parity canary is green again — closing automatically. Run: ${WORKFLOW_URL}"
-          echo "Closed ci-failure issue #${existing}."
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: close
+          title: RLS parity canary failing
+          close-comment: RLS parity canary is green again — closing automatically.
 
   notify-failure:
     name: Notify failure
     needs: [parity]
-    if: always() && needs.parity.result == 'failure'
+    if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      actions: read # the fix plan reads the failed jobs and their logs
       contents: read
       issues: write
     steps:
+      - name: Checkout the ci-failure-issue action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          sparse-checkout: .github/actions/ci-failure-issue
       - name: Open or update ci-failure issue
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          gh label create ci-failure --repo "$GH_REPOSITORY" \
-            --color FFAB91 --description "Automated post-merge/guard failure notification" \
-            2>/dev/null || true
-          title="RLS parity canary failing"
-          body="$(printf '%s\n' \
-            "Run: ${WORKFLOW_URL}" \
-            "" \
-            "The DB suites are red under the PRODUCTION role posture (operator fixtures +" \
-            "RLS-subject maintenance pool + SET LOCAL ROLE clinozy_be_app) while the superuser" \
-            "PR lanes may still be green — this is the RLS-masking bug class." \
-            "" \
-            "Reproduce locally (parity is already provisioned per the" \
-            "maintenance-database-role runbook): run the DB suites normally — the local" \
-            "harness uses the same operator/maintenance roles." \
-            "Check first: NEW-row SELECT visibility, RETURNING visibility, missing" \
-            "WITH CHECK bypass arms, MATERIALIZED locking CTEs (the be-rls-tenant-isolation-guard" \
-            "skill checklist).")"
-          existing="$(gh issue list --repo "$GH_REPOSITORY" --state open --label ci-failure \
-            --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
-          if [ -n "$existing" ]; then
-            gh issue comment "$existing" --repo "$GH_REPOSITORY" --body "$body"
-            echo "Commented on existing ci-failure issue #${existing}."
-          else
-            gh issue create --repo "$GH_REPOSITORY" --title "$title" --label ci-failure --body "$body"
-          fi
+        uses: ./.github/actions/ci-failure-issue
+        with:
+          mode: open
+          title: RLS parity canary failing
+          body: |
+            The DB suites are red under the PRODUCTION role posture (operator fixtures +
+            RLS-subject maintenance pool + SET LOCAL ROLE clinozy_be_app) while the superuser
+            PR lanes may still be green — this is the RLS-masking bug class.
+
+            Reproduce locally (parity is already provisioned per the
+            maintenance-database-role runbook): run the DB suites normally — the local
+            harness uses the same operator/maintenance roles.
+            Check first: NEW-row SELECT visibility, RETURNING visibility, missing
+            WITH CHECK bypass arms, MATERIALIZED locking CTEs (the be-rls-tenant-isolation-guard
+            skill checklist).

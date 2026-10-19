@@ -1,6 +1,7 @@
 import '@/shared/config/load-env-files.js';
 import { spawnSync } from 'node:child_process';
 import { DATABASE_APP_ROLE } from '@/shared/constants/project-identity.constants.js';
+import { isMain } from '@tooling/setup/common/script.js';
 
 /**
  * The projects this lane covers.
@@ -49,6 +50,6 @@ export function runVitestAsApplicationRole(vitestArguments: readonly string[]): 
   return result.status ?? 1;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   process.exit(runVitestAsApplicationRole(process.argv.slice(2)));
 }

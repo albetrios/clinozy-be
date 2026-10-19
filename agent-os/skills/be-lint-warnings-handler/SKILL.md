@@ -2,6 +2,7 @@
 name: be-lint-warnings-handler
 description: Detail guide for resolving Biome lint warnings. Invoked by be-code-smells-and-best-practices only — not a separate auto-trigger. Handle warnings yourself; prefer fixing over disabling.
 indexNote: detail; via code-smells
+disable-model-invocation: true
 ---
 
 # Lint warnings handler (clinozy-be)

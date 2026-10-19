@@ -31,6 +31,9 @@ import { memberships } from '@/domains/tenancy/sub-domains/membership/membership
 import { uploads } from '@/domains/upload/upload.schema.js';
 import { RATE_LIMIT_KEY_PREFIX } from '@/shared/middlewares/rate-limit/rate-limit-fallback-store.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
+
+parseCommandLine({ args: process.argv.slice(2) });
 
 /** Role names `scenarios/comprehensive-journey.js` creates (and deletes when an iteration finishes). */
 const JOURNEY_ROLE_NAME_PATTERNS = ['Role %', 'Member Role %'];

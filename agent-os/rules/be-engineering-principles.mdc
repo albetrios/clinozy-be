@@ -13,7 +13,7 @@ Write production-grade, maintainable, scalable code. Preserve simplicity; avoid 
 
 ## Before writing code
 
-1. Read **[CLAUDE.md](../../CLAUDE.md)** for architecture, domains, and dependency rules.
+1. Read **[CLAUDE.md](../../CLAUDE.md)** for architecture and dependency rules, and **[src/domains/CLAUDE.md](../../src/domains/CLAUDE.md)** for the domains.
 2. For new requirements, use **[requirement-intake](../../docs/getting-started/requirement-intake.md)** and consult **[be-skill-index](../skills/be-skill-index/SKILL.md)** first.
 3. **Reuse before you create.** Before adding a helper, wrapper, env var, constant or pattern, search for the one that already does the job and use it. Create something new only when nothing existing fits.
    - **Close but not quite right?** Improve the existing one instead of forking a parallel version — or, if new is genuinely the better design, say why in the PR description. Either way, do it **in the same PR**: never leave old and new side by side behind a "consolidate later".

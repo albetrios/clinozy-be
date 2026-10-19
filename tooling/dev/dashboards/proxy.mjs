@@ -22,6 +22,9 @@ import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { parseCommandLine } from '../../setup/common/script.ts';
+
+parseCommandLine({ args: process.argv.slice(2) });
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const HUB_HTML_PATH = join(ROOT, 'tooling/dev/dashboards/hub.html');

@@ -220,13 +220,67 @@ See also [api-versioning.md](../api/api-versioning.md).
 2. `beforeAll`: `createTestApp()`; `afterAll`: `await app.close()`.
 3. `beforeEach`: `cleanupDatabase()`; seed permissions if needed.
 4. Per route: 401, 403 (if gated), 200 (204 for DELETE), 400 validation.
-5. Run targeted `pnpm test:*`. `pnpm dev` can keep running: local test runs use their own database (`<project>_test`, created and migrated by the global setup — see `src/tests/helpers/local-test-database.ts`), never the one `pnpm dev` serves. A remote `DATABASE_*URL` in your env files is replaced (main and migration logins) or dropped (operator and maintenance logins), every wipe checks `current_database()` first, and Redis cleanup only ever touches the `<product>:test:` namespace. Provider keys are fakes forced by `src/tests/helpers/harness-provider-env.ts`, which also makes nock refuse every HTTP(S) and `fetch` connection to a non-loopback host — no suite can reach the real Stripe, Resend or S3, even by accident. Stub the client module in a suite that needs a provider call (a call that slips through fails at once with nock's `NetConnectNotAllowedError`).
+5. Run targeted `pnpm test:*`. `pnpm dev` can keep running: local test runs use their own database (`<project>_test`, prepared by the global setup and cloned once per worker — see **Worker databases** below and `src/tests/helpers/local-test-database.ts`), never the one `pnpm dev` serves. A remote `DATABASE_*URL` in your env files is replaced (main and migration logins) or dropped (operator and maintenance logins), every wipe checks `current_database()` first, and Redis cleanup only ever touches the worker's `<product>:worker-<n>:test:` namespace. Provider keys are fakes forced by `src/tests/helpers/harness-provider-env.ts`, which also makes nock refuse every HTTP(S) and `fetch` connection to a non-loopback host — no suite can reach the real Stripe, Resend or S3, even by accident. Stub the client module in a suite that needs a provider call (a call that slips through fails at once with nock's `NetConnectNotAllowedError`).
 
 ---
 
 ## Vitest projects
 
 All tiers share one root **`vitest.config.ts`**. Named projects live in **`tooling/vitest/projects.ts`**. Scripts filter with **`--project <name>`** (for example `default`, `unit`, `e2e`, `contract`, `chaos`). Default **`pnpm test`** runs the **`default`** project only (excludes contract, chaos, and smoke).
+
+### Selecting the affected tests
+
+`pnpm test:select` names the test files a change can affect (`--why` says why each was picked,
+`--run` runs them lane by lane). The rules live in `tooling/vitest/test-selection.util.ts`:
+
+| Rule | Selects |
+| --- | --- |
+| Next to the code | every test under the folder that owns the changed file's tests (the nearest folder above it with `__tests__/`) |
+| Imports | a test whose imports reach the changed file — not through the test harness (`src/tests/helpers/`) or a wiring file (outside every app sub-domain, importing three or more areas: `app.container.ts`, `worker-containers.ts`) |
+| Domain map | a test that boots the app (reaches `src/app.ts`), by its area: the changed file's (`app/<sub-domain>`, or `<domain>`) and every area whose code imports it; plus app tests that name a reached sub-domain (`/app/leads`) |
+| Containers | a test that loads a container wiring file (`app-records.container.ts`, `worker-containers.ts`), directly or through the harness, for any change the container wires: it fails as soon as anything it wires fails to load. Found by the 18 Oct planted-break proof (a top-level throw in the leads service failed 41 unit test files of other sub-domains the selection had skipped); only containers, because following every wiring file would select about half the unit suite |
+| Mentions | a test that names the changed path, its file name, a folder above it (also as `join('agent-os', 'hooks')`) or a glob over it |
+| Always run | on any source change under `src/`: the security project (RLS, the permission matrix), `src/tests/e2e/`, the global scans, every test that imports nothing from the repository, and every **unreachable** test — one a change it depends on would not select: an app-booting test outside every domain (the API contract and OpenAPI response suites, the cross-cutting integration and performance suites), or one that reaches non-escalating code only through the harness or a wiring file (62 today) |
+
+Everything runs when a change touches the escalation list (dependencies, Vitest config and
+`tooling/vitest/`, the test harness, tenancy, user, auth, audit, `src/shared/`, `src/core/`,
+`src/infrastructure/`, `migrations/`, the app entry files), a path outside the known roots, a
+deleted file nothing imports any more, or when the selector fails. So an app sub-domain change
+gets a small selection and a core-domain change runs everything — by design.
+
+PR CI uses the selection as an **early signal**: the `Affected database tests (early signal)` job
+runs `pnpm test:select --changed-only --exclude 'src/tests/security/rls/**' --lane db-bound --run`
+beside the database matrix. `--changed-only` keeps only the tests picked for the change — the
+always-run set is the matrix's — and selects nothing when the change selects everything, so a
+core-domain change skips it. For an app sub-domain change it is a fraction of the matrix (a
+`leads` service change: 13 database files, about 3 minutes locally), so a red result arrives
+first. It is not a gate: the matrix still decides the merge.
+
+The selection is checked against the full suite: when a PR's unit job or database matrix fails,
+the `Selector miss check` job (`pnpm test:selector-misses`, not a gate) lists every failed file the
+selection would have skipped — a miss, or a flake. A real miss becomes an entry in
+`tooling/vitest/selector-fixtures.json` (its fixture line is printed), so the next selection
+includes it. `pnpm agent-os:check` holds the selection to those entries and to one generated
+fixture per sub-domain and nested sub-domain (its main file selects every test in its folder),
+checks that the core domains run everything and that every unreachable test is always run
+(`tooling/vitest/selector-fixtures.check.ts`).
+
+### Selected tests at push
+
+`.husky/pre-push` runs its unit tests through `pnpm test:pre-push`
+(`tooling/vitest/pre-push-tests.ts`): only the unit-project files the selection picks for the
+pushed commits, always-run files included. A core-domain change (tenancy, user, auth, audit,
+`src/shared/`, `src/core/`, `src/infrastructure/`) escalates, so it runs the whole unit project
+(`pnpm test:unit`), as does a selection that cannot be built. CI still runs every suite.
+`pnpm test:affected` previews it.
+
+Proven before it became the default (18 Oct): eight planted breaks, one at a time, each run
+against the whole unit project — a top-level throw in the leads, billing plan, webhook and upload
+services and in the early failure alert script, a workflow without its `actions: read`, a route
+dropped from `docs/routes.txt`, and a changed slot step in the appointment rules (the last two
+fail no unit test; CI's route catalog check catches the dropped route). After the container rule
+above, every failing test was in the selection (0 misses). The `Selector miss check` keeps
+watching every PR.
 
 ### Run one database suite at a time
 
@@ -245,16 +299,51 @@ run's lock is taken over automatically (dead pid), and two runs against two diff
 not block each other. If a suite refuses to start and the named process is genuinely gone, delete
 the lock file the message points at.
 
+### Worker databases
+
+Every Vitest worker that reaches Postgres runs on its own database — there is one layout, with
+nothing to set. The global setup prepares the test database the one way every database is set up
+(`prepareDatabase`, `src/scripts/ops/db-prepare.ts`: create, migrate, the permission catalog), then
+clones it once per pool slot with `CREATE DATABASE … TEMPLATE` (`<test database>_worker_<n>`; roles
+are cluster-wide, so every login works in a clone). Each worker points its `DATABASE_*URL`s at its
+clone and its Redis prefix at `<stem>:worker-<n>:test:` (`src/tests/helpers/local-test-database.ts`).
+The base test database is only the template: the wipe guard accepts a worker's own clone and nothing
+else. The same holds on CI (`<service container database>_worker_<n>`) and in the chaos suite.
+
+How many workers (`tooling/vitest/worker-databases.ts`):
+
+| Project | Files at once | Why |
+| --- | --- | --- |
+| `e2e`, `integration` | one per core, at most 4 (one under `--coverage`), in their own `sequence.groupOrder` | proven equal to one at a time; coverage slows the API past its statement timeout |
+| `unit-db`, `security`, `performance` | one | parallel not yet proven for them; performance timings must be a file's own |
+
+The clone count covers every pool id a run can hand out: the largest of the machine's cores, the
+run's `--maxWorkers` and every selected project's `maxWorkers` (Vitest 5.0.3 never hands out a
+pool id above the pool size, measured 19 Oct). One clone of the 32 MB test database takes
+130–150 ms. A hosted test database (`ALLOW_HOSTED_TEST_DATABASE=true`) needs `CREATEDB` for the
+clones.
+
+Proven before it became the default (18 Oct): three parallel runs and one serial run (e2e, then
+integration) of the same 199 files gave the same 1,671 test ids with the same status, 1,670 passed
+and 1 skipped by design (it runs only under `pnpm test:rls-role`). The serial run took 3,743 s; the
+parallel runs 1,087–1,376 s, with at most 19 Postgres connections seen. Under coverage, four
+parallel workers on a 4-core machine pushed one API query past its 5 s statement timeout
+(`DATABASE_HTTP_STATEMENT_TIMEOUT_MS`), a 500 in one test of 1,671 (18 Oct), while every plain
+parallel run stayed green — so `--coverage` runs those files one at a time, on the same clones.
+
 ### What global setup prepares
 
-Before any database-backed suite, `src/tests/global-setup.ts` mirrors the deploy sequence
-(`pnpm db:migrate` → `pnpm db:seed`, see `reusable-railway-deploy.yml`): it takes the lock above,
-runs `pnpm db:migrate`, and then seeds the **permission catalog** (`tenancy.permissions`) with the
-reference seeder. The catalog is reference data, not a migration, so without that step it existed
-only after some suite happened to call `seedAllPermissions()` — and every login that provisions a
-personal organization depended on test order. `cleanupDatabase()` truncates everything **except**
-`permissions` and `schema_migrations`, so the catalog seeded once stays in place for the whole run.
-A suite that empties the catalog on purpose must restore it (`seedAllPermissions()` in `afterEach`).
+Before any database-backed suite, `src/tests/global-setup.ts` takes the lock above and calls
+`prepareDatabase` — the same function behind `pnpm db:migrate`, `pnpm db:seed` and
+`pnpm db:seed:full`, and so behind every deploy (`reusable-railway-deploy.yml` runs `pnpm db:seed`):
+create, migrate, then the **permission catalog** (`tenancy.permissions`, the `permissions` seed
+level), then one database per worker. The catalog is reference data, not a migration, so without
+that step it existed only after some suite happened to call `seedAllPermissions()` — and every login
+that provisions a personal organization depended on test order. `cleanupDatabase()` truncates
+everything **except** `permissions` and `schema_migrations`, so the catalog in the template stays in
+place for the whole run. A suite that empties the catalog on purpose must restore it
+(`seedAllPermissions()` in `afterEach`). No CI job migrates before a Vitest run: the global setup
+does.
 
 ---
 

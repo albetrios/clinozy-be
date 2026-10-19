@@ -36,7 +36,7 @@ pnpm dev:stack:stop                   # stop the API + worker (Postgres + Redis 
 pnpm dev:stack:reset-db               # drop + recreate the Compose database, migrate, seed, restart
 ```
 
-Run it yourself (another platform, after a stop, or with `AGENT_AUTO_STACK=0`):
+Run it yourself (another platform, or after a stop):
 
 ```bash
 export PATH="/opt/node24/bin:$HOME/.local/bin:$PATH"
@@ -56,7 +56,7 @@ bash tooling/setup/agent/healthcheck.sh
 ```bash
 export PATH="/opt/node24/bin:$HOME/.local/bin:$PATH"
 SONAR=0 pnpm compose:up && pnpm compose:wait
-pnpm db:migrate && pnpm setup:local --only-env && pnpm db:seed
+pnpm db:seed   # the database step: create, migrate, logins, reference rows
 pnpm dev &
 bash tooling/setup/agent/healthcheck.sh
 ```

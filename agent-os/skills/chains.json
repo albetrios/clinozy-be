@@ -1,5 +1,5 @@
 {
-  "description": "Declarative skill chains — ordered, named pipelines that capture the be-skill-index 'multi-skill scenarios' as runnable sequences. Single source for: workflow commands (e.g. /be-route-complete), the routing reminder hooks, and the eventual `agent-os:plan-skills` planner. agent-os/evals/check.ts asserts every step references a real skill and that the entry step matches a skill-triggers.md trigger. Steps run in order; each step is an existing skill invoked by name.",
+  "description": "Declarative skill chains — ordered, named pipelines that capture the multi-skill scenarios as runnable sequences. Single source for: workflow commands (e.g. /be-route-complete), the routing reminder hooks, and the eventual `agent-os:plan-skills` planner. agent-os/evals/check.ts asserts every step references a real skill; `pnpm agent-os:generate` renders the chains, with each skill's own `trigger`, into agent-os/docs/skill-triggers.md and agent-os/hooks/skill-routing.json. Steps run in order; each step is an existing skill invoked by name.",
   "chains": {
     "route-change": {
       "description": "Adding or changing an API route end-to-end.",

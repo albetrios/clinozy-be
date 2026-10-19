@@ -10,7 +10,8 @@ Get the current PR to **mergeable + green CI + review comments addressed**, then
 
 ## Preconditions
 
-- Use `gh` for PR status, checks, and comments.
+- Use `gh` (or the GitHub tools) for PR status, checks, and comments — to read them once, never in a polling loop.
+- Subscribe to the PR's activity (`subscribe_pr_activity` where it exists): CI results, reviews, conflicts and the merge wake the session; after a push from the CLI, the `be-push-ci-watch.mjs` hook wakes it when a run fails. Where neither exists, one safety-net check-in (`send_later`) replaces any timer.
 - Default branch: `main` (see `.github/workflows/pr-ci.yml`).
 - Review rubric: **`docs/process/pr-review.md`** (human + agent checklist, severity legend).
 
@@ -33,6 +34,9 @@ gh pr checks
 
 ### 3. CI failures (fix in scope only)
 
+On a red check, start **be-ci-investigator** in the background — one per failing check (the PR,
+the check, its run id) — and act on its root cause and fix plan instead of reading the logs yourself.
+
 | Job / area                    | Typical fix                                                                                                  |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | **Quality** | `pnpm ci:quality` locally — validate, domain, contract tests, routes catalog, migrate lint, Gitleaks/Semgrep |
@@ -52,7 +56,7 @@ pnpm validate:domain   # when domain layout touched
 git push
 ```
 
-Re-watch `gh pr checks` until green.
+Then wait for the next PR event — the push's CI result arrives as one; do not re-run `gh pr checks` in a loop.
 
 ### 4. Review comments
 
@@ -75,7 +79,7 @@ pnpm ci:local
 - Prefer **squash** so the base branch gets one conventional commit (release-please bumps from it).
 - If the branch is **behind** the base, update it first (re-runs CI), then re-check.
 - For a **transient** CI failure (e.g. an image-pull timeout), re-run the failed job / re-trigger CI rather than editing code.
-- CI **success is not delivered by webhooks** — re-check on a timer or self check-in. The watch is not finished until the PR is **merged or closed**.
+- Results, green and red, arrive as PR events; a lost event is covered by one safety-net check-in, not a timer. The watch is not finished until the PR is **merged or closed**.
 
 ## Related skills
 

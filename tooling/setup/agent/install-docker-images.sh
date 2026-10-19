@@ -47,10 +47,10 @@ wait_for_docker() {
   return 1
 }
 
-# Start (or restart) the Docker daemon so a freshly written daemon.json applies.
+# Start the Docker daemon the one way (ensure-docker-daemon.sh), so a freshly written daemon.json
+# applies on its next start.
 start_docker() {
-  service docker start >/dev/null 2>&1 || (dockerd >/tmp/dockerd-setup.log 2>&1 &)
-  wait_for_docker
+  bash "${agent_dir}/ensure-docker-daemon.sh" && wait_for_docker
 }
 
 # Steps 1–2 are for the Linux cloud image, whose Docker Hub blob CDN is blocked. Docker Desktop
@@ -80,7 +80,7 @@ if [ "$(uname -s)" = "Linux" ]; then
   # 2) Ensure dockerd is running and has actually picked up the mirror.
   if ! docker info >/dev/null 2>&1; then
     echo "install-docker-images: starting dockerd…" >&2
-    bash "${agent_dir}/ensure-docker-daemon.sh" || start_docker || true
+    start_docker || true
   fi
 
   if ! docker info >/dev/null 2>&1; then
@@ -105,6 +105,13 @@ if [ -f "${repository_root}/docker-compose.yml" ] && docker info >/dev/null 2>&1
   echo "install-docker-images: pre-pulling compose images…" >&2
   ( cd "${repository_root}" && docker compose pull postgres redis ) >&2 2>&1 \
     || echo "install-docker-images: pre-pull failed (non-fatal) — compose will pull on demand via the mirror." >&2
+fi
+# The SonarQube server + scanner the pre-commit gate runs (~1 GB): pulled here, in the cached
+# Setup script, so the first commit that touches src/ does not wait on the download.
+if [ -f "${repository_root}/docker-compose.sonar.yml" ] && docker info >/dev/null 2>&1; then
+  echo "install-docker-images: pre-pulling the SonarQube gate images…" >&2
+  ( cd "${repository_root}" && docker compose -f docker-compose.sonar.yml pull sonarqube scanner ) >&2 2>&1 \
+    || echo "install-docker-images: SonarQube pre-pull failed (non-fatal) — the gate pulls on first use." >&2
 fi
 
 echo "install-docker-images: done." >&2

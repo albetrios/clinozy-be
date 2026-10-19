@@ -28,6 +28,8 @@
 import { readFileSync } from 'node:fs';
 import { mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { readRouteCatalog } from '@tooling/openapi/route-catalog/catalog-reader.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 interface RouteEntry {
   method: string;
@@ -55,7 +57,9 @@ const SMOKE_FILE_FRAGMENT = 'src/scripts/ops/api-smoke-test.ts';
 
 const SMOKE_FILE = join(REPO_ROOT, SMOKE_FILE_FRAGMENT);
 
-const CHECK_MODE = process.argv.includes('--check');
+const CHECK_MODE =
+  parseCommandLine({ args: process.argv.slice(2), options: { check: { type: 'boolean' } } }).values
+    .check === true;
 
 /**
  * Routes that are explicitly allowed to lack a dedicated e2e/integration
@@ -75,27 +79,17 @@ const JUSTIFIED_GAPS = new Set<string>([
   // only with a written justification)
 ]);
 
+/** The catalog's routes (the one catalog parser), each with its normalised path for matching. */
 function parseRoutesFile(): RouteEntry[] {
-  const text = readFileSync(ROUTES_FILE, 'utf8');
-  const entries: RouteEntry[] = [];
-  const routeLineRegex = /^\s+(GET|POST|PATCH|PUT|DELETE)\s+(\S+)\s+(.+)$/;
-  for (const line of text.split('\n')) {
-    const match = line.match(routeLineRegex);
-    if (!match) continue;
-    const method = match[1]!;
-    const path = match[2]!;
-    const authType = (match[3] ?? '').trim();
-    entries.push({
-      method,
-      pathOriginal: path,
-      pathNormalised: path
-        .replace(/^\/api\/v\d+\//, '')
-        .replace(/:[\w-]+/g, ':PARAM')
-        .toLowerCase(),
-      authType,
-    });
-  }
-  return entries;
+  return readRouteCatalog(ROUTES_FILE).map((route) => ({
+    method: route.method,
+    pathOriginal: route.path,
+    pathNormalised: route.path
+      .replace(/^\/api\/v\d+\//, '')
+      .replace(/:[\w-]+/g, ':PARAM')
+      .toLowerCase(),
+    authType: route.gate,
+  }));
 }
 
 function walkTestFiles(root: string): string[] {

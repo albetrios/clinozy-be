@@ -10,7 +10,7 @@
 type Lane = {
   name: string;
   args: string[];
-  /** Lanes that run sequentially together — useful when DB cleanup races would happen across forks. */
+  /** Run the lane one project per Vitest process, in order, so one local Postgres serves one process at a time. */
   serial?: boolean;
 };
 
@@ -26,9 +26,10 @@ export const LANES: Lane[] = [
     args: ['run', '--project', 'unit', '--project', 'property', '--project', 'global'],
   },
   /**
-   * DB-bound: unit-db, e2e, integration, security, performance.
-   * Each project enforces serial file execution; lanes run after `fast` so a single
-   * local Postgres is not hammered by two processes at once.
+   * DB-bound: unit-db, e2e, integration, security, performance — one process at a time, after
+   * `fast`, so a single local Postgres is never driven by two processes at once. Every worker runs
+   * on its own database; e2e and integration run their files in parallel
+   * (`tooling/vitest/worker-databases.ts`).
    */
   {
     name: 'db-bound',

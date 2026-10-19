@@ -5,8 +5,14 @@
 import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { suggestNextMigrationPrefix } from '@/scripts/validators/migration/lint-migrations.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 async function main(): Promise<void> {
+  const [descriptionArgument] = parseCommandLine({
+    args: process.argv.slice(2),
+    maxPositionals: 1,
+    usage: 'Usage: pnpm db:migrate:next-prefix [description_snippet]',
+  }).positionals;
   const migrationsFolder = resolve(process.cwd(), 'migrations');
   const entries = await readdir(migrationsFolder);
   const upFilenames = entries.filter(
@@ -16,7 +22,7 @@ async function main(): Promise<void> {
   const { currentMax, nextPrefix } = suggestNextMigrationPrefix({
     upMigrationFilenames: upFilenames,
   });
-  const descriptionSnippet = process.argv[2]?.trim();
+  const descriptionSnippet = descriptionArgument?.trim();
   const suffix =
     descriptionSnippet && descriptionSnippet.length > 0 ? descriptionSnippet : 'your_description';
   const snakeSuffix = suffix

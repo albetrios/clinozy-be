@@ -66,16 +66,16 @@ Granular procedures live in **skills** (invoked by name); these commands are **w
 
 | Command | Purpose |
 | ------- | ------- |
-| `/be-pre-merge-review` | Read-only pipeline (sql-design → production-hardening → verifier, from `agent-os/agents/pipelines.json`); one aggregated report. |
+| `/be-pre-merge-review [release]` | Read-only pipeline from `agent-os/agents/pipelines.json` (`release`: everything since the last release tag): the reviewers the diff needs (sql-design, RLS, idempotency, production-hardening; the verifier always) at once in the background; one report in `REVIEW.md` → Findings format. |
 
 **PR lifecycle**
 
 | Command | Purpose |
 | ------- | ------- |
 | `/be-open-pr [title]` | Push the branch + open a PR to `main` (the explicit PR opt-in). |
-| `/be-watch-pr <n>` | Subscribe to a PR; triage CI + review comments until green. |
-| `/be-merge-pr <n>` | Merge once CI is green and approvals are in. |
-| `/be-ship [title]` | The full flow: open-pr → watch-pr → merge-pr. |
+| `/be-watch-pr <n>` | Subscribe to a PR; triage CI + review comments on PR events until green, then `/be-merge-pr`. |
+| `/be-merge-pr <n>` | Turn on GitHub auto-merge (squash): GitHub merges when every required check passes and the approvals are in; no up-to-date requirement, never `--admin`. |
+| `/be-ship [title]` | The full flow: pre-merge-review (a critical or major finding stops the push) → open-pr → watch-pr → merge-pr. |
 
 **Maintenance**
 
@@ -88,9 +88,10 @@ Granular procedures live in **skills** (invoked by name); these commands are **w
 The session-start and guardrail follow-up is implemented — see
 [`agent-os/hooks/README.md`](../hooks/README.md):
 
-- **SessionStart** (`agent-os/hooks/session-start.sh`) — on Claude Code on the web,
+- **SessionStart** (`agent-os/hooks/be-session-start.mjs`) — on Claude Code on the web,
   verifies Node/deps/codegraph, installs deps, and prints the skill-trigger map.
-- **Guardrails** — block destructive shell + secret writes; warn on protected paths
-  and cross-domain imports. Claude: `PreToolUse` (`guardrails.mjs`); Cursor:
-  `beforeShellExecution` (`cursor-shell-guard.mjs`) + advisory rule; Codex: AGENTS.md
+- **Guardrails** — block destructive shell, secret writes and skipping the git hooks
+  (`--no-verify`, `git commit -n`, `HUSKY=0`); warn on protected paths
+  and cross-domain imports. Claude: `PreToolUse` (`be-guardrails.mjs`); Cursor:
+  `beforeShellExecution` (`be-cursor-shell-guard.mjs`) + advisory rule; Codex: AGENTS.md
   policy + sandbox/approvals.

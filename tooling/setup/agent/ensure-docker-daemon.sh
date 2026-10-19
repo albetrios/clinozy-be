@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Ensure the Docker daemon is reachable before running docker compose.
 #
-# Cloud agent images can have the Docker CLI installed while dockerd is stopped.
-# This helper starts dockerd when possible, waits for the socket, and prints
-# useful diagnostics when the platform does not permit nested Docker.
+# The one way tooling starts Docker. On a Mac it starts OrbStack or Docker Desktop
+# (whichever is installed) and waits for it. Cloud agent images can have the Docker
+# CLI installed while dockerd is stopped: there it starts dockerd when possible, waits
+# for the socket, and prints useful diagnostics when the platform does not permit
+# nested Docker. Identical in clinozy-fe.
 set -uo pipefail
 
 readonly LOG_FILE="${DOCKERD_AGENT_LOG:-/tmp/dockerd-agent.log}"
@@ -107,6 +109,25 @@ start_restricted_vfs_dockerd() {
     --storage-driver=vfs \
     --data-root="${VFS_DATA_ROOT}"
 }
+
+# A developer Mac: OrbStack or Docker Desktop owns the daemon.
+if [ "$(uname -s)" = "Darwin" ]; then
+  docker info >/dev/null 2>&1 && exit 0
+  if command -v orb >/dev/null 2>&1; then
+    log "starting OrbStack…"
+    orb start >/dev/null 2>&1 || true
+    docker context use orbstack >/dev/null 2>&1 || true
+  elif [ -d /Applications/Docker.app ]; then
+    log "starting Docker Desktop…"
+    open -a Docker >/dev/null 2>&1 || true
+  else
+    log "no Docker runtime — install OrbStack or Docker Desktop (pnpm setup:mac-tools)."
+    exit 1
+  fi
+  DOCKERD_WAIT_SECONDS="${DOCKERD_WAIT_SECONDS:-60}" wait_for_docker && exit 0
+  log "Docker did not come up within ${DOCKERD_WAIT_SECONDS:-60} seconds."
+  exit 1
+fi
 
 sudo_cmd=()
 if [ "$(id -u)" -ne 0 ]; then

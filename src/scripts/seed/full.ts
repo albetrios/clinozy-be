@@ -2,18 +2,15 @@
  * Full seed — runs minimal seed + demo data + common flows (add user to organization, invite),
  * then the demo clinic (`demo-clinic.ts`). Orchestration only; entity logic lives in domain seeds.
  *
- * Usage: pnpm db:seed:full
+ * Run by `pnpm db:seed:full` (`src/scripts/ops/db-prepare.ts`, seed level `full`), which migrates
+ * first and drains the pool after.
  */
 import { MEMBERSHIP_STATUS } from '@/domains/tenancy/sub-domains/membership/membership.constants.js';
-import '@/shared/config/load-env-files.js';
-import '@/scripts/seed/seed-runtime-url.js';
 import { createHash, randomBytes } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 import {
   seedBranch,
   seedBranchMember,
 } from '@/domains/app/sub-domains/branches/seed/branches.seed.js';
-import { closeDatabase } from './helpers.js';
 import {
   seedPermissions,
   SYSTEM_PERMISSIONS,
@@ -55,8 +52,8 @@ const ADMIN_PERMISSION_CODES = SYSTEM_PERMISSIONS.map((permission) => permission
  * Orchestrator for the full demo seed: applies the minimal seed (permissions,
  * plans, demo user) and then layers on faker-generated organizations,
  * memberships, invitations, role wiring and the demo clinic. Idempotent — re-running upserts
- * existing rows. Does not manage the DB connection; the CLI entrypoint below
- * drains the pool after it resolves, so a test may call it directly.
+ * existing rows. Does not manage the DB connection; `pnpm db:seed:full` drains the pool after it
+ * resolves, so a test may call it directly.
  */
 export async function runFullSeed(): Promise<void> {
   logger.info('seed.full: starting');
@@ -194,21 +191,4 @@ export async function runFullSeed(): Promise<void> {
   logger.info({ slug: clinic.slug, created: clinic.created }, 'seed.full: demo clinic seeded');
 
   logger.info('seed.full: done');
-}
-
-/**
- * Auto-run only when executed directly (`tsx src/scripts/seed/full.ts`), never on import — so a
- * test can import {@link runFullSeed} without triggering a seed or tearing down the shared pool.
- * `closeDatabase` always runs (success or failure) so the database pool drains before exit;
- * without it a thrown error would `process.exit(1)` and leave aborted connections behind in Postgres.
- */
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {
-  runFullSeed()
-    .catch((error) => {
-      logger.error({ error }, 'seed.full: failed');
-      process.exitCode = 1;
-    })
-    .finally(async () => {
-      await closeDatabase();
-    });
 }

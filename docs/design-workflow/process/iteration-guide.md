@@ -40,8 +40,8 @@ pnpm iteration:new feat pharmacy-returns --both
 - The launch takes no topic: `pnpm iteration:new launch`.
 - Result: `iterations/<iteration>/README.md` (`Status: planning`) — nothing else yet. Write its
   **Summary** line.
-- The printed Baseline is a suggestion (the latest `done` / `frozen` iteration in this repository);
-  you confirm it at planning Step 0.
+- The Baseline is `none`: the iteration is from scratch. Only when the user names an earlier
+  iteration to build on is it recorded: `pnpm iteration:baseline <iteration> <baseline>`.
 
 ### Step 3 — Place the drop
 
@@ -52,12 +52,15 @@ pnpm iteration:intake <iteration> BRIEF.md --mode brief --both --dry-run     # o
 pnpm iteration:intake <iteration> <source> [--mode …] --both                 # then for real
 ```
 
-- Every mode leaves a **full snapshot** in `intake-files/`: `full` is the drop as received (always the
-  launch); `overlay` lays the received files over the Baseline's snapshot; `brief` adds `BRIEF.md`
-  (start from `tooling/iterations/templates/BRIEF.md`; all six sections required) to the Baseline's
-  snapshot and refuses any other changed file.
-- `overlay` and `brief` build on the README's Baseline — confirm it first if it is `—`
-  (`pnpm iteration:baseline <iteration> <baseline>`); its own intake must pass the gate.
+- Every mode stores **what arrived** in `intake-files/`, and the snapshot is resolved from it: `full`
+  is the drop as received (always the launch); `overlay` stores the received files, laid over the
+  Baseline's snapshot; `brief` stores `BRIEF.md` (start from `tooling/iterations/templates/BRIEF.md`;
+  all six sections required) — from scratch on Baseline `none`, or added to a named Baseline's
+  snapshot, refusing any other changed file.
+- `overlay`, and a `brief` on a named Baseline, build on the README's Baseline — record it first
+  only when the user names one (`pnpm iteration:baseline <iteration> <baseline>`); its own intake
+  must pass the gate. An older intake that still stores copies of its Baseline's files is trimmed
+  with `pnpm iteration:intake <iteration> --compact`, which never changes the snapshot or its hash.
 - The README's Drop placed, Drop source, Intake mode, Intake note, Schema-routes and Intake hash rows
   are filled. It stops when `PRD.md` or `schema-routes.md` is missing, and when a different snapshot
   is already there — re-run with `--replace` while the iteration is still `planning`.
@@ -72,14 +75,12 @@ the gate pass? Do the Schema-routes values match in both repositories?
 
 Say **"plan iteration `<iteration>`"** (or paste the
 [iteration-planning prompt](../prompts/iteration-planning-prompt.md)). The **be-iteration-planning**
-skill runs Steps 0–7 and stops after each:
+skill runs Steps 0–7 and stops after each — Steps 1–3 run back to back with one stop:
 
 | Skill step | What you answer or check |
 | --- | --- |
-| 0 — Confirm + gate | pick the iteration from the eligibility table; incremental: confirm the Baseline (saved with `pnpm iteration:baseline`); then `pnpm iteration:intake <iteration> --check` — a failure stops everything |
-| 1 — Inventory | are the counts right — screens, flows, entities, operations? |
-| 2 — Delta (incremental) | full / overlay: `pnpm iteration:diff <baseline> <iteration>` vs the designer's notes — are the findings intended? brief: `BRIEF.md` is the change list, and nothing else changed. Always: the Baseline's Standing deviations |
-| 3 — Reconcile | for each PRD ↔ schema-routes mismatch: which source wins? Anything only the screens or the prototype say (not in the PRD or schema-routes, nor an accepted frontend request): what do you want? — the plan never decides it |
+| 0 — Confirm + gate | pick the iteration from the eligibility table; a Baseline only if you name one (`pnpm iteration:baseline`); then `pnpm iteration:intake <iteration> --check` — a failure stops everything |
+| 1–3 — Read the drop (one stop) | **Inventory:** are the counts right — screens, flows, entities, operations? **Delta** (incremental): full / overlay: `pnpm iteration:diff <baseline> <iteration>` vs the designer's notes — are the findings intended? brief: `BRIEF.md` is the change list, and nothing else changed; always the Baseline's Standing deviations. **Reconcile:** for each PRD ↔ schema-routes mismatch: which source wins? Anything only the screens or the prototype say (not in the PRD or schema-routes, nor an accepted frontend request) becomes a Step 4 question — the plan never decides it |
 | 4 — Blocking questions | the RED questions — ownership, scope (organization or narrower), lifecycle and delete policy, who may do what, background timing, notification channels, realtime, outside systems, and where new tables live (the domain for each group, and their plural snake_case names) |
 | 5 — Route review | one sub-domain at a time in `plans/routes-final.md` ([template](routes-final-template.md)): its tables and connections, routes, permissions, errors and decisions with a recommendation — is it right? Your OK makes the sub-domain final; a change reopens it |
 | 6 — KICKOFF.md + plans/ | the plan, the ROUTE ledger (one row per sub-domain of the route review, or per table, background piece, flow), the requirements, the stories |
@@ -116,13 +117,18 @@ skill confirms the iteration (eligible: `approved`, Baseline `none` or `done`/`f
 
 1. builds it through its driver, with its route-review section as the spec — a **NEW table** through the
    [staged-build prompt](../../getting-started/staged-build-prompt.md) (its Stage 1 is where you
-   approve the table design); a **CHANGE table, flow or background work** through
-   `/be-build-requirement`;
-2. verifies it (`pnpm validate`, the row's acceptance and tests);
+   approve the table design, and its Stage 3 runs the tests the change selects); a **CHANGE table,
+   flow or background work** through `/be-build-requirement`;
+2. verifies it (`pnpm validate`, the row's acceptance and tests — `pnpm test:select --run`);
 3. writes the row into `AS-BUILT.md` — planned, actually built, difference, why, decision, commit;
 4. checks the impact on upcoming rows — a **scope** change (a row added or removed, an acceptance
    changed, the order changed) stops and asks you first;
 5. stops for your review.
+
+At kickoff the skill also offers a `/goal` line whose condition is the iteration's Close. Set it to
+let the rows run on without a stop each: a row then ends with a one-line report, the plan's open
+decisions are taken as recommendations (logged AMBER in `plans/decisions.md`), the rows are
+reviewed at Close — and a scope change or a RED question still stops and asks.
 
 **The plan proposes; agent-os decides.** The backend's agent-os — its skills, rules and agents — is
 the expert: whenever the plan and agent-os disagree, or anything is unclear, agent-os wins, and it may
@@ -137,7 +143,7 @@ where agent-os cannot, the row stops and asks before anything differs.
 ### Step 7 — Close
 
 The skill runs the repository's gates (`pnpm validate`, `pnpm ci:local`), `/be-pre-merge-review` as
-a review only, fills `plans/acceptance.md`, writes the `AS-BUILT.md` summary (planned-not-built,
+a review only, checks each criterion of the `/goal` (when one was set) with its evidence, fills `plans/acceptance.md`, writes the `AS-BUILT.md` summary (planned-not-built,
 built-not-planned, follow-ups) and the frontend's route map `plans/frontend-route-map.md` (sections 1, 2
 and 4 by hand), then:
 
@@ -156,6 +162,9 @@ pnpm iteration:status <iteration> done
   pnpm iteration:status <iteration> frozen
   ```
 
+- PR CI's **Iteration freeze** lane fails while an iteration the PR changes is not `frozen`, and on
+  any edit to a merged frozen iteration other than a hash-keeping `--compact`. Run it before raising
+  the PR: `pnpm iteration:freeze-check`.
 - Raise the PR yourself — agents never push, open a PR or merge. After the merge the folder is never
   edited; a correction is a new `fix` iteration.
 

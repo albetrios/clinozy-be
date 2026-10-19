@@ -14,17 +14,18 @@
  * coverable lines).
  *
  * Usage:
- *   node tooling/ci/check-patch-coverage.mjs \
+ *   tsx tooling/ci/check-patch-coverage.mjs \
  *     --coverage coverage-merged/coverage-final.json \
- *     --base origin/main \
+ *     [--base <ref>] \
  *     [--threshold 90] \
  *     [--report-only]
  *
  * Inputs:
  *   --coverage  Path to an istanbul-format `coverage-final.json` (the merged
  *               report is preferred so integration/e2e hits are included).
- *   --base      Git ref to diff against (the PR base, e.g. `origin/main`).
- *               The added/modified lines are taken from `git diff <base>...HEAD`.
+ *   --base      Git ref to diff against (the PR base, e.g. `origin/main`); default
+ *               origin/<trunk>, as the PR measures (`resolveBase`, from: 'trunk'). The added/modified lines are
+ *               taken from `git diff <base>...HEAD`.
  *   --threshold Minimum percentage of changed coverable lines that must be
  *               covered. Default 90.
  *   --report-only  Print the report without exiting non-zero on a miss.
@@ -47,45 +48,39 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
 import process from 'node:process';
+import { git, resolveBase } from '@tooling/setup/common/git-environment.js';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 const DEFAULT_THRESHOLD = 90;
 
+const MISSING_VALUE_MESSAGES = {
+  '--coverage': 'Missing --coverage <coverage-final.json>',
+  '--base': 'Missing --base <git-ref>',
+  '--threshold': '--threshold must be a number',
+};
+
 function parseArguments(argv) {
-  let coveragePath = null;
-  let base = null;
-  let threshold = DEFAULT_THRESHOLD;
-  let reportOnly = false;
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-    if (token === '') continue;
-    if (token === '--coverage') {
-      coveragePath = argv[index + 1];
-      index += 1;
-      continue;
-    }
-    if (token === '--base') {
-      base = argv[index + 1];
-      index += 1;
-      continue;
-    }
-    if (token === '--threshold') {
-      threshold = Number(argv[index + 1]);
-      index += 1;
-      continue;
-    }
-    if (token === '--report-only') {
-      reportOnly = true;
-      continue;
-    }
-    throw new Error(`Unknown flag: ${token}`);
-  }
-  if (!coveragePath) throw new Error('Missing --coverage <coverage-final.json>');
-  if (!base) throw new Error('Missing --base <git-ref>');
-  if (!Number.isFinite(threshold)) throw new Error('--threshold must be a number');
-  return { coveragePath, base, threshold, reportOnly };
+  // An empty token (an unset shell variable passed quoted) is skipped, as before.
+  const { values } = parseCommandLine({
+    args: argv.filter((token) => token !== ''),
+    options: {
+      coverage: { type: 'string' },
+      base: { type: 'string' },
+      threshold: { type: 'string' },
+      'report-only': { type: 'boolean' },
+    },
+    messages: {
+      unknownOption: (option) => `Unknown flag: ${option}`,
+      needsValue: (option) => MISSING_VALUE_MESSAGES[option],
+    },
+  });
+  const coveragePath = values.coverage;
+  const base = values.base;
+  const threshold = values.threshold === undefined ? DEFAULT_THRESHOLD : Number(values.threshold);
+  if (!coveragePath) throw new Error(MISSING_VALUE_MESSAGES['--coverage']);
+  if (!Number.isFinite(threshold)) throw new Error(MISSING_VALUE_MESSAGES['--threshold']);
+  return { coveragePath, base, threshold, reportOnly: values['report-only'] === true };
 }
 
 /**
@@ -225,13 +220,14 @@ function computePatchCoverage(coverage, addedLines) {
 }
 
 function main() {
-  const { coveragePath, base, threshold, reportOnly } = parseArguments(process.argv.slice(2));
+  const options = parseArguments(process.argv.slice(2));
+  const { coveragePath, threshold, reportOnly } = options;
+  // Measured as the pull request is: the whole branch against the trunk (or --base).
+  const base = resolveBase({ base: options.base, from: 'trunk' });
+  console.log(`Patch coverage measured against ${base}.`);
 
   const coverage = JSON.parse(readFileSync(resolve(process.cwd(), coveragePath), 'utf8'));
-  const diffText = execFileSync('git', ['diff', '--unified=0', '--no-color', `${base}...HEAD`], {
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const diffText = git({ args: ['diff', '--unified=0', '--no-color', `${base}...HEAD`] });
   const addedLines = parseAddedLines(diffText);
   const { overallPct, totalCovered, totalCoverable, perFile, uncoveredFiles } =
     computePatchCoverage(coverage, addedLines);
@@ -269,9 +265,7 @@ function main() {
 export { parseArguments, parseAddedLines, isMeasuredPath, buildLineHitMap, computePatchCoverage };
 
 // Run as CLI only when invoked directly (not when imported by tests).
-const invokedDirectly =
-  process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (invokedDirectly) {
+if (isMain(import.meta.url)) {
   try {
     main();
   } catch (error) {

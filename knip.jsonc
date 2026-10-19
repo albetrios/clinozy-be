@@ -2,9 +2,12 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   // Entry points knip treats as reachable roots. Everything transitively used
   // from here is "used"; anything under `project` but not reached is reported.
-  // src/server.ts, src/worker.ts, and the migrate runner are auto-detected from
-  // the package.json start/db scripts, so they are intentionally omitted here.
+  // src/server.ts and src/worker.ts are auto-detected from the package.json start
+  // scripts, so they are intentionally omitted here.
   "entry": [
+    // The migration runner: the one database step (src/scripts/ops/db-prepare.ts) starts it
+    // as a child process by path, which knip cannot follow.
+    "src/infrastructure/database/migration/migrate.ts",
     // tsx-run scripts (validators, codegen, ops, seed, admin) — each is its own root.
     "src/scripts/**/*.ts",
     // Tooling scripts run by package.json / CI (not imported by src).

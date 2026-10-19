@@ -17,9 +17,7 @@ One command (Docker + env + migrate + dev): `pnpm setup:local`. Full clone-to-ru
 pnpm install
 pnpm compose:up
 pnpm compose:wait
-pnpm db:migrate
-pnpm setup:local --only-env   # turn on the database logins the migrations created
-pnpm db:seed
+pnpm db:seed   # create, migrate, the database logins, the reference rows
 pnpm dev
 ```
 
@@ -44,7 +42,7 @@ Committed files at the project root (not directories) group as follows:
 
 | Category           | Examples                                                                                           |
 | ------------------ | -------------------------------------------------------------------------------------------------- |
-| Package / Node     | `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `patches/`, `tsconfig.json`, `.nvmrc`, `.node-version` |
+| Package / Node     | `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `patches/`, `tsconfig.json`, `.nvmrc` |
 | Quality            | `biome.json`, `.biomeignore`, `.editorconfig`, `tooling/vitest/`                                   |
 | Data               | `drizzle.config.ts`, `migrations/`                                                                 |
 | Containers         | `Dockerfile`, `Dockerfile.worker`, `Dockerfile.agent`, `docker-bake.hcl`, `docker-compose.yml`     |

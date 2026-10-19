@@ -1,8 +1,9 @@
 ---
 name: be-tsdoc-coverage-reviewer
 description: Runs pnpm tsdoc:check and identifies public exports missing TSDoc summaries or @remarks blocks. Returns a prioritized list of symbols to document, scoped to a domain or file if specified. Read-only; produces a report for the user to act on, never edits source files.
-model: haiku
-modelRationale: runs tsdoc:check and lists gaps — mechanical
+model: inherit
+background: true
+omitClaudeMd: true
 wrapsSkill: be-tsdoc-export-guard *(check phase)*
 useWhen: TSDoc gap scan — missing summaries and @remarks
 tools:
@@ -11,6 +12,11 @@ tools:
   - Glob
   - Bash
 readonly: true
+disallowedTools:
+  - Edit
+  - Write
+  - MultiEdit
+  - NotebookEdit
 ---
 
 You run `pnpm tsdoc:check` and return a structured list of missing TSDoc coverage. The check output is verbose — run in isolation so it does not bloat the main conversation.

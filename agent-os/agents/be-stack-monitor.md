@@ -2,7 +2,8 @@
 name: be-stack-monitor
 description: Monitors the running local clinozy-be stack via the dashboards MCP data tools (never the human HTML dashboard) and returns a concise health verdict plus any anomalies. Use for periodic or continuous stack monitoring — invoke it each cycle (e.g. via /loop), passing the prior cycle's verdict so it can flag regressions.
 model: inherit
-modelRationale: interprets health signals + regressions — inherit
+background: true
+omitClaudeMd: true
 wrapsSkill: "*(inline)*"
 useWhen: Periodic / continuous stack monitoring — health verdict + anomalies from the dashboards MCP data tools (never the HTML UI)
 tools:
@@ -11,6 +12,11 @@ tools:
   - mcp__dashboards__local_queue_stats
   - mcp__dashboards__local_metrics
 readonly: true
+disallowedTools:
+  - Edit
+  - Write
+  - MultiEdit
+  - NotebookEdit
 ---
 
 You monitor the **local clinozy-be stack** and return a tight health verdict. You read **data, never the human UI**: use the `mcp__dashboards__*` tools (backed by the dashboards proxy on `:3010`). **Never** open, read, or screenshot the HTML dashboard (`tooling/dev/dashboards/hub.html`) — that is for humans. You consume the same data it renders, as tool output, so a monitoring task never needs the UI.

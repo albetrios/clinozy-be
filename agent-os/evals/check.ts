@@ -16,13 +16,19 @@
  *   tsx agent-os/evals/check.ts            # gate: exits 1 on any ERROR
  *   tsx agent-os/evals/check.ts --report   # verbose: list every check + WARNs
  */
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { hashSkill } from "../../tooling/agent-os/skills-lock.ts";
+import { parseCommandLine } from "../../tooling/setup/common/script.ts";
+import { checkSelectorFixtures } from "../../tooling/vitest/selector-fixtures.check.ts";
 
 const repositoryRoot = process.cwd();
 const agentOsDirectory = join(repositoryRoot, "agent-os");
-const reportMode = process.argv.includes("--report");
+const reportMode =
+  parseCommandLine({
+    args: process.argv.slice(2),
+    options: { report: { type: "boolean" } },
+  }).values.report === true;
 
 type Level = "error" | "warn";
 interface Finding {
@@ -172,10 +178,8 @@ if (!existsSync(lockFile)) {
         );
         continue;
       }
-      const computedHash = createHash("sha256")
-        .update(readFileSync(skillFile))
-        .digest("hex");
-      if (computedHash !== entry.computedHash)
+      // The lock tool's own hash, so the check and `pnpm agent-os:lock` can never disagree.
+      if (hashSkill(skill) !== entry.computedHash)
         error(
           "skills-lock",
           `skill "${skill}" SKILL.md changed since it was locked — run \`pnpm agent-os:lock\``,
@@ -234,18 +238,12 @@ if (existsSync(catalogFile)) {
   }
 }
 
-// ── Check 7: every agent file has valid frontmatter; deep reasoners stay on inherit ──
-// Model routing is intentional (Task 6): mechanical checkers are pinned to a cheap
-// model (e.g. haiku) — that is fine and does NOT warn. Only a *deep reasoner* pinned
-// off `inherit` warns, since under-powering a reasoning-heavy review is the real risk.
-const deepReasoners = new Set([
-  "be-verifier",
-  "be-sql-design-reviewer",
-  "be-production-hardening-reviewer",
-  "be-production-reviewer",
-  "be-ci-investigator",
-  "be-stack-monitor",
-]);
+// ── Check 7: every agent file has valid frontmatter and runs on the session's model ──
+// Per-job routing (Opus for the judgment calls, Sonnet for the auditors, Haiku for the
+// scanners) is set aside for now (18 Oct 2026): every agent is `model: inherit` and sets no
+// `effort`, so it runs on the model and effort of the session that starts it, as in
+// clinozy-fe. Claude Code silently ignores a frontmatter field it does not recognize, so
+// these fields are validated here.
 for (const file of agentFiles) {
   const text = readText(join(agentOsDirectory, "agents", file));
   const agentName = basename(file, ".md");
@@ -262,11 +260,22 @@ for (const file of agentFiles) {
       "agent-frontmatter",
       `agents/${file} missing frontmatter \`description\``,
     );
-  if (model && model !== "inherit" && deepReasoners.has(agentName))
-    warn(
+  if (model !== "inherit")
+    error(
       "agent-model",
-      `agents/${file} pins model "${model}" but is a deep reasoner — prefer \`inherit\` so it keeps frontier reasoning`,
+      `agents/${file} model "${model ?? "∅"}" — every agent uses \`model: inherit\` (the session's model), for now`,
     );
+  for (const field of ["effort", "modelRationale"])
+    if (frontmatterField(text, field) !== undefined)
+      error(
+        "agent-effort",
+        `agents/${file} sets \`${field}\` — every agent runs at the session's model and effort, for now`,
+      );
+  for (const flag of ["background", "omitClaudeMd"]) {
+    const value = frontmatterField(text, flag);
+    if (value !== undefined && value !== "true")
+      error("agent-frontmatter", `agents/${file} ${flag} "${value}" — only \`true\` is documented; omit it otherwise`);
+  }
 }
 
 // ── Check 12: read-only agents must enforce read-only via a tools allowlist ──
@@ -294,6 +303,15 @@ for (const file of agentFiles) {
         `agents/${file} is readonly:true but its \`tools\` allowlist includes write tool(s): ${offenders.join(", ")}`,
       );
   }
+  // An explicit denylist as well, so a later `tools` edit cannot quietly hand back a write tool.
+  const disallowed = frontmatterField(text, "disallowedTools") ?? "";
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — the names come from the fixed writeTools list
+  const missing = writeTools.filter((tool) => !new RegExp(`\\b${tool}\\b`).test(disallowed));
+  if (missing.length)
+    error(
+      "agent-readonly",
+      `agents/${file} is readonly:true but \`disallowedTools\` does not list: ${missing.join(", ")}`,
+    );
 }
 
 // ── Check 8: hook commands must be portable and reference scripts that exist ──
@@ -319,7 +337,7 @@ if (existsSync(settingsFile)) {
         `.claude/settings.json hook hardcodes an absolute home path — use "$CLAUDE_PROJECT_DIR": ${command}`,
       );
     const scriptReference = command.match(
-      /agent-os\/hooks\/[A-Za-z0-9._-]+\.sh/,
+      /agent-os\/hooks\/[A-Za-z0-9._-]+\.mjs/,
     )?.[0];
     if (scriptReference && !existsSync(join(repositoryRoot, scriptReference)))
       error(
@@ -402,16 +420,24 @@ for (const rootDoc of ["CLAUDE.md", "AGENTS.md"])
   if (existsSync(join(repositoryRoot, rootDoc)))
     scanOneFile(join(repositoryRoot, rootDoc));
 
-// ── Check 10: root docs (CLAUDE.md, AGENTS.md) state counts that match disk ──
+// ── Check 10: root docs (CLAUDE.md, AGENTS.md) and the docs that list the skills state counts that match disk ──
 // These root files sit outside the per-component scans above (be-skill-index,
 // skill-triggers, agents-catalog), so a stale count there ("22 sync rules",
 // "All 8 agents", "36 project skills") drifts unseen. Same patterns, applied
 // at the repo root so the canonical entry-point docs cannot silently diverge.
-for (const rootDoc of ["CLAUDE.md", "AGENTS.md"]) {
+for (const rootDoc of [
+  "CLAUDE.md",
+  "AGENTS.md",
+  "docs/getting-started/requirement-intake.md",
+  "agent-os/cloud-environment/skills-and-mcps.md",
+]) {
   const rootDocFile = join(repositoryRoot, rootDoc);
   if (!existsSync(rootDocFile)) continue;
   const rootText = readText(rootDocFile);
-  for (const count of new Set(allNumbers(rootText, /(\d+)\s+project skills/g)))
+  for (const count of new Set([
+    ...allNumbers(rootText, /(\d+)\s+project skills/g),
+    ...allNumbers(rootText, /[Pp]roject skills \((\d+)\)/g),
+  ]))
     if (count !== skillNames.length)
       error(
         "root-doc-count",
@@ -754,7 +780,7 @@ if (!existsSync(requirementForm)) {
 
 // ── Check 17: every agent-os item this repo owns starts with `be-` ──
 // clinozy-be and clinozy-fe (`fe-`) are often loaded in one session, where a shared name lets
-// one repo's skill, agent, command or rule hide the other's. Skills installed from
+// one repo's skill, agent, command, rule or hook hide the other's. Skills installed from
 // upstream keep their upstream names: the skills-lock.json entries whose sourceType is
 // not "local" (today ponytail and ponytail-audit).
 const repositoryPrefix = "be-";
@@ -786,6 +812,33 @@ if (existsSync(commandsDirectory))
     requirePrefix("command", basename(file, ".md"));
 for (const file of listFilesWithExtension(join(agentOsDirectory, "rules"), ".mdc"))
   requirePrefix("rule", basename(file, ".mdc"));
+// Hook scripts and their manifest ids too, so a block message, a telemetry row or a session-root
+// settings entry always names its repository. A helper the hooks import (never registered
+// itself) keeps its leading `_` before the prefix: `_be-telemetry.mjs`.
+const hooksDirectory = join(agentOsDirectory, "hooks");
+for (const file of listFilesWithExtension(hooksDirectory, ".mjs"))
+  if (!file.replace(/^_/, "").startsWith(repositoryPrefix))
+    error(
+      "name-prefix",
+      `hook "${file}" must start with "${repositoryPrefix}" (a helper with "_${repositoryPrefix}")`,
+    );
+if (existsSync(hooksManifestFile)) {
+  try {
+    const manifest = JSON.parse(readText(hooksManifestFile)) as {
+      hooks?: Array<{ id?: string }>;
+    };
+    for (const entry of manifest.hooks ?? []) if (entry.id) requirePrefix("hook id", entry.id);
+  } catch {
+    // Check 11 reports invalid JSON in the hook manifest.
+  }
+}
+
+// ── Check 20: the test selection (pnpm test:select) holds its fixtures ──
+// One generated fixture per sub-domain (its main file selects every test in its folder), the
+// core domains running everything, the misses recorded in tooling/vitest/selector-fixtures.json,
+// and the unreachable tests (no single source change selects them) always run.
+const selectorFixtures = checkSelectorFixtures(repositoryRoot);
+for (const problem of selectorFixtures.problems) error("selector-fixtures", problem);
 
 // ── Report ──
 const errors = findings.filter((finding) => finding.level === "error");
@@ -814,11 +867,12 @@ const checkLabels: Record<string, string> = {
   "plugin-refs": "Plugin manifest refs exist",
   "name-prefix": "Repo name prefix (be-)",
   "requirement-form": "Requirement form sections",
+  "selector-fixtures": "Test selection fixtures",
 };
 
 console.log("\nagent-os integrity evals (Tier 1)\n");
 console.log(
-  `  skills: ${skillNames.length}   sync-rules: ${syncRuleCount}   agents: ${agentFiles.length}\n`,
+  `  skills: ${skillNames.length}   sync-rules: ${syncRuleCount}   agents: ${agentFiles.length}   selector fixtures: ${selectorFixtures.fixtures} (${selectorFixtures.unreachable} unreachable tests always run)\n`,
 );
 
 const group = (level: Level) => {

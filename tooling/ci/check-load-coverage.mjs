@@ -26,8 +26,10 @@
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
+import chalk from 'chalk';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { parseRouteCatalog } from '../openapi/route-catalog/catalog-reader.ts';
 
 const ROOT = resolve(new URL('.', import.meta.url).pathname, '../..');
 const ROUTES_FILE = join(ROOT, 'docs/routes.txt');
@@ -39,16 +41,9 @@ const DEFAULT_THRESHOLD = 50; // % of required routes that must appear in ≥1 s
 // Route catalog
 // --------------------------------------------------------------------------
 
-// METHOD  PATH  S(tatus)  I(dempotency)  O(rganization scope)  AUTH — AUTH may contain spaces.
-const ROUTE_LINE_RE = /^\s+(GET|POST|PUT|PATCH|DELETE)\s+(\/\S+)\s+\d{3}\s+\S+\s+\S+\s+(.+?)\s*$/;
-
-/** Parses the catalog table: one `{ method, path, auth }` per route line. */
+/** The catalog's routes — read by the one catalog parser — as `{ method, path, auth }`. */
 export function parseRoutes(content) {
-  return content
-    .split('\n')
-    .map((line) => ROUTE_LINE_RE.exec(line))
-    .filter(Boolean)
-    .map((match) => ({ method: match[1], path: match[2], auth: match[3] }));
+  return parseRouteCatalog(content).map(({ method, path, gate }) => ({ method, path, auth: gate }));
 }
 
 const PUBLIC_INFRASTRUCTURE_PATHS = [
@@ -232,12 +227,6 @@ function main() {
   const percentage =
     required.length === 0 ? 100 : Math.round((covered.length / required.length) * 100);
 
-  const GREEN = '\x1b[32m';
-  const YELLOW = '\x1b[33m';
-  const RED = '\x1b[31m';
-  const DIM = '\x1b[2m';
-  const RESET = '\x1b[0m';
-
   console.log('\n─────────────────────────────────────────────────────────');
   console.log(
     `  k6 Load-test Route Coverage (${nightly ? 'nightly workflow' : 'all scenario files'})`,
@@ -246,24 +235,22 @@ function main() {
   console.log(`  Scenario files     : ${scenarios.length}`);
   console.log(`  Total routes       : ${routes.length}`);
   console.log(
-    `  Excluded           : ${excluded.length}  ${DIM}(ROLE / TOKEN / public infrastructure)${RESET}`,
+    `  Excluded           : ${excluded.length}  ${chalk.dim('(ROLE / TOKEN / public infrastructure)')}`,
   );
   console.log(`  Required (testable): ${required.length}`);
-  console.log(`  Covered            : ${covered.length}  ${GREEN}✓${RESET}`);
+  console.log(`  Covered            : ${covered.length}  ${chalk.green('✓')}`);
   console.log(
-    `  Uncovered          : ${uncovered.length}  ${uncovered.length > 0 ? `${YELLOW}⚠` : `${GREEN}✓`}${RESET}`,
+    `  Uncovered          : ${uncovered.length}  ${uncovered.length > 0 ? chalk.yellow('⚠') : chalk.green('✓')}`,
   );
   console.log(
-    `  Coverage           : ${percentage >= threshold ? GREEN : RED}${percentage}%${RESET}  (threshold: ${threshold}%)`,
+    `  Coverage           : ${(percentage >= threshold ? chalk.green : chalk.red)(`${percentage}%`)}  (threshold: ${threshold}%)`,
   );
   console.log('─────────────────────────────────────────────────────────\n');
 
   if (uncovered.length > 0) {
-    console.log(`${YELLOW}Uncovered routes — add to a k6 scenario to improve coverage:${RESET}`);
+    console.log(chalk.yellow('Uncovered routes — add to a k6 scenario to improve coverage:'));
     for (const route of uncovered) {
-      console.log(
-        `  ${DIM}${route.method.padEnd(7)}${RESET} ${route.path}  ${DIM}${route.auth}${RESET}`,
-      );
+      console.log(`  ${chalk.dim(route.method.padEnd(7))} ${route.path}  ${chalk.dim(route.auth)}`);
     }
     console.log('');
   }
@@ -271,16 +258,16 @@ function main() {
   if (percentage < threshold) {
     if (reportOnly) {
       console.log(
-        `${YELLOW}⚠ check-load-coverage: ${percentage}% < ${threshold}% — below threshold (report-only, not failing)${RESET}\n`,
+        `${chalk.yellow(`⚠ check-load-coverage: ${percentage}% < ${threshold}% — below threshold (report-only, not failing)`)}\n`,
       );
       return;
     }
     console.error(
-      `${RED}✗ check-load-coverage: ${percentage}% < threshold ${threshold}% — failing build.${RESET}\n`,
+      `${chalk.red(`✗ check-load-coverage: ${percentage}% < threshold ${threshold}% — failing build.`)}\n`,
     );
     process.exit(1);
   }
-  console.log(`${GREEN}✓ check-load-coverage: ${percentage}% ≥ ${threshold}% — OK${RESET}\n`);
+  console.log(`${chalk.green(`✓ check-load-coverage: ${percentage}% ≥ ${threshold}% — OK`)}\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

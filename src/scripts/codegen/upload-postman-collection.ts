@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { shouldSkipHostedUpload } from './hosted-docs-upload.util.js';
 import { POSTMAN_COLLECTION_PREFIX } from '@/shared/constants/project-identity.constants.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const POSTMAN_UPLOAD_REQUIRED_VARIABLES = ['POSTMAN_API_KEY', 'POSTMAN_WORKSPACE_ID'] as const;
 const POSTMAN_API_BASE = 'https://api.getpostman.com';
@@ -132,6 +133,7 @@ async function updateCollection({
 }
 
 async function main(): Promise<void> {
+  parseCommandLine({ args: process.argv.slice(2) });
   if (
     shouldSkipHostedUpload({
       targetName: 'Postman',

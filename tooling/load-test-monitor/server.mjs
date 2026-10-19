@@ -15,9 +15,10 @@
  * bodies, query strings and headers are redacted before they are stored
  * (lib/recording-redaction.mjs). Bodies are buffered in memory (capped, ring-buffered).
  */
-import { execFile } from 'node:child_process';
 import http from 'node:http';
 import { URL } from 'node:url';
+import { tryGit } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import { LOOPBACK_HOST, createLoopbackGuard } from '../dev/loopback-guard.mjs';
 import { redactBody, redactHeaders, redactQuery } from './lib/recording-redaction.mjs';
 
@@ -43,23 +44,17 @@ import { redactBody, redactHeaders, redactQuery } from './lib/recording-redactio
 let branchName = null;
 let branchReadAt = 0;
 function readBranch() {
-  // Awaited rather than fired-and-forgotten: a background refresh serves the PREVIOUS branch on
+  // Read in line rather than in the background: a background refresh serves the PREVIOUS branch on
   // the first poll after a checkout, which is exactly the poll that matters when an A/B switches
   // branches between runs. `git rev-parse` is a few milliseconds and runs at most once a second.
-  if (Date.now() - branchReadAt < 1000) return Promise.resolve(branchName);
+  if (Date.now() - branchReadAt < 1000) return branchName;
   branchReadAt = Date.now();
-  return new Promise((resolve) => {
-    execFile(
-      'git',
-      ['rev-parse', '--abbrev-ref', 'HEAD'],
-      { cwd: process.cwd() },
-      (error, stdout) => {
-        branchName = error ? null : stdout.trim() || null;
-        resolve(branchName);
-      },
-    );
-  });
+  const result = tryGit({ args: ['rev-parse', '--abbrev-ref', 'HEAD'], cwd: process.cwd() });
+  branchName = result.ok ? result.output.trim() || null : null;
+  return branchName;
 }
+
+parseCommandLine({ args: process.argv.slice(2) });
 
 const PORT = 4985;
 const UPSTREAM = process.env.LOAD_MONITOR_UPSTREAM || 'http://localhost:3000';

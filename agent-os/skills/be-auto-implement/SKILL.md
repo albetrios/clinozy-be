@@ -45,7 +45,7 @@ Do **not** re-list or reorder steps here — the chain is authoritative.
 
 After each step, run that step's **gate** and do not proceed to the next step until it is green.
 The gate for a step is the command its owning skill / the definition-of-done enforces (the same
-map `gate-failure-hint.sh` uses). Practical checkpoints by chain:
+map `be-gate-failure-hint.mjs` uses). Practical checkpoints by chain:
 
 | Chain          | Per-step / end gate to run at the checkpoint                                                            |
 | -------------- | ------------------------------------------------------------------------------------------------------- |

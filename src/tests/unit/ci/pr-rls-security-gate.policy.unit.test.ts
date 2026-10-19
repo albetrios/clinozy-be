@@ -31,10 +31,11 @@ describe('PR CI runs the non-superuser RLS security suite against Postgres', () 
     expect(prCi).toContain('--project security src/tests/security/rls');
   });
 
-  it('provisions Postgres and migrates before the suite (the RLS tests need a real database)', () => {
+  it('provisions Postgres and lets the Vitest global setup prepare it (the RLS tests need a real database)', () => {
     expect(prCi).toContain('postgres:17');
-    // `pnpm db:migrate` (not `:lint`) appears only in the DB-backed RLS jobs within pr-ci.yml.
-    expect(prCi).toContain('pnpm db:migrate\n');
+    // The database is set up one way: the global setup's database step, never a workflow step.
+    expect(prCi).not.toMatch(/pnpm db:migrate$/m);
+    expect(prCi).toContain('pnpm exec vitest run --project security src/tests/security/rls');
   });
 
   it('skips docs-only PRs but runs on source/ci changes', () => {
@@ -48,7 +49,8 @@ describe('PR CI runs the non-superuser RLS security suite against Postgres', () 
  * `clinozy_be_app`, so application code paths are RLS-subject too. A query that runs without a
  * database context reads zero rows there and in production, but every row on the RLS-exempt
  * superuser the other lanes use — which is how offboarding came to erase nothing with every check
- * green. It must stay a PR gate, run as the role, and migrate before the role is applied.
+ * green. It must stay a PR gate and run as the role; the global setup migrates before the role is
+ * applied.
  */
 describe('PR CI runs the application-role lane against Postgres', () => {
   const prCi = readFileSync(prCiPath, 'utf8');
@@ -60,12 +62,12 @@ describe('PR CI runs the application-role lane against Postgres', () => {
     expect(job).toContain('name: RLS application role (whole connection)');
   });
 
-  it('migrates as the superuser, then runs the suites as the application role', () => {
+  it('runs the suites as the application role, the global setup migrating as the superuser first', () => {
     expect(job).toContain('postgres:17');
-    const migrateAt = job.indexOf('pnpm db:migrate\n');
-    const roleRunAt = job.indexOf('pnpm test:rls-role');
-    expect(migrateAt).toBeGreaterThan(-1);
-    expect(roleRunAt).toBeGreaterThan(migrateAt);
+    // `src/tests/global-setup.ts` prepares the database on the job's superuser URL before any
+    // worker applies `TEST_DATABASE_ROLE` (src/tests/setup.ts), so no workflow step migrates.
+    expect(job).not.toMatch(/pnpm db:migrate$/m);
+    expect(job).toContain('pnpm test:rls-role');
   });
 
   it('skips docs-only PRs but runs on source/ci changes', () => {

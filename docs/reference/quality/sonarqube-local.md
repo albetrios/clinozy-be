@@ -1,23 +1,25 @@
 # SonarQube — local quality gate
 
-SonarQube runs **locally** (Docker) and is enforced as a **pre-commit gate**: when you commit
+SonarQube runs **locally** (Docker) and is enforced as a **pre-push gate** (as in clinozy-fe): when you push
 changes that touch deployed-surface code (`src/` runtime), the hook scans the project and **blocks
-the commit if SonarQube reports any unresolved issue or hotspot**. The gate is **mandatory — there
-is no bypass**; every finding must be resolved. Everything is local — there is no hosted SonarQube
-and no CI dependency.
+the push if SonarQube reports any unresolved issue or hotspot**. The gate is **mandatory — there
+is no bypass**; every finding must be resolved. There is no hosted SonarQube: PR CI runs the same
+server and the same `pnpm sonar:scan` in its `SonarQube` lane (part of the `Quality gate`, on
+source changes only), so a finding that reaches a PR — a push made where the hook did not run —
+turns it red under the same rules.
 
 ## TL;DR
 
 ```bash
 pnpm compose:up    # starts the app stack AND SonarQube (SONAR=0 pnpm compose:up skips Sonar)
 pnpm sonar:scan    # scan now + print the report; exits non-zero if anything is open
-git commit         # the pre-commit hook runs the same gate automatically
+git push           # the pre-push hook runs the same gate automatically
 ```
 
 `pnpm compose:up` brings SonarQube up with the rest of the local stack — detached, so it boots in
 the background and the gate waits for readiness only when needed. First boot is ~2 min and
 provisions an analysis token into `.env.local` (gitignored); after that a scan is ~60–90s.
-`pnpm sonar:up` starts only SonarQube, and the pre-commit gate auto-starts it if it is down.
+`pnpm sonar:up` starts only SonarQube, and the pre-push gate auto-starts it if it is down.
 
 The scanner runs with **`sonar.scm.disabled=true`** (set in `docker-compose.sonar.yml`). The gate
 fails on any open issue, so blame and new-code data never change its verdict — and the scanner's git
@@ -26,7 +28,7 @@ whose shared `.git/config` sets `core.bare = true` with per-worktree overrides
 (`extensions.worktreeConfig`), a layout git itself handles. The analysis token reaches the scanner
 **only** through the `SONAR_TOKEN` environment variable: passing it again as `-Dsonar.token` made the
 scanner log both values in plain text ("Property 'sonar.token' … is overridden with value …") on
-every pre-commit run.
+every pre-push run.
 
 ### Sharing port 9000 with clinozy-fe
 
@@ -48,11 +50,11 @@ token there, copy `SONAR_ADMIN_PASSWORD` from this repo's `.env.local` into clin
 The server UI is at <http://localhost:9000>. Admin credentials are generated on first run and
 stored in `.env.local` as `SONAR_ADMIN_PASSWORD` / `SONAR_TOKEN`.
 
-## How the pre-commit gate works
+## How the pre-push gate works
 
-The `pnpm guard:pre-commit` hook (`.husky/pre-commit`, step 17) runs the gate **only when the
-staged changes include deployed-surface code** — `src/**/*.ts` excluding tests, `src/scripts/**`,
-and `__tests__/`. Commits that touch only tests, tooling, docs, or migrations skip the scan (Sonar
+The `pnpm guard:pre-push` hook (`.husky/pre-push`, the last step of `tooling/validate/pre-push-steps.ts`)
+runs the gate **only when the pushed changes include deployed-surface code** — `src/**/*.ts` excluding tests, `src/scripts/**`,
+and `__tests__/`. Pushes that touch only tests, tooling, docs, or migrations skip the scan (Sonar
 excludes those anyway — see [Scope](#what-sonarqube-analyzes)).
 
 The gate ([`tooling/sonar/sonar-gate.ts`](../../../tooling/sonar/sonar-gate.ts)):
@@ -62,7 +64,7 @@ The gate ([`tooling/sonar/sonar-gate.ts`](../../../tooling/sonar/sonar-gate.ts))
    one, mints a token, saves both to `.env.local`). Idempotent afterwards.
 3. **Scans** via the `sonar-scanner-cli` container.
 4. **Waits** for the server to finish processing the report.
-5. **Reports** every unresolved issue + hotspot and **exits 1** (blocking the commit) if there is
+5. **Reports** every unresolved issue + hotspot and **exits 1** (blocking the push) if there is
    at least one; exits 0 when clean.
 
 ### No bypass
@@ -87,7 +89,16 @@ So a clean gate means **zero issues in the code that ships to production**.
 
 ## Troubleshooting
 
-- **"failed to start SonarQube (is Docker running?)"** — start Docker Desktop, then retry.
+- **"failed to start SonarQube (is Docker running?)"** — start Docker Desktop, then retry. In a
+  Linux cloud session the gate first starts the daemon itself
+  ([`ensure-docker-daemon.sh`](../../../tooling/setup/agent/ensure-docker-daemon.sh)), and the
+  environment's Setup script pre-pulls the SonarQube and scanner images, so this only shows when
+  the session may not run Docker at all.
+- **"SonarQube did not become ready in time"** with `high disk watermark [90%] exceeded` in
+  `docker compose -f docker-compose.sonar.yml logs sonarqube` — Elasticsearch refuses to place its
+  index on a disk under 10% free. `docker-compose.sonar.yml` keeps that index on a 2 GB tmpfs for
+  this reason (a cloud session's disk is 252 GB with about 22 GB free); the database stays on the
+  volume and the index is rebuilt at each start.
 - **"admin password is unknown"** — the instance was provisioned outside this flow. Run
   `pnpm sonar:reset` to start fresh, or set `SONAR_ADMIN_PASSWORD` in `.env.local`.
 - **Server slow / stuck after an upgrade** — `pnpm sonar:reset`.

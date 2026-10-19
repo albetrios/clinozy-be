@@ -1,7 +1,7 @@
 ---
 name: be-iteration-planning
 description: >
-  Plan an iteration under iterations/<iteration>/ — NO CODE: confirm the iteration and its Baseline,
+  Plan an iteration under iterations/<iteration>/ — NO CODE: confirm the iteration (Baseline none unless the user names one),
   pass the intake gate (iteration:intake --check — stop on failure), take the delta by Intake mode
   (iteration:diff + notes, or BRIEF.md) and the Baseline's Standing deviations, reconcile
   PRD ↔ schema-routes, ask the blocking questions, review the routes sub-domain by sub-domain
@@ -50,6 +50,14 @@ Each ROUTE row is a work item (one per sub-domain of the route review, or per ta
 flow); any detail the route review leaves open is decided during implementation and recorded in
 `AS-BUILT.md`.
 
+## Under `--both`: one shared plan, this one owns the contract
+
+When the iteration exists in both repositories, this plan is the only plan of the contract —
+`plans/routes-final.md`, `route-changes.md`, `db-changes.md`, `worker-changes.md` and the
+decisions behind them. The frontend's plan links to them and adds its screens; it never copies
+them. Its requests (a field, a filter, an error it needs) come here as Step 4 questions or decision
+rows, and the frontend builds against what is decided here.
+
 ## The plan proposes; agent-os decides
 
 The plan's tables, fields, routes and background work are **proposals at the requirement level**. The
@@ -75,15 +83,18 @@ user (`be-kickoff-iteration` › Each ROUTE row).
 | `iterations/<iteration>/intake-files/BRIEF.md` | brief mode — the written change (what, why, affected screens / entities / routes, rules, acceptance criteria, out of scope) |
 | the Baseline's `AS-BUILT.md` › Standing deviations | where the build already differs from the drop — plan against what was actually built |
 
-`intake-files/` always holds a **full snapshot**, exactly as placed by `pnpm iteration:intake`. The
-README's **Intake mode** says how it was built: `full` — the drop as received (always the launch);
-`overlay` — only the changed files arrived, laid over the Baseline's snapshot; `brief` — no design
-files, only a written change: the Baseline's snapshot plus `BRIEF.md`.
+`intake-files/` stores **what arrived**, exactly as placed by `pnpm iteration:intake`; the snapshot
+is resolved from it. The README's **Intake mode** says how: `full` — the drop as received (always
+the launch); `overlay` — only the changed files arrived and are stored, laid over the Baseline's
+snapshot; `brief` — no design files, only a written change: `BRIEF.md` is stored — from scratch it
+is the whole snapshot, on a named Baseline the snapshot is the Baseline's plus it. A file
+`intake-files/` does not store is read from the Baseline's intake (and, when that one is layered
+too, from its Baseline's) — the gate's ✓ line counts what is stored and what comes from where.
 
-- **Baseline `none` → MODE initial** — the first iteration in this repository: plan everything.
-- **Baseline `<iteration>` → MODE incremental** — the Baseline the user confirms at Step 0. The delta
+- **Baseline `none` → MODE initial** — the default for every iteration: plan everything.
+- **Baseline `<iteration>` → MODE incremental** — only when the user named it. The delta
   depends on the Intake mode: `full` / `overlay` — the designer's "What changed" notes **plus**
-  `pnpm iteration:diff <baseline> <iteration>`, which compares the two `intake-files/` folders and
+  `pnpm iteration:diff <baseline> <iteration>`, which compares the two resolved intakes and
   nothing else (anything the diff shows that the notes omit is a finding); `brief` — `BRIEF.md` is
   the change list, and the diff must show nothing but `BRIEF.md` added. The Baseline's
   `intake-files/` is therefore mandatory (`iteration:baseline` refuses a Baseline without it).
@@ -359,7 +370,9 @@ per iteration, current at every step, with before → after wherever something e
 ## Step review — at every stop, no PR diff needed
 
 Every step ends with the same short review, so the user can check everything in place and ask for a
-change before the next step:
+change before the next step. **The step reviews are the plan's review of record:** the approval
+(`ready-for-approval → approved`) confirms what they already accepted and what changed after the
+last one — it does not ask for a second full read of `KICKOFF.md` and `plans/`.
 
 1. **What changed** — each file this step wrote or changed, as a clickable link, with one line on
    what changed in it (counts, not dumps).
@@ -379,6 +392,21 @@ change before the next step:
    decision is a new `plans/decisions.md` row that supersedes the old one — and the step review is
    shown again before moving on.
 
+## Lite mode — a fix planned in one step
+
+When the README's Process is `lite` (a `fix` opened with `pnpm iteration:new fix <topic> --lite`):
+
+1. **Step 0** as below — confirm the iteration (Baseline `none` unless the user names one), and run
+   the gate when a drop was placed.
+2. **One step, then one stop:** read the current code the fix touches; write `KICKOFF.md` with its
+   ROUTE rows, `plans/decisions.md` (what is decided and why) and `plans/acceptance.md` (what proves
+   the fix — a failing test turned green, at least); keep `plans/db-changes.md`,
+   `plans/route-changes.md` and `plans/worker-changes.md` when the fix changes tables, routes or
+   background work. Show it all in one step review and ask the user's go with **AskUserQuestion**.
+3. No `ready-for-approval` and no `approved`: on the go, be-kickoff-iteration moves it
+   `planning → implementing` and builds the rows. If the fix turns out bigger than a fix (a new
+   table, a new route surface), stop and say so — it becomes a `change` with the full procedure.
+
 ## Procedure — stop after every step, with its step review, and wait
 
 ### Step 0 — Confirm the iteration, then stop until confirmed
@@ -390,9 +418,9 @@ Run `pnpm iteration:list` and show:
 
 - Eligible = Status `planning`. Recommend the earliest-opened eligible iteration (the launch always
   comes first). If the user named one, check it against the rule.
-- **Incremental:** suggest the Baseline — the latest `done` / `frozen` iteration in this repository
-  with a complete `intake-files/` (`pnpm iteration:diff <iteration>` prints the suggestion). The user
-  confirms it or picks another; save it with `pnpm iteration:baseline <iteration> <baseline|none>`.
+- **Incremental — only when the user names a Baseline** ("build on <iteration>"): record it with
+  `pnpm iteration:baseline <iteration> <baseline>` (it needs a complete `intake-files/`). Never
+  suggest or ask for one: without one the iteration is from scratch (MODE initial).
   An `overlay` or `brief` snapshot was built on the Baseline recorded at intake; picking another
   means rebuilding it (the gate fails until
   `pnpm iteration:intake <iteration> <source> --mode <mode> --replace` has run).
@@ -405,7 +433,13 @@ pnpm iteration:intake <iteration> --check                         # MODE initial
 pnpm iteration:intake <iteration> --check --baseline <baseline>   # MODE incremental
 ```
 
-### Step 1 — Inventory, then stop
+### Steps 1–3 — Read the drop: inventory, delta, reconcile — then one stop
+
+The three run back to back and end with **one** step review: they read the drop and write the
+same three files, and nothing in them needs the user's answer before the next part (questions wait
+for Step 4).
+
+#### Step 1 — Inventory
 
 - The gate passed, so the snapshot is complete and unedited; extras the intake warned about are
   findings.
@@ -418,9 +452,9 @@ pnpm iteration:intake <iteration> --check --baseline <baseline>   # MODE increme
   proposed route per operation row (initial: all `NEW`) — and `plans/worker-changes.md` — one row per
   piece of background work the intake names (rules, reminders, automatic tasks, schedules).
 
-Report the counts in the step review. **Stop.**
+Keep the counts for the step review at the end of Step 3.
 
-### Step 2 — Delta (MODE incremental only), then stop
+#### Step 2 — Delta (MODE incremental only)
 
 MODE initial: write `n/a — initial` and continue. MODE incremental — by the README's Intake mode:
 
@@ -437,7 +471,7 @@ MODE initial: write `n/a — initial` and continue. MODE incremental — by the 
   differs from the drop, plan against what was actually built. List the ones this change touches
   in `KICKOFF.md` (section 8).
 
-### Step 3 — Reconcile, then stop
+#### Step 3 — Reconcile
 
 List every `PRD.md` ↔ `schema-routes.md` mismatch in `plans/coverage.md` › Reconciliation:
 
@@ -454,6 +488,9 @@ for scope and behaviour, `schema-routes.md` for data, value lists, limits and UR
 request the user accepted, or a decision in `plans/decisions.md`. **Anything only the screens or the
 prototype say gets no verdict — it is a question for the user** (Step 4), with a proposed default,
 and every change-file entry that rests on it is marked *pending your answer* until it is answered.
+
+**Stop** — one step review for Steps 1–3: the inventory counts, the delta and its findings, the
+reconciliation rows and the questions they raise for Step 4.
 
 ### Step 4 — Blocking questions, then stop when every RED is answered
 
@@ -484,6 +521,12 @@ Write `plans/routes-final.md` from the template (Route review above), in the sub
    row, and move to the next. A change asked for reopens the sub-domain (`rev n+1`).
 
 Continue to Step 6 only when every sub-domain in scope is final. **Stop after each sub-domain.**
+
+When the last sub-domain turns final, put the approval line under the file's title —
+`**Route review final — <date>.** …` (template › File header) — and say so in the step review:
+under `--both` it is the frontend's signal to kick off on these routes now, without waiting for
+this plan's approval. A later change reopens its sub-domain, removes the line until it is final
+again, and is a decision row the frontend's iteration is told about.
 
 ### Step 6 — Write KICKOFF.md and plans/, then stop
 
@@ -560,7 +603,7 @@ markers change, and `intake-files/` is locked.
 
 | Failure | Prevention here |
 | --- | --- |
-| The wrong iteration planned, or against an unconfirmed Baseline | Step 0 table + AskUserQuestion + `iteration:baseline` |
+| The wrong iteration planned, or against a Baseline nobody named | Step 0 table + AskUserQuestion; Baseline `none` unless named (`iteration:baseline`) |
 | A plan built on an incomplete or edited intake | Step 0 gate (`iteration:intake --check`) |
 | A plan against the design where the build already differs | Step 2 — the Baseline's Standing deviations |
 | A change in the drop the designer didn't mention | Step 2 diff vs notes → findings |

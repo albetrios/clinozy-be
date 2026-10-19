@@ -41,10 +41,8 @@ is_up()     { case "$1" in 2*|3*|401) return 0;; *) return 1;; esac; }
 ensure_engine() {
   if docker info >/dev/null 2>&1; then return 0; fi
   warn "Docker engine not reachable — trying to start it…"
-  command -v orb >/dev/null 2>&1 && orb start >/dev/null 2>&1
-  docker context use orbstack >/dev/null 2>&1
-  [ -d /Applications/Docker.app ] && open -a Docker >/dev/null 2>&1
-  for _ in $(seq 1 40); do docker info >/dev/null 2>&1 && break; done
+  # The one way tooling starts Docker (OrbStack / Docker Desktop on a Mac, dockerd on Linux).
+  bash tooling/setup/agent/ensure-docker-daemon.sh >&2
   docker info >/dev/null 2>&1
 }
 
@@ -113,11 +111,9 @@ cmd_up() {
   log "→ Postgres / Redis${SONAR:+/ SonarQube}…"
   pnpm compose:up   >/dev/null 2>&1 && ok "containers up"   || warn "compose:up reported issues"
   pnpm compose:wait >/dev/null 2>&1 && ok "postgres ready"  || warn "postgres wait timed out"
-  log "→ migrations…"
-  pnpm db:migrate   >/dev/null 2>&1 && ok "migrations applied" || warn "migrate failed (run: pnpm db:migrate)"
-  # The migrations create the role logins NOLOGIN; turn them on before the seed and the API connect.
-  pnpm setup:local --only-env >/dev/null 2>&1 && ok "database logins enabled" \
-    || warn "database logins failed (run: pnpm setup:local --only-env)"
+  log "→ database (create, migrate, logins)…"
+  pnpm db:migrate   >/dev/null 2>&1 && ok "database migrated, logins enabled" \
+    || warn "database step failed (run: pnpm db:migrate)"
   log "→ demo super_admin (the user the proxy logs in as for Bull Board)…"
   pnpm db:seed:demo-admin >/dev/null 2>&1 \
     && ok "demo super_admin ready" \

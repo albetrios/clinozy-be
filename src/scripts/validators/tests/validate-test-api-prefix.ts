@@ -9,6 +9,7 @@
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
 /** Hardcoded version segment in an inject/options `url` property. */
 export const INJECT_URL_PATTERN = /url:\s*['`]\/api\/v\d+/;
@@ -69,6 +70,7 @@ export function findInjectUrlViolations({
 }
 
 function main(): void {
+  parseCommandLine({ args: process.argv.slice(2) });
   const violations = findInjectUrlViolations({ sourceRoot: process.cwd() });
 
   if (violations.length > 0) {
@@ -84,4 +86,6 @@ function main(): void {
   console.log('✅ validate-test-api-prefix passed');
 }
 
-main();
+if (isMain(import.meta.url)) {
+  main();
+}

@@ -61,9 +61,13 @@ Lanes currently rolled up (**authoritative source: `quality-gate.needs` in pr-ci
 | `lint` | Lint |
 | `typecheck` | Typecheck |
 | `static-sync` | Static sync |
+| `agent-os-gate` | agent-os evals |
+| `iteration-freeze` | Iteration freeze (on `iterations/` or `tooling/iterations/` changes) |
 | `unit` | Unit + global (via `reusable-unit-gate.yml`) |
 | `matrix` | Integration (via `reusable-matrix-gate.yml`) |
 | `migration-lint` | Migration lint |
+| `knip` | Knip (dead code) |
+| `sonarqube` | SonarQube (the pre-push gate's server and rules; source changes only) |
 | `build-verify` | Build verify |
 | `security-audit` | Security audit |
 | `security-secrets` | Security secrets |
@@ -74,6 +78,7 @@ Lanes currently rolled up (**authoritative source: `quality-gate.needs` in pr-ci
 | `rls-security` | RLS security (non-superuser) |
 | `rls-application-role` | RLS application role (whole connection) |
 | `actionlint` | Actionlint |
+| `workflow-security` | Workflow security (zizmor) |
 
 Post-merge Docker (Trivy + GHCR), SBOM, API docs, deploy, and release automation run from [post-merge-ci.yml](../../../.github/workflows/post-merge-ci.yml) when a PR merges (not required PR checks).
 
@@ -81,7 +86,7 @@ Post-merge Docker (Trivy + GHCR), SBOM, API docs, deploy, and release automation
 
 ### Advisory PR jobs (run but not in the aggregate)
 
-These run on every non-docs-only PR and display on the PR, but are **not** in `quality-gate.needs`, so they do not block merge: `agent-os evals` (internal tooling gate, only runs on `agent-os/**` changes). Promote one to blocking by adding its job id to `quality-gate.needs` **and** to `REQUIRED_LANES` in [`pr-quality-gate.policy.unit.test.ts`](../../../src/tests/unit/ci/pr-quality-gate.policy.unit.test.ts).
+These run on the PR and display on it, but are **not** in `quality-gate.needs`, so they do not block merge: `Early failure alert` — it starts with the run, watches the lanes, and the moment one fails posts a red `Early failure alert` commit status naming the lane, while every lane still runs to the end and `Quality gate` still decides ([`early-failure-alert.mjs`](../../../tooling/ci/early-failure-alert.mjs); it needs `actions: read` + `statuses: write`). (`agent-os evals` is no longer advisory: `agent-os-gate` is in the aggregate.) Promote one to blocking by adding its job id to `quality-gate.needs` **and** to `REQUIRED_LANES` in [`pr-quality-gate.policy.unit.test.ts`](../../../src/tests/unit/ci/pr-quality-gate.policy.unit.test.ts).
 
 ### Skipped PR CI jobs on docs-only pull requests
 
@@ -101,7 +106,7 @@ When [pr-ci.yml](../../../.github/workflows/pr-ci.yml) path filters detect **doc
 
 Treat these as **post-merge gates**: failing runs still indicate problems on the branch tip after merge.
 
-**Artifact attestations** (`Docker` image provenance + SBOM, `SBOM` source SBOM) need **GitHub Enterprise Cloud** on a private repository — on any other plan GitHub refuses to store them and the job fails. There, set the repository variable `ARTIFACT_ATTESTATIONS=disabled`: the attest steps are skipped with a warning (cosign signing and the SBOM artifacts are unaffected). clinozy-infra's `pnpm setup:infra:deploy` sets it from the organization's plan; by hand: `gh variable set ARTIFACT_ATTESTATIONS --body disabled --repo albetrios/clinozy-be`. Delete the variable after upgrading the plan.
+**Artifact attestations** (`Docker` image provenance + SBOM, `SBOM` source SBOM) need **GitHub Enterprise Cloud** on a private repository — on any other plan GitHub refuses to store them and the job fails. There, set the repository variable `ARTIFACT_ATTESTATIONS=disabled`: the attest steps are skipped with a warning (cosign signing and the SBOM artifacts are unaffected). The images also carry **cosign attestations**, which work on any plan because cosign stores them next to the image in GHCR: a CycloneDX image SBOM and SLSA v1 build provenance ([`slsa-provenance-predicate.mjs`](../../../tooling/ci/slsa-provenance-predicate.mjs)), attested by digest in [reusable-docker-build-trivy.yml](../../../.github/workflows/reusable-docker-build-trivy.yml). [release-deploy.yml](../../../.github/workflows/release-deploy.yml)'s `Verify signatures + attestations` job runs `cosign verify` and `cosign verify-attestation` (both types) on the API and worker images, pinned to this repository's image workflow and the GitHub OIDC issuer, and `Deploy production` needs it to pass. An image built before these attestations existed fails that job; rebuild it rather than skip the check. Keyless signing writes the repository name to the public Sigstore log; once the repository is private, sign with a key from GitHub secrets instead. clinozy-infra's `pnpm setup:infra:deploy` sets it from the organization's plan; by hand: `gh variable set ARTIFACT_ATTESTATIONS --body disabled --repo albetrios/clinozy-be`. Delete the variable after upgrading the plan.
 
 Manual emergency redeploy: [reusable-railway-deploy.yml](../../../.github/workflows/reusable-railway-deploy.yml) `workflow_dispatch` only (not a PR status check).
 

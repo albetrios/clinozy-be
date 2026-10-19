@@ -1,7 +1,7 @@
 ---
 name: be-i18n-message-guard
 description: When a user-facing message is added or changed in the codebase, ensure it uses a translation key and that the key exists in src/shared/locales/en/. Do not allow raw user-facing strings in errors, success payloads, or error-handler copy.
-trigger: src/shared/locales/**/*.json
+trigger: src/shared/locales/**/*.json, src/shared/errors/**, src/shared/middlewares/core/error-handler.middleware.ts, src/domains/**/*.validator.ts, src/domains/**/*.service.ts, src/domains/**/*.controller.ts, src/shared/constants/**
 triggerNote: User-facing copy / translation keys
 indexNote: user-facing copy uses translation keys present in locales/en
 ---

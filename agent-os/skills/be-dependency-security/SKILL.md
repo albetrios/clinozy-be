@@ -1,7 +1,7 @@
 ---
 name: be-dependency-security
 description: Keeps pnpm dependencies non-vulnerable and avoids breaking changes when updating — and owns the pinned agent-tool versions (codegraph, headroom, semgrep, gitleaks, k6) in tooling/setup/agent/tool-versions.sh. Use when adding/updating dependencies, when CI audit fails, when reviewing package.json / pnpm-lock.yaml, or when bumping an agent tool pin.
-trigger: package.json, pnpm-lock.yaml, tooling/setup/agent/tool-versions.sh
+trigger: package.json, pnpm-lock.yaml, pnpm-workspace.yaml, patches/**, tooling/setup/agent/tool-versions.sh
 triggerNote: Zero-vuln dependency updates + agent tool pin bumps
 indexNote: keep pnpm deps non-vulnerable; safe patch/minor updates
 ---

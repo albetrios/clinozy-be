@@ -21,6 +21,7 @@ import { readdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { suggestNextMigrationPrefix } from '@/scripts/validators/migration/lint-migrations.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const SLUG_PATTERN = /^[a-z][a-z0-9_]*$/u;
 const MAXIMUM_SLUG_LENGTH = 60;
@@ -62,14 +63,20 @@ function migrationFileHeader({
 }
 
 async function main(): Promise<void> {
-  const slug = process.argv[2];
+  const { values, positionals } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { help: { type: 'boolean', short: 'h' } },
+    maxPositionals: 1,
+    usage: 'Usage: pnpm db:migrate:new <snake_case_slug>',
+  });
+  const [slug] = positionals;
 
-  if (!slug || slug === '--help' || slug === '-h') {
+  if (!slug || values.help) {
     process.stdout.write(
       'Usage: pnpm db:migrate:new <snake_case_slug>\n' +
         'Example: pnpm db:migrate:new add_user_avatar_url\n',
     );
-    process.exit(slug ? 0 : 2);
+    process.exit(values.help ? 0 : 2);
   }
 
   if (!SLUG_PATTERN.test(slug)) {

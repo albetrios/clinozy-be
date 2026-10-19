@@ -38,7 +38,7 @@ eager-parses `envSchema` and throws) — never a silent default.
 `process.env.NODE_ENV` only to name the `.env.<NODE_ENV>` file — no comparison. Every
 environment-varying behaviour is an explicit env flag with a **STATIC default** (never
 `NODE_ENV`-derived). Enforced by `src/tests/global/no-nodeenv-branching.global.test.ts` and the
-`guard-edits.sh` R4 pre-edit hook.
+`be-guard-edits.mjs` R4 pre-edit hook.
 
 ## Env-flag principles (non-negotiable)
 

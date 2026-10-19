@@ -2,7 +2,7 @@
  * Locale key-usage gate: every `<namespace>:<key>` referenced in runtime source must resolve to a
  * key defined in the base-locale JSON. Complements the parity check (en ↔ es) — parity cannot catch
  * a key that is missing from BOTH locales, which renders to users as the raw `errors:foo` string.
- * Part of `pnpm validate:locale-keys`.
+ * Run by `src/tests/unit/validators/locale-hardcoded-fallbacks.policy.unit.test.ts` (the unit lane).
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';

@@ -1,4 +1,5 @@
 import type { TestProjectConfiguration } from 'vitest/config';
+import { databaseProjectParallelism } from './worker-databases.js';
 
 /**
  * Named Vitest projects — run a tier with `vitest run --project <name>`.
@@ -9,8 +10,11 @@ import type { TestProjectConfiguration } from 'vitest/config';
  * Parallelism rules:
  *   - Pure-unit projects (`unit`, `property`, `global`, `security`, `performance`)
  *     enable file parallelism — handlers and validators are fully mocked.
- *   - DB-bound projects (`unit-db`, `e2e`, `integration`) keep `fileParallelism: false`
- *     because tests share a Postgres database and call `cleanupDatabase()`.
+ *   - Every Vitest worker that reaches Postgres runs on its own database, a clone of the
+ *     migrated test database (`tooling/vitest/worker-databases.ts`), so `cleanupDatabase()` in
+ *     one file never races another. `e2e` and `integration` run their files in parallel (one at
+ *     a time under coverage), in their own `sequence.groupOrder` so their worker count never has
+ *     to match the unit tiers'; `unit-db`, `security` and `performance` run one file at a time.
  *
  * Run a slice in parallel (CI matrix shards): `vitest run --project unit --shard=1/3`.
  *
@@ -21,6 +25,11 @@ import type { TestProjectConfiguration } from 'vitest/config';
  *   Used by `.github/workflows/reusable-vitest-postgres-redis.yml` to split the db-bound suite
  *   across multiple runners (tenancy+billing, auth+user, notify+audit+upload+rest).
  *   Empty/unset → run everything (default).
+ *
+ * Security slicing (CI db-bound shards):
+ *   Set `VITEST_SECURITY_SLICE=matrix` to narrow the `security` project to the permission route
+ *   matrix (one file, about 9 minutes) or `rest` to everything else, so the matrix gets a shard of
+ *   its own. Empty/unset → the whole project (default).
  */
 
 const ALL_DOMAIN_NAMES = [
@@ -57,6 +66,16 @@ function parseDomainFilter(): DomainFilter | null {
     return null;
   }
   return { domains, includeRest };
+}
+
+const PERMISSION_ROUTE_MATRIX =
+  'src/tests/security/infrastructure/permission-route-matrix.security.test.ts';
+
+function buildSecurityFiles(): { include: string[]; exclude: string[] } {
+  const slice = process.env.VITEST_SECURITY_SLICE?.trim();
+  if (slice === 'matrix') return { include: [PERMISSION_ROUTE_MATRIX], exclude: [] };
+  const include = ['src/tests/security/**/*.security.test.ts'];
+  return { include, exclude: slice === 'rest' ? [PERMISSION_ROUTE_MATRIX] : [] };
 }
 
 function buildE2eIncludes(): string[] {
@@ -159,7 +178,8 @@ export const vitestProjects = [
 
   /**
    * DB-bound unit tests (repository / replay / atomic-consume specs).
-   * Use a real Postgres database via `cleanupDatabase()` — must run files serially.
+   * Use a real Postgres database via `cleanupDatabase()` — one file at a time, on the worker's own
+   * database (parallel is proven only for `e2e` + `integration` so far).
    */
   {
     extends: true,
@@ -176,8 +196,8 @@ export const vitestProjects = [
 
   /**
    * Bundled domain e2e + dedicated `*.e2e.test.ts` suites + worker tests.
-   * All hit the live test app and database; files share `cleanupDatabase()`
-   * and must run sequentially.
+   * All hit the live test app and database; files run in parallel, each worker on its own
+   * database (`databaseProjectParallelism`).
    *
    * `include` honors `VITEST_DOMAIN_FILTER` (see top of file).
    */
@@ -193,8 +213,8 @@ export const vitestProjects = [
         'src/**/events/__tests__/**',
       ],
       pool: 'forks',
-      fileParallelism: false,
-      maxWorkers: 1,
+      ...databaseProjectParallelism(),
+      sequence: { groupOrder: 1 },
       testTimeout: 60_000,
       hookTimeout: 60_000,
     },
@@ -202,7 +222,8 @@ export const vitestProjects = [
 
   /**
    * Integration tests — `src/tests/integration/**` and per-domain
-   * `__tests__/integration/**`. Postgres-backed; sequential.
+   * `__tests__/integration/**`. Postgres-backed; files in parallel, each worker on its own
+   * database, like `e2e`.
    *
    * `include` honors `VITEST_DOMAIN_FILTER` (see top of file).
    *
@@ -222,22 +243,22 @@ export const vitestProjects = [
       name: 'integration',
       include: buildIntegrationIncludes(),
       pool: 'forks',
-      fileParallelism: false,
-      maxWorkers: 1,
+      ...databaseProjectParallelism(),
+      sequence: { groupOrder: 1 },
       testTimeout: 60_000,
       hookTimeout: 60_000,
     },
   },
 
   /**
-   * Security tests — almost all use `cleanupDatabase()` or a live app.
-   * Sequential to avoid DB cleanup races.
+   * Security tests — almost all use `cleanupDatabase()` or a live app. One file at a time, on the
+   * worker's own database: parallel is proven only for `e2e` + `integration` so far.
    */
   {
     extends: true,
     test: {
       name: 'security',
-      include: ['src/tests/security/**/*.security.test.ts'],
+      ...buildSecurityFiles(),
       pool: 'forks',
       fileParallelism: false,
       maxWorkers: 1,
@@ -246,7 +267,7 @@ export const vitestProjects = [
     },
   },
 
-  /** Performance tests — live app + DB; sequential. */
+  /** Performance tests — live app + DB; one file at a time, so a file's timings are its own. */
   {
     extends: true,
     test: {

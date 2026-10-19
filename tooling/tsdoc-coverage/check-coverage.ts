@@ -33,6 +33,8 @@
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { TSDocParser } from '@microsoft/tsdoc';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
+import { localDate } from '@tooling/setup/common/date.js';
 
 const REPO_ROOT = resolve(process.cwd());
 const SRC_ROOT = resolve(REPO_ROOT, 'src');
@@ -255,7 +257,7 @@ function writeBudget(budget: Budget): void {
   const payload = {
     _comment:
       'Locked TSDoc-coverage budget. The gate (`pnpm tsdoc:check`) fails when either count exceeds these numbers. PRs may LOWER counts (and refresh this file via `pnpm tsdoc:check --refresh-budget`); they may not raise them.',
-    _recordedAt: new Date().toISOString().slice(0, 10),
+    _recordedAt: localDate(),
     tokens: budget.tokens,
   };
   writeFileSync(BUDGET_FILE, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8');
@@ -306,9 +308,12 @@ function summariseCounts(missing: MissingEntry[]): {
 }
 
 function main(): void {
-  const argv = process.argv.slice(2);
-  const isRefresh = argv.includes('--refresh-budget');
-  const isReport = argv.includes('--report');
+  const { values } = parseCommandLine({
+    args: process.argv.slice(2),
+    options: { 'refresh-budget': { type: 'boolean' }, report: { type: 'boolean' } },
+  });
+  const isRefresh = values['refresh-budget'] === true;
+  const isReport = values.report === true;
 
   const missing = collectMissing();
   const counts = summariseCounts(missing);

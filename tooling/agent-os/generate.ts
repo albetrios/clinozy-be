@@ -21,17 +21,34 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import { generateDocs } from './generate-docs.js';
 
 const repositoryRoot = process.cwd();
 const agentOsDirectory = join(repositoryRoot, 'agent-os');
-const writeMode = process.argv.includes('--write');
+const writeMode =
+  parseCommandLine({
+    args: process.argv.slice(2),
+    options: { write: { type: 'boolean' }, check: { type: 'boolean' } },
+  }).values.write === true;
 
 interface HookManifestEntry {
   id: string;
-  runtime: 'bash' | 'node';
   script: string;
-  claude?: { event: string; matcher?: string };
+  /**
+   * `if`: permission rules (`Edit(**)`, `Write(**)`), one handler each — Claude Code spawns the
+   * hook only for a tool call that matches one. An `Edit(…)` rule matches Edit calls only, a
+   * `Write(…)` rule Write calls only (checked on Claude Code 2.1.302).
+   * `asyncRewake`: the hook runs in the background and wakes the model when it exits 2;
+   * `timeout`: seconds before Claude Code stops it.
+   */
+  claude?: {
+    event: string;
+    matcher?: string;
+    if?: string[];
+    asyncRewake?: boolean;
+    timeout?: number;
+  };
   cursor?: { event: string; matcher?: string };
   codex?: { event: string; matcher?: string; statusMessage?: string };
 }
@@ -59,20 +76,38 @@ const claudeTarget = targets.agents.claude;
 const cursorTarget = targets.agents.cursor;
 const codexTarget = targets.agents.codex;
 
-/** Claude command form: `<runtime> "$CLAUDE_PROJECT_DIR/agent-os/hooks/<script>"`. */
+/** Claude command form: `node "$CLAUDE_PROJECT_DIR/agent-os/hooks/<script>"` — every hook is a Node script. */
 const claudeCommand = (entry: HookManifestEntry): string =>
-  `${entry.runtime} "$CLAUDE_PROJECT_DIR/agent-os/hooks/${entry.script}"`;
-/** Cursor command form, relative to .cursor/: `<runtime> ../agent-os/hooks/<script>`. */
+  `node "$CLAUDE_PROJECT_DIR/agent-os/hooks/${entry.script}"`;
+/** Cursor command form, relative to .cursor/: `node ../agent-os/hooks/<script>`. */
 const cursorCommand = (entry: HookManifestEntry): string =>
-  `${entry.runtime} ../agent-os/hooks/${entry.script}`;
+  `node ../agent-os/hooks/${entry.script}`;
 /** Codex command form: resolve from git root because Codex may start in a subdirectory. */
 const codexCommand = (entry: HookManifestEntry): string =>
-  `CLAUDE_PROJECT_DIR="$(git rev-parse --show-toplevel)" ${entry.runtime} "$(git rev-parse --show-toplevel)/agent-os/hooks/${entry.script}"`;
+  `CLAUDE_PROJECT_DIR="$(git rev-parse --show-toplevel)" node "$(git rev-parse --show-toplevel)/agent-os/hooks/${entry.script}"`;
 
 type ClaudeHookEntry = {
   matcher?: string;
-  hooks: Array<{ type: 'command'; command: string }>;
+  hooks: Array<{
+    type: 'command';
+    command: string;
+    if?: string;
+    asyncRewake?: boolean;
+    timeout?: number;
+  }>;
 };
+
+/**
+ * The events whose handlers may carry an `if` rule; on any other event Claude Code never runs a
+ * handler that has one (code.claude.com/docs/en/hooks, Common fields).
+ */
+const claudeIfEvents = new Set([
+  'PreToolUse',
+  'PostToolUse',
+  'PostToolUseFailure',
+  'PermissionRequest',
+  'PermissionDenied',
+]);
 type CodexHookEntry = {
   matcher?: string;
   hooks: Array<{ type: 'command'; command: string; statusMessage?: string }>;
@@ -90,10 +125,25 @@ function buildClaudeHooks(): Record<string, ClaudeHookEntry[]> {
       );
       continue;
     }
+    const rules = entry.claude.if ?? [];
+    if (rules.length > 0 && !claudeIfEvents.has(entry.claude.event)) {
+      report(
+        `claude: hook "${entry.id}" sets if on ${entry.claude.event}, where a handler with if never runs — skipped`,
+      );
+      continue;
+    }
     const command = claudeCommand(entry);
+    const options = {
+      ...(entry.claude.asyncRewake ? { asyncRewake: true } : {}),
+      ...(entry.claude.timeout === undefined ? {} : { timeout: entry.claude.timeout }),
+    };
+    const handlers: ClaudeHookEntry['hooks'] =
+      rules.length > 0
+        ? rules.map((rule) => ({ type: 'command', command, if: rule, ...options }))
+        : [{ type: 'command', command, ...options }];
     const hookEntry: ClaudeHookEntry = entry.claude.matcher
-      ? { matcher: entry.claude.matcher, hooks: [{ type: 'command', command }] }
-      : { hooks: [{ type: 'command', command }] };
+      ? { matcher: entry.claude.matcher, hooks: handlers }
+      : { hooks: handlers };
     const event = entry.claude.event;
     const bucket = grouped[event] ?? [];
     bucket.push(hookEntry);

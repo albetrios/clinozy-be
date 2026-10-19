@@ -18,6 +18,8 @@ pre-flight, so still treat the file-level rules below as hard policy.
 - **Destructive shell** — no `rm -rf`, no `git push --force` (use
   `--force-with-lease`), avoid `git reset --hard` / `git clean -f` on work you
   did not create; never `mkfs` or `dd if=`.
+- **Git hooks** — never skip them (`--no-verify` on commit or push, `git commit -n`,
+  `HUSKY=0`); the pre-commit and pre-push gates are mandatory, so fix what they report.
 
 ## Confirm first (protected paths)
 - **Migrations** (`migrations/*.sql`) — applied migrations are immutable; add a

@@ -1,24 +1,24 @@
 /**
- * `pnpm iteration:diff` — compare two iterations' `intake-files/` (Baseline ↔ current).
+ * `pnpm iteration:diff` — compare two iterations' resolved intakes (Baseline ↔ current).
  *
- * Every iteration's intake holds a full snapshot, so the delta of an incremental iteration is this
+ * Every iteration's intake resolves to a whole snapshot (up its Baseline chain), so the delta of an incremental iteration is this
  * comparison plus the designer's "What changed" notes (in brief mode, `BRIEF.md` — and the
  * comparison shows nothing else); anything the comparison shows that the notes omit is a finding. The summary covers files, screens (via `_index.md` Slugs where present),
  * whether the PRD, `schema-routes.md` or the prototype changed, and the `schema-routes.md` entities,
  * fields, enums, routes and operations added, removed or changed.
  */
-import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { gitEnvironmentWithoutInheritedRepository } from '@tooling/setup/common/git-environment.js';
+import { tryGit } from '@tooling/setup/common/git-environment.js';
+import { parseCommandLine } from '@tooling/setup/common/script.js';
 import {
   EMPTY_FIELD,
   INTAKE_DIRECTORY,
-  readSnapshot,
-  ITERATIONS_DIRECTORY,
   NO_BASELINE,
   readIterationReadme,
-  suggestBaseline,
+  readResolvedSnapshot,
+  resolveIntakeSnapshot,
 } from './iteration.util.js';
 
 /** Added, removed and changed names — sorted. */
@@ -201,13 +201,6 @@ export function compareSchemaRoutes(models: {
   };
 }
 
-function intakeFolder(location: {
-  readonly repositoryRoot: string;
-  readonly iteration: string;
-}): string {
-  return join(location.repositoryRoot, ITERATIONS_DIRECTORY, location.iteration, INTAKE_DIRECTORY);
-}
-
 function screenSlugs(index: Buffer | undefined): string[] {
   if (index === undefined) return [];
   let slugColumn = -1;
@@ -230,13 +223,14 @@ function screenSlugs(index: Buffer | undefined): string[] {
  * Summarizes the difference between two iterations' intake files.
  *
  * @remarks
- * Algorithm: compares the flat file sets byte by byte; maps changed `<slug>.md` files to screens
+ * Algorithm: compares the two resolved snapshots ({@link resolveIntakeSnapshot} — an overlay or a
+ * brief stores only what arrived) byte by byte; maps changed `<slug>.md` files to screens
  * through either side's `_index.md` Slug column; flags `PRD.md`, `schema-routes.md` and prototype
  * (`.html`, `.js`) changes; parses both `schema-routes.md` files ({@link parseSchemaRoutes}) and
  * compares them ({@link compareSchemaRoutes}).
  *
- * Failure modes: throws when either iteration has no README or no `intake-files/` — the
- * comparison covers `intake-files/` only, so both sides are mandatory.
+ * Failure modes: throws when either iteration has no README, no intake, or a snapshot that cannot
+ * be resolved — the comparison covers the intakes only, so both sides are mandatory.
  */
 export function summarizeIntakeDiff(request: {
   readonly repositoryRoot: string;
@@ -246,20 +240,19 @@ export function summarizeIntakeDiff(request: {
   const { repositoryRoot, baseline, current } = request;
   readIterationReadme({ repositoryRoot, iteration: baseline });
   readIterationReadme({ repositoryRoot, iteration: current });
-  const beforeFolder = intakeFolder({ repositoryRoot, iteration: baseline });
-  const afterFolder = intakeFolder({ repositoryRoot, iteration: current });
-  for (const [iteration, folder] of [
-    [baseline, beforeFolder],
-    [current, afterFolder],
-  ] as const) {
-    if (!existsSync(folder)) {
+  for (const iteration of [baseline, current]) {
+    const resolved = resolveIntakeSnapshot({ repositoryRoot, iteration });
+    if (resolved.stored.length === 0) {
       throw new Error(
-        `${iteration} has no ${INTAKE_DIRECTORY}/ — the incremental delta is a diff of ${INTAKE_DIRECTORY}/ only, so both iterations need theirs: pnpm iteration:intake ${iteration} <source-folder>.`,
+        `${iteration} has no ${INTAKE_DIRECTORY}/ — the incremental delta is a diff of the two intakes only, so both iterations need theirs: pnpm iteration:intake ${iteration} <source-folder>.`,
       );
     }
+    if (resolved.problem !== undefined) {
+      throw new Error(`${iteration}'s snapshot cannot be resolved — ${resolved.problem}.`);
+    }
   }
-  const before = readSnapshot(beforeFolder);
-  const after = readSnapshot(afterFolder);
+  const before = readResolvedSnapshot({ repositoryRoot, iteration: baseline });
+  const after = readResolvedSnapshot({ repositoryRoot, iteration: current });
   const files = compareMaps({ before, after, same: (left, right) => left.equals(right) });
   const touched = new Set([...files.added, ...files.removed, ...files.changed]);
   const slugs = new Set([
@@ -323,28 +316,41 @@ export function formatIntakeDiffSummary(summary: IntakeDiffSummary): string {
   ].join('\n');
 }
 
-/** Runs `git diff --no-index` between the two iterations' `intake-files/` and returns its output. */
+/**
+ * Runs `git diff --no-index` between the two iterations' resolved snapshots and returns its output.
+ *
+ * @remarks
+ * Each snapshot is copied into a temporary folder first (an overlay or a brief stores only what
+ * arrived), and the output names them `iterations/<iteration>/intake-files`.
+ *
+ * Side effects: writes and removes two temporary folders.
+ */
 export function rawIntakeDiff(request: {
   readonly repositoryRoot: string;
   readonly baseline: string;
   readonly current: string;
 }): string {
-  const result = spawnSync(
-    'git',
-    [
-      'diff',
-      '--no-index',
-      '--',
-      join(ITERATIONS_DIRECTORY, request.baseline, INTAKE_DIRECTORY),
-      join(ITERATIONS_DIRECTORY, request.current, INTAKE_DIRECTORY),
-    ],
-    {
-      cwd: request.repositoryRoot,
-      encoding: 'utf-8',
-      env: gitEnvironmentWithoutInheritedRepository(),
-    },
-  );
-  return result.stdout ?? '';
+  const workspace = mkdtempSync(join(tmpdir(), 'iteration-diff-'));
+  try {
+    const sides = [request.baseline, request.current].map((iteration, index) => {
+      const folder = join(workspace, index === 0 ? 'baseline' : 'current');
+      mkdirSync(folder);
+      for (const [name, path] of resolveIntakeSnapshot({
+        repositoryRoot: request.repositoryRoot,
+        iteration,
+      }).files) {
+        copyFileSync(path, join(folder, name));
+      }
+      return { folder, label: `iterations/${iteration}/${INTAKE_DIRECTORY}` };
+    });
+    const [before, after] = sides as [(typeof sides)[number], (typeof sides)[number]];
+    // `diff --no-index` exits 1 when the folders differ, so its output is read either way.
+    return tryGit({ args: ['diff', '--no-index', '--', before.folder, after.folder] })
+      .output.replaceAll(before.folder.slice(1), before.label)
+      .replaceAll(after.folder.slice(1), after.label);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
 }
 
 /** Parsed `pnpm iteration:diff [<baseline>] <current> [--json]` command line. */
@@ -354,28 +360,25 @@ export function parseDiffArguments(commandLine: readonly string[]): {
   readonly json: boolean;
   readonly help: boolean;
 } {
-  const positionals: string[] = [];
-  let json = false;
-  let help = false;
-  for (const token of commandLine) {
-    if (token === '--json') json = true;
-    else if (token === '--help' || token === '-h') help = true;
-    else if (token.startsWith('-')) throw new Error(`Unknown option "${token}".`);
-    else positionals.push(token);
-  }
-  if (positionals.length > 2) {
-    throw new Error(
-      `Too many arguments: ${positionals.join(' ')} — expected [<baseline>] <current>.`,
-    );
-  }
+  const { values, positionals } = parseCommandLine({
+    args: commandLine,
+    options: { json: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
+    maxPositionals: 2,
+    usage: 'expected [<baseline>] <current>.',
+  });
+  const json = values.json === true;
+  const help = values.help === true;
   return positionals.length === 2
     ? { baseline: positionals[0], current: positionals[1], json, help }
     : { baseline: undefined, current: positionals[0], json, help };
 }
 
 /**
- * Explains what to compare against when no Baseline is given — the recorded Baseline and the
- * suggestion — so the caller can ask the user. Returns the message.
+ * Explains what to compare against when no Baseline is given — the recorded Baseline, if any —
+ * so the caller can ask the user. Returns the message.
+ *
+ * @remarks
+ * Nothing is suggested: an iteration is from scratch until the user names its Baseline.
  */
 export function missingBaselineMessage(request: {
   readonly repositoryRoot: string;
@@ -386,24 +389,15 @@ export function missingBaselineMessage(request: {
     iteration: request.current,
   });
   const recorded = readme.fields.get('Baseline');
-  const suggested = suggestBaseline({
-    repositoryRoot: request.repositoryRoot,
-    excluding: request.current,
-  });
-  const lines = ['No Baseline given.'];
   if (recorded !== undefined && recorded !== NO_BASELINE && recorded !== EMPTY_FIELD) {
-    lines.push(`  Recorded in ${request.current}/README.md: ${recorded}`);
+    return [
+      'No Baseline given.',
+      `  Recorded in ${request.current}/README.md: ${recorded}`,
+      `Confirm and re-run: pnpm iteration:diff ${recorded} ${request.current}`,
+    ].join('\n');
   }
-  lines.push(
-    suggested === undefined
-      ? '  Suggested: none — no iteration in this repository is done or frozen yet.'
-      : `  Suggested (latest done/frozen in this repository): ${suggested}`,
-  );
-  const pick =
-    recorded !== undefined && recorded !== NO_BASELINE && recorded !== EMPTY_FIELD
-      ? recorded
-      : suggested;
-  if (pick !== undefined)
-    lines.push(`Confirm and re-run: pnpm iteration:diff ${pick} ${request.current}`);
-  return lines.join('\n');
+  return [
+    'No Baseline given, and none is recorded — the iteration is from scratch.',
+    `To build on an earlier iteration the user names: pnpm iteration:baseline ${request.current} <baseline>`,
+  ].join('\n');
 }
