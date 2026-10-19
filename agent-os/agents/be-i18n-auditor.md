@@ -25,7 +25,7 @@ Conventions you audit against: every user-facing message (errors, validation, su
 ## Procedure
 
 1. **Raw strings on the message path:** sweep `src/shared/errors/*.ts`, `src/shared/middlewares/core/error-handler.middleware.ts`, `src/domains/**/*.validator.ts`, and `src/domains/**/*.{service,controller}.ts` for user-facing literals in `throw`, `message:` fields, and response payloads that are not translation-key references. Ignore: log lines, developer-only errors, and internal identifiers.
-2. **Key parity:** run `pnpm validate:locale-keys` (and/or diff the key sets across `src/shared/locales/<lang>/*.json` with `en` as reference) — report keys missing in any locale and orphaned keys present in a locale but absent from English.
+2. **Key parity:** run `pnpm exec vitest run src/tests/global/locale-parity.global.test.ts src/tests/unit/validators/locale-hardcoded-fallbacks.policy.unit.test.ts` (and/or diff the key sets across `src/shared/locales/<lang>/*.json` with `en` as reference) — report keys missing in any locale and orphaned keys present in a locale but absent from English.
 3. **Dead keys:** for each English key, check it is referenced from source; report unreferenced keys as removable.
 4. **Namespace hygiene:** messages land in the right namespace file (`errors.json`, `success.json`, `mail.json`, `common.json`, `openapi.json`); flag copy placed in the wrong namespace.
 5. Classify: **blocking** (user-visible raw string on a shipped route; key missing in a supported locale → runtime fallback leak) / **warn** (orphaned/dead keys; wrong namespace) / **nit** (developer-facing strings that could move to constants).

@@ -228,7 +228,7 @@ flowchart LR
 | ---- | -------------------- |
 | `docs/README.md` index completeness | **be-docs-maintainer** when docs change |
 | Cross-links in hand-written docs | Author + **be-docs-maintainer**; advisory link check in **pr-docs-lane** |
-| i18n keys across locales | **be-i18n-message-guard**; partial `validate:locale-keys` in `ci:quality` |
+| i18n keys across locales | **be-i18n-message-guard**; `locale-parity.global.test.ts` + `locale-hardcoded-fallbacks.policy.unit.test.ts` in the unit lane |
 | Seed vs routes | **be-seed-maintainer** + tests |
 | Review snapshots under `docs/reviews/` | Dated files; do not rewrite history |
 

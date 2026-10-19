@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { findLocaleParityMismatches } from '@/scripts/validators/locale/locale-key-parity.util.js';
 import { findHardcodedFallbackViolations } from '@/scripts/validators/locale/validate-locale-hardcoded-fallbacks.js';
 import {
   findUndefinedKeyReferences,
@@ -9,10 +8,6 @@ import {
 describe('locale i18n policy', () => {
   it('has no hardcoded user-facing error fallbacks in application code', () => {
     expect(findHardcodedFallbackViolations()).toEqual([]);
-  });
-
-  it('has en/es parity for errors, success, common, and mail locale files', () => {
-    expect(findLocaleParityMismatches()).toEqual([]);
   });
 
   it('has no i18n key referenced in runtime code but missing from the locale JSON', () => {

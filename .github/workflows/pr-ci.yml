@@ -213,9 +213,6 @@ jobs:
       - name: TSDoc coverage budget
         run: pnpm tsdoc:check
 
-      - name: Locale keys (en ↔ es, every referenced key defined)
-        run: pnpm validate:locale-keys
-
       - name: Test filename suffixes
         run: pnpm validate:test-naming
 

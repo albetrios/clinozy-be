@@ -1,8 +1,8 @@
 /**
  * Policy: every locale carries the same keys as English, with the same interpolation placeholders.
  *
- * `validate:locale-keys` already gates the code → JSON direction (a thrown key must exist). It does
- * not gate locale → locale. Two failure modes it cannot see:
+ * The one parity check. `locale-hardcoded-fallbacks.policy.unit.test.ts` gates the code → JSON
+ * direction (a thrown key must exist); this gates locale → locale. Two failure modes only it sees:
  *
  * - a key added to `en` and forgotten elsewhere, so a Spanish caller receives English copy — or, if
  *   the fallback is missing, the raw `errors:someKey` string;

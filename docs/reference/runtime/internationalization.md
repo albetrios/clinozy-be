@@ -85,12 +85,12 @@ Templates translate through `translateMailText({ key, locale, values })` (`src/i
 **Check locally:**
 
 ```bash
-pnpm validate:locale-keys
+pnpm exec vitest run src/tests/global/locale-parity.global.test.ts src/tests/unit/validators/locale-hardcoded-fallbacks.policy.unit.test.ts
 ```
 
-This runs JSON parity (`en` ↔ `es`) for all four files and fails if application code passes a redundant English **fallback** string when an `errors:` messageKey is already set. A key used with a computed suffix (`errors:resources.${noun}`) is written as its prefix ending in `.`; the key-usage scan treats it as a prefix.
+Two tests, one job each. `locale-parity.global.test.ts` is the parity check: every locale carries English's keys with the same interpolation placeholders, in every namespace but `openapi`. `locale-hardcoded-fallbacks.policy.unit.test.ts` checks the code side: every key the code references exists, and no application code passes a redundant English **fallback** string when an `errors:` messageKey is already set. A key used with a computed suffix (`errors:resources.${noun}`) is written as its prefix ending in `.`; the key-usage scan treats it as a prefix.
 
-CI runs `validate:locale-keys` in `ci:quality`. When adding a key, update **every** locale file in the same change.
+Both run in every PR's unit lane (`--project unit --project global`) and in `pnpm test`. When adding a key, update **every** locale file in the same change.
 
 ## Skill
 
