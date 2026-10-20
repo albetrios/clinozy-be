@@ -5,7 +5,9 @@
  * Checks:
  * - Routes file or container file exists
  * - __tests__ directory exists; routed domains have __tests__/integration/*.test.ts
- * - Vitest specs only under __tests__/{unit,integration,e2e}/; events/__tests__/ is forbidden (use __tests__/unit/events/)
+ * - Vitest specs only under __tests__/{unit,integration,e2e}/, plus the folder's bundled e2e spec
+ *   (`<domain>/__tests__/<domain>.test.ts`, `<child>/__tests__/<child>.test.ts`); events/__tests__/
+ *   is forbidden (use __tests__/unit/events/)
  * - Multi-sub-domain domains: sub-domains/ + at least one *.service.ts in tree
  * - Domain root dirs limited to reserved names (multi-resource domains)
  * - Optional warnings: schema, depth, empty factories, routes without controllers
@@ -33,10 +35,14 @@ const RESERVED_DOMAIN_ROOT_DIRS = new Set([
 ]);
 
 /**
- * Deepest allowed path under a domain, counted in segments: a nested sub-domain's event-handler
- * test, `sub-domains/<sub-domain>/<nested-sub-domain>/__tests__/unit/events/<file>`.
+ * Deepest allowed path under a domain, counted in segments: a nested sub-domain's worker unit
+ * test, `sub-domains/<sub-domain>/<nested-sub-domain>/__tests__/unit/events/worker/<file>` — the
+ * place docs/reference/testing/testing-conventions.md and validate-subdomain-unit-matrix.ts give it.
  */
-const MAX_DOMAIN_ENTRY_DEPTH = 7;
+const MAX_DOMAIN_ENTRY_DEPTH = 8;
+
+/** Domains whose root `workers/` holds domain-wide retention (user: offboarding and tombstones; app: record purge). */
+const DOMAIN_WIDE_WORKER_DOMAINS = new Set(['user', 'app']);
 
 /** Allowed subdirectories directly under `__tests__/`. */
 const ALLOWED_TESTS_SUBDIRS = new Set(['unit', 'integration', 'e2e', 'factories']);
@@ -75,12 +81,17 @@ function walkEmptyTestDirectories({
         const testFiles = readdirSync(entryPath).filter(
           (fileName) => fileName.endsWith('.test.ts') || fileName.endsWith('.test.tsx'),
         );
+        // The bundled e2e spec is named after the folder that owns `__tests__/`
+        // (`<domain>/__tests__/<domain>.test.ts`, `<child>/__tests__/<child>.test.ts`; CLAUDE.md → Testing).
+        const misplacedTestFiles = testFiles.filter(
+          (fileName) => fileName !== `${basename(directoryPath)}.test.ts`,
+        );
         const nonTestEntries = readdirSync(entryPath).filter(
           (fileName) => !(fileName.endsWith('.test.ts') || fileName.endsWith('.test.tsx')),
         );
-        if (testFiles.length > 0) {
+        if (misplacedTestFiles.length > 0) {
           result.errors.push(
-            `Vitest specs must live under unit/ or integration/ — move: ${entryPath.replace(`${DOMAINS_DIR}/`, '')}/${testFiles.join(', ')}`,
+            `Vitest specs must live under unit/, integration/ or e2e/ (or be the folder's bundled <folder>.test.ts) — move: ${entryPath.replace(`${DOMAINS_DIR}/`, '')}/${misplacedTestFiles.join(', ')}`,
           );
         }
 
@@ -152,7 +163,7 @@ function validateDomain(domainName: string): ValidationResult {
       );
     }
 
-    if (domainName !== 'user' && rootDirectories.includes('workers')) {
+    if (!DOMAIN_WIDE_WORKER_DOMAINS.has(domainName) && rootDirectories.includes('workers')) {
       result.warnings.push(
         'workers/ at domain root — prefer sub-domains/<resource>/workers/ unless domain-wide retention',
       );
@@ -266,13 +277,9 @@ function main() {
 
   const domains = targetDomain
     ? [targetDomain]
-    : readdirSync(DOMAINS_DIR).filter((name) => {
-        try {
-          return require('node:fs').statSync(join(DOMAINS_DIR, name)).isDirectory();
-        } catch {
-          return false;
-        }
-      });
+    : readdirSync(DOMAINS_DIR, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
 
   let hasErrors = false;
 
