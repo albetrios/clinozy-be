@@ -217,6 +217,18 @@ describe('list-query.util', () => {
       expect(finishKeysetPage({ rows: [row()], args: { limit: 2 } }).total).toBeNull();
     });
 
+    // A last page that is exactly full: the `limit + 1` fetch got `limit` rows, so there is no
+    // next page (planted-bug drill A2-5, 20 Oct 2026: `>=` reported one, with a cursor).
+    it('reports no next page when the fetch returns exactly limit rows', () => {
+      const page = finishKeysetPage({
+        rows: [row(), row({ id: 2 })],
+        args: { limit: 2 },
+      });
+      expect(page.items).toHaveLength(2);
+      expect(page.has_more).toBe(false);
+      expect(page.next_cursor).toBeNull();
+    });
+
     it('returns no cursor when there is no next page', () => {
       const page = finishKeysetPage({
         rows: [row()],

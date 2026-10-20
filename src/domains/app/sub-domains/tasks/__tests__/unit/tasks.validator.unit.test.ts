@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ValidationError } from '@/shared/errors/index.js';
-import { validateListTasksQuery } from '@/domains/app/sub-domains/tasks/tasks.validator.js';
+import {
+  validateListTasksQuery,
+  validateUpdateTask,
+} from '@/domains/app/sub-domains/tasks/tasks.validator.js';
 
 /** The Tasks type filter (D81 T6): `rule_key` and `kind`, each a comma list, are one filter. */
 describe('validateListTasksQuery — the type filter (D81 T6)', () => {
@@ -27,5 +30,19 @@ describe('validateListTasksQuery — the type filter (D81 T6)', () => {
 
   it.each(['later', 'manual,later', 'manual,manual', 'manual,'])('refuses kind=%s', (kind) => {
     expect(() => validateListTasksQuery({ kind })).toThrow(ValidationError);
+  });
+});
+
+/**
+ * Locks in the title limit of a task made by hand: 120 characters (10.A.8). Only DB-bound tests
+ * sent a title, so pre-push never saw the limit loosened (planted-bug drill A2-1, 20 Oct 2026).
+ */
+describe('validateUpdateTask — the title limit', () => {
+  it('takes a title of 120 characters', () => {
+    expect(validateUpdateTask({ title: 'a'.repeat(120) }).title).toHaveLength(120);
+  });
+
+  it('refuses a title of 121 characters', () => {
+    expect(() => validateUpdateTask({ title: 'a'.repeat(121) })).toThrow(ValidationError);
   });
 });
