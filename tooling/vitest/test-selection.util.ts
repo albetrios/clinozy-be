@@ -118,6 +118,13 @@ export const MENTION_ONLY_GLOBS = [
   'Dockerfile*',
 ];
 
+/**
+ * Policy tests that read every test file's source rather than import it — no test starts git
+ * outside the throwaway-repository fixture. Nothing imports a test, so a changed test selects
+ * them; otherwise a new test's own `git init` runs inside pre-push before CI judges it.
+ */
+export const TEST_SOURCE_POLICIES = ['src/tests/unit/ci/git-hook-environment.policy.unit.test.ts'];
+
 /** Test files that run on any source change under `src/` (see the module comment). */
 export const ALWAYS_RUN_GLOBS = [
   'src/tests/security/**/*.test.ts',
@@ -638,6 +645,20 @@ function selectMigrationReaders(options: {
   }
 }
 
+/** A changed test: itself, and each test-source policy the repository has ({@link TEST_SOURCE_POLICIES}). */
+function selectChangedTest(options: {
+  changed: string;
+  repositoryRoot: string;
+  select: (test: string, reason: string) => void;
+}): void {
+  options.select(options.changed, 'the changed test itself');
+  for (const policy of TEST_SOURCE_POLICIES) {
+    if (policy !== options.changed && existsSync(join(options.repositoryRoot, policy))) {
+      options.select(policy, `reads every test's source (${options.changed})`);
+    }
+  }
+}
+
 function selectTestsOrThrow(options: {
   changedFiles: string[];
   repositoryRoot: string;
@@ -693,7 +714,7 @@ function selectTestsOrThrow(options: {
   for (const changed of judged) {
     const exists = existsSync(join(repositoryRoot, changed));
     if (isTestFile(changed)) {
-      if (exists) select(changed, 'the changed test itself');
+      if (exists) selectChangedTest({ changed, repositoryRoot, select });
       continue;
     }
     const inGraph = GRAPH_ROOTS.some((root) => changed.startsWith(`${root}/`));

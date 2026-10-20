@@ -40,9 +40,27 @@ const PRE_COMMIT_INDEX_READERS: readonly string[] = [
 /** The one test file that starts git: every throwaway repository is built through it. */
 const TEST_GIT_FIXTURE = 'src/tests/helpers/git-repository.helper.ts';
 
+/** This file: its sample lines show the scan's shapes, not git it starts. */
+const THIS_FILE = 'src/tests/unit/ci/git-hook-environment.policy.unit.test.ts';
+
 /** A child-process call whose command is `git` (the literal may sit on the next line). */
 const GIT_CHILD_PROCESS =
   /\b(?:spawnSync|spawn|execFileSync|execFile|execSync)\(\s*(['"`])git[\s'"`]/;
+
+/** A binding that holds the git binary's name: `const GIT = 'git'`. */
+const GIT_BINARY_BINDING = /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(['"`])git\2/g;
+
+/** The child-process calls a binding holding `git` may be handed to. */
+const CHILD_PROCESS_CALLS = ['spawnSync', 'spawn', 'execFileSync', 'execFile', 'execSync'];
+
+/** Whether `source` starts git: by its literal name, or through a binding that holds it. */
+function startsGit(source: string): boolean {
+  if (GIT_CHILD_PROCESS.test(source)) return true;
+  const calls = source.replace(/\(\s+/g, '(');
+  return [...source.matchAll(GIT_BINARY_BINDING)].some(([, name]) =>
+    CHILD_PROCESS_CALLS.some((call) => calls.includes(`${call}(${name}`)),
+  );
+}
 
 function collectSourceFiles(directory: string, collected: string[] = []): string[] {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -58,7 +76,8 @@ function collectSourceFiles(directory: string, collected: string[] = []): string
 function gitCallers(roots: readonly string[]): string[] {
   return roots
     .flatMap((root) => collectSourceFiles(root))
-    .filter((absolutePath) => GIT_CHILD_PROCESS.test(readFileSync(absolutePath, 'utf-8')))
+    .filter((absolutePath) => relative(ROOT, absolutePath) !== THIS_FILE)
+    .filter((absolutePath) => startsGit(readFileSync(absolutePath, 'utf-8')))
     .map((absolutePath) => relative(ROOT, absolutePath));
 }
 
@@ -123,6 +142,18 @@ describe('git hook environment — inherited repository variables', () => {
         'The documented exception to the shared git module',
       );
     }
+  });
+
+  it('recognises git started by its name, on the next line, or through a binding', () => {
+    // The shapes the planted-bug drill used (20 Oct 2026); the binding form escaped the scan.
+    expect(startsGit("spawnSync('git', ['init'], { cwd })")).toBe(true);
+    expect(startsGit("execFileSync(\n  'git',\n  ['config', 'user.name', 'x'],\n)")).toBe(true);
+    expect(startsGit("execSync('git init -q -b main', { cwd })")).toBe(true);
+    expect(startsGit("const GIT = 'git';\nspawnSync(GIT, ['init'], { cwd });")).toBe(true);
+    expect(startsGit("const GIT = 'git';\nexecFileSync(\n  GIT,\n  ['commit'],\n)")).toBe(true);
+    // A payload or a message that only names a git command starts nothing.
+    expect(startsGit("const command = 'git push origin main';")).toBe(false);
+    expect(startsGit("spawnSync('node', ['hook.mjs'], { input: 'git push' })")).toBe(false);
   });
 
   it('starts git in tests only through the one fixture, which strips the inherited repository', () => {
