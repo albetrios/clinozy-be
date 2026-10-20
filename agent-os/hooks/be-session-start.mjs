@@ -235,9 +235,14 @@ async function probeToolPins() {
       return { name, current: current || "missing", pinned };
     }),
   );
-  const drifted = rows.filter((row) => row.current !== row.pinned).map((row) => `${row.name} ${row.current}≠${row.pinned}`);
+  // Each drifted tool names its own installer, as `pnpm tool:agent-tools` does: a failed
+  // best-effort install still writes bootstrap.sh's install stamp, so re-running the bootstrap
+  // skips the installs and repairs nothing.
+  const drifted = rows
+    .filter((row) => row.current !== row.pinned)
+    .map((row) => `${row.name} ${row.current}≠${row.pinned} — run bash tooling/setup/agent/install-${row.name}.sh`);
   let result = `${rows.length - drifted.length}/${rows.length} at pin`;
-  if (drifted.length > 0) result += ` (${drifted.join(" ")} — run bash tooling/setup/agent/bootstrap.sh)`;
+  if (drifted.length > 0) result += ` (${drifted.join("; ")})`;
   writeFileSync(join(probeDirectory, "tool-pins"), `${result}\n`);
 }
 

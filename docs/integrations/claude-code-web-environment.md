@@ -131,7 +131,7 @@ Every agent tool the bootstrap installs — `codegraph`, `headroom`, `semgrep`, 
 | `install-*.sh` (via [`tool-install.lib.sh`](../../tooling/setup/agent/tool-install.lib.sh)) | **Moves the machine to the pin**: installs when missing, **reinstalls when the installed version differs** (a cached environment never freezes on an old version), and refuses a release download whose SHA-256 does not match. |
 | CI ([`pr-ci.yml`](../../.github/workflows/pr-ci.yml), [`scheduled-k6-load-slo.yml`](../../.github/workflows/scheduled-k6-load-slo.yml)) | Appends the same file to `$GITHUB_ENV` and runs the same installers — CI and cloud sessions run identical versions, with no second copy to drift. |
 | `pnpm tool:agent-tools --smoke --outdated` | Run by `bootstrap.sh` at **every install**: each tool vs its pin, the `.mcp.default.json` servers started for real (`initialize` + `tools/list`), and **which pins have a newer release** — with the paste-ready lines (version + checksums) to bump. Report only; it never upgrades. |
-| Session-start banner | `tools 5/5 at pin`, or names the drifted tool (`k6 2.2.0≠2.3.0 — run bash tooling/setup/agent/bootstrap.sh`). Local `--version` calls only. |
+| Session-start banner | `tools 5/5 at pin`, or names the drifted tool (`k6 2.2.0≠2.3.0 — run bash tooling/setup/agent/install-k6.sh`). Local `--version` calls only. |
 | [`agent-tool-versions.policy.unit.test.ts`](../../src/tests/unit/tooling/agent-tool-versions.policy.unit.test.ts) | Fails on an unpinned install, a hardcoded version, a missing checksum, or a tool added to one place but not the others. |
 
 **Upgrade flow — what if something breaks?**
