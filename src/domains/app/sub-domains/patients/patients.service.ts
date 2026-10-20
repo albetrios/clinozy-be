@@ -133,13 +133,12 @@ export class PatientsService extends BaseRecordService<PatientOutput> {
     };
   }): Promise<{ rows: PatientExportRow[]; is_truncated: boolean }> {
     const { rows, is_truncated } = await super.exportRows({ scope, query, options });
-    const organizationId = await this.organizationId(scope);
     const summaries = await withAppDatabaseContext({
       scope,
-      callback: () =>
+      callback: async () =>
         this.contactsRepository.findSummaries(
           [...new Set(rows.map((row) => row.contact_id))],
-          organizationId,
+          await this.organizationId(scope),
         ),
     });
     const contactOf = new Map(summaries.map((contact) => [contact.id, contact]));
