@@ -8,8 +8,10 @@ const HELPER = '_be-hook.mjs';
 /** The hooks' state directory under TMPDIR. */
 const HOOK_STATE = `${PROJECT_SLUG}-hooks`;
 const manifest = JSON.parse(readFileSync(join(HOOKS, 'hooks.json'), 'utf8')) as {
-  hooks: Array<{ id: string; runtime?: unknown; script: string }>;
+  hooks: Array<{ id: string; runtime?: unknown; script: string; claude?: { timeout?: number } }>;
 };
+/** A hook script's own time budgets (`const TEST_BUDGET_MILLISECONDS = 60_000;`). */
+const BUDGETS = /const \w+_BUDGET_MILLISECONDS = ([\d_]+);/g;
 const scripts = readdirSync(HOOKS).filter((name) => /\.(?:mjs|sh)$/.test(name));
 const source = (name: string) => readFileSync(join(HOOKS, name), 'utf8');
 /** The hook scripts with the comments dropped, so prose about a rule never counts as code. */
@@ -54,6 +56,20 @@ describe('agent hook runtime', () => {
     expect(code(HELPER)).toContain('readFileSync(0');
     expect(code(HELPER)).toContain('CLAUDE_PROJECT_DIR');
     expect(code(HELPER)).toContain(HOOK_STATE);
+  });
+
+  it("every hook's timeout covers its own script budgets, run one after another", () => {
+    // The planted-bug drill (A8-2, 20 Oct 2026) lowered the turn-end hook's timeout to 60 s, below
+    // the 80 s its test selection and test run may take in turn: the platform kills the hook
+    // mid-run, which reads as a pass. 10 s is left for the hook's own start-up and git calls.
+    const budgeted = manifest.hooks.filter((hook) => code(hook.script).match(BUDGETS));
+    expect(budgeted.length).toBeGreaterThan(0);
+    for (const hook of budgeted) {
+      const total = [...code(hook.script).matchAll(BUDGETS)]
+        .map((match) => Number((match[1] ?? '0').replaceAll('_', '')))
+        .reduce((sum, value) => sum + value, 0);
+      expect((hook.claude?.timeout ?? 0) * 1000, hook.id).toBeGreaterThanOrEqual(total + 10_000);
+    }
   });
 
   it('builds every registered hook on the helper', () => {
