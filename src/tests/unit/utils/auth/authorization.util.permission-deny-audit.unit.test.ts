@@ -108,7 +108,7 @@ describe('authorization.util — permission-deny audit (sec-U13)', () => {
     const apiKeyRequest = mockRequest({
       auth: {
         kind: 'apiKey' as const,
-        apiKeyPublicId: 'key_deniedscopeprobe00001',
+        apiKeyPublicId: 'key_deniedscopeprobe00001', // gitleaks:allow
         apiKeyScopes: ['membership:read'],
         organizationPublicId: 'org-public',
       },
@@ -117,7 +117,7 @@ describe('authorization.util — permission-deny audit (sec-U13)', () => {
     expect(auditRecord).toHaveBeenCalledTimes(1);
     const call = auditRecord.mock.calls[0]?.[0];
     expect(call).toMatchObject({
-      actorApiKeyPublicId: 'key_deniedscopeprobe00001',
+      actorApiKeyPublicId: 'key_deniedscopeprobe00001', // gitleaks:allow
       action: 'auth.permission.denied',
       severity: 'WARNING',
       metadata: expect.objectContaining({

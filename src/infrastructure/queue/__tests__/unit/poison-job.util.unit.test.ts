@@ -34,10 +34,10 @@ describe('parseJobDataOrDeadLetter', () => {
   });
 
   it('returns parsed data for a valid payload without touching the DLQ', async () => {
-    const job = buildJob({ mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f' });
+    const job = buildJob({ mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f' }); // gitleaks:allow
 
     await expect(parseJobDataOrDeadLetter({ schema, job, queueName: 'mail' })).resolves.toEqual({
-      mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f',
+      mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f', // gitleaks:allow
     });
     expect(recordDeadLetterFailureMock).not.toHaveBeenCalled();
   });

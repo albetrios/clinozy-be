@@ -207,7 +207,8 @@ clearIfPlaceholderHost('DATABASE_MIGRATION_URL');
 clearIfPlaceholderHost('REDIS_URL');
 clearIfPlaceholderHost('REDIS_BULLMQ_URL');
 
-const TEST_JWT_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
+// nosemgrep: generic.secrets.security.detected-private-key.detected-private-key — the test harness's throwaway signing key, never a deployed one
+const TEST_JWT_PRIVATE_KEY = /* gitleaks:allow */ `-----BEGIN PRIVATE KEY-----
 MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDJp33Skforij0b
 cb5iPkuY7IeTw+X6NuKmkadoCS7aRaQgkon9u/s1Lj05tRuZTgw0VqfYiIbud2z1
 PWJtl4niSyG8cjNdglpUkNW1f7oaDC9YoGfup5telmZy5vK5IVieT0fn5ePLRdlk

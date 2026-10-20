@@ -49,7 +49,8 @@ export function generateFieldExample(fieldName: string, schema: Record<string, u
   // ── Token / secret / code fields ──
   if (lowerField === 'code') return '123456';
   if (lowerField === 'token' || lowerField === 'refresh_token') {
-    return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U';
+    // nosemgrep: generic.secrets.security.detected-jwt-token.detected-jwt-token — jwt.io's public sample token, shown as a docs example
+    return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'; // gitleaks:allow
   }
   // OpenAPI examples are visible in published docs (Swagger / Redoc / Postman).
   // Using real Stripe prefixes (`whsec_`, `sk_live_`) here would (a) ship a

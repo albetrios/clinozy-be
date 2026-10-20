@@ -128,7 +128,7 @@ vi.mock('@/shared/utils/validation/omit-undefined.util.js', () => ({
 
 describe('mail.worker', () => {
   const validJobData = {
-    mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f',
+    mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f', // gitleaks:allow
     requestId: 'req-test-1',
     traceparent: undefined,
     tracestate: undefined,

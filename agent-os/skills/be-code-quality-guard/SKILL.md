@@ -30,7 +30,7 @@ Layer 3 (CI)      -- Full validation, Semgrep SAST, Gitleaks full-repo, tests
 | `.husky/commit-msg`                 | 2     | Validates commit messages with commitlint (conventional commits)                                                                                                                                              |
 | `commitlint.config.cjs`             | 2 + 3 | Commitlint rules (extends `@commitlint/config-conventional`); same config as CI on push to `main`                                                                                                             |
 | `lint-staged.config.mjs`            | 2     | Which files get linted/formatted on commit (at repo root)                                                                                                                                                     |
-| `.gitleaks.toml`                    | 2 + 3 | Gitleaks allowlist (ignored paths)                                                                                                                                                                            |
+| `.gitleaks.toml`                    | 2 + 3 | gitleaks' built-in rules (`[extend] useDefault = true`) + the allowlist; `.gitleaksignore` holds old-commit fingerprints only                                                                                 |
 | `.semgrepignore`                    | 3     | Semgrep ignored paths in CI                                                                                                                                                                                   |
 | `.github/workflows/pr-ci.yml`       | 3     | CI jobs: `lint`, `typecheck`, `static-sync`, `unit`, `security-audit`, `security-secrets`, `security-sast`, `rls-security`, `build-verify`, `contract-plus-property`, `migration-lint` |
 | `.github/workflows/pr-governance.yml` | 3   | Commitlint on every push to `main`                                                                                                                                                                            |
@@ -160,7 +160,8 @@ one-line PR there (owner: **be-dependency-security**); never a version in the wo
 
 ### Supporting ignore files
 
-- `.gitleaks.toml` -- paths Gitleaks skips (node_modules, .env.example, lock files, generated docs)
+- `.gitleaks.toml` -- gitleaks' built-in rules (`[extend] useDefault = true`; without it no rule loads and every scan passes) plus the paths it skips (node_modules, .env.example, lock files, generated docs). The PR CI secrets job plants a key and fails if the config misses it
+- A fixture that looks like a secret: mark its line `// gitleaks:allow` (on the first line of a multi-line match). `.gitleaksignore` lists only fingerprints of old commits; never add a new finding there
 - `.semgrepignore` -- paths Semgrep skips (node_modules, dist, migrations, lock files, design drops' `iterations/*/intake-files/`)
 
 ## Convenience scripts (`package.json`)

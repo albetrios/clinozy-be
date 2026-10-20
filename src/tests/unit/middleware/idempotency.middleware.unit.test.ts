@@ -8,7 +8,7 @@ import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { buildIdempotencyRequestFingerprint } from '@/shared/utils/idempotency/idempotency-fingerprint.util.js';
 
 const IDEMPOTENCY_KEY_HEADER = 'x-idempotency-key';
-const IDEMPOTENCY_TEST_KEY = 'test-key-1234567890';
+const IDEMPOTENCY_TEST_KEY = 'test-key-1234567890'; // gitleaks:allow
 const TEST_USER_PUBLIC_ID = 'user-public';
 const TEST_ORGANIZATION_PUBLIC_ID = 'org-public';
 

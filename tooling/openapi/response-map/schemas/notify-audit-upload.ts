@@ -96,7 +96,7 @@ export const deliveryAttemptSchema = {
 
 export const deliveryAttemptExample = {
   event_type: 'subscription.created',
-  event_key: 'sub_p5q8w1r4x9k3m7n2a1b2c',
+  event_key: 'sub_p5q8w1r4x9k3m7n2a1b2c', // gitleaks:allow
   status: 'SENT',
   http_status_code: 200,
   sent_at: '2026-02-14T10:00:00.000Z',

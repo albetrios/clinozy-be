@@ -40,7 +40,7 @@ describe('commit-dispatch.store', () => {
     );
     const task: CommitDispatchTask = {
       type: 'mail_outbox',
-      mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f',
+      mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f', // gitleaks:allow
     };
 
     await appendCommitDispatchTask({ requestId: 'req-1', task });
@@ -79,7 +79,7 @@ describe('commit-dispatch.store', () => {
   it('reaudit-#2: acknowledgeCommitDispatchTask LREMs the task and clears the index once empty', async () => {
     const raw = JSON.stringify({
       type: 'mail_outbox',
-      mailOutboxToken: '0d3c2b1a-9f8e-4d7c-8b6a-5f4e3d2c1b0a',
+      mailOutboxToken: '0d3c2b1a-9f8e-4d7c-8b6a-5f4e3d2c1b0a', // gitleaks:allow
     });
     redisMock.llen.mockResolvedValue(0); // list empty after this LREM
 
@@ -97,7 +97,7 @@ describe('commit-dispatch.store', () => {
   it('reaudit-#2: acknowledge leaves the recovery index intact while tasks remain', async () => {
     const raw = JSON.stringify({
       type: 'mail_outbox',
-      mailOutboxToken: '0d3c2b1a-9f8e-4d7c-8b6a-5f4e3d2c1b0a',
+      mailOutboxToken: '0d3c2b1a-9f8e-4d7c-8b6a-5f4e3d2c1b0a', // gitleaks:allow
     });
     redisMock.llen.mockResolvedValue(2); // more tasks still pending
 

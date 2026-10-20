@@ -34,7 +34,7 @@ describe('dlq-replay.util', () => {
       buildReplayJobPayload({
         ...base,
         original_queue: MAIL_QUEUE_NAME,
-        original_data_summary: { mail_outbox_token: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f' },
+        original_data_summary: { mail_outbox_token: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f' }, // gitleaks:allow
       }),
     ).toBeNull();
   });

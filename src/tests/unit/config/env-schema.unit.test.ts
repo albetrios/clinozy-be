@@ -29,7 +29,7 @@ const commonRequiredBase = {
   ALLOWED_ORIGINS: 'http://localhost:3000',
   METRICS_SCRAPE_TOKEN: 'b'.repeat(32),
   // High-entropy 32-byte hex key — production rejects low-entropy placeholders (e.g. all-zeros).
-  SECRETS_ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+  SECRETS_ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', // gitleaks:allow
   AUDIT_RETENTION_DAYS: '30',
   AUTH_SESSION_RETENTION_DAYS: '30',
 };

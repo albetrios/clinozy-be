@@ -303,7 +303,7 @@ describe('createAuthController', () => {
     await controller.createAuthMethod(mockRequest({ body: { type: 'password' } }), mockReply());
     const deleteMethodReply = mockReply();
     await controller.deleteAuthMethod(
-      mockRequest({ params: { auth_method_id: 'am_a1b2c3d4e5f6g7h8i9j0k' } }),
+      mockRequest({ params: { auth_method_id: 'am_a1b2c3d4e5f6g7h8i9j0k' } }), // gitleaks:allow
       deleteMethodReply,
     );
     await controller.listSessions(mockRequest(), mockReply());
