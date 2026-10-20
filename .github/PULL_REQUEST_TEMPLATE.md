@@ -106,7 +106,7 @@
 <!-- The three things CI cannot catch. "None" is a valid answer to each — silence is not. -->
 
 - **Breaking changes:** <!-- None | impact + migration steps (required when Release type = Major) -->
-- **Env / secrets to set first:** <!-- None | KEY per environment + who sets it. Deploys inject env from GitHub Environments, so a key merged unset breaks the deploy AFTER CI goes green -->
+- **Env / secrets to set first:** <!-- None | KEY per environment + who sets it. Deploys inject env from GitHub Environments, so a key merged unset breaks the deploy AFTER CI goes green. A change to how a job gets its secrets (`secrets:`, `environment:`) is proven only by a run of that caller → callee path: name it (for a deploy caller, the post-merge deploy) and watch it right after merge -->
 - **Rollback:** <!-- revert-safe | needs <config or data step> first. See rollback-deploy.yml -->
 
 ---
