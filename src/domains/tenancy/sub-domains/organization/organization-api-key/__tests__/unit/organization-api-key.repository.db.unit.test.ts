@@ -40,12 +40,12 @@ describe('OrganizationApiKeyRepository.touchLastUsedAt (audit-#8 throttle)', () 
     const organization = await createTestOrganization({ ownerUserId: user.id });
     const publicId = await seedApiKey(organization.id);
 
-    await repository.touchLastUsedAt(publicId);
+    await repository.touchLastUsedAt(publicId, organization.id);
     const first = await readLastUsedAt(publicId);
     expect(first).not.toBeNull();
 
     // A second touch within the ~1-minute bucket must not rewrite the row.
-    await repository.touchLastUsedAt(publicId);
+    await repository.touchLastUsedAt(publicId, organization.id);
     const second = await readLastUsedAt(publicId);
     expect(second?.toISOString()).toBe(first?.toISOString());
   });
@@ -62,7 +62,7 @@ describe('OrganizationApiKeyRepository.touchLastUsedAt (audit-#8 throttle)', () 
       .set({ last_used_at: stale })
       .where(eq(api_keys.public_id, publicId));
 
-    await repository.touchLastUsedAt(publicId);
+    await repository.touchLastUsedAt(publicId, organization.id);
     const updated = await readLastUsedAt(publicId);
     expect(updated!.getTime()).toBeGreaterThan(stale.getTime());
   });

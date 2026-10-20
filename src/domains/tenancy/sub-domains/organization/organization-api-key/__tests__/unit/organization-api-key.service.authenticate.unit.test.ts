@@ -89,7 +89,7 @@ describe('OrganizationApiKeyService.authenticate', () => {
       storedHash: 'stored-hash',
       candidateHash: 'candidate-hash',
     });
-    expect(apiKeyRepository.touchLastUsedAt).toHaveBeenCalledWith('apikey_public_abc');
+    expect(apiKeyRepository.touchLastUsedAt).toHaveBeenCalledWith('apikey_public_abc', 1);
     // The resolver already returned the organization public id, so we never read it back via the repo.
     expect(organizationRepository.findById).not.toHaveBeenCalled();
   });

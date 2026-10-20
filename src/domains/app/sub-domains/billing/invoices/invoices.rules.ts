@@ -138,17 +138,23 @@ function keptLine(row: InvoiceItemWriteRow): InvoiceItemInput {
  * The billed person of each bill or payment on a page (B3): fills `contact` — `{ id, name,
  * primary_phone }` — and sets `patient_id`, the contact's patient file.
  */
-export async function attachBilledContacts(outputs: Record<string, unknown>[]): Promise<void> {
+export async function attachBilledContacts({
+  outputs,
+  organizationId,
+}: {
+  outputs: Record<string, unknown>[];
+  organizationId: number;
+}): Promise<void> {
   const contactIdOf = (output: Record<string, unknown>): string | null =>
     (output.contact as BilledContactOutput | null)?.id ?? null;
   const contactPublicIds = [...new Set(outputs.flatMap((output) => contactIdOf(output) ?? []))];
   const summaries = new Map(
-    (await contactsRepository.findSummaries(contactPublicIds)).map((contact) => [
+    (await contactsRepository.findSummaries(contactPublicIds, organizationId)).map((contact) => [
       contact.id,
       contact,
     ]),
   );
-  const patientFiles = await contactsRepository.findPatientFiles(contactPublicIds);
+  const patientFiles = await contactsRepository.findPatientFiles(contactPublicIds, organizationId);
   for (const output of outputs) {
     const contactId = contactIdOf(output);
     const contact = contactId === null ? undefined : summaries.get(contactId);
@@ -619,6 +625,7 @@ export function createInvoicesRules(repository: InvoicesRepository): BaseRecordR
       const items = await repository.findItems([...idsByPublicId.values()]);
       const billed = await repository.findBilledTreatments(
         items.flatMap((item) => (item.patient_offering_id ? [item.patient_offering_id] : [])),
+        context.organizationId,
       );
       const settled = await paymentsRepository.findSettledInvoices(
         [...idsByPublicId.values()],
@@ -639,7 +646,7 @@ export function createInvoicesRules(repository: InvoicesRepository): BaseRecordR
         output.is_settled = id !== undefined && settled.has(id);
         output.created_by_membership_id = id === undefined ? null : (recordedBy.get(id) ?? null);
       }
-      await attachBilledContacts(outputs);
+      await attachBilledContacts({ outputs, organizationId: context.organizationId });
     },
   };
 }

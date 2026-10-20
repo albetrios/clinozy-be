@@ -424,17 +424,22 @@ function linkOf<Link>({
 async function attachLinkNumbers({
   repository,
   outputs,
+  organizationId,
 }: {
   repository: PaymentsRepository;
   outputs: Record<string, unknown>[];
+  organizationId: number;
 }): Promise<void> {
-  const numbers = await repository.findLinkNumbers({
-    invoiceIds: linkedPublicIds({ outputs, field: 'invoice_id' }),
-    creditNoteIds: linkedPublicIds({ outputs, field: 'invoice_credit_note_id' }),
-    pendingCreditIds: linkedPublicIds({ outputs, field: 'pending_credit_id' }),
-    stockPurchaseIds: linkedPublicIds({ outputs, field: 'stock_purchase_id' }),
-    medicalPurchaseOrderIds: linkedPublicIds({ outputs, field: 'medical_purchase_order_id' }),
-  });
+  const numbers = await repository.findLinkNumbers(
+    {
+      invoiceIds: linkedPublicIds({ outputs, field: 'invoice_id' }),
+      creditNoteIds: linkedPublicIds({ outputs, field: 'invoice_credit_note_id' }),
+      pendingCreditIds: linkedPublicIds({ outputs, field: 'pending_credit_id' }),
+      stockPurchaseIds: linkedPublicIds({ outputs, field: 'stock_purchase_id' }),
+      medicalPurchaseOrderIds: linkedPublicIds({ outputs, field: 'medical_purchase_order_id' }),
+    },
+    organizationId,
+  );
   for (const output of outputs) {
     output.invoice = linkOf({ map: numbers.invoices, publicId: output.invoice_id });
     output.invoice_credit_note_number = linkOf({
@@ -589,8 +594,8 @@ export function createPaymentsRules(repository: PaymentsRepository): BaseRecordR
         output.last_edit = summary ? serializePaymentEdit(summary.last) : null;
         output.created_by_membership_id = recordedBy.get(id) ?? null;
       }
-      await attachLinkNumbers({ repository, outputs });
-      await attachBilledContacts(outputs);
+      await attachLinkNumbers({ repository, outputs, organizationId: context.organizationId });
+      await attachBilledContacts({ outputs, organizationId: context.organizationId });
     },
   };
 }

@@ -102,6 +102,7 @@ export class PatientOfferingSuggestionsRepository extends BaseRecordRepository {
 
   /** The check-ins' dates and the visits' numbers and services a page's labels name (PK8). */
   async findSources(options: {
+    organizationId: number;
     checkInPublicIds: readonly string[];
     appointmentPublicIds: readonly string[];
   }): Promise<PatientOfferingSuggestionSources> {
@@ -115,7 +116,12 @@ export class PatientOfferingSuggestionsRepository extends BaseRecordRepository {
               check_in_date: patient_check_ins.check_in_date,
             })
             .from(patient_check_ins)
-            .where(inArray(patient_check_ins.public_id, [...options.checkInPublicIds]));
+            .where(
+              and(
+                eq(patient_check_ins.organization_id, options.organizationId),
+                inArray(patient_check_ins.public_id, [...options.checkInPublicIds]),
+              ),
+            );
     const visits =
       options.appointmentPublicIds.length === 0
         ? []
@@ -126,7 +132,12 @@ export class PatientOfferingSuggestionsRepository extends BaseRecordRepository {
               service_label: appointments.service_label,
             })
             .from(appointments)
-            .where(inArray(appointments.public_id, [...options.appointmentPublicIds]));
+            .where(
+              and(
+                eq(appointments.organization_id, options.organizationId),
+                inArray(appointments.public_id, [...options.appointmentPublicIds]),
+              ),
+            );
     return {
       checkInDates: new Map(checkIns.map((row) => [row.public_id, row.check_in_date])),
       visits: new Map(visits.map(({ public_id, ...visit }) => [public_id, visit])),

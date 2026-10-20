@@ -168,6 +168,7 @@ export class LeadsRepository extends BaseRecordRepository {
    */
   async findOpenLeadsOfContacts(
     contactPublicIds: readonly string[],
+    organizationId: number,
   ): Promise<Map<string, { id: string; status: string; owner_membership_id: string | null }>> {
     if (contactPublicIds.length === 0) return new Map();
     const rows = await getRequestDatabase()
@@ -182,6 +183,7 @@ export class LeadsRepository extends BaseRecordRepository {
       .leftJoin(memberships, eq(memberships.id, leads.owner_membership_id))
       .where(
         and(
+          eq(leads.organization_id, organizationId),
           inArray(contacts.public_id, [...contactPublicIds]),
           isNull(leads.deleted_at),
           isOpenStatus,

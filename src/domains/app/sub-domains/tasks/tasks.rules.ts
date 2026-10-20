@@ -485,9 +485,10 @@ async function decorateTasks(options: {
     (output.contact as { id: string } | null)?.id ?? null;
   const summaries = new Map(
     (
-      await contactsRepository.findSummaries([
-        ...new Set(outputs.flatMap((output) => contactIdOf(output) ?? [])),
-      ])
+      await contactsRepository.findSummaries(
+        [...new Set(outputs.flatMap((output) => contactIdOf(output) ?? []))],
+        context.organizationId,
+      )
     ).map((contact) => [contact.id, contact]),
   );
   const idsByPublicId = await resolveRecordIds({

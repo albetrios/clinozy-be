@@ -80,10 +80,10 @@ describe('UploadService', () => {
     findActiveByUserIdAfter: vi.fn().mockResolvedValue([uploadRow]),
     findActiveByOrganizationIdAfter: vi.fn().mockResolvedValue([]),
     markStatus: vi.fn().mockResolvedValue(uploadRow),
-    markStatusByPublicId: vi.fn().mockResolvedValue(uploadRow),
-    markConfirmedByPublicId: vi.fn().mockResolvedValue(uploadRow),
+    markStatusById: vi.fn().mockResolvedValue(uploadRow),
+    markConfirmedById: vi.fn().mockResolvedValue(uploadRow),
     softDelete: vi.fn().mockResolvedValue(uploadRow),
-    softDeleteByPublicId: vi.fn().mockResolvedValue(uploadRow),
+    softDeleteById: vi.fn().mockResolvedValue(uploadRow),
     softDeleteAllByUserId: vi.fn().mockResolvedValue(1),
     softDeleteAllByOrganizationId: vi.fn().mockResolvedValue(2),
     countPendingByUserId: vi.fn().mockResolvedValue(0),
@@ -120,7 +120,7 @@ describe('UploadService', () => {
       UPLOAD_MAX_PENDING_PER_ORGANIZATION: 2_000,
     } as ReturnType<typeof getEnv>);
     vi.mocked(repository.findByPublicId).mockResolvedValue(uploadRow as never);
-    vi.mocked(repository.softDeleteByPublicId).mockResolvedValue(uploadRow as never);
+    vi.mocked(repository.softDeleteById).mockResolvedValue(uploadRow as never);
     vi.mocked(repository.countPendingByUserId).mockResolvedValue(0);
     vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue(user as never);
   });
@@ -230,7 +230,7 @@ describe('UploadService', () => {
 
   it('deleteUpload removes upload for user', async () => {
     await service.deleteUpload({ public_id: uploadPublicId, principal });
-    expect(repository.softDeleteByPublicId).toHaveBeenCalled();
+    expect(repository.softDeleteById).toHaveBeenCalled();
   });
 
   it('deleteUpload allows organization managers to delete teammate-created organization uploads', async () => {
@@ -243,7 +243,7 @@ describe('UploadService', () => {
     await service.deleteUpload({ public_id: uploadPublicId, principal });
 
     expect(objectStorage.deleteObject).toHaveBeenCalledWith(uploadRow.file_key);
-    expect(repository.softDeleteByPublicId).toHaveBeenCalledWith(uploadPublicId);
+    expect(repository.softDeleteById).toHaveBeenCalledWith(uploadRow.id);
   });
 
   it('deleteUpload hides personal uploads owned by another user', async () => {
@@ -257,7 +257,7 @@ describe('UploadService', () => {
       service.deleteUpload({ public_id: uploadPublicId, principal }),
     ).rejects.toBeInstanceOf(NotFoundError);
     expect(objectStorage.deleteObject).not.toHaveBeenCalled();
-    expect(repository.softDeleteByPublicId).not.toHaveBeenCalled();
+    expect(repository.softDeleteById).not.toHaveBeenCalled();
   });
 
   it('deleteUpload rejects organization-scoped upload when caller lacks upload:manage', async () => {
@@ -273,7 +273,7 @@ describe('UploadService', () => {
       service.deleteUpload({ public_id: uploadPublicId, principal }),
     ).rejects.toBeInstanceOf(ForbiddenError);
     expect(objectStorage.deleteObject).not.toHaveBeenCalled();
-    expect(repository.softDeleteByPublicId).not.toHaveBeenCalled();
+    expect(repository.softDeleteById).not.toHaveBeenCalled();
   });
 
   it('deleteUpload 404s an organization-scoped upload whose organization is undiscoverable (not 403 / not 500)', async () => {
@@ -310,7 +310,7 @@ describe('UploadService', () => {
     await expect(
       service.confirmUpload({ public_id: uploadPublicId, principal }),
     ).rejects.toBeInstanceOf(ValidationError);
-    expect(repository.markStatusByPublicId).toHaveBeenCalledWith(uploadPublicId, 'FAILED');
+    expect(repository.markStatusById).toHaveBeenCalledWith(uploadRow.id, 'FAILED');
     // The security point: the object is NEVER verified/published from the client-writable key.
     expect(objectStorage.verifyUploadedObject).not.toHaveBeenCalled();
   });
@@ -401,7 +401,7 @@ describe('UploadService', () => {
     });
     vi.mocked(objectStorage.copyObject).mockResolvedValueOnce({ kind: 'copied' });
     vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({ kind: 'deleted' });
-    vi.mocked(repository.markConfirmedByPublicId).mockResolvedValue({
+    vi.mocked(repository.markConfirmedById).mockResolvedValue({
       ...uploadRow,
       status: 'UPLOADED',
     } as never);
@@ -416,7 +416,7 @@ describe('UploadService', () => {
       },
     });
     // Row is repointed at the immutable final key (pending key is then deleted).
-    expect(repository.markConfirmedByPublicId).toHaveBeenCalledWith(uploadPublicId, finalKey);
+    expect(repository.markConfirmedById).toHaveBeenCalledWith(uploadRow.id, finalKey);
     expect(result.status).toBe('UPLOADED');
   });
 
@@ -440,7 +440,7 @@ describe('UploadService', () => {
       contentType: 'image/png',
       eTag: '"verified-etag"',
     });
-    vi.mocked(repository.markConfirmedByPublicId).mockResolvedValue({
+    vi.mocked(repository.markConfirmedById).mockResolvedValue({
       ...uploadRow,
       file_key: finalKey,
       status: 'UPLOADED',
@@ -463,7 +463,7 @@ describe('UploadService', () => {
     });
     // No transforming put for a non-SVG; the row is repointed to the final key and pending removed.
     expect(objectStorage.putObject).not.toHaveBeenCalled();
-    expect(repository.markConfirmedByPublicId).toHaveBeenCalledWith(uploadPublicId, finalKey);
+    expect(repository.markConfirmedById).toHaveBeenCalledWith(uploadRow.id, finalKey);
     expect(objectStorage.deleteObject).toHaveBeenCalledWith(pendingKey);
     expect(result.status).toBe('UPLOADED');
   });
@@ -566,7 +566,7 @@ describe('UploadService', () => {
     });
     vi.mocked(objectStorage.copyObject).mockResolvedValueOnce({ kind: 'copied' });
     vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({ kind: 'deleted' });
-    vi.mocked(repository.markConfirmedByPublicId).mockResolvedValue({
+    vi.mocked(repository.markConfirmedById).mockResolvedValue({
       ...uploadRow,
       user_id: 99,
       organization_id: 10,
@@ -576,7 +576,7 @@ describe('UploadService', () => {
     const result = await service.confirmUpload({ public_id: uploadPublicId, principal });
 
     expect(result.status).toBe('UPLOADED');
-    expect(repository.markConfirmedByPublicId).toHaveBeenCalledWith(uploadPublicId, finalKey);
+    expect(repository.markConfirmedById).toHaveBeenCalledWith(uploadRow.id, finalKey);
   });
 
   it('confirmUpload marks FAILED when magic bytes do not match the declared type (spoofed content)', async () => {
@@ -600,7 +600,7 @@ describe('UploadService', () => {
     await expect(
       service.confirmUpload({ public_id: uploadPublicId, principal }),
     ).rejects.toBeInstanceOf(ValidationError);
-    expect(repository.markStatusByPublicId).toHaveBeenCalledWith(uploadPublicId, 'FAILED');
+    expect(repository.markStatusById).toHaveBeenCalledWith(uploadRow.id, 'FAILED');
   });
 
   it('confirmUpload marks FAILED and throws when object size does not match', async () => {
@@ -618,7 +618,7 @@ describe('UploadService', () => {
     await expect(
       service.confirmUpload({ public_id: uploadPublicId, principal }),
     ).rejects.toBeInstanceOf(ValidationError);
-    expect(repository.markStatusByPublicId).toHaveBeenCalledWith(uploadPublicId, 'FAILED');
+    expect(repository.markStatusById).toHaveBeenCalledWith(uploadRow.id, 'FAILED');
   });
 
   it('UPLOAD-03: confirmUpload rethrows a transient storage error WITHOUT marking FAILED', async () => {
@@ -637,7 +637,7 @@ describe('UploadService', () => {
       service.confirmUpload({ public_id: uploadPublicId, principal }),
     ).rejects.toBeInstanceOf(ExternalServiceError);
     // The upload must stay PENDING for retry — never permanently FAILED on a blip.
-    expect(repository.markStatusByPublicId).not.toHaveBeenCalledWith(uploadPublicId, 'FAILED');
+    expect(repository.markStatusById).not.toHaveBeenCalledWith(uploadRow.id, 'FAILED');
   });
 
   it('confirmUpload leaves the upload PENDING when the S3 circuit is open', async () => {
@@ -655,7 +655,7 @@ describe('UploadService', () => {
     await expect(
       service.confirmUpload({ public_id: uploadPublicId, principal }),
     ).rejects.toBeInstanceOf(CircuitBreakerOpenError);
-    expect(repository.markStatusByPublicId).not.toHaveBeenCalled();
+    expect(repository.markStatusById).not.toHaveBeenCalled();
   });
 
   it('confirmUpload leaves the upload PENDING when publishing the verified bytes fails', async () => {
@@ -676,8 +676,8 @@ describe('UploadService', () => {
     await expect(
       service.confirmUpload({ public_id: uploadPublicId, principal }),
     ).rejects.toBeInstanceOf(ExternalServiceError);
-    expect(repository.markStatusByPublicId).not.toHaveBeenCalled();
-    expect(repository.markConfirmedByPublicId).not.toHaveBeenCalled();
+    expect(repository.markStatusById).not.toHaveBeenCalled();
+    expect(repository.markConfirmedById).not.toHaveBeenCalled();
   });
 
   it('confirmUpload answers 409 and leaves the upload PENDING when the pending object changed after verify', async () => {
@@ -709,8 +709,8 @@ describe('UploadService', () => {
     expect(objectStorage.copyObject).toHaveBeenCalledWith(
       expect.objectContaining({ sourceETag: '"verified-etag"' }),
     );
-    expect(repository.markStatusByPublicId).not.toHaveBeenCalled();
-    expect(repository.markConfirmedByPublicId).not.toHaveBeenCalled();
+    expect(repository.markStatusById).not.toHaveBeenCalled();
+    expect(repository.markConfirmedById).not.toHaveBeenCalled();
   });
 
   it('confirmUpload sanitizes a stored SVG before marking UPLOADED', async () => {
@@ -727,7 +727,7 @@ describe('UploadService', () => {
       status: 'PENDING',
     };
     vi.mocked(repository.findByPublicId).mockResolvedValue(svgRow as never);
-    vi.mocked(repository.markConfirmedByPublicId).mockResolvedValue({
+    vi.mocked(repository.markConfirmedById).mockResolvedValue({
       ...svgRow,
       file_key: finalKey,
       status: 'UPLOADED',
@@ -787,7 +787,7 @@ describe('UploadService', () => {
     await expect(
       service.confirmUpload({ public_id: uploadPublicId, principal }),
     ).rejects.toBeInstanceOf(ValidationError);
-    expect(repository.markStatusByPublicId).toHaveBeenCalledWith(uploadPublicId, 'FAILED');
+    expect(repository.markStatusById).toHaveBeenCalledWith(uploadRow.id, 'FAILED');
     expect(objectStorage.putObject).not.toHaveBeenCalled();
   });
 
@@ -800,7 +800,7 @@ describe('UploadService', () => {
     const result = await service.confirmUpload({ public_id: uploadPublicId, principal });
     expect(result.status).toBe('UPLOADED');
     expect(objectStorage.verifyUploadedObject).not.toHaveBeenCalled();
-    expect(repository.markStatusByPublicId).not.toHaveBeenCalled();
+    expect(repository.markStatusById).not.toHaveBeenCalled();
   });
 
   it('confirmUpload rejects when the upload is not pending', async () => {
@@ -966,7 +966,7 @@ describe('UploadService', () => {
     it('soft-deletes an organization upload under the organization scope, not the user scope', async () => {
       const { scopeAtCall } = await simulateRlsArms();
       const scopesAtWrite: unknown[] = [];
-      vi.mocked(repository.softDeleteByPublicId).mockImplementation((async () => {
+      vi.mocked(repository.softDeleteById).mockImplementation((async () => {
         scopesAtWrite.push(scopeAtCall());
         // Under the user arm this UPDATE would match zero rows.
         return scopeAtCall()?.organizationPublicId ? uploadRow : null;
@@ -998,7 +998,7 @@ describe('UploadService', () => {
       vi.mocked(objectStorage.copyObject).mockResolvedValueOnce({ kind: 'copied' });
       vi.mocked(objectStorage.deleteObject).mockResolvedValueOnce({ kind: 'deleted' });
       const scopesAtWrite: unknown[] = [];
-      vi.mocked(repository.markConfirmedByPublicId).mockImplementation((async () => {
+      vi.mocked(repository.markConfirmedById).mockImplementation((async () => {
         scopesAtWrite.push(scopeAtCall());
         return scopeAtCall()?.organizationPublicId ? { ...uploadRow, status: 'UPLOADED' } : null;
       }) as never);

@@ -42,12 +42,20 @@ export class PatientImagesRepository extends BaseRecordRepository {
   }
 
   /** The service label of each visit, by the appointments' public ids (a photo's date group, P26). */
-  async findServiceLabels(appointmentPublicIds: readonly string[]): Promise<Map<string, string>> {
+  async findServiceLabels(
+    appointmentPublicIds: readonly string[],
+    organizationId: number,
+  ): Promise<Map<string, string>> {
     if (appointmentPublicIds.length === 0) return new Map();
     const rows = await getRequestDatabase()
       .select({ public_id: appointments.public_id, service_label: appointments.service_label })
       .from(appointments)
-      .where(inArray(appointments.public_id, [...appointmentPublicIds]));
+      .where(
+        and(
+          eq(appointments.organization_id, organizationId),
+          inArray(appointments.public_id, [...appointmentPublicIds]),
+        ),
+      );
     return new Map(rows.map((row) => [row.public_id, row.service_label]));
   }
 }

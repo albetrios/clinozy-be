@@ -128,6 +128,7 @@ export interface PaymentLinkIds {
 /** Rows of `table` among `publicIds` (deleted ones too — a ledger row keeps naming what it paid). */
 async function selectByPublicIds<Row>(options: {
   table: PgTable;
+  organizationId: number;
   publicIds: readonly string[];
   columns: Record<string, AnyPgColumn>;
 }): Promise<(Row & { public_id: string })[]> {
@@ -137,7 +138,12 @@ async function selectByPublicIds<Row>(options: {
   return (await getRequestDatabase()
     .select({ public_id: publicId, ...options.columns })
     .from(options.table)
-    .where(inArray(publicId, unique))) as (Row & { public_id: string })[];
+    .where(
+      and(
+        eq(columnOf(options.table, 'organization_id'), options.organizationId),
+        inArray(publicId, unique),
+      ),
+    )) as (Row & { public_id: string })[];
 }
 
 /** The organization's calendar day of a payment (its time zone) — the day it belongs to (B6). */
@@ -495,7 +501,7 @@ export class PaymentsRepository extends BaseRecordRepository {
    * statutory number, type and due; each credit note's and pending credit's number; each stock
    * purchase's and medical order's number and bill number — one read per kind of link.
    */
-  async findLinkNumbers(ids: PaymentLinkIds): Promise<PaymentLinkNumbers> {
+  async findLinkNumbers(ids: PaymentLinkIds, organizationId: number): Promise<PaymentLinkNumbers> {
     const invoiceRows = await selectByPublicIds<{
       invoice_sequence: number;
       invoice_number: string;
@@ -503,6 +509,7 @@ export class PaymentsRepository extends BaseRecordRepository {
       due_amount: string;
     }>({
       table: invoices,
+      organizationId,
       publicIds: ids.invoiceIds,
       columns: {
         invoice_sequence: invoices.invoice_sequence,
@@ -513,16 +520,19 @@ export class PaymentsRepository extends BaseRecordRepository {
     });
     const creditNoteRows = await selectByPublicIds<{ number: number }>({
       table: invoice_credit_notes,
+      organizationId,
       publicIds: ids.creditNoteIds,
       columns: { number: invoice_credit_notes.credit_note_number },
     });
     const pendingCreditRows = await selectByPublicIds<{ number: number }>({
       table: pending_credits,
+      organizationId,
       publicIds: ids.pendingCreditIds,
       columns: { number: pending_credits.pending_credit_number },
     });
     const stockPurchaseRows = await selectByPublicIds<PaymentStockPurchaseLink>({
       table: stock_purchases,
+      organizationId,
       publicIds: ids.stockPurchaseIds,
       columns: {
         stock_purchase_number: stock_purchases.stock_purchase_number,
@@ -531,6 +541,7 @@ export class PaymentsRepository extends BaseRecordRepository {
     });
     const orderRows = await selectByPublicIds<PaymentMedicalPurchaseOrderLink>({
       table: medical_purchase_orders,
+      organizationId,
       publicIds: ids.medicalPurchaseOrderIds,
       columns: {
         purchase_order_number: medical_purchase_orders.purchase_order_number,

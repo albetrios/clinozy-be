@@ -296,7 +296,10 @@ export class ContactsRepository extends BaseRecordRepository {
    * What a record about a contact shows of it (a lead's or an appointment's `contact`, L1, A1) and
    * its activity fields, by the contacts' public ids — one read for a page.
    */
-  async findSummaries(publicIds: readonly string[]): Promise<ContactSummaryRow[]> {
+  async findSummaries(
+    publicIds: readonly string[],
+    organizationId: number,
+  ): Promise<ContactSummaryRow[]> {
     if (publicIds.length === 0) return [];
     return getRequestDatabase()
       .select({
@@ -312,7 +315,12 @@ export class ContactsRepository extends BaseRecordRepository {
         last_received_at: contacts.last_received_at,
       })
       .from(contacts)
-      .where(inArray(contacts.public_id, [...publicIds]));
+      .where(
+        and(
+          eq(contacts.organization_id, organizationId),
+          inArray(contacts.public_id, [...publicIds]),
+        ),
+      );
   }
 
   /**
@@ -321,6 +329,7 @@ export class ContactsRepository extends BaseRecordRepository {
    */
   async findPatientFiles(
     contactPublicIds: readonly string[],
+    organizationId: number,
   ): Promise<Map<string, { id: string; patient_number: number }>> {
     if (contactPublicIds.length === 0) return new Map();
     const rows = await getRequestDatabase()
@@ -331,7 +340,13 @@ export class ContactsRepository extends BaseRecordRepository {
       })
       .from(patients)
       .innerJoin(contacts, eq(contacts.id, patients.contact_id))
-      .where(and(inArray(contacts.public_id, [...contactPublicIds]), isNull(patients.deleted_at)));
+      .where(
+        and(
+          eq(patients.organization_id, organizationId),
+          inArray(contacts.public_id, [...contactPublicIds]),
+          isNull(patients.deleted_at),
+        ),
+      );
     return new Map(rows.map(({ contact_public_id, ...file }) => [contact_public_id, file]));
   }
 

@@ -118,7 +118,7 @@ describe('UploadRepository (database)', () => {
       bucket: 'test',
       status: 'PENDING',
     });
-    await repository.softDeleteByPublicId(created.public_id);
+    await repository.softDeleteById(created.id);
 
     await confirm(created.id, 'user-files/b.png');
 
