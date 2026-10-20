@@ -129,14 +129,16 @@ function sourceFiles(): string[] {
 /** Whether `source` reads docs/routes.txt: a `readFileSync` of a path naming it, directly or by a constant. */
 function readsRouteCatalog(source: string): boolean {
   const code = source.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-  const names = [
-    ...code.matchAll(/const (\w+)\s*=\s*[^;]*(?:routes\.txt|CATALOG_OUTPUT_PATH)/g),
-  ].map((match) => match[1]);
+  const names = new Set(
+    [...code.matchAll(/const (\w+)\s*=\s*[^;]*(?:routes\.txt|CATALOG_OUTPUT_PATH)/g)].map(
+      (match) => match[1],
+    ),
+  );
   return [...code.matchAll(/readFileSync\(([^)]*)/g)].some((match) => {
     const argument = match[1] ?? '';
     return (
       /routes\.txt|CATALOG_OUTPUT_PATH/.test(argument) ||
-      names.some((name) => new RegExp(`\\b${name}\\b`).test(argument))
+      (argument.match(/\w+/g) ?? []).some((token) => names.has(token))
     );
   });
 }
