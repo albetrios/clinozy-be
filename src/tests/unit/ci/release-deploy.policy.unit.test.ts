@@ -16,6 +16,19 @@ describe('release-deploy production policy', () => {
     expect(workflow).toContain('workflow_dispatch:');
   });
 
+  it("probes the development API with the development environment's variable", () => {
+    const job = workflow.slice(
+      workflow.indexOf('  probe-development-api:'),
+      workflow.indexOf('\n  deploy:'),
+    );
+    // DEVELOPMENT_API_URL lives in the development environment, never at repository level:
+    // without `environment:` the job reads only repository variables and silently skips (v9.3.0).
+    expect(job).toMatch(/\n {4}environment: development\n/);
+    // the steps test the value, not a job-level `if` (one may be evaluated before the environment applies)
+    expect(job).not.toMatch(/\n {4}if:/);
+    expect(job).toContain('base-url: ${{ vars.DEVELOPMENT_API_URL }}');
+  });
+
   it('deploys the production environment explicitly (env != branch)', () => {
     expect(workflow).toMatch(/deploy:[\s\S]*?github_environment:\s*production/);
     expect(workflow).toContain('reusable-railway-deploy.yml');

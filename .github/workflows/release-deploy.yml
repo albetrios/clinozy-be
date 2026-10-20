@@ -220,27 +220,37 @@ jobs:
           done
 
   # Before the production deploy: the development API — the same image, deployed at merge —
-  # still answers with the right headers, CORS and TLS. Runs when the repository variable
-  # DEVELOPMENT_API_URL is set (the development API's public base URL); skipped otherwise.
+  # still answers with the right headers, CORS and TLS. The job runs in the development
+  # environment and reads its DEVELOPMENT_API_URL (the development API's public base URL);
+  # variables live in the environments, never at repository level. The steps test the value,
+  # not a job-level `if` (one that may be evaluated before the environment is applied); without
+  # a value, a notice says the probe is off and the deploy goes ahead.
   probe-development-api:
     name: Probe the development API
     needs: [resolve]
-    if: vars.DEVELOPMENT_API_URL != ''
+    environment: development
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
+      - name: Say the probe is off (no DEVELOPMENT_API_URL in the development environment)
+        if: vars.DEVELOPMENT_API_URL == ''
+        run: echo "::notice title=Development API probe off::Set DEVELOPMENT_API_URL in the development environment to probe the development API before each production release."
+
       - name: Checkout release tag
+        if: vars.DEVELOPMENT_API_URL != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           fetch-depth: 1
           persist-credentials: false
 
-      - uses: ./.github/actions/setup-node-pnpm
+      - if: vars.DEVELOPMENT_API_URL != ''
+        uses: ./.github/actions/setup-node-pnpm
 
       - name: Probe the development API (headers, CORS, TLS)
+        if: vars.DEVELOPMENT_API_URL != ''
         uses: ./.github/actions/probe-live-api
         with:
           base-url: ${{ vars.DEVELOPMENT_API_URL }}
