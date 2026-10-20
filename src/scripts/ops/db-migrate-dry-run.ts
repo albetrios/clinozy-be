@@ -8,7 +8,7 @@
  *   DATABASE_MIGRATION_URL=postgresql://... pnpm db:migrate:dry-run
  */
 import '@/shared/config/load-env-files.js';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { parseCommandLine } from '@tooling/setup/common/script.js';
@@ -33,7 +33,7 @@ const migrateScriptPath = resolve(
 );
 
 try {
-  execSync(`tsx ${migrateScriptPath} --dry-run`, {
+  execFileSync('tsx', [migrateScriptPath, '--dry-run'], {
     stdio: 'inherit',
     env: {
       ...process.env,

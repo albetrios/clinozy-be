@@ -32,6 +32,14 @@ export const UNIT_RELEVANT =
   /^(src\/|tooling\/|\.github\/|agent-os\/|vitest\.config\.ts$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$)/;
 
 /**
+ * The files that make pre-push run `pnpm agent-os:generate:check`: the agent-os sources it
+ * generates from and its generator. It ran only in CI until the planted-bug drill (20 Oct 2026)
+ * showed a hook timeout edited in `agent-os/hooks/hooks.json` reach the PR with the generated
+ * platform settings left behind.
+ */
+export const AGENT_OS_GENERATED_RELEVANT = /^(agent-os\/|tooling\/agent-os\/)/;
+
+/**
  * The files that make pre-push run the generated-doc drift checks: source, tooling, and a hand
  * edit of a generated doc.
  */
@@ -110,6 +118,7 @@ export function prePushSteps(options: {
   const markdown = changedFiles.some((file) => file.endsWith('.md'));
   const generatedDocRelevant = changedFiles.some((file) => GENERATED_DOC_RELEVANT.test(file));
   const semgrep = pushSemgrepTargets(changedFiles);
+  const agentOsGenerated = changedFiles.some((file) => AGENT_OS_GENERATED_RELEVANT.test(file));
   const unitRelevant = changedFiles.some((file) => UNIT_RELEVANT.test(file));
   const sonar = shouldRunSonarScan(changedFiles);
   /** A pnpm script step; `withBase` passes the push base, so every step measures the same diff. */
@@ -150,13 +159,20 @@ export function prePushSteps(options: {
       }),
     ),
     pnpm({
+      script: 'agent-os:generate:check',
+      runs: agentOsGenerated,
+      why: agentOsGenerated
+        ? 'pushed agent-os/ or its generator — the generated platform files must match'
+        : 'no agent-os/ change pushed',
+    }),
+    pnpm({
       script: 'security:semgrep:push',
       withBase: true,
       runs: semgrep.length > 0,
       why:
         semgrep.length > 0
-          ? `${semgrep.length} auth / tenancy / billing / database-context file(s)`
-          : 'none of auth, tenancy, billing, database contexts',
+          ? `${semgrep.length} source file(s) under src/`
+          : 'no source file under src/',
     }),
     pnpm({
       script: 'test:pre-push',
