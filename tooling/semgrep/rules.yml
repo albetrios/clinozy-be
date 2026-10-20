@@ -1,0 +1,32 @@
+# This repository's own Semgrep rules, run next to the registry's p/default at push
+# (`pnpm security:semgrep:push`) and in PR CI's Semgrep SAST step. Each rule closes a gap the
+# registry rules leave; the planted-bug drill (20 Oct 2026) found the first.
+rules:
+  # p/default's detect-child-process matches only the bare 'child_process' import. Biome's
+  # useNodejsImportProtocol rewrites every import to 'node:child_process', so the registry rule
+  # never sees this repository's code (drill A4-3: exec(`tar … ${request.query.name}`) passed).
+  - id: child-process-command-from-template
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      A shell command built from a template string with an interpolated value reaches
+      exec/execSync, so a value from a request or the database can inject commands. Pass the
+      arguments as an array to execFile/spawn (no shell) instead.
+    patterns:
+      - pattern-either:
+          - pattern: exec(`...${$VALUE}...`, ...)
+          - pattern: execSync(`...${$VALUE}...`, ...)
+          - patterns:
+              - pattern-either:
+                  - pattern: $MODULE.exec(`...${$VALUE}...`, ...)
+                  - pattern: $MODULE.execSync(`...${$VALUE}...`, ...)
+              - metavariable-regex:
+                  metavariable: $MODULE
+                  regex: ^(child_process|childProcess|childProcesses)$
+    # App code only: tooling, agent hooks and tests run commands of their own on purpose.
+    paths:
+      exclude:
+        - tooling/
+        - agent-os/
+        - src/tests/
+        - '**/__tests__/**'

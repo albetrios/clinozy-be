@@ -48,6 +48,16 @@ describe('the pre-push steps', () => {
       'pnpm-workspace.yaml',
     ])
       expect(labels([file]), file).toContain('pnpm test:pre-push');
+    // The generated platform files are checked when agent-os/ or its generator is pushed.
+    expect(labels(['agent-os/hooks/hooks.json'])).toContain('pnpm agent-os:generate:check');
+    expect(labels(['tooling/agent-os/generate.ts'])).toContain('pnpm agent-os:generate:check');
+    expect(labels(['src/domains/auth/auth.service.ts'])).not.toContain(
+      'pnpm agent-os:generate:check',
+    );
+    // Semgrep scans every pushed source file, the app domain included.
+    expect(labels(['src/domains/app/sub-domains/leads/leads.validator.ts'])).toContain(
+      'pnpm security:semgrep:push',
+    );
     expect(labels(['src/domains/auth/auth.service.ts'])).toEqual(
       expect.arrayContaining([
         'pnpm security:semgrep:push',

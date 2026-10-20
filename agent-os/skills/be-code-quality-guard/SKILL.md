@@ -102,9 +102,10 @@ Pre-commit mirrors a **subset** of the static checks in [`.github/workflows/pr-c
 | 2–4 | `pnpm typecheck`, `pnpm build`, `pnpm build:check` | Type errors, compile failures, unresolved `@/` aliases in `dist/` |
 | 5 | `pnpm docs:lint:changed --base <push base>` | Markdown lint — when Markdown is pushed |
 | 6–8 | `pnpm tool:project-structure-tree:check`, `routes:catalog:check`, `validate:route-organization-scope` | Generated-doc drift — when `src/`, `tooling/` or a generated doc is pushed |
-| 9 | `pnpm security:semgrep:push --base <push base>` | Semgrep on pushed auth / tenancy / billing / database-context code (a finding blocks; no semgrep → a warning) |
-| 10 | `pnpm test:pre-push --base <push base>` | The unit tests `pnpm test:select` picks — when unit-relevant files are pushed |
-| 11 | `pnpm sonar:scan` | SonarQube quality gate — when deployed-surface `src/**/*.ts` is pushed; any unresolved issue blocks. **Mandatory — no bypass.** |
+| 9 | `pnpm agent-os:generate:check` | Generated platform files drift — when `agent-os/` or `tooling/agent-os/` is pushed |
+| 10 | `pnpm security:semgrep:push --base <push base>` | Semgrep on every pushed source file under `src/`: the registry `p/default` plus `tooling/semgrep/rules.yml` (a finding blocks; no semgrep → a warning) |
+| 11 | `pnpm test:pre-push --base <push base>` | The unit tests `pnpm test:select` picks — when unit-relevant files are pushed |
+| 12 | `pnpm sonar:scan` | SonarQube quality gate — when deployed-surface `src/**/*.ts` is pushed; any unresolved issue blocks. **Mandatory — no bypass.** |
 
 One list, `tooling/validate/pre-push-steps.ts`: `.husky/pre-push` is `pnpm guard:pre-push`
 (`tooling/validate/run-pre-push.ts`), and `pnpm test:affected` previews the same steps with why

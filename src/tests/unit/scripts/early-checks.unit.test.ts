@@ -1,6 +1,8 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reportEarlyCheck } from '@/scripts/tooling/early-checks.util.js';
-import { pushSemgrepTargets } from '@/scripts/tooling/run-push-semgrep.js';
+import { pushSemgrepTargets, SEMGREP_CONFIGS } from '@/scripts/tooling/run-push-semgrep.js';
 import {
   buildRlsState,
   lintRlsTables,
@@ -154,22 +156,28 @@ describe('route access diff', () => {
 });
 
 describe('Semgrep at push', () => {
-  it('scans auth, tenancy, billing and the database contexts, never their tests', () => {
+  it('scans every source file under src/, never a test', () => {
     expect(
       pushSemgrepTargets([
         'src/domains/auth/auth.service.ts',
-        'src/domains/tenancy/sub-domains/membership/membership.service.ts',
-        'src/domains/billing/billing.container.ts',
+        'src/domains/app/sub-domains/leads/leads.validator.ts',
         'src/infrastructure/database/contexts/database-context.ts',
         'src/domains/auth/__tests__/unit/auth.service.unit.test.ts',
-        'src/domains/app/sub-domains/leads/leads.service.ts',
+        'src/tests/unit/scripts/early-checks.unit.test.ts',
+        'tooling/validate/pre-push-steps.ts',
         'docs/reference/commands.md',
       ]),
     ).toEqual([
       'src/domains/auth/auth.service.ts',
-      'src/domains/tenancy/sub-domains/membership/membership.service.ts',
-      'src/domains/billing/billing.container.ts',
+      'src/domains/app/sub-domains/leads/leads.validator.ts',
       'src/infrastructure/database/contexts/database-context.ts',
     ]);
+  });
+
+  it('runs the same rules as the PR CI Semgrep SAST step', () => {
+    const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'pr-ci.yml'), 'utf8');
+    const step = workflow.split('\n').find((line) => line.includes('run: semgrep scan'));
+    for (const config of SEMGREP_CONFIGS) expect(step).toContain(`--config ${config}`);
+    expect(existsSync(join(process.cwd(), 'tooling', 'semgrep', 'rules.yml'))).toBe(true);
   });
 });
