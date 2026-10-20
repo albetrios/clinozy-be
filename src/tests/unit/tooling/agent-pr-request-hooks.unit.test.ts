@@ -8,12 +8,23 @@ import {
 
 const HOOKS = join(process.cwd(), 'agent-os', 'hooks');
 
+/**
+ * Runs one hook and returns its result; throws when the hook process did not run to the end. Both
+ * hooks here exit 0 on every path, so a missing answer would otherwise read as "silent": one
+ * pre-push run under heavy load (20 Oct 2026) failed with an empty decision and no other trace.
+ */
 function runHook(options: { script: string; state: string; payload: object }) {
-  return spawnSync('node', [join(HOOKS, options.script)], {
+  const result = spawnSync('node', [join(HOOKS, options.script)], {
     input: JSON.stringify(options.payload),
     encoding: 'utf8',
     env: { ...process.env, CLAUDE_PROJECT_DIR: process.cwd(), TMPDIR: options.state },
   });
+  if (result.error || result.signal || result.status !== 0) {
+    throw new Error(
+      `${options.script} did not run to the end (status ${result.status}, signal ${result.signal}, ${result.error?.message ?? 'no spawn error'}): ${result.stderr}`,
+    );
+  }
+  return result;
 }
 
 /** The PR guard's answer for one MCP PR creation in `session`: `ask`, or nothing. */
