@@ -89,4 +89,56 @@ describe('one docs/routes.txt parser', () => {
     );
     expect(withPattern.sort()).toEqual(Object.keys(OTHER_FORMATS).sort());
   });
+
+  it('reads docs/routes.txt only through the catalog reader, or for a listed reason', () => {
+    // A parser needs no method regex: the drill's A8-5 split each line on whitespace and checked a
+    // METHODS set, which the pattern test above cannot see. So the test follows the file instead:
+    // whoever reads docs/routes.txt imports the reader, or is listed here with why it reads the text.
+    const readers = sourceFiles().filter((path) => readsRouteCatalog(readFileSync(path, 'utf8')));
+    expect(readers.length).toBeGreaterThan(0);
+    const offList = readers.filter(
+      (path) =>
+        !(
+          path in RAW_CATALOG_READERS ||
+          /route-catalog\/catalog-reader\.(?:js|ts)['"]/.test(readFileSync(path, 'utf8'))
+        ),
+    );
+    expect(offList).toEqual([]);
+  });
 });
+
+/** The files that read the catalog's text without the reader, each with its reason. */
+const RAW_CATALOG_READERS: Readonly<Record<string, string>> = {
+  'tooling/openapi/route-catalog/catalog-reader.ts': 'the reader itself',
+  'src/infrastructure/mcp/mcp-server.ts': 'serves the catalog text verbatim as an MCP resource',
+  'src/scripts/codegen/generate-route-catalog.ts':
+    'writes the catalog and compares its own output byte for byte',
+  'tooling/iterations/frontend-route-map.ts':
+    'hands the text to iteration-frontend-map.util.ts, which parses it with the reader',
+};
+
+/** Every non-test code file under src/ and tooling/. */
+function sourceFiles(): string[] {
+  return ['src', 'tooling'].flatMap((root) =>
+    readdirSync(root, { recursive: true, encoding: 'utf8' })
+      .map((path) => join(root, path))
+      .filter((path) => /\.(?:ts|mts|mjs)$/.test(path) && !/\.test\.ts$/.test(path)),
+  );
+}
+
+/** Whether `source` reads docs/routes.txt: a `readFileSync` of a path naming it, directly or by a constant. */
+function readsRouteCatalog(source: string): boolean {
+  const code = source.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const names = new Set(
+    [...code.matchAll(/const (\w+)\s*=\s*[^;]*(?:routes\.txt|CATALOG_OUTPUT_PATH)/g)].map(
+      (match) => match[1],
+    ),
+  );
+  return [...code.matchAll(/readFileSync\(([^)]*)/g)].some((match) => {
+    const argument = match[1] ?? '';
+    return (
+      /routes\.txt|CATALOG_OUTPUT_PATH/.test(argument) ||
+      (argument.match(/\w+/g) ?? []).some((token) => names.has(token))
+    );
+  });
+}

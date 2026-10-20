@@ -299,6 +299,8 @@ A changed test also selects the policies that read every test's source (`TEST_SO
 no test starts git outside the throwaway-repository fixture), since nothing imports a test. They
 run first and alone, so a new test that builds a git repository by hand fails the push before it
 runs inside the hook and rewrites the developer's repository (planted-bug drill, 20 Oct).
+Likewise a changed code file under `src/` or `tooling/` selects the policies that read every source
+file (`SOURCE_SCAN_POLICIES`: one `docs/routes.txt` parser), so a new second parser fails at push.
 
 Proven before it became the default (18 Oct): eight planted breaks, one at a time, each run
 against the whole unit project — a top-level throw in the leads, billing plan, webhook and upload

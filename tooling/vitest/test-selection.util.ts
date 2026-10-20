@@ -125,6 +125,14 @@ export const MENTION_ONLY_GLOBS = [
  */
 export const TEST_SOURCE_POLICIES = ['src/tests/unit/ci/git-hook-environment.policy.unit.test.ts'];
 
+/**
+ * Policy tests that read every source file under `src/` and `tooling/` rather than import it — one
+ * `docs/routes.txt` parser. Nothing imports a new file, so a changed code file selects them;
+ * otherwise a second parser added in a new tooling file reaches the PR (planted-bug drill A8-4S,
+ * 20 Oct 2026).
+ */
+export const SOURCE_SCAN_POLICIES = ['src/tests/unit/tooling/route-catalog-reader.unit.test.ts'];
+
 /** Test files that run on any source change under `src/` (see the module comment). */
 export const ALWAYS_RUN_GLOBS = [
   'src/tests/security/**/*.test.ts',
@@ -659,6 +667,22 @@ function selectChangedTest(options: {
   }
 }
 
+/** A changed code file under `src/` or `tooling/`: each source-scan policy the repository has ({@link SOURCE_SCAN_POLICIES}). */
+function selectSourceScanPolicies(options: {
+  changed: string;
+  repositoryRoot: string;
+  select: (test: string, reason: string) => void;
+}): void {
+  const inGraph = GRAPH_ROOTS.some((root) => options.changed.startsWith(`${root}/`));
+  const isCode = CODE_EXTENSIONS.some((extension) => options.changed.endsWith(extension));
+  if (!(inGraph && isCode)) return;
+  for (const policy of SOURCE_SCAN_POLICIES) {
+    if (existsSync(join(options.repositoryRoot, policy))) {
+      options.select(policy, `reads every source file (${options.changed})`);
+    }
+  }
+}
+
 function selectTestsOrThrow(options: {
   changedFiles: string[];
   repositoryRoot: string;
@@ -723,6 +747,7 @@ function selectTestsOrThrow(options: {
       return all(`${changed} was deleted and nothing imports it now, so everything runs`);
     }
     if (changed.startsWith('src/') && !changed.endsWith('.md')) sourceChanged = true;
+    selectSourceScanPolicies({ changed, repositoryRoot, select });
 
     const owner = owningFolder({ repositoryRoot, file: changed });
     if (owner) {
