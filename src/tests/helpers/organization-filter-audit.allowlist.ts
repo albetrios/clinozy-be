@@ -7,8 +7,8 @@
  * Each entry is a debt, not an exemption: the fix is the repository's `organization_id` filter,
  * after which the entry goes. The audit (`organization-filter-audit.setup.ts`) fails a test file
  * on any statement of this kind that is not listed, so a filter dropped from a repository fails the
- * push. Measured on the full e2e + integration run of 20 Oct 2026: 19 shapes, all reads by
- * client-sent public ids or keys, none a list.
+ * push. Measured on the full e2e + integration run of 20 Oct 2026 and CI's RLS application role
+ * lanes: 21 shapes, all reads or updates by client-sent public ids or keys, none a list.
  */
 export const RLS_ONLY_STATEMENTS: Readonly<Record<string, string>> = {
   dbc2f8e99d51: 'contacts.repository.ts: patients of the given contacts, by contacts.public_id',
@@ -31,6 +31,10 @@ export const RLS_ONLY_STATEMENTS: Readonly<Record<string, string>> = {
   '9a7807a5efd4': 'patient-offering-suggestions.repository.ts: check-in labels by public_id',
   '38f5167e38b3': 'payments.repository.ts: the pending credits a payment links to, by public_id',
   '05d09a34f13a': 'payments.repository.ts: the stock purchases a payment links to, by public_id',
+  baf3f6483a6f:
+    'upload.repository.ts: an upload by public_id; a personal upload has no organization_id, so the owner or tenant arm decides',
+  '9337da02cae6':
+    'upload.repository.ts: confirming an upload by public_id; same owner-or-tenant reason as the read',
   '38a99fcf7c2f':
     'organization-api-key.repository.ts: last_used_at of a key already verified by its hash',
 };
