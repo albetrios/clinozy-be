@@ -3471,6 +3471,7 @@ src/
     │   │   ├── run-pre-commit-guard.unit.test.ts
     │   │   ├── settle-check.config.unit.test.ts
     │   │   ├── settle-check.evaluate.unit.test.ts
+    │   │   ├── validate-domain.unit.test.ts
     │   │   └── validate-test-naming.unit.test.ts
     │   ├── services/
     │   │   ├── event-bus.unit.test.ts
