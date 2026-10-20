@@ -120,6 +120,7 @@ Do **not** try to enforce this with a blanket "no `set_config` inside a nested t
 3b. **Wrong-GUC query path** → same silent zero rows, but harder to spot because a context *is* present and looks authoritative. Canonical case: reaching for `MAINTENANCE_SCOPE.GLOBAL_ADMIN` on a `tenancy.*` read because the flow has no organization yet. (Tell: a `null`/empty result that the caller treats as "not found" and swallows — e.g. `if (userPublicId)` guarding a cache purge.)
 4. **Superuser/`BYPASSRLS` `DATABASE_URL`** → Postgres skips FORCE RLS silently; only caught on hosted by `assert-database-rls-safety`.
 5. **DB context held across external I/O** → pool exhaustion under load.
+6. **A repository drops its `organization_id` filter** → RLS returns the same rows, so every database test still passes. Caught by the organization filter audit in the e2e and integration lanes (`src/tests/helpers/organization-filter-audit.setup.ts`); a statement that is safe another way goes in `organization-filter-audit.allowlist.ts` with its reason.
 
 ## Verify
 
