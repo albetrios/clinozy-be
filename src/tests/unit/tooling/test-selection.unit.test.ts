@@ -7,6 +7,7 @@ import {
   changedOnly,
   isAlwaysRunOnly,
   selectTests,
+  SOURCE_SCAN_POLICIES,
   TEST_SOURCE_POLICIES,
   withoutTests,
 } from '@tooling/vitest/test-selection.util.js';
@@ -214,6 +215,26 @@ describe('selectTests', () => {
         expect(selection.why[policy]).toEqual([
           `reads every test's source (${LEADS}/__tests__/unit/leads.rules.unit.test.ts)`,
         ]);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('runs the source-scan policies with a changed code file, when the repository has them', () => {
+    // The planted-bug drill (A8-4S, 20 Oct 2026) added a second docs/routes.txt parser in a new
+    // tooling file: nothing imports a new file, so only this rule selects the policy that finds it.
+    const root = mkdtempSync(join(tmpdir(), 'test-selection-source-scan-'));
+    const added = 'tooling/openapi/route-catalog/another-reader.ts';
+    try {
+      for (const path of [added, ...SOURCE_SCAN_POLICIES]) {
+        mkdirSync(dirname(join(root, path)), { recursive: true });
+        writeFileSync(join(root, path), 'export {};\n');
+      }
+      const selection = selectTests({ changedFiles: [added], repositoryRoot: root });
+      for (const policy of SOURCE_SCAN_POLICIES) {
+        expect(Object.values(selection.projects).flat()).toContain(policy);
+        expect(selection.why[policy]).toEqual([`reads every source file (${added})`]);
       }
     } finally {
       rmSync(root, { recursive: true, force: true });
