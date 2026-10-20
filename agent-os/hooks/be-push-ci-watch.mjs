@@ -9,6 +9,11 @@
 // and asking for be-ci-investigator on it; all green, nothing to watch or a timeout exits 0. A
 // cancelled run counts only while HEAD is still the pushed commit (a newer push cancels the older
 // runs and starts its own watch). One watch per commit.
+//
+// Telemetry: `fired` when it wakes the model, else `silent`, with the outcome in the detail column
+// (`not-a-push`, `no-gh`, `green`, …) so the hooks report can say why it stayed quiet. The `if`
+// filter lets a compound command (a loop, a pipe) through, so `not-a-push` is the common outcome.
+// A cloud session has no signed-in `gh` (`no-gh`); there the PR subscription watches CI instead.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -45,12 +50,12 @@ function listRuns(sha) {
 
 async function watch(payload) {
   const command = payload.tool_input?.command || "";
-  if (!/\bgit\s+(?:-C\s+\S+\s+)?push\b/.test(command)) return "silent";
+  if (!/\bgit\s+(?:-C\s+\S+\s+)?push\b/.test(command)) return "not-a-push";
   const directory = pushDirectory({ command, cwd: payload.cwd || repositoryRoot });
-  if (!isInsideRepository(directory)) return "silent";
+  if (!isInsideRepository(directory)) return "another-repository";
   if (!run("gh", ["auth", "status"]).ok) return "no-gh";
   const sha = run("git", ["rev-parse", "HEAD"]).output;
-  if (!sha) return "silent";
+  if (!sha) return "no-commit";
 
   mkdirSync(stateRoot, { recursive: true });
   const lock = join(stateRoot, `${HOOK_ID}-${sha}.lock`);
@@ -65,7 +70,7 @@ async function watch(payload) {
     const started = Date.now();
     while (Date.now() - started < FINISH_WITHIN_MILLISECONDS) {
       const runs = listRuns(sha);
-      if (runs === null) return "silent";
+      if (runs === null) return "gh-error";
       if (runs.length === 0 && Date.now() - started > APPEAR_WITHIN_MILLISECONDS) return "no-runs";
       const stillHead = run("git", ["rev-parse", "HEAD"]).output === sha;
       const failed = runs.filter(
@@ -95,12 +100,12 @@ async function watch(payload) {
 let outcome = "error";
 try {
   const payload = readHookPayload();
-  outcome = payload ? await watch(payload) : "silent";
+  outcome = payload ? await watch(payload) : "no-payload";
 } catch {
   /* fail-open */
 }
 try {
-  recordTelemetry(HOOK_ID, "PostToolUse", outcome);
+  recordTelemetry(HOOK_ID, "PostToolUse", outcome === "failed" ? "fired" : "silent", outcome);
 } catch {
   /* telemetry never changes the outcome */
 }

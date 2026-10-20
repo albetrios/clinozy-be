@@ -2,7 +2,8 @@
 /**
  * agent-os hooks telemetry report — aggregates agent-os/hooks/.telemetry.log
  * (written by _be-telemetry.sh / _be-telemetry.mjs) into a per-hook summary: total
- * runs, fired vs silent, silent ratio, and last-fired timestamp.
+ * runs, fired vs silent, silent ratio, last-fired timestamp, and why a quiet hook stayed quiet
+ * (the detail column of its silent rows: `not-a-push`, `no-gh`, …).
  *
  * Every hook declared in agent-os/hooks/hooks.json is listed even with zero
  * runs, so a hook that never fires (or was never invoked) is visible. A hook
@@ -28,6 +29,8 @@ interface Stat {
   lastRun: string | null;
   /** Sum of `bytes=N` details (5th CSV column) — volume the hook flagged. */
   flaggedBytes: number;
+  /** Silent rows by reason: the detail column, or the status of a row written without one. */
+  quiet: Map<string, number>;
 }
 
 const declaredHookIds: string[] = existsSync(manifestPath)
@@ -50,6 +53,7 @@ const ensure = (id: string): Stat => {
     lastFired: null,
     lastRun: null,
     flaggedBytes: 0,
+    quiet: new Map(),
   };
   stats.set(id, fresh);
   return fresh;
@@ -67,7 +71,11 @@ if (existsSync(logPath)) {
     if (status === 'fired') {
       stat.fired++;
       if (timestamp && (!stat.lastFired || timestamp > stat.lastFired)) stat.lastFired = timestamp;
-    } else stat.silent++;
+    } else {
+      stat.silent++;
+      const reason = detail || status || 'silent';
+      stat.quiet.set(reason, (stat.quiet.get(reason) ?? 0) + 1);
+    }
     if (detail?.startsWith('bytes=')) {
       const bytes = Number(detail.slice('bytes='.length));
       if (Number.isFinite(bytes) && bytes > 0) stat.flaggedBytes += bytes;
@@ -87,6 +95,8 @@ if (!existsSync(logPath)) console.log('  (no .telemetry.log yet — hooks log he
 console.log('  hook                      runs   fired  silent  silent%  last-fired');
 console.log('  ------------------------  -----  -----  ------  -------  ----------');
 const pruningCandidates: string[] = [];
+/** Ids in the log that hooks.json no longer declares (a renamed or removed hook's old rows). */
+const retiredIds: string[] = [];
 for (const [id, stat] of rows) {
   const silentPct = stat.total ? Math.round((stat.silent / stat.total) * 100) : 0;
   const firedDays = daysAgo(stat.lastFired);
@@ -94,8 +104,8 @@ for (const [id, stat] of rows) {
   console.log(
     `  ${id.padEnd(24)}  ${String(stat.total).padStart(5)}  ${String(stat.fired).padStart(5)}  ${String(stat.silent).padStart(6)}  ${String(silentPct).padStart(6)}%  ${lastFired}`,
   );
-  if (stat.fired === 0 || (firedDays !== null && firedDays >= 30)) pruningCandidates.push(id);
-  else if (firedDays === null && stat.total === 0) pruningCandidates.push(id);
+  if (!declaredHookIds.includes(id)) retiredIds.push(id);
+  else if (stat.fired === 0 || (firedDays !== null && firedDays >= 30)) pruningCandidates.push(id);
 }
 
 const totalFlaggedBytes = [...stats.values()].reduce((sum, stat) => sum + stat.flaggedBytes, 0);
@@ -105,14 +115,24 @@ if (totalFlaggedBytes > 0) {
   );
 }
 
+/** A hook's top three silent reasons, e.g. `not-a-push 519, no-gh 18`. */
+const whyQuiet = (id: string): string =>
+  [...(stats.get(id)?.quiet ?? new Map<string, number>())]
+    .sort((first, second) => second[1] - first[1])
+    .slice(0, 3)
+    .map(([reason, count]) => `${reason} ${count}`)
+    .join(', ');
+
 console.log('');
 if (pruningCandidates.length) {
-  console.log(
-    `⚠ pruning candidates (never fired, or silent 30+ days): ${pruningCandidates.join(', ')}`,
-  );
+  console.log('⚠ pruning candidates (never fired, or silent 30+ days), and why each stayed quiet:');
+  for (const id of pruningCandidates) console.log(`  ${id}: ${whyQuiet(id) || 'no runs'}`);
   console.log(
     '  Review monthly — a hook that never fires is dead weight (agent-os/hooks/README.md).\n',
   );
 } else {
   console.log('✓ every declared hook has fired recently.\n');
+}
+if (retiredIds.length) {
+  console.log(`  retired ids still in the log (not in hooks.json): ${retiredIds.join(', ')}\n`);
 }
