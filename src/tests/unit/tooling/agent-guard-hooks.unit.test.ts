@@ -313,6 +313,37 @@ const cases: GuardCase[] = [
     }),
   ),
 
+  // Every branch of destructiveShellReason (_be-guard-rules.mjs), each with a safe twin: the
+  // planted-bug drill (20 Oct 2026) narrowed the force-push rule to --force and no test noticed.
+  ...[
+    'git push -f origin main',
+    'git push origin main -f',
+    'rm -Rf build',
+    ':(){ :|:& };:',
+    'mkfs.ext4 /dev/sdb1',
+    'dd if=/dev/zero of=/dev/sdb bs=1M',
+  ].map(
+    (command): GuardCase => ({
+      name: `a destructive command is denied: ${command}`,
+      script: 'be-guardrails.mjs',
+      payload: { tool_name: 'Bash', tool_input: { command } },
+      expect: 'deny',
+    }),
+  ),
+  ...[
+    'git push --force-with-lease origin feat/x',
+    'git push origin feat/x',
+    'rm -r build',
+    'git commit -m "never git push -f"',
+  ].map(
+    (command): GuardCase => ({
+      name: `the safe twin of a destructive command stays allowed: ${command}`,
+      script: 'be-guardrails.mjs',
+      payload: { tool_name: 'Bash', tool_input: { command } },
+      expect: 'silent',
+    }),
+  ),
+
   // ── reminders: PostToolUse additionalContext, once per turn ──
   {
     name: 'subagent-verify reminds through additionalContext after a subagent returns',
