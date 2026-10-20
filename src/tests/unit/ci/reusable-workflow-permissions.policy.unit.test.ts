@@ -15,12 +15,27 @@ import { describe, expect, it } from 'vitest';
  * reusable-calling jobs and failed this way on **9 consecutive releases** over a month —
  * production was never deployed once — while every PR stayed green, because actionlint does not
  * model this rule and nothing else exercises a `release`-triggered workflow.
+ *
+ * Secrets have a contract too. They live in GitHub Environments, so every job of a reusable
+ * workflow that reads one sets `environment:`. And that job reaches its environment's secrets only
+ * when the caller passes `secrets: inherit`: clinozy-fe#150 dropped it and the called deploy read
+ * every secret empty (run 39454666563), so a call whose callee reads a secret must pass it.
  */
 const ROOT = process.cwd();
 const WORKFLOW_DIRECTORY = join(ROOT, '.github/workflows');
 
 /** Ordered so a numeric comparison decides whether a grant covers a request. */
 const PERMISSION_RANK: Record<string, number> = { none: 0, read: 1, write: 2 };
+
+/** A `${{ secrets.NAME }}` read; `GITHUB_TOKEN` is the run's own token, never an environment secret. */
+const SECRET_READ = /\$\{\{ *secrets\.(?!GITHUB_TOKEN\b)[A-Za-z_]\w*/;
+const JOB_ENVIRONMENT = /^ {4}environment:/m;
+
+function listWorkflows(): Array<{ file: string; content: string }> {
+  return readdirSync(WORKFLOW_DIRECTORY)
+    .filter((name) => name.endsWith('.yml'))
+    .map((file) => ({ file, content: readFileSync(join(WORKFLOW_DIRECTORY, file), 'utf8') }));
+}
 
 /** Splits a workflow into its top-level job blocks (`jobs:` children are indented two spaces). */
 function parseJobBlocks(workflow: string): Map<string, string> {
@@ -91,10 +106,8 @@ interface ReusableCall {
 
 function collectReusableCalls(): ReusableCall[] {
   const calls: ReusableCall[] = [];
-  const files = readdirSync(WORKFLOW_DIRECTORY).filter((name) => name.endsWith('.yml'));
 
-  for (const file of files) {
-    const workflow = readFileSync(join(WORKFLOW_DIRECTORY, file), 'utf8');
+  for (const { file, content: workflow } of listWorkflows()) {
     const workflowPermissions = parseWorkflowPermissions(workflow);
 
     for (const [jobName, block] of parseJobBlocks(workflow)) {
@@ -141,5 +154,40 @@ describe('reusable workflow permission contract', () => {
     );
 
     expect(violations).toEqual([]);
+  });
+
+  it('every call of a reusable workflow that reads a secret passes secrets: inherit', () => {
+    const readsSecret = (calleeWorkflow: string): boolean =>
+      [
+        ...parseJobBlocks(readFileSync(join(WORKFLOW_DIRECTORY, calleeWorkflow), 'utf8')).values(),
+      ].some((block) => SECRET_READ.test(block));
+    const secretCalls = listWorkflows().flatMap((workflow) =>
+      [...parseJobBlocks(workflow.content)].flatMap(([jobName, block]) => {
+        const callee = /^\s*uses:\s*\.\/\.github\/workflows\/([A-Za-z0-9._-]+\.yml)\s*$/m.exec(
+          block,
+        )?.[1];
+        return callee && readsSecret(callee)
+          ? [{ caller: `${workflow.file} job '${jobName}'`, block }]
+          : [];
+      }),
+    );
+    expect(secretCalls.length).toBeGreaterThan(0);
+    const withoutInherit = secretCalls
+      .filter(({ block }) => !block.split('\n').some((line) => line.trim() === 'secrets: inherit'))
+      .map(({ caller }) => caller);
+    expect(withoutInherit).toEqual([]);
+  });
+
+  it('every reusable-workflow job that reads a secret sets environment:', () => {
+    const reusable = listWorkflows().filter((workflow) =>
+      /^ {2}workflow_call:/m.test(workflow.content),
+    );
+    expect(reusable.length).toBeGreaterThan(0);
+    const unscoped = reusable.flatMap((workflow) =>
+      [...parseJobBlocks(workflow.content)]
+        .filter(([, block]) => SECRET_READ.test(block) && !JOB_ENVIRONMENT.test(block))
+        .map(([name]) => `${workflow.file}: ${name}`),
+    );
+    expect(unscoped).toEqual([]);
   });
 });
