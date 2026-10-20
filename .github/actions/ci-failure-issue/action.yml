@@ -16,6 +16,9 @@ description: |
   or a cancelled job — one past its timeout-minutes ends cancelled, not failed:
   `if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))`.
 
+  An issue tracks `main`: a run on any other ref (a `workflow_dispatch` on a branch) neither opens
+  nor closes one, so a green branch run cannot close the issue about a red `main`.
+
 inputs:
   mode:
     description: '`open` on failure (create, or comment on the open issue), `close` on success'
@@ -64,4 +67,5 @@ runs:
         WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.run-id }}
         RUN_ID: ${{ inputs.run-id }}
         HEAD_SHA: ${{ inputs.head-sha }}
+        REF: ${{ github.ref }}
       run: bash "${GITHUB_ACTION_PATH}/ci-failure-issue.sh"

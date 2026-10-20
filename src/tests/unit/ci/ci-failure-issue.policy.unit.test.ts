@@ -138,6 +138,21 @@ describe('ci-failure issue alert', () => {
     expect(ghLog().match(/^issue create /gm)).toHaveLength(1);
   });
 
+  it('leaves the issue about main alone on a run from another ref', () => {
+    // A green workflow_dispatch on a branch closed main's issue while main was still red (20 Oct
+    // 2026); a red one would open an issue about main.
+    expect(run('open').status).toBe(0);
+    const branch = run('close', { REF: 'refs/heads/fix/a-branch' });
+    expect(branch.status).toBe(0);
+    expect(branch.output).toContain('refs/heads/fix/a-branch is not main');
+    expect(run('open', { REF: 'refs/pull/7/merge' }).status).toBe(0);
+    expect(ghLog().match(/^issue (?:close|comment) /gm)).toBeNull();
+
+    expect(run('close', { REF: 'refs/heads/main' }).output).toContain(
+      'Closed ci-failure issue #7.',
+    );
+  });
+
   it('adds the extra labels when it creates the issue, each created first if missing', () => {
     expect(run('open', { LABELS: 'dependencies' }).status).toBe(0);
     expect(ghLog()).toContain('label create dependencies --repo owner/repository\n');

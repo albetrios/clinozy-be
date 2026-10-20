@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # The logic of the ci-failure-issue action (action.yml): MODE=open|close, TITLE, BODY, LABELS,
 # CLOSE_COMMENT, WORKFLOW_URL, GH_REPOSITORY, and GH_TOKEN for `gh`; RUN_ID and HEAD_SHA for the
-# fix plan (fix-plan.mjs) an `open` adds below the body — empty when it cannot build one.
+# fix plan (fix-plan.mjs) an `open` adds below the body — empty when it cannot build one. REF is
+# the run's ref: an issue tracks main, so a run on any other ref leaves the issues alone.
 set -euo pipefail
+
+if [ "${REF:-refs/heads/main}" != "refs/heads/main" ]; then
+  echo "ci-failure-issue: ${REF} is not main; an issue tracks main, so nothing to ${MODE:-do}."
+  exit 0
+fi
 
 existing_issue() {
   gh issue list --repo "${GH_REPOSITORY}" --state open --label ci-failure \
