@@ -156,7 +156,7 @@ describe('route access diff', () => {
 });
 
 describe('Semgrep at push', () => {
-  it('scans every source file under src/, never a test', () => {
+  it('scans every code file under src/ and tooling/, tests included, as PR SAST does', () => {
     expect(
       pushSemgrepTargets([
         'src/domains/auth/auth.service.ts',
@@ -171,6 +171,10 @@ describe('Semgrep at push', () => {
       'src/domains/auth/auth.service.ts',
       'src/domains/app/sub-domains/leads/leads.validator.ts',
       'src/infrastructure/database/contexts/database-context.ts',
+      // #124's PR SAST failed on a test file the push had skipped (20 Oct 2026).
+      'src/domains/auth/__tests__/unit/auth.service.unit.test.ts',
+      'src/tests/unit/scripts/early-checks.unit.test.ts',
+      'tooling/validate/pre-push-steps.ts',
     ]);
   });
 

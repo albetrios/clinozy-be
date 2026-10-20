@@ -1,8 +1,9 @@
 /**
- * Semgrep at push on every changed source file under `src/` (tests excluded) — an early check in
- * `.husky/pre-push`. The PR's SAST lane scans the whole repository. It scanned only auth, tenancy,
- * billing and the database contexts until the planted-bug drill (20 Oct 2026) showed an app-domain
- * validator's ReDoS-prone regex reach the PR unscanned.
+ * Semgrep at push on every changed code file under `src/` and `tooling/`, tests included — an
+ * early check in `.husky/pre-push`. The PR's SAST lane scans the whole repository, so the push
+ * scans what that lane would flag. It scanned only auth, tenancy, billing and the database
+ * contexts until the planted-bug drill (20 Oct 2026) showed an app-domain validator's ReDoS-prone
+ * regex reach the PR unscanned, and it skipped test files until #124's PR SAST failed on one.
  *
  * Usage:
  *   pnpm security:semgrep:push                # files changed since the upstream (or origin/<trunk>)
@@ -19,8 +20,8 @@ import { resolveBase, tryGit } from '@tooling/setup/common/git-environment.js';
 import { requireTool } from '@tooling/setup/common/require-tool.js';
 import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 
-/** The code Semgrep scans at push: every TypeScript file under `src/`. */
-export const PUSH_SEMGREP_PATTERNS = [/^src\/.+\.ts$/];
+/** The code Semgrep scans at push: every TypeScript and JavaScript file under `src/` and `tooling/`. */
+export const PUSH_SEMGREP_PATTERNS = [/^(?:src|tooling)\/.+\.(?:ts|mts|js|mjs)$/];
 
 /**
  * The rules Semgrep runs, at push and in PR CI's Semgrep SAST step alike: the registry's
@@ -28,13 +29,9 @@ export const PUSH_SEMGREP_PATTERNS = [/^src\/.+\.ts$/];
  */
 export const SEMGREP_CONFIGS = ['p/default', 'tooling/semgrep/rules.yml'];
 
-/** The changed files Semgrep scans at push — test files excluded. */
+/** The changed files Semgrep scans at push — test files too, as PR SAST scans them. */
 export function pushSemgrepTargets(changedFiles: readonly string[]): string[] {
-  return changedFiles.filter(
-    (file) =>
-      PUSH_SEMGREP_PATTERNS.some((pattern) => pattern.test(file)) &&
-      !(file.includes('/__tests__/') || file.endsWith('.test.ts')),
-  );
+  return changedFiles.filter((file) => PUSH_SEMGREP_PATTERNS.some((pattern) => pattern.test(file)));
 }
 
 function main(): void {
@@ -53,7 +50,7 @@ function main(): void {
   });
   const targets = pushSemgrepTargets(changed.output.split('\n'));
   if (targets.length === 0) {
-    console.log('Semgrep at push: no source changes under src/.');
+    console.log('Semgrep at push: no code changes under src/ or tooling/.');
     return;
   }
   // A warning, not a block: the PR's SAST lane scans everything.
