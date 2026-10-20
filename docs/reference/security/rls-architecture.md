@@ -24,6 +24,11 @@ in exactly **two files**, and the connection itself is an RLS-subject role
 row. Elevated access exists only as the named fixture role `clinozy_be_operator`
 (local/CI) and the bootstrap superuser (fresh-clone first migrate only).
 
+The app's repositories repeat the boundary: every organization-scoped statement also filters on
+`organization_id`. Under RLS that filter returns the same rows, so no database test can see it
+go missing. `src/domains/app/__tests__/unit/base-record-organization-filter.unit.test.ts` reads the SQL
+the shared repository sends and fails when a statement drops it.
+
 ---
 
 ## 2. Old → new — what changed and why
