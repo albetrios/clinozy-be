@@ -9,7 +9,7 @@
  */
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveBase, tryGit } from '@tooling/setup/common/git-environment.js';
+import { changedSince, resolveBase } from '@tooling/setup/common/git-environment.js';
 import { prePushSteps } from '@tooling/validate/pre-push-steps.js';
 import {
   ALWAYS_RUN_REASON,
@@ -41,13 +41,14 @@ function main(): void {
   const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
   const baseIndex = process.argv.indexOf('--base');
   const base = resolveBase({ base: baseIndex === -1 ? undefined : process.argv[baseIndex + 1] });
-  const changed = tryGit({ args: ['diff', '--name-only', '--no-renames', `${base}...HEAD`] });
-  if (!changed.ok) {
+  let changedFiles: string[];
+  try {
+    changedFiles = changedSince({ base });
+  } catch {
     console.error(`Cannot diff against ${base} — pass --base <ref>.`);
     process.exitCode = 1;
     return;
   }
-  const changedFiles = changed.output.split('\n').filter(Boolean);
   const lines = [
     `## What git push will run (${changedFiles.length} file(s) since ${base})`,
     '',

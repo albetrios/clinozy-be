@@ -6,15 +6,18 @@
  * the push. `pnpm test:affected` previews the same list.
  */
 import { spawnSync } from 'node:child_process';
-import { git, resolveBase, trunkBranch } from '@tooling/setup/common/git-environment.js';
+import {
+  changedSince,
+  git,
+  resolveBase,
+  trunkBranch,
+} from '@tooling/setup/common/git-environment.js';
 import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 import { branchNameProblem, prePushSteps } from '@tooling/validate/pre-push-steps.js';
 
 function main(): number {
   const base = resolveBase();
-  const changedFiles = git({ args: ['diff', '--name-only', '--no-renames', `${base}...HEAD`] })
-    .split('\n')
-    .filter(Boolean);
+  const changedFiles = changedSince({ base });
   const steps = prePushSteps({ changedFiles, base });
   console.log(`pre-push: ${changedFiles.length} file(s) since ${base}`);
   for (const [index, step] of steps.entries()) {

@@ -5,6 +5,7 @@ import { selectionTable } from '@tooling/vitest/affected.js';
 import {
   BRANCH_TYPES,
   branchNameProblem,
+  isApplicationRoleRelevant,
   prePushSteps,
   shouldRunSonarScan,
 } from '@tooling/validate/pre-push-steps.js';
@@ -62,9 +63,33 @@ describe('the pre-push steps', () => {
       expect.arrayContaining([
         'pnpm security:semgrep:push',
         'pnpm test:pre-push',
+        'pnpm test:rls-role:changed',
         'pnpm sonar:scan',
       ]),
     );
+  });
+
+  it('runs the application-role tests for code and database tests under src/domains/ only', () => {
+    // Pull request #125: an organization lookup outside the database context passed a
+    // green pre-push, because every local lane bypasses RLS.
+    for (const file of [
+      'src/domains/app/sub-domains/patients/patients.service.ts',
+      'src/domains/tenancy/__tests__/integration/tenancy.integration.test.ts',
+      'src/domains/app/__tests__/e2e/flow-enquiry-to-patient.e2e.test.ts',
+    ]) {
+      expect(isApplicationRoleRelevant(file), file).toBe(true);
+      expect(labels([file]), file).toContain('pnpm test:rls-role:changed');
+    }
+    for (const file of [
+      'src/domains/app/sub-domains/patients/__tests__/unit/patients.service.unit.test.ts',
+      'src/domains/app/sub-domains/patients/patients.validator.unit.test.ts',
+      'src/shared/utils/http/response.util.ts',
+      'src/domains/app/sub-domains/patients/patients.overview.md',
+      'tooling/vitest/projects.ts',
+    ]) {
+      expect(isApplicationRoleRelevant(file), file).toBe(false);
+      expect(labels([file]), file).not.toContain('pnpm test:rls-role:changed');
+    }
   });
 
   it('passes the one push base to every step that measures a diff', () => {
@@ -76,6 +101,7 @@ describe('the pre-push steps', () => {
       'pnpm docs:lint:changed',
       'pnpm security:semgrep:push',
       'pnpm test:pre-push',
+      'pnpm test:rls-role:changed',
     ]) {
       expect(steps.find((step) => step.label === label)?.pnpmArguments.slice(-2), label).toEqual([
         '--base',

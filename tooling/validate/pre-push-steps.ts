@@ -47,6 +47,22 @@ export const GENERATED_DOC_RELEVANT =
   /^(src\/|tooling\/|docs\/routes\.txt$|docs\/reference\/architecture\/src-structure-tree\.txt$)/;
 
 /**
+ * Whether a pushed file makes pre-push run its e2e and integration tests as the application role
+ * (`pnpm test:rls-role:changed`): TypeScript under `src/domains/` that is not a unit test — the
+ * code those tests reach through the pool, and the tests themselves.
+ *
+ * @remarks
+ * A unit test (`__tests__/unit/`, `*.unit.test.ts`) never opens the pool, so it is left out. Code
+ * outside `src/domains/` (`src/shared/`, `src/infrastructure/`, migrations) reaches every test;
+ * CI's four RLS application-role shards run those whole. Failure modes: none.
+ */
+export function isApplicationRoleRelevant(file: string): boolean {
+  return (
+    /^src\/domains\/.+\.ts$/.test(file) && !/(\/__tests__\/unit\/|\.unit\.test\.ts$)/.test(file)
+  );
+}
+
+/**
  * Whether the files include deployed-surface runtime code that SonarQube analyzes.
  *
  * @remarks
@@ -121,6 +137,7 @@ export function prePushSteps(options: {
   const agentOsGenerated = changedFiles.some((file) => AGENT_OS_GENERATED_RELEVANT.test(file));
   const unitRelevant = changedFiles.some((file) => UNIT_RELEVANT.test(file));
   const sonar = shouldRunSonarScan(changedFiles);
+  const applicationRole = changedFiles.some(isApplicationRoleRelevant);
   /** A pnpm script step; `withBase` passes the push base, so every step measures the same diff. */
   const pnpm = (step: {
     readonly script: string;
@@ -171,8 +188,8 @@ export function prePushSteps(options: {
       runs: semgrep.length > 0,
       why:
         semgrep.length > 0
-          ? `${semgrep.length} source file(s) under src/`
-          : 'no source file under src/',
+          ? `${semgrep.length} code file(s) under src/ or tooling/`
+          : 'no code file under src/ or tooling/',
     }),
     pnpm({
       script: 'test:pre-push',
@@ -181,6 +198,14 @@ export function prePushSteps(options: {
       why: unitRelevant
         ? 'pushed unit-relevant files — the unit-project files pnpm test:select picks (all of them when the selection escalates)'
         : 'nothing unit-relevant pushed',
+    }),
+    pnpm({
+      script: 'test:rls-role:changed',
+      withBase: true,
+      runs: applicationRole,
+      why: applicationRole
+        ? 'pushed code or e2e/integration tests under src/domains/ — their e2e and integration tests, as the application role (clinozy_be_app, subject to RLS)'
+        : 'nothing under src/domains/ beyond unit tests pushed',
     }),
     pnpm({
       script: 'sonar:scan',
