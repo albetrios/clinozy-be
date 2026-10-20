@@ -357,13 +357,23 @@ async function addTeamToContact({
 }
 
 /** Adds what an appointment reads of others to a page (A1): the contact summary, its patient file and open lead. */
-async function decorateAppointments(outputs: Record<string, unknown>[]): Promise<void> {
+async function decorateAppointments({
+  outputs,
+  context,
+}: {
+  outputs: Record<string, unknown>[];
+  context: BaseRecordWriteContext;
+}): Promise<void> {
+  const { organizationId } = context;
   const contactIds = [...new Set(outputs.map((output) => String(output.contact_id)))];
   const contacts = new Map(
-    (await contactsRepository.findSummaries(contactIds)).map((contact) => [contact.id, contact]),
+    (await contactsRepository.findSummaries(contactIds, organizationId)).map((contact) => [
+      contact.id,
+      contact,
+    ]),
   );
-  const patientFiles = await contactsRepository.findPatientFiles(contactIds);
-  const openLeads = await leadsRepository.findOpenLeadsOfContacts(contactIds);
+  const patientFiles = await contactsRepository.findPatientFiles(contactIds, organizationId);
+  const openLeads = await leadsRepository.findOpenLeadsOfContacts(contactIds, organizationId);
   for (const output of outputs) {
     const contactId = String(output.contact_id);
     const contact = contacts.get(contactId);
@@ -732,7 +742,7 @@ export function createAppointmentsRules(repository: AppointmentsRepository): Bas
       if (change.kind === 'create') await involveBooker({ row, context });
       await followBookingMessages({ repository, row, change, context });
     },
-    decorate: decorateAppointments,
+    decorate: (outputs, context) => decorateAppointments({ outputs, context }),
     collectionViews: {
       slots: (input) => slotsOfDay({ collection: input, repository }),
       'daily-counts': dailyCounts,

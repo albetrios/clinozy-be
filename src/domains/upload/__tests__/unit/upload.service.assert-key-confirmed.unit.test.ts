@@ -19,8 +19,8 @@ vi.mock('@/shared/config/env.config.js', () => ({
  * `updateLogo`) stubs these two methods with `vi.fn()`, so before this file the gate itself
  * had no assertions anywhere in the suite.
  *
- * `findByFileKey` deliberately does NO owner scoping in SQL (upload.repository.ts:76), which
- * is exactly why `assertKeyConfirmedForOwner` re-checks `user_id` / `organization_id` in code
+ * `findByFileKey` names the owner in SQL (the organization filter audit, 20 Oct 2026), and
+ * `assertKeyConfirmedForOwner` still re-checks `user_id` / `organization_id` on the row it gets
  * (sec-UP5). These cases pin that code-level check so it cannot be quietly dropped.
  */
 describe('UploadService — assertKeyConfirmed / assertKeyConfirmedForOwner', () => {
@@ -145,6 +145,11 @@ describe('UploadService — assertKeyConfirmed / assertKeyConfirmedForOwner', ()
           userInternalId: USER_INTERNAL_ID,
         }),
       ).resolves.toEqual({ mimeType: 'image/png', fileName: 'avatar.png', fileSize: 1024 });
+      // The read itself names the owner, so the row checks below are a second line.
+      expect(findByFileKey).toHaveBeenCalledWith(FILE_KEY, {
+        user_id: USER_INTERNAL_ID,
+        organization_id: undefined,
+      });
     });
 
     it('resolves for an UPLOADED row whose organization_id matches', async () => {

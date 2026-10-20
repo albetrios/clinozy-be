@@ -137,6 +137,7 @@ export class AppointmentsRepository extends BaseRecordRepository {
    * one (the first scheduled or confirmed from today), by the contacts' public ids (4.A.6).
    */
   async findLastAndNextVisits(options: {
+    organizationId: number;
     contactPublicIds: readonly string[];
     today: string;
   }): Promise<{ last: Map<string, ContactVisitRow>; next: Map<string, ContactVisitRow> }> {
@@ -156,6 +157,7 @@ export class AppointmentsRepository extends BaseRecordRepository {
       .innerJoin(contacts, eq(contacts.id, appointments.contact_id))
       .where(
         and(
+          eq(appointments.organization_id, options.organizationId),
           inArray(contacts.public_id, [...options.contactPublicIds]),
           isNull(appointments.deleted_at),
           or(

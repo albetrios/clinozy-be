@@ -444,7 +444,7 @@ async function decorateSales(options: {
       });
     }
   }
-  await attachBilledContacts(outputs);
+  await attachBilledContacts({ outputs, organizationId: context.organizationId });
 }
 
 /**
@@ -481,7 +481,7 @@ async function listDues({
     })),
     oldest_sold_at: new Date(row.oldest_sold_at).toISOString(),
   }));
-  await attachBilledContacts(outputs);
+  await attachBilledContacts({ outputs, organizationId: collection.context.organizationId });
   return outputs;
 }
 

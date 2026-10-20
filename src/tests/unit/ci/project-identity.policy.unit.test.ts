@@ -649,6 +649,7 @@ describe('project identity — package.json reconcile', () => {
 describe('project identity — rename safety', () => {
   it('rewrites compose container names from ANY previous slug', () => {
     const compose = [
+      'name: legacy',
       'services:',
       '  postgres:',
       '    container_name: totally-different-postgres',
@@ -662,6 +663,8 @@ describe('project identity — rename safety', () => {
     expect(rewritten).toContain('container_name: acme-api-redis');
     // Longest-suffix-first ordering: `-sonar-scanner` must not be shortened.
     expect(rewritten).toContain('container_name: acme-api-sonar-scanner');
+    // The pinned project name follows the slug too (a worktree reuses the checkout's containers).
+    expect(rewritten).toMatch(/^name: acme-api$/m);
   });
 
   it('is idempotent — re-running produces no further change', () => {

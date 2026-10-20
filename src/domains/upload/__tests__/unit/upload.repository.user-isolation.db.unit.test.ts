@@ -153,10 +153,11 @@ describe('UploadRepository user/organization isolation (database)', () => {
     );
     expect(scopedForStranger).toBeNull();
 
-    // …while the key lookup has no owner argument at all and hands the row back.
-    const byKey = await repository.findByFileKey(fileKey);
+    // The key lookup names its owner too: the owner gets the row, a stranger none.
+    const byKey = await repository.findByFileKey(fileKey, { user_id: ownerUser.id });
     expect(byKey?.id).toBe(created.id);
     expect(byKey?.user_id).toBe(ownerUser.id);
+    expect(await repository.findByFileKey(fileKey, { user_id: strangerUser.id })).toBeNull();
   });
 
   it('findByFileKey applies no organization predicate — it returns another organization’s row (sec-UP5)', async () => {
@@ -201,10 +202,12 @@ describe('UploadRepository user/organization isolation (database)', () => {
     expect(idsScopedToOrganizationB).toContain(inOrganizationB.id);
     expect(idsScopedToOrganizationB).not.toContain(created.id);
 
-    // …while the key lookup returns organization A's row to any caller, which is
-    // why assertKeyConfirmedForOwner compares organization_id itself.
-    const byKey = await repository.findByFileKey(fileKey);
+    // The key lookup names the organization too: A gets its row, B none.
+    const byKey = await repository.findByFileKey(fileKey, { organization_id: organizationA.id });
     expect(byKey?.id).toBe(created.id);
     expect(byKey?.organization_id).toBe(organizationA.id);
+    expect(
+      await repository.findByFileKey(fileKey, { organization_id: organizationB.id }),
+    ).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { BaseRecordRepository, nullsLastSortKeys } from '@/domains/app/base-record.repository.js';
 import { contactLinkedSearchCondition } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
@@ -70,7 +70,10 @@ export class PatientsRepository extends BaseRecordRepository {
    * MD29: the patients records name, by public id — the number, the contact and its first and
    * last name; a deleted file's too (a prescription keeps naming its patient).
    */
-  async findSummaries(publicIds: readonly string[]): Promise<Map<string, PatientSummaryRow>> {
+  async findSummaries(
+    publicIds: readonly string[],
+    organizationId: number,
+  ): Promise<Map<string, PatientSummaryRow>> {
     const unique = [...new Set(publicIds)];
     if (unique.length === 0) return new Map();
     const rows = await getRequestDatabase()
@@ -83,7 +86,9 @@ export class PatientsRepository extends BaseRecordRepository {
       })
       .from(patients)
       .innerJoin(contacts, eq(contacts.id, patients.contact_id))
-      .where(inArray(patients.public_id, unique));
+      .where(
+        and(eq(patients.organization_id, organizationId), inArray(patients.public_id, unique)),
+      );
     return new Map(
       rows.map(({ first_name: firstName, last_name: lastName, ...row }) => [
         row.id,

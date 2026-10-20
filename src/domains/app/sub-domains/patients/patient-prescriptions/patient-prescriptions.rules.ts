@@ -48,9 +48,16 @@ export async function assertLineMedicinesLive(options: {
 }
 
 /** MD29: each prescription names its patient — "Prescriptions to fill" in one read. */
-async function attachPatients(outputs: Record<string, unknown>[]): Promise<void> {
+async function attachPatients({
+  outputs,
+  organizationId,
+}: {
+  outputs: Record<string, unknown>[];
+  organizationId: number;
+}): Promise<void> {
   const summaries = await patientsRepository.findSummaries(
     outputs.map((output) => String(output.patient_id)),
+    organizationId,
   );
   for (const output of outputs) {
     output.patient = summaries.get(String(output.patient_id)) ?? null;
@@ -110,7 +117,8 @@ export const patientPrescriptionsRules: BaseRecordRules = {
     }
     values.approved_by_membership_id = membershipId;
   },
-  decorate: (outputs) => attachPatients(outputs),
+  decorate: (outputs, context) =>
+    attachPatients({ outputs, organizationId: context.organizationId }),
   afterWrite: async (row, change, context) => {
     if (!(change.kind === 'transition' && change.action === APPROVE)) return;
     await writePatientFileActivity({

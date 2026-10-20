@@ -77,20 +77,40 @@ export class UploadRepository {
     });
   }
 
-  async findByPublicId(public_id: string): Promise<UploadRow | null> {
+  /** A live upload by its public id; with `organization_id`, only that organization's. */
+  async findByPublicId(public_id: string, organization_id?: number): Promise<UploadRow | null> {
     const rows = await getRequestDatabase()
       .select()
       .from(uploads)
-      .where(and(eq(uploads.public_id, public_id), isNull(uploads.deleted_at)))
+      .where(
+        and(
+          eq(uploads.public_id, public_id),
+          organization_id === undefined ? undefined : eq(uploads.organization_id, organization_id),
+          isNull(uploads.deleted_at),
+        ),
+      )
       .limit(1);
     return rows[0] ?? null;
   }
 
-  async findByFileKey(file_key: string): Promise<UploadRow | null> {
+  /** A live upload by its storage key, owned by the given user and/or organization. */
+  async findByFileKey(
+    file_key: string,
+    owner: { user_id?: number | undefined; organization_id?: number | undefined },
+  ): Promise<UploadRow | null> {
     const rows = await getRequestDatabase()
       .select()
       .from(uploads)
-      .where(and(eq(uploads.file_key, file_key), isNull(uploads.deleted_at)))
+      .where(
+        and(
+          eq(uploads.file_key, file_key),
+          owner.user_id === undefined ? undefined : eq(uploads.user_id, owner.user_id),
+          owner.organization_id === undefined
+            ? undefined
+            : eq(uploads.organization_id, owner.organization_id),
+          isNull(uploads.deleted_at),
+        ),
+      )
       .limit(1);
     return rows[0] ?? null;
   }
@@ -144,11 +164,11 @@ export class UploadRepository {
     return rows[0] ?? null;
   }
 
-  async softDeleteByPublicId(public_id: string): Promise<UploadRow | null> {
+  async softDeleteById(id: number): Promise<UploadRow | null> {
     const rows = await getRequestDatabase()
       .update(uploads)
       .set({ deleted_at: databaseNowTimestamp, updated_at: databaseNowTimestamp })
-      .where(and(eq(uploads.public_id, public_id), isNull(uploads.deleted_at)))
+      .where(and(eq(uploads.id, id), isNull(uploads.deleted_at)))
       .returning();
     return rows[0] ?? null;
   }
@@ -168,11 +188,11 @@ export class UploadRepository {
     return rows[0] ?? null;
   }
 
-  async markStatusByPublicId(public_id: string, status: string): Promise<UploadRow | null> {
+  async markStatusById(id: number, status: string): Promise<UploadRow | null> {
     const rows = await getRequestDatabase()
       .update(uploads)
       .set({ status, updated_at: databaseNowTimestamp })
-      .where(and(eq(uploads.public_id, public_id), isNull(uploads.deleted_at)))
+      .where(and(eq(uploads.id, id), isNull(uploads.deleted_at)))
       .returning();
     return rows[0] ?? null;
   }
@@ -182,11 +202,11 @@ export class UploadRepository {
    * the confirm step published the verified bytes to. One atomic update so the row never points at
    * the still-overwritable pending key once it is servable.
    */
-  async markConfirmedByPublicId(public_id: string, file_key: string): Promise<UploadRow | null> {
+  async markConfirmedById(id: number, file_key: string): Promise<UploadRow | null> {
     const rows = await getRequestDatabase()
       .update(uploads)
       .set({ status: UPLOAD_STATUS.UPLOADED, file_key, updated_at: databaseNowTimestamp })
-      .where(and(eq(uploads.public_id, public_id), isNull(uploads.deleted_at)))
+      .where(and(eq(uploads.id, id), isNull(uploads.deleted_at)))
       .returning();
     return rows[0] ?? null;
   }
