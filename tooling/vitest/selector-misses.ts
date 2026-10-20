@@ -11,7 +11,7 @@
 import { appendFileSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { git, resolveBase } from '@tooling/setup/common/git-environment.js';
+import { changedSince, git, resolveBase } from '@tooling/setup/common/git-environment.js';
 import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
 import { selectTests, type TestSelection } from '@tooling/vitest/test-selection.util.js';
 
@@ -61,9 +61,7 @@ function main(): void {
   const base = git({
     args: ['merge-base', 'HEAD', resolveBase({ base: values.base, from: 'trunk' })],
   });
-  const changedFiles = git({ args: ['diff', '--name-only', '--no-renames', `${base}...HEAD`] })
-    .split('\n')
-    .filter(Boolean);
+  const changedFiles = changedSince({ base });
   const failed = existsSync(resultsDirectory)
     ? readdirSync(resultsDirectory, { recursive: true })
         .map(String)

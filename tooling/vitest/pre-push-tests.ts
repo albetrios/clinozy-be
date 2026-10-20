@@ -19,7 +19,7 @@
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { git, resolveBase } from '@tooling/setup/common/git-environment.js';
+import { changedSince, resolveBase } from '@tooling/setup/common/git-environment.js';
 import {
   selectTests,
   TEST_SOURCE_POLICIES,
@@ -64,19 +64,13 @@ export function prePushRuns(plan: PrePushTests): string[][] {
   return rest.length === 0 ? [unit(policies)] : [unit(policies), unit(rest)];
 }
 
-function changedFiles(base: string): string[] {
-  return git({ args: ['diff', '--name-only', '--no-renames', `${base}...HEAD`] })
-    .split('\n')
-    .filter((file) => file.trim() !== '');
-}
-
 function main(): void {
   const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
   const baseIndex = process.argv.indexOf('--base');
   const base = resolveBase({ base: baseIndex === -1 ? undefined : process.argv[baseIndex + 1] });
   const plan = prePushTests({
     select: () =>
-      selectTests({ changedFiles: changedFiles(base), repositoryRoot, unitLevel: true }),
+      selectTests({ changedFiles: changedSince({ base }), repositoryRoot, unitLevel: true }),
   });
   console.log(`Pre-push unit tests: ${plan.run} — ${plan.reason}`);
   for (const args of prePushRuns(plan)) {

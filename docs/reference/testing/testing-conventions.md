@@ -295,6 +295,16 @@ pushed commits, always-run files included. A core-domain change (tenancy, user, 
 (`pnpm test:unit`), as does a selection that cannot be built. CI still runs every suite.
 `pnpm test:affected` previews it.
 
+Pushed code under `src/domains/` (a unit test aside) also runs its e2e and integration tests as the
+application role, `clinozy_be_app`, through `pnpm test:rls-role:changed`
+(`tooling/vitest/changed-as-application-role.ts`): the e2e and integration files of the selection's
+changed-only part, and for a tenancy, user, auth or audit change, where the selection escalates,
+that domain's own. albetrios/clinozy-be#125 pushed an organization lookup outside its database
+context through a green pre-push; every local lane bypasses RLS, and the PR's application-role lane
+caught it 5.4 minutes into CI. A one-file app change selects about 25 files (136 s locally); a
+tenancy change, the domain's 21 (151 s). Code outside `src/domains/` reaches every test, so CI's
+four application-role shards cover it.
+
 A changed test also selects the policies that read every test's source (`TEST_SOURCE_POLICIES`:
 no test starts git outside the throwaway-repository fixture), since nothing imports a test. They
 run first and alone, so a new test that builds a git repository by hand fails the push before it
