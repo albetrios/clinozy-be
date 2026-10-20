@@ -133,9 +133,8 @@ jobs:
       attestations: write
       security-events: write
     if: needs.resolve.outputs.image_present != 'true'
-    # No `secrets:` here: the reusable reads none (it pushes with GITHUB_TOKEN);
-    # `secrets: inherit` would hand it every repository secret.
     uses: ./.github/workflows/reusable-docker-build-trivy.yml
+    secrets: inherit
     with:
       merge_commit_sha: ${{ needs.resolve.outputs.sha }}
       target_branch: main
@@ -270,10 +269,8 @@ jobs:
       needs.docs.result == 'success' &&
       needs.verify-supply-chain.result == 'success' &&
       (needs.probe-development-api.result == 'success' || needs.probe-development-api.result == 'skipped')
-    # No `secrets:` here: the reusable's job sets its GitHub Environment and reads
-    # that environment's secrets itself; `secrets: inherit` would hand it every
-    # repository secret too.
     uses: ./.github/workflows/reusable-railway-deploy.yml
+    secrets: inherit
     with:
       merge_commit_sha: ${{ needs.resolve.outputs.sha }}
       github_environment: production

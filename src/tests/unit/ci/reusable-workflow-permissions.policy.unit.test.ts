@@ -16,10 +16,10 @@ import { describe, expect, it } from 'vitest';
  * production was never deployed once — while every PR stayed green, because actionlint does not
  * model this rule and nothing else exercises a `release`-triggered workflow.
  *
- * Secrets follow the same direction: a called workflow takes its secrets from its own job's
- * GitHub Environment. No caller passes `secrets: inherit` (it hands the callee every repository
- * secret), and every job of a reusable workflow that reads a secret sets `environment:`, the only
- * way it can resolve one without `inherit`.
+ * Secrets have a contract too. They live in GitHub Environments, so every job of a reusable
+ * workflow that reads one sets `environment:`. And that job reaches its environment's secrets only
+ * when the caller passes `secrets: inherit`: clinozy-fe#150 dropped it and the called deploy read
+ * every secret empty (run 39454666563), so a call whose callee reads a secret must pass it.
  */
 const ROOT = process.cwd();
 const WORKFLOW_DIRECTORY = join(ROOT, '.github/workflows');
@@ -156,13 +156,26 @@ describe('reusable workflow permission contract', () => {
     expect(violations).toEqual([]);
   });
 
-  it('no caller passes secrets: inherit', () => {
-    const inheriting = listWorkflows()
-      .filter((workflow) =>
-        workflow.content.split('\n').some((line) => line.trim() === 'secrets: inherit'),
-      )
-      .map((workflow) => workflow.file);
-    expect(inheriting).toEqual([]);
+  it('every call of a reusable workflow that reads a secret passes secrets: inherit', () => {
+    const readsSecret = (calleeWorkflow: string): boolean =>
+      [
+        ...parseJobBlocks(readFileSync(join(WORKFLOW_DIRECTORY, calleeWorkflow), 'utf8')).values(),
+      ].some((block) => SECRET_READ.test(block));
+    const secretCalls = listWorkflows().flatMap((workflow) =>
+      [...parseJobBlocks(workflow.content)].flatMap(([jobName, block]) => {
+        const callee = /^\s*uses:\s*\.\/\.github\/workflows\/([A-Za-z0-9._-]+\.yml)\s*$/m.exec(
+          block,
+        )?.[1];
+        return callee && readsSecret(callee)
+          ? [{ caller: `${workflow.file} job '${jobName}'`, block }]
+          : [];
+      }),
+    );
+    expect(secretCalls.length).toBeGreaterThan(0);
+    const withoutInherit = secretCalls
+      .filter(({ block }) => !block.split('\n').some((line) => line.trim() === 'secrets: inherit'))
+      .map(({ caller }) => caller);
+    expect(withoutInherit).toEqual([]);
   });
 
   it('every reusable-workflow job that reads a secret sets environment:', () => {

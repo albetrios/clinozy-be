@@ -67,10 +67,8 @@ jobs:
     permissions:
       contents: read
       packages: write
-    # No `secrets:` here: the reusable's job sets its GitHub Environment and reads
-    # that environment's secrets itself; `secrets: inherit` would hand it every
-    # repository secret too.
     uses: ./.github/workflows/reusable-railway-deploy.yml
+    secrets: inherit
     with:
       # Single-trunk: pass the environment explicitly (both environments deploy
       # from main); the reusable selects the matching GitHub Environment + secrets.

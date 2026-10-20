@@ -268,10 +268,8 @@ jobs:
     if: |
       needs.changes.outputs.docs-only-md != 'true' &&
       (needs.changes.outputs.src-code == 'true' || needs.changes.outputs.ci-config == 'true')
-    # No `secrets:` here: the reusable's job sets its GitHub Environment and reads
-    # that environment's secrets itself; `secrets: inherit` would hand it every
-    # repository secret too.
     uses: ./.github/workflows/reusable-vitest-postgres-redis.yml
+    secrets: inherit
     with:
       merge_commit_sha: ${{ github.event.pull_request.head.sha }}
       target_branch: main
