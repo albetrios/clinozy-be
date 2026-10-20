@@ -91,6 +91,17 @@ src/domains/<domain>/sub-domains/<resource>/__tests__/
 | **Global**             | `pnpm test:global`      | Route catalog, consistency                |
 | **Coverage**           | `pnpm test:coverage`    | Full suite + Stage 5 thresholds           |
 
+### The organization filter audit
+
+The e2e and integration projects load `src/tests/helpers/organization-filter-audit.setup.ts`. It
+watches the statements node-postgres sends and fails a test file when one, run inside an
+organization context, reads or changes a tenant table without naming the organization or an
+internal id. RLS returns the same rows either way, so without it a repository that lost its
+`organization_id` filter passed every database test (planted-bug drill, 20 Oct 2026: A3-2 and
+A3-10, 608 tenancy and security tests green). A failure prints the statement and its fingerprint:
+add the filter, or list the fingerprint in `organization-filter-audit.allowlist.ts` with where it
+comes from and why.
+
 ### Why `pnpm test:rls-role` exists
 
 Every other lane connects with a role that **bypasses** row-level security: Compose creates

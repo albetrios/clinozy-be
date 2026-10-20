@@ -2963,6 +2963,9 @@ src/
     │   ├── local-test-database.ts
     │   ├── object-storage-mock.helper.ts
     │   ├── operator-database.ts
+    │   ├── organization-filter-audit.allowlist.ts
+    │   ├── organization-filter-audit.setup.ts
+    │   ├── organization-filter-audit.ts
     │   ├── principal-scope.helper.ts
     │   ├── redis-mock.helper.ts
     │   ├── registered-route.util.ts
@@ -3320,6 +3323,7 @@ src/
     │   │   ├── load-env-files.unit.test.ts
     │   │   └── static-verification-code-gate.unit.test.ts
     │   ├── database/
+    │   │   ├── organization-filter-audit.unit.test.ts
     │   │   └── role-least-privilege-migration.policy.unit.test.ts
     │   ├── domains/
     │   │   └── catalog-memo.unit.test.ts

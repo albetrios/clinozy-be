@@ -24,10 +24,18 @@ in exactly **two files**, and the connection itself is an RLS-subject role
 row. Elevated access exists only as the named fixture role `clinozy_be_operator`
 (local/CI) and the bootstrap superuser (fresh-clone first migrate only).
 
-The app's repositories repeat the boundary: every organization-scoped statement also filters on
+The repositories repeat the boundary: every organization-scoped statement also filters on
 `organization_id`. Under RLS that filter returns the same rows, so no database test can see it
-go missing. `src/domains/app/__tests__/unit/base-record-organization-filter.unit.test.ts` reads the SQL
-the shared repository sends and fails when a statement drops it.
+go missing. Two checks do:
+
+- `src/domains/app/__tests__/unit/base-record-organization-filter.unit.test.ts` reads the SQL the
+  shared app repository sends and fails when a statement drops it.
+- `src/tests/helpers/organization-filter-audit.setup.ts` watches every statement the e2e and
+  integration lanes send, in every domain. A statement run inside an organization context that
+  reads or changes a FORCE RLS table carrying `organization_id`, without comparing
+  `organization_id`, an internal id or the organization's `public_id` with a bound value, fails its
+  test file. The statements that rely on RLS alone today are listed, each with its repository, in
+  `organization-filter-audit.allowlist.ts`: each entry is a debt, fixed by the repository's filter.
 
 ---
 

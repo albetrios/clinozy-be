@@ -205,6 +205,7 @@ export const vitestProjects = [
     extends: true,
     test: {
       name: 'e2e',
+      setupFiles: ['./src/tests/helpers/organization-filter-audit.setup.ts'],
       include: buildE2eIncludes(),
       exclude: [
         'src/**/__tests__/unit/**',
@@ -241,6 +242,7 @@ export const vitestProjects = [
     extends: true,
     test: {
       name: 'integration',
+      setupFiles: ['./src/tests/helpers/organization-filter-audit.setup.ts'],
       include: buildIntegrationIncludes(),
       pool: 'forks',
       ...databaseProjectParallelism(),
