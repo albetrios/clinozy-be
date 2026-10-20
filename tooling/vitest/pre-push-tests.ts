@@ -6,8 +6,9 @@
  * The unit-project files `pnpm test:select` picks for the pushed changes, its always-run files
  * included. The selection's escalation list keeps the core domains whole — a tenancy, user, auth,
  * audit, `src/shared/`, `src/core/` or `src/infrastructure/` change selects everything, and then
- * the whole unit project runs (`pnpm test:unit`); so does a selection that cannot be built. CI
- * still runs every suite.
+ * the whole unit project runs (`pnpm test:unit`); so does a selection that cannot be built. A
+ * migration is narrowed here (`unitLevel`): it selects the unit tests that read migrations, since
+ * only the database tests see it through the schema, and CI runs those. CI still runs every suite.
  *
  * Proven before it became the default (18 Oct 2026): eight planted breaks, one at a time, each
  * against the full unit project — every failing test was in the selection (0 misses), after the
@@ -52,7 +53,8 @@ function main(): void {
   const baseIndex = process.argv.indexOf('--base');
   const base = resolveBase({ base: baseIndex === -1 ? undefined : process.argv[baseIndex + 1] });
   const plan = prePushTests({
-    select: () => selectTests({ changedFiles: changedFiles(base), repositoryRoot }),
+    select: () =>
+      selectTests({ changedFiles: changedFiles(base), repositoryRoot, unitLevel: true }),
   });
   console.log(`Pre-push unit tests: ${plan.run} — ${plan.reason}`);
   if (plan.run === 'none') return;

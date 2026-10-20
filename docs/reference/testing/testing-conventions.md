@@ -248,6 +248,16 @@ Everything runs when a change touches the escalation list (dependencies, Vitest 
 deleted file nothing imports any more, or when the selector fails. So an app sub-domain change
 gets a small selection and a core-domain change runs everything — by design.
 
+At push, a migration is the one exception (`unitLevel` in `tooling/vitest/pre-push-tests.ts`):
+pre-push runs only the unit project, and a unit-level test sees a migration only by reading the
+`migrations` folder, so a migration selects every test whose source names it (18 unit files
+today: the migration lints, the role and login policy scans, `db-prepare`) instead of the whole
+unit project — 15 s instead of about 7 minutes for a migration-only push. A database test sees a
+migration through the schema, so everything else — PR CI's matrix, the early signal below,
+`pnpm test:select` — still treats `migrations/` as escalating. Proven on 20 Oct 2026 with four
+planted migration breaks against the full unit project: all 3 failing files were in the
+selection (0 misses).
+
 PR CI uses the selection as an **early signal**: the `Affected database tests (early signal)` job
 runs `pnpm test:select --changed-only --exclude 'src/tests/security/rls/**' --lane db-bound --run`
 beside the database matrix. `--changed-only` keeps only the tests picked for the change — the

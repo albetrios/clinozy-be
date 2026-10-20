@@ -54,6 +54,9 @@ const FIXTURE: Record<string, string> = {
   'src/tests/unit/hooks-policy.unit.test.ts':
     "import { join } from 'node:path';\nconst hooks = join(process.cwd(), 'agent-os', 'hooks');",
   'src/tests/unit/docs-policy.unit.test.ts': `import { stockService } ${from('@/domains/app/sub-domains/stock/stock.service.js')};\nconst doc = 'docs/reference/commands.md';`,
+  // A unit test that reads the migrations folder, as the migration lints and RLS scans do.
+  'migrations/00000000000000_init.sql': '-- init',
+  'src/tests/unit/migration-lint.unit.test.ts': `import { stockService } ${from('@/domains/app/sub-domains/stock/stock.service.js')};\nconst folder = join(process.cwd(), 'migrations');`,
   'src/tests/unit/dto-glob.unit.test.ts': `import { stockService } ${from('@/domains/app/sub-domains/stock/stock.service.js')};\nconst dtos = 'src/domains/**/*.dto.ts';`,
   'src/tests/security/tenant.security.test.ts': `import { appRoutes } ${from('@/app.js')};`,
   'src/tests/global/layers.global.test.ts': "const roots = ['src'];",
@@ -100,7 +103,8 @@ function selected(...changedFiles: string[]): string[] {
  * Locks in the selection rules of `pnpm test:select`: an app sub-domain change picks its own
  * tests, the sub-domains whose code imports it, the app tests that name it and the always-run
  * set — and nothing else; documents pick only the tests that name them; the escalation list, an
- * unknown path, a deleted file nothing imports and any error run everything.
+ * unknown path, a deleted file nothing imports and any error run everything — except a migration
+ * in a unit-level selection (pre-push), which picks the tests that read migrations.
  */
 describe('selectTests', () => {
   it('selects an app sub-domain change small: its tests, connected areas, named flows, always-run', () => {
@@ -186,6 +190,23 @@ describe('selectTests', () => {
     expect(selected(`${LEADS}/__tests__/unit/leads.service.unit.test.ts`)).toEqual([
       `${LEADS}/__tests__/unit/leads.service.unit.test.ts`,
     ]);
+  });
+
+  it('narrows a migration to the tests that read migrations, for a unit-level selection only', () => {
+    const migration = 'migrations/20261020000000_add_column.sql';
+    expect(select(migration).reasons[0]).toContain('escalation list');
+    const unitLevel = selectTests({ changedFiles: [migration], repositoryRoot, unitLevel: true });
+    expect(unitLevel.mode).toBe('selected');
+    expect(unitLevel.projects).toEqual({ unit: ['src/tests/unit/migration-lint.unit.test.ts'] });
+    expect(unitLevel.why['src/tests/unit/migration-lint.unit.test.ts']).toEqual([
+      `reads migrations (${migration})`,
+    ]);
+    const withTenancy = selectTests({
+      changedFiles: [migration, 'src/domains/tenancy/x.ts'],
+      repositoryRoot,
+      unitLevel: true,
+    });
+    expect(withTenancy.reasons[0]).toContain('escalation list');
   });
 
   it('fails closed: the escalation list, an unknown path, an untraceable deletion, any error', () => {

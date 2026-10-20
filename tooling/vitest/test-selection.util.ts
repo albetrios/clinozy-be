@@ -29,7 +29,9 @@
  * source change would select ({@link findUnreachableTests}). The escalation list
  * runs everything: dependencies, Vitest config, the test harness, the core domains (tenancy,
  * user, auth, audit), shared, core, infrastructure and migrations — a change there reaches
- * nearly every test by design. It fails closed: a path outside the known roots, a deleted
+ * nearly every test by design. A unit-level selection (`unitLevel`, pre-push's unit project) narrows
+ * a migration to the tests that read migrations ({@link UNIT_LEVEL_NARROWED_GLOBS}): only a database
+ * test sees a migration through the schema. It fails closed: a path outside the known roots, a deleted
  * file it cannot place, or any error selects everything.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -76,6 +78,17 @@ export const ESCALATION_GLOBS = [
   'src/*.ts',
   'src/domains/*.ts',
 ];
+
+/**
+ * Escalating paths a unit-level selection (`unitLevel`) narrows instead: a migration reaches every
+ * database test through the schema, so a full selection still runs everything for it, but a
+ * unit-level test sees a migration only by reading the `migrations` folder — every test whose
+ * source names it ({@link READS_MIGRATIONS}) is selected.
+ */
+export const UNIT_LEVEL_NARROWED_GLOBS = ['migrations/**'];
+
+/** A test that reads the migrations: its source names the `migrations` folder. */
+export const READS_MIGRATIONS = /\bmigrations\b/;
 
 /** Paths no test imports: they select only the tests that mention them. */
 export const MENTION_ONLY_GLOBS = [
@@ -592,6 +605,8 @@ export function selectTests(options: {
   changedFiles: string[];
   repositoryRoot: string;
   graph?: ImportGraph;
+  /** Only unit-level projects will run (pre-push): a migration selects the tests that read it. */
+  unitLevel?: boolean;
 }): TestSelection {
   try {
     return selectTestsOrThrow(options);
@@ -600,10 +615,34 @@ export function selectTests(options: {
   }
 }
 
+/** The changed migrations a unit-level selection narrows ({@link UNIT_LEVEL_NARROWED_GLOBS}). */
+function narrowedMigrations(options: { changedFiles: string[]; unitLevel?: boolean }): string[] {
+  if (!options.unitLevel) return [];
+  return options.changedFiles.filter((file) =>
+    matchesAny({ path: file, globs: UNIT_LEVEL_NARROWED_GLOBS }),
+  );
+}
+
+/** Selects every test that reads the migrations ({@link READS_MIGRATIONS}) for each narrowed one. */
+function selectMigrationReaders(options: {
+  tests: string[];
+  migrations: string[];
+  source: (test: string) => string;
+  select: (test: string, reason: string) => void;
+}): void {
+  if (options.migrations.length === 0) return;
+  for (const test of options.tests) {
+    if (!READS_MIGRATIONS.test(options.source(test))) continue;
+    for (const migration of options.migrations)
+      options.select(test, `reads migrations (${migration})`);
+  }
+}
+
 function selectTestsOrThrow(options: {
   changedFiles: string[];
   repositoryRoot: string;
   graph?: ImportGraph;
+  unitLevel?: boolean;
 }): TestSelection {
   const { repositoryRoot } = options;
   const changedFiles = [...new Set(options.changedFiles.map(toPosix))].filter(Boolean);
@@ -611,7 +650,9 @@ function selectTestsOrThrow(options: {
     return { mode: 'none', reasons: ['no changed files'], projects: {}, why: {} };
   }
 
-  for (const file of changedFiles) {
+  const migrations = narrowedMigrations({ changedFiles, unitLevel: options.unitLevel === true });
+  const judged = changedFiles.filter((file) => !migrations.includes(file));
+  for (const file of judged) {
     if (isTestFile(file)) continue;
     if (matchesAny({ path: file, globs: ESCALATION_GLOBS })) {
       return all(`${file} is on the escalation list, so everything runs`);
@@ -641,8 +682,15 @@ function selectTestsOrThrow(options: {
     return entry;
   };
 
+  selectMigrationReaders({
+    tests: graph.tests,
+    migrations,
+    source: (test) => testText(test).source,
+    select,
+  });
+
   let sourceChanged = false;
-  for (const changed of changedFiles) {
+  for (const changed of judged) {
     const exists = existsSync(join(repositoryRoot, changed));
     if (isTestFile(changed)) {
       if (exists) select(changed, 'the changed test itself');
