@@ -91,7 +91,7 @@ describe('createSubscriptionController', () => {
       mockRequest({
         params: {},
         body: { plan_id: generatePublicId('plan'), billing_cycle: 'monthly' },
-        headers: { 'x-idempotency-key': 'idem-key-123456789012' },
+        headers: { 'x-idempotency-key': 'idem-key-123456789012' }, // gitleaks:allow
       }),
       mockReply(),
     );
@@ -101,7 +101,7 @@ describe('createSubscriptionController', () => {
     const createCall = vi.mocked(service.create).mock.calls[0];
     expect(createCall?.[0]).toMatchObject({
       scope: { organizationPublicId },
-      idempotencyKey: 'idem-key-123456789012',
+      idempotencyKey: 'idem-key-123456789012', // gitleaks:allow
     });
   });
 
@@ -110,7 +110,7 @@ describe('createSubscriptionController', () => {
       mockRequest({
         params: { subscription_id: subscriptionPublicId },
         body: { plan_id: generatePublicId('plan') },
-        headers: { 'x-idempotency-key': 'idem-key-123456789012' },
+        headers: { 'x-idempotency-key': 'idem-key-123456789012' }, // gitleaks:allow
       }),
       mockReply(),
     );
@@ -118,7 +118,7 @@ describe('createSubscriptionController', () => {
       scope: expect.objectContaining({ organizationPublicId }),
       subscription_public_id: subscriptionPublicId,
       body: expect.anything(),
-      idempotencyKey: 'idem-key-123456789012',
+      idempotencyKey: 'idem-key-123456789012', // gitleaks:allow
     });
   });
 
@@ -126,14 +126,14 @@ describe('createSubscriptionController', () => {
     await controller.cancelSubscription(
       mockRequest({
         params: { subscription_id: subscriptionPublicId },
-        headers: { 'x-idempotency-key': 'idem-key-123456789012' },
+        headers: { 'x-idempotency-key': 'idem-key-123456789012' }, // gitleaks:allow
       }),
       mockReply(),
     );
     expect(service.cancel).toHaveBeenCalledWith({
       scope: expect.objectContaining({ organizationPublicId }),
       subscription_public_id: subscriptionPublicId,
-      idempotencyKey: 'idem-key-123456789012',
+      idempotencyKey: 'idem-key-123456789012', // gitleaks:allow
     });
   });
 
@@ -141,14 +141,14 @@ describe('createSubscriptionController', () => {
     await controller.resumeSubscription(
       mockRequest({
         params: { subscription_id: subscriptionPublicId },
-        headers: { 'x-idempotency-key': 'idem-key-123456789012' },
+        headers: { 'x-idempotency-key': 'idem-key-123456789012' }, // gitleaks:allow
       }),
       mockReply(),
     );
     expect(service.resume).toHaveBeenCalledWith({
       scope: expect.objectContaining({ organizationPublicId }),
       subscription_public_id: subscriptionPublicId,
-      idempotencyKey: 'idem-key-123456789012',
+      idempotencyKey: 'idem-key-123456789012', // gitleaks:allow
     });
   });
 
@@ -183,7 +183,7 @@ describe('createSubscriptionController', () => {
               params: {
                 subscription_id: malformedSubscriptionId,
               },
-              headers: { 'x-idempotency-key': 'idem-key-123456789012' },
+              headers: { 'x-idempotency-key': 'idem-key-123456789012' }, // gitleaks:allow
             }),
             mockReply(),
           );
@@ -197,7 +197,7 @@ describe('createSubscriptionController', () => {
               params: {
                 subscription_id: malformedSubscriptionId,
               },
-              headers: { 'x-idempotency-key': 'idem-key-123456789012' },
+              headers: { 'x-idempotency-key': 'idem-key-123456789012' }, // gitleaks:allow
             }),
             mockReply(),
           );
@@ -211,7 +211,7 @@ describe('createSubscriptionController', () => {
               params: {
                 subscription_id: malformedSubscriptionId,
               },
-              headers: { 'x-idempotency-key': 'idem-key-123456789012' },
+              headers: { 'x-idempotency-key': 'idem-key-123456789012' }, // gitleaks:allow
             }),
             mockReply(),
           );

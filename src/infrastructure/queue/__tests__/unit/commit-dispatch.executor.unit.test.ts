@@ -66,7 +66,7 @@ vi.mock('@/domains/user/sub-domains/user-data-export/queues/user-data-export.que
   enqueueUserDataExport: (...arguments_: unknown[]) => enqueueUserDataExportMock(...arguments_),
 }));
 
-const MAIL_OUTBOX_TOKEN = '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f';
+const MAIL_OUTBOX_TOKEN = '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f'; // gitleaks:allow
 const NOTIFICATION_PUBLIC_ID = 'ntf_9z3rura5kqvcv8zggriym';
 const USER_PUBLIC_ID = 'usr_0y8vf3ktxqnhcm1ze21ab';
 const EXPORT_PUBLIC_ID = 'exp_0y8vf3ktxqnhcm1ze21ab';

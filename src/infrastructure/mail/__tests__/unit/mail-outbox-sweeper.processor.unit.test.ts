@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runMailOutboxSweeperJob } from '@/infrastructure/mail/workers/mail-outbox-sweeper.processor.js';
 
-const STALE_PENDING_TOKEN = '0b6d3f2a-1c4e-4a5b-8d7c-9e0f1a2b3c4d';
-const OTHER_STALE_PENDING_TOKEN = '1c7e4a3b-2d5f-4b6c-9e8d-0f1a2b3c4d5e';
-const STUCK_SENDING_TOKEN = '2d8f5b4c-3e6a-4c7d-8f9e-1a2b3c4d5e6f';
+const STALE_PENDING_TOKEN = '0b6d3f2a-1c4e-4a5b-8d7c-9e0f1a2b3c4d'; // gitleaks:allow
+const OTHER_STALE_PENDING_TOKEN = '1c7e4a3b-2d5f-4b6c-9e8d-0f1a2b3c4d5e'; // gitleaks:allow
+const STUCK_SENDING_TOKEN = '2d8f5b4c-3e6a-4c7d-8f9e-1a2b3c4d5e6f'; // gitleaks:allow
 
 const findStalePendingMailOutboxTokensMock = vi.fn();
 const reclaimStaleSendingMailOutboxTokensMock = vi.fn();

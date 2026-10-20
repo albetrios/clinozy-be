@@ -157,7 +157,7 @@ describe('autoReplayDeadLetterFromLedger', () => {
         source_queue: 'mail',
         dead_letter_queue: 'mail-dlq',
         job_name: 'send-email',
-        payload_summary: { mail_outbox_token: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f' },
+        payload_summary: { mail_outbox_token: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f' }, // gitleaks:allow
       },
     });
 

@@ -714,6 +714,19 @@ jobs:
           sudo bash tooling/setup/agent/install-gitleaks.sh
           gitleaks version
 
+      # The scan below is only as good as its rules: a config without `[extend] useDefault = true`
+      # loads none and passes everything. Plant a freshly generated key outside the checkout
+      # and fail unless this repository's config finds it.
+      - name: Gitleaks canary (the config finds a planted key)
+        run: |
+          set -euo pipefail
+          canary="$(mktemp -d)"
+          printf 'export const STRIPE_SECRET_KEY = "sk_live_%s";\n' "$(head -c 64 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)" > "$canary/canary.ts"
+          if gitleaks detect --no-git --source "$canary" --config .gitleaks.toml --redact --no-banner; then
+            echo "::error title=Secret scan has no rules::gitleaks with .gitleaks.toml did not find a planted key"
+            exit 1
+          fi
+
       - name: Gitleaks (secret detection)
         run: gitleaks detect --redact --verbose --no-banner --config .gitleaks.toml
 

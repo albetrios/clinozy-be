@@ -3291,6 +3291,7 @@ src/
     │   │   ├── reusable-workflow-permissions.policy.unit.test.ts
     │   │   ├── route-param-schemas.policy.unit.test.ts
     │   │   ├── rulesets.policy.unit.test.ts
+    │   │   ├── secret-scan.policy.unit.test.ts
     │   │   ├── setup-mac-tools.policy.unit.test.ts
     │   │   ├── shared-contract.policy.unit.test.ts
     │   │   ├── stryker-config.policy.unit.test.ts

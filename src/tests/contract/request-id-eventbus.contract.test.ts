@@ -14,7 +14,7 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 const enqueueMailOutboxJobMock = vi.fn();
 // Hoisted with the vi.mock factories below, which read it.
 const { MAIL_OUTBOX_TOKEN } = vi.hoisted(() => ({
-  MAIL_OUTBOX_TOKEN: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f',
+  MAIL_OUTBOX_TOKEN: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f', // gitleaks:allow
 }));
 const findMailOutboxByTokenMock = vi.fn();
 const tryClaimPendingMailOutboxMock = vi.fn();

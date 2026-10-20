@@ -17,7 +17,7 @@ async function importThrottle() {
   );
 }
 
-const API_KEY_PUBLIC_ID = 'apikey_e9x2m4qv7c1ktp05rbnwa';
+const API_KEY_PUBLIC_ID = 'apikey_e9x2m4qv7c1ktp05rbnwa'; // gitleaks:allow
 
 describe('API-key last-used throttle', () => {
   beforeEach(() => {

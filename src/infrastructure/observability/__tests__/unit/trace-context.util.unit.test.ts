@@ -156,7 +156,7 @@ describe('trace context propagation (API → mail enqueue → worker)', () => {
     await tracer.startActiveSpan('http.request', async (parentSpan) => {
       const { enqueueMailOutboxJob } = await import('@/infrastructure/mail/queues/mail.queue.js');
       await enqueueMailOutboxJob({
-        mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f',
+        mailOutboxToken: '6b1d2e8f-3c4a-4b5d-8e9f-0a1b2c3d4e5f', // gitleaks:allow
         options: {
           requestId: 'req-trace-test',
         },

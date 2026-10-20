@@ -76,7 +76,7 @@ describe('AuditSerializer — metadata identifier stripping (denylist)', () => {
             access_token: 'tok_xyz',
             authorization: 'Bearer abc',
             refresh_secret: 'rt_123',
-            api_key_public_id: 'apikey_pub_123',
+            api_key_public_id: 'apikey_pub_123', // gitleaks:allow
             session_public_id: 'sess_pub_xyz',
             action_detail: 'rotated key',
           },
@@ -90,7 +90,7 @@ describe('AuditSerializer — metadata identifier stripping (denylist)', () => {
       access_token: '[REDACTED]',
       authorization: '[REDACTED]',
       refresh_secret: '[REDACTED]',
-      api_key_public_id: 'apikey_pub_123',
+      api_key_public_id: 'apikey_pub_123', // gitleaks:allow
       session_public_id: 'sess_pub_xyz',
       action_detail: 'rotated key',
     });

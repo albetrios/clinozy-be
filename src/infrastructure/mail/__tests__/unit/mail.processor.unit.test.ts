@@ -13,7 +13,7 @@ import {
 } from '@/infrastructure/mail/workers/mail.processor.js';
 
 /** The row's token — the job's handle and the Resend Idempotency-Key. */
-const MAIL_OUTBOX_TOKEN = '3f0c7a52-8a1e-4f6b-9a7d-2c5e8b1d4f60';
+const MAIL_OUTBOX_TOKEN = '3f0c7a52-8a1e-4f6b-9a7d-2c5e8b1d4f60'; // gitleaks:allow
 
 const findMailOutboxByTokenMock = vi.fn();
 const tryClaimPendingMailOutboxMock = vi.fn();

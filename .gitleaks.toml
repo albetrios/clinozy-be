@@ -1,7 +1,16 @@
-# Gitleaks configuration — secret detection allowlist
+# Gitleaks configuration — gitleaks' built-in rules plus this repository's allowlist
 # https://github.com/gitleaks/gitleaks
+#
+# `[extend] useDefault = true` loads the built-in rules: without it this file defines no rule
+# and every scan passes. The PR CI secrets job plants a key before it scans and fails when this
+# config misses it; src/tests/unit/ci/secret-scan.policy.unit.test.ts pins the block. A fixture
+# value that looks like a secret carries an inline `gitleaks:allow`; findings in old commits,
+# which no edit can mark, are listed by fingerprint in .gitleaksignore.
 
 title = "clinozy-be gitleaks config"
+
+[extend]
+useDefault = true
 
 [allowlist]
 description = "Global allowlist"

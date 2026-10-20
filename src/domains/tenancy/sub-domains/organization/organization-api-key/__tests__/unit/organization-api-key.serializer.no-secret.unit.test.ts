@@ -8,7 +8,7 @@ describe('serializeOrganizationApiKey — no secret leakage', () => {
     organization_id: 1,
     name: 'CI key',
     key_hash: 'super-secret-hash-value',
-    key_prefix: 'ak_prefix12345',
+    key_prefix: 'ak_prefix12345', // gitleaks:allow
     scopes: ['billing:read'],
     last_used_at: new Date('2026-01-01T00:00:00Z'),
     expires_at: null,

@@ -1,0 +1,51 @@
+# Findings in commits already on main when gitleaks' built-in rules were turned on (20 Oct 2026).
+# Every one is a test fixture or a documentation example, and its line in the current tree
+# carries an inline `gitleaks:allow`. A fingerprint names its commit, which never changes, so
+# the list stays valid. Never add a finding from a new commit here: mark the fixture line with
+# `gitleaks:allow`, or take the secret out.
+34a85f6958db013b710aad9a51e357e6c8120af5:src/domains/audit/__tests__/unit/audit.serializer.metadata-strip.unit.test.ts:generic-api-key:79
+34a85f6958db013b710aad9a51e357e6c8120af5:src/domains/billing/sub-domains/subscription/__tests__/unit/subscription.controller.unit.test.ts:generic-api-key:104
+34a85f6958db013b710aad9a51e357e6c8120af5:src/domains/billing/sub-domains/subscription/__tests__/unit/subscription.controller.unit.test.ts:generic-api-key:121
+34a85f6958db013b710aad9a51e357e6c8120af5:src/domains/billing/sub-domains/subscription/__tests__/unit/subscription.controller.unit.test.ts:generic-api-key:136
+34a85f6958db013b710aad9a51e357e6c8120af5:src/domains/billing/sub-domains/subscription/__tests__/unit/subscription.controller.unit.test.ts:generic-api-key:151
+34a85f6958db013b710aad9a51e357e6c8120af5:src/infrastructure/observability/__tests__/unit/trace-context.util.unit.test.ts:generic-api-key:159
+34a85f6958db013b710aad9a51e357e6c8120af5:src/tests/unit/utils/validation/bullmq-job-validation.unit.test.ts:generic-api-key:15
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/domains/notify/sub-domains/notification/__tests__/unit/notification.worker.unit.test.ts:generic-api-key:82
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/infrastructure/mail/__tests__/unit/mail-outbox-sweeper.processor.unit.test.ts:generic-api-key:4
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/infrastructure/mail/__tests__/unit/mail-outbox-sweeper.processor.unit.test.ts:generic-api-key:5
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/infrastructure/mail/__tests__/unit/mail-outbox-sweeper.processor.unit.test.ts:generic-api-key:6
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/infrastructure/mail/__tests__/unit/mail.processor.unit.test.ts:generic-api-key:16
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/infrastructure/mail/workers/__tests__/unit/mail.worker.unit.test.ts:generic-api-key:124
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/infrastructure/queue/__tests__/unit/commit-dispatch.executor.unit.test.ts:generic-api-key:64
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/infrastructure/queue/__tests__/unit/commit-dispatch.store.unit.test.ts:generic-api-key:100
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/infrastructure/queue/__tests__/unit/commit-dispatch.store.unit.test.ts:generic-api-key:43
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/infrastructure/queue/__tests__/unit/commit-dispatch.store.unit.test.ts:generic-api-key:82
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/infrastructure/queue/__tests__/unit/dlq-replay.util.unit.test.ts:generic-api-key:37
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/infrastructure/queue/__tests__/unit/poison-job.util.unit.test.ts:generic-api-key:37
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/infrastructure/queue/__tests__/unit/poison-job.util.unit.test.ts:generic-api-key:40
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/tests/contract/request-id-eventbus.contract.test.ts:generic-api-key:17
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/tests/unit/queue/dlq-replay.unit.test.ts:generic-api-key:160
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/tests/unit/utils/auth/authorization.util.permission-deny-audit.unit.test.ts:generic-api-key:111
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/tests/unit/utils/auth/authorization.util.permission-deny-audit.unit.test.ts:generic-api-key:120
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/tests/unit/utils/validation/bullmq-job-validation.unit.test.ts:generic-api-key:15
+34cdd4a10362668c69ef7745c8e6c027f5d18390:src/tests/unit/utils/validation/bullmq-job-validation.unit.test.ts:generic-api-key:19
+96333eec92b855ff38fc38a00936ba16abfcfbd2:docs/integrations/credentials-and-env.md:private-key:292
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/domains/audit/__tests__/unit/audit.serializer.metadata-strip.unit.test.ts:generic-api-key:76
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/domains/audit/__tests__/unit/audit.serializer.metadata-strip.unit.test.ts:generic-api-key:89
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/domains/auth/__tests__/unit/auth.controller.unit.test.ts:generic-api-key:285
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/domains/billing/sub-domains/subscription/__tests__/unit/subscription.controller.unit.test.ts:generic-api-key:119
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/domains/billing/sub-domains/subscription/__tests__/unit/subscription.controller.unit.test.ts:generic-api-key:135
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/domains/billing/sub-domains/subscription/__tests__/unit/subscription.controller.unit.test.ts:generic-api-key:150
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/domains/billing/sub-domains/subscription/__tests__/unit/subscription.controller.unit.test.ts:generic-api-key:208
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/domains/billing/sub-domains/subscription/__tests__/unit/subscription.controller.unit.test.ts:generic-api-key:223
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/domains/billing/sub-domains/subscription/__tests__/unit/subscription.controller.unit.test.ts:generic-api-key:238
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/domains/billing/sub-domains/subscription/__tests__/unit/subscription.controller.unit.test.ts:generic-api-key:90
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/domains/tenancy/sub-domains/organization/organization-api-key/__tests__/unit/organization-api-key-last-used.throttle.unit.test.ts:generic-api-key:20
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/domains/tenancy/sub-domains/organization/organization-api-key/__tests__/unit/organization-api-key.serializer.no-secret.unit.test.ts:generic-api-key:11
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/tests/setup.ts:private-key:212
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/tests/unit/config/env-schema-boolean-coerce.unit.test.ts:generic-api-key:24
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/tests/unit/config/env-schema.unit.test.ts:generic-api-key:31
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/tests/unit/middleware/idempotency.middleware.unit.test.ts:generic-api-key:10
+96333eec92b855ff38fc38a00936ba16abfcfbd2:src/tests/unit/utils/idempotency/idempotency-required.util.unit.test.ts:generic-api-key:22
+96333eec92b855ff38fc38a00936ba16abfcfbd2:tooling/openapi/enrichers/field-examples.ts:jwt:36
+96333eec92b855ff38fc38a00936ba16abfcfbd2:tooling/openapi/response-map/schemas/notify-audit-upload.ts:generic-api-key:100
