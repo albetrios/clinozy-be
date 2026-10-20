@@ -77,8 +77,8 @@ jobs:
     # them — an unscoped job reads the repository-level copies instead. A caller
     # job that `uses:` a reusable workflow cannot declare `environment:`
     # (GitHub allows only with/secrets/needs/if/permissions/strategy/concurrency
-    # there), so the scope must live here even though both callers pass
-    # `secrets: inherit`. `development` has no protection rules — no approval gate.
+    # there), so the scope lives here, and the callers pass no secrets at all.
+    # `development` has no protection rules — no approval gate.
     environment: development
 
     strategy:

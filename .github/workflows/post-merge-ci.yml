@@ -190,8 +190,9 @@ jobs:
         needs.changes.outputs.docker == 'true' ||
         needs.changes.outputs.ci-config == 'true'
       )
+    # No `secrets:` here: the reusable reads none (it pushes with GITHUB_TOKEN);
+    # `secrets: inherit` would hand it every repository secret.
     uses: ./.github/workflows/reusable-docker-build-trivy.yml
-    secrets: inherit
     with:
       merge_commit_sha: ${{ github.sha }}
       target_branch: main
@@ -213,8 +214,10 @@ jobs:
         needs.changes.outputs.src-code == 'true' ||
         needs.changes.outputs.ci-config == 'true'
       )
+    # No `secrets:` here: the reusable's job sets its GitHub Environment and reads
+    # that environment's secrets itself; `secrets: inherit` would hand it every
+    # repository secret too.
     uses: ./.github/workflows/reusable-vitest-postgres-redis.yml
-    secrets: inherit
     with:
       merge_commit_sha: ${{ github.sha }}
       target_branch: main
@@ -281,8 +284,10 @@ jobs:
         needs.changes.outputs.docs-artifacts == 'true' ||
         needs.changes.outputs.src-code == 'true'
       )
+    # No `secrets:` here: the reusable's job sets its GitHub Environment and reads
+    # that environment's secrets itself; `secrets: inherit` would hand it every
+    # repository secret too.
     uses: ./.github/workflows/reusable-openapi-postman-publish.yml
-    secrets: inherit
     with:
       merge_commit_sha: ${{ github.sha }}
       target_branch: main
@@ -478,8 +483,10 @@ jobs:
       needs.docker-build-push.result == 'success' &&
       (needs.api-docs.result == 'success' || needs.api-docs.result == 'skipped') &&
       (needs.matrix-tests.result == 'success' || needs.matrix-tests.result == 'skipped')
+    # No `secrets:` here: the reusable's job sets its GitHub Environment and reads
+    # that environment's secrets itself; `secrets: inherit` would hand it every
+    # repository secret too.
     uses: ./.github/workflows/reusable-railway-deploy.yml
-    secrets: inherit
     with:
       merge_commit_sha: ${{ github.sha }}
       github_environment: development

@@ -49,13 +49,6 @@ describe('GitHub Actions Node.js 24 policy', () => {
     }
   });
 
-  it('does not use secrets: inherit under on.workflow_call (caller-only keyword)', () => {
-    for (const workflowPath of listWorkflowFiles()) {
-      const contents = readFileSync(workflowPath, 'utf8');
-      expect(contents, workflowPath).not.toMatch(/workflow_call:\s*\n\s*secrets:\s*inherit/);
-    }
-  });
-
   it('names reusable workflow files with reusable- prefix and Reusable — display name', () => {
     for (const workflowPath of listWorkflowFiles()) {
       const fileName = workflowPath.split('/').pop() ?? workflowPath;
