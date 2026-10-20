@@ -7,6 +7,7 @@ import {
   changedOnly,
   isAlwaysRunOnly,
   selectTests,
+  TEST_SOURCE_POLICIES,
   withoutTests,
 } from '@tooling/vitest/test-selection.util.js';
 
@@ -190,6 +191,33 @@ describe('selectTests', () => {
     expect(selected(`${LEADS}/__tests__/unit/leads.service.unit.test.ts`)).toEqual([
       `${LEADS}/__tests__/unit/leads.service.unit.test.ts`,
     ]);
+  });
+
+  it('runs the test-source policies with a changed test, when the repository has them', () => {
+    const root = mkdtempSync(join(tmpdir(), 'test-selection-policies-'));
+    try {
+      for (const path of [
+        `${LEADS}/__tests__/unit/leads.rules.unit.test.ts`,
+        ...TEST_SOURCE_POLICIES,
+      ]) {
+        mkdirSync(dirname(join(root, path)), { recursive: true });
+        writeFileSync(join(root, path), 'export {};\n');
+      }
+      const selection = selectTests({
+        changedFiles: [`${LEADS}/__tests__/unit/leads.rules.unit.test.ts`],
+        repositoryRoot: root,
+      });
+      expect(Object.values(selection.projects).flat().sort()).toEqual(
+        [`${LEADS}/__tests__/unit/leads.rules.unit.test.ts`, ...TEST_SOURCE_POLICIES].sort(),
+      );
+      for (const policy of TEST_SOURCE_POLICIES) {
+        expect(selection.why[policy]).toEqual([
+          `reads every test's source (${LEADS}/__tests__/unit/leads.rules.unit.test.ts)`,
+        ]);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('narrows a migration to the tests that read migrations, for a unit-level selection only', () => {

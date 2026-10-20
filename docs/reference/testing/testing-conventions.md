@@ -284,6 +284,11 @@ pushed commits, always-run files included. A core-domain change (tenancy, user, 
 (`pnpm test:unit`), as does a selection that cannot be built. CI still runs every suite.
 `pnpm test:affected` previews it.
 
+A changed test also selects the policies that read every test's source (`TEST_SOURCE_POLICIES`:
+no test starts git outside the throwaway-repository fixture), since nothing imports a test. They
+run first and alone, so a new test that builds a git repository by hand fails the push before it
+runs inside the hook and rewrites the developer's repository (planted-bug drill, 20 Oct).
+
 Proven before it became the default (18 Oct): eight planted breaks, one at a time, each run
 against the whole unit project — a top-level throw in the leads, billing plan, webhook and upload
 services and in the early failure alert script, a workflow without its `actions: read`, a route
