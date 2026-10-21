@@ -57,7 +57,8 @@ merging both shard reports through
 Measured on the clinic launch branch with the `app` patterns above in scope,
 merged as CI merges it (unit + global, plus the DB-bound projects). With
 `--output`, the script also writes `coverage-summary.json` beside the merged map;
-the CI test report email (one per run, the `Test report email` job) reads it.
+the CI failure report email (`reusable-ci-failure-report-email.yml`, sent only
+when a run fails) shows it.
 
 The codebase already sits **above** the configured thresholds. The thresholds
 are conservative floors that **ratchet upward only** (never down).

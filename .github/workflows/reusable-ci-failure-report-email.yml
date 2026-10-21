@@ -1,0 +1,85 @@
+name: Reusable — CI failure report email
+
+# One email per failed CI run, and none for a green one. pr-ci.yml calls it when the Quality gate
+# fails, post-merge-ci.yml when one of its jobs fails. The email names every failed job with its
+# failed steps and its log up to the error — the ci-failure issue's fix plan
+# (.github/actions/ci-failure-issue/fix-plan.mjs) — and carries the merged coverage when the test
+# matrix wrote it (src/scripts/ops/send-ci-failure-report-email.ts). Without the Resend key, the
+# recipients or the sender it says which is missing and skips; an email failure never fails a run.
+
+on:
+  workflow_call:
+    inputs:
+      head_sha:
+        description: The commit the run tested (a pull request's head, or main's merge commit)
+        required: true
+        type: string
+
+permissions:
+  actions: read # the fix plan reads the run's jobs and their logs
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 || 'true' }}
+
+jobs:
+  send:
+    name: Send
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # RESEND_API_KEY is a `development` environment secret and TEST_RESULT_EMAIL_TO /
+    # EMAIL_FROM_ADDRESS are its variables; a job resolves them only when environment-scoped (both
+    # callers pass `secrets: inherit`). `development` has no protection rules — no approval gate.
+    environment: development
+    # The script loads the env schema: throwaway values, as in the test jobs. Nothing connects.
+    env:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.head_sha }}
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Download the merged coverage
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: coverage-merged
+          path: coverage
+
+      - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
+        uses: ./.github/actions/test-env
+
+      - name: Read the failed jobs and their logs
+        # Fail-open: on any error the plan is empty, and the email points at the run instead.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+        run: node .github/actions/ci-failure-issue/fix-plan.mjs > "${RUNNER_TEMP}/ci-failure-details.md"
+
+      - name: Send the failure report email
+        continue-on-error: true
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          TEST_RESULT_EMAIL_TO: ${{ vars.TEST_RESULT_EMAIL_TO }}
+          EMAIL_FROM_ADDRESS: ${{ vars.EMAIL_FROM_ADDRESS }}
+          # The commit the run tested: a pull request's GITHUB_SHA is its merge ref's commit.
+          HEAD_SHA: ${{ inputs.head_sha }}
+        run: |
+          missing=""
+          for name in RESEND_API_KEY TEST_RESULT_EMAIL_TO EMAIL_FROM_ADDRESS; do
+            if [ -z "${!name}" ]; then missing="${missing} ${name}"; fi
+          done
+          if [ -n "${missing}" ]; then
+            echo "Not set:${missing} — skipping the failure report email."
+            exit 0
+          fi
+          pnpm tool:ci-failure-report-email --details "${RUNNER_TEMP}/ci-failure-details.md"

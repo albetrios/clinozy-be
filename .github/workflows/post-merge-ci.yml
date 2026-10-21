@@ -214,7 +214,6 @@ jobs:
         needs.changes.outputs.ci-config == 'true'
       )
     uses: ./.github/workflows/reusable-vitest-postgres-redis.yml
-    secrets: inherit
     with:
       merge_commit_sha: ${{ github.sha }}
       target_branch: main
@@ -576,3 +575,23 @@ jobs:
             | deploy (development) | ${{ needs.deploy.result }} |
 
             Close this issue once the failure is resolved.
+
+  failure-report:
+    name: Failure report email
+    # One email when a job above fails, naming every failed job with its log up to the error
+    # (reusable-ci-failure-report-email.yml) — the same report pr-ci.yml sends. A green run sends
+    # nothing, and neither does a cancelled run (`!cancelled()`); a job past its timeout-minutes
+    # still counts, because it ends `cancelled` while the run does not.
+    needs:
+      - docker-build-push
+      - matrix-tests
+      - deploy
+      - release-please
+    if: ${{ !cancelled() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/reusable-ci-failure-report-email.yml
+    secrets: inherit
+    with:
+      head_sha: ${{ github.sha }}

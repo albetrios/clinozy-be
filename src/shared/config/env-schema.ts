@@ -1295,7 +1295,7 @@ const envSchemaBase = z.object({
   SCALAR_NAMESPACE: z.string().min(1).optional(),
   /** Scalar Registry slug for the published OpenAPI document; the upload script defaults to the project slug when unset. Non-sensitive → GitHub Environment Variable (read via `vars.SCALAR_SLUG`); pushed by `pnpm github:sync`. */
   SCALAR_SLUG: z.string().min(1).optional(),
-  /** Comma-separated recipients of the CI test-result email (one summary per run of `reusable-vitest-postgres-redis.yml`, plus the k6 results email); `pnpm tool:test-report-email` skips when unset. Not loaded by the API/worker. Non-sensitive by `classifyKey` → GitHub Environment Variable (read via `vars.TEST_RESULT_EMAIL_TO`); declared here so `pnpm github:sync` keeps it instead of pruning it. */
+  /** Comma-separated recipients of the CI failure report (one email per failed PR CI or post-merge run, from `reusable-ci-failure-report-email.yml`; none for a green run) and of the k6 results email; `pnpm tool:ci-failure-report-email` skips when unset. Not loaded by the API/worker. Non-sensitive by `classifyKey` → GitHub Environment Variable (read via `vars.TEST_RESULT_EMAIL_TO`); declared here so `pnpm github:sync` keeps it instead of pruning it. */
   TEST_RESULT_EMAIL_TO: z.string().min(1).optional(),
 
   // Release automation (GitHub Actions only — consumed by .github/workflows/post-merge-ci.yml)

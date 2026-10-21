@@ -39,6 +39,7 @@ export type WarnOnlyCheck =
 
 const PULL_REQUEST_CI = '.github/workflows/pr-ci.yml';
 const DATABASE_TESTS = '.github/workflows/reusable-vitest-postgres-redis.yml';
+const FAILURE_REPORT = '.github/workflows/reusable-ci-failure-report-email.yml';
 const NIGHTLY_LOAD = '.github/workflows/scheduled-k6-load-slo.yml';
 const UPLOAD_API_DOCS = '.github/actions/upload-api-docs/action.yml';
 
@@ -159,17 +160,17 @@ export const WARN_ONLY_CHECKS: readonly WarnOnlyCheck[] = [
     reason: INFORMATIONAL_SCENARIO,
   },
   {
-    workflow: DATABASE_TESTS,
+    workflow: FAILURE_REPORT,
     step: 'Download the merged coverage',
     mechanism: 'continue-on-error',
     reason:
-      'the report email reads coverage when it exists; a run whose coverage gate made no merged artifact still sends its pass/fail',
+      'the failure report shows coverage when the run wrote it; a run that failed before its coverage gate still sends its report',
   },
   {
-    workflow: DATABASE_TESTS,
-    step: 'Send the test report email',
+    workflow: FAILURE_REPORT,
+    step: 'Send the failure report email',
     mechanism: 'continue-on-error',
-    reason: 'a notification, not a check: a mail outage must not fail the test run',
+    reason: 'a notification, not a check: a mail outage must not fail the run it reports',
   },
   {
     workflow: NIGHTLY_LOAD,

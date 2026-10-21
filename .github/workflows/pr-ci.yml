@@ -269,7 +269,6 @@ jobs:
       needs.changes.outputs.docs-only-md != 'true' &&
       (needs.changes.outputs.src-code == 'true' || needs.changes.outputs.ci-config == 'true')
     uses: ./.github/workflows/reusable-vitest-postgres-redis.yml
-    secrets: inherit
     with:
       merge_commit_sha: ${{ github.event.pull_request.head.sha }}
       target_branch: main
@@ -898,6 +897,22 @@ jobs:
         env:
           FAST_CHECK_NUM_RUNS: 50
         run: pnpm test:property
+
+  failure-report:
+    name: Failure report email
+    # Advisory, NOT in the Quality gate: one email when the gate fails, naming every failed job
+    # with its log up to the error (reusable-ci-failure-report-email.yml). A green run sends
+    # nothing, and neither does a run a newer push cancelled (`!cancelled()`); a lane past its
+    # timeout-minutes still counts, because it ends `cancelled` while the run does not.
+    needs: [quality-gate]
+    if: ${{ !cancelled() && needs.quality-gate.result == 'failure' }}
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/reusable-ci-failure-report-email.yml
+    secrets: inherit
+    with:
+      head_sha: ${{ github.event.pull_request.head.sha }}
 
   early-failure-alert:
     name: Early failure alert
