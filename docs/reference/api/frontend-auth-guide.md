@@ -254,7 +254,7 @@ token alone can therefore not erase an account or an organization.
    refresh keeps the session, a new login does not — so a second action inside it needs no prompt.
 
 The k6 scenarios `user-data-export.js` and `fe-full-surface.js` (step 53) do exactly this with a
-password.
+password; `fe-full-surface.js` steps up an account that has none with an email code.
 
 ## Entry flows → how many calls to the dashboard
 

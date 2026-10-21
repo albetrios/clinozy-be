@@ -95,6 +95,11 @@ jobs:
       # fe-full-surface signs its pool users in with a fixed email code (STATIC_VERIFICATION_CODE)
       # instead of a mailed one. A refine allows this on the local target only (hence NODE_ENV).
       AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED: 'true'
+      # Every send-code issues a fresh code: no 60 s per-email spacing. fe-full-surface's teardown
+      # steps up with the pool password, and an account that has none with a second email code,
+      # which the spacing would withhold (sign-in spent the first). A refine allows false on the
+      # local and development targets only.
+      AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED: 'false'
       # CI-only fixtures, the Vitest harness's. fe-full-surface starts a Google sign-in, which answers
       # 302 to the authorize URL (string work, no outbound call) only once a provider is configured.
       OAUTH_GOOGLE_CLIENT_ID: test-google-client-id

@@ -64,11 +64,15 @@ import { SharedArray } from 'k6/data';
  *
  * ## The step-up cluster is opt-in
  *
- * `POST /auth/step-up` accepts an email code, and `TEST_MODE` returns the real one on
- * `send-code` (`debug_verification_code`). But a code is issued at most once per 60 seconds per
- * email, and sign-in consumes the first one — so reaching step-up costs a 60-second wait. That wait
- * is per VU and runs in parallel, so it costs ~60s of wall clock for the whole run rather than 60s
- * each. It is still off by default; set `STEP_UP=true` to include it and the two routes it unlocks.
+ * Steps 50-52 step up with an email code — `TEST_MODE` returns the real one on `send-code`
+ * (`debug_verification_code`) — and then reach the two enrolment routes that window unlocks. The API
+ * takes an email code only from an account with no password and no MFA, though, and pool users
+ * have a password: against the seeded pool step 50 is refused (403) and 51-52 with it. A code is
+ * also issued at most once per 60 seconds per email unless the API runs with
+ * `AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED=false`, and sign-in spent the first one, so the cluster
+ * waits 63 seconds before asking for a second — per VU and in parallel, ~60s of wall clock for the
+ * whole run. It is off by default; set `STEP_UP=true` to include it. The teardown does not need it:
+ * it steps up on its own (see Self-cleaning).
  *
  * ## The subscription is opt-in
  *
@@ -90,8 +94,17 @@ import { SharedArray } from 'k6/data';
  * organization to be gone from the owner's own list; the proof runs inside the session rather than
  * against the database.
  *
+ * Deleting an organization needs a recent step-up on the session, and sign-in grants none, so the
+ * teardown opens one before step 53 unless the step-up cluster already did. It steps up as the app
+ * does for the account: with the password, which every pool user has. An account with no password
+ * is refused that (401) and steps up with a fresh email code instead — `send-code`, then its
+ * `debug_verification_code` — which needs the resend cooldown off. That account is what `send-code`
+ * signs up when a pool email is missing from this database (a pool written against another one).
+ * A VU that gets no window leaks its organization, and the summary says why.
+ *
  * Run:
  *   TEST_MODE=true AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED=true \
+ *     AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED=false \
  *     WEBHOOK_URL_ALLOWLIST=example.com pnpm dev   # the webhook block creates example.com URLs
  *   BASE_URL=http://localhost:3000 VUS=20 k6 run src/tests/load/k6/scenarios/fe-full-surface.js
  *
@@ -225,6 +238,7 @@ const journeyDuration = new Trend('journey_duration', true);
 const journeyComplete = new Rate('journey_complete');
 const orgsLeaked = new Counter('orgs_leaked');
 const teardownThrottled = new Counter('teardown_throttled');
+const teardownStepUpRefused = new Counter('teardown_step_up_refused');
 const cleanupVerified = new Counter('cleanup_verified');
 const seatLimitHit = new Counter('seat_limit_hit');
 
@@ -902,13 +916,16 @@ function billingBlock(auth) {
  * A verification code is issued at most once per 60 seconds per email and sign-in consumed the
  * first one, so this waits out that cooldown before asking for a second. The wait is per VU and
  * runs in parallel, so it costs about a minute of wall clock for the whole run.
+ *
+ * Returns whether the block passed and whether step 50 opened a step-up window; the teardown opens
+ * its own when it did not.
  */
 function stepUpBlock(auth, email) {
   const state = { ok: true };
   const step = stepper(state);
   if (!STEP_UP) {
     for (const n of ['50-step-up', '51-mfa-enroll', '52-webauthn-options']) skip(n);
-    return true;
+    return { ok: true, steppedUp: false };
   }
 
   sleep(63);
@@ -920,17 +937,18 @@ function stepUpBlock(auth, email) {
   if (!code) {
     // Without TEST_MODE the real code never reaches the client, so step-up cannot be reached.
     for (const n of ['50-step-up', '51-mfa-enroll', '52-webauthn-options']) skip(n);
-    return false;
+    return { ok: false, steppedUp: false };
   }
 
-  step(
-    '50-step-up',
-    http.post(`${API}/auth/step-up`, JSON.stringify({ code }), {
-      headers: auth,
-      tags: { name: '50-step-up' },
-    }),
-    [200],
-  );
+  const steppedUp =
+    step(
+      '50-step-up',
+      http.post(`${API}/auth/step-up`, JSON.stringify({ code }), {
+        headers: auth,
+        tags: { name: '50-step-up' },
+      }),
+      [200],
+    ).status === 200;
   step(
     '51-mfa-enroll',
     http.post(`${API}/auth/me/mfa/enroll`, JSON.stringify({ method_type: 'MFA_TOTP' }), {
@@ -948,21 +966,56 @@ function stepUpBlock(auth, email) {
     [200],
   );
 
-  return state.ok;
+  return { ok: state.ok, steppedUp };
+}
+
+/**
+ * Opens the step-up window step 53 needs on this session, with the factor the API takes from the
+ * account: the password every pool user has, or — once that is refused, as it is for an account
+ * with no password — a fresh email code (`send-code`, then its `debug_verification_code`). Sign-in
+ * spent the first code, so the second needs `TEST_MODE` and the resend cooldown off. Returns whether
+ * the window is open.
+ */
+function teardownStepUp(session, credential) {
+  const withPassword = http.post(
+    `${API}/auth/step-up`,
+    JSON.stringify({ password: credential.password }),
+    { headers: session, tags: { name: 'teardown-step-up' } },
+  );
+  if (withPassword.status === 200) return true;
+
+  const reissued = http.post(
+    `${API}/auth/email/send-code`,
+    JSON.stringify({ email: credential.email }),
+    { headers: PUBLIC_AUTH_FORM_HEADERS, tags: { name: 'teardown-code' } },
+  );
+  const code = reissued.status === 200 ? body(reissued).debug_verification_code : null;
+  const withCode = code
+    ? http.post(`${API}/auth/step-up`, JSON.stringify({ code }), {
+        headers: session,
+        tags: { name: 'teardown-step-up' },
+      })
+    : null;
+  if (withCode?.status === 200) return true;
+
+  console.warn(
+    `VU ${__VU}: no step-up window for 53-delete-org — the pool password got ${withPassword.status}, ` +
+      (withCode
+        ? `an email code ${withCode.status}`
+        : 'and send-code issued no code (TEST_MODE off, or the resend cooldown on)'),
+  );
+  return false;
 }
 
 /** 53-56 teardown: step up, delete what this VU made, return home, prove it is gone, sign out. */
-function teardownBlock(auth, json, slug, password) {
+function teardownBlock(auth, json, slug, credential, steppedUp) {
   const state = { ok: true };
   const step = stepper(state);
   let session = auth;
 
-  // Deleting an organization needs a recent step-up on this session. Pool users have a password, so
-  // that is the step-up (an email-code one is refused for an account with a password).
-  http.post(`${API}/auth/step-up`, JSON.stringify({ password }), {
-    headers: session,
-    tags: { name: 'teardown-step-up' },
-  });
+  // Deleting an organization needs a recent step-up on this session, and sign-in grants none. When
+  // the step-up cluster ran, the window step 50 opened still stands.
+  const windowOpen = steppedUp || teardownStepUp(session, credential);
   const removed = http.del(`${API}/tenancy/organization`, null, {
     headers: session,
     tags: { name: '53-delete-org' },
@@ -972,6 +1025,7 @@ function teardownBlock(auth, json, slug, password) {
     state.ok = false;
     orgsLeaked.add(1);
     if (removed.status === 429) teardownThrottled.add(1);
+    if (!windowOpen) teardownStepUpRefused.add(1);
   }
 
   // Deleting the active organization leaves this token scoped to a row that no longer resolves —
@@ -1159,9 +1213,10 @@ export function feFullJourney() {
   if (!membershipBlock(auth, invitee.email, seats.seatCeiling)) state.ok = false;
   if (!billingBlock(auth)) state.ok = false;
 
-  if (!stepUpBlock(auth, cred.email)) state.ok = false;
+  const stepUp = stepUpBlock(auth, cred.email);
+  if (!stepUp.ok) state.ok = false;
 
-  if (!teardownBlock(auth, json, slug, cred.password)) state.ok = false;
+  if (!teardownBlock(auth, json, slug, cred, stepUp.steppedUp)) state.ok = false;
 
   journeyDuration.add(Date.now() - t0);
   journeyComplete.add(state.ok);
@@ -1237,6 +1292,7 @@ export function handleSummary(data) {
   const jd = m.journey_duration ? m.journey_duration.values : {};
   const leaked = m.orgs_leaked ? m.orgs_leaked.values.count : 0;
   const throttled = m.teardown_throttled ? m.teardown_throttled.values.count : 0;
+  const refused = m.teardown_step_up_refused ? m.teardown_step_up_refused.values.count : 0;
   const verified = m.cleanup_verified ? m.cleanup_verified.values.count : 0;
 
   const seats = m.seat_limit_hit ? m.seat_limit_hit.values.count : 0;
@@ -1263,7 +1319,8 @@ export function handleSummary(data) {
     [
       'ORGS LEAKED',
       leaked > 0
-        ? `${leaked} NOT DELETED${throttled > 0 ? ` (${throttled} throttled — DELETE /organization allows 5 per 5 min per user; space repeat runs)` : ''}`
+        ? `${leaked} NOT DELETED${throttled > 0 ? ` (${throttled} throttled — DELETE /organization allows 5 per 5 min per user; space repeat runs)` : ''}` +
+          `${refused > 0 ? ` (${refused} without a step-up window — the pool password was refused and no email code stood in; see the warnings above)` : ''}`
         : verified === VUS
           ? `0 — all ${verified} confirmed gone from the owner's own me/context`
           : `0 deletes rejected, but only ${verified}/${VUS} confirmed gone — treat as unproven`,
