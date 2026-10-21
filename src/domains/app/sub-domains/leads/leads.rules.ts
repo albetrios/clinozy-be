@@ -114,12 +114,22 @@ async function releaseLead({
  * Adds what a lead reads of others to a page (L1, M3, L8): the contact summary, the contact's last
  * activity and reply state, and the contact's patient file — one read each.
  */
-async function decorateLeads(outputs: Record<string, unknown>[]): Promise<void> {
+async function decorateLeads({
+  outputs,
+  context,
+}: {
+  outputs: Record<string, unknown>[];
+  context: BaseRecordWriteContext;
+}): Promise<void> {
+  const { organizationId } = context;
   const contactIds = [...new Set(outputs.map((output) => String(output.contact_id)))];
   const contacts = new Map(
-    (await contactsRepository.findSummaries(contactIds)).map((contact) => [contact.id, contact]),
+    (await contactsRepository.findSummaries(contactIds, organizationId)).map((contact) => [
+      contact.id,
+      contact,
+    ]),
   );
-  const patientFiles = await contactsRepository.findPatientFiles(contactIds);
+  const patientFiles = await contactsRepository.findPatientFiles(contactIds, organizationId);
   for (const output of outputs) {
     const contact = contacts.get(String(output.contact_id));
     if (contact) {
@@ -257,7 +267,7 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
       if (change.kind === 'delete') return;
       await settleTeam({ row, before: change.before, context });
     },
-    decorate: decorateLeads,
+    decorate: (outputs, context) => decorateLeads({ outputs, context }),
     actions: { claim: createClaimLead(repository), release: releaseLead },
   };
 }

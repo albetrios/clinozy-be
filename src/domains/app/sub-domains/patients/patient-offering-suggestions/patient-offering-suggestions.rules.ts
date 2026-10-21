@@ -131,8 +131,10 @@ export function createPatientOfferingSuggestionsRules(
       const invoiced = await invoicesRepository.findInvoicedQuantities([...idsByPublicId.values()]);
       const summaries = await offeringsRepository.findSummaries(
         outputs.map((output) => String(output.offering_id)),
+        context.organizationId,
       );
       const sources = await repository.findSources({
+        organizationId: context.organizationId,
         checkInPublicIds: outputs.flatMap((output) =>
           output.patient_check_in_id ? [toText(output.patient_check_in_id)] : [],
         ),

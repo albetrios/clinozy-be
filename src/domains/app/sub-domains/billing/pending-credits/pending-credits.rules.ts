@@ -357,7 +357,7 @@ export function createPendingCreditsRules(): BaseRecordRules {
         output.payment_ids = id === undefined ? [] : (settlements.get(id) ?? []);
         output.created_by_membership_id = id === undefined ? null : (recordedBy.get(id) ?? null);
       }
-      await attachBilledContacts(outputs);
+      await attachBilledContacts({ outputs, organizationId: context.organizationId });
     },
   };
 }

@@ -34,8 +34,9 @@ go missing. Two checks do:
   integration lanes send, in every domain. A statement run inside an organization context that
   reads or changes a FORCE RLS table carrying `organization_id`, without comparing
   `organization_id`, an internal id or the organization's `public_id` with a bound value, fails its
-  test file. The statements that rely on RLS alone today are listed, each with its repository, in
-  `organization-filter-audit.allowlist.ts`: each entry is a debt, fixed by the repository's filter.
+  test file. A statement that may rely on RLS alone is listed, with its repository and why, in
+  `organization-filter-audit.allowlist.ts`. One is today: the lookup that finds a webhook delivery
+  attempt's organization, whose answer is the organization itself.
 
 ---
 

@@ -152,6 +152,28 @@ export function tryGit(command: GitCommand): GitResult {
 }
 
 /**
+ * The files the commits since `base` change: `git diff --name-only --no-renames <base>...HEAD`.
+ *
+ * @remarks
+ * The one list of pushed files every pre-push gate measures (`pnpm guard:pre-push`, the unit
+ * tests at push, the application-role tests at push, the affected-tests preview, the selector
+ * misses). `--no-renames` lists a moved file under both paths, so a gate sees the old one too.
+ *
+ * Failure modes: throws as {@link git} does — an unknown `base` included.
+ */
+export function changedSince(options: {
+  readonly base: string;
+  readonly cwd?: string | undefined;
+}): string[] {
+  return git({
+    args: ['diff', '--name-only', '--no-renames', `${options.base}...HEAD`],
+    cwd: options.cwd,
+  })
+    .split('\n')
+    .filter((file) => file.trim() !== '');
+}
+
+/**
  * The trunk branch — `git.defaultBranch` in `tooling/setup/setup.config.json`.
  *
  * @remarks

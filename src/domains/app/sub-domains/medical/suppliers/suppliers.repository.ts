@@ -134,6 +134,7 @@ export class SuppliersRepository extends BaseRecordRepository {
    */
   async findSummariesByPublicId(
     publicIds: readonly string[],
+    organizationId: number,
   ): Promise<Map<string, { name: string; phone: string | null; gst_number: string | null }>> {
     const unique = [...new Set(publicIds)];
     if (unique.length === 0) return new Map();
@@ -145,7 +146,9 @@ export class SuppliersRepository extends BaseRecordRepository {
         gst_number: suppliers.gst_number,
       })
       .from(suppliers)
-      .where(inArray(suppliers.public_id, unique));
+      .where(
+        and(eq(suppliers.organization_id, organizationId), inArray(suppliers.public_id, unique)),
+      );
     return new Map(rows.map(({ public_id: publicId, ...summary }) => [publicId, summary]));
   }
 

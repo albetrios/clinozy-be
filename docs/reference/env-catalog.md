@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**17 / 243** variables migrated to an explicit `{ allowed, description }` entry.
+**17 / 244** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -223,6 +223,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `STRIPE_WEBHOOK_TOLERANCE_SECONDS` | — | `150` |  | — |
 | `TEAM_ORGANIZATION_ENABLED` | — | `true` |  | — |
 | `TEST_MODE` | — | `false` |  | — |
+| `TEST_RESULT_EMAIL_TO` | — | — *(optional)* |  | — |
 | `TOMBSTONE_RETENTION_DAYS` | — | `90` |  | — |
 | `TRUST_PROXY` | false \| 0, or integer 1–10 | `false` | ✓ | Number of reverse-proxy hops Fastify may trust for X-Forwarded-* headers. |
 | `TRUST_PROXY_REQUIRED` | — | `true` |  | — |

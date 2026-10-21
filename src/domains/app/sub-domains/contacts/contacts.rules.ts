@@ -122,9 +122,10 @@ async function decorateContacts({
   context: BaseRecordWriteContext;
 }): Promise<void> {
   const ids = outputs.map((output) => String(output.id));
-  const openLeads = await leadsRepository.findOpenLeadsOfContacts(ids);
-  const patientFiles = await repository.findPatientFiles(ids);
+  const openLeads = await leadsRepository.findOpenLeadsOfContacts(ids, context.organizationId);
+  const patientFiles = await repository.findPatientFiles(ids, context.organizationId);
   const visits = await appointmentsRepository.findLastAndNextVisits({
+    organizationId: context.organizationId,
     contactPublicIds: ids,
     today: await organizationToday(context),
   });
@@ -266,14 +267,18 @@ export function createContactsRules(repository: ContactsRepository): BaseRecordR
       // last appointment — the patient file and the appointments null until #133 and #132 (D61).
       preview: async ({ existing, present, context }) => {
         const [contact] = (await present([existing])) as ContactPreviewOutput[];
-        const openLead = (await leadsRepository.findOpenLeadsOfContacts([existing.public_id])).get(
-          existing.public_id,
-        );
-        const patientFile = (await repository.findPatientFiles([existing.public_id])).get(
-          existing.public_id,
-        );
+        const openLead = (
+          await leadsRepository.findOpenLeadsOfContacts(
+            [existing.public_id],
+            context.organizationId,
+          )
+        ).get(existing.public_id);
+        const patientFile = (
+          await repository.findPatientFiles([existing.public_id], context.organizationId)
+        ).get(existing.public_id);
         const visits = (await context.can(APP_PERMISSIONS.APPOINTMENT_READ))
           ? await appointmentsRepository.findLastAndNextVisits({
+              organizationId: context.organizationId,
               contactPublicIds: [existing.public_id],
               today: await organizationToday(context),
             })

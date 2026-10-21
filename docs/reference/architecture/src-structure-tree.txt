@@ -3517,6 +3517,7 @@ src/
     │   │   ├── agent-tool-install-lib.unit.test.ts
     │   │   ├── agent-tool-versions.policy.unit.test.ts
     │   │   ├── agent-turn-end-tests.unit.test.ts
+    │   │   ├── changed-as-application-role.unit.test.ts
     │   │   ├── check-load-coverage.unit.test.ts
     │   │   ├── check-patch-coverage.unit.test.ts
     │   │   ├── dashboards-mcp.unit.test.ts
@@ -3535,6 +3536,7 @@ src/
     │   │   ├── local-database-logins.unit.test.ts
     │   │   ├── local-test-mode.unit.test.ts
     │   │   ├── mcp-previous-server-keys.unit.test.ts
+    │   │   ├── merge-coverage-summary.unit.test.ts
     │   │   ├── pre-push-steps.unit.test.ts
     │   │   ├── pre-push-tests.unit.test.ts
     │   │   ├── railway-deploy-image.unit.test.ts

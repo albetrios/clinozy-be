@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { classifyKey, parseEnvContents } from '@tooling/setup/github/sync-github-environments.js';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -15,12 +16,27 @@ import { describe, expect, it } from 'vitest';
  * reusable-calling jobs and failed this way on **9 consecutive releases** over a month —
  * production was never deployed once — while every PR stayed green, because actionlint does not
  * model this rule and nothing else exercises a `release`-triggered workflow.
+ *
+ * Secrets have a contract too. They live in GitHub Environments, so every job of a reusable
+ * workflow that reads one sets `environment:`. And that job reaches its environment's secrets only
+ * when the caller passes `secrets: inherit`: clinozy-fe#150 dropped it and the called deploy read
+ * every secret empty (run 39454666563), so a call whose callee reads a secret must pass it.
  */
 const ROOT = process.cwd();
 const WORKFLOW_DIRECTORY = join(ROOT, '.github/workflows');
 
 /** Ordered so a numeric comparison decides whether a grant covers a request. */
 const PERMISSION_RANK: Record<string, number> = { none: 0, read: 1, write: 2 };
+
+/** A `${{ secrets.NAME }}` read; `GITHUB_TOKEN` is the run's own token, never an environment secret. */
+const SECRET_READ = /\$\{\{ *secrets\.(?!GITHUB_TOKEN\b)[A-Za-z_]\w*/;
+const JOB_ENVIRONMENT = /^ {4}environment:/m;
+
+function listWorkflows(): Array<{ file: string; content: string }> {
+  return readdirSync(WORKFLOW_DIRECTORY)
+    .filter((name) => name.endsWith('.yml'))
+    .map((file) => ({ file, content: readFileSync(join(WORKFLOW_DIRECTORY, file), 'utf8') }));
+}
 
 /** Splits a workflow into its top-level job blocks (`jobs:` children are indented two spaces). */
 function parseJobBlocks(workflow: string): Map<string, string> {
@@ -91,10 +107,8 @@ interface ReusableCall {
 
 function collectReusableCalls(): ReusableCall[] {
   const calls: ReusableCall[] = [];
-  const files = readdirSync(WORKFLOW_DIRECTORY).filter((name) => name.endsWith('.yml'));
 
-  for (const file of files) {
-    const workflow = readFileSync(join(WORKFLOW_DIRECTORY, file), 'utf8');
+  for (const { file, content: workflow } of listWorkflows()) {
     const workflowPermissions = parseWorkflowPermissions(workflow);
 
     for (const [jobName, block] of parseJobBlocks(workflow)) {
@@ -142,4 +156,121 @@ describe('reusable workflow permission contract', () => {
 
     expect(violations).toEqual([]);
   });
+
+  it('every call of a reusable workflow that reads a secret passes secrets: inherit', () => {
+    const readsSecret = (calleeWorkflow: string): boolean =>
+      [
+        ...parseJobBlocks(readFileSync(join(WORKFLOW_DIRECTORY, calleeWorkflow), 'utf8')).values(),
+      ].some((block) => SECRET_READ.test(block));
+    const secretCalls = listWorkflows().flatMap((workflow) =>
+      [...parseJobBlocks(workflow.content)].flatMap(([jobName, block]) => {
+        const callee = /^\s*uses:\s*\.\/\.github\/workflows\/([A-Za-z0-9._-]+\.yml)\s*$/m.exec(
+          block,
+        )?.[1];
+        return callee && readsSecret(callee)
+          ? [{ caller: `${workflow.file} job '${jobName}'`, block }]
+          : [];
+      }),
+    );
+    expect(secretCalls.length).toBeGreaterThan(0);
+    const withoutInherit = secretCalls
+      .filter(({ block }) => !block.split('\n').some((line) => line.trim() === 'secrets: inherit'))
+      .map(({ caller }) => caller);
+    expect(withoutInherit).toEqual([]);
+  });
+
+  it('every reusable-workflow job that reads a secret sets environment:', () => {
+    const reusable = listWorkflows().filter((workflow) =>
+      /^ {2}workflow_call:/m.test(workflow.content),
+    );
+    expect(reusable.length).toBeGreaterThan(0);
+    const unscoped = reusable.flatMap((workflow) =>
+      [...parseJobBlocks(workflow.content)]
+        .filter(([, block]) => SECRET_READ.test(block) && !JOB_ENVIRONMENT.test(block))
+        .map(([name]) => `${workflow.file}: ${name}`),
+    );
+    expect(unscoped).toEqual([]);
+  });
+
+  it('reads every synced key from the context its classification names', () => {
+    // A Variable read through `secrets.*` (or a Secret through `vars.*`) is an empty string, not an
+    // error: the test-result email read TEST_RESULT_EMAIL_TO, a Variable by `classifyKey`, through
+    // `secrets.*` (and SCALAR_NAMESPACE once skipped the Scalar publish the same way).
+    const synced = new Set(
+      parseEnvContents(readFileSync(join(ROOT, '.env.example'), 'utf8')).map((entry) => entry.name),
+    );
+    const mismatched = listWorkflows().flatMap((workflow) =>
+      [...workflow.content.matchAll(CONTEXT_READ)]
+        .filter(([, , name]) => name !== undefined && synced.has(name))
+        .filter(
+          ([, context, name]) => (context === 'secrets') !== (classifyKey(name ?? '') === 'secret'),
+        )
+        .map(([, context, name]) => `${workflow.file}: ${context}.${name}`),
+    );
+    expect(mismatched).toEqual([]);
+  });
+
+  it("never gates a step on an env value that only the step's own env: sets", () => {
+    // A step's `env:` is not visible to its `if:`, so such a gate reads empty: the per-shard
+    // test-result email gated on `env.RESEND_API_KEY != ''` from its own `env:` and never sent.
+    const selfGated = listWorkflows().flatMap((workflow) =>
+      stepsOf(workflow.content).flatMap((step) => {
+        const ownEnvironment = stepEnvironmentKeys(step);
+        const read = [...stepCondition(step).matchAll(/\benv\.([A-Z_][A-Z0-9_]*)/g)].map(
+          ([, name]) => name ?? '',
+        );
+        return read
+          .filter((name) => ownEnvironment.has(name))
+          .map((name) => `${workflow.file}: ${step.split('\n')[0]?.trim()} reads env.${name}`);
+      }),
+    );
+    expect(selfGated).toEqual([]);
+  });
 });
+
+/** A `${{ secrets.NAME }}` or `${{ vars.NAME }}` read: the context and the key. */
+const CONTEXT_READ = /\$\{\{[^}]*?\b(secrets|vars)\.([A-Z_][A-Z0-9_]*)/g;
+
+/** The steps of every job: each starts at a `      - ` line (steps sit six spaces in). */
+function stepsOf(workflow: string): string[] {
+  const steps: string[] = [];
+  let current: string[] | undefined;
+  for (const line of workflow.split('\n')) {
+    if (line.startsWith('      - ')) {
+      current = [line];
+      steps.push(current.join('\n'));
+      continue;
+    }
+    if (current && (line.startsWith('       ') || line.trim() === '')) {
+      current.push(line);
+      steps[steps.length - 1] = current.join('\n');
+    } else {
+      current = undefined;
+    }
+  }
+  return steps;
+}
+
+/** The step's `if:` expression, a block scalar's continuation lines included. */
+function stepCondition(step: string): string {
+  const lines = step.split('\n');
+  const start = lines.findIndex((line) => /^ {6}- if:|^ {8}if:/.test(line));
+  if (start === -1) return '';
+  const continuation = lines.slice(start + 1);
+  const end = continuation.findIndex((line) => /^ {8}\S/.test(line));
+  return [lines[start], ...(end === -1 ? continuation : continuation.slice(0, end))].join('\n');
+}
+
+/** The keys of the step's own `env:` block. */
+function stepEnvironmentKeys(step: string): Set<string> {
+  const lines = step.split('\n');
+  const start = lines.findIndex((line) => /^ {6}- env:\s*$|^ {8}env:\s*$/.test(line));
+  if (start === -1) return new Set();
+  const keys = new Set<string>();
+  for (const line of lines.slice(start + 1)) {
+    if (/^ {8}\S/.test(line)) break;
+    const key = /^ {10}([A-Z_][A-Z0-9_]*):/.exec(line)?.[1];
+    if (key) keys.add(key);
+  }
+  return keys;
+}

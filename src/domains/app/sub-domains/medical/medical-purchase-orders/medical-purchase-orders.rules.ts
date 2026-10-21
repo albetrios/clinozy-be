@@ -384,6 +384,7 @@ async function decorateOrders(options: {
   const items = await repository.findItems([...idsByPublicId.values()]);
   const suppliersById = await suppliersRepository.findSummariesByPublicId(
     outputs.map((output) => (output.supplier as { id: string }).id),
+    context.organizationId,
   );
   for (const output of outputs) {
     const id = idsByPublicId.get(String(output.id));

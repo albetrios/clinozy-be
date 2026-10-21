@@ -303,7 +303,8 @@ export class OrganizationApiKeyService {
           scope: PRINCIPAL_SCOPE.VERIFIED({
             organizationPublicId: candidate.organization_public_id,
           }),
-          callback: () => this.apiKeyRepository.touchLastUsedAt(candidate.public_id),
+          callback: () =>
+            this.apiKeyRepository.touchLastUsedAt(candidate.public_id, candidate.organization_id),
         });
       }
       return {

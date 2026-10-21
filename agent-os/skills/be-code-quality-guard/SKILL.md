@@ -102,10 +102,11 @@ Pre-commit mirrors a **subset** of the static checks in [`.github/workflows/pr-c
 | 2–4 | `pnpm typecheck`, `pnpm build`, `pnpm build:check` | Type errors, compile failures, unresolved `@/` aliases in `dist/` |
 | 5 | `pnpm docs:lint:changed --base <push base>` | Markdown lint — when Markdown is pushed |
 | 6–8 | `pnpm tool:project-structure-tree:check`, `routes:catalog:check`, `validate:route-organization-scope` | Generated-doc drift — when `src/`, `tooling/` or a generated doc is pushed |
-| 9 | `pnpm agent-os:generate:check` | Generated platform files drift — when `agent-os/` or `tooling/agent-os/` is pushed |
-| 10 | `pnpm security:semgrep:push --base <push base>` | Semgrep on every pushed source file under `src/`: the registry `p/default` plus `tooling/semgrep/rules.yml` (a finding blocks; no semgrep → a warning) |
-| 11 | `pnpm test:pre-push --base <push base>` | The unit tests `pnpm test:select` picks — when unit-relevant files are pushed |
-| 12 | `pnpm sonar:scan` | SonarQube quality gate — when deployed-surface `src/**/*.ts` is pushed; any unresolved issue blocks. **Mandatory — no bypass.** |
+| 9–10 | `pnpm agent-os:generate:check`, `pnpm agent-os:check` | Generated platform files drift, a stale skills lock and the other agent-os integrity evals — when `agent-os/` or `tooling/agent-os/` is pushed |
+| 11 | `pnpm security:semgrep:push --base <push base>` | Semgrep on every pushed TypeScript and JavaScript file under `src/` and `tooling/`, tests included: the registry `p/default` plus `tooling/semgrep/rules.yml` (a finding blocks; no semgrep → a warning) |
+| 12 | `pnpm test:pre-push --base <push base>` | The unit tests `pnpm test:select` picks — when unit-relevant files are pushed |
+| 13 | `pnpm test:rls-role:changed --base <push base>` | A statement that needs RLS bypassed (no database context) — the e2e and integration tests of pushed code under `src/domains/`, as the application role `clinozy_be_app`: `pnpm test:select`'s changed-only picks, or a tenancy, user, auth or audit change's own domain tests |
+| 14 | `pnpm sonar:scan` | SonarQube quality gate — when deployed-surface `src/**/*.ts` is pushed; any unresolved issue blocks. **Mandatory — no bypass.** |
 
 One list, `tooling/validate/pre-push-steps.ts`: `.husky/pre-push` is `pnpm guard:pre-push`
 (`tooling/validate/run-pre-push.ts`), and `pnpm test:affected` previews the same steps with why

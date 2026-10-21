@@ -177,7 +177,8 @@ export function renderProductionEnvironment(
 }
 
 /**
- * Rewrite Docker Compose `container_name:` values to the slug-derived names.
+ * Rewrite Docker Compose `container_name:` values to the slug-derived names, and a top-level
+ * project `name:` to the slug.
  *
  * @remarks
  * Matches on the SERVICE SUFFIX (`-postgres`, `-redis`, …) rather than on the
@@ -199,7 +200,8 @@ export function renderComposeContainerNames(
     ['postgres', containers.postgres],
     ['redis', containers.redis],
   ];
-  let updated = existing;
+  // The project name, pinned so a worktree reuses the checkout's containers (any previous slug).
+  let updated = existing.replace(/^name:[ \t]*\S+[ \t]*$/m, `name: ${snapshot.slug}`);
   for (const [suffix, containerName] of bySuffix) {
     updated = updated.replace(
       new RegExp(`^([ \\t]*container_name:[ \\t]*)\\S*-${escapeRegExp(suffix)}[ \\t]*$`, 'gm'),

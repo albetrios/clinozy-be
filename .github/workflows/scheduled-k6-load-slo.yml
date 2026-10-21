@@ -1,6 +1,6 @@
 # Nightly k6 load tests against an ephemeral API (Postgres + Redis).
 # Gate: health-stress, api-stress, login-smoke, permission-cached, stripe-webhook-ingest, idempotency-storm (SLO thresholds); strict journeys on the seeded pool (multi-tenant reads, notifications, auth security; roles, API keys, policies, settings, webhooks, billing reads). Informational: auth, daily-ops, webhooks, admin, org-scoped routes (incl. rls-concurrency-beyond-pool), organization writes (roles, permissions, settings, API keys), fe-full-surface (every call clinozy-fe makes).
-# Secrets (optional email): RESEND_API_KEY, TEST_RESULT_EMAIL_TO
+# Optional email: the RESEND_API_KEY secret and the TEST_RESULT_EMAIL_TO / EMAIL_FROM_ADDRESS variables
 name: Scheduled k6 API load & SLO
 
 on:
@@ -23,8 +23,8 @@ jobs:
     # fe-full-surface ≈ 3)
     # plus setup; the headroom keeps one slow night from being cut off mid-scenario.
     timeout-minutes: 60
-    # RESEND_API_KEY / TEST_RESULT_EMAIL_TO are environment secrets; without this
-    # the job resolves the repository-level copies. `development` has no
+    # RESEND_API_KEY (a secret) and TEST_RESULT_EMAIL_TO / EMAIL_FROM_ADDRESS (variables) live in
+    # this environment; without it the job resolves the repository-level copies. `development` has no
     # protection rules, so a scheduled run needs no approval.
     environment: development
 
@@ -303,12 +303,14 @@ jobs:
         continue-on-error: true
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          TEST_RESULT_EMAIL_TO: ${{ secrets.TEST_RESULT_EMAIL_TO }}
+          TEST_RESULT_EMAIL_TO: ${{ vars.TEST_RESULT_EMAIL_TO }}
+          # The job-level EMAIL_FROM_ADDRESS is the API's fixture; the email needs the verified sender.
+          EMAIL_FROM_ADDRESS: ${{ vars.EMAIL_FROM_ADDRESS }}
           BASE_URL: http://localhost:3000
           K6_USE_SUMMARIES: '1'
         run: |
-          if [ -z "$RESEND_API_KEY" ] || [ -z "$TEST_RESULT_EMAIL_TO" ]; then
-            echo "RESEND_API_KEY or TEST_RESULT_EMAIL_TO is not set — skipping the results email."
+          if [ -z "$RESEND_API_KEY" ] || [ -z "$TEST_RESULT_EMAIL_TO" ] || [ -z "$EMAIL_FROM_ADDRESS" ]; then
+            echo "RESEND_API_KEY, TEST_RESULT_EMAIL_TO or EMAIL_FROM_ADDRESS is not set — skipping the results email."
             exit 0
           fi
           pnpm tool:send-load-test-results-email

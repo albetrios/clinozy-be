@@ -80,14 +80,18 @@ describe('UploadRepository', () => {
     const row = { public_id: 'upload_public_test', file_key: 'avatars/user_public/key.png' };
     mockLimit.mockResolvedValue([row]);
 
-    expect(await repository.findByFileKey('avatars/user_public/key.png')).toEqual(row);
+    expect(await repository.findByFileKey('avatars/user_public/key.png', { user_id: 1 })).toEqual(
+      row,
+    );
     expect(mockSelect).toHaveBeenCalled();
   });
 
   it('findByFileKey returns null for an unknown key', async () => {
     mockLimit.mockResolvedValue([]);
 
-    expect(await repository.findByFileKey('avatars/user_public/missing.png')).toBeNull();
+    expect(
+      await repository.findByFileKey('avatars/user_public/missing.png', { user_id: 1 }),
+    ).toBeNull();
   });
 
   it('findByPublicIdForUser scopes by user', async () => {
@@ -104,15 +108,15 @@ describe('UploadRepository', () => {
     expect(await repository.softDelete('missing', 1)).toBeNull();
   });
 
-  it('softDeleteByPublicId returns null when upload missing', async () => {
+  it('softDeleteById returns null when upload missing', async () => {
     mockReturning.mockResolvedValue([]);
-    expect(await repository.softDeleteByPublicId('missing')).toBeNull();
+    expect(await repository.softDeleteById(404)).toBeNull();
   });
 
-  it('markStatusByPublicId returns updated row', async () => {
+  it('markStatusById returns updated row', async () => {
     const row = { public_id: 'upload_public_test', status: 'UPLOADED' };
     mockReturning.mockResolvedValue([row]);
-    expect(await repository.markStatusByPublicId('upload_public_test', 'UPLOADED')).toEqual(row);
+    expect(await repository.markStatusById(2, 'UPLOADED')).toEqual(row);
   });
 
   // sec-D12: the unbounded `findActiveByUserId` / `findActiveByOrganizationId`

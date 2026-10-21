@@ -18,6 +18,9 @@
  * union of shards exceeds it. Disable thresholds per shard
  * (`--coverage.thresholds.*=0`) and gate the merged report with this script.
  *
+ * With `--output`, a `coverage-summary.json` (istanbul's json-summary shape) is written
+ * beside the merged map: the CI test report email reads it from the merged artifact.
+ *
  * `--report-only` prints the summary and threshold comparison without exiting
  * non-zero on misses. Used by CI in smart mode, where only tests touched by
  * the PR diff run and the merged report cannot meet a full-matrix threshold.
@@ -201,14 +204,20 @@ function main() {
   }
   console.log(`Merged total: ${Object.keys(merged).length} unique files`);
 
+  const summary = computeSummary(merged);
+
   if (outputPath) {
     const absoluteOutputPath = resolve(process.cwd(), outputPath);
     mkdirSync(dirname(absoluteOutputPath), { recursive: true });
     writeFileSync(absoluteOutputPath, JSON.stringify(merged));
-    console.log(`Wrote merged coverage to ${absoluteOutputPath}`);
+    // Istanbul's json-summary shape, beside the map: the CI test report email reads
+    // `coverage/coverage-summary.json`, and a shard's own summary covers only that shard.
+    writeFileSync(
+      resolve(dirname(absoluteOutputPath), 'coverage-summary.json'),
+      JSON.stringify({ total: summary }),
+    );
+    console.log(`Wrote merged coverage and its summary to ${dirname(absoluteOutputPath)}`);
   }
-
-  const summary = computeSummary(merged);
 
   console.log('\nMerged coverage summary:');
   for (const metric of ['lines', 'statements', 'functions', 'branches']) {

@@ -148,6 +148,7 @@ export class InvoicesRepository extends BaseRecordRepository {
   /** The treatments each patient offering bills, by its public id (`patient_treatment_ids`, B28). */
   async findBilledTreatments(
     patientOfferingPublicIds: readonly string[],
+    organizationId: number,
   ): Promise<Map<string, string[]>> {
     if (patientOfferingPublicIds.length === 0) return new Map();
     const rows = await getRequestDatabase()
@@ -157,7 +158,12 @@ export class InvoicesRepository extends BaseRecordRepository {
         patient_offerings,
         eq(patient_offerings.id, patient_treatments.patient_offering_id),
       )
-      .where(inArray(patient_offerings.public_id, [...patientOfferingPublicIds]))
+      .where(
+        and(
+          eq(patient_offerings.organization_id, organizationId),
+          inArray(patient_offerings.public_id, [...patientOfferingPublicIds]),
+        ),
+      )
       .orderBy(patient_treatments.id);
     const billed = new Map<string, string[]>();
     for (const row of rows) billed.set(row.offering, [...(billed.get(row.offering) ?? []), row.id]);

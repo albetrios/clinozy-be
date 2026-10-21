@@ -386,11 +386,16 @@ export class UploadService {
         { field: 'key', messageKey: 'errors:validation.uploadNotConfirmed' },
       ]);
     }
-    const row = await this.repository.findByFileKey(fileKey);
+    const row = await this.repository.findByFileKey(fileKey, {
+      user_id: userInternalId,
+      organization_id: organizationInternalId,
+    });
     const notConfirmed = (): ValidationError =>
       new ValidationError('errors:validation.uploadNotConfirmed', undefined, undefined, [
         { field: 'key', messageKey: 'errors:validation.uploadNotConfirmed' },
       ]);
+    // The owner is part of the read, so another user's or organization's key is no row at all;
+    // the row is checked again here, so the rule holds whatever the read returns.
     if (!row || row.status !== UPLOAD_STATUS.UPLOADED) throw notConfirmed();
     if (userInternalId !== undefined && row.user_id !== userInternalId) {
       throw notConfirmed();
@@ -559,7 +564,13 @@ export class UploadService {
       (organizationScope
         ? await withAppDatabaseContext({
             scope: organizationScope,
-            callback: () => this.repository.findByPublicId(public_id),
+            callback: async () => {
+              // The organization arm names the organization in the read; RLS is the second filter.
+              const organization = await this.organizationService.requireOrganizationByPublicId(
+                organizationPublicId!,
+              );
+              return this.repository.findByPublicId(public_id, organization.id);
+            },
           })
         : null);
     if (!row) throw new NotFoundError('Upload');
@@ -693,8 +704,7 @@ export class UploadService {
     if (finalKey === sourceKey) {
       const failedRow = await withAppDatabaseContext({
         scope,
-        callback: () =>
-          this.repository.markStatusByPublicId(validatedPublicId, UPLOAD_STATUS.FAILED),
+        callback: () => this.repository.markStatusById(row.id, UPLOAD_STATUS.FAILED),
       });
       if (!failedRow) throw new NotFoundError('Upload');
       logger.warn(
@@ -717,8 +727,7 @@ export class UploadService {
     if (!verified) {
       const failedRow = await withAppDatabaseContext({
         scope,
-        callback: () =>
-          this.repository.markStatusByPublicId(validatedPublicId, UPLOAD_STATUS.FAILED),
+        callback: () => this.repository.markStatusById(row.id, UPLOAD_STATUS.FAILED),
       });
       if (!failedRow) throw new NotFoundError('Upload');
       throw new ValidationError('errors:uploadVerificationFailed', undefined, undefined, [
@@ -730,7 +739,7 @@ export class UploadService {
     // servable row never references the overwritable pending key.
     const updated = await withAppDatabaseContext({
       scope,
-      callback: () => this.repository.markConfirmedByPublicId(validatedPublicId, finalKey),
+      callback: () => this.repository.markConfirmedById(row.id, finalKey),
     });
     if (!updated) throw new NotFoundError('Upload');
 
@@ -882,7 +891,7 @@ export class UploadService {
 
     const deleted = await withAppDatabaseContext({
       scope,
-      callback: () => this.repository.softDeleteByPublicId(validatedPublicId),
+      callback: () => this.repository.softDeleteById(row.id),
     });
     if (!deleted) throw new NotFoundError('Upload');
   }

@@ -174,7 +174,7 @@ export function createPatientImagesRules(repository: PatientImagesRepository): B
           ),
         ),
       ];
-      const labels = await repository.findServiceLabels(appointmentIds);
+      const labels = await repository.findServiceLabels(appointmentIds, context.organizationId);
       for (const output of outputs) {
         output.service_label = output.appointment_id
           ? (labels.get(toText(output.appointment_id)) ?? null)

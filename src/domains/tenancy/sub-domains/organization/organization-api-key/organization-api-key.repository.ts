@@ -285,7 +285,7 @@ export class OrganizationApiKeyRepository {
     }));
   }
 
-  async touchLastUsedAt(public_id: string): Promise<void> {
+  async touchLastUsedAt(public_id: string, organization_id: number): Promise<void> {
     // audit-#8: throttle the write. Previously every authenticated API-key request
     // issued an unconditional UPDATE of last_used_at, so a single hot key serialized
     // writes to one row (row-lock contention, dead-tuple churn, autovacuum pressure).
@@ -297,6 +297,7 @@ export class OrganizationApiKeyRepository {
       .set({ last_used_at: sql`now()`, updated_at: databaseNowTimestamp })
       .where(
         and(
+          eq(api_keys.organization_id, organization_id),
           eq(api_keys.public_id, public_id),
           sql`(${api_keys.last_used_at} IS NULL OR ${api_keys.last_used_at} < now() - interval '1 minute')`,
         ),

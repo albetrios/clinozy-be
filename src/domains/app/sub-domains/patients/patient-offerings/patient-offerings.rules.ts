@@ -50,6 +50,7 @@ export const patientOfferingsRules: BaseRecordRules = {
   decorate: async (outputs, context) => {
     const summaries = await offeringsRepository.findSummaries(
       outputs.map((output) => String(output.offering_id)),
+      context.organizationId,
     );
     const itemIds = await resolveRecordIds({
       table: invoice_items,

@@ -6,6 +6,10 @@
 #
 # Dashboard: http://localhost:9000  (admin / admin on first login)
 
+# The project name is pinned, so a push from a git worktree reuses this checkout's containers and
+# volumes instead of colliding on their fixed container names (the default name is the folder's).
+name: clinozy-be
+
 services:
   sonarqube:
     image: sonarqube:25.5.0.107428-community
