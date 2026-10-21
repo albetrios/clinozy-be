@@ -173,9 +173,8 @@ can quantify what was flagged — the feedback loop behind the compression advic
 more than two outcomes still writes only `fired` or `silent` and names the outcome in that
 column (`be-push-ci-watch`: `not-a-push`, `no-gh`, `green`; `be-turn-end-tests`: `no-changes`,
 `passed`, …), so the readers, which count `fired`, never miss a real fire. Logging
-is fail-open — a telemetry error can never block or fail the hook. `HOOK_TELEMETRY_LOG` moves
-the log to another file (clinozy-fe's hook tests use it; this repository's point
-`CLAUDE_PROJECT_DIR` at a scratch root instead), so a test run never counts in the real log.
+is fail-open — a telemetry error can never block or fail the hook. The hook tests set
+`HOOK_TELEMETRY_LOG` (in `src/tests/setup.ts`) so a test run never counts in the real log.
 
 Aggregate it with:
 
