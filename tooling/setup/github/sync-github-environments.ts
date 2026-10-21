@@ -365,9 +365,10 @@ export function selectOnlyEntries<T extends { name: string; value: string }>(
  * The `.env.example` section headers are for humans only — this strict, name-based rule is the
  * authority, so a key can never leak as a plaintext Variable because it was filed under the wrong
  * half. Also consumed by {@link planEnvironmentSyncPreview} so the `--diff` preview masks the same
- * keys the sync treats as secrets.
+ * keys the sync treats as secrets, and by the workflow policy that every `secrets.*` / `vars.*`
+ * read of a synced key matches its classification (a mismatch reads an empty string).
  */
-function classifyKey(key: string): 'secret' | 'variable' {
+export function classifyKey(key: string): 'secret' | 'variable' {
   // Credential / signing material suffixes → Secret (`_SECRET` covers every client, webhook and
   // provider secret — CAPTCHA_SECRET, OAUTH_*_CLIENT_SECRET, STRIPE_WEBHOOK_SECRET, …)
   if (key.endsWith('_SECRET')) return 'secret';
