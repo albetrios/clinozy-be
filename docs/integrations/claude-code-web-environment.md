@@ -234,21 +234,26 @@ A re-run is safe: a lock stops a second bring-up from racing the first, and an A
 A web session is a playground: it brings itself **fully live** before the work starts, without
 delaying the session. [`be-session-start.mjs`](../../agent-os/hooks/be-session-start.mjs) runs on startup
 and resume (not after `/clear` or a compact), runs `pnpm install` when dependencies are missing,
-starts the `pnpm agent-os:check` gate and the tool-pin probes in the background (the banner shows
-their last result), then launches `bootstrap.sh` **detached** and returns at once:
+then launches `bootstrap.sh` **detached** before anything slow — the bring-up starts the Docker
+daemon itself at [9], so the hook never waits for it — starts the `pnpm agent-os:check` gate and
+the tool-pin probes in the background (the banner shows their last result), and returns:
 
 ```text
 session starts → session-start hook (returns at once) → bootstrap.sh, detached
-  [1] Node   [2–8] skipped when the install stamp matches (the Setup script ran them)
-  [9] Postgres + Redis  [10] migrate + database logins
+  [1] Node   [2–8] skipped when the install stamp matches (the Setup script ran them;
+             [8] writes .env.local with TEST_MODE on, so the sign-in code screen fills itself in)
+  [9] Docker daemon, then Postgres + Redis  [10] migrate + database logins
   [11] full demo seed, with the API and worker already starting alongside
   [12] API on :3000 — kept running   [13] worker, health on :9090 — kept running
   → "live" + the playground card (API, /reference, /admin/queues, worker, logs)
+clinozy-fe in the same session → its own hook starts Vite on :5173 (pnpm dev), detached
 ```
 
 | You want | Do |
 | -------- | -- |
 | Follow it step by step | `tail -f /tmp/agent-stack/bootstrap.log`, or ask the agent to watch the stack |
+| Follow the frontend | `tail -f /tmp/agent-stack/frontend.log`; stop it with `kill -- -$(cat /tmp/agent-stack/frontend.pid)` |
+| Sign in without the email | the code screen fills itself in: `TEST_MODE` is on in `.env.local`, so send-code echoes `debug_verification_code` |
 | Know where it is | `pnpm dev:stack:status` — the running step (or `live`), API + worker `/livez` · `/readyz`, containers, logs |
 | Stop the API + worker | `pnpm dev:stack:stop` (Postgres + Redis stay; `pnpm compose:down` stops them) |
 | Bring it back | `bash tooling/setup/agent/bootstrap.sh` |
@@ -256,7 +261,8 @@ session starts → session-start hook (returns at once) → bootstrap.sh, detach
 | A known demo password | set `DEMO_PASSWORD` in the environment's variables (`demo@example.com`) |
 
 The banner shows `Stack: starting…` / `live` and tells the agent to wait for `live` before any
-database or API work. A resumed session whose API already answers, or a bring-up already
+database or API work; `docker starting (bootstrap.sh starts it)` means the bring-up has the
+daemon in hand. A resumed session whose API already answers, or a bring-up already
 running, is left alone; a stale lock does not count as one, so a resumed container goes live
 with no manual step. Local sessions are unchanged (`Stack: on demand`).
 

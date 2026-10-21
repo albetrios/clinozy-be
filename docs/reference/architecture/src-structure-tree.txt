@@ -3533,6 +3533,7 @@ src/
     │   │   ├── load-test-monitor.unit.test.ts
     │   │   ├── local-captcha.unit.test.ts
     │   │   ├── local-database-logins.unit.test.ts
+    │   │   ├── local-test-mode.unit.test.ts
     │   │   ├── mcp-previous-server-keys.unit.test.ts
     │   │   ├── pre-push-steps.unit.test.ts
     │   │   ├── pre-push-tests.unit.test.ts

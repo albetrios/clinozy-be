@@ -189,9 +189,10 @@ export class EmailLoginService {
     return {
       messageKey: 'success:verificationCodeSent',
       expires_in_minutes: VERIFICATION_CODE_TTL_MINUTES,
-      // TEST_MODE-only affordance: echo the plaintext code so an out-of-process test client (k6 load
-      // test) can complete the passwordless flow. `env.TEST_MODE` is `.refine()`-forbidden in
-      // production and is never set on a deployed runtime, so this key is absent everywhere real.
+      // TEST_MODE-only affordance: echo the plaintext code so an out-of-process client (a k6 load
+      // test; clinozy-fe's code screen on a dev box) can complete the passwordless flow.
+      // `env.TEST_MODE` is `.refine()`-forbidden in production and no deployed env file sets it (only
+      // `pnpm setup:local`, in `.env.local`), so this key is absent everywhere real.
       // When the per-email cooldown was already held, no code was issued this call (`issuedCode`
       // undefined) — mirroring the uniform no-op response.
       ...(env.TEST_MODE && issuedCode ? { debug_verification_code: issuedCode } : {}),

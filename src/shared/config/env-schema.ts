@@ -451,9 +451,10 @@ const envSchemaBase = z.object({
   /** Category-B. Fail boot when TRUST_PROXY is unset/false (behind a load balancer the client IP collapses). */
   TRUST_PROXY_REQUIRED: booleanString('true'),
   /**
-   * Category-B. Marks the process as a test run — the master gate for test-only affordances (today the
-   * destructive DB/Redis wipe helpers). Defaults false; a refine forbids `true` in production; the
-   * test harness sets it true. A test-only capability must additionally check `env.TEST_MODE`.
+   * Category-B. Marks a test run or a dev box — the master gate for test-only affordances: the
+   * send-code `debug_verification_code` echo and the harness's DB/Redis wipe helpers. Defaults false;
+   * a refine forbids `true` in production; the test harness and `pnpm setup:local` (in `.env.local`)
+   * set it true. A test-only capability must additionally check `env.TEST_MODE`.
    */
   TEST_MODE: booleanString('false'),
   /**

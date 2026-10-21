@@ -17,7 +17,7 @@ const packageScripts = (
 describe('live playground stack policy', () => {
   it('the session-start hook launches the bring-up detached, on web sessions only', () => {
     expect(sessionStart).toContain('const isRemote = process.env.CLAUDE_CODE_REMOTE === "true";');
-    expect(sessionStart).toContain('if (!isRemote) return "on demand (local session)');
+    expect(sessionStart).toContain('if (!isRemote) return { line: "on demand (local session)');
     // Its own session (setsid), its log in the stack directory, and not waited for.
     expect(sessionStart).toContain(
       'spawn("bash", ["tooling/setup/agent/bootstrap.sh"], { cwd: repositoryRoot, detached: true, stdio: ["ignore", log, log] }).unref();',
@@ -75,8 +75,21 @@ describe('live playground stack policy', () => {
 
   it('the banner tells the agent to wait for "live" before database/API work', () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal template in be-session-start.mjs
-    expect(sessionStart).toContain('`- Stack: ${stack}`');
+    expect(sessionStart).toContain('`- Stack: ${stack.line}`');
     expect(sessionStart).toContain('wait until pnpm dev:stack:status says live');
+  });
+
+  it('the bring-up launches before the Docker check, and then starts the daemon itself', () => {
+    // A bring-up starts the daemon at its step 9, so the hook does not hold the session for it.
+    expect(sessionStart.indexOf('const stack = await stackStatus();')).toBeGreaterThan(-1);
+    expect(sessionStart.indexOf('const stack = await stackStatus();')).toBeLessThan(
+      sessionStart.indexOf('const docker = dockerStatus('),
+    );
+    expect(sessionStart).toContain('dockerStatus({ bringUpStartsIt: stack.bringUp })');
+    expect(sessionStart).toContain(
+      'if (bringUpStartsIt) return "starting (bootstrap.sh starts it)";',
+    );
+    expect(bootstrap).toContain('ensure-docker-daemon.sh" >&2 || die');
   });
 
   it('the default bootstrap is the live stack; --install-only is the only other mode', () => {

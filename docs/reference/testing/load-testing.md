@@ -398,7 +398,8 @@ today. When reading the report, treat step 09 as a **caching target**, not as pr
 subtract it before quoting a per-user total as what a real session costs — see point 3 under
 [Trusting a result](#trusting-a-result).
 
-Requires the API started with `TEST_MODE=true`:
+Requires the API started with `TEST_MODE=true` (`pnpm setup:local` turns it on in `.env.local`; the
+explicit form below also works without it):
 
 ```bash
 TEST_MODE=true DATABASE_POOL_MAX=50 pnpm dev
