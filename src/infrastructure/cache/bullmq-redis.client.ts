@@ -1,4 +1,5 @@
 import { Redis } from 'ioredis';
+import { closeRedisClient } from '@/infrastructure/cache/redis-close.util.js';
 import { buildRedisTlsOptions } from '@/infrastructure/cache/redis-url.parse.util.js';
 import {
   resolveBullMqRedisUrl,
@@ -92,19 +93,16 @@ export async function connectBullMqRedis(): Promise<void> {
 
 /**
  * Closes the dedicated BullMQ Redis client during graceful shutdown. No-op when BullMQ
- * shares the cache Redis endpoint (closing the cache client is sufficient). Races a 5s
- * timeout so a misbehaving Redis cannot stall process exit.
+ * shares the cache Redis endpoint (closing the cache client is sufficient). Closes it the
+ * same way as the cache client ({@link closeRedisClient}), so a disconnected client cannot
+ * stall process exit.
  */
 export async function closeBullMqRedis(): Promise<void> {
   if (!usesSeparateBullMqRedisDatabase()) {
     return;
   }
-
-  const timeout = new Promise<void>((resolve) => {
-    setTimeout(() => {
-      logger.warn('redis.bullmq.close.timeout');
-      resolve();
-    }, FIVE_SECONDS_MS);
+  await closeRedisClient({
+    client: bullmqRedisConnection,
+    timeoutEvent: 'redis.bullmq.close.timeout',
   });
-  await Promise.race([bullmqRedisConnection.quit(), timeout]);
 }

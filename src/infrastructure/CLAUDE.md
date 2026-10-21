@@ -22,6 +22,7 @@ src/infrastructure/
                               # + redis.constants.ts, assert-redis-tls-safety.ts + assert-redis-eviction-policy.ts (boot guards), redis-topology-warn.util.ts,
                               #   redis-lock.util.ts (withRedisLock compare-and-del lock), redis-url.parse.util.ts,
                               #   redis-scan.util.ts (SCAN under the client's key prefix — ioredis leaves it off patterns)
+                              #   redis-close.util.ts (closeRedisClient: QUIT a ready client, disconnect one that is not, so no client holds the process open)
   queue/
     connection.ts             # Re-exports Redis for BullMQ + getBullMQConnectionOptions()
     health.ts                  # BullMQ readiness helper (notification queue client ping)

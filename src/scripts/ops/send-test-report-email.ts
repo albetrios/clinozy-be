@@ -5,6 +5,7 @@ import {
 } from '@/shared/constants/project-identity.constants.js';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { closeRedis } from '@/infrastructure/cache/redis.client.js';
 import { sendEmail, isMailConfigured } from '@/infrastructure/mail/mail.service.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
@@ -302,7 +303,7 @@ function buildHtmlBody({
 </html>`;
 }
 
-async function main(): Promise<void> {
+async function sendReport(): Promise<void> {
   parseCommandLine({ args: process.argv.slice(2) });
   if (!isMailConfigured()) {
     logger.warn(
@@ -371,4 +372,17 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+// The send goes through the Redis-backed circuit breaker, so the shared Redis client stays open
+// after it; without this close the process never exits (the CI job hung until its 10-minute timeout).
+async function main(): Promise<void> {
+  try {
+    await sendReport();
+  } finally {
+    await closeRedis();
+  }
+}
+
+main().catch((error) => {
+  logger.error({ error }, 'test-report.email.failed');
+  process.exitCode = 1;
+});
