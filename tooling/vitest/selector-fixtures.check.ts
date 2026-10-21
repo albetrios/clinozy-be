@@ -1,11 +1,11 @@
 /**
  * The test selection's fixtures, checked by `pnpm agent-os:check`:
  *
- * - **One per sub-domain**, generated from the layout: for every app sub-domain and each of its
- *   nested sub-domains, every billing and notify sub-domain and the upload domain, a change to
- *   its main file (its `*.service.ts`, else its first source file) selects every test under its
- *   folder.
- * - **The core domains** (tenancy, user, auth, audit) run everything.
+ * - **One per sub-domain**, generated from the layout: for every app, tenancy and user sub-domain
+ *   and each of its nested sub-domains, every billing and notify sub-domain and the upload domain,
+ *   a change to its main file (its `*.service.ts`, else its first source file) selects every test
+ *   under its folder.
+ * - **The core domains** (auth, audit) run everything.
  * - **The recorded ones** in `tooling/vitest/selector-fixtures.json` — each a miss the full PR
  *   suite found (`pnpm test:selector-misses`): the selection for `changed` holds `mustSelect`.
  * - **The unreachable tests** (no single source change selects them) are always run.
@@ -31,6 +31,8 @@ const FIXTURES_FILE = 'tooling/vitest/selector-fixtures.json';
 /** Folders whose sub-domains each get a generated fixture. */
 const SUB_DOMAIN_PARENTS = [
   'src/domains/app/sub-domains',
+  'src/domains/tenancy/sub-domains',
+  'src/domains/user/sub-domains',
   'src/domains/billing/sub-domains',
   'src/domains/notify/sub-domains',
 ];
@@ -40,8 +42,6 @@ const FLAT_DOMAINS = ['src/domains/upload'];
 const LAYER_FOLDERS = new Set(['__tests__', 'seed', 'events', 'queues', 'workers']);
 /** One file in each core domain: a change there must run everything. */
 const ESCALATING_FILES = [
-  'src/domains/tenancy/tenancy.container.ts',
-  'src/domains/user/user.container.ts',
   'src/domains/auth/auth.container.ts',
   'src/domains/audit/audit.service.ts',
 ];

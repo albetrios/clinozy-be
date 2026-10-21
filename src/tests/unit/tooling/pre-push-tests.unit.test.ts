@@ -34,14 +34,14 @@ describe('pre-push unit tests', () => {
     const core = prePushTests({
       select: () => ({
         mode: 'all',
-        reasons: ['src/domains/tenancy/tenancy.container.ts escalates'],
+        reasons: ['src/domains/auth/auth.container.ts escalates'],
         projects: {},
         why: {},
       }),
     });
     expect(core).toMatchObject({
       run: 'all',
-      reason: 'src/domains/tenancy/tenancy.container.ts escalates',
+      reason: 'src/domains/auth/auth.container.ts escalates',
     });
     const failed = prePushTests({
       select: () => {

@@ -4,9 +4,9 @@
  * commits.
  *
  * The unit-project files `pnpm test:select` picks for the pushed changes, its always-run files
- * included. The selection's escalation list keeps the core domains whole — a tenancy, user, auth,
- * audit, `src/shared/`, `src/core/` or `src/infrastructure/` change selects everything, and then
- * the whole unit project runs (`pnpm test:unit`); so does a selection that cannot be built. A
+ * included. The selection's escalation list keeps the core domains whole — an auth, audit,
+ * `src/shared/`, `src/core/` or `src/infrastructure/` change selects everything, and then the
+ * whole unit project runs (`pnpm test:unit`); so does a selection that cannot be built. A
  * migration is narrowed here (`unitLevel`): it selects the unit tests that read migrations, since
  * only the database tests see it through the schema, and CI runs those. A changed test also selects
  * the policies that read every test's source, and those run first and alone ({@link prePushRuns}).
