@@ -109,9 +109,10 @@ describe('Railway variables push (policy)', () => {
 });
 
 /**
- * A rejected token fails every retry the same way. On 21 Oct the step spent five tries and 30 s
- * of backoff on it, four runs in a row, and the CLI's own "Invalid RAILWAY_TOKEN" line sat under
- * a generic "failed after 5 attempts" error (runs 39571367477 and 39583024361).
+ * A token answer fails every retry the same way, whether the token is wrong or Railway is down.
+ * On 21 Oct the step spent five tries and 30 s of backoff on it, four runs in a row, and the CLI's
+ * own "Invalid RAILWAY_TOKEN" line sat under a generic "failed after 5 attempts" error (runs
+ * 39571367477 and 39583024361).
  */
 describe('Railway variables push: retries (policy)', () => {
   it.each([
@@ -122,7 +123,10 @@ describe('Railway variables push: retries (policy)', () => {
     expect(run.status).toBe(1);
     expect(run.railwayCalls).toBe(1);
     expect(run.sleeps).toEqual([]);
-    expect(run.output).toContain('::error::Railway rejected RAILWAY_TOKEN for service api-service');
+    expect(run.output).toContain(
+      '::error::Railway answered that RAILWAY_TOKEN is invalid for service api-service',
+    );
+    expect(run.output).toContain('If Railway is down, re-run this job once it is back.');
   });
 
   it('still retries an answer that does not name the token', () => {
