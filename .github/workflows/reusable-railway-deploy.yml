@@ -558,8 +558,10 @@ jobs:
           #   - SMOKE_*         Post-deploy smoke-test credentials, runner-only.
           #   - GITHUB_TOKEN /
           #     ACTIONS_* / CI  GitHub Actions internals.
+          #   - github_token    The secrets context's own key: toJSON(secrets)
+          #                     always carries the job's token in lower case.
           # Anything else flows through to Railway as runtime config.
-          exclude_regex='^(RAILWAY_.*|GHCR_API_IMAGE|GHCR_WORKER_IMAGE|SMOKE_DEMO_EMAIL|SMOKE_DEMO_PASSWORD|GITHUB_TOKEN|ACTIONS_.*|CI)$'
+          exclude_regex='^(RAILWAY_.*|GHCR_API_IMAGE|GHCR_WORKER_IMAGE|SMOKE_DEMO_EMAIL|SMOKE_DEMO_PASSWORD|GITHUB_TOKEN|github_token|ACTIONS_.*|CI)$'
 
           services="$RAILWAY_SERVICE_ID"
           if [ -n "${RAILWAY_WORKER_SERVICE_ID:-}" ]; then
