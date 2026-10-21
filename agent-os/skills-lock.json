@@ -11,7 +11,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-auto-implement/SKILL.md",
-      "computedHash": "43c06758af61e9ce57248079351a93b0f657747afead1f088ae28ec854f49c71"
+      "computedHash": "bad920a940f79268fcec5b43586dfd4cc052f8b40d815e8f1cf0a0d6ac10d3b7"
     },
     "be-before-commit-guard": {
       "source": "local",
@@ -215,7 +215,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-skill-index/SKILL.md",
-      "computedHash": "24145c647c0c9f2b1cdc4fb7cd0d6005778d01434cf7169a7f80115cf0bb7330"
+      "computedHash": "4f073ae7116f37f64faad4938a9e850b1f2b8120bf436e3480b3ba9440229d98"
     },
     "be-split-to-prs": {
       "source": "local",

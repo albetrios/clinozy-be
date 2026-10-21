@@ -675,8 +675,8 @@ if (existsSync(commandsDirectory)) {
 }
 
 // ── Check 15: agent review-pipelines reference real agents ──
-// pipelines.json names sequences of read-only agents (pre-merge-review runs via
-// /be-pre-merge-review, prod-readiness after be-path-to-production-gate); every step
+// pipelines.json names sequences of read-only agents (be-pre-merge-review runs via
+// /be-pre-merge-review, be-prod-readiness after be-path-to-production-gate); every step
 // must resolve to an agent file on disk.
 const pipelinesFile = join(agentOsDirectory, "agents", "pipelines.json");
 if (existsSync(pipelinesFile)) {
@@ -830,6 +830,17 @@ if (existsSync(hooksManifestFile)) {
     for (const entry of manifest.hooks ?? []) if (entry.id) requirePrefix("hook id", entry.id);
   } catch {
     // Check 11 reports invalid JSON in the hook manifest.
+  }
+}
+// Review pipelines too: skills and commands find one as `agent-os/agents/pipelines.json` →
+// `<name>`, a path both repositories have, so a shared name would run the other one's reviewers.
+if (existsSync(pipelinesFile)) {
+  try {
+    const pipelines =
+      (JSON.parse(readText(pipelinesFile)) as { pipelines?: Record<string, unknown> }).pipelines ?? {};
+    for (const pipeline of Object.keys(pipelines)) requirePrefix("pipeline", pipeline);
+  } catch {
+    // Check 15 reports invalid JSON in pipelines.json.
   }
 }
 

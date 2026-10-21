@@ -28,7 +28,7 @@ agent-os/cloud-environment/  environment.json, agents-cloud.md  ──▶ .curso
 
 - **Groups** — [`agent-os/skills/groups.json`](../skills/groups.json): every skill in exactly one functional group.
 - **Chains** — [`agent-os/skills/chains.json`](../skills/chains.json): ordered, named pipelines (`route-change`, `schema-change`, `worker-change`, `new-domain`) with a file-glob `trigger`. The single source for workflow commands and routing reminders.
-- **Pipelines** — [`agent-os/agents/pipelines.json`](../agents/pipelines.json): read-only agent sequences (`pre-merge-review`, `prod-readiness`) with diagnostic→procedural handoff (each finding names the skill that fixes it).
+- **Pipelines** — [`agent-os/agents/pipelines.json`](../agents/pipelines.json): read-only agent sequences (`be-pre-merge-review`, `be-prod-readiness`) with diagnostic→procedural handoff (each finding names the skill that fixes it).
 - **Planner** — `pnpm agent-os:plan-skills <files|--diff>` matches a changeset against the chain triggers and prints the exact ordered skill series to run.
 
 ## Commands
