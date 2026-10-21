@@ -123,6 +123,9 @@ pnpm coverage:patch                       # base: origin/<trunk>, as the PR meas
 pnpm coverage:patch --base origin/main    # or name the base
 ```
 
+In PR CI the `Coverage` job runs it on the PR merged with `main` — the tree the shards measured —
+so `git diff origin/main...HEAD` is exactly the PR's lines, numbered as in the report.
+
 The script only counts **executable** changed lines (a line with an
 instrumented statement) in **in-scope** files — changes to validators, schemas,
 tests, infra, etc. neither help nor hurt the number, keeping it honest and in

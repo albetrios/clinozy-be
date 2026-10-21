@@ -14,7 +14,7 @@ on:
   workflow_call:
     inputs:
       merge_commit_sha:
-        description: Commit SHA on the target branch after merge (or branch tip for manual dispatch)
+        description: Commit to test — on a PR, github.sha (the PR merged with main); post-merge, the pushed commit
         required: true
         type: string
       target_branch:
@@ -318,7 +318,9 @@ jobs:
         with:
           ref: ${{ inputs.merge_commit_sha || github.sha }}
           # Full history so the patch-coverage gate can diff changed lines against
-          # the PR base merge-base (git diff origin/<target>...HEAD).
+          # the PR base merge-base (git diff origin/<target>...HEAD). On a PR, HEAD is the PR
+          # merged with main, so the merge-base is main's tip at the run (even if main has
+          # moved since) and the diff is exactly the PR's lines, numbered in the tested tree.
           fetch-depth: 0
 
       - name: Setup Node and pnpm

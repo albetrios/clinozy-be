@@ -40,13 +40,16 @@ Name the branch after the change: `<type>` is its conventional-commit type, `<sl
 2. Commit; open a PR to **`main`** (`/be-open-pr` or `/be-ship`).
 3. **PR CI is the authoritative gate**: lint, typecheck, unit, the full DB-backed matrix
    (e2e/integration/rls/performance), security, and contract lanes all roll up into the single
-   **`Quality gate`** required check (with **`Checks`** from pr-governance). It must be green — and the
-   branch up to date with `main` (strict checks) — before merge.
+   **`Quality gate`** required check (with **`Checks`** from pr-governance). It must be green before
+   merge. Every lane tests the PR merged with `main` as of the run (`github.sha`), never the branch
+   head alone, so a branch behind `main` is tested with `main`'s fixes and need not be updated
+   (strict up-to-date is off). A run does not repeat when `main` moves: push, or update the branch,
+   to test on the newer `main`.
 4. **Squash-merge** into `main` (0 approvals required; the squash commit = the PR title + body). The
    branch auto-deletes.
 5. Post-merge CI on `main` runs the **adaptive lane**: a single-PR push takes the FAST lane (build →
-   release-please → deploy development, no re-test — the PR already proved the tree); a batched push
-   (≥2 commits, e.g. a merge queue) takes the FULL lane and re-runs the matrix.
+   release-please → deploy development, no re-test — the PR's run tested it merged with `main`); a
+   batched push (≥2 commits, e.g. a merge queue) takes the FULL lane and re-runs the matrix.
 
 ## Releasing
 

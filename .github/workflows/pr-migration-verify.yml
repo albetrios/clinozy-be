@@ -74,10 +74,10 @@ jobs:
       ALLOWED_ORIGINS: http://localhost:3000
 
     steps:
+      # The default ref, the PR merged with main, as every PR lane tests: the run applies the
+      # PR's migrations together with main's newer ones, in the order they will run once merged.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup-node-pnpm

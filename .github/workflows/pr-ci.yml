@@ -259,10 +259,11 @@ jobs:
   # Authoritative DB-backed matrix ON THE PR (D10 — migration item 1.31): the full
   # e2e / integration / unit-db / performance / security suite runs here so the
   # post-merge FAST lane can trust a single-PR merge without re-testing. The same
-  # reusable runs post-merge only in the FULL (batched) lane. Tests the PR head tree
-  # that squash-lands (strict up-to-date ⇒ that tree == the merge-commit tree).
-  # NOTE: the "Matrix Tests / *" checks must be added to main.json's required status
-  # checks in Phase 2 so a red matrix blocks merge (that is what makes it authoritative).
+  # reusable runs post-merge only in the FULL (batched) lane. It tests `github.sha`, the PR
+  # merged with main — the tree every other lane here checks out — never the PR head: strict
+  # up-to-date is off, so a head behind main is a tree that never lands (#134's head re-ran a
+  # hang main had already fixed, and the gate went red). A red matrix blocks the merge through
+  # the `matrix` gate below. Pinned by src/tests/unit/ci/pr-merge-commit.policy.unit.test.ts.
   matrix-tests:
     needs: [changes]
     if: |
@@ -270,7 +271,7 @@ jobs:
       (needs.changes.outputs.src-code == 'true' || needs.changes.outputs.ci-config == 'true')
     uses: ./.github/workflows/reusable-vitest-postgres-redis.yml
     with:
-      merge_commit_sha: ${{ github.event.pull_request.head.sha }}
+      merge_commit_sha: ${{ github.sha }}
       target_branch: main
 
   # Required-status-check gate: satisfies the branch-protection rule
