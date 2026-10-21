@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DISPOSABLE_EMAIL_MESSAGE } from '@/shared/utils/text/email.util.js';
+import { DISPOSABLE_EMAIL_MESSAGE, isReservedEmailDomain } from '@/shared/utils/text/email.util.js';
 
 const DISPOSABLE_EMAIL = 'test@yopmail.com';
 const NORMAL_EMAIL = 'user@example.com';
@@ -55,6 +55,41 @@ describe('email.util', () => {
       const mod = await import('@/shared/utils/text/email.util.js');
       expect(mod.isDisposableEmailBlocked('user@example.com')).toBe(false);
       expect(mod.isDisposableEmailBlocked('user@gmail.com')).toBe(false);
+    });
+  });
+
+  describe('isReservedEmailDomain', () => {
+    it('matches the documentation domains and the reserved top-level names (RFC 2606, RFC 6761)', () => {
+      for (const email of [
+        'demo@example.com',
+        'someone@example.net',
+        'someone@example.org',
+        'someone@clinic.example',
+        'someone@clinic.test',
+        'someone@nowhere.invalid',
+        'someone@app.localhost',
+      ]) {
+        expect(isReservedEmailDomain(email), email).toBe(true);
+      }
+    });
+
+    it('matches a subdomain, any letter case and a trailing dot', () => {
+      expect(isReservedEmailDomain('staff@mail.example.com')).toBe(true);
+      expect(isReservedEmailDomain('Demo@EXAMPLE.COM')).toBe(true);
+      expect(isReservedEmailDomain('demo@example.com.')).toBe(true);
+    });
+
+    it('leaves real domains alone, including ones that only contain a reserved name', () => {
+      for (const email of [
+        'user@gmail.com',
+        'owner@clinic.in',
+        'someone@myexample.com',
+        'someone@example.com.au',
+        'someone@testing.io',
+        'someone@contest',
+      ]) {
+        expect(isReservedEmailDomain(email), email).toBe(false);
+      }
     });
   });
 });

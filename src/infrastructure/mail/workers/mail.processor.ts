@@ -20,6 +20,8 @@ import {
   toProviderOutageError,
 } from '@/infrastructure/queue/worker-runtime/provider-outage-pause.util.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
+import { isReservedEmailDomain } from '@/shared/utils/text/email.util.js';
+import { env } from '@/shared/config/env.config.js';
 import {
   MAINTENANCE_SCOPE,
   withMaintenanceDatabaseContext,
@@ -77,15 +79,22 @@ export type ProcessMailOutboxJobOptions = {
  * - **Algorithm:** `sent` carries the Resend message id. `skipped` covers the jobs with nothing to
  *   do: the row is already `sent` (its message id is returned), another execution holds it
  *   (`in_flight` — the outbox sweeper re-enqueues it if that execution died), or the row is gone
- *   (`not_found` — pruned, erased, or lost to a restore; nothing can bring it back). `rejected` is
- *   Resend refusing this one email (a bad recipient, field or attachment): the row is `failed`.
+ *   (`not_found` — pruned, erased, or lost to a restore; nothing can bring it back), or every
+ *   recipient is on a reserved domain (`reserved_domain` — only with
+ *   `MAIL_RESERVED_DOMAIN_SKIP_ENABLED`, local and development; the row is `failed`, Resend is never
+ *   called). `rejected` is Resend refusing this one email (a bad recipient, field or attachment):
+ *   the row is `failed`.
  * - **Failure modes:** never returned on a retryable or alerting error — those throw to BullMQ.
  * - **Side effects:** none from the type itself.
  * - **Notes:** every variant completes the job; it is the job's return value in Bull Board.
  */
 export type ProcessMailOutboxJobResult =
   | { outcome: 'sent'; messageId: string }
-  | { outcome: 'skipped'; reason: 'already_sent' | 'in_flight' | 'not_found'; messageId?: string }
+  | {
+      outcome: 'skipped';
+      reason: 'already_sent' | 'in_flight' | 'not_found' | 'reserved_domain';
+      messageId?: string;
+    }
   | { outcome: 'rejected'; statusCode: number | null };
 
 /**
@@ -104,7 +113,9 @@ export type ProcessMailOutboxJobResult =
  *   half-open) is never terminal, even on the last attempt: the claim is released and the worker
  *   pauses the queue until Resend is back; so is a Resend throttle (429 `rate_limit_exceeded`),
  *   which pauses it for Resend's `Retry-After`; a Resend per-email rejection fails the row and
- *   completes as `rejected`.
+ *   completes as `rejected`. With `MAIL_RESERVED_DOMAIN_SKIP_ENABLED` (local and development only)
+ *   recipients on a reserved domain are dropped before the send, and a row left with none is
+ *   failed and completes as `skipped` (`reserved_domain`) without calling Resend.
  * - **Side effects:** updates `auth.mail_outbox.status` / `sent_at` /
  *   `resend_message_id`; sends one HTTP request to Resend per claimed attempt;
  *   emits `mail.worker.*` structured logs.
@@ -208,7 +219,21 @@ async function processMailOutboxJobInner({
     logger.error(logFields, 'mail.worker.recipients_invalid');
     throw new UnrecoverableError(`mail.outbox.recipients_invalid:${mailOutboxToken}`);
   }
-  const toAddresses = parsedRecipients.data;
+  // Local and development only (the env schema refuses the flag elsewhere): a reserved domain
+  // (example.com, *.test, …) never receives mail and Resend refuses the whole email with a 422, so
+  // drop those recipients — every seeded and test account uses one — and with none left, fail the
+  // row without calling Resend.
+  const toAddresses = env.MAIL_RESERVED_DOMAIN_SKIP_ENABLED
+    ? parsedRecipients.data.filter((address) => !isReservedEmailDomain(address))
+    : parsedRecipients.data;
+  if (toAddresses.length === 0) {
+    await markMailOutboxFailed(mailOutboxToken);
+    logger.info(
+      { ...logFields, recipientCount: parsedRecipients.data.length },
+      'mail.worker.reserved_domain_skipped',
+    );
+    return { outcome: 'skipped', reason: 'reserved_domain' };
+  }
   logger.info(
     { ...logFields, recipientCount: toAddresses.length, jobAttemptNumber, maxJobAttempts },
     'mail.worker.processing',

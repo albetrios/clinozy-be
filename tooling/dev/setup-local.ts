@@ -34,8 +34,10 @@
  *   still on their `.env.example` placeholder are copied from the hosted development target's env
  *   file, else from the process environment; key names are printed, never values.
  * - `--with-captcha` / `--without-captcha` turn local CAPTCHA on (Cloudflare test keys) or off.
- * - `TEST_MODE=true` unless the file sets it (`local-test-mode.ts`): send-code echoes the code, so
- *   clinozy-fe's code screen fills itself in. The template keeps it off for hosted files.
+ * - The local-only switches (`local-switches.ts`) turn on unless the file sets them: `TEST_MODE`
+ *   (send-code echoes the code, so clinozy-fe's code screen fills itself in; the template keeps it
+ *   off for hosted files) and `MAIL_RESERVED_DOMAIN_SKIP_ENABLED` (the mail worker never sends
+ *   `example.com` recipients to Resend, which refuses them).
  * - The database logins the migrations create (`local-database-logins.ts`) are enabled and their
  *   URLs written — by the database step, which runs after the migrations create those roles.
  */
@@ -54,7 +56,7 @@ import {
 } from './external-credentials.js';
 import { upsertEnvAssignment } from './env-file.util.js';
 import { applyLocalCaptcha, TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY } from './local-captcha.js';
-import { applyLocalTestMode } from './local-test-mode.js';
+import { applyLocalSwitches } from './local-switches.js';
 import { environmentConnectionUrlProblems, localDatabase } from './local-database-logins.js';
 import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
 import { listProcessTree, signalProcesses } from '@/scripts/ops/process-tree.util.js';
@@ -392,7 +394,7 @@ function runEnvScaffolding(reports: StepReport[], options: BootstrapOptions): vo
   checkEnvironmentConnectionUrls(reports, options);
   syncExternalCredentials(reports, options);
   configureLocalCaptcha(reports, options);
-  enableLocalTestMode(reports, options);
+  enableLocalSwitches(reports, options);
 }
 
 /**
@@ -437,27 +439,33 @@ function configureLocalCaptcha(reports: StepReport[], options: BootstrapOptions)
 }
 
 /**
- * Turns `TEST_MODE` on in `.env.local` unless it sets its own ({@link applyLocalTestMode}), so
- * send-code echoes the code and clinozy-fe's code screen fills itself in.
+ * Turns the local-only switches on in `.env.local` unless it sets its own
+ * ({@link applyLocalSwitches}): send-code echoes the code, and the mail worker never sends
+ * `example.com` recipients to Resend.
  */
-function enableLocalTestMode(reports: StepReport[], options: BootstrapOptions): void {
+function enableLocalSwitches(reports: StepReport[], options: BootstrapOptions): void {
   const startedAt = performance.now();
   if (!existsSync(ENV_LOCAL_PATH)) {
-    reportStep(reports, 'TEST_MODE', 'skipped', startedAt, 'no .env.local yet');
+    reportStep(reports, 'local switches', 'skipped', startedAt, 'no .env.local yet');
     return;
   }
-  const content = readFileSync(ENV_LOCAL_PATH, 'utf8');
-  const updated = applyLocalTestMode(content);
-  if (updated === content) {
-    reportStep(reports, 'TEST_MODE', 'skipped', startedAt, 'set in .env.local (kept)');
+  const { content, turnedOn } = applyLocalSwitches(readFileSync(ENV_LOCAL_PATH, 'utf8'));
+  if (turnedOn.length === 0) {
+    reportStep(reports, 'local switches', 'skipped', startedAt, 'set in .env.local (kept)');
     return;
   }
   if (options.check) {
-    reportStep(reports, 'TEST_MODE', 'warning', startedAt, '--check mode (would turn it on)');
+    reportStep(
+      reports,
+      'local switches',
+      'warning',
+      startedAt,
+      `--check mode (would turn on ${turnedOn.join(', ')})`,
+    );
     return;
   }
-  writeFileSync(ENV_LOCAL_PATH, updated);
-  reportStep(reports, 'TEST_MODE', 'done', startedAt, 'on — send-code echoes the code');
+  writeFileSync(ENV_LOCAL_PATH, content);
+  reportStep(reports, 'local switches', 'done', startedAt, `on: ${turnedOn.join(', ')}`);
 }
 
 /** Report label for the process environment as a credential source. */

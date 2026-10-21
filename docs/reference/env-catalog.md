@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**17 / 243** variables migrated to an explicit `{ allowed, description }` entry.
+**17 / 244** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -111,6 +111,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `MAIL_OUTBOX_SWEEP_BATCH_SIZE` | — | `100` |  | — |
 | `MAIL_OUTBOX_SWEEP_PENDING_MINUTES` | — | `3` |  | — |
 | `MAIL_OUTBOX_SWEEPER_CRON` | — | — *(optional)* |  | — |
+| `MAIL_RESERVED_DOMAIN_SKIP_ENABLED` | — | `false` |  | — |
 | `MAX_TEAM_ORGANIZATIONS_PER_OWNER` | — | `20` |  | — |
 | `MCP_CALL_API_ALLOW_MUTATIONS` | — | `false` |  | — |
 | `MCP_CALL_API_ALLOWED_PATH_PREFIXES` | — | `` |  | — |

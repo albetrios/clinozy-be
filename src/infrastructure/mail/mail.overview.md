@@ -34,6 +34,7 @@ This module is **infrastructure**, not a domain — it offers `recordOutboxEmail
 ## Tuning parameters
 
 - `RESEND_API_KEY`, `EMAIL_FROM_ADDRESS` (required once `RESEND_API_KEY` is set), `EMAIL_FROM_NAME`.
+- `MAIL_RESERVED_DOMAIN_SKIP_ENABLED = false` (`local` / `development` only: drop reserved-domain recipients before Resend).
 - `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES = 30` (reclaim cutoff for stuck `sending` rows).
 - `MAIL_OUTBOX_SWEEP_PENDING_MINUTES = 3` (re-enqueue scan cutoff for `pending` rows); the sweeper runs every two minutes (`MAIL_OUTBOX_SWEEPER_CRON`).
 - `RESEND_MAX_REQUESTS_PER_SECOND = 10` (the mail queue's limiter — Resend's per-team rate limit).
@@ -48,6 +49,7 @@ This module is **infrastructure**, not a domain — it offers `recordOutboxEmail
 - **Sweeper passes during a long outage** → each pass re-enqueues the `pending` rows, but `enqueueMailOutboxJob` deduplicates on the row's token: a row has one live job, so the passes add nothing.
 - **Worker crash mid-send** → row stuck in `sending`; sweeper reclaims after `MAIL_OUTBOX_RECLAIM_SENDING_MINUTES` and re-queues. The row's stored Resend idempotency key prevents a duplicate delivery if the crash happened after Resend accepted the message.
 - **Resend refuses the email itself** (422 `validation_error` — e.g. a bad recipient — `missing_required_field`, `invalid_attachment`, `invalid_parameter`) → a per-email rejection: the row is marked `failed` on the first attempt, the job completes as `rejected` (no retries, no DLQ, no page), and the `resend` circuit counts the call as a success — one bad address cannot hold back every other email.
+- **Recipient on a reserved domain** (`example.com`, `*.test`, `*.invalid`, … — every seeded and test account) → Resend refuses it as a per-email rejection above. On `local` and `development`, `MAIL_RESERVED_DOMAIN_SKIP_ENABLED` drops such recipients before the send instead; a row left with none is marked `failed` without calling Resend and the job completes as `skipped` (`reserved_domain`). The env schema refuses the flag on any other target, so production hands every recipient to Resend.
 - **Resend 409 `invalid_idempotent_request`** → also a per-email rejection: the key was already used in the last 24 hours with a different body. Keys come from the per-row random token, so this points to a key built from something other than `resend_idempotency_token`.
 - **Disposable email rejected at the source domain (auth)** → never reaches the outbox.
 - **Resend signs the outbound payload but the customer's email server bounces** → Resend captures the bounce; we don't inspect bounces today (future work to feed back into `user-notification-preferences`).

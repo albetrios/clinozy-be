@@ -212,6 +212,36 @@ describe('env-schema', () => {
     });
   });
 
+  // Dropping reserved-domain recipients (example.com, *.test, …) before Resend is a local-work
+  // convenience — production hands every recipient to Resend. Stated as an allowlist so a target
+  // added to the enum later is refused by default.
+  describe('MAIL_RESERVED_DOMAIN_SKIP_ENABLED', () => {
+    it('defaults to false so every recipient goes to Resend', () => {
+      const parsed = envSchema.parse({ ...commonRequiredBase, NODE_ENV: 'local' });
+      expect(parsed.MAIL_RESERVED_DOMAIN_SKIP_ENABLED).toBe(false);
+    });
+
+    it('rejects true in production', () => {
+      const result = envSchema.safeParse({
+        ...productionRequiredBase,
+        MAIL_RESERVED_DOMAIN_SKIP_ENABLED: 'true',
+      });
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result.error?.issues)).toContain('MAIL_RESERVED_DOMAIN_SKIP_ENABLED');
+    });
+
+    it('allows true on the local and development targets', () => {
+      for (const NODE_ENV of ['local', 'development'] as const) {
+        const result = envSchema.safeParse({
+          ...commonRequiredBase,
+          NODE_ENV,
+          MAIL_RESERVED_DOMAIN_SKIP_ENABLED: 'true',
+        });
+        expect(result.success, `${NODE_ENV} should allow it`).toBe(true);
+      }
+    });
+  });
+
   // A Turnstile outage is exactly when credential stuffing is cheapest to hide in; production
   // answers 503 instead of skipping the check.
   describe('CAPTCHA_FAIL_OPEN', () => {
