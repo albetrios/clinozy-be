@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -24,14 +24,14 @@ function shardCoverage(hits: readonly [number, number]): object {
   };
 }
 
-describe('merge-coverage-and-check-thresholds summary file', () => {
+describe('merge-coverage-and-check-thresholds merged summary', () => {
   let root = '';
 
   afterEach(() => {
     if (root) rmSync(root, { recursive: true, force: true });
   });
 
-  it('writes the merged json-summary beside the map, the file the test report email reads', () => {
+  it('counts the union of the shards, not any one shard', () => {
     root = mkdtempSync(join(tmpdir(), 'merge-coverage-'));
     for (const [shard, hits] of [
       ['first', [1, 0]],
@@ -41,7 +41,7 @@ describe('merge-coverage-and-check-thresholds summary file', () => {
       writeFileSync(join(root, shard, 'coverage-final.json'), JSON.stringify(shardCoverage(hits)));
     }
 
-    execFileSync(
+    const output = execFileSync(
       'node',
       [
         MERGE_SCRIPT,
@@ -54,11 +54,8 @@ describe('merge-coverage-and-check-thresholds summary file', () => {
       { cwd: root, encoding: 'utf8' },
     );
 
-    const summary = JSON.parse(
-      readFileSync(join(root, 'coverage-merged', 'coverage-summary.json'), 'utf8'),
-    );
     // Each shard alone covers one of the two lines; the union covers both.
-    expect(summary.total.lines).toEqual({ covered: 2, total: 2, pct: 100 });
-    expect(summary.total.statements).toEqual({ covered: 2, total: 2, pct: 100 });
+    expect(output).toContain('lines      : 100.00% (2/2)');
+    expect(output).toContain('statements : 100.00% (2/2)');
   });
 });

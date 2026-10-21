@@ -21,9 +21,6 @@ on:
         description: Protected branch that received the merge (main)
         required: true
         type: string
-    secrets:
-      RESEND_API_KEY:
-        required: false
     outputs:
       coverage_gate_result:
         description: Summary emitted by the merged coverage gate job
@@ -432,64 +429,3 @@ jobs:
         id: summary
         if: always()
         run: echo "coverage_summary=coverage-gate-complete" >> "$GITHUB_OUTPUT"
-
-  test-report-email:
-    name: Test report email
-    # One email per run, after every lane. It replaces a per-shard step that never sent: that step
-    # gated on `env.RESEND_API_KEY`, which its own `env:` set, and a step's `env:` is not visible to
-    # its `if:`; it also read the recipients through `secrets.*`, but `classifyKey` makes
-    # TEST_RESULT_EMAIL_TO a Variable. The step skips (and says which) when the key, the recipients
-    # or the sender is unset, and an email failure never reds the run.
-    needs: [run, unit-coverage, coverage-gate]
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # RESEND_API_KEY is a `development` environment secret and TEST_RESULT_EMAIL_TO /
-    # EMAIL_FROM_ADDRESS are its variables; a job resolves them only when environment-scoped (both
-    # callers pass `secrets: inherit`). `development` has no protection rules — no approval gate.
-    environment: development
-    # The script loads the env schema: the same throwaway values as the coverage-gate job. Nothing
-    # connects.
-    env:
-      NODE_ENV: development
-      DATABASE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
-      DATABASE_MAINTENANCE_URL: postgresql://clinozy:clinozy@localhost:5432/clinozy
-      REDIS_URL: redis://localhost:6379
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.merge_commit_sha || github.sha }}
-
-      - name: Setup Node and pnpm
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Download the merged coverage
-        continue-on-error: true
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        with:
-          name: coverage-merged
-          path: coverage
-
-      - name: Export shared CI test env (JWT keys + retention + secrets-encryption)
-        uses: ./.github/actions/test-env
-
-      - name: Send the test report email
-        continue-on-error: true
-        env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          TEST_RESULT_EMAIL_TO: ${{ vars.TEST_RESULT_EMAIL_TO }}
-          EMAIL_FROM_ADDRESS: ${{ vars.EMAIL_FROM_ADDRESS }}
-          # The run's own GITHUB_REF_NAME / GITHUB_SHA name the branch and commit: a step's `env:`
-          # cannot overwrite the default GITHUB_* variables.
-          TEST_STATUS: ${{ contains(needs.*.result, 'failure') && 'failure' || 'success' }}
-        run: |
-          missing=""
-          for name in RESEND_API_KEY TEST_RESULT_EMAIL_TO EMAIL_FROM_ADDRESS; do
-            if [ -z "${!name}" ]; then missing="${missing} ${name}"; fi
-          done
-          if [ -n "${missing}" ]; then
-            echo "Not set:${missing} — skipping the test report email."
-            exit 0
-          fi
-          pnpm tool:test-report-email

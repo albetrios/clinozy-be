@@ -214,7 +214,6 @@ jobs:
         needs.changes.outputs.ci-config == 'true'
       )
     uses: ./.github/workflows/reusable-vitest-postgres-redis.yml
-    secrets: inherit
     with:
       merge_commit_sha: ${{ github.sha }}
       target_branch: main

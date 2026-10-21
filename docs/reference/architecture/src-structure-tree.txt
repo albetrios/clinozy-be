@@ -2533,8 +2533,6 @@ src/
     │   ├── process-tree.util.ts
     │   ├── route-coverage-audit.ts
     │   ├── secrets-key-rotate.ts
-    │   ├── send-load-test-results-email.ts
-    │   ├── send-test-report-email.ts
     │   ├── settle-check.config.ts
     │   ├── settle-check.evaluate.ts
     │   ├── settle-check.ts

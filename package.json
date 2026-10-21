@@ -206,8 +206,6 @@
     "iteration:freeze-check": "tsx tooling/iterations/check-iteration-freeze.ts",
     "tool:codemod-import-paths": "tsx src/scripts/tooling/codemod-import-paths.ts",
     "tool:generate-dbdiagram": "tsx src/scripts/codegen/generate-dbdiagram.ts",
-    "tool:test-report-email": "tsx src/scripts/ops/send-test-report-email.ts",
-    "tool:send-load-test-results-email": "tsx src/scripts/ops/send-load-test-results-email.ts",
     "verify:base": "tsx src/scripts/ops/verify-base.ts",
     "ops:probe-live-api": "tsx src/scripts/ops/probe-live-api.ts",
     "ops:secrets:rotate": "tsx src/scripts/ops/secrets-key-rotate.ts",
