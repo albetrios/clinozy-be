@@ -82,6 +82,30 @@ describe('agent Docker daemon setup scripts', () => {
     expect(serviceAttempts.match(/dockerd_appeared/g)).toHaveLength(2);
   });
 
+  it('clears pid files left from before a pause, so a reused pid never blocks the start', () => {
+    // A resumed container keeps /var/run but no processes: dockerd's and containerd's pid files
+    // named pids a kernel worker and a shell held after the reboot, and dockerd refused to start.
+    expect(ensureDockerDaemonScript).toContain('clear_stale_pid_file /var/run/docker.pid dockerd');
+    expect(ensureDockerDaemonScript).toContain(
+      'clear_stale_pid_file /var/run/docker/containerd/containerd.pid containerd',
+    );
+    // Stale means the pid does not run the program the file belongs to.
+    expect(ensureDockerDaemonScript).toContain(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal shell test in ensure-docker-daemon.sh
+      '[ "$(ps -p "${pid}" -o comm= 2>/dev/null)" = "$2" ]',
+    );
+    const start = ensureDockerDaemonScript.slice(
+      ensureDockerDaemonScript.indexOf('start_dockerd() {'),
+      ensureDockerDaemonScript.indexOf('stop_dockerd() {'),
+    );
+    expect(start.indexOf('clear_stale_pid_files')).toBeGreaterThan(-1);
+    expect(start.indexOf('clear_stale_pid_files')).toBeLessThan(start.indexOf('setsid'));
+    // The service script starts dockerd with the same pid file, so it is cleared before that too.
+    expect(
+      ensureDockerDaemonScript.indexOf('dockerd_running || clear_stale_pid_files'),
+    ).toBeLessThan(ensureDockerDaemonScript.indexOf('service docker start >/dev/null'));
+  });
+
   it('stops only the process trees the bring-up started, without Linux-only /proc', () => {
     // A /proc walk never ran on macOS (the app was left up) and, on Linux, matched every
     // `tsx watch` on the machine. `ps` exists on both; each tree hangs off the PID the
