@@ -533,7 +533,14 @@ jobs:
         # --set ... --set ...` call per service. Batching collapses ~50 GraphQL
         # mutations into one (so transient `backboard.railway.com` timeouts
         # don't fail mid-stream) and any genuine flake is absorbed by an
-        # exponential-backoff retry loop. We pass `--skip-deploys` so this
+        # exponential-backoff retry loop. A token answer is not a flake the
+        # backoff can ride out: when the CLI names RAILWAY_TOKEN ("Invalid
+        # RAILWAY_TOKEN…", "Unauthorized… RAILWAY_TOKEN…"), every retry gets the
+        # same answer, whether the token is wrong or Railway itself is down. The
+        # loop stops at the first such answer with an error that names both
+        # (pinned by railway-variables-push.policy.unit.test.ts).
+        #
+        # We pass `--skip-deploys` so this
         # mutation only updates config — the single deploy per service is
         # triggered later by `pnpm tool:railway-deploy-image`
         # (serviceInstanceUpdate + serviceInstanceDeployV2 are issued back-to-
@@ -627,9 +634,15 @@ jobs:
           for service in $services; do
             attempt=1
             while true; do
-              if railway variables --service "$service" --skip-deploys "${set_args[@]}"; then
+              if push_output="$(railway variables --service "$service" --skip-deploys "${set_args[@]}" 2>&1)"; then
+                printf '%s\n' "$push_output"
                 echo "Pushed ${push_count} variables to Railway service ${service} on attempt ${attempt} (skipped ${#skipped_keys[@]} excluded keys)."
                 break
+              fi
+              printf '%s\n' "$push_output"
+              if grep -q 'RAILWAY_TOKEN' <<< "$push_output"; then
+                echo "::error::Railway answered that RAILWAY_TOKEN is invalid for service ${service}; retrying cannot change that answer. If Railway is down, re-run this job once it is back. If Railway is up, create a new project token for the '${ENVIRONMENT}' environment and set it as RAILWAY_TOKEN in GitHub → Settings → Environments → ${ENVIRONMENT}."
+                exit 1
               fi
               if [ "$attempt" -ge "$max_attempts" ]; then
                 echo "::error::Railway variables push failed for service ${service} after ${max_attempts} attempts."
