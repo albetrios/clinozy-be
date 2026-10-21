@@ -38,6 +38,19 @@ describe('files mirrored in clinozy-fe', () => {
     for (const path of COPIES) expect(existsSync(path), path).toBe(true);
   });
 
+  it("is compared nightly with clinozy-fe's main, and a difference opens the ci-failure issue", () => {
+    const workflow = readFileSync(
+      join('.github', 'workflows', 'scheduled-main-canary.yml'),
+      'utf8',
+    );
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions expression syntax, asserted verbatim
+    expect(workflow).toContain('repository: ${{ github.repository_owner }}/clinozy-fe');
+    expect(workflow).toMatch(/ref: main\s+path: \.mirror-sibling/);
+    expect(workflow).toContain('MIRROR_SIBLING_CHECKOUT: .mirror-sibling');
+    expect(workflow).toContain('src/tests/unit/ci/mirrored-files.policy.unit.test.ts');
+    expect(workflow).toMatch(/notify-failure:[\s\S]*?needs: \[[^\]]*\bmirrored-files\b/);
+  });
+
   // The canary never skips: a sibling checkout that is missing there is a broken canary.
   it.skipIf(SIBLING_FROM_CANARY === undefined && !existsSync(join(SIBLING, '.git')))(
     'matches the sibling checkout byte for byte',
