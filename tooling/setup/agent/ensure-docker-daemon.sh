@@ -18,6 +18,12 @@ log() {
   printf 'ensure-docker-daemon: %s\n' "$*" >&2
 }
 
+# True while a dockerd process is alive. One that has not answered yet is still starting, not
+# failed: a second dockerd started beside it stops on the first one's pid file.
+dockerd_running() {
+  pgrep -x dockerd >/dev/null 2>&1
+}
+
 wait_for_docker() {
   for _ in $(seq 1 "${DOCKERD_WAIT_SECONDS:-30}"); do
     docker info >/dev/null 2>&1 && return 0
@@ -63,8 +69,10 @@ stop_dockerd() {
     pkill -TERM dockerd >/dev/null 2>&1 || true
   fi
 
-  for _ in $(seq 1 10); do
-    docker info >/dev/null 2>&1 || return 0
+  # Wait for the process, not the API: dockerd stops answering at once but exits only after it
+  # has stopped its containers, and a dockerd started before then stops on its pid file.
+  for _ in $(seq 1 30); do
+    dockerd_running || return 0
     sleep 1
   done
 }
@@ -201,7 +209,8 @@ if ! wait_for_docker && command -v systemctl >/dev/null 2>&1; then
   fi
 fi
 
-if ! wait_for_docker && command -v dockerd >/dev/null 2>&1; then
+# Not beside a dockerd the service is still starting.
+if ! wait_for_docker && command -v dockerd >/dev/null 2>&1 && ! dockerd_running; then
   start_dockerd "directly"
 fi
 
@@ -258,30 +267,41 @@ if wait_for_docker; then
   exit 0
 fi
 
+# A dockerd still alive by now is slow, not failed: on a just-booted machine it can take longer
+# than the waits above. It gets three more waits as it is. A restricted dockerd started beside it
+# would stop on its pid file, and the first one, answering later, would be recorded as the
+# fallback, sending bootstrap.sh to the host-network override for a daemon that has its bridge.
+if dockerd_running && DOCKERD_WAIT_SECONDS=$((${DOCKERD_WAIT_SECONDS:-30} * 3)) wait_for_docker; then
+  log "Docker daemon is reachable after a slow start."
+  rm -f "${MODE_FILE}" 2>/dev/null || true
+  exit 0
+fi
+
 # Some cloud-agent setup containers can run as root but still lack the kernel
 # capability Docker needs to program iptables/NAT for the default bridge:
 # "failed to create NAT chain DOCKER ... Permission denied". In that case,
 # start dockerd without bridge/NAT; bootstrap.sh detects this marker and uses a
-# host-network compose override for Postgres + Redis.
-if command -v dockerd >/dev/null 2>&1; then
+# host-network compose override for Postgres + Redis. Only a dockerd started here
+# is recorded as restricted.
+if command -v dockerd >/dev/null 2>&1 && ! dockerd_running; then
   start_restricted_dockerd
-fi
 
-if wait_for_docker; then
-  probe_docker_layer_extract
-  probe_status=$?
-  if [ "${probe_status}" -eq 0 ]; then
-    printf 'restricted\n' >"${MODE_FILE}"
-    log "Docker daemon is reachable with restricted networking fallback."
-    exit 0
-  fi
-  if [ "${probe_status}" -eq 2 ] && command -v dockerd >/dev/null 2>&1; then
-    stop_dockerd
-    start_restricted_vfs_dockerd
-    if wait_for_docker && probe_docker_layer_extract; then
-      printf 'restricted-vfs\n' >"${MODE_FILE}"
-      log "Docker daemon is reachable with restricted networking and vfs storage fallback."
+  if wait_for_docker; then
+    probe_docker_layer_extract
+    probe_status=$?
+    if [ "${probe_status}" -eq 0 ]; then
+      printf 'restricted\n' >"${MODE_FILE}"
+      log "Docker daemon is reachable with restricted networking fallback."
       exit 0
+    fi
+    if [ "${probe_status}" -eq 2 ]; then
+      stop_dockerd
+      start_restricted_vfs_dockerd
+      if wait_for_docker && probe_docker_layer_extract; then
+        printf 'restricted-vfs\n' >"${MODE_FILE}"
+        log "Docker daemon is reachable with restricted networking and vfs storage fallback."
+        exit 0
+      fi
     fi
   fi
 fi

@@ -7,6 +7,10 @@ const ensureDockerDaemonScript = readFileSync(
 );
 const bootstrapScript = readFileSync('tooling/setup/agent/bootstrap.sh', 'utf8');
 const stackScript = readFileSync('tooling/setup/agent/stack.sh', 'utf8');
+const cloudAgentOverride = readFileSync(
+  'tooling/setup/agent/docker-compose.cloud-agent.yml',
+  'utf8',
+);
 
 describe('agent Docker daemon setup scripts', () => {
   it('falls back to restricted dockerd flags when cloud iptables setup is denied', () => {
@@ -28,6 +32,32 @@ describe('agent Docker daemon setup scripts', () => {
     expect(bootstrapScript).toContain('docker-compose.cloud-agent.yml');
     expect(bootstrapScript).toContain('DOCKERD_AGENT_MODE_FILE');
     expect(bootstrapScript).toContain('restricted*');
+    // Compose v5 validates the override: `cgroupns_mode` failed it, so every restricted
+    // bring-up stopped at step 9. The Compose spec key is `cgroup`.
+    expect(cloudAgentOverride).toContain('cgroup: host');
+    expect(cloudAgentOverride).not.toContain('cgroupns_mode');
+  });
+
+  it('never starts a second dockerd beside one that is still starting or stopping', () => {
+    // A dockerd still alive has not failed: a second one stops on its pid file, and the first,
+    // answering later, was recorded as the restricted fallback.
+    expect(ensureDockerDaemonScript).toContain('pgrep -x dockerd');
+    expect(ensureDockerDaemonScript).toContain(
+      'if ! wait_for_docker && command -v dockerd >/dev/null 2>&1 && ! dockerd_running; then',
+    );
+    expect(ensureDockerDaemonScript).toContain(
+      'if command -v dockerd >/dev/null 2>&1 && ! dockerd_running; then\n  start_restricted_dockerd',
+    );
+    expect(ensureDockerDaemonScript).toContain(
+      'log "Docker daemon is reachable after a slow start."',
+    );
+    // Stopping waits for the process to exit, not for the API to stop answering.
+    const stop = ensureDockerDaemonScript.slice(
+      ensureDockerDaemonScript.indexOf('stop_dockerd() {'),
+      ensureDockerDaemonScript.indexOf('probe_docker_layer_extract() {'),
+    );
+    expect(stop).toContain('dockerd_running || return 0');
+    expect(stop).not.toContain('docker info');
   });
 
   it('stops only the process trees the bring-up started, without Linux-only /proc', () => {
