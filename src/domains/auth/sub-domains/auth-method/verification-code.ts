@@ -25,19 +25,6 @@ export const VERIFICATION_CODE_MAX_VERIFY_ATTEMPTS = 5;
 /** Seconds a caller must wait between successive code resends for the same purpose (anti-spam). */
 export const VERIFICATION_CODE_RESEND_COOLDOWN_SECONDS = 60;
 
-/**
- * The one code `POST /auth/email/login` also accepts while
- * `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED` is on, so local work and load tests can reach an
- * authenticated state without the `send-code` round trip.
- *
- * @remarks
- * A constant rather than configuration: the value is not a secret — the flag is what carries the
- * risk, and the env schema only permits that flag on the `local` target (a developer machine or a
- * throwaway CI runner), never on a deployed one. Drawn from {@link VERIFICATION_CODE_CHARSET} at {@link VERIFICATION_CODE_LENGTH}
- * so it is indistinguishable in shape from a real issued code.
- */
-export const STATIC_VERIFICATION_CODE = 'TEST24';
-
 /** HMAC pepper for verification codes — a labelled sub-key of `SECRETS_ENCRYPTION_KEY`. */
 function verificationCodePepper(): Buffer {
   return deriveSecretsSubKey('verification-code-pepper');

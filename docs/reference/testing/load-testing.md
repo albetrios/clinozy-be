@@ -72,7 +72,7 @@ The service containers are plaintext and the connection is the superuser, while 
 | Role                 | Scenarios                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Job outcome                                                          |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | **Gate (must pass)** | `health-stress.js`, `api-stress.js`, `login-smoke.js`, `permission-cached.js`, `stripe-webhook-ingest.js`, `idempotency-storm.js`                                                                                                                                                                                                                                                                                                                                                                                        | Workflow **fails** if any k6 threshold fails                         |
-| **Informational**    | `auth-onboarding.js`, `passwordless-signup.js`, `daily-ops.js`, `webhooks.js`, `admin.js`; the organization-scoped set (`audit-list.js`, `organization-membership-list.js`, `notification-policy-crud.js`, `billing-subscriptions-rls.js`, `user-data-export.js`, `rls-concurrency-beyond-pool.js`); and the organization writes (`member-role-permission-list.js`, `permission-write.js`, `tenancy-role-write.js`, `organization-settings-write.js`, `organization-api-key-lifecycle.js`); and `fe-full-surface.js`, every call clinozy-fe makes, walked once by each of 20 pool users (the job seeds the pool with `pnpm db:seed:loadtest` and starts the API with `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED=true`; with `SUBSCRIBE=true` each user's new organization subscribes to the cheapest plan with a second seat, so the member steps run — see [Seats for the member steps](#seats-for-the-member-steps)) | `continue-on-error`; failures do not fail the workflow by themselves |
+| **Informational**    | `auth-onboarding.js`, `passwordless-signup.js`, `daily-ops.js`, `webhooks.js`, `admin.js`; the organization-scoped set (`audit-list.js`, `organization-membership-list.js`, `notification-policy-crud.js`, `billing-subscriptions-rls.js`, `user-data-export.js`, `rls-concurrency-beyond-pool.js`); and the organization writes (`member-role-permission-list.js`, `permission-write.js`, `tenancy-role-write.js`, `organization-settings-write.js`, `organization-api-key-lifecycle.js`); and `fe-full-surface.js`, every call clinozy-fe makes, walked once by each of 20 pool users (the job seeds the pool with `pnpm db:seed:loadtest` and starts the API with `TEST_MODE=true`, so each login presents the code `send-code` echoes; with `SUBSCRIBE=true` each user's new organization subscribes to the cheapest plan with a second seat, so the member steps run — see [Seats for the member steps](#seats-for-the-member-steps)) | `continue-on-error`; failures do not fail the workflow by themselves |
 | **Strict (must pass)** | On the seeded pool: `multi-tenant-membership-read.js`, `notification-write.js`, `auth-security-lifecycle.js`; then `tenancy-role-write.js`, `organization-api-key-lifecycle.js`, `notification-policy-crud.js`, `organization-settings-write.js`, `webhooks.js` and `billing.js` as completed-journey gates | Workflow **fails** if any check, completion count or threshold fails |
 
 **SLO-style thresholds (k6):** Scenarios define `http_req_duration` percentiles on tagged requests and `http_req_failed` (see each file under `src/tests/load/k6/scenarios/`). A `{name:<tag>}` threshold only measures requests sent with exactly that `name` tag; on a tag no request carries it has no samples, reports p(95)=0s and always passes, so `k6-coverage.policy.unit.test.ts` fails on any threshold its scenario never tags. The gate enforces:
@@ -365,9 +365,10 @@ Walks the complete front-end user journey once per virtual user, so **VUs are us
 50 people each performing the journey a single time, not 50 people looping.
 
 - **File**: `src/tests/load/k6/scenarios/fe-login-to-organization.js`
-- **Auth**: `AUTH=code` (default) logs in with `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED`; `AUTH=password` uses
-  `POST /auth/login`; `AUTH=otp` does the real `send-code` → read `debug_verification_code` → login
-  round trip (needs `TEST_MODE=true`).
+- **Auth**: `AUTH=code` (default) signs a pool user in the way the app does: `send-code` → read
+  `debug_verification_code` → login (needs `TEST_MODE=true`, and no more VUs than pool users, because an
+  address gets one code per resend cooldown); `AUTH=password` uses `POST /auth/login`; `AUTH=otp` does
+  the same round trip for a brand-new account, so each VU signs up (needs `TEST_MODE=true`).
 - **Credentials**: the pool at `src/tests/load/k6/data/credential-pool.json` — build it with
   `pnpm db:seed:loadtest`.
 - **Routes** (16): guest refresh → send-code → login → me/context → profile patch → create organization →
@@ -379,14 +380,12 @@ Walks the complete front-end user journey once per virtual user, so **VUs are us
 | `VUS` | `50` | Virtual users; each performs the journey once |
 | `POOL` | — | `DATABASE_POOL_MAX` the API was started with; printed in the header for the record |
 | `AUTH` | `code` | `code` \| `password` \| `otp` |
-| `STATIC_CODE` | `TEST24` | Must match the API's `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED` |
 | `STAGGER` | `5` | Milliseconds between VU starts, to avoid a synthetic thundering herd |
 | `RESULT_TAG` | — | Label recorded with the run |
 
-**`send-code` is measured but not depended on.** The journey issues it because the real client always
-does and its cost belongs in the numbers, but login presents `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED` rather
-than the code `send-code` issued, so the two calls stay independent and a non-200 on `send-code` does
-not abort the journey.
+**`send-code` is part of every `code` login.** The journey asks for a code because the real client
+always does and its cost belongs in the numbers; login then presents the code `send-code` echoed, so a
+non-200 on `send-code`, or no code in its answer, ends that user's journey.
 
 **The second `me/context` after the organization switch is a benchmark, not a fidelity claim.** clinozy-fe does
 **not** make that call — `switch-to-organization` already returns the active-organization context inline and
@@ -399,10 +398,10 @@ today. When reading the report, treat step 09 as a **caching target**, not as pr
 subtract it before quoting a per-user total as what a real session costs — see point 3 under
 [Trusting a result](#trusting-a-result).
 
-Requires the API started with `TEST_MODE=true` and `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED` turned on:
+Requires the API started with `TEST_MODE=true`:
 
 ```bash
-TEST_MODE=true AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED=true DATABASE_POOL_MAX=50 pnpm dev
+TEST_MODE=true DATABASE_POOL_MAX=50 pnpm dev
 # then
 BASE_URL=http://localhost:3000 VUS=50 POOL=50 k6 run src/tests/load/k6/scenarios/fe-login-to-organization.js
 ```
