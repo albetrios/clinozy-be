@@ -343,6 +343,10 @@ api_url="http://127.0.0.1:${PORT:-3000}"
 # curl prints 000 itself when nothing answers.
 route_state() { curl -s -o /dev/null -m 3 -w '%{http_code}' "$1" 2>/dev/null || true; }
 record_status "live — API ${api_url} · worker ${worker_url}"
+# SonarQube last and in the background: the script waits for this bring-up's lock to clear (the
+# EXIT trap removes it), so its two-minute boot never competes with the migrations or the seed,
+# and the pre-push gate finds it up instead of booting it.
+start_detached sonarqube-backend bash "${AGENT_DIR}/start-sonarqube.sh"
 echo ""
 echo "✓ playground live in $(( $(date +%s) - start_ts ))s"
 echo "  API          ${api_url}   (/livez · /readyz)"
@@ -350,5 +354,6 @@ echo "  API docs     ${api_url}/reference      [HTTP $(route_state "${api_url}/r
 echo "  Queues       ${api_url}/admin/queues   [HTTP $(route_state "${api_url}/admin/queues")]"
 echo "  Worker       ${worker_url}/readyz"
 echo "  Demo login   demo@example.com — set DEMO_PASSWORD on the environment for a known password"
+echo "  SonarQube    starting in the background for the pre-push gate (log: ${STACK_DIR}/sonarqube-backend.log)"
 echo "  Logs         ${STACK_DIR}/{bootstrap,api,worker}.log"
 echo "  Status/stop  pnpm dev:stack:status · pnpm dev:stack:stop"

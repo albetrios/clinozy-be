@@ -200,7 +200,7 @@ pnpm compose:wait    # block until Postgres accepts connections
 pnpm db:seed         # create, migrate, the database logins, the reference rows (or pnpm db:seed:full)
 ```
 
-`pnpm compose:up` also starts the local SonarQube container unless you set `SONAR=0`; a cloud session rarely needs it, so `SONAR=0 pnpm compose:up` brings up just Postgres + Redis. Stop everything with `pnpm compose:down`.
+`pnpm compose:up` also starts the local SonarQube container unless you set `SONAR=0`. The cloud bring-up runs `SONAR=0 pnpm compose:up` (just Postgres + Redis) and starts SonarQube in the background once the stack is live (see [Session startup](#session-startup--the-live-playground)). Stop everything with `pnpm compose:down`.
 
 > **Docker image pulls in the cloud.** Docker Hub serves image *blobs* from a CDN (`production.cloudfront.docker.com`) that is **not** on the default allowlist, so a bare `pnpm compose:up` fails with `403 Forbidden` while pulling `postgres:<v>-alpine` / `redis:<v>-alpine` (AWS ECR Public has the same `*.cloudfront.net` problem). Run [`install-docker-images.sh`](../../tooling/setup/agent/install-docker-images.sh) in the Setup script: it points the Docker daemon at Google's Docker Hub pull-through mirror (`https://mirror.gcr.io` — reachable on the default allowlist, byte-identical images / same digests) and pre-pulls the compose images, so `pnpm compose:up` runs the **same** pinned images you use locally with no compose changes. Alternatively add `production.cloudfront.docker.com` to the Custom network allowlist to pull straight from Docker Hub. Note Postgres **17+** is required by `pnpm db:migrate`, so the cloud image's native Postgres 16 is not a substitute.
 
@@ -246,7 +246,9 @@ session starts → session-start hook (returns at once) → bootstrap.sh, detach
   [11] full demo seed, with the API and worker already starting alongside
   [12] API on :3000 — kept running   [13] worker, health on :9090 — kept running
   → "live" + the playground card (API, /reference, /admin/queues, worker, logs)
-clinozy-fe in the same session → its own hook starts Vite on :5173 (pnpm dev), detached
+  → start-sonarqube.sh, detached: once the bring-up's lock clears, SonarQube for the pre-push gate
+clinozy-fe in the same session → its own hook starts Vite on :5173 (pnpm dev), detached,
+  and its own start-sonarqube.sh (the same script), which waits for the same lock
 ```
 
 | You want | Do |
@@ -259,6 +261,7 @@ clinozy-fe in the same session → its own hook starts Vite on :5173 (pnpm dev),
 | Bring it back | `bash tooling/setup/agent/bootstrap.sh` |
 | A scratch database again | `pnpm dev:stack:reset-db` — drops and recreates the local Compose database, then migrate, logins, seed, API and worker (the installs are skipped) |
 | A known demo password | set `DEMO_PASSWORD` in the environment's variables (`demo@example.com`) |
+| Follow SonarQube | `tail -f /tmp/agent-stack/sonarqube-backend.log` (clinozy-fe's: `sonarqube-frontend.log`). [`start-sonarqube.sh`](../../tooling/setup/agent/start-sonarqube.sh) waits until no bring-up holds the lock and Docker answers, then starts the server, so the first push finds it up instead of waiting about two minutes. `SONAR=0` in the environment's variables skips it |
 
 The banner shows `Stack: starting…` / `live` and tells the agent to wait for `live` before any
 database or API work; `docker starting (bootstrap.sh starts it)` means the bring-up has the
