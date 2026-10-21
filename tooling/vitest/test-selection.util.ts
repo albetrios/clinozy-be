@@ -27,9 +27,10 @@
  * permission matrix), the cross-domain flows under `src/tests/e2e/`, the global policy scans,
  * every test that imports nothing from the repository (a scanner) and every test no single
  * source change would select ({@link findUnreachableTests}). The escalation list
- * runs everything: dependencies, Vitest config, the test harness, the core domains (tenancy,
- * user, auth, audit), shared, core, infrastructure and migrations — a change there reaches
- * nearly every test by design. A unit-level selection (`unitLevel`, pre-push's unit project) narrows
+ * runs everything: dependencies, Vitest config, the test harness, the auth and audit domains,
+ * shared, core, infrastructure and migrations — a change there reaches nearly every test by
+ * design. Tenancy and user are judged by the import graph like any other domain: measured on
+ * 21 Oct 2026, a tenancy service change reaches 232 of the 747 unit files, a user one 122. A unit-level selection (`unitLevel`, pre-push's unit project) narrows
  * a migration to the tests that read migrations ({@link UNIT_LEVEL_NARROWED_GLOBS}): only a database
  * test sees a migration through the schema. It fails closed: a path outside the known roots, a deleted
  * file it cannot place, or any error selects everything.
@@ -67,8 +68,6 @@ export const ESCALATION_GLOBS = [
   'src/tests/helpers/**',
   'src/tests/factories/**',
   'src/tests/fixtures/**',
-  'src/domains/tenancy/**',
-  'src/domains/user/**',
   'src/domains/auth/**',
   'src/domains/audit/**',
   'src/shared/**',

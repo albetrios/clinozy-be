@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   APPLICATION_ROLE_PROJECTS,
   applicationRoleTests,
-  ESCALATING_DOMAINS,
+  OWN_TESTS_DOMAINS,
 } from '@tooling/vitest/changed-as-application-role.js';
 import type { TestSelection } from '@tooling/vitest/test-selection.util.js';
 
@@ -53,20 +53,18 @@ describe('the application-role tests at push', () => {
     expect(APPLICATION_ROLE_PROJECTS).toEqual(['e2e', 'integration']);
   });
 
-  it("runs an escalating domain's own e2e and integration tests, which the selector would not narrow", () => {
-    expect(ESCALATING_DOMAINS).toEqual(
-      expect.arrayContaining(['tenancy', 'user', 'auth', 'audit']),
-    );
+  it("runs a core domain's own e2e and integration tests instead of the selection", () => {
+    expect(OWN_TESTS_DOMAINS).toEqual(['tenancy', 'user', 'auth', 'audit']);
     const plan = applicationRoleTests({
       changedFiles: ['src/domains/tenancy/sub-domains/membership/membership.service.ts'],
       testFiles: TEST_FILES,
       select: () => {
-        throw new Error('an escalating domain file is not sent to the selector');
+        throw new Error('a core domain file is not sent to the selector');
       },
     });
     expect(plan.files).toEqual([TENANCY_ONBOARDING, TENANCY_INTEGRATION]);
     expect(plan.reasons).toEqual([
-      '1 changed file(s) in tenancy, on the escalation list: its 2 e2e and integration test file(s)',
+      '1 changed file(s) in tenancy, a core domain: its 2 e2e and integration test file(s)',
     ]);
   });
 

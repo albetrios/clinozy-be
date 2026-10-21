@@ -251,13 +251,19 @@ All tiers share one root **`vitest.config.ts`**. Named projects live in **`tooli
 | Domain map | a test that boots the app (reaches `src/app.ts`), by its area: the changed file's (`app/<sub-domain>`, or `<domain>`) and every area whose code imports it; plus app tests that name a reached sub-domain (`/app/leads`) |
 | Containers | a test that loads a container wiring file (`app-records.container.ts`, `worker-containers.ts`), directly or through the harness, for any change the container wires: it fails as soon as anything it wires fails to load. Found by the 18 Oct planted-break proof (a top-level throw in the leads service failed 41 unit test files of other sub-domains the selection had skipped); only containers, because following every wiring file would select about half the unit suite |
 | Mentions | a test that names the changed path, its file name, a folder above it (also as `join('agent-os', 'hooks')`) or a glob over it |
-| Always run | on any source change under `src/`: the security project (RLS, the permission matrix), `src/tests/e2e/`, the global scans, every test that imports nothing from the repository, and every **unreachable** test — one a change it depends on would not select: an app-booting test outside every domain (the API contract and OpenAPI response suites, the cross-cutting integration and performance suites), or one that reaches non-escalating code only through the harness or a wiring file (62 today) |
+| Always run | on any source change under `src/`: the security project (RLS, the permission matrix), `src/tests/e2e/`, the global scans, every test that imports nothing from the repository, and every **unreachable** test — one a change it depends on would not select: an app-booting test outside every domain (the API contract and OpenAPI response suites, the cross-cutting integration and performance suites), or one that reaches non-escalating code only through the harness or a wiring file (63 today) |
 
 Everything runs when a change touches the escalation list (dependencies, Vitest config and
-`tooling/vitest/`, the test harness, tenancy, user, auth, audit, `src/shared/`, `src/core/`,
+`tooling/vitest/`, the test harness, auth, audit, `src/shared/`, `src/core/`,
 `src/infrastructure/`, `migrations/`, the app entry files), a path outside the known roots, a
 deleted file nothing imports any more, or when the selector fails. So an app sub-domain change
 gets a small selection and a core-domain change runs everything — by design.
+
+Tenancy and user left the list on 21 Oct 2026: they are judged by the import graph like any other
+domain, since a change there reaches far fewer tests than "everything". Measured on the real graph,
+a tenancy service change (`organization.service.ts`) selects 232 of the 747 unit files and a user
+one (`user-settings.service.ts`) 122. A planted break in each was caught by the narrowed selection
+(the team-organization cap off by one; a missing-user check disabled).
 
 At push, a migration is the one exception (`unitLevel` in `tooling/vitest/pre-push-tests.ts`):
 pre-push runs only the unit project, and a unit-level test sees a migration only by reading the
@@ -282,15 +288,15 @@ the `Selector miss check` job (`pnpm test:selector-misses`, not a gate) lists ev
 selection would have skipped — a miss, or a flake. A real miss becomes an entry in
 `tooling/vitest/selector-fixtures.json` (its fixture line is printed), so the next selection
 includes it. `pnpm agent-os:check` holds the selection to those entries and to one generated
-fixture per sub-domain and nested sub-domain (its main file selects every test in its folder),
-checks that the core domains run everything and that every unreachable test is always run
-(`tooling/vitest/selector-fixtures.check.ts`).
+fixture per sub-domain and nested sub-domain, tenancy and user included (its main file selects
+every test in its folder), checks that auth and audit run everything and that every unreachable
+test is always run (`tooling/vitest/selector-fixtures.check.ts`).
 
 ### Selected tests at push
 
 `.husky/pre-push` runs its unit tests through `pnpm test:pre-push`
 (`tooling/vitest/pre-push-tests.ts`): only the unit-project files the selection picks for the
-pushed commits, always-run files included. A core-domain change (tenancy, user, auth, audit,
+pushed commits, always-run files included. A core-domain change (auth, audit,
 `src/shared/`, `src/core/`, `src/infrastructure/`) escalates, so it runs the whole unit project
 (`pnpm test:unit`), as does a selection that cannot be built. CI still runs every suite.
 `pnpm test:affected` previews it.
@@ -298,12 +304,14 @@ pushed commits, always-run files included. A core-domain change (tenancy, user, 
 Pushed code under `src/domains/` (a unit test aside) also runs its e2e and integration tests as the
 application role, `clinozy_be_app`, through `pnpm test:rls-role:changed`
 (`tooling/vitest/changed-as-application-role.ts`): the e2e and integration files of the selection's
-changed-only part, and for a tenancy, user, auth or audit change, where the selection escalates,
-that domain's own. albetrios/clinozy-be#125 pushed an organization lookup outside its database
-context through a green pre-push; every local lane bypasses RLS, and the PR's application-role lane
-caught it 5.4 minutes into CI. A one-file app change selects about 25 files (136 s locally); a
-tenancy change, the domain's 21 (151 s). Code outside `src/domains/` reaches every test, so CI's
-four application-role shards cover it.
+changed-only part, and for a change in a core domain (tenancy, user, auth or audit,
+`OWN_TESTS_DOMAINS`), that domain's own. For auth and audit the selection escalates; for tenancy
+and user it reaches far more than a push can afford: an `organization.service.ts` change selects
+132 e2e and integration files (644.5 s locally, 21 Oct 2026), against tenancy's own 21 (134.6 s).
+albetrios/clinozy-be#125 pushed an organization lookup outside its database context through a
+green pre-push; every local lane bypasses RLS, and the PR's application-role lane caught it 5.4
+minutes into CI. A one-file app change selects about 25 files (136 s locally). Code outside
+`src/domains/` reaches every test, so CI's four application-role shards cover it.
 
 A changed test also selects the policies that read every test's source (`TEST_SOURCE_POLICIES`:
 no test starts git outside the throwaway-repository fixture), since nothing imports a test. They

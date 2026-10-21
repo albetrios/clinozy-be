@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { checkSelectorFixtures } from '@tooling/vitest/selector-fixtures.check.js';
 import {
   changedOnly,
+  ESCALATION_GLOBS,
   isAlwaysRunOnly,
   selectTests,
   SOURCE_SCAN_POLICIES,
@@ -16,6 +17,7 @@ const APP = 'src/domains/app';
 const LEADS = `${APP}/sub-domains/leads`;
 const PATIENTS = `${APP}/sub-domains/patients`;
 const STOCK = `${APP}/sub-domains/stock`;
+const MEMBERSHIP = 'src/domains/tenancy/sub-domains/membership';
 
 /** A small repository: three app sub-domains (patients imports leads), wiring, and one test per rule. */
 /**
@@ -75,6 +77,9 @@ const FIXTURE: Record<string, string> = {
   'src/tests/helpers/record-contract.helper.ts': `import { services } ${from('@/domains/app/app-records.container.js')};\nexport const contract = services;`,
   [`${STOCK}/__tests__/unit/stock.contract.unit.test.ts`]: `import { contract } ${from('@/tests/helpers/record-contract.helper.js')};`,
   'src/tests/unit/records-wiring.unit.test.ts': `import { services } ${from('@/domains/app/app-records.container.js')};`,
+  // A tenancy sub-domain: off the escalation list, so judged by its imports like any other.
+  [`${MEMBERSHIP}/membership.service.ts`]: 'export const membershipService = {};',
+  [`${MEMBERSHIP}/__tests__/unit/membership.service.unit.test.ts`]: `import { membershipService } ${from('@/domains/tenancy/sub-domains/membership/membership.service.js')};`,
 };
 
 let repositoryRoot = '';
@@ -151,9 +156,22 @@ describe('selectTests', () => {
   it('holds its generated fixtures: each sub-domain file selects every test in its folder', () => {
     expect(checkSelectorFixtures(repositoryRoot)).toEqual({
       problems: [],
-      fixtures: 3,
+      fixtures: 4,
       unreachable: 2,
     });
+  });
+
+  it('judges a tenancy or user change by its imports: neither domain is on the escalation list', () => {
+    expect(ESCALATION_GLOBS).not.toContain('src/domains/tenancy/**');
+    expect(ESCALATION_GLOBS).not.toContain('src/domains/user/**');
+    const selection = select(`${MEMBERSHIP}/membership.service.ts`);
+    expect(selection.mode).toBe('selected');
+    expect(selection.projects.unit).toContain(
+      `${MEMBERSHIP}/__tests__/unit/membership.service.unit.test.ts`,
+    );
+    expect(selection.projects.unit).not.toContain(
+      `${LEADS}/__tests__/unit/leads.service.unit.test.ts`,
+    );
   });
 
   it('selects the tests that load a container, directly or through the harness, for a change it wires', () => {
@@ -250,17 +268,17 @@ describe('selectTests', () => {
     expect(unitLevel.why['src/tests/unit/migration-lint.unit.test.ts']).toEqual([
       `reads migrations (${migration})`,
     ]);
-    const withTenancy = selectTests({
-      changedFiles: [migration, 'src/domains/tenancy/x.ts'],
+    const withAuth = selectTests({
+      changedFiles: [migration, 'src/domains/auth/x.ts'],
       repositoryRoot,
       unitLevel: true,
     });
-    expect(withTenancy.reasons[0]).toContain('escalation list');
+    expect(withAuth.reasons[0]).toContain('escalation list');
   });
 
   it('fails closed: the escalation list, an unknown path, an untraceable deletion, any error', () => {
     expect(select('package.json')).toMatchObject({ mode: 'all' });
-    expect(select('src/domains/tenancy/x.ts').reasons[0]).toContain('escalation list');
+    expect(select('src/domains/auth/x.ts').reasons[0]).toContain('escalation list');
     expect(select('weird/thing.txt').reasons[0]).toContain('outside the known roots');
     expect(select(`${LEADS}/gone.ts`).reasons[0]).toContain('was deleted');
     const broken = selectTests({

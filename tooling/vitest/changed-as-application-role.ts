@@ -18,7 +18,6 @@ import { runVitestAsApplicationRole } from '@tooling/vitest/run-as-application-r
 import {
   buildImportGraph,
   changedOnly,
-  ESCALATION_GLOBS,
   isTestFile,
   projectOf,
   selectTests,
@@ -29,13 +28,13 @@ import {
 export const APPLICATION_ROLE_PROJECTS = ['e2e', 'integration'];
 
 /**
- * The domains on the selector's escalation list (`src/domains/<domain>/**` in
- * {@link ESCALATION_GLOBS}): a change there selects every test, so their own tests stand in.
+ * The core domains, whose change runs that domain's own e2e and integration tests instead of the
+ * selection's: for auth and audit `pnpm test:select` selects everything, and for tenancy and user
+ * it reaches far more database tests than a push can afford (21 Oct 2026: an `organization.service.ts`
+ * change selects 132 e2e and integration files against tenancy's own 21, a `user-settings.service.ts`
+ * change 76 against user's 12). CI's application-role shards run the rest.
  */
-export const ESCALATING_DOMAINS = ESCALATION_GLOBS.flatMap((glob) => {
-  const domain = /^src\/domains\/([a-z-]+)\/\*\*$/.exec(glob)?.[1];
-  return domain ? [domain] : [];
-});
+export const OWN_TESTS_DOMAINS = ['tenancy', 'user', 'auth', 'audit'];
 
 /** What the step runs: the test files, and why each group was picked. */
 export interface ApplicationRoleTests {
@@ -47,9 +46,9 @@ export interface ApplicationRoleTests {
  * The e2e and integration test files to run as the application role for `changedFiles`.
  *
  * @remarks
- * - **Algorithm:** keeps the files {@link isApplicationRoleRelevant} accepts. Code in a domain on
- *   the escalation list (tenancy, user, auth, audit) selects that domain's e2e and integration
- *   tests: there `pnpm test:select` selects everything, the two whole lanes, too long for a push.
+ * - **Algorithm:** keeps the files {@link isApplicationRoleRelevant} accepts. Code in a core domain
+ *   ({@link OWN_TESTS_DOMAINS}) selects that domain's e2e and integration tests: there
+ *   `pnpm test:select` selects everything or close to the two whole lanes, too long for a push.
  *   Every other file, a changed test included, goes to `pnpm test:select`'s changed-only
  *   selection (`select`), which drops the always-run tests and turns an escalation into none.
  * - **Failure modes:** none; `select` fails closed (an error selects everything, so here none,
@@ -57,7 +56,7 @@ export interface ApplicationRoleTests {
  */
 export function applicationRoleTests(options: {
   readonly changedFiles: readonly string[];
-  /** Every test file in the repository, for the escalating domains. */
+  /** Every test file in the repository, for the core domains. */
   readonly testFiles: readonly string[];
   readonly select: (changedFiles: string[]) => TestSelection;
 }): ApplicationRoleTests {
@@ -66,7 +65,7 @@ export function applicationRoleTests(options: {
   const escalated = new Map<string, number>();
   const selectable: string[] = [];
   for (const file of options.changedFiles.filter(isApplicationRoleRelevant)) {
-    const domain = ESCALATING_DOMAINS.find((name) => file.startsWith(`src/domains/${name}/`));
+    const domain = OWN_TESTS_DOMAINS.find((name) => file.startsWith(`src/domains/${name}/`));
     if (domain && !isTestFile(file)) escalated.set(domain, (escalated.get(domain) ?? 0) + 1);
     else selectable.push(file);
   }
@@ -78,7 +77,7 @@ export function applicationRoleTests(options: {
     );
     for (const test of tests) files.add(test);
     reasons.push(
-      `${changed} changed file(s) in ${domain}, on the escalation list: its ${tests.length} e2e and integration test file(s)`,
+      `${changed} changed file(s) in ${domain}, a core domain: its ${tests.length} e2e and integration test file(s)`,
     );
   }
   if (selectable.length > 0) {
