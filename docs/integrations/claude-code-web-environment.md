@@ -252,7 +252,7 @@ clinozy-fe in the same session → its own hook starts Vite on :5173 (pnpm dev),
 | You want | Do |
 | -------- | -- |
 | Follow it step by step | `tail -f /tmp/agent-stack/bootstrap.log`, or ask the agent to watch the stack |
-| Follow the frontend | `tail -f /tmp/agent-stack/frontend.log`; stop it with `kill -- -$(cat /tmp/agent-stack/frontend.pid)` |
+| Follow the frontend | `tail -f /tmp/agent-stack/frontend.log`; stop it with `pkill -s "$(cat /tmp/agent-stack/frontend.pid)"` (the pid is its session's: Vite runs in another process group) |
 | Sign in without the email | the code screen fills itself in: `TEST_MODE` is on in `.env.local`, so send-code echoes `debug_verification_code` |
 | Know where it is | `pnpm dev:stack:status` — the running step (or `live`), API + worker `/livez` · `/readyz`, containers, logs |
 | Stop the API + worker | `pnpm dev:stack:stop` (Postgres + Redis stay; `pnpm compose:down` stops them) |
