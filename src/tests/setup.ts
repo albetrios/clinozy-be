@@ -1,8 +1,11 @@
 import '@/shared/config/load-env-files.js';
 import '@/tests/helpers/harness-provider-env.js';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DEFAULT_FRONTEND_URL } from '@/shared/constants/index.js';
 import {
   DATABASE_MAINTENANCE_ROLE,
+  PROJECT_SLUG,
   REDIS_KEY_PREFIX_STEM,
 } from '@/shared/constants/project-identity.constants.js';
 import {
@@ -73,6 +76,12 @@ process.env.I18N_REPORT_MISSING_KEYS ??= 'false';
 process.env.LOG_PRETTY ??= 'true';
 process.env.SENTRY_REDUCED_SAMPLING ??= 'false';
 process.env.SENTRY_DEBUG ??= 'true';
+// The hook tests spawn the real hooks against this checkout: their telemetry goes to a scratch
+// file, never the real agent-os/hooks/.telemetry.log (agent-os/hooks/_be-telemetry.mjs).
+process.env.HOOK_TELEMETRY_LOG ??= join(
+  tmpdir(),
+  `${PROJECT_SLUG}-test-telemetry-${process.pid}.log`,
+);
 /**
  * Re-opens the pool under test as a specific Postgres role when `TEST_DATABASE_ROLE` is set,
  * stashing the elevated URL for the harness's own use first.

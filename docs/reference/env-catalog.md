@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**17 / 245** variables migrated to an explicit `{ allowed, description }` entry.
+**17 / 244** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -27,7 +27,6 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `AUTH_SESSION_CLEANUP_CRON` | — | — *(optional)* |  | — |
 | `AUTH_SESSION_MAX_AGE_DAYS` | — | `7` |  | — |
 | `AUTH_SESSION_RETENTION_DAYS` | — | `30` |  | — |
-| `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED` | — | `false` |  | — |
 | `BILLING_DUNNING_GRACE_DAYS` | — | `14` |  | — |
 | `BILLING_READ_ONLY_ENFORCED` | true \| false (or 1 \| 0) | `false` | ✓ | Read-only mode for unpaid clinics: a TEAM organization without a paid plan may not write under /api/v1/app/ once its grace ends (14 days after creation, or BILLING_DUNNING_GRACE_DAYS after a lapsed subscription period). Off, every clinic reports plan_access active. |
 | `BLOCK_DISPOSABLE_EMAIL` | — | `true` |  | — |

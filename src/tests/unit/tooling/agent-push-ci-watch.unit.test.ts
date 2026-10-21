@@ -59,13 +59,14 @@ function runHook(options: { root: string; state: string; bin: string; command?: 
       TMPDIR: options.state,
       PATH: `${options.bin}:${process.env.PATH ?? ''}`,
       PUSH_CI_WATCH_POLL_MILLISECONDS: '10',
+      HOOK_TELEMETRY_LOG: join(options.state, 'telemetry.log'),
     },
   });
 }
 
 /** The last telemetry row's status and detail columns (`fired,failed`), as the readers see them. */
-function lastTelemetry(root: string): string {
-  const rows = readFileSync(join(root, 'agent-os', 'hooks', '.telemetry.log'), 'utf8').trim();
+function lastTelemetry(state: string): string {
+  const rows = readFileSync(join(state, 'telemetry.log'), 'utf8').trim();
   return rows.split('\n').at(-1)?.split(',').slice(2).join(',') ?? '';
 }
 
@@ -102,15 +103,15 @@ describe('be-push-ci-watch.mjs', () => {
   it('records fired when it wakes the model, else silent with why, for the hooks report', () => {
     const failed = fixture({ runs: [run('PR CI', 'failure')] });
     runHook(failed);
-    expect(lastTelemetry(failed.root)).toBe('PostToolUse,fired,failed');
+    expect(lastTelemetry(failed.state)).toBe('PostToolUse,fired,failed');
     const green = fixture({ runs: [run('PR CI', 'success')] });
     runHook(green);
-    expect(lastTelemetry(green.root)).toBe('PostToolUse,silent,green');
+    expect(lastTelemetry(green.state)).toBe('PostToolUse,silent,green');
     runHook({ ...green, command: 'for x in a; do echo "$x"; done | sort' });
-    expect(lastTelemetry(green.root)).toBe('PostToolUse,silent,not-a-push');
+    expect(lastTelemetry(green.state)).toBe('PostToolUse,silent,not-a-push');
     const unauthenticated = fixture({ runs: [], authenticated: false });
     runHook(unauthenticated);
-    expect(lastTelemetry(unauthenticated.root)).toBe('PostToolUse,silent,no-gh');
+    expect(lastTelemetry(unauthenticated.state)).toBe('PostToolUse,silent,no-gh');
   });
 
   it('fails open on a broken gh answer: exits 0 and records silent, never fired', () => {
@@ -119,7 +120,7 @@ describe('be-push-ci-watch.mjs', () => {
     const result = runHook(broken);
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
-    expect(lastTelemetry(broken.root)).toBe('PostToolUse,silent,error');
+    expect(lastTelemetry(broken.state)).toBe('PostToolUse,silent,error');
   });
 
   it('judges only pushes in its own repository', () => {

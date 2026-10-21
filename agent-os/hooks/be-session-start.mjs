@@ -235,9 +235,14 @@ async function probeToolPins() {
       return { name, current: current || "missing", pinned };
     }),
   );
-  const drifted = rows.filter((row) => row.current !== row.pinned).map((row) => `${row.name} ${row.current}≠${row.pinned}`);
+  // Each drifted tool names its own installer, as `pnpm tool:agent-tools` does: a failed
+  // best-effort install still writes bootstrap.sh's install stamp, so re-running the bootstrap
+  // skips the installs and repairs nothing.
+  const drifted = rows
+    .filter((row) => row.current !== row.pinned)
+    .map((row) => `${row.name} ${row.current}≠${row.pinned} — run bash tooling/setup/agent/install-${row.name}.sh`);
   let result = `${rows.length - drifted.length}/${rows.length} at pin`;
-  if (drifted.length > 0) result += ` (${drifted.join(" ")} — run bash tooling/setup/agent/bootstrap.sh)`;
+  if (drifted.length > 0) result += ` (${drifted.join("; ")})`;
   writeFileSync(join(probeDirectory, "tool-pins"), `${result}\n`);
 }
 
@@ -252,11 +257,15 @@ function agentOsStatus() {
  * Best-effort: the Docker daemon on web sessions. DB / Redis / chaos work needs `docker compose`,
  * but the cloud image ships dockerd without starting it; start it through the one way tooling
  * starts Docker (ensure-docker-daemon.sh), bounded so a stuck daemon never holds the session up.
- * compose:up / migrations / seeds stay on demand — only the daemon is started here.
+ * compose:up / migrations / seeds stay on demand — only the daemon is started here. A bring-up
+ * (launched here or already running) starts the daemon itself at its step 9, so then this only
+ * reports: starting it here too would race the bring-up and hold the session for the daemon's
+ * start-up (~45 s).
  */
-function dockerStatus() {
+function dockerStatus({ bringUpStartsIt }) {
   if (!isRemote || !onPath("docker")) return "n/a";
   if (spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0) return "up";
+  if (bringUpStartsIt) return "starting (bootstrap.sh starts it)";
   diagnose("Docker daemon down — starting it (best-effort)…");
   // In the hook's own probe directory, beside the other probe logs — not a fixed name in /tmp.
   mkdirSync(probeDirectory, { recursive: true });
@@ -370,32 +379,37 @@ function toolsStatus() {
  * the stack goes live in the background; the banner tells the agent to wait for "live" before
  * database/API work. Never launches twice: a live API (/livez) or a bring-up holding the stack
  * lock (stack-lock.lib.sh's stack_lock_holder, which treats a lock whose run is gone as stale)
- * skips it. Local sessions are untouched.
+ * skips it. Local sessions are untouched. Returns the banner line and whether a bring-up —
+ * launched here or already running — is the one starting the Docker daemon.
  */
 async function stackStatus() {
   const stackDirectory = process.env.AGENT_STACK_DIR || "/tmp/agent-stack";
-  if (!isRemote) return "on demand (local session) — bash tooling/setup/agent/bootstrap.sh";
+  if (!isRemote) return { line: "on demand (local session) — bash tooling/setup/agent/bootstrap.sh", bringUp: false };
   try {
     const response = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/livez`, { signal: AbortSignal.timeout(2000) });
-    if (response.status === 200) return "live — pnpm dev:stack:status";
+    if (response.status === 200) return { line: "live — pnpm dev:stack:status", bringUp: false };
   } catch {
     /* not live */
   }
   // The shell reads AGENT_STACK_DIR itself, as bootstrap.sh and stack.sh do: no value of it is
   // ever part of a command line.
   const lockHolder = spawnSync("bash", ["-c", STACK_LOCK_HOLDER_COMMAND], { cwd: repositoryRoot, stdio: "ignore" });
-  if (lockHolder.status === 0) return `starting (bring-up already running) — tail -f ${stackDirectory}/bootstrap.log`;
-  if (!dependenciesInstalled()) return "not started (dependencies missing) — bash tooling/setup/agent/bootstrap.sh";
+  if (lockHolder.status === 0) {
+    return { line: `starting (bring-up already running) — tail -f ${stackDirectory}/bootstrap.log`, bringUp: true };
+  }
+  if (!dependenciesInstalled()) {
+    return { line: "not started (dependencies missing) — bash tooling/setup/agent/bootstrap.sh", bringUp: false };
+  }
   mkdirSync(stackDirectory, { recursive: true, mode: 0o700 });
   // A stack directory another user made in /tmp, or a link, could aim this log anywhere: refuse it.
   const directory = lstatSync(stackDirectory);
   if (!directory.isDirectory() || directory.uid !== process.getuid?.()) {
-    return `not started (${stackDirectory} is not this user's directory) — bash tooling/setup/agent/bootstrap.sh`;
+    return { line: `not started (${stackDirectory} is not this user's directory) — bash tooling/setup/agent/bootstrap.sh`, bringUp: false };
   }
   const log = openSync(join(stackDirectory, "bootstrap.log"), "w", 0o600);
   // detached: its own session (setsid), so it outlives this hook and the agent's process group.
   spawn("bash", ["tooling/setup/agent/bootstrap.sh"], { cwd: repositoryRoot, detached: true, stdio: ["ignore", log, log] }).unref();
-  return `starting in the background — follow: tail -f ${stackDirectory}/bootstrap.log`;
+  return { line: `starting in the background — follow: tail -f ${stackDirectory}/bootstrap.log`, bringUp: true };
 }
 
 /** The `gh` version, or `absent`. */
@@ -423,13 +437,15 @@ async function sessionContext() {
   const node = provisionNode(requiredMajor);
   installDependencies({ node, requiredMajor });
   mkdirSync(probeDirectory, { recursive: true });
+  // The stack first: a bring-up starts the Docker daemon itself (bootstrap.sh step 9), so launching
+  // it before anything slow hands the session over at once, not after the daemon's start-up.
+  const stack = await stackStatus();
   const agentOs = agentOsStatus();
-  const docker = dockerStatus();
+  const docker = dockerStatus({ bringUpStartsIt: stack.bringUp });
   const gitleaks = gitleaksStatus();
   const mcp = mcpStatus();
   const health = hookHealth();
   const tools = toolsStatus();
-  const stack = await stackStatus();
   const dependencies = dependenciesInstalled() ? "installed" : "missing";
   const codegraph = existsSync(join(repositoryRoot, ".codegraph", "codegraph.db")) ? "present" : "absent";
   // "provisioned" = the cached toolchain the Setup script builds (Node >=required + installed deps) is live.
@@ -438,7 +454,7 @@ async function sessionContext() {
   return [
     `clinozy-be session ready (hooks from ${repositoryRoot}) — environment provisioned: ${provisioned}.`,
     `- Node ${node.version} (need >=${requiredMajor}) · deps ${dependencies} · gh ${githubCliStatus()} · codegraph ${codegraph} · mcp ${mcp} · gitleaks ${gitleaks} · tools ${tools} · agent-os ${agentOs} · docker ${docker}${nodeNote}${health}`,
-    `- Stack: ${stack}`,
+    `- Stack: ${stack.line}`,
     "- Web sessions go fully live on their own: bootstrap.sh (setup → Postgres + Redis → migrate → demo seed → API :3000 + worker :9090, kept running). Before any database/API work, wait until pnpm dev:stack:status says live.",
     "- Gates: pnpm validate · pnpm ci:local   (pre-commit: pnpm guard:pre-commit)",
     "- Custom commands: /be-validate · /be-ci-local · /be-new-domain · /be-routes-sync",

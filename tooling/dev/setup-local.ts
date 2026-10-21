@@ -34,6 +34,8 @@
  *   still on their `.env.example` placeholder are copied from the hosted development target's env
  *   file, else from the process environment; key names are printed, never values.
  * - `--with-captcha` / `--without-captcha` turn local CAPTCHA on (Cloudflare test keys) or off.
+ * - `TEST_MODE=true` unless the file sets it (`local-test-mode.ts`): send-code echoes the code, so
+ *   clinozy-fe's code screen fills itself in. The template keeps it off for hosted files.
  * - The database logins the migrations create (`local-database-logins.ts`) are enabled and their
  *   URLs written — by the database step, which runs after the migrations create those roles.
  */
@@ -52,6 +54,7 @@ import {
 } from './external-credentials.js';
 import { upsertEnvAssignment } from './env-file.util.js';
 import { applyLocalCaptcha, TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY } from './local-captcha.js';
+import { applyLocalTestMode } from './local-test-mode.js';
 import { environmentConnectionUrlProblems, localDatabase } from './local-database-logins.js';
 import { isLocalDatabaseUrl } from '@/infrastructure/database/utils/connection-url.util.js';
 import { listProcessTree, signalProcesses } from '@/scripts/ops/process-tree.util.js';
@@ -389,6 +392,7 @@ function runEnvScaffolding(reports: StepReport[], options: BootstrapOptions): vo
   checkEnvironmentConnectionUrls(reports, options);
   syncExternalCredentials(reports, options);
   configureLocalCaptcha(reports, options);
+  enableLocalTestMode(reports, options);
 }
 
 /**
@@ -430,6 +434,30 @@ function configureLocalCaptcha(reports: StepReport[], options: BootstrapOptions)
     `      clinozy-fe: set VITE_TURNSTILE_SITE_KEY=${TURNSTILE_ALWAYS_PASS_TEST_SITE_KEY} and leave VITE_CAPTCHA_DISABLED unset.`,
   );
   logInfo('      Restart pnpm dev (and pnpm dev:worker) to apply.');
+}
+
+/**
+ * Turns `TEST_MODE` on in `.env.local` unless it sets its own ({@link applyLocalTestMode}), so
+ * send-code echoes the code and clinozy-fe's code screen fills itself in.
+ */
+function enableLocalTestMode(reports: StepReport[], options: BootstrapOptions): void {
+  const startedAt = performance.now();
+  if (!existsSync(ENV_LOCAL_PATH)) {
+    reportStep(reports, 'TEST_MODE', 'skipped', startedAt, 'no .env.local yet');
+    return;
+  }
+  const content = readFileSync(ENV_LOCAL_PATH, 'utf8');
+  const updated = applyLocalTestMode(content);
+  if (updated === content) {
+    reportStep(reports, 'TEST_MODE', 'skipped', startedAt, 'set in .env.local (kept)');
+    return;
+  }
+  if (options.check) {
+    reportStep(reports, 'TEST_MODE', 'warning', startedAt, '--check mode (would turn it on)');
+    return;
+  }
+  writeFileSync(ENV_LOCAL_PATH, updated);
+  reportStep(reports, 'TEST_MODE', 'done', startedAt, 'on — send-code echoes the code');
 }
 
 /** Report label for the process environment as a credential source. */
