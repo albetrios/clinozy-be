@@ -101,4 +101,22 @@ describe('post-merge CI trigger policy', () => {
     expect(workflow).not.toContain('gh release edit');
     expect(workflow).not.toContain('--draft=false');
   });
+
+  it('closes the ci-failure issue on a green run that skips release-please (an ordinary merge)', () => {
+    // release-please runs on demand only, so an ordinary merge skips it: a close gated on its
+    // success never fires. Same shape as clinozy-fe: no failure, no cancellation. Compared
+    // without whitespace: an expression reads the same with or without spaces around its
+    // operators, so a literal match would let `result=='success'` through.
+    const workflow = readFileSync(POST_MERGE_WORKFLOW, 'utf8');
+    const resolveBlock = workflow
+      .slice(workflow.indexOf('\n  resolve-success:'), workflow.indexOf('\n  notify-failure:'))
+      .replace(/\s+/g, '');
+    expect(resolveBlock).not.toContain("needs.release-please.result=='success'");
+    for (const job of ['docker-build-push', 'matrix-tests', 'deploy', 'release-please']) {
+      for (const result of ['failure', 'cancelled']) {
+        expect(resolveBlock, `${job} ${result}`).toContain(`needs.${job}.result!='${result}'`);
+      }
+    }
+    expect(resolveBlock).toContain('!cancelled()');
+  });
 });

@@ -90,12 +90,19 @@ describe('agent tool versions policy', () => {
     for (const tool of AGENT_TOOLS) {
       expect(sessionStart, tool.name).toContain(`${tool.name}:${tool.versionKey}:`);
     }
+    // The remedy is the tool's own installer: while the install stamp matches, a bootstrap
+    // re-run skips the installs, so it cannot repair a failed best-effort install.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal template in be-session-start.mjs
+    expect(sessionStart).toContain('run bash tooling/setup/agent/install-${row.name}.sh');
   });
 
   it('codegraph is linked onto the PATH Claude Code launches MCP servers with', () => {
     const script = read('tooling/setup/agent/install-codegraph.sh');
     // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts literal shell variables in install-codegraph.sh
     expect(script).toContain('ln -sf "${codegraph_path}" "${user_bin}/codegraph"');
+    // When node resolves through install-node.sh's ~/.local/bin links, npm's global bin is
+    // not on PATH and `command -v codegraph` finds nothing: the CLI is read from that bin.
+    expect(script).toContain('$(npm prefix -g 2>/dev/null)/bin/codegraph');
   });
 });
 

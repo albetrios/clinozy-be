@@ -59,13 +59,14 @@ function runHook(options: { root: string; state: string; exitCode?: number }) {
       CLAUDE_PROJECT_DIR: options.root,
       TMPDIR: options.state,
       VITEST_STUB_EXIT: String(options.exitCode ?? 0),
+      HOOK_TELEMETRY_LOG: join(options.state, 'telemetry.log'),
     },
   });
 }
 
 /** The last telemetry row's status and detail columns (`fired,failed`), as the readers see them. */
-function lastTelemetry(root: string): string {
-  const rows = readFileSync(join(root, 'agent-os', 'hooks', '.telemetry.log'), 'utf8').trim();
+function lastTelemetry(state: string): string {
+  const rows = readFileSync(join(state, 'telemetry.log'), 'utf8').trim();
   return rows.split('\n').at(-1)?.split(',').slice(2).join(',') ?? '';
 }
 
@@ -102,11 +103,11 @@ describe('be-turn-end-tests.mjs', () => {
   it('records fired when it wakes the model, else silent with why, for the hooks report', () => {
     const { root, state } = repository();
     runHook({ root, state, exitCode: 1 });
-    expect(lastTelemetry(root)).toBe('Stop,fired,failed');
+    expect(lastTelemetry(state)).toBe('Stop,fired,failed');
     runHook({ root, state });
-    expect(lastTelemetry(root)).toBe('Stop,silent,passed');
+    expect(lastTelemetry(state)).toBe('Stop,silent,passed');
     runHook({ root, state });
-    expect(lastTelemetry(root)).toBe('Stop,silent,already-passed');
+    expect(lastTelemetry(state)).toBe('Stop,silent,already-passed');
   });
 
   it('skips while another run holds the lock', () => {

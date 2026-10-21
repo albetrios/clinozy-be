@@ -91,8 +91,8 @@ import { SharedArray } from 'k6/data';
  * against the database.
  *
  * Run:
- *   TEST_MODE=true AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED=true \
- *     WEBHOOK_URL_ALLOWLIST=example.com pnpm dev   # the webhook block creates example.com URLs
+ *   # TEST_MODE: send-code echoes the sign-in code; the webhook block creates example.com URLs
+ *   TEST_MODE=true WEBHOOK_URL_ALLOWLIST=example.com pnpm dev
  *   BASE_URL=http://localhost:3000 VUS=20 k6 run src/tests/load/k6/scenarios/fe-full-surface.js
  *
  *   # include the step-up cluster (adds a 60s wait per VU, in parallel):
@@ -110,7 +110,6 @@ const API = `${BASE}/api/v1`;
 const VUS = Number(__ENV.VUS || 20);
 const POOL = __ENV.POOL || 'unknown';
 const STAGGER = Number(__ENV.STAGGER ?? 5);
-const STATIC_CODE = __ENV.STATIC_CODE || 'TEST24';
 const OAUTH_PROVIDER = __ENV.OAUTH_PROVIDER || 'google';
 const USER_OFFSET = Number(__ENV.USER_OFFSET || 0);
 const STEP_UP = String(__ENV.STEP_UP || '').toLowerCase() === 'true';
@@ -1060,24 +1059,25 @@ export function feFullJourney() {
   const step = stepper(state);
 
   // `send-code` is required before EVERY login: submitting the code consumes it, so a second login
-  // without a fresh request fails with "invalid or expired verification code".
-  step(
-    '04-send-code',
-    http.post(`${API}/auth/email/send-code`, JSON.stringify({ email: cred.email }), {
-      headers: PUBLIC_AUTH_FORM_HEADERS,
-      tags: { name: '04-send-code' },
-    }),
-    [200, 202],
-  );
+  // without a fresh request fails with "invalid or expired verification code". Under TEST_MODE it
+  // echoes the code it issued (`debug_verification_code`), which the login below presents.
+  const sent = http.post(`${API}/auth/email/send-code`, JSON.stringify({ email: cred.email }), {
+    headers: PUBLIC_AUTH_FORM_HEADERS,
+    tags: { name: '04-send-code' },
+  });
+  step('04-send-code', sent, [200, 202]);
+  const code = sent.status === 200 ? body(sent).debug_verification_code : null;
+  if (!code) {
+    // Without TEST_MODE the real code never reaches the client, so nothing past sign-in can run.
+    for (const [name] of stepsFrom('05-login')) skip(name);
+    journeyDuration.add(Date.now() - t0);
+    return void journeyComplete.add(false);
+  }
 
-  const login = http.post(
-    `${API}/auth/email/login`,
-    JSON.stringify({ email: cred.email, code: STATIC_CODE }),
-    {
-      headers: PUBLIC_AUTH_FORM_HEADERS,
-      tags: { name: '05-login' },
-    },
-  );
+  const login = http.post(`${API}/auth/email/login`, JSON.stringify({ email: cred.email, code }), {
+    headers: PUBLIC_AUTH_FORM_HEADERS,
+    tags: { name: '05-login' },
+  });
   if (!record('05-login', login, [200])) {
     for (const [name] of stepsFrom('06-me-context')) skip(name);
     journeyDuration.add(Date.now() - t0);

@@ -65,9 +65,9 @@ import { credentialPool } from '../helpers/pool.js';
  * FEWER calls than the full count, never more.
  *
  * REQUIRES, by mode:
- *   AUTH=code (default)  the API with AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED (local or
- *                        development targets only) and the credential pool
- *                        (`pnpm db:seed:loadtest`)
+ *   AUTH=code (default)  the API with TEST_MODE=true (the code echo) and the credential pool
+ *                        (`pnpm db:seed:loadtest`), with no more VUs than pool users: an address
+ *                        gets one code per resend cooldown, so two VUs cannot share one
  *   AUTH=password        the credential pool
  *   AUTH=otp             the API with TEST_MODE=true (the OTP echo lets a VU sign itself up)
  *
@@ -83,9 +83,9 @@ const POOL = __ENV.POOL || 'unknown';
 /**
  * How each VU authenticates.
  *
- *   code (default) — ONE call to `POST /auth/email/login` with the static verification
- *                    code, as a distinct pre-seeded user. No send-code, no argon2.
- *                    Needs the API started with AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED set.
+ *   code (default) — the app's own sign-in for a distinct pre-seeded user: `send-code`, then
+ *                    `POST /auth/email/login` with the code the API echoes as
+ *                    `debug_verification_code`. No argon2. Needs the API started with TEST_MODE=true.
  *   password       — ONE call to `POST /auth/login` with email + password from the pool.
  *                    Real argon2 verification, so it costs more than `code`.
  *   otp            — the real signup flow: `send-code` then `email/login`, creating a
@@ -106,16 +106,6 @@ const POOL = __ENV.POOL || 'unknown';
  * when you want the app's capacity without the sign-in ceremony dominating the result.
  */
 const AUTH = (__ENV.AUTH || 'code').toLowerCase();
-/**
- * The static code accepted by `POST /auth/email/login` when the API runs with a matching
- * `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED`. Lets a VU authenticate in ONE call with no `send-code`
- * round trip — so no per-email resend cooldown, no send-code rate limit, and none of the
- * 300 ms anti-enumeration floor that call always pays.
- *
- * The API's env schema refuses any value for `AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED` in production,
- * so this path exists on local and development runtimes only.
- */
-const STATIC_CODE = __ENV.STATIC_CODE || 'TEST24';
 
 /** The sixteen routes each user walks, in order. */
 const STEPS = [
@@ -128,10 +118,8 @@ const STEPS = [
     : AUTH === 'password'
       ? [['02-login', 'POST', '/auth/login']]
       : [
-          // send-code is measured as its own route because the real app always calls it, even
-          // though login below uses AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED and never reads the code this
-          // issues. Keeping it in the journey keeps its cost (mail enqueue + the
-          // anti-enumeration floor) visible instead of hiding it behind the static-code shortcut.
+          // The app's own sign-in for a known user: send-code (its cost — mail enqueue + the
+          // anti-enumeration floor — stays measured), then email/login with the echoed code.
           ['02-send-code', 'POST', '/auth/email/send-code'],
           ['03-code-login', 'POST', '/auth/email/login'],
         ]),
@@ -257,30 +245,26 @@ function authenticate(email) {
       if (!record('02-login', login, [200])) return undefined;
       token = JSON.parse(login.body).data?.access_token;
     } else {
-      // The app always asks for a code, so the journey does too — its cost stays measured.
-      // A non-200 here is not fatal: login does not depend on this call, because it presents
-      // AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED rather than whatever code this issued.
-      record(
-        '02-send-code',
-        http.post(`${API_PREFIX}/auth/email/send-code`, JSON.stringify({ email: cred.email }), {
-          headers: PUBLIC_AUTH_FORM_HEADERS,
-          tags: { name: '02-send-code' },
-        }),
-        [200],
+      // The app's own sign-in: ask for a code, then present the one send-code echoes under
+      // TEST_MODE (`debug_verification_code`).
+      const send = http.post(
+        `${API_PREFIX}/auth/email/send-code`,
+        JSON.stringify({ email: cred.email }),
+        { headers: PUBLIC_AUTH_FORM_HEADERS, tags: { name: '02-send-code' } },
       );
+      if (!record('02-send-code', send, [200])) return undefined;
 
-      // Static-code login: a code the API is configured to accept, so nothing is read from
-      // `debug_verification_code` and the two calls stay independent.
+      // No code: TEST_MODE is off, or this address already got one within the resend cooldown
+      // (more VUs than pool users).
+      const code = JSON.parse(send.body).data?.debug_verification_code;
+      if (!code) return undefined;
+
       const login = http.post(
         `${API_PREFIX}/auth/email/login`,
-        JSON.stringify({ email: cred.email, code: STATIC_CODE }),
+        JSON.stringify({ email: cred.email, code }),
         { headers: PUBLIC_AUTH_FORM_HEADERS, tags: { name: '03-code-login' } },
       );
-      if (!record('03-code-login', login, [200])) {
-        // A 401 here almost always means the API was started without a matching
-        // AUTH_STATIC_VERIFICATION_CODE_ACCEPT_ENABLED, not that the journey found a real defect.
-        return undefined;
-      }
+      if (!record('03-code-login', login, [200])) return undefined;
       token = JSON.parse(login.body).data?.access_token;
     }
   }
@@ -310,7 +294,7 @@ export function feJourney() {
   });
   record('01-refresh-guest', guest, [200, 401, 403]);
 
-  // 02 — authenticate (password, static code, or the two-call OTP signup).
+  // 02 — authenticate (password, the echoed code, or the two-call OTP signup).
   const token = authenticate(email);
   if (!token) return void journeyComplete.add(false);
   let auth = { ...json, Authorization: `Bearer ${token}` };
@@ -457,7 +441,7 @@ export function handleSummary(data) {
         ? ' (send-code + email/login)'
         : AUTH === 'password'
           ? ' (single /auth/login, argon2)'
-          : ` (send-code measured, then /auth/email/login with static code ${STATIC_CODE})`
+          : ' (send-code, then /auth/email/login with the echoed code)'
     }`,
   );
   L.push('='.repeat(W));

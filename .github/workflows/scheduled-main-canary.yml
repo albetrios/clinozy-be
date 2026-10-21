@@ -7,7 +7,8 @@
 # July 2026 without any PR failing. This canary re-runs the full static quality
 # slice on the merged trunk every night and raises a ci-failure issue on red —
 # a broken main becomes a next-morning notification instead of a surprise weeks
-# later. Companion canaries: scheduled-release-guards.yml (settings drift),
+# later. It also compares the files kept as true copies with clinozy-fe's main (the
+# mirrored-files job). Companion canaries: scheduled-release-guards.yml (settings drift),
 # codeql.yml (advisories), scheduled-k6-load-slo.yml (SLOs).
 name: Main quality canary
 
@@ -79,10 +80,44 @@ jobs:
         if: always()
         run: pnpm deps:audit:report
 
+  # The files kept as true copies in both repositories (mirrored-files.policy.unit.test.ts). A PR's
+  # CI checks out this repository only, so there the test can check the copies exist but not that
+  # they match; a PR that edits a copy cannot be told apart from one whose sibling PR is still open.
+  # Comparing the two mains each night catches a copy changed on one side only within a day.
+  mirrored-files:
+    name: Mirrored files match clinozy-fe main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout clinozy-fe main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/clinozy-fe
+          ref: main
+          path: .mirror-sibling
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Compare the mirrored files
+        env:
+          MIRROR_SIBLING_CHECKOUT: .mirror-sibling
+          VITEST_SKIP_DATABASE: 'true'
+        run: pnpm exec vitest run --project unit src/tests/unit/ci/mirrored-files.policy.unit.test.ts
+
   resolve-success:
     name: Close ci-failure issue
-    needs: [quality, dependency-audit]
-    if: always() && needs.quality.result == 'success' && needs.dependency-audit.result == 'success'
+    needs: [quality, dependency-audit, mirrored-files]
+    if: >-
+      always() && needs.quality.result == 'success' && needs.dependency-audit.result == 'success'
+      && needs.mirrored-files.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -108,7 +143,7 @@ jobs:
 
   notify-failure:
     name: Notify failure
-    needs: [quality, dependency-audit]
+    needs: [quality, dependency-audit, mirrored-files]
     if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -137,6 +172,9 @@ jobs:
               tested together (strict up-to-date is intentionally off).
             - **Dependency audit (production tree)** — `pnpm deps:audit:prod` found an advisory:
               fix it with an `overrides` entry in `pnpm-workspace.yaml` (be-dependency-security).
+            - **Mirrored files match clinozy-fe main** — a true copy (mirrored-files.policy.unit.test.ts)
+              differs between the two mains: one side changed without its sibling PR. Copy the
+              change across in a sibling PR.
 
             Reproduce locally on main: `pnpm ci:quality` (or `pnpm health` for a full PASS/FAIL table).
             Fix forward with a short-lived branch + PR; close this issue once the canary is green.

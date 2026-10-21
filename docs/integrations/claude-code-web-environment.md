@@ -131,7 +131,7 @@ Every agent tool the bootstrap installs — `codegraph`, `headroom`, `semgrep`, 
 | `install-*.sh` (via [`tool-install.lib.sh`](../../tooling/setup/agent/tool-install.lib.sh)) | **Moves the machine to the pin**: installs when missing, **reinstalls when the installed version differs** (a cached environment never freezes on an old version), and refuses a release download whose SHA-256 does not match. |
 | CI ([`pr-ci.yml`](../../.github/workflows/pr-ci.yml), [`scheduled-k6-load-slo.yml`](../../.github/workflows/scheduled-k6-load-slo.yml)) | Appends the same file to `$GITHUB_ENV` and runs the same installers — CI and cloud sessions run identical versions, with no second copy to drift. |
 | `pnpm tool:agent-tools --smoke --outdated` | Run by `bootstrap.sh` at **every install**: each tool vs its pin, the `.mcp.default.json` servers started for real (`initialize` + `tools/list`), and **which pins have a newer release** — with the paste-ready lines (version + checksums) to bump. Report only; it never upgrades. |
-| Session-start banner | `tools 5/5 at pin`, or names the drifted tool (`k6 2.2.0≠2.3.0 — run bash tooling/setup/agent/bootstrap.sh`). Local `--version` calls only. |
+| Session-start banner | `tools 5/5 at pin`, or names the drifted tool (`k6 2.2.0≠2.3.0 — run bash tooling/setup/agent/install-k6.sh`). Local `--version` calls only. |
 | [`agent-tool-versions.policy.unit.test.ts`](../../src/tests/unit/tooling/agent-tool-versions.policy.unit.test.ts) | Fails on an unpinned install, a hardcoded version, a missing checksum, or a tool added to one place but not the others. |
 
 **Upgrade flow — what if something breaks?**
@@ -234,21 +234,26 @@ A re-run is safe: a lock stops a second bring-up from racing the first, and an A
 A web session is a playground: it brings itself **fully live** before the work starts, without
 delaying the session. [`be-session-start.mjs`](../../agent-os/hooks/be-session-start.mjs) runs on startup
 and resume (not after `/clear` or a compact), runs `pnpm install` when dependencies are missing,
-starts the `pnpm agent-os:check` gate and the tool-pin probes in the background (the banner shows
-their last result), then launches `bootstrap.sh` **detached** and returns at once:
+then launches `bootstrap.sh` **detached** before anything slow — the bring-up starts the Docker
+daemon itself at [9], so the hook never waits for it — starts the `pnpm agent-os:check` gate and
+the tool-pin probes in the background (the banner shows their last result), and returns:
 
 ```text
 session starts → session-start hook (returns at once) → bootstrap.sh, detached
-  [1] Node   [2–8] skipped when the install stamp matches (the Setup script ran them)
-  [9] Postgres + Redis  [10] migrate + database logins
+  [1] Node   [2–8] skipped when the install stamp matches (the Setup script ran them;
+             [8] writes .env.local with TEST_MODE on, so the sign-in code screen fills itself in)
+  [9] Docker daemon, then Postgres + Redis  [10] migrate + database logins
   [11] full demo seed, with the API and worker already starting alongside
   [12] API on :3000 — kept running   [13] worker, health on :9090 — kept running
   → "live" + the playground card (API, /reference, /admin/queues, worker, logs)
+clinozy-fe in the same session → its own hook starts Vite on :5173 (pnpm dev), detached
 ```
 
 | You want | Do |
 | -------- | -- |
 | Follow it step by step | `tail -f /tmp/agent-stack/bootstrap.log`, or ask the agent to watch the stack |
+| Follow the frontend | `tail -f /tmp/agent-stack/frontend.log`; stop it with `pkill -s "$(cat /tmp/agent-stack/frontend.pid)"` (the pid is its session's: Vite runs in another process group) |
+| Sign in without the email | the code screen fills itself in: `TEST_MODE` is on in `.env.local`, so send-code echoes `debug_verification_code` |
 | Know where it is | `pnpm dev:stack:status` — the running step (or `live`), API + worker `/livez` · `/readyz`, containers, logs |
 | Stop the API + worker | `pnpm dev:stack:stop` (Postgres + Redis stay; `pnpm compose:down` stops them) |
 | Bring it back | `bash tooling/setup/agent/bootstrap.sh` |
@@ -256,7 +261,8 @@ session starts → session-start hook (returns at once) → bootstrap.sh, detach
 | A known demo password | set `DEMO_PASSWORD` in the environment's variables (`demo@example.com`) |
 
 The banner shows `Stack: starting…` / `live` and tells the agent to wait for `live` before any
-database or API work. A resumed session whose API already answers, or a bring-up already
+database or API work; `docker starting (bootstrap.sh starts it)` means the bring-up has the
+daemon in hand. A resumed session whose API already answers, or a bring-up already
 running, is left alone; a stale lock does not count as one, so a resumed container goes live
 with no manual step. Local sessions are unchanged (`Stack: on demand`).
 

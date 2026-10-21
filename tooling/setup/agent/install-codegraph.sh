@@ -93,7 +93,13 @@ fi
 # bin (/opt/node24/bin), which only the Bash tool's PATH gains (via CLAUDE_ENV_FILE); the
 # Claude Code process that launches MCP servers keeps the image PATH, so `codegraph serve
 # --mcp` failed with ENOENT. ~/.local/bin is on that PATH (headroom lives there).
-codegraph_path="$(command -v codegraph)"
+# When node already resolves through install-node.sh's ~/.local/bin links, the Node switch
+# above never runs and that bin is not on this shell's PATH either: read npm's own global bin.
+codegraph_path="$(command -v codegraph || echo "$(npm prefix -g 2>/dev/null)/bin/codegraph")"
+if [ ! -x "${codegraph_path}" ]; then
+  echo "install-codegraph: CLI not found after the install — run \`npm i -g ${CODEGRAPH_PACKAGE}@${codegraph_version}\` manually (non-fatal)." >&2
+  exit 0
+fi
 if [ "${codegraph_path}" != "${user_bin}/codegraph" ]; then
   mkdir -p "${user_bin}" 2>/dev/null || true
   ln -sf "${codegraph_path}" "${user_bin}/codegraph" \
