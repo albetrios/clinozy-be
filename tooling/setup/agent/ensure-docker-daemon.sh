@@ -45,10 +45,36 @@ dockerd_appeared() {
   return 1
 }
 
+# A resumed container keeps /var/run but none of its processes, so the pid files of dockerd and
+# of the containerd it manages can name a pid that something else holds after the reboot (a
+# kernel worker, a shell). dockerd then refuses to start ("process with PID … is still running"),
+# or waits for a containerd that is not there until it times out. A pid file whose pid does not
+# run the program it belongs to is stale, and is removed before any dockerd is started.
+clear_stale_pid_file() { # $1 = pid file, $2 = the program its pid must run
+  local pid
+  [ -f "$1" ] || return 0
+  pid="$(cat "$1" 2>/dev/null || true)"
+  if [ -n "${pid}" ] && [ "$(ps -p "${pid}" -o comm= 2>/dev/null)" = "$2" ]; then
+    return 0
+  fi
+  log "removing stale $1 (pid ${pid:-none} is not a running $2)."
+  if [ "${#sudo_cmd[@]}" -gt 0 ]; then
+    "${sudo_cmd[@]}" rm -f "$1" 2>/dev/null || true
+  else
+    rm -f "$1" 2>/dev/null || true
+  fi
+}
+
+clear_stale_pid_files() {
+  clear_stale_pid_file /var/run/docker.pid dockerd
+  clear_stale_pid_file /var/run/docker/containerd/containerd.pid containerd
+}
+
 start_dockerd() {
   local mode="$1"
   shift
 
+  clear_stale_pid_files
   log "starting dockerd ${mode}; log: ${LOG_FILE}"
   : >"${LOG_FILE}"
   if [ "${#sudo_cmd[@]}" -gt 0 ]; then
@@ -205,6 +231,9 @@ if docker info >/dev/null 2>&1; then
 fi
 
 log "Docker daemon is not reachable; attempting to start it."
+
+# The service script starts dockerd with the same pid file, so it is cleared for that start too.
+dockerd_running || clear_stale_pid_files
 
 if command -v service >/dev/null 2>&1; then
   if [ "${#sudo_cmd[@]}" -gt 0 ]; then
