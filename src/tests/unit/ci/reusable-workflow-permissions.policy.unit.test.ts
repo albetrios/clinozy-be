@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { jobBlocks } from '@/tests/helpers/workflow-jobs.helper.js';
 import { classifyKey, parseEnvContents } from '@tooling/setup/github/sync-github-environments.js';
 import { describe, expect, it } from 'vitest';
 
@@ -38,28 +39,6 @@ function listWorkflows(): Array<{ file: string; content: string }> {
     .map((file) => ({ file, content: readFileSync(join(WORKFLOW_DIRECTORY, file), 'utf8') }));
 }
 
-/** Splits a workflow into its top-level job blocks (`jobs:` children are indented two spaces). */
-function parseJobBlocks(workflow: string): Map<string, string> {
-  const jobsSection = workflow.split(/^jobs:\s*$/m)[1] ?? '';
-  const blocks = new Map<string, string>();
-  let currentName = '';
-  let currentLines: string[] = [];
-
-  for (const line of jobsSection.split('\n')) {
-    const header = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(line);
-    if (header?.[1]) {
-      if (currentName) blocks.set(currentName, currentLines.join('\n'));
-      currentName = header[1];
-      currentLines = [];
-      continue;
-    }
-    if (currentName) currentLines.push(line);
-  }
-  if (currentName) blocks.set(currentName, currentLines.join('\n'));
-
-  return blocks;
-}
-
 /** Reads a `permissions:` mapping at the given indent, or null when the block is absent. */
 function parsePermissions(block: string, indent: number): Map<string, string> | null {
   const pad = ' '.repeat(indent);
@@ -87,7 +66,7 @@ function parseWorkflowPermissions(workflow: string): Map<string, string> {
 /** Every elevated scope any job inside a reusable workflow asks for. */
 function requiredPermissions(reusableWorkflow: string): Map<string, string> {
   const required = new Map<string, string>();
-  for (const block of parseJobBlocks(reusableWorkflow).values()) {
+  for (const [, block] of jobBlocks(reusableWorkflow)) {
     for (const [scope, level] of parsePermissions(block, 4) ?? []) {
       const current = required.get(scope);
       const isHigher = (PERMISSION_RANK[level] ?? 0) > (PERMISSION_RANK[current ?? 'none'] ?? 0);
@@ -111,7 +90,7 @@ function collectReusableCalls(): ReusableCall[] {
   for (const { file, content: workflow } of listWorkflows()) {
     const workflowPermissions = parseWorkflowPermissions(workflow);
 
-    for (const [jobName, block] of parseJobBlocks(workflow)) {
+    for (const [jobName, block] of jobBlocks(workflow)) {
       const callee = /^\s*uses:\s*\.\/\.github\/workflows\/([A-Za-z0-9._-]+\.yml)\s*$/m.exec(block);
       if (!callee?.[1]) continue;
 
@@ -159,11 +138,11 @@ describe('reusable workflow permission contract', () => {
 
   it('every call of a reusable workflow that reads a secret passes secrets: inherit', () => {
     const readsSecret = (calleeWorkflow: string): boolean =>
-      [
-        ...parseJobBlocks(readFileSync(join(WORKFLOW_DIRECTORY, calleeWorkflow), 'utf8')).values(),
-      ].some((block) => SECRET_READ.test(block));
+      jobBlocks(readFileSync(join(WORKFLOW_DIRECTORY, calleeWorkflow), 'utf8')).some(([, block]) =>
+        SECRET_READ.test(block),
+      );
     const secretCalls = listWorkflows().flatMap((workflow) =>
-      [...parseJobBlocks(workflow.content)].flatMap(([jobName, block]) => {
+      jobBlocks(workflow.content).flatMap(([jobName, block]) => {
         const callee = /^\s*uses:\s*\.\/\.github\/workflows\/([A-Za-z0-9._-]+\.yml)\s*$/m.exec(
           block,
         )?.[1];
@@ -185,7 +164,7 @@ describe('reusable workflow permission contract', () => {
     );
     expect(reusable.length).toBeGreaterThan(0);
     const unscoped = reusable.flatMap((workflow) =>
-      [...parseJobBlocks(workflow.content)]
+      jobBlocks(workflow.content)
         .filter(([, block]) => SECRET_READ.test(block) && !JOB_ENVIRONMENT.test(block))
         .map(([name]) => `${workflow.file}: ${name}`),
     );

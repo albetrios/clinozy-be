@@ -71,6 +71,8 @@ describe('main branch ruleset policy (no bypass, checks absolute)', () => {
   });
 
   it('does not require branches to be up to date (strict off) so a green PR merges cleanly', () => {
+    // A branch behind main is still tested with main's commits: every PR lane tests the PR merged
+    // with main (pr-merge-commit.policy.unit.test.ts).
     const checks = ruleset.rules.find((rule) => rule.type === 'required_status_checks');
     expect(checks?.parameters?.strict_required_status_checks_policy).toBe(false);
   });

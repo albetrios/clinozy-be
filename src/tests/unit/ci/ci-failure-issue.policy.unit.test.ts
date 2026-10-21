@@ -10,6 +10,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { jobBlocks } from '@/tests/helpers/workflow-jobs.helper.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const ACTION_USE = 'uses: ./.github/actions/ci-failure-issue';
@@ -30,17 +31,6 @@ const alertedWorkflows = [
   ),
   'post-merge-ci.yml',
 ];
-
-/** The top-level jobs of a workflow, as `[name, block]` (two-space keys under `jobs:`). */
-function jobBlocks(text: string): Array<[string, string]> {
-  const jobs = text.slice(text.indexOf('\njobs:\n'));
-  const parts = jobs.split(/^ {2}([a-z][a-z-]*):\n/m).slice(1);
-  const blocks: Array<[string, string]> = [];
-  for (let index = 0; index + 1 < parts.length; index += 2) {
-    blocks.push([parts[index] ?? '', parts[index + 1] ?? '']);
-  }
-  return blocks;
-}
 
 /** The `title:` of each action step in the given mode. */
 function titles(text: string, mode: 'open' | 'close'): string[] {

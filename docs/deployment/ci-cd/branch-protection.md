@@ -6,7 +6,8 @@ trunk), and how that maps to workflows and committed ruleset JSON under
 
 > **Single-trunk model.** `main` is the only long-lived branch. Its ruleset
 > ([`main.json`](../../../.github/rulesets/main.json)) is **squash-only**, 0 approvals (D8), with
-> `required_linear_history`, **no `bypass_actors`**, and strict up-to-date OFF. Branch protection requires exactly **two**
+> `required_linear_history`, **no `bypass_actors`**, and strict up-to-date OFF (every PR lane tests the PR merged with `main`,
+> so a branch behind `main` is still tested with `main`'s commits). Branch protection requires exactly **two**
 > aggregate contexts — **`Quality gate`** (the pr-ci.yml aggregate that rolls up every merge-gating
 > lane, including the authoritative DB matrix) and **`Checks`** (pr-governance). `main.json` is the
 > **only** committed ruleset: hotfixes fix-forward to `main` via ordinary `fix/*` PRs, so there are

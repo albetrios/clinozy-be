@@ -2,18 +2,19 @@ name: Post-merge CI
 
 # Single-trunk post-merge pipeline on pushes to main (or manual workflow_dispatch).
 #
-# The PR gate (pr-ci.yml) is AUTHORITATIVE: the same tree already passed lint,
-# typecheck, unit, build, security, contract/property AND the full DB-backed
-# matrix (e2e/integration/rls/performance) before merge. Post-merge does not
-# re-test a single-PR push. Caveat: `strict up-to-date` is intentionally OFF on
-# the main ruleset, so a green PR tested on a stale base can squash-merge into a
-# combined tree no gate ever saw — that residual skew is caught by the nightly
-# scheduled-main-canary.yml (`pnpm ci:quality` on main → ci-failure issue).
+# The PR gate (pr-ci.yml) is AUTHORITATIVE: every lane — lint, typecheck, unit, build,
+# security, contract/property AND the full DB-backed matrix (e2e/integration/rls/
+# performance) — tested the PR merged with main (`github.sha`) before merge. Post-merge
+# does not re-test a single-PR push. Caveat: `strict up-to-date` is intentionally OFF on
+# the main ruleset, so when main moves after a PR's last run, the squash lands a combined
+# tree no gate ever saw — that residual skew is caught by the nightly
+# scheduled-main-canary.yml (`pnpm ci:quality` on main → ci-failure issue) and, for the
+# tests, by the next PR's run, which tests that PR merged with the new main.
 #
 # Adaptive lanes (D10 — migration item 1.32), keyed on N = commits in the push
 # (squash ⇒ N = number of PRs merged in this push):
 #   N == 1  FAST lane  → build image → release-please → deploy development
-#                        (no matrix — the PR already proved this exact tree)
+#                        (no matrix — the PR's run already tested it merged with main)
 #   N >= 2  FULL lane   → matrix (the COMBINED tree of batched/merge-queue PRs
 #                        was never tested together) → build → release → deploy
 #
