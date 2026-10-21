@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UnrecoverableError } from 'bullmq';
 import {
   CircuitBreakerOpenError,
@@ -11,6 +11,7 @@ import {
   buildMailOutboxIdempotencyKey,
   processMailOutboxJob,
 } from '@/infrastructure/mail/workers/mail.processor.js';
+import { env } from '@/shared/config/env.config.js';
 
 /** The row's token — the job's handle and the Resend Idempotency-Key. */
 const MAIL_OUTBOX_TOKEN = '3f0c7a52-8a1e-4f6b-9a7d-2c5e8b1d4f60'; // gitleaks:allow
@@ -228,6 +229,58 @@ describe('mail.processor', () => {
     expect(result).toEqual({ outcome: 'rejected', statusCode: 422 });
     expect(markMailOutboxFailedMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN);
     expect(releaseMailOutboxClaimMock).not.toHaveBeenCalled();
+  });
+
+  // Local and development only: seeded and test accounts all use example.com, which Resend refuses
+  // with a 422. Off (the harness pins it off, as production keeps it), the cases above already send
+  // to user@example.com, so the flag is the only thing that changes the answer.
+  describe('MAIL_RESERVED_DOMAIN_SKIP_ENABLED', () => {
+    beforeEach(() => {
+      env.MAIL_RESERVED_DOMAIN_SKIP_ENABLED = true;
+    });
+
+    afterEach(() => {
+      env.MAIL_RESERVED_DOMAIN_SKIP_ENABLED = false;
+    });
+
+    it('fails a row whose every recipient is on a reserved domain without calling Resend', async () => {
+      const { logger } = await import('@/shared/utils/infrastructure/logger.util.js');
+      tryClaimPendingMailOutboxMock.mockResolvedValue('claimed');
+      findMailOutboxByTokenMock.mockResolvedValue(
+        outboxRow({ to_addresses: ['demo@example.com', 'staff@clinic.test'] }),
+      );
+
+      const result = await processMailOutboxJob({
+        jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+      });
+
+      expect(result).toEqual({ outcome: 'skipped', reason: 'reserved_domain' });
+      expect(sendEmailMock).not.toHaveBeenCalled();
+      expect(markMailOutboxFailedMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN);
+      expect(releaseMailOutboxClaimMock).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ mailOutboxToken: MAIL_OUTBOX_TOKEN, recipientCount: 2 }),
+        'mail.worker.reserved_domain_skipped',
+      );
+    });
+
+    it('sends to the real recipients only when the list also holds a reserved one', async () => {
+      tryClaimPendingMailOutboxMock.mockResolvedValue('claimed');
+      findMailOutboxByTokenMock.mockResolvedValue(
+        outboxRow({ to_addresses: ['demo@example.com', 'owner@clinic.in'] }),
+      );
+      sendEmailMock.mockResolvedValue('msg_real');
+
+      const result = await processMailOutboxJob({
+        jobData: { mailOutboxToken: MAIL_OUTBOX_TOKEN },
+      });
+
+      expect(sendEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({ to: ['owner@clinic.in'] }),
+      );
+      expect(markMailOutboxSentMock).toHaveBeenCalledWith(MAIL_OUTBOX_TOKEN, 'msg_real');
+      expect(result).toEqual({ outcome: 'sent', messageId: 'msg_real' });
+    });
   });
 
   it('keeps retrying a Resend error that is not about the email itself', async () => {

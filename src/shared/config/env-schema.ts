@@ -492,6 +492,21 @@ const envSchemaBase = z.object({
    */
   MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED: booleanString('false'),
   /**
+   * Category-B. The mail worker drops recipients on a reserved domain (`example.com`, `*.test`,
+   * `*.invalid`, … — see `isReservedEmailDomain`) instead of handing them to Resend, and fails a
+   * row left with none without calling Resend.
+   *
+   * Exists because every seeded and test account uses `example.com`, which can never receive
+   * mail: Resend refuses each such email with a 422 `validation_error`, so a developer's sign-ins
+   * and invitations filled the worker log with errors for mail nobody could read (the code reaches
+   * them through `debug_verification_code` instead).
+   *
+   * Defaults false, so every recipient goes to Resend. A refine permits `true` ONLY on the `local`
+   * and `development` targets — an allowlist rather than a not-production test, so a target added
+   * to the enum later is refused by default and production mail is never filtered.
+   */
+  MAIL_RESERVED_DOMAIN_SKIP_ENABLED: booleanString('false'),
+  /**
    * Category-B. ioredis ready-check on the cache / BullMQ connections. Defaults true (on); the test
    * harness sets `REDIS_READY_CHECK_ENABLED=false` (the per-worker singletons churn across
    * createTestApp instances and a reconnect ready-check rejects against a closing stream). Read via
@@ -1795,6 +1810,17 @@ export const envSchema = envSchemaBase
       message:
         "MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED may only be true on the 'local' or 'development' targets (it returns the raw invitation accept token in the add-member and resend answers, so a deployed runtime must deliver it only through the email). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
       path: ['MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED'],
+    },
+  )
+  .refine(
+    (data) =>
+      !data.MAIL_RESERVED_DOMAIN_SKIP_ENABLED ||
+      data.NODE_ENV === 'local' ||
+      data.NODE_ENV === 'development',
+    {
+      message:
+        "MAIL_RESERVED_DOMAIN_SKIP_ENABLED may only be true on the 'local' or 'development' targets (it drops recipients before Resend, so a deployed production runtime must hand every one to Resend). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
+      path: ['MAIL_RESERVED_DOMAIN_SKIP_ENABLED'],
     },
   )
   .refine((data) => data.NODE_ENV !== 'production' || data.REDIS_READY_CHECK_ENABLED === true, {

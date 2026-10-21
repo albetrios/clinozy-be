@@ -343,6 +343,7 @@ instead of running insecure — you cannot ship the dev value:
 | `EMAIL_FROM_ADDRESS`                  | optional                  | **required** when `RESEND_API_KEY` or `STRIPE_SECRET_KEY` is set                   |
 | `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` | `true` (tests: `false`) | `true` — a patient photo is never filed with where it was taken (launch D79)      |
 | `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` | `true` on `local`     | refused outside `local` / `development` — the accept token leaves only by email    |
+| `MAIL_RESERVED_DOMAIN_SKIP_ENABLED`   | `true` on `local`         | refused outside `local` / `development` — every recipient goes to Resend           |
 
 **Verify before deploy:** `NODE_ENV=production pnpm dev` with `.env.production`
 filled — boot fails loudly on any violation. The deploy workflow's `validate:github-env-runtime`
@@ -405,6 +406,7 @@ Environment through `.env.<environment>` + `pnpm github:sync`.
 | `APP_RECORD_PURGE_CRON` | `56 5 * * *` (scheduler default) | `56 5 * * *` | default | default |
 | `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` | `true` | `true` | `true` | `true` — enforced |
 | `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` | `false` | `true` (local QA accepts invitations without the email) | `false` unless QA needs it | `false` — enforced (refused outside `local` / `development`) |
+| `MAIL_RESERVED_DOMAIN_SKIP_ENABLED` | `false` | `true` (seeded `example.com` accounts never reach Resend, which refuses them with a 422) | `true` (the same seeded accounts) | `false` — enforced (refused outside `local` / `development`) |
 | `BILLING_READ_ONLY_ENFORCED` | `false` | `false` (set `true` in `.env.local` to work on the grace and read-only screens) | `false` | `false` until clinics can pay in ₹ — then `true`: a clinic without a paid plan turns read-only 14 days after it was created, or `BILLING_DUNNING_GRACE_DAYS` after a lapsed subscription's period (owner decision D3). Not refined — switching it on is a launch decision, not a security posture |
 
 The allowed values and a description of each key are in [reference/env-catalog.md](../../reference/env-catalog.md)
