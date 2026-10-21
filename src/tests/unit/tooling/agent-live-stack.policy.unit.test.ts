@@ -76,11 +76,11 @@ describe('live playground stack policy', () => {
   it('the banner tells the agent to wait for "live" before database/API work', () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal template in be-session-start.mjs
     expect(sessionStart).toContain('`- Stack: ${stack.line}`');
-    expect(sessionStart).toContain('wait until pnpm dev:stack:status says live');
+    expect(sessionStart).toContain('run pnpm dev:stack:wait: it returns once live');
   });
 
-  it('the bring-up launches before the Docker check, and then starts the daemon itself', () => {
-    // A bring-up starts the daemon at its step 9, so the hook does not hold the session for it.
+  it('the bring-up launches before the Docker check, and starts the daemon in its first second', () => {
+    // A bring-up starts the daemon itself, so the hook does not hold the session for it.
     expect(sessionStart.indexOf('const stack = await stackStatus();')).toBeGreaterThan(-1);
     expect(sessionStart.indexOf('const stack = await stackStatus();')).toBeLessThan(
       sessionStart.indexOf('const docker = dockerStatus('),
@@ -89,7 +89,18 @@ describe('live playground stack policy', () => {
     expect(sessionStart).toContain(
       'if (bringUpStartsIt) return "starting (bootstrap.sh starts it)";',
     );
-    expect(bootstrap).toContain('ensure-docker-daemon.sh" >&2 || die');
+    // In the background, before step 1, so its start-up overlaps the installs; only a daemon that
+    // does not answer is started, and the steps that touch Docker wait for that start first.
+    const backgroundStart = bootstrap.indexOf(
+      `bash "\${AGENT_DIR}/ensure-docker-daemon.sh" >"\${STACK_DIR}/docker-start.log" 2>&1 &`,
+    );
+    expect(backgroundStart).toBeGreaterThan(-1);
+    expect(backgroundStart).toBeLessThan(bootstrap.indexOf(`step "[1/\${TOTAL}] Node runtime"`));
+    expect(bootstrap).toContain(
+      'if command -v docker >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then',
+    );
+    const postgres = bootstrap.slice(bootstrap.indexOf('start_postgres_and_redis() {'));
+    expect(postgres.indexOf('await_docker_start')).toBeLessThan(postgres.indexOf('compose:up'));
   });
 
   it('the default bootstrap is the live stack; --install-only is the only other mode', () => {
@@ -119,20 +130,125 @@ describe('live playground stack policy', () => {
     expect(seed).toBeLessThan(bootstrap.indexOf('record_status "live'));
   });
 
-  it('a live run after an install with the same inputs skips the installs', () => {
-    expect(bootstrap).toContain('install_stamp_file="node_modules/.agent-install-stamp"');
-    expect(bootstrap).toContain(`install_stamp > "\${install_stamp_file}"`);
+  it('an API or worker that answers but is not ready is restarted, never joined by a second', () => {
+    // One left from before Postgres or Redis restarted answered /livez with /readyz at 503; a
+    // second process failed on the taken port while the health checks kept reaching the first.
     expect(bootstrap).toContain(
-      `if [ "\${reset_database}" = 0 ] && [ "\${installs_cached}" = 0 ]; then`,
+      'elif [ "$(http_status "$1/livez")" = 200 ]; then\n    echo unready',
     );
-    expect(bootstrap).not.toContain('AGENT_REINSTALL');
+    const restart = bootstrap.indexOf(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal shell test in bootstrap.sh
+      'if [ "${api_state}" = unready ] || [ "${worker_state}" = unready ]; then',
+    );
+    expect(restart).toBeGreaterThan(-1);
+    expect(restart).toBeLessThan(bootstrap.indexOf('start_detached api pnpm dev'));
+    expect(bootstrap).toContain(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal shell test in bootstrap.sh
+      '[ "${api_state}" = down ] || die "something still answers on ${api_url}',
+    );
+    // stack.sh stop keeps a running bring-up's status line, so dev:stack:wait never reads "stopped".
+    expect(stack).toContain(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal shell test in stack.sh
+      'if [ -d "${STACK_DIR}" ] && ! stack_lock_holder "${STACK_DIR}" >/dev/null; then',
+    );
   });
 
-  it('one bring-up at a time, and each step is recorded as it runs', () => {
+  it('"live" comes after the demo user signs in', () => {
+    const signIn = bootstrap.indexOf(`node "\${AGENT_DIR}/verify-sign-in.mjs" "\${api_url}"`);
+    expect(signIn).toBeGreaterThan(
+      bootstrap.indexOf(
+        `HEALTHCHECK_URL="\${worker_url}" bash "\${AGENT_DIR}/healthcheck.sh"; then`,
+      ),
+    );
+    expect(signIn).toBeLessThan(bootstrap.indexOf('record_status "live'));
+    // Exit 3 is a skip (the stack cannot be signed in to from a script); anything else fails it.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal ${TOTAL} in bootstrap.sh
+    expect(bootstrap).toContain('3) skip "[10/${TOTAL}] sign-in check skipped');
+    expect(bootstrap).toContain('*) die "sign-in check failed');
+  });
+
+  it('each install runs only when its own inputs changed', () => {
+    // One stamp over every script in tooling/setup/agent re-ran every install (pnpm install
+    // alone 34 s) whenever any of them changed; each step now hashes only what it depends on.
+    expect(bootstrap).toContain('readonly STAMP_DIR="node_modules/.agent-stamps"');
+    expect(bootstrap).toContain(`stamp_matches dependencies "\${dependency_stamp}"`);
+    expect(bootstrap).toContain(`stamp_matches docker "\${docker_stamp}"`);
+    const dependencies = bootstrap.slice(
+      bootstrap.indexOf('dependency_inputs() {'),
+      bootstrap.indexOf('docker_inputs() {'),
+    );
+    expect(dependencies).toContain('pnpm-lock.yaml');
+    expect(dependencies).not.toContain('AGENT_DIR');
+    expect(bootstrap).not.toContain('.agent-install-stamp');
+    expect(bootstrap).not.toContain('AGENT_REINSTALL');
+    // The agent's own tools keep their own stamp, written only once their check passes.
+    const tools = readFileSync('tooling/setup/agent/install-agent-tools.sh', 'utf8');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal ${STAMP_DIR} in install-agent-tools.sh
+    expect(tools).toContain('readonly STAMP_FILE="${STAMP_DIR}/agent-tools"');
+    expect(tools.indexOf('if pnpm tool:agent-tools --smoke --outdated; then')).toBeLessThan(
+      tools.indexOf(`printf '%s\\n' "\${stamp}" > "\${STAMP_FILE}"`),
+    );
+  });
+
+  it('the agent tools run after "live", in the background, never before it', () => {
+    const live = bootstrap.indexOf('record_status "live');
+    expect(
+      bootstrap.indexOf(`start_detached agent-tools bash "\${AGENT_DIR}/install-agent-tools.sh"`),
+    ).toBeGreaterThan(live);
+    const beforeLive = bootstrap.slice(0, live);
+    expect(beforeLive).not.toContain('install-codegraph.sh');
+    expect(beforeLive).not.toContain('tool:agent-tools');
+  });
+
+  it('the Setup script leaves a database that finished its first-time setup, stopped cleanly', () => {
+    const installOnly = bootstrap.slice(
+      bootstrap.indexOf('# 4) The agent'),
+      bootstrap.indexOf('# 4) Environment files'),
+    );
+    expect(installOnly).toContain('if prime_database; then');
+    expect(installOnly).toContain('docker compose stop');
+    expect(installOnly).toContain('exit 0');
+    expect(bootstrap).toContain(
+      'prime_database() {\n  start_postgres_and_redis || return 1\n  pnpm db:migrate >&2\n}',
+    );
+  });
+
+  it('step 5 rebuilds a Postgres volume cut short in its setup, and only one that holds nothing', () => {
+    const ensure = readFileSync('tooling/setup/agent/ensure-postgres-volume.sh', 'utf8');
+    const postgres = bootstrap.slice(bootstrap.indexOf('start_postgres_and_redis() {'));
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal ${AGENT_DIR} in bootstrap.sh
+    expect(postgres).toContain('bash "${AGENT_DIR}/ensure-postgres-volume.sh"');
+    // Databases are counted from the directories on the volume (ids from FirstNormalObjectId),
+    // so the check works on a catalog that cannot be read.
+    expect(ensure).toContain('readonly FIRST_USER_OBJECT_ID=16384');
+    expect(ensure).toContain("-c 'ls -1 /data/base 2>/dev/null; echo listed'");
+    // The volume is removed in one place, reached only after the count came back zero.
+    expect(ensure.match(/docker volume rm /g)).toHaveLength(2);
+    expect(ensure).toContain(
+      'log "repair by hand: docker compose rm -s -f postgres && docker volume rm',
+    );
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal ${user_databases} in the script
+    const zeroCheck = ensure.indexOf('if [ "${user_databases}" != 0 ]; then');
+    expect(zeroCheck).toBeGreaterThan(-1);
+    expect(zeroCheck).toBeLessThan(ensure.indexOf('if rebuild "first-time setup cut short'));
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal ${user_databases} in the script
+    expect(ensure.indexOf('if [ -z "${user_databases}" ]; then')).toBeLessThan(zeroCheck);
+    // Readiness is probed over TCP: the image's first-time setup runs a socket-only server.
+    expect(readFileSync('tooling/dev/wait-for-local-postgres.sh', 'utf8')).toContain(
+      'pg_isready -h 127.0.0.1 -U clinozy -d clinozy',
+    );
+  });
+
+  it('one bring-up at a time, and each step is recorded as it runs, stamped with its boot', () => {
     expect(bootstrap).toContain(`mkdir "\${STACK_DIR}/lock"`);
     expect(bootstrap).toContain(`stack_lock_holder "\${STACK_DIR}"`);
     expect(bootstrap).toContain(`record_status "running \${*}"`);
     expect(bootstrap).toContain(`record_status "failed — \${*}"`);
+    expect(bootstrap).toContain(`stack_status_write "\${STACK_DIR}" "$*"`);
+    const lockLibrary = readFileSync('tooling/setup/agent/stack-lock.lib.sh', 'utf8');
+    expect(lockLibrary).toContain('stack_boot_id > "$1/status.boot_id"');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal ${boot} in the library
+    expect(lockLibrary).toContain('[ "${boot}" = "$(stack_boot_id)" ] || return 1');
   });
 
   it('SonarQube starts in the background once the stack is live, never beside a bring-up', () => {
@@ -151,10 +267,14 @@ describe('live playground stack policy', () => {
     );
   });
 
-  it('status and stop are one command each', () => {
+  it('wait, status, verify and stop are one command each', () => {
+    expect(packageScripts['dev:stack:wait']).toBe('bash tooling/setup/agent/stack.sh wait');
     expect(packageScripts['dev:stack:status']).toBe('bash tooling/setup/agent/stack.sh status');
+    expect(packageScripts['dev:stack:verify']).toBe('bash tooling/setup/agent/stack.sh verify');
     expect(packageScripts['dev:stack:stop']).toBe('bash tooling/setup/agent/stack.sh stop');
+    expect(stack).toContain('wait) wait_for_live ;;');
     expect(stack).toContain('show_status');
+    expect(stack).toContain('verify) verify_stack ;;');
     expect(stack).toContain('stop_stack');
   });
 });

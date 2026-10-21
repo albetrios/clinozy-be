@@ -3517,9 +3517,11 @@ src/
     │   │   ├── agent-session-hooks.unit.test.ts
     │   │   ├── agent-sonar-docker.policy.unit.test.ts
     │   │   ├── agent-stack-lock.unit.test.ts
+    │   │   ├── agent-stack-wait.unit.test.ts
     │   │   ├── agent-tool-install-lib.unit.test.ts
     │   │   ├── agent-tool-versions.policy.unit.test.ts
     │   │   ├── agent-turn-end-tests.unit.test.ts
+    │   │   ├── agent-verify-sign-in.unit.test.ts
     │   │   ├── changed-as-application-role.unit.test.ts
     │   │   ├── check-load-coverage.unit.test.ts
     │   │   ├── check-patch-coverage.unit.test.ts

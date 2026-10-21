@@ -73,12 +73,17 @@ Add the rest via **Custom** (tick "Also include default list of common package m
 bash tooling/setup/agent/bootstrap.sh --install-only
 ```
 
-`--install-only` runs steps 1–8 — Node 24 into `/opt/node24`, `pnpm install`, gh, the Docker
-CLI + mirror + compose images, CodeGraph, Headroom + the default MCP pair, gitleaks, semgrep, k6, and the
-`.env.local` scaffold — and stops before Docker, so the result is cached. In every web session the session-start hook
-then runs the same script **without** the flag in the background — those steps again (fast: each
-is idempotent and already at its pin), then the stack, fully live. See
-[Session startup — the live playground](#session-startup--the-live-playground).
+`--install-only` builds the cached environment in six steps — Node 24 into `/opt/node24`,
+`pnpm install`, the Docker CLI + mirror + compose images, the agent tools
+([`install-agent-tools.sh`](../../tooling/setup/agent/install-agent-tools.sh): gh, CodeGraph,
+Headroom with the default MCP pair and the session hooks, gitleaks, semgrep, k6), the `.env.local` scaffold — and
+then **a database for the cache**: Postgres + Redis up, Postgres's first-time setup and the
+migrations, then `docker compose stop`, so the cached image carries a finished, cleanly stopped
+volume and no session ever runs that first-time setup (the one step a pause can break — see
+[A pause during Postgres's first-time setup](#a-pause-during-postgress-first-time-setup)). The
+database step is best-effort: if it fails, the environment still builds and the session does the
+work itself. In every web session the session-start hook then runs the same script **without** the
+flag in the background. See [Session startup — the live playground](#session-startup--the-live-playground).
 
 **Both repos in one environment.** The Setup script runs once for the environment, so name each repo's
 script by its path — the clones sit side by side (in this setup `/home/user/clinozy-be` and
@@ -86,11 +91,15 @@ script by its path — the clones sit side by side (in this setup `/home/user/cl
 
 ```bash
 bash /home/user/clinozy-be/tooling/setup/agent/bootstrap.sh --install-only
-bash /home/user/clinozy-fe/agent-os/cloud-environment/install.sh
+bash /home/user/clinozy-fe/agent-os/cloud-environment/install.sh --install-only
 ```
 
-clinozy-fe's script also builds its codegraph index; the first build takes about 2–3 minutes, later
-runs only sync it.
+Both take the same switch. clinozy-fe's `--install-only` skips its step 10, which in a Setup script
+only booted Vite to check the app shell and stopped it again (a session's start hook starts the dev
+server itself); any other option is refused by both, so a mistyped flag fails the line instead of
+being ignored. Run them one after the other, not in parallel: both start the Docker daemon and pull
+images. clinozy-fe's script also builds its codegraph index; the first build takes about 2–3
+minutes, later runs only sync it.
 
 Both scripts also register the session's hooks (`pnpm agent-os:session-hooks`,
 [`tooling/agent-os/session-hooks.ts`](../../tooling/agent-os/session-hooks.ts)). A session that holds
@@ -204,19 +213,27 @@ pnpm db:seed         # create, migrate, the database logins, the reference rows 
 
 > **Docker image pulls in the cloud.** Docker Hub serves image *blobs* from a CDN (`production.cloudfront.docker.com`) that is **not** on the default allowlist, so a bare `pnpm compose:up` fails with `403 Forbidden` while pulling `postgres:<v>-alpine` / `redis:<v>-alpine` (AWS ECR Public has the same `*.cloudfront.net` problem). Run [`install-docker-images.sh`](../../tooling/setup/agent/install-docker-images.sh) in the Setup script: it points the Docker daemon at Google's Docker Hub pull-through mirror (`https://mirror.gcr.io` — reachable on the default allowlist, byte-identical images / same digests) and pre-pulls the compose images, so `pnpm compose:up` runs the **same** pinned images you use locally with no compose changes. Alternatively add `production.cloudfront.docker.com` to the Custom network allowlist to pull straight from Docker Hub. Note Postgres **17+** is required by `pnpm db:migrate`, so the cloud image's native Postgres 16 is not a substitute.
 
-**Restricted cloud Docker.** [`bootstrap.sh`](../../tooling/setup/agent/bootstrap.sh) calls the shared [`ensure-docker-daemon.sh`](../../tooling/setup/agent/ensure-docker-daemon.sh) helper before compose. If a cloud-agent container denies Docker bridge/NAT setup or overlay layer extraction, the helper falls back to restricted networking, then `vfs` storage when needed, and `bootstrap.sh` uses the shared [`docker-compose.cloud-agent.yml`](../../tooling/setup/agent/docker-compose.cloud-agent.yml) host-network override for Postgres + Redis. A `dockerd` that is still running but slow to answer (a just-booted machine) is waited for, never joined by a second one: the fallback starts only once no `dockerd` process is alive, so only a daemon that really runs restricted is recorded as one, and a restart waits for the old process to exit.
+**Restricted cloud Docker.** [`bootstrap.sh`](../../tooling/setup/agent/bootstrap.sh) calls the shared [`ensure-docker-daemon.sh`](../../tooling/setup/agent/ensure-docker-daemon.sh) helper before compose. If a cloud-agent container denies Docker bridge/NAT setup or overlay layer extraction, the helper falls back to restricted networking, then `vfs` storage when needed, and `bootstrap.sh` uses the shared [`docker-compose.cloud-agent.yml`](../../tooling/setup/agent/docker-compose.cloud-agent.yml) host-network override for Postgres + Redis. A `dockerd` that is still running but slow to answer (a just-booted machine) is waited for, never joined by a second one: the fallback starts only once no `dockerd` process is alive, so only a daemon that really runs restricted is recorded as one, and a restart waits for the old process to exit. A service manager is waited on only when it actually started a `dockerd`: in a cloud container `service docker start` returns with no daemon behind it and systemd is not running, and the full 30 s wait after each of them cost every cold start about 60 s — the helper now looks for a `dockerd` process for 5 s (`DOCKERD_APPEAR_SECONDS`), skips `systemctl` without `/run/systemd/system`, and starts `dockerd` directly.
 
 ---
 
 ### One-command bring-up + verify
 
-The session-start hook runs this for you in every web session (below). To run it yourself — after `pnpm dev:stack:stop` — use the orchestrator; it logs a ✓/✗ after each step and records the running step for `pnpm dev:stack:status`:
+The session-start hook runs this for you in every web session (below). To run it yourself — after `pnpm dev:stack:stop` — use the orchestrator; it logs a ✓/✗ after each step (with the seconds since it started) and records the running step for `pnpm dev:stack:status` and `pnpm dev:stack:wait`:
 
 ```bash
-bash tooling/setup/agent/bootstrap.sh        # setup → Postgres + Redis → migrate → demo seed → API + worker, left running
+bash tooling/setup/agent/bootstrap.sh        # setup → Postgres + Redis → migrate → demo seed → API + worker, left running → the demo user signs in
 ```
 
-A re-run is safe: a lock stops a second bring-up from racing the first, and an API or worker that already answers is kept. A lock whose bring-up is gone — or that came from another boot inside a cached environment — is stale: `pnpm dev:stack:status` says so and the next run clears it ([`stack-lock.lib.sh`](../../tooling/setup/agent/stack-lock.lib.sh)). A live run after an install with the same inputs (the Setup script, or an earlier run in this container) skips steps 2–8, so it neither redoes the installs nor restarts dockerd; a changed input runs them again. Measured on 17 Oct on a resumed container (API and worker stopped, containers down, volumes kept): 82 s before these changes, 41 s on the first run after them (installs run, stamp written; warmer caches), 18 s once the stamp matches — with a stale lock planted whose pid named another process, which the old code waited on forever. To verify health on its own, run [`healthcheck.sh`](../../tooling/setup/agent/healthcheck.sh): it polls `GET /livez` then `GET /readyz` (set `HEALTHCHECK_URL=http://127.0.0.1:9090` for the worker) and exits non-zero unless Postgres + Redis + BullMQ are all reachable. Only `--install-only` belongs in the Setup-script *field* (that runs before any service can be running).
+A re-run is safe: a lock stops a second bring-up from racing the first, and an API or worker that already answers is kept. A lock whose bring-up is gone — or that came from another boot inside a cached environment — is stale: `pnpm dev:stack:status` says so and the next run clears it ([`stack-lock.lib.sh`](../../tooling/setup/agent/stack-lock.lib.sh)). The status line is stamped with its boot the same way, so a container resumed after "live" — the file still says `live`, none of the processes run — reads as no bring-up, never as live.
+
+**Each install has its own stamp** (`node_modules/.agent-stamps/`): `pnpm install` runs only when Node or the lockfile changed, the Docker step only when its installers or the compose files changed, and the agent tools only when their pins or installers changed (and only once their check passes). One stamp over every script in this directory used to re-run every install whenever any of them changed — five such changes landed in two days, and each re-ran `pnpm install` (34 s), CodeGraph (18 s) and the tool checks (11 s) with unchanged inputs. The `.env.local` step runs every time: it keeps the file, but its check that stops on a remote `DATABASE_*_URL` follows the environment's variables.
+
+**Measured on 21 Oct** on this container, both hooks' work started at once (API, worker, Vite and the Docker daemon stopped first, as a resume leaves them): before these changes, a resume went live in **97 s**, 70 of them waiting on `service` and `systemctl` (the same day's first resume stopped at step 10 on a half-built Postgres volume, after 163 s). After them: **24–25 s** over three cold resumes, **21 s** on a Setup-primed volume, the sign-in through Vite included each time. To verify health on its own, run [`healthcheck.sh`](../../tooling/setup/agent/healthcheck.sh): it polls `GET /livez` then `GET /readyz` (set `HEALTHCHECK_URL=http://127.0.0.1:9090` for the worker) and exits non-zero unless Postgres + Redis + BullMQ are all reachable; `pnpm dev:stack:verify` signs the demo user in. Only `--install-only` belongs in the Setup-script *field* (that runs before any service can be running).
+
+### A pause during Postgres's first-time setup
+
+A cloud session can be paused at any second, and the one step that cannot be resumed is the Postgres image's first-time setup of an empty volume (`initdb`, then the rule that lets the host log in, then the database). Cut short, it leaves a volume the server starts on but nobody can use — depending on the moment, a catalog that cannot be read, no `postgres` database, or no host login rule (`no pg_hba.conf entry` at the first migration). `pg_isready` passes all of these. Step 5 runs [`ensure-postgres-volume.sh`](../../tooling/setup/agent/ensure-postgres-volume.sh) after compose up: it rebuilds such a volume, but **only when it provably holds nothing** — no database beyond `template0`, `template1` and `postgres`, counted from the directories under `base/` (every database anyone creates gets an id of 16384 or more), so the count works on a catalog that cannot be read. A volume holding any such database is never touched; the script stops and prints the manual repair. Readiness is probed over TCP (`pg_isready -h 127.0.0.1`), because during a first-time setup the image runs a temporary server on its Unix socket only, which a socket probe took for the real one. Tested by cutting a fresh setup short at 13 moments from 0.03 s to 6 s, plus the volume this failure left on 21 Oct: every one was repaired (5 s typically, up to 45 s for a cut in the first tenth of a second, where the server restarts in a loop first), and a volume holding a database was left alone.
 
 ## Tiers — what to enable for which goal
 
@@ -235,17 +252,22 @@ A web session is a playground: it brings itself **fully live** before the work s
 delaying the session. [`be-session-start.mjs`](../../agent-os/hooks/be-session-start.mjs) runs on startup
 and resume (not after `/clear` or a compact), runs `pnpm install` when dependencies are missing,
 then launches `bootstrap.sh` **detached** before anything slow — the bring-up starts the Docker
-daemon itself at [9], so the hook never waits for it — starts the `pnpm agent-os:check` gate and
-the tool-pin probes in the background (the banner shows their last result), and returns:
+daemon itself, in its first second, so the hook never waits for it — starts the `pnpm agent-os:check`
+gate and the tool-pin probes in the background (the banner shows their last result), and returns:
 
 ```text
 session starts → session-start hook (returns at once) → bootstrap.sh, detached
-  [1] Node   [2–8] skipped when the install stamp matches (the Setup script ran them;
-             [8] writes .env.local with TEST_MODE on, so the sign-in code screen fills itself in)
-  [9] Docker daemon, then Postgres + Redis  [10] migrate + database logins
-  [11] full demo seed, with the API and worker already starting alongside
-  [12] API on :3000 — kept running   [13] worker, health on :9090 — kept running
+  second 0: the Docker daemon starts in the background (only if it does not answer)
+  [1] Node   [2] pnpm install, [3] Docker CLI + images — each skipped while its stamp matches
+  [4] .env.local (TEST_MODE on, so the sign-in code screen fills itself in; every run)
+  [5] Postgres + Redis — a volume whose first-time setup a pause cut short is rebuilt
+  [6] migrate + database logins
+  [7] full demo seed, with the API and worker already starting alongside
+  [8] API on :3000 — kept running   [9] worker, health on :9090 — kept running
+  [10] the demo user signs in (send-code → login → users/me)
   → "live" + the playground card (API, /reference, /admin/queues, worker, logs)
+  → install-agent-tools.sh, detached: gh, CodeGraph sync, Headroom + MCP + session hooks,
+    gitleaks, semgrep, k6 — the app needs none of them, so they never hold "live" up
   → start-sonarqube.sh, detached: once the bring-up's lock clears, SonarQube for the pre-push gate
 clinozy-fe in the same session → its own hook starts Vite on :5173 (pnpm dev), detached,
   and its own start-sonarqube.sh (the same script), which waits for the same lock — first
@@ -254,18 +276,20 @@ clinozy-fe in the same session → its own hook starts Vite on :5173 (pnpm dev),
 
 | You want | Do |
 | -------- | -- |
-| Follow it step by step | `tail -f /tmp/agent-stack/bootstrap.log`, or ask the agent to watch the stack |
+| Wait until it is live | `pnpm dev:stack:wait` — prints each step as it starts; exit 0 once live and the API answers, exit 1 with the failing step and the log's tail |
+| Follow it step by step | `tail -f /tmp/agent-stack/bootstrap.log` |
+| Check sign-in end to end | `pnpm dev:stack:verify` — the demo user signs in through the API, and through Vite when it serves |
 | Follow the frontend | `tail -f /tmp/agent-stack/frontend.log`; stop it with `pkill -s "$(cat /tmp/agent-stack/frontend.pid)"` (the pid is its session's: Vite runs in another process group) |
 | Sign in without the email | the code screen fills itself in: `TEST_MODE` is on in `.env.local`, so send-code echoes `debug_verification_code` |
-| Know where it is | `pnpm dev:stack:status` — the running step (or `live`), API + worker `/livez` · `/readyz`, containers, logs |
+| Know where it is | `pnpm dev:stack:status` — the running step (or `live`), API + worker `/livez` · `/readyz`, clinozy-fe's dev server, both SonarQube servers, the agent tools, containers, logs |
 | Stop the API + worker | `pnpm dev:stack:stop` (Postgres + Redis stay; `pnpm compose:down` stops them) |
 | Bring it back | `bash tooling/setup/agent/bootstrap.sh` |
 | A scratch database again | `pnpm dev:stack:reset-db` — drops and recreates the local Compose database, then migrate, logins, seed, API and worker (the installs are skipped) |
 | A known demo password | set `DEMO_PASSWORD` in the environment's variables (`demo@example.com`) |
 | Follow SonarQube | `tail -f /tmp/agent-stack/sonarqube-backend.log` (clinozy-fe's: `sonarqube-frontend.log`). [`start-sonarqube.sh`](../../tooling/setup/agent/start-sonarqube.sh) waits until no bring-up holds the lock and Docker answers, then starts the server, so the first push finds it up instead of waiting about two minutes. Its first lock check comes after 30 s, so clinozy-fe's copy, launched by a hook that runs beside this repository's, cannot miss a bring-up that has not taken the lock yet. `SONAR=0` in the environment's variables skips it |
 
-The banner shows `Stack: starting…` / `live` and tells the agent to wait for `live` before any
-database or API work; `docker starting (bootstrap.sh starts it)` means the bring-up has the
+The banner shows `Stack: starting…` / `live` and tells the agent to run `pnpm dev:stack:wait`
+before any database or API work; `docker starting (bootstrap.sh starts it)` means the bring-up has the
 daemon in hand. A resumed session whose API already answers, or a bring-up already
 running, is left alone; a stale lock does not count as one, so a resumed container goes live
 with no manual step. Local sessions are unchanged (`Stack: on demand`).

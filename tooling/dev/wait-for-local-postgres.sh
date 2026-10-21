@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Wait until docker compose Postgres is accepting connections, or exit non-zero.
 #
-# Uses credentials from docker-compose.yml (user/database: core).
+# Uses credentials from docker-compose.yml (user/database: core). The probe goes over TCP
+# (-h 127.0.0.1), not the container's Unix socket: during a first-time setup the image runs a
+# temporary server on the socket only, so a socket probe answered before the real server was up
+# and the first migration could find nothing listening.
 #
 # Env:
 #   WAIT_FOR_POSTGRES_ATTEMPTS (default 60) — retry count
@@ -15,7 +18,7 @@ readonly INTERVAL_SECONDS="${WAIT_FOR_POSTGRES_INTERVAL_SECONDS:-1}"
 
 for ((attempt_index = 1; attempt_index <= MAXIMUM_ATTEMPTS; attempt_index++)); do
   set +e
-  readiness_output="$(docker compose exec -T postgres pg_isready -U clinozy -d clinozy 2>&1)"
+  readiness_output="$(docker compose exec -T postgres pg_isready -h 127.0.0.1 -U clinozy -d clinozy 2>&1)"
   readiness_exit_code=$?
   set -e
 

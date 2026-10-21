@@ -26,11 +26,13 @@ run the bring-up when a task needs it:
 
 Every Claude Code web session brings itself fully live: the session-start hook launches
 `bootstrap.sh` in the background — setup, Postgres + Redis, migrations + database logins, the
-full demo seed, then the API (:3000) and the worker (health on :9090) **left running**. Wait for
-`live` before database/API work:
+full demo seed, then the API (:3000) and the worker (health on :9090) **left running**, and the
+demo user signs in. Run `pnpm dev:stack:wait` before database/API work:
 
 ```bash
-pnpm dev:stack:status                 # the running step (or "live"), API + worker health, logs
+pnpm dev:stack:wait                   # blocks until live (exit 0) or failed (exit 1, step + log tail)
+pnpm dev:stack:status                 # the running step (or "live"), API + worker, Vite, SonarQube, logs
+pnpm dev:stack:verify                 # the demo user signs in through the API (and Vite)
 tail -f /tmp/agent-stack/bootstrap.log
 pnpm dev:stack:stop                   # stop the API + worker (Postgres + Redis stay)
 pnpm dev:stack:reset-db               # drop + recreate the Compose database, migrate, seed, restart
