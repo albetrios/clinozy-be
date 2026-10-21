@@ -19,6 +19,7 @@ const SIBLING = SIBLING_FROM_CANARY ?? join(process.cwd(), '..', 'clinozy-fe');
 const COPIES = [
   'agent-os/shared-contract.json',
   'tooling/setup/agent/ensure-docker-daemon.sh',
+  'tooling/setup/agent/start-sonarqube.sh',
   'tooling/ci/early-failure-alert.d.mts',
 ] as const;
 
