@@ -24,6 +24,7 @@ import { describe, expect, it } from 'vitest';
  */
 const WORKFLOW_DIRECTORY = join(process.cwd(), '.github/workflows');
 const MATRIX_WORKFLOW = 'reusable-vitest-postgres-redis.yml';
+const LOCAL_CALL = /^ {4}uses: \.\/\.github\/workflows\/([\w.-]+\.ya?ml)$/m;
 
 /** The run's own commit: on a pull request, the PR merged with main. */
 const RUN_COMMIT = /^\$\{\{ github\.sha \}\}$/;
@@ -50,11 +51,6 @@ function pullRequestWorkflows(): string[] {
     .filter((file) => /^ {2}pull_request:/m.test(triggers(readWorkflow(file))));
 }
 
-/** The local reusable workflow a job calls, if it calls one. */
-function calledWorkflow(job: string): string | undefined {
-  return /^ {4}uses: \.\/\.github\/workflows\/([A-Za-z0-9._-]+\.yml)\s*$/m.exec(job)?.[1];
-}
-
 /** Every `actions/checkout` step: from its `- ` item to the next item or a shallower line. */
 function checkoutSteps(workflow: string): string[] {
   const lines = workflow.split('\n');
@@ -73,21 +69,28 @@ function checkoutSteps(workflow: string): string[] {
   });
 }
 
+/** The value a block's first `<key>:` line sets — line by line, no backtracking regex. */
+function keyValue(options: { readonly block: string; readonly key: string }): string | undefined {
+  const prefix = `${options.key}:`;
+  const line = options.block.split('\n').find((text) => text.trimStart().startsWith(prefix));
+  return line?.trimStart().slice(prefix.length).trim();
+}
+
 /** The `ref:` a checkout step names, or undefined for the default (the run's commit). */
 function checkoutRef(step: string): string | undefined {
-  return /^\s+ref:\s*(.*)$/m.exec(step)?.[1]?.trim();
+  return keyValue({ block: step, key: 'ref' });
 }
 
 /** A checkout of another repository (`repository:`) tests nothing of this one. */
 function checksOutThisRepository(step: string): boolean {
-  return !/^\s+repository:/m.test(step);
+  return keyValue({ block: step, key: 'repository' }) === undefined;
 }
 
 /** Every job of a pull-request workflow that calls a local reusable workflow. */
 function reusableCalls(): Array<{ caller: string; workflow: string; job: string }> {
   return pullRequestWorkflows().flatMap((file) =>
     jobBlocks(readWorkflow(file)).flatMap(([id, job]) => {
-      const workflow = calledWorkflow(job);
+      const workflow = LOCAL_CALL.exec(job)?.[1];
       return workflow ? [{ caller: `${file} job '${id}'`, workflow, job }] : [];
     }),
   );
@@ -106,8 +109,8 @@ describe('PR CI tests one tree: the PR merged with main', () => {
 
   it('passes the DB matrix github.sha, the PR merged with main, never the PR head', () => {
     const matrix = jobBlock({ workflow: readWorkflow('pr-ci.yml'), job: 'matrix-tests' });
-    expect(calledWorkflow(matrix)).toBe(MATRIX_WORKFLOW);
-    expect(matrix).toMatch(/^ {6}merge_commit_sha: \$\{\{ github\.sha \}\}$/m);
+    expect(LOCAL_CALL.exec(matrix)?.[1]).toBe(MATRIX_WORKFLOW);
+    expect(keyValue({ block: matrix, key: 'merge_commit_sha' })).toMatch(RUN_COMMIT);
   });
 
   it('checks out the run commit in every job a pull request runs', () => {
@@ -123,7 +126,7 @@ describe('PR CI tests one tree: the PR merged with main', () => {
 
   it('tests the commit the caller passes in every reusable workflow a pull request calls', () => {
     const drifting = reusableCalls().flatMap(({ caller, workflow, job }) => {
-      const passed = /^ {6}merge_commit_sha:\s*(.*)$/m.exec(job)?.[1]?.trim();
+      const passed = keyValue({ block: job, key: 'merge_commit_sha' });
       const passedElsewhere =
         passed === undefined || RUN_COMMIT.test(passed)
           ? []
