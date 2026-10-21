@@ -1,5 +1,6 @@
 import { Redis } from 'ioredis';
 import { resolveRedisKeyPrefix } from '@/infrastructure/cache/redis-prefix.util.js';
+import { closeRedisClient } from '@/infrastructure/cache/redis-close.util.js';
 import { buildRedisTlsOptions } from '@/infrastructure/cache/redis-url.parse.util.js';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
@@ -108,17 +109,7 @@ export async function connectRedis(): Promise<void> {
   });
 }
 
-/**
- * Closes the shared Redis client during graceful shutdown. Races a 5s timeout so a
- * misbehaving Redis cannot stall process exit; the timeout is logged and treated as
- * resolved.
- */
+/** Closes the shared Redis client during graceful shutdown (see {@link closeRedisClient}). */
 export async function closeRedis(): Promise<void> {
-  const timeout = new Promise<void>((resolve) => {
-    setTimeout(() => {
-      logger.warn('redis.close.timeout');
-      resolve();
-    }, FIVE_SECONDS_MS);
-  });
-  await Promise.race([redisConnection.quit(), timeout]);
+  await closeRedisClient({ client: redisConnection, timeoutEvent: 'redis.close.timeout' });
 }
