@@ -2245,6 +2245,7 @@ src/
     │   ├── assert-redis-tls-safety.ts
     │   ├── bullmq-redis.client.ts
     │   ├── cache.overview.md
+    │   ├── redis-close.util.ts
     │   ├── redis-lock.util.ts
     │   ├── redis-prefix.util.ts
     │   ├── redis-scan.util.ts
@@ -3337,6 +3338,7 @@ src/
     │   ├── infrastructure/
     │   │   ├── cache/
     │   │   │   ├── redis-client.lifecycle.unit.test.ts
+    │   │   │   ├── redis-close.util.unit.test.ts
     │   │   │   ├── redis-prefix.util.unit.test.ts
     │   │   │   └── redis-tombstone-cache.util.unit.test.ts
     │   │   ├── database/
