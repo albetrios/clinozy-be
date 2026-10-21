@@ -27,8 +27,8 @@ their steps, in order, are the chain rows of [`agent-os/docs/skill-triggers.md`]
 - **Write or reorganize `docs/**`** → **be-docs-maintainer** (audit-only pass → **be-docs-audit**)
 - **Bump or add a dependency, or an agent tool pin** (`tooling/setup/agent/tool-versions.sh`) → **be-dependency-security**
 - **Finish any code change (definition-of-done)** → **be-change-completeness-guard**
-- **Review before merge** → **pre-merge-review** pipeline (`/be-pre-merge-review`: be-sql-design-reviewer, be-rls-reviewer, be-idempotency-reviewer, be-production-hardening-reviewer and be-verifier, the ones the diff needs, at once in the background; findings in `REVIEW.md` → Findings format)
-- **Release / production readiness** → **be-path-to-production-gate** (then **prod-readiness** pipeline)
+- **Review before merge** → **be-pre-merge-review** pipeline (`/be-pre-merge-review`: be-sql-design-reviewer, be-rls-reviewer, be-idempotency-reviewer, be-production-hardening-reviewer and be-verifier, the ones the diff needs, at once in the background; findings in `REVIEW.md` → Findings format)
+- **Release / production readiness** → **be-path-to-production-gate** (then **be-prod-readiness** pipeline)
 - **Start or continue a design iteration, step by step** → **`/be-iteration`** (asks the opening questions; walks `docs/design-workflow/process/iteration-guide.md` — open, `pnpm iteration:intake`, plan, approve, kick off, close, freeze)
 - **Plan a design iteration** ("plan iteration <name>") → **iteration** chain, first half: **be-iteration-planning** (no code — `KICKOFF.md` with its ROUTE ledger + `plans/`; stops after every step)
 - **Implement an approved iteration** ("kickoff", "kickoff iteration <name>", "start implementing <iteration>") → **iteration** chain, second half: **be-kickoff-iteration** (one ROUTE row at a time, `AS-BUILT.md`, a review stop after every row)

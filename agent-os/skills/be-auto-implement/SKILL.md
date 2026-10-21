@@ -1,6 +1,6 @@
 ---
 name: be-auto-implement
-description: Master orchestrator — given a requirement in the requirement.template.md format, pick the matching skill chain from chains.json, run its steps in order, run each step's gate as a stop-on-red checkpoint, and finish with the pre-merge-review pipeline. Use to drive a whole requirement end-to-end without hand-listing steps.
+description: Master orchestrator — given a requirement in the requirement.template.md format, pick the matching skill chain from chains.json, run its steps in order, run each step's gate as a stop-on-red checkpoint, and finish with the be-pre-merge-review pipeline. Use to drive a whole requirement end-to-end without hand-listing steps.
 indexNote: workflow orchestrator — runs a chain end-to-end with per-step gates
 ---
 
@@ -9,7 +9,7 @@ indexNote: workflow orchestrator — runs a chain end-to-end with per-step gates
 The **master orchestrator**. It owns no procedure of its own: it selects an existing
 **chain** ([`agent-os/skills/chains.json`](../chains.json)), runs that chain's steps in
 order — each step is an existing skill invoked by name — runs the step's **gate** as a
-checkpoint, **stops on the first red**, and ends with the **pre-merge-review** pipeline
+checkpoint, **stops on the first red**, and ends with the **be-pre-merge-review** pipeline
 ([`agent-os/agents/pipelines.json`](../../agents/pipelines.json)). No step list is duplicated
 here; the chains and pipelines are the single source.
 
@@ -60,7 +60,7 @@ and only then continue. Never run a later step over a red gate.
 
 ## 4. Finish with the review pipeline
 
-When the chain's steps are green, run the **pre-merge-review** pipeline from `pipelines.json`
+When the chain's steps are green, run the **be-pre-merge-review** pipeline from `pipelines.json`
 (be-sql-design-reviewer → be-production-hardening-reviewer → verifier) and address blocking findings —
 each reviewer hands its finding to the procedural skill that fixes it (`pipelines.json` `handoff`).
 Then the change is done per **be-change-completeness-guard** (own tests, cross-cutting suites, docs,
@@ -71,7 +71,7 @@ rules, and skills all moved with it).
 - References chains and pipelines **by name only** — if a chain's steps change, this skill
   follows automatically.
 - Stops on the first red gate (checkpoint) — never bulldozes a broken step.
-- Ends every run at **pre-merge-review**; releases go through **be-path-to-production-gate**, not here.
+- Ends every run at **be-pre-merge-review**; releases go through **be-path-to-production-gate**, not here.
 
 See [[be-skill-index]] for the chain/pipeline catalog and [[be-change-completeness-guard]] for the
 definition-of-done.
