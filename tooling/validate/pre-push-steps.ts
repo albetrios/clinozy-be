@@ -32,10 +32,11 @@ export const UNIT_RELEVANT =
   /^(src\/|tooling\/|\.github\/|agent-os\/|vitest\.config\.ts$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$)/;
 
 /**
- * The files that make pre-push run `pnpm agent-os:generate:check`: the agent-os sources it
- * generates from and its generator. It ran only in CI until the planted-bug drill (20 Oct 2026)
- * showed a hook timeout edited in `agent-os/hooks/hooks.json` reach the PR with the generated
- * platform settings left behind.
+ * The files that make pre-push run `pnpm agent-os:generate:check` and `pnpm agent-os:check`: the
+ * agent-os sources and their generator. The generate check ran only in CI until the planted-bug
+ * drill (20 Oct 2026) showed a hook timeout edited in `agent-os/hooks/hooks.json` reach the PR with
+ * the generated platform settings left behind; the integrity evals ran only in CI until #130
+ * reached its PR with two edited skills left unlocked.
  */
 export const AGENT_OS_GENERATED_RELEVANT = /^(agent-os\/|tooling\/agent-os\/)/;
 
@@ -180,6 +181,13 @@ export function prePushSteps(options: {
       runs: agentOsGenerated,
       why: agentOsGenerated
         ? 'pushed agent-os/ or its generator — the generated platform files must match'
+        : 'no agent-os/ change pushed',
+    }),
+    pnpm({
+      script: 'agent-os:check',
+      runs: agentOsGenerated,
+      why: agentOsGenerated
+        ? 'pushed agent-os/ or its generator — the skills lock and the integrity evals must pass'
         : 'no agent-os/ change pushed',
     }),
     pnpm({

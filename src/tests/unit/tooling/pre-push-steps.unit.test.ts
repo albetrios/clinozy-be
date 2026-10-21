@@ -55,6 +55,13 @@ describe('the pre-push steps', () => {
     expect(labels(['src/domains/auth/auth.service.ts'])).not.toContain(
       'pnpm agent-os:generate:check',
     );
+    // An edited skill left unlocked (#130) is caught at push, not first in CI.
+    for (const file of [
+      'agent-os/skills/be-skill-index/SKILL.md',
+      'tooling/agent-os/skills-lock.ts',
+    ])
+      expect(labels([file]), file).toContain('pnpm agent-os:check');
+    expect(labels(['src/domains/auth/auth.service.ts'])).not.toContain('pnpm agent-os:check');
     // Semgrep scans every pushed source file, the app domain included.
     expect(labels(['src/domains/app/sub-domains/leads/leads.validator.ts'])).toContain(
       'pnpm security:semgrep:push',
