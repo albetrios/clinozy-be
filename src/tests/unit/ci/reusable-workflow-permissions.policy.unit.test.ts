@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { classifyKey, parseEnvContents } from '@tooling/setup/github/sync-github-environments.js';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -190,4 +191,86 @@ describe('reusable workflow permission contract', () => {
     );
     expect(unscoped).toEqual([]);
   });
+
+  it('reads every synced key from the context its classification names', () => {
+    // A Variable read through `secrets.*` (or a Secret through `vars.*`) is an empty string, not an
+    // error: the test-result email read TEST_RESULT_EMAIL_TO, a Variable by `classifyKey`, through
+    // `secrets.*` (and SCALAR_NAMESPACE once skipped the Scalar publish the same way).
+    const synced = new Set(
+      parseEnvContents(readFileSync(join(ROOT, '.env.example'), 'utf8')).map((entry) => entry.name),
+    );
+    const mismatched = listWorkflows().flatMap((workflow) =>
+      [...workflow.content.matchAll(CONTEXT_READ)]
+        .filter(([, , name]) => name !== undefined && synced.has(name))
+        .filter(
+          ([, context, name]) => (context === 'secrets') !== (classifyKey(name ?? '') === 'secret'),
+        )
+        .map(([, context, name]) => `${workflow.file}: ${context}.${name}`),
+    );
+    expect(mismatched).toEqual([]);
+  });
+
+  it("never gates a step on an env value that only the step's own env: sets", () => {
+    // A step's `env:` is not visible to its `if:`, so such a gate reads empty: the per-shard
+    // test-result email gated on `env.RESEND_API_KEY != ''` from its own `env:` and never sent.
+    const selfGated = listWorkflows().flatMap((workflow) =>
+      stepsOf(workflow.content).flatMap((step) => {
+        const ownEnvironment = stepEnvironmentKeys(step);
+        const read = [...stepCondition(step).matchAll(/\benv\.([A-Z_][A-Z0-9_]*)/g)].map(
+          ([, name]) => name ?? '',
+        );
+        return read
+          .filter((name) => ownEnvironment.has(name))
+          .map((name) => `${workflow.file}: ${step.split('\n')[0]?.trim()} reads env.${name}`);
+      }),
+    );
+    expect(selfGated).toEqual([]);
+  });
 });
+
+/** A `${{ secrets.NAME }}` or `${{ vars.NAME }}` read: the context and the key. */
+const CONTEXT_READ = /\$\{\{[^}]*?\b(secrets|vars)\.([A-Z_][A-Z0-9_]*)/g;
+
+/** The steps of every job: each starts at a `      - ` line (steps sit six spaces in). */
+function stepsOf(workflow: string): string[] {
+  const steps: string[] = [];
+  let current: string[] | undefined;
+  for (const line of workflow.split('\n')) {
+    if (line.startsWith('      - ')) {
+      current = [line];
+      steps.push(current.join('\n'));
+      continue;
+    }
+    if (current && (line.startsWith('       ') || line.trim() === '')) {
+      current.push(line);
+      steps[steps.length - 1] = current.join('\n');
+    } else {
+      current = undefined;
+    }
+  }
+  return steps;
+}
+
+/** The step's `if:` expression, a block scalar's continuation lines included. */
+function stepCondition(step: string): string {
+  const lines = step.split('\n');
+  const start = lines.findIndex((line) => /^ {6}- if:|^ {8}if:/.test(line));
+  if (start === -1) return '';
+  const continuation = lines.slice(start + 1);
+  const end = continuation.findIndex((line) => /^ {8}\S/.test(line));
+  return [lines[start], ...(end === -1 ? continuation : continuation.slice(0, end))].join('\n');
+}
+
+/** The keys of the step's own `env:` block. */
+function stepEnvironmentKeys(step: string): Set<string> {
+  const lines = step.split('\n');
+  const start = lines.findIndex((line) => /^ {6}- env:\s*$|^ {8}env:\s*$/.test(line));
+  if (start === -1) return new Set();
+  const keys = new Set<string>();
+  for (const line of lines.slice(start + 1)) {
+    if (/^ {8}\S/.test(line)) break;
+    const key = /^ {10}([A-Z_][A-Z0-9_]*):/.exec(line)?.[1];
+    if (key) keys.add(key);
+  }
+  return keys;
+}

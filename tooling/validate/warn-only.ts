@@ -159,6 +159,19 @@ export const WARN_ONLY_CHECKS: readonly WarnOnlyCheck[] = [
     reason: INFORMATIONAL_SCENARIO,
   },
   {
+    workflow: DATABASE_TESTS,
+    step: 'Download the merged coverage',
+    mechanism: 'continue-on-error',
+    reason:
+      'the report email reads coverage when it exists; a run whose coverage gate made no merged artifact still sends its pass/fail',
+  },
+  {
+    workflow: DATABASE_TESTS,
+    step: 'Send the test report email',
+    mechanism: 'continue-on-error',
+    reason: 'a notification, not a check: a mail outage must not fail the test run',
+  },
+  {
     workflow: NIGHTLY_LOAD,
     step: 'Send load-test results email (from k6 summaries)',
     mechanism: 'continue-on-error',
