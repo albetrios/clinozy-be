@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { jobBlock, jobBlocks } from '@/tests/helpers/workflow-jobs.helper.js';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -49,22 +50,6 @@ function pullRequestWorkflows(): string[] {
     .filter((file) => /^ {2}pull_request:/m.test(triggers(readWorkflow(file))));
 }
 
-/** Each top-level job of a workflow, by id (job ids sit two spaces in, under `jobs:`). */
-function jobBlocks(workflow: string): Map<string, string> {
-  const jobs = new Map<string, string>();
-  let id = '';
-  for (const line of (workflow.split(/^jobs:\s*$/m)[1] ?? '').split('\n')) {
-    const header = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(line)?.[1];
-    if (header) {
-      id = header;
-      jobs.set(id, '');
-    } else if (id) {
-      jobs.set(id, `${jobs.get(id)}${line}\n`);
-    }
-  }
-  return jobs;
-}
-
 /** The local reusable workflow a job calls, if it calls one. */
 function calledWorkflow(job: string): string | undefined {
   return /^ {4}uses: \.\/\.github\/workflows\/([A-Za-z0-9._-]+\.yml)\s*$/m.exec(job)?.[1];
@@ -101,7 +86,7 @@ function checksOutThisRepository(step: string): boolean {
 /** Every job of a pull-request workflow that calls a local reusable workflow. */
 function reusableCalls(): Array<{ caller: string; workflow: string; job: string }> {
   return pullRequestWorkflows().flatMap((file) =>
-    [...jobBlocks(readWorkflow(file))].flatMap(([id, job]) => {
+    jobBlocks(readWorkflow(file)).flatMap(([id, job]) => {
       const workflow = calledWorkflow(job);
       return workflow ? [{ caller: `${file} job '${id}'`, workflow, job }] : [];
     }),
@@ -120,7 +105,7 @@ describe('PR CI tests one tree: the PR merged with main', () => {
   });
 
   it('passes the DB matrix github.sha, the PR merged with main, never the PR head', () => {
-    const matrix = jobBlocks(readWorkflow('pr-ci.yml')).get('matrix-tests') ?? '';
+    const matrix = jobBlock({ workflow: readWorkflow('pr-ci.yml'), job: 'matrix-tests' });
     expect(calledWorkflow(matrix)).toBe(MATRIX_WORKFLOW);
     expect(matrix).toMatch(/^ {6}merge_commit_sha: \$\{\{ github\.sha \}\}$/m);
   });

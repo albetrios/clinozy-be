@@ -30,6 +30,7 @@ pnpm test:unit -- --watch       # watch mode
 
 - Vitest setup: `setup.ts` at suite root configures the test environment without booting Fastify or opening DB connections.
 - Mocks live alongside the file under test or in [src/tests/factories/](src/tests/factories/) when shared across suites.
+- Workflow policies in `ci/` slice a workflow into its jobs with `jobBlock` / `jobBlocks` from `src/tests/helpers/workflow-jobs.helper.ts` — the one slicer, as clinozy-fe's `tests/utils/workflow-jobs.ts`.
 
 ## Dependencies
 
