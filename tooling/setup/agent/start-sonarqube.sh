@@ -6,7 +6,10 @@
 # Launched detached, so nothing waits on it: by the backend's bootstrap.sh once the stack is live,
 # and by the frontend's session-start hook once it has started the dev server. It waits for
 #   1. no bring-up holding the agent-stack lock ($AGENT_STACK_DIR/lock, default /tmp/agent-stack),
-#      so SonarQube's boot does not compete with the migrations and the seed, then
+#      so SonarQube's boot does not compete with the migrations and the seed — first checked after
+#      a 30-second settle window, because the two repositories' session-start hooks run at the
+#      same moment and the backend's bootstrap.sh takes the lock a moment after the frontend's hook
+#      launches this script, so a check at once can find no lock while a bring-up is starting, then
 #   2. a reachable Docker daemon,
 # and runs `docker compose -f docker-compose.sonar.yml up -d sonarqube` (a no-op when it is already
 # up). It skips when SONAR=0 (the switch `pnpm compose:up` reads) and gives up after
@@ -19,6 +22,7 @@ set -uo pipefail
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 lock_directory="${AGENT_STACK_DIR:-/tmp/agent-stack}/lock"
 wait_seconds="${SONARQUBE_START_WAIT_SECONDS:-900}"
+settle_seconds=30
 
 log() { echo "start-sonarqube: $*"; }
 
@@ -28,7 +32,7 @@ if [ "${SONAR:-1}" = 0 ]; then
 fi
 
 waited=0
-while [ -d "${lock_directory}" ] || ! docker info >/dev/null 2>&1; do
+while [ "${waited}" -lt "${settle_seconds}" ] || [ -d "${lock_directory}" ] || ! docker info >/dev/null 2>&1; do
   if [ "${waited}" -ge "${wait_seconds}" ]; then
     log "gave up after ${wait_seconds}s (a bring-up still holds ${lock_directory}, or Docker is not reachable) — the pre-push gate starts SonarQube when it needs it."
     exit 0
