@@ -43,7 +43,7 @@ describe('agent Docker daemon setup scripts', () => {
     // answering later, was recorded as the restricted fallback.
     expect(ensureDockerDaemonScript).toContain('pgrep -x dockerd');
     expect(ensureDockerDaemonScript).toContain(
-      'if ! wait_for_docker && command -v dockerd >/dev/null 2>&1 && ! dockerd_running; then',
+      'if ! docker info >/dev/null 2>&1 && command -v dockerd >/dev/null 2>&1 && ! dockerd_running; then',
     );
     expect(ensureDockerDaemonScript).toContain(
       'if command -v dockerd >/dev/null 2>&1 && ! dockerd_running; then\n  start_restricted_dockerd',
@@ -58,6 +58,28 @@ describe('agent Docker daemon setup scripts', () => {
     );
     expect(stop).toContain('dockerd_running || return 0');
     expect(stop).not.toContain('docker info');
+  });
+
+  it('waits on a service manager only when it started a dockerd', () => {
+    // `service docker start` can return with no daemon behind it, and systemctl can start
+    // nothing without systemd: a 30 s wait after each cost a cold start about 60 s.
+    expect(ensureDockerDaemonScript).toContain('dockerd_appeared() {');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal shell default in ensure-docker-daemon.sh
+    expect(ensureDockerDaemonScript).toContain('"${DOCKERD_APPEAR_SECONDS:-5}"');
+    expect(ensureDockerDaemonScript).toContain(
+      'if dockerd_appeared; then\n    wait_for_docker || true\n  else\n    log "service docker start left no dockerd running; moving on."',
+    );
+    expect(ensureDockerDaemonScript).toContain('[ -d /run/systemd/system ]');
+    // Between the service attempts and the direct start, nothing waits on a daemon that no
+    // process is starting.
+    const serviceAttempts = ensureDockerDaemonScript.slice(
+      ensureDockerDaemonScript.indexOf(
+        'log "Docker daemon is not reachable; attempting to start it."',
+      ),
+      ensureDockerDaemonScript.indexOf('  start_dockerd "directly"'),
+    );
+    expect(serviceAttempts.match(/wait_for_docker/g)).toHaveLength(2);
+    expect(serviceAttempts.match(/dockerd_appeared/g)).toHaveLength(2);
   });
 
   it('stops only the process trees the bring-up started, without Linux-only /proc', () => {

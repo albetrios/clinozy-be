@@ -79,10 +79,15 @@ describe('agent tool versions policy', () => {
   });
 
   it('the bootstrap installs every tool and reports pins, MCP smoke and upgrades', () => {
+    // The installs live in install-agent-tools.sh, which bootstrap.sh runs inline in the Setup
+    // script and in the background once a session's stack is live.
     const bootstrap = read('tooling/setup/agent/bootstrap.sh');
+    const agentTools = read('tooling/setup/agent/install-agent-tools.sh');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal ${AGENT_DIR} in bootstrap.sh
+    expect(bootstrap).toContain('bash "${AGENT_DIR}/install-agent-tools.sh"');
     for (const tool of AGENT_TOOLS)
-      expect(bootstrap, tool.name).toContain(`install-${tool.name}.sh`);
-    expect(bootstrap).toContain('pnpm tool:agent-tools --smoke --outdated');
+      expect(agentTools, tool.name).toContain(`install-${tool.name}.sh`);
+    expect(agentTools).toContain('pnpm tool:agent-tools --smoke --outdated');
   });
 
   it('the session-start banner checks every tool against its pin', () => {
@@ -90,8 +95,8 @@ describe('agent tool versions policy', () => {
     for (const tool of AGENT_TOOLS) {
       expect(sessionStart, tool.name).toContain(`${tool.name}:${tool.versionKey}:`);
     }
-    // The remedy is the tool's own installer: while the install stamp matches, a bootstrap
-    // re-run skips the installs, so it cannot repair a failed best-effort install.
+    // The remedy is the tool's own installer: the fix for one tool, without re-running every
+    // install.
     // biome-ignore lint/suspicious/noTemplateCurlyInString: asserts the literal template in be-session-start.mjs
     expect(sessionStart).toContain('run bash tooling/setup/agent/install-${row.name}.sh');
   });

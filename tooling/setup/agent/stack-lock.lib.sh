@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
-# The live bring-up's lock (`$AGENT_STACK_DIR/lock/`), shared by bootstrap.sh (takes it),
-# stack.sh (reports it) and agent-os/hooks/be-session-start.mjs (decides whether to launch one).
+# The live bring-up's lock (`$AGENT_STACK_DIR/lock/`) and status line (`$AGENT_STACK_DIR/status`),
+# shared by bootstrap.sh (takes the lock, writes the status), stack.sh (reports and waits on both)
+# and agent-os/hooks/be-session-start.mjs (decides whether to launch a bring-up).
 #
 # A lock outlives its bring-up when the container stops mid-run: the cached environment of
 # a cloud session can carry a `lock/pid` from another boot, and that pid can name an
@@ -31,4 +32,30 @@ stack_lock_holder() {
 stack_lock_write() {
   echo "$$" > "$1/lock/pid"
   stack_boot_id > "$1/lock/boot_id"
+}
+
+# The status line has the same problem as the lock: a container paused after "live" resumes with
+# the file saying "live" and none of the processes running. So each line is stamped with the boot
+# it was written in, and a line from another boot reads as no status at all.
+
+# stack_status_write STACK_DIR TEXT — records the bring-up's state ("running …", "failed — …",
+# "live — …", "stopped — …") as one line, stamped with this boot.
+stack_status_write() {
+  printf '%s  %s\n' "$(date -u '+%H:%M:%SZ')" "$2" > "$1/status"
+  stack_boot_id > "$1/status.boot_id"
+}
+
+# stack_status_line STACK_DIR — prints the state line and returns 0 when it was written in this
+# boot; returns 1 when there is none or it is from another boot.
+stack_status_line() {
+  local boot
+  [ -f "$1/status" ] || return 1
+  boot="$(cat "$1/status.boot_id" 2>/dev/null || true)"
+  [ "${boot}" = "$(stack_boot_id)" ] || return 1
+  cat "$1/status"
+}
+
+# stack_status_state LINE — the state word of a status line: running, failed, live or stopped.
+stack_status_state() {
+  printf '%s\n' "$1" | awk '{ print $2 }'
 }

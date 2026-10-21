@@ -32,6 +32,19 @@ wait_for_docker() {
   return 1
 }
 
+# True once a dockerd process exists, polled for DOCKERD_APPEAR_SECONDS (default 5). A service
+# manager that starts the daemon has a process up within a second; one that returns with nothing
+# behind it (a cloud container's `service docker start`) is given up on here, not after the full
+# DOCKERD_WAIT_SECONDS — that wait, once for `service` and once for `systemctl`, cost a cold
+# start about 60 s.
+dockerd_appeared() {
+  for _ in $(seq 1 "${DOCKERD_APPEAR_SECONDS:-5}"); do
+    dockerd_running && return 0
+    sleep 1
+  done
+  return 1
+}
+
 start_dockerd() {
   local mode="$1"
   shift
@@ -199,18 +212,28 @@ if command -v service >/dev/null 2>&1; then
   else
     service docker start >/dev/null 2>&1 || true
   fi
+  if dockerd_appeared; then
+    wait_for_docker || true
+  else
+    log "service docker start left no dockerd running; moving on."
+  fi
 fi
 
-if ! wait_for_docker && command -v systemctl >/dev/null 2>&1; then
+# systemctl only where systemd runs (/run/systemd/system): elsewhere it can start nothing.
+if ! docker info >/dev/null 2>&1 && ! dockerd_running && [ -d /run/systemd/system ] \
+  && command -v systemctl >/dev/null 2>&1; then
   if [ "${#sudo_cmd[@]}" -gt 0 ]; then
     "${sudo_cmd[@]}" systemctl start docker >/dev/null 2>&1 || true
   else
     systemctl start docker >/dev/null 2>&1 || true
   fi
+  if dockerd_appeared; then
+    wait_for_docker || true
+  fi
 fi
 
 # Not beside a dockerd the service is still starting.
-if ! wait_for_docker && command -v dockerd >/dev/null 2>&1 && ! dockerd_running; then
+if ! docker info >/dev/null 2>&1 && command -v dockerd >/dev/null 2>&1 && ! dockerd_running; then
   start_dockerd "directly"
 fi
 

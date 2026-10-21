@@ -235,9 +235,8 @@ async function probeToolPins() {
       return { name, current: current || "missing", pinned };
     }),
   );
-  // Each drifted tool names its own installer, as `pnpm tool:agent-tools` does: a failed
-  // best-effort install still writes bootstrap.sh's install stamp, so re-running the bootstrap
-  // skips the installs and repairs nothing.
+  // Each drifted tool names its own installer, as `pnpm tool:agent-tools` does: the fix for one
+  // tool, without re-running every install.
   const drifted = rows
     .filter((row) => row.current !== row.pinned)
     .map((row) => `${row.name} ${row.current}≠${row.pinned} — run bash tooling/setup/agent/install-${row.name}.sh`);
@@ -258,9 +257,9 @@ function agentOsStatus() {
  * but the cloud image ships dockerd without starting it; start it through the one way tooling
  * starts Docker (ensure-docker-daemon.sh), bounded so a stuck daemon never holds the session up.
  * compose:up / migrations / seeds stay on demand — only the daemon is started here. A bring-up
- * (launched here or already running) starts the daemon itself at its step 9, so then this only
- * reports: starting it here too would race the bring-up and hold the session for the daemon's
- * start-up (~45 s).
+ * (launched here or already running) starts the daemon itself in its first second, in the
+ * background, so then this only reports: starting it here too would race the bring-up and hold
+ * the session for the daemon's start-up.
  */
 function dockerStatus({ bringUpStartsIt }) {
   if (!isRemote || !onPath("docker")) return "n/a";
@@ -437,8 +436,9 @@ async function sessionContext() {
   const node = provisionNode(requiredMajor);
   installDependencies({ node, requiredMajor });
   mkdirSync(probeDirectory, { recursive: true });
-  // The stack first: a bring-up starts the Docker daemon itself (bootstrap.sh step 9), so launching
-  // it before anything slow hands the session over at once, not after the daemon's start-up.
+  // The stack first: a bring-up starts the Docker daemon itself (bootstrap.sh, in its first
+  // second), so launching it before anything slow hands the session over at once, not after the
+  // daemon's start-up.
   const stack = await stackStatus();
   const agentOs = agentOsStatus();
   const docker = dockerStatus({ bringUpStartsIt: stack.bringUp });
@@ -455,7 +455,7 @@ async function sessionContext() {
     `clinozy-be session ready (hooks from ${repositoryRoot}) — environment provisioned: ${provisioned}.`,
     `- Node ${node.version} (need >=${requiredMajor}) · deps ${dependencies} · gh ${githubCliStatus()} · codegraph ${codegraph} · mcp ${mcp} · gitleaks ${gitleaks} · tools ${tools} · agent-os ${agentOs} · docker ${docker}${nodeNote}${health}`,
     `- Stack: ${stack.line}`,
-    "- Web sessions go fully live on their own: bootstrap.sh (setup → Postgres + Redis → migrate → demo seed → API :3000 + worker :9090, kept running). Before any database/API work, wait until pnpm dev:stack:status says live.",
+    "- Web sessions go fully live on their own: bootstrap.sh (setup → Postgres + Redis → migrate → demo seed → API :3000 + worker :9090, kept running → the demo user signs in). Before any database/API work, run pnpm dev:stack:wait: it returns once live, or prints the failing step.",
     "- Gates: pnpm validate · pnpm ci:local   (pre-commit: pnpm guard:pre-commit)",
     "- Custom commands: /be-validate · /be-ci-local · /be-new-domain · /be-routes-sync",
     "",

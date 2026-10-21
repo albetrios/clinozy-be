@@ -120,10 +120,17 @@ describe.runIf(process.platform === 'linux')('tooling/setup/agent/stack-lock.lib
   it('stack.sh status calls a dead bring-up stale instead of in progress', () => {
     const stackDirectory = makeStackDirectory();
     writeLock({ stackDirectory, pid: spawnSync('/bin/true').pid, bootId: currentBoot() });
-    writeFileSync(join(stackDirectory, 'status'), '18:34:15Z  running [4/13] Docker\n');
+    writeFileSync(join(stackDirectory, 'status'), '18:34:15Z  running [3/10] Docker\n');
+    writeFileSync(join(stackDirectory, 'status.boot_id'), `${currentBoot()}\n`);
     const result = spawnSync('/bin/bash', ['tooling/setup/agent/stack.sh', 'status'], {
       encoding: 'utf8',
-      env: { ...process.env, AGENT_STACK_DIR: stackDirectory, PORT: '1', WORKER_HEALTH_PORT: '1' },
+      env: {
+        ...process.env,
+        AGENT_STACK_DIR: stackDirectory,
+        PORT: '1',
+        WORKER_HEALTH_PORT: '1',
+        FRONTEND_URL: 'http://127.0.0.1:1',
+      },
     });
 
     expect(result.stdout).toContain('(stale — no bring-up is running)');
