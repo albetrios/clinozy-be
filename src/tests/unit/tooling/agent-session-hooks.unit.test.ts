@@ -72,7 +72,7 @@ const OTHER_SETTINGS = JSON.stringify({
   },
 });
 
-const REAL_MCP = readFileSync('.mcp.json', 'utf8');
+const REAL_MCP = readFileSync('.mcp.default.json', 'utf8');
 
 /** The other repository's servers, as clinozy-fe declares them: codegraph through `pnpm exec`. */
 const OTHER_MCP = JSON.stringify({
@@ -221,8 +221,8 @@ describe('tooling/agent-os/session-hooks.ts', () => {
     const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other: OTHER_SETTINGS });
     const own = join(sessionRoot, 'own');
     const other = join(sessionRoot, 'other');
-    writeFileSync(join(own, '.mcp.json'), REAL_MCP);
-    writeFileSync(join(other, '.mcp.json'), OTHER_MCP);
+    writeFileSync(join(own, '.mcp.default.json'), REAL_MCP);
+    writeFileSync(join(other, '.mcp.default.json'), OTHER_MCP);
     const handAdded = { command: 'echo', args: ['hand-added'] };
     const stale = { command: 'codegraph', args: ['serve', '--mcp', '--path', '/gone/repository'] };
     writeFileSync(
@@ -253,7 +253,7 @@ describe('tooling/agent-os/session-hooks.ts', () => {
 
   it('writes nothing for a single repository', () => {
     const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS });
-    writeFileSync(join(sessionRoot, 'own', '.mcp.json'), REAL_MCP);
+    writeFileSync(join(sessionRoot, 'own', '.mcp.default.json'), REAL_MCP);
     const result = runScript({ sessionRoot });
 
     expect(result.status).toBe(0);

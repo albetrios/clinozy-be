@@ -20,7 +20,8 @@
  *
  * Claude Code reads `.mcp.json` from the session root too, so no repository's MCP servers start
  * there. The script also writes `<parent>/.mcp.json` with each repository's codegraph server
- * (`<prefix>-codegraph` in its `.mcp.json`), pointed at that repository with `--path`: codegraph
+ * (`<prefix>-codegraph` in its committed `.mcp.default.json`, there on a fresh clone before setup
+ * writes `.mcp.json`), pointed at that repository with `--path`: codegraph
  * serves the index under `<repository>/.codegraph/`, and from the parent it would look for one
  * there. A `pnpm exec <bin>` launcher becomes the repository's `node_modules/.bin/<bin>`, which
  * runs from any directory. headroom keeps no repository state, so it is not copied: the one
@@ -280,11 +281,13 @@ function registerMcpServer({
   const command = launchedByPnpm
     ? join(repository, 'node_modules', '.bin', binary)
     : server.command;
-  const args = launchedByPnpm ? rest : (server.args ?? []);
+  const launchArguments = launchedByPnpm ? rest : (server.args ?? []);
   return {
     ...server,
     command,
-    args: args.includes('--path') ? args : [...args, '--path', repository],
+    args: launchArguments.includes('--path')
+      ? launchArguments
+      : [...launchArguments, '--path', repository],
   };
 }
 
@@ -303,7 +306,7 @@ function buildMcpServers({
     Object.entries(existing).filter(([name]) => !codegraphServerName.test(name)),
   );
   for (const repository of repositories) {
-    const declared = readJson<McpConfig>(join(repository, '.mcp.json')).mcpServers ?? {};
+    const declared = readJson<McpConfig>(join(repository, '.mcp.default.json')).mcpServers ?? {};
     for (const [name, server] of Object.entries(declared)) {
       if (codegraphServerName.test(name)) servers[name] = registerMcpServer({ server, repository });
     }
