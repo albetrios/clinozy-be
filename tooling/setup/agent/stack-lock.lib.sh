@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
-# The live bring-up's lock (`$AGENT_STACK_DIR/lock/`) and status line (`$AGENT_STACK_DIR/status`),
-# shared by bootstrap.sh (takes the lock, writes the status), stack.sh (reports and waits on both)
-# and agent-os/hooks/be-session-start.mjs (decides whether to launch a bring-up).
+# The live bring-up's lock (`$AGENT_STACK_DIR/lock/`), status line (`$AGENT_STACK_DIR/status`)
+# and timeline, shared by bootstrap.sh (takes the lock, writes the status and the timeline),
+# stack.sh (reports and waits on them) and agent-os/hooks/be-session-start.mjs (decides whether
+# to launch a bring-up).
 #
 # A lock outlives its bring-up when the container stops mid-run: the cached environment of
 # a cloud session can carry a `lock/pid` from another boot, and that pid can name an
@@ -58,4 +59,36 @@ stack_status_line() {
 # stack_status_state LINE — the state word of a status line: running, failed, live or stopped.
 stack_status_state() {
   printf '%s\n' "$1" | awk '{ print $2 }'
+}
+
+# The timeline: when each step of a bootstrap.sh run started and how it ended, and each process it
+# launched, one line each, stamped with the UTC date and time. A live bring-up writes
+# `$AGENT_STACK_DIR/timeline`, stamped with its boot like the status line. The environment's Setup
+# script (bootstrap.sh --install-only) writes `setup-timeline-<repository>` in the directory below,
+# outside /tmp, so the record is cached with the installs it describes and both repositories' runs
+# sit side by side.
+
+# stack_setup_timeline_directory — where each repository's Setup-script timeline is kept.
+stack_setup_timeline_directory() {
+  printf '%s\n' "${AGENT_SETUP_TIMELINE_DIR:-${XDG_CACHE_HOME:-${HOME}/.cache}/agent-stack}"
+}
+
+# stack_timeline_start FILE — starts an empty timeline, stamped with this boot.
+stack_timeline_start() {
+  : > "$1" 2>/dev/null || true
+  stack_boot_id > "$1.boot_id" 2>/dev/null || true
+}
+
+# stack_timeline_append FILE TEXT — adds one stamped line; a timeline that cannot be written never
+# stops the run it records.
+stack_timeline_append() {
+  printf '%s  %s\n' "$(date -u '+%Y-%m-%d %H:%M:%SZ')" "$2" >> "$1" 2>/dev/null || true
+}
+
+# stack_timeline_this_boot FILE — prints the timeline and returns 0 when it was started in this
+# boot; returns 1 when there is none or it is from another boot.
+stack_timeline_this_boot() {
+  [ -s "$1" ] || return 1
+  [ "$(cat "$1.boot_id" 2>/dev/null || true)" = "$(stack_boot_id)" ] || return 1
+  cat "$1"
 }

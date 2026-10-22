@@ -7,7 +7,12 @@
 #                                              #   and the log's tail); prints each step as it starts
 #   bash tooling/setup/agent/stack.sh status   # pnpm dev:stack:status — the bring-up step (or
 #                                              #   "live"), API + worker health, clinozy-fe's dev
-#                                              #   server, SonarQube, the agent tools, logs
+#                                              #   server, SonarQube, the agent tools, the
+#                                              #   session-start checks, where the session's hooks
+#                                              #   come from, logs
+#   bash tooling/setup/agent/stack.sh timeline # pnpm dev:stack:timeline — when each start-up step
+#                                              #   ran: the Setup script's, this boot's bring-up,
+#                                              #   the containers
 #   bash tooling/setup/agent/stack.sh verify   # pnpm dev:stack:verify — the demo user signs in
 #                                              #   through the API, and through Vite when it serves
 #   bash tooling/setup/agent/stack.sh stop     # pnpm dev:stack:stop — stop the API + worker
@@ -22,6 +27,8 @@
 set -uo pipefail
 AGENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly AGENT_DIR
+REPOSITORY_ROOT="$(cd "${AGENT_DIR}/../../.." && pwd)"
+readonly REPOSITORY_ROOT
 # shellcheck source=tooling/setup/agent/stack-lock.lib.sh
 source "${AGENT_DIR}/stack-lock.lib.sh"
 
@@ -78,6 +85,41 @@ agent_tools_state() {
   fi
 }
 
+# The hooks' state directory, read from the hooks' own helper (agent-os/hooks/_be-hook.mjs), so
+# this script and the hooks never name it differently.
+hook_state_directory() {
+  node --input-type=module \
+    -e 'console.log((await import(process.argv[1])).hookStateDirectory)' \
+    "${REPOSITORY_ROOT}/agent-os/hooks/_be-hook.mjs" 2>/dev/null
+}
+
+# The last finished result of the session-start hook's background checks: agent-os:check, and the
+# agent tools against their pins (be-session-start.mjs runs both detached at every session start).
+background_checks_state() {
+  local probes
+  probes="$(hook_state_directory)/probes"
+  printf 'agent-os:check %s · tool pins %s\n' \
+    "$(cat "${probes}/agent-os-check" 2>/dev/null || echo 'not run yet')" \
+    "$(cat "${probes}/tool-pins" 2>/dev/null || echo 'not run yet')"
+}
+
+# Where this session's hooks come from. A session that holds several repositories runs from their
+# parent and loads every repository's hooks from the parent's .claude/settings.json
+# (tooling/agent-os/session-hooks.ts writes it, each command naming its repository); any other
+# session loads this repository's own .claude/settings.json.
+session_hooks_state() {
+  local settings counts
+  settings="$(dirname "${REPOSITORY_ROOT}")/.claude/settings.json"
+  counts="$(grep -o 'CLAUDE_PROJECT_DIR=\\"[^\\]*' "${settings}" 2>/dev/null \
+    | sed 's#.*/##' | sort | uniq -c \
+    | awk '{ printf "%s%s %s hooks", (NR > 1 ? " · " : ""), $2, $1 }')"
+  if [ -n "${counts}" ]; then
+    echo "${settings} — ${counts}"
+  else
+    echo "${REPOSITORY_ROOT}/.claude/settings.json (one repository in this session)"
+  fi
+}
+
 show_status() {
   local holder="" status_line note=""
   holder="$(stack_lock_holder "${STACK_DIR}")"
@@ -107,10 +149,42 @@ show_status() {
   fi
   echo "  SonarQube  backend :9000 $(sonarqube_state 9000) · frontend :9001 $(sonarqube_state 9001)"
   echo "  agent      $(agent_tools_state)"
+  echo "  checks     $(background_checks_state)"
+  echo "  hooks      $(session_hooks_state)"
   if command -v docker >/dev/null 2>&1; then
     echo "  containers $(docker ps --format '{{.Names}} ({{.Status}})' 2>/dev/null | paste -sd' ' - || echo 'docker unreachable')"
   fi
   echo "  logs       ${STACK_DIR}/{bootstrap,api,worker,agent-tools}.log"
+}
+
+# When each start-up step ran, in UTC: the environment's Setup script (each repository's
+# bootstrap.sh --install-only, merged by time and tagged with its repository), this boot's
+# bring-up, and the containers running now.
+show_timeline() {
+  local directory file containers
+  directory="$(stack_setup_timeline_directory)"
+  echo "Start-up timeline (UTC)"
+  echo ""
+  echo "Setup script — the cached environment build (${directory})"
+  if compgen -G "${directory}/setup-timeline-*" >/dev/null; then
+    for file in "${directory}"/setup-timeline-*; do
+      [ "${file%.boot_id}" = "${file}" ] || continue
+      sed "s/^\([0-9-]* [0-9:]*Z\)  /\1  ${file##*/setup-timeline-}  /" "${file}"
+    done | sort -s -k1,2 | sed 's/^/  /'
+  else
+    echo "  none recorded — the environment was built before bootstrap.sh kept one, or its Setup script is not bootstrap.sh --install-only"
+  fi
+  echo ""
+  echo "This boot's bring-up (${STACK_DIR}/timeline)"
+  if ! stack_timeline_this_boot "${STACK_DIR}/timeline" | sed 's/^/  /' | grep .; then
+    echo "  none in this boot — bash tooling/setup/agent/bootstrap.sh starts one"
+  fi
+  echo ""
+  echo "Containers running now"
+  # shellcheck disable=SC2046 # one container id per word
+  containers="$(docker inspect -f '{{.State.StartedAt}} {{.Name}}' $(docker ps -q 2>/dev/null) 2>/dev/null \
+    | awk '{ printf "  %s %sZ  %s started\n", substr($1, 1, 10), substr($1, 12, 8), substr($2, 2) }' | sort)"
+  echo "${containers:-  none (or Docker is not reachable)}"
 }
 
 # Blocks until the bring-up of this boot is live and the API answers (exit 0), or it failed
@@ -204,9 +278,10 @@ case "${1:-status}" in
   wait) wait_for_live ;;
   status) show_status ;;
   verify) verify_stack ;;
+  timeline) show_timeline ;;
   stop) stop_stack ;;
   *)
-    echo "usage: stack.sh [wait|status|verify|stop]" >&2
+    echo "usage: stack.sh [wait|status|verify|timeline|stop]" >&2
     exit 2
     ;;
 esac
