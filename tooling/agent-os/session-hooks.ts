@@ -16,7 +16,8 @@
  * `deny` lists are merged in beside the root's own (a union without duplicates). The root's `ask`
  * list is the repositories' asks plus the ones added there by hand: each run records the asks it
  * took from the repositories in `.claude/session-hooks-asks.json`, so the next run replaces those
- * and keeps every other one; deny still beats ask and allow.
+ * and keeps every other one; deny still beats ask and allow. Each repository's `env` is merged in
+ * too: `MCP_TIMEOUT` gives the MCP servers below time to start on a freshly booted container.
  *
  * Claude Code reads `.mcp.json` from the session root too, so no repository's MCP servers start
  * there. The script also writes `<parent>/.mcp.json` with each repository's codegraph server
@@ -83,6 +84,7 @@ type Permissions = Partial<Record<PermissionList, string[]>> & Record<string, un
 interface ClaudeSettings {
   hooks?: HookMap;
   permissions?: Permissions;
+  env?: Record<string, string>;
   [key: string]: unknown;
 }
 
@@ -259,6 +261,26 @@ function mergePermissions({
     else delete merged[list];
   }
   return merged;
+}
+
+/**
+ * The session root's `env` entry: its own `env` with every repository's merged in, a repository's
+ * value winning so a changed one reaches the root on the next run; a key only the root holds is
+ * kept, and no entry when no file sets one. Claude Code applies a settings file's `env` at startup,
+ * before the MCP servers connect — `MCP_TIMEOUT`, the time each server gets to start, among them.
+ */
+function mergeEnvironment({
+  existing,
+  repositories,
+}: {
+  existing: Record<string, string> | undefined;
+  repositories: string[];
+}): { env?: Record<string, string> } {
+  const environment: Record<string, string> = Object.assign(
+    { ...existing },
+    ...repositories.map((repository) => readJson(join(repository, claudeSettingsPath)).env ?? {}),
+  );
+  return Object.keys(environment).length > 0 ? { env: environment } : {};
 }
 
 /** The asks the previous run took from the repositories, or `null` when no run has recorded them. */
@@ -442,7 +464,8 @@ function main(): void {
     repositories,
     recordedAsks,
   });
-  const next = `${JSON.stringify({ ...current, permissions, hooks }, null, 2)}\n`;
+  const environment = mergeEnvironment({ existing: current.env, repositories });
+  const next = `${JSON.stringify({ ...current, ...environment, permissions, hooks }, null, 2)}\n`;
   const record = `${JSON.stringify({ ask: repositoryAsks(repositories) }, null, 2)}\n`;
   const summary = repositories
     .map((repository) => `${repository} (${counts.get(repository) ?? 0})`)

@@ -73,6 +73,7 @@ const OTHER_SETTINGS = JSON.stringify({
 });
 
 const REAL_MCP = readFileSync('.mcp.default.json', 'utf8');
+const REAL_ENVIRONMENT = (JSON.parse(REAL_SETTINGS) as { env?: Record<string, string> }).env ?? {};
 
 /** The other repository's servers, as clinozy-fe declares them: codegraph through `pnpm exec`. */
 const OTHER_MCP = JSON.stringify({
@@ -215,6 +216,30 @@ describe('tooling/agent-os/session-hooks.ts', () => {
     expect(commandsOf(settings)).toContain(handAdded);
     expect(commandsOf(settings)).not.toContain(stale);
     expect(readFileSync(`${sessionSettingsPath(sessionRoot)}.bak`, 'utf8')).toBe(previous);
+  });
+
+  it("merges every repository's env into the root, a repository's value winning over the root's", () => {
+    const other = JSON.stringify({ ...JSON.parse(OTHER_SETTINGS), env: { OTHER_ONLY: 'other' } });
+    const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other });
+    mkdirSync(join(sessionRoot, '.claude'));
+    writeFileSync(
+      sessionSettingsPath(sessionRoot),
+      JSON.stringify({ env: { MCP_TIMEOUT: '1000', HAND_ADDED: 'kept' } }),
+    );
+    expect(runScript({ sessionRoot }).status).toBe(0);
+
+    expect(readSessionSettings(sessionRoot).env).toEqual({
+      MCP_TIMEOUT: REAL_ENVIRONMENT.MCP_TIMEOUT,
+      HAND_ADDED: 'kept',
+      OTHER_ONLY: 'other',
+    });
+  });
+
+  it('the Claude settings give each MCP server three minutes to start', () => {
+    // A freshly booted container started the codegraph and headroom servers about 55 s after
+    // Claude Code launched them, past its 30 s default. A longer limit costs the first reply
+    // nothing: it waits at most 5 s for MCP servers (MCP_CONNECT_TIMEOUT_MS), they join later.
+    expect(Number(REAL_ENVIRONMENT.MCP_TIMEOUT)).toBeGreaterThanOrEqual(180_000);
   });
 
   it("declares each repository's codegraph server at the session root, pointed at its repository", () => {
