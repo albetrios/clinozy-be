@@ -84,7 +84,11 @@ pnpm mcp:setup:default   # declare be-codegraph + be-headroom in .mcp.json (Clau
 
 ## MCP tools exposed to agents
 
-`codegraph_search`, `codegraph_context`, `codegraph_trace`, `codegraph_callers`, `codegraph_callees`, `codegraph_impact`, `codegraph_node`, `codegraph_explore`, `codegraph_files`, `codegraph_status`.
+`codegraph_explore` — one call returns the matching symbols' source, the call paths between them and
+their blast radius. It is the only tool listed by default; `codegraph_node`, `codegraph_search`,
+`codegraph_callers`, `codegraph_callees`, `codegraph_impact`, `codegraph_files` and
+`codegraph_status` come back when `CODEGRAPH_MCP_TOOLS` names them (e.g.
+`CODEGRAPH_MCP_TOOLS=explore,node,search`), and their CLI commands work either way.
 
 ---
 

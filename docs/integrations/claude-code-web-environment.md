@@ -106,7 +106,8 @@ Both scripts also register the session's hooks (`pnpm agent-os:session-hooks`,
 both repos runs from `/home/user`, so it takes hooks from `/home/user/.claude/settings.json`, never from
 a repo's own `.claude/settings.json`. The script writes there every hook of both repos, with absolute
 paths and `CLAUDE_PROJECT_DIR` set to the hook's own repo, and both repos' permission rules (a
-repo's own settings contribute none in that layout either). It keeps any other hook in that file and
+repo's own settings contribute none in that layout either), and `/home/user/.mcp.json` with each repo's
+codegraph server ([MCP servers](#mcp-servers)). It keeps any other hook in that file and
 backs the file up to `settings.json.bak` before a change, and `--dry-run` prints the file without
 writing it. In a single-repo checkout it writes nothing.
 
@@ -339,7 +340,10 @@ A cloud session can touch GitHub only after the platform is **authorized** on th
 
 ## MCP servers
 
-In Claude Code on the web the live MCP server set is loaded by the **platform at session start** from your account / environment MCP settings — **not** the repo's [`.mcp.json`](../../.mcp.example.json). Installing a server's CLI in-session (e.g. CodeGraph) does not make its tools appear until a fresh session starts with that server configured in the web UI.
+Claude Code connects MCP servers **when it starts**: the platform's own (GitHub, remote sessions), the environment's MCP settings (web UI), the user-level servers in `~/.claude.json`, and the `.mcp.json` of the session's working directory. A cloud session runs non-interactively, so Claude Code approves that `.mcp.json` without a prompt. A server added mid-session — a CLI installed, a file written — loads at the next start (a resume or a new session).
+
+- **One repository** — the session runs in the repository, so its `.mcp.json` (the default pair) loads.
+- **Both repositories** — the session runs from their parent (`/home/user`), where no repository's `.mcp.json` is read. `pnpm agent-os:session-hooks` (run by the bring-up, as for the hooks) writes `<parent>/.mcp.json` with each repository's codegraph, pointed at it with `--path` — `be-codegraph` and `fe-codegraph`. headroom keeps no repository state, so one user-level `headroom` serves both: `install-headroom.sh` registers it (`headroom mcp install`). Cursor, Codex and single-repository sessions keep `be-headroom` / `fe-headroom`.
 
 The repo splits the MCP set into two tiers:
 
@@ -348,9 +352,9 @@ The repo splits the MCP set into two tiers:
 
 ### Configure the web environment (one-time, in the web UI)
 
-Because the platform — not `.mcp.json` — drives a cloud session's MCP, set these in the environment's MCP settings:
+The default pair needs no web settings. Set these in the environment's MCP settings only when they apply:
 
-1. **Add the default pair so they auto-connect every session:** `codegraph` (command `codegraph serve --mcp`) and `headroom` (command `headroom mcp serve`). Their CLIs are installed by the Setup script above, both in `~/.local/bin` (on the platform's `PATH`). Check them in-session with `pnpm tool:agent-tools --smoke` — it starts each server the way a client does and lists its tools.
+1. **The default pair loads without them** (see above). Their CLIs are installed by the Setup script above, both in `~/.local/bin` (on the platform's `PATH`). Check them in-session with `pnpm tool:agent-tools --smoke` — it starts each server the way a client does and lists its tools.
 2. **Add any on-demand server a task needs** from `.mcp.example.json`, supplying its token via the environment **Variables**.
 3. **Do not add `Composio`, `Descript`, or `Slack`.** They are intentionally not part of this project's tooling — use `gh` / the GitHub MCP for GitHub, and keep any personal-account servers at the user level, separate from the repo. (See [agentic-third-party-tooling.md](agentic-third-party-tooling.md).)
 

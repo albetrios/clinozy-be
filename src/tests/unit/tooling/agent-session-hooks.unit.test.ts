@@ -37,6 +37,7 @@ function runScript({ sessionRoot, options = [] }: { sessionRoot: string; options
 }
 
 const sessionSettingsPath = (sessionRoot: string) => join(sessionRoot, '.claude', 'settings.json');
+const sessionMcpPath = (sessionRoot: string) => join(sessionRoot, '.mcp.json');
 const readSessionSettings = (sessionRoot: string) =>
   JSON.parse(readFileSync(sessionSettingsPath(sessionRoot), 'utf8')) as Settings;
 const commandsOf = (settings: Settings) =>
@@ -68,6 +69,19 @@ const OTHER_SETTINGS = JSON.stringify({
         ],
       },
     ],
+  },
+});
+
+const REAL_MCP = readFileSync('.mcp.default.json', 'utf8');
+
+/** The other repository's servers, as clinozy-fe declares them: codegraph through `pnpm exec`. */
+const OTHER_MCP = JSON.stringify({
+  mcpServers: {
+    'fe-codegraph': { command: 'pnpm', args: ['exec', 'codegraph', 'serve', '--mcp'] },
+    'fe-headroom': {
+      command: 'uvx',
+      args: ['--from', 'headroom-ai[mcp]', 'headroom', 'mcp', 'serve'],
+    },
   },
 });
 
@@ -203,13 +217,49 @@ describe('tooling/agent-os/session-hooks.ts', () => {
     expect(readFileSync(`${sessionSettingsPath(sessionRoot)}.bak`, 'utf8')).toBe(previous);
   });
 
+  it("declares each repository's codegraph server at the session root, pointed at its repository", () => {
+    const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other: OTHER_SETTINGS });
+    const own = join(sessionRoot, 'own');
+    const other = join(sessionRoot, 'other');
+    writeFileSync(join(own, '.mcp.default.json'), REAL_MCP);
+    writeFileSync(join(other, '.mcp.default.json'), OTHER_MCP);
+    const handAdded = { command: 'echo', args: ['hand-added'] };
+    const stale = { command: 'codegraph', args: ['serve', '--mcp', '--path', '/gone/repository'] };
+    writeFileSync(
+      sessionMcpPath(sessionRoot),
+      JSON.stringify({ mcpServers: { 'hand-added': handAdded, 'gone-codegraph': stale } }),
+    );
+    expect(runScript({ sessionRoot }).status).toBe(0);
+
+    const { mcpServers } = JSON.parse(readFileSync(sessionMcpPath(sessionRoot), 'utf8')) as {
+      mcpServers: Record<string, { command: string; args: string[] }>;
+    };
+    // codegraph serves `<repository>/.codegraph/`; from the session root it needs `--path`.
+    expect(mcpServers['be-codegraph']).toMatchObject({
+      command: 'codegraph',
+      args: ['serve', '--mcp', '--path', own],
+    });
+    // A `pnpm exec` launcher only resolves inside its repository: it becomes the binary itself.
+    expect(mcpServers['fe-codegraph']).toEqual({
+      command: join(other, 'node_modules', '.bin', 'codegraph'),
+      args: ['serve', '--mcp', '--path', other],
+    });
+    // headroom keeps no repository state: the one user-level server serves every repository.
+    expect(Object.keys(mcpServers).filter((name) => name.endsWith('-headroom'))).toEqual([]);
+    expect(mcpServers['hand-added']).toEqual(handAdded);
+    expect(mcpServers['gone-codegraph']).toBeUndefined();
+    expect(runScript({ sessionRoot }).stdout).toContain('is up to date');
+  });
+
   it('writes nothing for a single repository', () => {
     const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS });
+    writeFileSync(join(sessionRoot, 'own', '.mcp.default.json'), REAL_MCP);
     const result = runScript({ sessionRoot });
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('holds 1 agent-os repository');
     expect(existsSync(sessionSettingsPath(sessionRoot))).toBe(false);
+    expect(existsSync(sessionMcpPath(sessionRoot))).toBe(false);
   });
 
   it('writes nothing when the session root is itself inside a git checkout', () => {

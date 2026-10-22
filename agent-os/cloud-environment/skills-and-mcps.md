@@ -30,10 +30,11 @@ the server fails with `ENOENT`).
 (`CODEGRAPH_VERSION`, `HEADROOM_VERSION`). `pnpm tool:agent-tools --smoke` starts each server
 and lists its tools; `--outdated` reports newer releases.
 
-**Platform note:** Claude Code on the web loads MCP from the **environment MCP settings** in
-the web UI as well as repo `.mcp.json`. Cursor Cloud Agents read `.mcp.json` when present.
-Configure the same `codegraph` + `headroom` commands in the platform MCP panel if tools do
-not appear after a fresh session.
+**Platform note:** Claude Code on the web loads the environment's MCP settings (web UI), the
+user-level servers and the `.mcp.json` of the session's working directory. A session that holds
+both repositories runs from their parent: `pnpm agent-os:session-hooks` writes
+`<parent>/.mcp.json` with each repository's codegraph, and the user-level `headroom` serves both.
+Cursor Cloud Agents read `.mcp.json` when present.
 
 ### Often available from the platform (not in `bootstrap.sh`)
 

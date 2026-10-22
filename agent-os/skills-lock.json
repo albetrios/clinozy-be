@@ -71,7 +71,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-delegate-search/SKILL.md",
-      "computedHash": "08219168353f9e44631dcf7e58067ded6287523486c6f2f329bd634f73ab039f"
+      "computedHash": "551c0d42fe3f1761e55d61131c306e50ea97764d5394c2ba6548a37b02cef261"
     },
     "be-dependency-security": {
       "source": "local",

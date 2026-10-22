@@ -11,8 +11,10 @@ paying tokens to read whole files.
 
 Preferred order for "where / who / what" questions (cheapest first):
 
-1. **`codegraph`** — `codegraph_search` / `callers` / `callees` / `impact` / `node` for symbols,
-   call graphs, and impact. Ask the index, don't read the tree.
+1. **`codegraph`** — `codegraph_explore`: one call returns the matching symbols' source, the call
+   paths between them and their blast radius. Ask the index, don't read the tree. (Its narrower
+   tools are off the MCP list by default; the `codegraph node` / `query` / `callers` / `impact` CLI
+   commands give the same answers.)
 2. **`serena` / `LSP`** — LSP-backed go-to-definition / find-references / hover / symbol body;
    returns the symbol, not the whole file. (`serena` MCP is the semantic-retrieval superset.)
 3. **`ast-grep`** — structural (AST) pattern search when you want *matches*, not text hits or files.

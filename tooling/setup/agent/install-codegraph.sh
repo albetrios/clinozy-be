@@ -14,13 +14,10 @@
 # Network: needs registry.npmjs.org (in the default Trusted allowlist) for the
 # global npm install — no extra allowlist entry required.
 #
-# IMPORTANT (MCP): installing the CLI + index does NOT auto-connect the codegraph
-# MCP tools in a running session. In Claude Code on the web the live MCP server set
-# is loaded by the platform at session start from your account/environment MCP
-# settings — NOT the repo .mcp.json (declared by install-headroom.sh). Configure the
-# `codegraph` server in the web UI MCP settings (command `codegraph serve --mcp`) for
-# the tools to appear, then start a fresh session. The CLI (`codegraph query/context/status`)
-# works immediately regardless.
+# MCP: Claude Code connects MCP servers when it starts, so the codegraph tools appear at the
+# next start, from the repository's .mcp.json (declared by install-headroom.sh) or, in a
+# session that holds both repositories, from the parent's .mcp.json that
+# `pnpm agent-os:session-hooks` writes. The CLI (`codegraph explore/query/status`) works at once.
 #
 # Idempotent and best-effort: never hard-fails the setup chain. Diagnostics → stderr.
 set -uo pipefail

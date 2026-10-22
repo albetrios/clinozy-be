@@ -62,8 +62,8 @@ share (`tool-install.lib.sh`, `stack-lock.lib.sh`) rather than copy them. Pinned
   from `/home/user/.claude/settings.json`. `pnpm agent-os:session-hooks`
   ([`tooling/agent-os/session-hooks.ts`](../../tooling/agent-os/session-hooks.ts), run by
   the cloud bootstrap) writes every repository's hooks there with absolute paths and
-  `CLAUDE_PROJECT_DIR="<repository>"` in front of each command; it is a no-op in a
-  single-repository checkout. Canary: the SessionStart context names the root the hooks
+  `CLAUDE_PROJECT_DIR="<repository>"` in front of each command, and `/home/user/.mcp.json` with
+  each repository's codegraph server; it is a no-op in a single-repository checkout. Canary: the SessionStart context names the root the hooks
   ran from (`clinozy-be session ready (hooks from …)`).
 - **Cursor** — `.cursor/hooks.json` (symlink to the generated
   `agent-os/platforms/cursor/hooks.json`) → `beforeShellExecution` (shell guard),

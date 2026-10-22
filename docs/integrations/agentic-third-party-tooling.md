@@ -80,9 +80,9 @@ They split into two tiers:
 - **On-demand set — the other twelve.** Most need a provider token. Scaffold them into
   `.mcp.json` with **`pnpm mcp:setup`** — all at once, or a subset by name
   (`pnpm mcp:setup stripe sentry`); `pnpm mcp:setup:default` for just the pair, and
-  `pnpm mcp:setup --list` for status. On Claude Code web the live set is configured in
-  the environment MCP settings (web UI), not `.mcp.json` — see
-  [claude-code-web-environment.md](claude-code-web-environment.md).
+  `pnpm mcp:setup --list` for status. On Claude Code web, see
+  [claude-code-web-environment.md](claude-code-web-environment.md#mcp-servers) for what a
+  cloud session loads.
 
 The **GitHub**, **Composio**, **Descript**, and **Slack** MCPs are intentionally **not**
 part of this project's config — use `gh` / the GitHub MCP for GitHub, and keep any
@@ -102,8 +102,7 @@ personal-account servers at the user level so they stay separate from the repo.
 
 Merges are **non-destructive**: existing `.mcp.json` entries (with real keys) are kept, and a
 server whose token or CLI is missing simply stays disconnected until you fill its `${VAR}` in
-`.env.local`. Unknown names are ignored with a hint. On Claude Code web the live set is
-configured in the environment MCP settings (web UI), not this file.
+`.env.local`. Unknown names are ignored with a hint.
 
 ### On-demand servers (everything except the default pair)
 

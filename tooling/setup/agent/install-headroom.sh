@@ -13,12 +13,11 @@
 #
 # Network: needs pypi.org + files.pythonhosted.org (PyPI) for the install.
 #
-# IMPORTANT (MCP): installing the CLI does NOT auto-connect the headroom MCP tools
-# in a running session. In Claude Code on the web the live MCP server set is loaded
-# by the platform at session start from your account/environment MCP settings — NOT
-# the repo .mcp.json. Configure the `headroom` server (command `headroom mcp serve`)
-# in the web UI MCP settings for the tools to appear, then start a fresh session.
-# `headroom mcp install` (run below, best-effort) wires it for LOCAL clients.
+# MCP: Claude Code connects MCP servers when it starts, so a server installed mid-session
+# loads at the next start. `headroom mcp install` (run below, best-effort) registers headroom
+# at user level: the one server a session holding both repositories uses (it runs from their
+# parent, where no repository's .mcp.json is read). A single-repository session reads the
+# repository's .mcp.json, which ensure_default_mcp_servers declares below.
 #
 # Idempotent and best-effort: never hard-fails the setup chain. Diagnostics → stderr.
 set -uo pipefail
@@ -95,9 +94,7 @@ fi
 # Ensure the default MCP pair (codegraph + headroom) is declared in .mcp.json so the
 # session matches `pnpm setup:local`. install-codegraph.sh only builds the index; this merges
 # in the committed `.mcp.default.json` (codegraph + headroom), preserving any other
-# entries — never clobbering real keys. Best-effort: needs jq + the template. (On Claude
-# Code web the platform loads MCP from the environment settings, not this file; this keeps
-# local/CI clients and the documented default in sync.)
+# entries — never clobbering real keys. Best-effort: needs jq + the template.
 ensure_default_mcp_servers() {
   command -v jq >/dev/null 2>&1 || {
     echo "install-headroom: jq not found — skipping .mcp.json default-pair merge (non-fatal)." >&2
