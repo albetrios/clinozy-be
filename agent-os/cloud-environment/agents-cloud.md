@@ -31,8 +31,9 @@ demo user signs in. Run `pnpm dev:stack:wait` before database/API work:
 
 ```bash
 pnpm dev:stack:wait                   # blocks until live (exit 0) or failed (exit 1, step + log tail)
-pnpm dev:stack:status                 # the running step (or "live"), API + worker, Vite, SonarQube, logs
+pnpm dev:stack:status                 # the running step (or "live"), API + worker, Vite, SonarQube, checks, hooks, logs
 pnpm dev:stack:verify                 # the demo user signs in through the API (and Vite)
+pnpm dev:stack:timeline               # when each start-up step ran: Setup script, this boot's bring-up, containers
 tail -f /tmp/agent-stack/bootstrap.log
 pnpm dev:stack:stop                   # stop the API + worker (Postgres + Redis stay)
 pnpm dev:stack:reset-db               # drop + recreate the Compose database, migrate, seed, restart

@@ -15,6 +15,7 @@
     "dev:worker": "tsx watch src/worker.ts",
     "dev:stack:status": "bash tooling/setup/agent/stack.sh status",
     "dev:stack:stop": "bash tooling/setup/agent/stack.sh stop",
+    "dev:stack:timeline": "bash tooling/setup/agent/stack.sh timeline",
     "dev:stack:verify": "bash tooling/setup/agent/stack.sh verify",
     "dev:stack:wait": "bash tooling/setup/agent/stack.sh wait",
     "dev:stack:reset-db": "bash tooling/setup/agent/bootstrap.sh --reset-database",

@@ -2,8 +2,9 @@
 // Claude Code PostToolUseFailure hook (Bash).
 //
 // When a known clinozy-be *sync / validation gate* fails, inject a concise hint with the fix
-// command and the owning skill — turning a raw non-zero exit into a fix path. Scoped to gates
-// only: an ordinary failed command (a grep with no match, a test mid-TDD) produces no output, so
+// command and the owning skill — turning a raw non-zero exit into a fix path. The one non-gate
+// rule is the pnpm flag pnpm 12 rejects outright (`-s`), so the next try is right. Scoped to
+// those: an ordinary failed command (a grep with no match, a test mid-TDD) produces no output, so
 // this never nags.
 //
 // Adds context via hookSpecificOutput.additionalContext (PostToolUseFailure cannot block — the
@@ -13,6 +14,7 @@ import { recordTelemetry } from "./_be-telemetry.mjs";
 
 /** [does the lowercased command match, fix hint] — in the order the hints are listed. */
 const GATES = [
+  [(command) => /\bpnpm\s+-s\b/.test(command), "pnpm 12 has no -s shorthand → pnpm --silent <script>, or plain pnpm <script>"],
   [(command) => command.includes("validate:domain"), "domain structure → fix layout per CLAUDE.md › Domain Structure (be-domain-generator / be-structure-maintainer); details: pnpm validate:domain:strict"],
   [(command) => command.includes("routes:catalog"), "route catalog drift → pnpm routes:catalog to regenerate docs/routes.txt"],
   [(command) => command.includes("tsdoc:check"), "TSDoc coverage → add summary + @remarks on new exports; budget tooling/tsdoc-coverage/budget.json (be-tsdoc-export-guard); details: pnpm tsdoc:check:report"],
@@ -32,7 +34,7 @@ const hints = command ? GATES.filter(([matches]) => matches(command)).map(([, hi
 if (hints.length > 0) {
   addModelContext({
     event: "PostToolUseFailure",
-    context: ["⚡ clinozy-be gate failed — likely fix:", ...hints.map((hint) => `  • ${hint}`), "Skill map: agent-os/docs/skill-triggers.md"].join("\n"),
+    context: ["⚡ clinozy-be command failed — likely fix:", ...hints.map((hint) => `  • ${hint}`), "Skill map: agent-os/docs/skill-triggers.md"].join("\n"),
   });
 }
 recordTelemetry("be-gate-failure-hint", "PostToolUseFailure", hints.length > 0 ? "fired" : "silent");

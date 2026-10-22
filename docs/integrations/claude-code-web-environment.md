@@ -281,7 +281,8 @@ clinozy-fe in the same session → its own hook starts Vite on :5173 (pnpm dev),
 | Check sign-in end to end | `pnpm dev:stack:verify` — the demo user signs in through the API, and through Vite when it serves |
 | Follow the frontend | `tail -f /tmp/agent-stack/frontend.log`; stop it with `pkill -s "$(cat /tmp/agent-stack/frontend.pid)"` (the pid is its session's: Vite runs in another process group) |
 | Sign in without the email | the code screen fills itself in: `TEST_MODE` is on in `.env.local`, so send-code echoes `debug_verification_code` |
-| Know where it is | `pnpm dev:stack:status` — the running step (or `live`), API + worker `/livez` · `/readyz`, clinozy-fe's dev server, both SonarQube servers, the agent tools, containers, logs |
+| Know where it is | `pnpm dev:stack:status` — the running step (or `live`), API + worker `/livez` · `/readyz`, clinozy-fe's dev server, both SonarQube servers, the agent tools, the session-start checks (`agent-os:check`, tool pins), the settings file the session's hooks load from (the parent's `.claude/settings.json` when the session holds both repositories), containers, logs |
+| Know when each step ran | `pnpm dev:stack:timeline` — in UTC, the Setup script's run (each repository's `bootstrap.sh --install-only`, recorded in `~/.cache/agent-stack/` so it is cached with the environment), this boot's bring-up step by step with the processes it launched, and the containers' start times |
 | Stop the API + worker | `pnpm dev:stack:stop` (Postgres + Redis stay; `pnpm compose:down` stops them) |
 | Bring it back | `bash tooling/setup/agent/bootstrap.sh` |
 | A scratch database again | `pnpm dev:stack:reset-db` — drops and recreates the local Compose database, then migrate, logins, seed, API and worker (the installs are skipped) |

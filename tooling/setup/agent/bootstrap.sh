@@ -32,7 +32,9 @@
 # Each step writes its name to $AGENT_STACK_DIR/status (default /tmp/agent-stack), stamped with
 # this boot (stack-lock.lib.sh), with the full log beside it. `pnpm dev:stack:wait` blocks until
 # "live" or "failed"; `pnpm dev:stack:status` / `pnpm dev:stack:stop` (stack.sh). A lock keeps two
-# bring-ups from racing; a re-run is safe (live services are kept).
+# bring-ups from racing; a re-run is safe (live services are kept). Each step's start and outcome,
+# and each process launched, also go to a timeline with the UTC time — the Setup script's kept
+# with the cached environment (stack-lock.lib.sh) — which `pnpm dev:stack:timeline` prints.
 #
 # `--install-only` builds the cached environment, so everything it leaves is a file: the
 # installs, and a Postgres volume that has finished its first-time setup and the migrations,
@@ -72,6 +74,17 @@ mkdir -p "${STACK_DIR}"
 # shellcheck source=tooling/setup/agent/stack-lock.lib.sh
 source "${AGENT_DIR}/stack-lock.lib.sh"
 
+# This run's timeline (stack-lock.lib.sh): a live bring-up's in the stack directory, started once
+# it holds the lock below; the Setup script's beside the cached environment, started now.
+if [ "${live}" = 1 ]; then
+  TIMELINE_FILE="${STACK_DIR}/timeline"
+else
+  TIMELINE_FILE="$(stack_setup_timeline_directory)/setup-timeline-$(basename "$(pwd)")"
+  mkdir -p "$(dirname "${TIMELINE_FILE}")" 2>/dev/null || true
+  stack_timeline_start "${TIMELINE_FILE}"
+fi
+readonly TIMELINE_FILE
+
 # The step that is running (or failed, or "live") — read by `pnpm dev:stack:status` and
 # `pnpm dev:stack:wait`, which ignore a line written in another boot.
 record_status() {
@@ -79,13 +92,16 @@ record_status() {
   stack_status_write "${STACK_DIR}" "$*"
 }
 
+# One line in this run's timeline — `pnpm dev:stack:timeline`.
+timeline() { stack_timeline_append "${TIMELINE_FILE}" "$*"; }
+
 # Seconds since this run started, for the log.
 elapsed() { echo "$(( $(date +%s) - start_ts ))s"; }
 
-step() { echo ""; echo "▶ $* (+$(elapsed))"; record_status "running ${*}"; }
-ok()   { echo "✓ $*"; }
-skip() { echo "• $*"; }
-die()  { echo "✗ $*" >&2; record_status "failed — ${*}"; exit 1; }
+step() { echo ""; echo "▶ $* (+$(elapsed))"; record_status "running ${*}"; timeline "▶ $*"; }
+ok()   { echo "✓ $*"; timeline "✓ $*"; }
+skip() { echo "• $*"; timeline "• $*"; }
+die()  { echo "✗ $*" >&2; record_status "failed — ${*}"; timeline "✗ $*"; exit 1; }
 
 # start_detached NAME COMMAND… — COMMAND in its own session, so it outlives this script
 # (and the hook that launched it); output in $STACK_DIR/NAME.log, pid in $STACK_DIR/NAME.pid.
@@ -98,6 +114,7 @@ start_detached() {
     nohup "$@" >"${STACK_DIR}/${name}.log" 2>&1 </dev/null &
   fi
   echo $! > "${STACK_DIR}/${name}.pid"
+  timeline "  started ${name} (pid $!, log ${STACK_DIR}/${name}.log)"
 }
 
 # One bring-up at a time (a session resume, or a manual run while the hook's runs). A lock
@@ -114,6 +131,7 @@ if [ "${live}" = 1 ]; then
     mkdir "${STACK_DIR}/lock" || die "cannot take the bring-up lock ${STACK_DIR}/lock"
   fi
   stack_lock_write "${STACK_DIR}"
+  stack_timeline_start "${TIMELINE_FILE}"
   trap 'rm -f "${STACK_DIR}/lock/pid" "${STACK_DIR}/lock/boot_id"; rmdir "${STACK_DIR}/lock" 2>/dev/null' EXIT
 fi
 
@@ -315,6 +333,7 @@ if [ "${install_only}" = 1 ]; then
   fi
   echo ""
   echo "✓ install complete in $(elapsed) — every session brings the stack live itself (bash tooling/setup/agent/bootstrap.sh)."
+  timeline "install complete in $(elapsed)"
   exit 0
 fi
 
@@ -437,6 +456,7 @@ esac
 # curl prints 000 itself when nothing answers.
 route_state() { curl -s -o /dev/null -m 3 -w '%{http_code}' "$1" 2>/dev/null || true; }
 record_status "live — API ${api_url} · worker ${worker_url}"
+timeline "live in $(elapsed) — API ${api_url} · worker ${worker_url}"
 
 # The agent's tools, then SonarQube, in the background. The tools install only what changed
 # (their own stamp) and sync the CodeGraph index; one run at a time.
@@ -461,4 +481,4 @@ echo "  Demo login   demo@example.com — the code screen fills itself in while 
 echo "  Agent tools  ${agent_tools_note} (log: ${STACK_DIR}/agent-tools.log)"
 echo "  SonarQube    starting in the background for the pre-push gate (log: ${STACK_DIR}/sonarqube-backend.log)"
 echo "  Logs         ${STACK_DIR}/{bootstrap,api,worker}.log"
-echo "  Wait/status  pnpm dev:stack:wait · pnpm dev:stack:status · pnpm dev:stack:verify · pnpm dev:stack:stop"
+echo "  Wait/status  pnpm dev:stack:wait · pnpm dev:stack:status · pnpm dev:stack:verify · pnpm dev:stack:timeline · pnpm dev:stack:stop"

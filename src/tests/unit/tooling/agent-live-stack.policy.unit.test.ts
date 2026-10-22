@@ -267,14 +267,42 @@ describe('live playground stack policy', () => {
     );
   });
 
-  it('wait, status, verify and stop are one command each', () => {
+  it('wait, status, verify, timeline and stop are one command each', () => {
     expect(packageScripts['dev:stack:wait']).toBe('bash tooling/setup/agent/stack.sh wait');
     expect(packageScripts['dev:stack:status']).toBe('bash tooling/setup/agent/stack.sh status');
     expect(packageScripts['dev:stack:verify']).toBe('bash tooling/setup/agent/stack.sh verify');
+    expect(packageScripts['dev:stack:timeline']).toBe('bash tooling/setup/agent/stack.sh timeline');
     expect(packageScripts['dev:stack:stop']).toBe('bash tooling/setup/agent/stack.sh stop');
     expect(stack).toContain('wait) wait_for_live ;;');
     expect(stack).toContain('show_status');
     expect(stack).toContain('verify) verify_stack ;;');
+    expect(stack).toContain('timeline) show_timeline ;;');
     expect(stack).toContain('stop_stack');
+  });
+
+  it('every step, outcome and launch goes to the timeline, the Setup script with the cached environment', () => {
+    // The shell lines as bootstrap.sh writes them, `${…}` expansions included.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a shell parameter expansion, not a template.
+    const stepLine = 'record_status "running ${*}"; timeline "▶ $*"; }';
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a shell parameter expansion, not a template.
+    const launchLine = 'timeline "  started ${name} (pid $!, log ${STACK_DIR}/${name}.log)"';
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a shell parameter expansion, not a template.
+    const lockLine = 'stack_lock_write "${STACK_DIR}"';
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a shell parameter expansion, not a template.
+    const timelineStart = 'stack_timeline_start "${TIMELINE_FILE}"';
+    expect(bootstrap).toContain(stepLine);
+    expect(bootstrap).toContain('ok()   { echo "✓ $*"; timeline "✓ $*"; }');
+    expect(bootstrap).toContain('skip() { echo "• $*"; timeline "• $*"; }');
+    expect(bootstrap).toContain('timeline "✗ $*"; exit 1; }');
+    expect(bootstrap).toContain(launchLine);
+    // The live run's timeline starts only once it holds the lock: a second run that finds the lock
+    // taken exits without wiping the record of the one that holds it.
+    const lockWritten = bootstrap.indexOf(lockLine);
+    expect(lockWritten).toBeGreaterThan(-1);
+    expect(bootstrap.indexOf(timelineStart, lockWritten)).toBeGreaterThan(lockWritten);
+    // The Setup script's record sits beside the cached environment, one file per repository.
+    expect(bootstrap).toContain(
+      'TIMELINE_FILE="$(stack_setup_timeline_directory)/setup-timeline-$(basename "$(pwd)")"',
+    );
   });
 });

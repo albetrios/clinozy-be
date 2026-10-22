@@ -3517,6 +3517,7 @@ src/
     │   │   ├── agent-session-hooks.unit.test.ts
     │   │   ├── agent-sonar-docker.policy.unit.test.ts
     │   │   ├── agent-stack-lock.unit.test.ts
+    │   │   ├── agent-stack-timeline.unit.test.ts
     │   │   ├── agent-stack-wait.unit.test.ts
     │   │   ├── agent-tool-install-lib.unit.test.ts
     │   │   ├── agent-tool-versions.policy.unit.test.ts
