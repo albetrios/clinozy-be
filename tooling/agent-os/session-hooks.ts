@@ -19,20 +19,23 @@
  * and keeps every other one; deny still beats ask and allow. Each repository's `env` is merged in
  * too: `MCP_TIMEOUT` gives the MCP servers below time to start on a freshly booted container.
  *
- * Claude Code reads `.mcp.json` from the session root too, so no repository's MCP servers start
- * there. The script also writes `<parent>/.mcp.json` with each repository's codegraph server
- * (`<prefix>-codegraph` in its committed `.mcp.default.json`, there on a fresh clone before setup
- * writes `.mcp.json`), pointed at that repository with `--path`: codegraph
- * serves the index under `<repository>/.codegraph/`, and from the parent it would look for one
- * there. A `pnpm exec <bin>` launcher becomes the repository's `node_modules/.bin/<bin>`, which
- * runs from any directory. headroom keeps no repository state, so it is not copied: the one
- * user-level server `install-headroom.sh` registers (`headroom mcp install`) serves every
- * repository.
+ * Claude Code reads `.mcp.json` only from the directory the session runs in (and its parents),
+ * never from a repository added beside it, so no repository's MCP servers start there. The script
+ * registers each repository's codegraph server (`<prefix>-codegraph` in its committed
+ * `.mcp.default.json`, there on a fresh clone before setup writes `.mcp.json`) at user level, in
+ * Claude Code's own config (`~/.claude.json`, or `$CLAUDE_CONFIG_DIR/.claude.json`), beside the
+ * `headroom` server `install-headroom.sh` registers there (`headroom mcp install`): a user-level
+ * server starts whichever directory the session runs from. Each is pointed at its repository with
+ * `--path`: codegraph serves the index under `<repository>/.codegraph/`, and from elsewhere it
+ * would look for one there. A `pnpm exec <bin>` launcher becomes the repository's
+ * `node_modules/.bin/<bin>`, which runs from any directory. headroom keeps no repository state,
+ * so the one user-level server serves every repository.
  *
- * Idempotent: the commands it writes (`CLAUDE_PROJECT_DIR="…" node "…/agent-os/hooks/…"`)
- * and the codegraph servers are rebuilt on every run, while any other hook, server and key in
- * the files are kept. Before a change, the previous settings file is copied to
- * `settings.json.bak`. Running it from either repository gives the same files.
+ * Idempotent: the commands it writes (`CLAUDE_PROJECT_DIR="…" node "…/agent-os/hooks/…"`) are
+ * rebuilt on every run and a codegraph server is rewritten only when its definition changed,
+ * while any other hook, server and key in the files are kept. Before a change, the previous
+ * settings file is copied to `settings.json.bak`. Running it from either repository gives the
+ * same files.
  *
  * Writes nothing, and says why, when the parent directory sits inside a git checkout, or when
  * it holds fewer than two agent-os repositories (a
@@ -47,9 +50,12 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { parseCommandLine } from '@tooling/setup/common/script.js';
 
 const claudeSettingsPath = join('agent-os', 'platforms', 'claude', 'settings.json');
@@ -290,7 +296,7 @@ function readRecordedAsks(recordFile: string): string[] | null {
   return Array.isArray(record.ask) ? record.ask.filter((rule) => typeof rule === 'string') : null;
 }
 
-/** A repository's codegraph server, started from the session root but serving the repository's index. */
+/** A repository's codegraph server, started from any directory but serving the repository's index. */
 function registerMcpServer({
   server,
   repository,
@@ -313,20 +319,9 @@ function registerMcpServer({
   };
 }
 
-/**
- * The session root's MCP servers: every one it already has except the codegraph servers, which
- * are rebuilt from the repositories (a repository since removed leaves none behind).
- */
-function buildMcpServers({
-  existing,
-  repositories,
-}: {
-  existing: Record<string, McpServer>;
-  repositories: string[];
-}): Record<string, McpServer> {
-  const servers = Object.fromEntries(
-    Object.entries(existing).filter(([name]) => !codegraphServerName.test(name)),
-  );
+/** Every repository's codegraph server, as its committed `.mcp.default.json` declares it. */
+function buildCodegraphServers(repositories: string[]): Record<string, McpServer> {
+  const servers: Record<string, McpServer> = {};
   for (const repository of repositories) {
     const declared = readJson<McpConfig>(join(repository, '.mcp.default.json')).mcpServers ?? {};
     for (const [name, server] of Object.entries(declared)) {
@@ -337,14 +332,26 @@ function buildMcpServers({
 }
 
 /** Writes through a temporary file, so Claude Code never reads a half-written one. */
-function writeFileAtomically({ path, content }: { path: string; content: string }): void {
+function writeFileAtomically({
+  path,
+  content,
+  mode,
+}: {
+  path: string;
+  content: string;
+  mode?: number;
+}): void {
   const temporaryFile = `${path}.tmp`;
-  writeFileSync(temporaryFile, content);
+  writeFileSync(temporaryFile, content, { mode });
   renameSync(temporaryFile, path);
 }
 
-/** The session root's `.mcp.json` as this run writes it, and whether the file holds that already. */
-function planMcpFile({
+/**
+ * Claude Code's user-level config with every repository's codegraph server registered, and
+ * whether it holds them already. Every other key — the account, `headroom`, any server added by
+ * hand — is kept, and an unchanged config is never rewritten.
+ */
+function planUserConfig({
   path,
   current,
   repositories,
@@ -352,18 +359,19 @@ function planMcpFile({
   path: string;
   current: McpConfig;
   repositories: string[];
-}): { path: string; content: string; servers: string; isCurrent: boolean } {
-  const mcpServers = buildMcpServers({ existing: current.mcpServers ?? {}, repositories });
-  const content = `${JSON.stringify({ ...current, mcpServers }, null, 2)}\n`;
-  const servers =
-    Object.keys(mcpServers)
-      .filter((name) => codegraphServerName.test(name))
-      .join(', ') || 'none';
-  // No file and nothing to declare is current too: the script never writes an empty server list.
-  const isCurrent = existsSync(path)
-    ? readFileSync(path, 'utf8') === content
-    : Object.keys(mcpServers).length === 0;
-  return { path, content, servers, isCurrent };
+}): { path: string; content: string; mode: number; servers: string; isCurrent: boolean } {
+  const codegraphServers = buildCodegraphServers(repositories);
+  const mcpServers = { ...current.mcpServers, ...codegraphServers };
+  return {
+    path,
+    content: `${JSON.stringify({ ...current, mcpServers }, null, 2)}\n`,
+    // The file holds the signed-in account: an existing one keeps its mode, a new one is private.
+    mode: existsSync(path) ? statSync(path).mode & 0o777 : 0o600,
+    servers: Object.keys(codegraphServers).join(', ') || 'none',
+    isCurrent: Object.entries(codegraphServers).every(([name, server]) =>
+      isDeepStrictEqual(current.mcpServers?.[name], server),
+    ),
+  };
 }
 
 /** Writes the session root's settings and the asks record, or prints the settings on a dry run. */
@@ -396,21 +404,22 @@ function writeSettings({
   log(`wrote ${settingsFile} — hooks from ${summary}.`);
 }
 
-/** Writes the session root's `.mcp.json`, or prints it on a dry run. */
-function writeMcpFile({
+/** Registers the codegraph servers in Claude Code's user-level config, or names them on a dry run. */
+function writeUserConfig({
   dryRun,
   plan,
 }: {
   dryRun: boolean;
-  plan: { path: string; content: string; servers: string };
+  plan: { path: string; content: string; mode: number; servers: string };
 }): void {
+  // Never printed: the file holds the signed-in account.
   if (dryRun) {
-    log(`would write ${plan.path} — ${plan.servers}:`);
-    process.stdout.write(plan.content);
+    log(`would register at user level in ${plan.path}: ${plan.servers}.`);
     return;
   }
-  writeFileAtomically({ path: plan.path, content: plan.content });
-  log(`wrote ${plan.path} — ${plan.servers}.`);
+  mkdirSync(dirname(plan.path), { recursive: true });
+  writeFileAtomically({ path: plan.path, content: plan.content, mode: plan.mode });
+  log(`registered at user level in ${plan.path}: ${plan.servers}.`);
 }
 
 function main(): void {
@@ -444,17 +453,17 @@ function main(): void {
   const settingsDirectory = join(sessionRoot, '.claude');
   const settingsFile = join(settingsDirectory, 'settings.json');
   const recordFile = join(settingsDirectory, 'session-hooks-asks.json');
-  const mcpFile = join(sessionRoot, '.mcp.json');
+  const userConfigFile = join(process.env.CLAUDE_CONFIG_DIR ?? homedir(), '.claude.json');
   let current: ClaudeSettings;
   let recordedAsks: string[] | null;
-  let currentMcp: McpConfig;
+  let userConfig: McpConfig;
   try {
     current = readJson(settingsFile);
     recordedAsks = readRecordedAsks(recordFile);
-    currentMcp = readJson<McpConfig>(mcpFile);
+    userConfig = readJson<McpConfig>(userConfigFile);
   } catch {
     console.error(
-      `session-hooks: ${settingsFile}, ${recordFile} or ${mcpFile} is not valid JSON — fix or move it, then re-run.`,
+      `session-hooks: ${settingsFile}, ${recordFile} or ${userConfigFile} is not valid JSON — fix or move it, then re-run.`,
     );
     process.exit(1);
   }
@@ -473,16 +482,16 @@ function main(): void {
   const recordIsCurrent = existsSync(recordFile) && readFileSync(recordFile, 'utf8') === record;
   const settingsIsCurrent =
     existsSync(settingsFile) && readFileSync(settingsFile, 'utf8') === next && recordIsCurrent;
-  const mcp = planMcpFile({ path: mcpFile, current: currentMcp, repositories });
+  const mcp = planUserConfig({ path: userConfigFile, current: userConfig, repositories });
 
   if (settingsIsCurrent && mcp.isCurrent) {
-    log(`${settingsFile} is up to date — hooks from ${summary}; MCP: ${mcp.servers}.`);
+    log(`${settingsFile} is up to date — hooks from ${summary}; user-level MCP: ${mcp.servers}.`);
     return;
   }
   if (!settingsIsCurrent) {
     writeSettings({ dryRun, settingsFile, recordFile, next, record, summary });
   }
-  if (!mcp.isCurrent) writeMcpFile({ dryRun, plan: mcp });
+  if (!mcp.isCurrent) writeUserConfig({ dryRun, plan: mcp });
 }
 
 main();

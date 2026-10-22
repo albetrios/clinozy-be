@@ -32,8 +32,8 @@ and lists its tools; `--outdated` reports newer releases.
 
 **Platform note:** Claude Code on the web loads the environment's MCP settings (web UI), the
 user-level servers and the `.mcp.json` of the session's working directory. A session that holds
-both repositories runs from their parent: `pnpm agent-os:session-hooks` writes
-`<parent>/.mcp.json` with each repository's codegraph, and the user-level `headroom` serves both.
+both repositories runs from their parent: `pnpm agent-os:session-hooks` registers each
+repository's codegraph at user level (`~/.claude.json`), beside the user-level `headroom` that serves both.
 Cursor Cloud Agents read `.mcp.json` when present.
 
 ### Often available from the platform (not in `bootstrap.sh`)

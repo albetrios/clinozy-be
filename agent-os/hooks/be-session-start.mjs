@@ -27,6 +27,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
+import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { addModelContext, hookStateDirectory, repositoryRoot } from "./_be-hook.mjs";
@@ -325,6 +326,21 @@ function mcpStatus() {
 }
 
 /**
+ * The user-level MCP servers (`~/.claude.json`): Claude Code loads them wherever the session
+ * starts, and they are all a session that holds several repositories gets — it runs from their
+ * parent, where no repository's `.mcp.json` is read (tooling/agent-os/session-hooks.ts registers
+ * each repository's codegraph there, install-headroom.sh the one headroom).
+ */
+function userLevelServers() {
+  try {
+    const config = JSON.parse(readFileSync(join(process.env.CLAUDE_CONFIG_DIR || homedir(), ".claude.json"), "utf8"));
+    return Object.keys(config.mcpServers ?? {}).join(", ") || "none";
+  } catch {
+    return "none";
+  }
+}
+
+/**
  * Hook health from telemetry: the README's monthly ritual (prune hooks silent 30+ days), enforced
  * passively — names any hook whose last `fired` row is older than 30 days, or that never fired
  * across 50+ runs, with why it stayed quiet (the detail column, e.g. `not-a-push 519, no-gh 18`),
@@ -443,7 +459,7 @@ async function sessionContext() {
   const agentOs = agentOsStatus();
   const docker = dockerStatus({ bringUpStartsIt: stack.bringUp });
   const gitleaks = gitleaksStatus();
-  const mcp = mcpStatus();
+  const mcp = `${mcpStatus()} · user-level mcp ${userLevelServers()}`;
   const health = hookHealth();
   const tools = toolsStatus();
   const dependencies = dependenciesInstalled() ? "installed" : "missing";

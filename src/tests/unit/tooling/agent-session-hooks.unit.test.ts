@@ -1,7 +1,15 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const SCRIPT = join(process.cwd(), 'tooling', 'agent-os', 'session-hooks.ts');
@@ -32,12 +40,17 @@ function makeSessionRoot(repositories: Record<string, string>): string {
   return root;
 }
 
+/** Claude Code's user-level config for one run: never the real `~/.claude.json`. */
+const userConfigPath = (sessionRoot: string) => join(sessionRoot, 'claude-config', '.claude.json');
+
 function runScript({ sessionRoot, options = [] }: { sessionRoot: string; options?: string[] }) {
-  return spawnSync(TSX, [SCRIPT, '--session-root', sessionRoot, ...options], { encoding: 'utf8' });
+  return spawnSync(TSX, [SCRIPT, '--session-root', sessionRoot, ...options], {
+    encoding: 'utf8',
+    env: { ...process.env, CLAUDE_CONFIG_DIR: dirname(userConfigPath(sessionRoot)) },
+  });
 }
 
 const sessionSettingsPath = (sessionRoot: string) => join(sessionRoot, '.claude', 'settings.json');
-const sessionMcpPath = (sessionRoot: string) => join(sessionRoot, '.mcp.json');
 const readSessionSettings = (sessionRoot: string) =>
   JSON.parse(readFileSync(sessionSettingsPath(sessionRoot), 'utf8')) as Settings;
 const commandsOf = (settings: Settings) =>
@@ -242,38 +255,56 @@ describe('tooling/agent-os/session-hooks.ts', () => {
     expect(Number(REAL_ENVIRONMENT.MCP_TIMEOUT)).toBeGreaterThanOrEqual(180_000);
   });
 
-  it("declares each repository's codegraph server at the session root, pointed at its repository", () => {
+  it("registers each repository's codegraph server at user level, pointed at its repository", () => {
     const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other: OTHER_SETTINGS });
     const own = join(sessionRoot, 'own');
     const other = join(sessionRoot, 'other');
     writeFileSync(join(own, '.mcp.default.json'), REAL_MCP);
     writeFileSync(join(other, '.mcp.default.json'), OTHER_MCP);
-    const handAdded = { command: 'echo', args: ['hand-added'] };
-    const stale = { command: 'codegraph', args: ['serve', '--mcp', '--path', '/gone/repository'] };
+    const headroom = { type: 'stdio', command: 'headroom', args: ['mcp', 'serve'] };
+    const stale = { command: 'codegraph', args: ['serve', '--mcp'] };
+    mkdirSync(dirname(userConfigPath(sessionRoot)));
     writeFileSync(
-      sessionMcpPath(sessionRoot),
-      JSON.stringify({ mcpServers: { 'hand-added': handAdded, 'gone-codegraph': stale } }),
+      userConfigPath(sessionRoot),
+      JSON.stringify({
+        oauthAccount: { name: 'kept' },
+        mcpServers: { headroom, 'be-codegraph': stale },
+      }),
+      { mode: 0o600 },
     );
     expect(runScript({ sessionRoot }).status).toBe(0);
 
-    const { mcpServers } = JSON.parse(readFileSync(sessionMcpPath(sessionRoot), 'utf8')) as {
+    const config = JSON.parse(readFileSync(userConfigPath(sessionRoot), 'utf8')) as {
+      oauthAccount: unknown;
       mcpServers: Record<string, { command: string; args: string[] }>;
     };
-    // codegraph serves `<repository>/.codegraph/`; from the session root it needs `--path`.
-    expect(mcpServers['be-codegraph']).toMatchObject({
+    // codegraph serves `<repository>/.codegraph/`; started from any directory it needs `--path`.
+    expect(config.mcpServers['be-codegraph']).toMatchObject({
       command: 'codegraph',
       args: ['serve', '--mcp', '--path', own],
     });
     // A `pnpm exec` launcher only resolves inside its repository: it becomes the binary itself.
-    expect(mcpServers['fe-codegraph']).toEqual({
+    expect(config.mcpServers['fe-codegraph']).toEqual({
       command: join(other, 'node_modules', '.bin', 'codegraph'),
       args: ['serve', '--mcp', '--path', other],
     });
     // headroom keeps no repository state: the one user-level server serves every repository.
-    expect(Object.keys(mcpServers).filter((name) => name.endsWith('-headroom'))).toEqual([]);
-    expect(mcpServers['hand-added']).toEqual(handAdded);
-    expect(mcpServers['gone-codegraph']).toBeUndefined();
+    expect(Object.keys(config.mcpServers).filter((name) => name.endsWith('-headroom'))).toEqual([]);
+    expect(config.mcpServers.headroom).toEqual(headroom);
+    expect(config.oauthAccount).toEqual({ name: 'kept' });
+    // The file holds the signed-in account, so it stays private.
+    expect(statSync(userConfigPath(sessionRoot)).mode & 0o777).toBe(0o600);
+    // Claude Code reads no `.mcp.json` from a repository added beside the session root.
+    expect(existsSync(join(sessionRoot, '.mcp.json'))).toBe(false);
     expect(runScript({ sessionRoot }).stdout).toContain('is up to date');
+  });
+
+  it('creates a private user-level config when there is none', () => {
+    const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other: OTHER_SETTINGS });
+    writeFileSync(join(sessionRoot, 'own', '.mcp.default.json'), REAL_MCP);
+    expect(runScript({ sessionRoot }).status).toBe(0);
+
+    expect(statSync(userConfigPath(sessionRoot)).mode & 0o777).toBe(0o600);
   });
 
   it('writes nothing for a single repository', () => {
@@ -284,7 +315,7 @@ describe('tooling/agent-os/session-hooks.ts', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('holds 1 agent-os repository');
     expect(existsSync(sessionSettingsPath(sessionRoot))).toBe(false);
-    expect(existsSync(sessionMcpPath(sessionRoot))).toBe(false);
+    expect(existsSync(userConfigPath(sessionRoot))).toBe(false);
   });
 
   it('writes nothing when the session root is itself inside a git checkout', () => {
@@ -298,11 +329,14 @@ describe('tooling/agent-os/session-hooks.ts', () => {
 
   it('--dry-run prints the file and writes nothing', () => {
     const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other: OTHER_SETTINGS });
+    writeFileSync(join(sessionRoot, 'own', '.mcp.default.json'), REAL_MCP);
     const result = runScript({ sessionRoot, options: ['--dry-run'] });
 
     expect(result.stdout).toContain('would write');
     expect(result.stdout).toContain('CLAUDE_PROJECT_DIR=');
+    expect(result.stdout).toContain('would register at user level');
     expect(existsSync(sessionSettingsPath(sessionRoot))).toBe(false);
+    expect(existsSync(userConfigPath(sessionRoot))).toBe(false);
   });
 
   it('anchors a relative file rule to its repository and keeps a command rule as it is', () => {
