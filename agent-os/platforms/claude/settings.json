@@ -1,4 +1,7 @@
 {
+  "env": {
+    "MCP_TIMEOUT": "180000"
+  },
   "permissions": {
     "allow": [
       "mcp__codegraph__codegraph_search",

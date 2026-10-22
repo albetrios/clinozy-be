@@ -344,6 +344,7 @@ Claude Code connects MCP servers **when it starts**: the platform's own (GitHub,
 
 - **One repository** — the session runs in the repository, so its `.mcp.json` (the default pair) loads.
 - **Both repositories** — the session runs from their parent (`/home/user`), where no repository's `.mcp.json` is read. `pnpm agent-os:session-hooks` (run by the bring-up, as for the hooks) writes `<parent>/.mcp.json` with each repository's codegraph, pointed at it with `--path` — `be-codegraph` and `fe-codegraph`. headroom keeps no repository state, so one user-level `headroom` serves both: `install-headroom.sh` registers it (`headroom mcp install`). Cursor, Codex and single-repository sessions keep `be-headroom` / `fe-headroom`.
+- **Startup limit** — each server gets 3 minutes to start: `agent-os/platforms/claude/settings.json` sets `env.MCP_TIMEOUT` to `180000`, and `pnpm agent-os:session-hooks` merges each repository's `env` into the parent's settings. Claude Code's default is 30 s, and on a freshly booted container — Docker, the stack and both bring-ups starting at once — codegraph and headroom started about 55 s after launch, so all three failed. The longer limit costs the first reply nothing: it waits at most 5 s for MCP servers (`MCP_CONNECT_TIMEOUT_MS`), and a slower server's tools join the session when it connects.
 
 The repo splits the MCP set into two tiers:
 
