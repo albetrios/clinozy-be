@@ -16,11 +16,11 @@ subagent's reads land in *its* context, and only its short conclusion returns to
   follow convention Y", "map the call sites of Z", "how does subsystem W fit together". Anything
   where you'd otherwise open several whole files or run a wide grep and skim.
 - **Search inline** when you already know the file/symbol and need one exact fact — that's a single
-  `codegraph_node` / `LSP` / ranged `Read`, cheaper done directly than delegated.
+  `codegraph_explore` / `LSP` / ranged `Read`, cheaper done directly than delegated.
 
 ## How
 
-1. **Try the index first.** `codegraph_search` / `callers` / `impact` often answers the sweep with
+1. **Try the index first.** One `codegraph_explore` call often answers the sweep with
    no file reads at all (see [`be-token-efficient-navigation`](../../rules/be-token-efficient-navigation.mdc)).
 2. **Otherwise spawn a read-only `Explore` subagent** with a precise question and the breadth
    ("medium" or "very thorough"). It reads excerpts, not whole files, and returns the conclusion —
@@ -32,7 +32,7 @@ subagent's reads land in *its* context, and only its short conclusion returns to
 
 - Reading 5+ whole files in the main context to answer one "where/how" question → delegate instead.
 - Running an unscoped repo-wide `Grep` and skimming pages of hits → `codegraph` or a subagent.
-- Delegating a single-fact lookup you could answer with one `codegraph_node` / ranged `Read`.
+- Delegating a single-fact lookup you could answer with one `codegraph_explore` / ranged `Read`.
 
 ## Related
 

@@ -35,7 +35,7 @@ function nudge(payload) {
     }
     if (size <= LARGE_FILE_BYTES) return null;
     return {
-      hint: `Read a large file whole (${size} bytes). For "where/who/what" prefer codegraph (codegraph_search / callers / impact) or a ranged Read (offset/limit); if you must load it all, compress with headroom_compress. (be-token-efficient-navigation)`,
+      hint: `Read a large file whole (${size} bytes). For "where/who/what" prefer codegraph (codegraph_explore) or a ranged Read (offset/limit); if you must load it all, compress with headroom_compress. (be-token-efficient-navigation)`,
       detail: `bytes=${size}`,
     };
   }
@@ -44,7 +44,7 @@ function nudge(payload) {
     const mode = input.output_mode ?? "files_with_matches";
     if (mode !== "content" || "path" in input || "glob" in input) return null;
     return {
-      hint: "Repo-wide content grep with no path/glob scope. Prefer codegraph_search for symbols/usages, or scope the grep; for a broad sweep delegate to a read-only Explore subagent (skill: be-delegate-search) so the reads stay out of your context.",
+      hint: "Repo-wide content grep with no path/glob scope. Prefer codegraph_explore for symbols/usages, or scope the grep; for a broad sweep delegate to a read-only Explore subagent (skill: be-delegate-search) so the reads stay out of your context.",
       detail: "grep=unscoped",
     };
   }

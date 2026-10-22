@@ -19,10 +19,9 @@
  * missing servers are added, so real credentials already filled into `.mcp.json` are
  * never clobbered.
  *
- * NOTE (Claude Code on the web): a cloud session's live MCP set is loaded by the
- * platform from the environment's MCP settings — NOT this `.mcp.json`. These helpers
- * scaffold the file for local MCP clients; the web environment is configured in the
- * web UI. See `docs/integrations/claude-code-web-environment.md`.
+ * NOTE (Claude Code on the web): a single-repository cloud session reads this `.mcp.json`; a
+ * session that holds both repositories runs from their parent, which gets its own file from
+ * `pnpm agent-os:session-hooks`. See `docs/integrations/claude-code-web-environment.md`.
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';

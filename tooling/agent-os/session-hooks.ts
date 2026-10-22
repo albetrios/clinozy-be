@@ -18,10 +18,19 @@
  * took from the repositories in `.claude/session-hooks-asks.json`, so the next run replaces those
  * and keeps every other one; deny still beats ask and allow.
  *
+ * Claude Code reads `.mcp.json` from the session root too, so no repository's MCP servers start
+ * there. The script also writes `<parent>/.mcp.json` with each repository's codegraph server
+ * (`<prefix>-codegraph` in its `.mcp.json`), pointed at that repository with `--path`: codegraph
+ * serves the index under `<repository>/.codegraph/`, and from the parent it would look for one
+ * there. A `pnpm exec <bin>` launcher becomes the repository's `node_modules/.bin/<bin>`, which
+ * runs from any directory. headroom keeps no repository state, so it is not copied: the one
+ * user-level server `install-headroom.sh` registers (`headroom mcp install`) serves every
+ * repository.
+ *
  * Idempotent: the commands it writes (`CLAUDE_PROJECT_DIR="…" node "…/agent-os/hooks/…"`)
- * are rebuilt on every run, while any other hook and every non-hook key in the file are kept.
- * Before a change, the previous file is copied to `settings.json.bak`. Running it from either
- * repository gives the same file.
+ * and the codegraph servers are rebuilt on every run, while any other hook, server and key in
+ * the files are kept. Before a change, the previous settings file is copied to
+ * `settings.json.bak`. Running it from either repository gives the same files.
  *
  * Writes nothing, and says why, when the parent directory sits inside a git checkout, or when
  * it holds fewer than two agent-os repositories (a
@@ -78,12 +87,27 @@ interface ClaudeSettings {
 
 const permissionLists: PermissionList[] = ['allow', 'ask', 'deny'];
 
+/** A repository's codegraph server: the one MCP server that needs its repository's directory. */
+const codegraphServerName = /-codegraph$/;
+
+/** A stdio server, as `.mcp.json` declares one. */
+interface McpServer {
+  command: string;
+  args?: string[];
+  [key: string]: unknown;
+}
+
+interface McpConfig {
+  mcpServers?: Record<string, McpServer>;
+  [key: string]: unknown;
+}
+
 function log(message: string): void {
   console.log(`session-hooks: ${message}`);
 }
 
-function readSettings(path: string): ClaudeSettings {
-  return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as ClaudeSettings) : {};
+function readJson<Shape extends object = ClaudeSettings>(path: string): Shape {
+  return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as Shape) : ({} as Shape);
 }
 
 function isInsideGitCheckout(directory: string): boolean {
@@ -147,7 +171,7 @@ function unregisteredHooks(existing: HookMap): HookEntry[] {
 
 /** One repository's hooks with every command registered for the session root, by event. */
 function repositoryHooks(repository: string): HookEntry[] {
-  const hooks = readSettings(join(repository, claudeSettingsPath)).hooks ?? {};
+  const hooks = readJson(join(repository, claudeSettingsPath)).hooks ?? {};
   return Object.entries(hooks).flatMap(([event, groups]) =>
     groups.flatMap((group): HookEntry[] => {
       const registered = group.hooks.flatMap((hook) => {
@@ -191,7 +215,7 @@ function repositoryAsks(repositories: string[]): string[] {
   return [
     ...new Set(
       repositories.flatMap(
-        (repository) => readSettings(join(repository, claudeSettingsPath)).permissions?.ask ?? [],
+        (repository) => readJson(join(repository, claudeSettingsPath)).permissions?.ask ?? [],
       ),
     ),
   ];
@@ -219,7 +243,7 @@ function mergePermissions({
   const sources = [
     existing,
     ...repositories.map(
-      (repository) => readSettings(join(repository, claudeSettingsPath)).permissions ?? {},
+      (repository) => readJson(join(repository, claudeSettingsPath)).permissions ?? {},
     ),
   ];
   const handAddedAsks =
@@ -241,6 +265,127 @@ function readRecordedAsks(recordFile: string): string[] | null {
   if (!existsSync(recordFile)) return null;
   const record = JSON.parse(readFileSync(recordFile, 'utf8')) as { ask?: unknown };
   return Array.isArray(record.ask) ? record.ask.filter((rule) => typeof rule === 'string') : null;
+}
+
+/** A repository's codegraph server, started from the session root but serving the repository's index. */
+function registerMcpServer({
+  server,
+  repository,
+}: {
+  server: McpServer;
+  repository: string;
+}): McpServer {
+  const [first, binary, ...rest] = server.args ?? [];
+  const launchedByPnpm = server.command === 'pnpm' && first === 'exec' && binary !== undefined;
+  const command = launchedByPnpm
+    ? join(repository, 'node_modules', '.bin', binary)
+    : server.command;
+  const args = launchedByPnpm ? rest : (server.args ?? []);
+  return {
+    ...server,
+    command,
+    args: args.includes('--path') ? args : [...args, '--path', repository],
+  };
+}
+
+/**
+ * The session root's MCP servers: every one it already has except the codegraph servers, which
+ * are rebuilt from the repositories (a repository since removed leaves none behind).
+ */
+function buildMcpServers({
+  existing,
+  repositories,
+}: {
+  existing: Record<string, McpServer>;
+  repositories: string[];
+}): Record<string, McpServer> {
+  const servers = Object.fromEntries(
+    Object.entries(existing).filter(([name]) => !codegraphServerName.test(name)),
+  );
+  for (const repository of repositories) {
+    const declared = readJson<McpConfig>(join(repository, '.mcp.json')).mcpServers ?? {};
+    for (const [name, server] of Object.entries(declared)) {
+      if (codegraphServerName.test(name)) servers[name] = registerMcpServer({ server, repository });
+    }
+  }
+  return servers;
+}
+
+/** Writes through a temporary file, so Claude Code never reads a half-written one. */
+function writeFileAtomically({ path, content }: { path: string; content: string }): void {
+  const temporaryFile = `${path}.tmp`;
+  writeFileSync(temporaryFile, content);
+  renameSync(temporaryFile, path);
+}
+
+/** The session root's `.mcp.json` as this run writes it, and whether the file holds that already. */
+function planMcpFile({
+  path,
+  current,
+  repositories,
+}: {
+  path: string;
+  current: McpConfig;
+  repositories: string[];
+}): { path: string; content: string; servers: string; isCurrent: boolean } {
+  const mcpServers = buildMcpServers({ existing: current.mcpServers ?? {}, repositories });
+  const content = `${JSON.stringify({ ...current, mcpServers }, null, 2)}\n`;
+  const servers =
+    Object.keys(mcpServers)
+      .filter((name) => codegraphServerName.test(name))
+      .join(', ') || 'none';
+  // No file and nothing to declare is current too: the script never writes an empty server list.
+  const isCurrent = existsSync(path)
+    ? readFileSync(path, 'utf8') === content
+    : Object.keys(mcpServers).length === 0;
+  return { path, content, servers, isCurrent };
+}
+
+/** Writes the session root's settings and the asks record, or prints the settings on a dry run. */
+function writeSettings({
+  dryRun,
+  settingsFile,
+  recordFile,
+  next,
+  record,
+  summary,
+}: {
+  dryRun: boolean;
+  settingsFile: string;
+  recordFile: string;
+  next: string;
+  record: string;
+  summary: string;
+}): void {
+  if (dryRun) {
+    log(`would write ${settingsFile} — hooks from ${summary}:`);
+    process.stdout.write(next);
+    return;
+  }
+  mkdirSync(dirname(settingsFile), { recursive: true });
+  if (!existsSync(settingsFile) || readFileSync(settingsFile, 'utf8') !== next) {
+    if (existsSync(settingsFile)) copyFileSync(settingsFile, `${settingsFile}.bak`);
+    writeFileAtomically({ path: settingsFile, content: next });
+  }
+  writeFileSync(recordFile, record);
+  log(`wrote ${settingsFile} — hooks from ${summary}.`);
+}
+
+/** Writes the session root's `.mcp.json`, or prints it on a dry run. */
+function writeMcpFile({
+  dryRun,
+  plan,
+}: {
+  dryRun: boolean;
+  plan: { path: string; content: string; servers: string };
+}): void {
+  if (dryRun) {
+    log(`would write ${plan.path} — ${plan.servers}:`);
+    process.stdout.write(plan.content);
+    return;
+  }
+  writeFileAtomically({ path: plan.path, content: plan.content });
+  log(`wrote ${plan.path} — ${plan.servers}.`);
 }
 
 function main(): void {
@@ -274,14 +419,17 @@ function main(): void {
   const settingsDirectory = join(sessionRoot, '.claude');
   const settingsFile = join(settingsDirectory, 'settings.json');
   const recordFile = join(settingsDirectory, 'session-hooks-asks.json');
+  const mcpFile = join(sessionRoot, '.mcp.json');
   let current: ClaudeSettings;
   let recordedAsks: string[] | null;
+  let currentMcp: McpConfig;
   try {
-    current = readSettings(settingsFile);
+    current = readJson(settingsFile);
     recordedAsks = readRecordedAsks(recordFile);
+    currentMcp = readJson<McpConfig>(mcpFile);
   } catch {
     console.error(
-      `session-hooks: ${settingsFile} or ${recordFile} is not valid JSON — fix or move it, then re-run.`,
+      `session-hooks: ${settingsFile}, ${recordFile} or ${mcpFile} is not valid JSON — fix or move it, then re-run.`,
     );
     process.exit(1);
   }
@@ -297,25 +445,18 @@ function main(): void {
     .map((repository) => `${repository} (${counts.get(repository) ?? 0})`)
     .join(', ');
   const recordIsCurrent = existsSync(recordFile) && readFileSync(recordFile, 'utf8') === record;
+  const settingsIsCurrent =
+    existsSync(settingsFile) && readFileSync(settingsFile, 'utf8') === next && recordIsCurrent;
+  const mcp = planMcpFile({ path: mcpFile, current: currentMcp, repositories });
 
-  if (existsSync(settingsFile) && readFileSync(settingsFile, 'utf8') === next && recordIsCurrent) {
-    log(`${settingsFile} is up to date — hooks from ${summary}.`);
+  if (settingsIsCurrent && mcp.isCurrent) {
+    log(`${settingsFile} is up to date — hooks from ${summary}; MCP: ${mcp.servers}.`);
     return;
   }
-  if (dryRun) {
-    log(`would write ${settingsFile} — hooks from ${summary}:`);
-    process.stdout.write(next);
-    return;
+  if (!settingsIsCurrent) {
+    writeSettings({ dryRun, settingsFile, recordFile, next, record, summary });
   }
-  mkdirSync(settingsDirectory, { recursive: true });
-  if (!existsSync(settingsFile) || readFileSync(settingsFile, 'utf8') !== next) {
-    if (existsSync(settingsFile)) copyFileSync(settingsFile, `${settingsFile}.bak`);
-    const temporaryFile = `${settingsFile}.tmp`;
-    writeFileSync(temporaryFile, next);
-    renameSync(temporaryFile, settingsFile);
-  }
-  writeFileSync(recordFile, record);
-  log(`wrote ${settingsFile} — hooks from ${summary}.`);
+  if (!mcp.isCurrent) writeMcpFile({ dryRun, plan: mcp });
 }
 
 main();

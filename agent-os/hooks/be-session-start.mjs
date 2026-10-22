@@ -300,8 +300,8 @@ function gitleaksStatus() {
  * `.mcp.json` at startup (a tracked symlink → the gitignored agent-os/mcp/mcp.json); on local
  * sessions, scaffold that target from the committed `.mcp.default.json` (codegraph + headroom,
  * zero-config) when absent, as setup:local does — written directly, since copying onto a dangling
- * symlink fails on a fresh Linux clone. Web sessions load MCP from the platform environment
- * settings, not this file, so there it only reports.
+ * symlink fails on a fresh Linux clone. On the web it only reports: install-headroom.sh declares
+ * the pair there.
  */
 function mcpStatus() {
   const declared = join(repositoryRoot, ".mcp.json");
@@ -321,7 +321,7 @@ function mcpStatus() {
       return "template only (run: pnpm mcp:setup:default)";
     }
   }
-  return "platform-managed on web (configure in the environment MCP settings); local: pnpm mcp:setup";
+  return "none yet on web (install-headroom.sh declares the pair); local: pnpm mcp:setup";
 }
 
 /**

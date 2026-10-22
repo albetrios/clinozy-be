@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Refresh the codegraph code-intelligence index after a branch switch so queries
-# (codegraph_search / callers / impact) match the checked-out tree instead of a
+# (codegraph_explore) match the checked-out tree instead of a
 # stale one. `codegraph sync` is a LOCAL, incremental index update — it costs no
 # LLM tokens and, backgrounded, never blocks the checkout.
 #

@@ -18,11 +18,10 @@
  *
  * Merges are non-destructive — existing `.mcp.json` entries (with real keys) are kept.
  *
- * NOTE (Claude Code on the web): a cloud session's live MCP set is loaded by the
- * platform from the environment's MCP settings — NOT this `.mcp.json`. Use this command
- * for local clients; configure the web environment's servers in the web UI. The
- * Composio, Descript, and Slack MCPs are intentionally not part of this project. See
- * `docs/integrations/claude-code-web-environment.md`.
+ * NOTE (Claude Code on the web): a single-repository cloud session reads this `.mcp.json`; a
+ * session that holds both repositories runs from their parent, which gets its own file from
+ * `pnpm agent-os:session-hooks`. The Composio, Descript, and Slack MCPs are intentionally not
+ * part of this project. See `docs/integrations/claude-code-web-environment.md`.
  */
 import { parseCommandLine } from '@tooling/setup/common/script.js';
 import chalk from 'chalk';
