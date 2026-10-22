@@ -21,6 +21,12 @@ the background and the gate waits for readiness only when needed. First boot is 
 provisions an analysis token into `.env.local` (gitignored); after that a scan is ~60–90s.
 `pnpm sonar:up` starts only SonarQube, and the pre-push gate auto-starts it if it is down.
 
+`docker-compose.sonar.yml` and `docker-compose.yml` share one Compose project (the pinned `name:`),
+so each would report the other's containers as orphans. `pnpm compose:up`, `pnpm compose:down`,
+the `pnpm sonar:*` commands, the pre-push gate and the cloud bring-up set
+`COMPOSE_IGNORE_ORPHANS=true` to skip that check. If you run `docker compose` by hand and see the
+warning, ignore it: its `--remove-orphans` advice deletes Postgres and Redis, or SonarQube.
+
 The scanner runs with **`sonar.scm.disabled=true`** (set in `docker-compose.sonar.yml`). The gate
 fails on any open issue, so blame and new-code data never change its verdict — and the scanner's git
 reader (JGit) crashes with `Bare Repository has neither a working tree, nor an index` on a checkout

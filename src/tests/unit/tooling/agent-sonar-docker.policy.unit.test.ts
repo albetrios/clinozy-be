@@ -25,6 +25,27 @@ describe('SonarQube gate in cloud sessions', () => {
     expect(sonarCompose).toContain('- sonarqube_data:/opt/sonarqube/data');
   });
 
+  it('the two compose files share a project, and every path that runs them skips the orphan check', () => {
+    // A shared project makes each file call the other's containers orphans, and compose's advice
+    // (--remove-orphans) would delete Postgres and Redis, or SonarQube.
+    const scripts = (
+      JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> }
+    ).scripts;
+    for (const name of ['compose:up', 'compose:down', 'sonar:up', 'sonar:down', 'sonar:reset']) {
+      expect(scripts[name], name).toMatch(/^(export )?COMPOSE_IGNORE_ORPHANS=true /);
+    }
+    expect(readFileSync('tooling/setup/agent/bootstrap.sh', 'utf8')).toContain(
+      'export COMPOSE_IGNORE_ORPHANS=true',
+    );
+    expect(sonarGate).toContain("const COMPOSE_ENVIRONMENT = { COMPOSE_IGNORE_ORPHANS: 'true' };");
+    expect(sonarGate).toContain('env: { ...process.env, ...COMPOSE_ENVIRONMENT, ...extraEnv }');
+    expect(sonarGate).toContain(
+      'env: { ...process.env, ...COMPOSE_ENVIRONMENT, SONAR_TOKEN: token }',
+    );
+    // Nothing may "fix" the warning the way compose suggests.
+    for (const script of Object.values(scripts)) expect(script).not.toContain('--remove-orphans');
+  });
+
   it('the gate starts a stopped Docker daemon before it starts SonarQube', () => {
     expect(sonarGate).toContain("'tooling/setup/agent/ensure-docker-daemon.sh'");
     const daemonStart = sonarGate.indexOf('  ensureDockerDaemon();');

@@ -142,6 +142,13 @@ echo "cloud bring-up — $(date -u '+%Y-%m-%d %H:%M:%SZ')$([ "${install_only}" =
 # pinned or nvm Node.
 export PATH="${PATH}:${HOME}/.local/bin"
 
+# docker-compose.yml (Postgres + Redis) and docker-compose.sonar.yml (SonarQube) share one Compose
+# project on purpose (the pinned `name:`), so each would report the other's containers as orphans
+# and suggest --remove-orphans, which would delete them. Every compose call in this run, and in the
+# scripts it starts (ensure-postgres-volume.sh, pnpm compose:up, start-sonarqube.sh), skips that
+# check.
+export COMPOSE_IGNORE_ORPHANS=true
+
 # The Docker daemon starts now, in the background. Nothing touches Docker before step 3 or 5,
 # and both wait for this start first, so its start-up overlaps steps 1–4 instead of following
 # them. Only a daemon that does not answer is started: ensure-docker-daemon.sh run against a

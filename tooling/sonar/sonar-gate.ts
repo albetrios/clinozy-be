@@ -24,6 +24,9 @@ const DERIVED_NAMES = resolveDerivedNames(loadConfig());
 const SONAR_URL = process.env.SONAR_HOST_URL ?? 'http://localhost:9000';
 const PROJECT_KEY = DERIVED_NAMES.sonarProjectKey;
 const COMPOSE_FILE = 'docker-compose.sonar.yml';
+// This file shares one Compose project with docker-compose.yml (its pinned `name:`), so without
+// this compose reports Postgres + Redis as orphans and suggests --remove-orphans, which deletes them.
+const COMPOSE_ENVIRONMENT = { COMPOSE_IGNORE_ORPHANS: 'true' };
 const DOCKER_DAEMON_SCRIPT = 'tooling/setup/agent/ensure-docker-daemon.sh';
 const ENV_LOCAL = '.env.local';
 const TOKEN_NAME = DERIVED_NAMES.sonarTokenName;
@@ -95,7 +98,7 @@ async function sonarApi(path: string, options: ApiOptions = {}): Promise<Respons
 function dockerCompose(args: string[], extraEnv: Record<string, string> = {}): number {
   const result = spawnSync('docker', ['compose', '-f', COMPOSE_FILE, ...args], {
     stdio: 'inherit',
-    env: { ...process.env, ...extraEnv },
+    env: { ...process.env, ...COMPOSE_ENVIRONMENT, ...extraEnv },
   });
   return result.status ?? 1;
 }
@@ -240,7 +243,7 @@ function runScanner(token: string): string {
   const result = spawnSync('docker', ['compose', '-f', COMPOSE_FILE, 'run', '--rm', 'scanner'], {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, SONAR_TOKEN: token },
+    env: { ...process.env, ...COMPOSE_ENVIRONMENT, SONAR_TOKEN: token },
   });
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   if (result.status !== 0) {
