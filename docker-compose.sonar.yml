@@ -8,6 +8,9 @@
 
 # The project name is pinned, so a push from a git worktree reuses this checkout's containers and
 # volumes instead of colliding on their fixed container names (the default name is the folder's).
+# It is docker-compose.yml's project too, so each file would call the other's containers orphans:
+# the commands that run them set COMPOSE_IGNORE_ORPHANS=true. Never answer that warning here with
+# --remove-orphans, which deletes the other file's containers (Postgres and Redis, or SonarQube).
 name: clinozy-be
 
 services:
