@@ -106,8 +106,8 @@ Both scripts also register the session's hooks (`pnpm agent-os:session-hooks`,
 both repos runs from `/home/user`, so it takes hooks from `/home/user/.claude/settings.json`, never from
 a repo's own `.claude/settings.json`. The script writes there every hook of both repos, with absolute
 paths and `CLAUDE_PROJECT_DIR` set to the hook's own repo, and both repos' permission rules (a
-repo's own settings contribute none in that layout either), and `/home/user/.mcp.json` with each repo's
-codegraph server ([MCP servers](#mcp-servers)). It keeps any other hook in that file and
+repo's own settings contribute none in that layout either), and registers each repo's codegraph server
+at user level, in `~/.claude.json` ([MCP servers](#mcp-servers)). It keeps any other hook in that file and
 backs the file up to `settings.json.bak` before a change, and `--dry-run` prints the file without
 writing it. In a single-repo checkout it writes nothing.
 
@@ -340,10 +340,10 @@ A cloud session can touch GitHub only after the platform is **authorized** on th
 
 ## MCP servers
 
-Claude Code connects MCP servers **when it starts**: the platform's own (GitHub, remote sessions), the environment's MCP settings (web UI), the user-level servers in `~/.claude.json`, and the `.mcp.json` of the session's working directory. A cloud session runs non-interactively, so Claude Code approves that `.mcp.json` without a prompt. A server added mid-session — a CLI installed, a file written — loads at the next start (a resume or a new session).
+Claude Code connects MCP servers **when it starts**: the platform's own (GitHub, remote sessions), the environment's MCP settings (web UI), the user-level servers in `~/.claude.json`, and the `.mcp.json` of the session's working directory. A cloud session runs non-interactively, so Claude Code approves that `.mcp.json` without a prompt. A server added mid-session — a CLI installed, a file written — loads at the next start (a resume or a new session). These files sit outside the repositories, so a new session gets them from the environment's cached Setup result: a change to what the Setup script registers reaches new sessions once the Setup script runs again (an edit to it, or the cache's expiry).
 
 - **One repository** — the session runs in the repository, so its `.mcp.json` (the default pair) loads.
-- **Both repositories** — the session runs from their parent (`/home/user`), where no repository's `.mcp.json` is read. `pnpm agent-os:session-hooks` (run by the bring-up, as for the hooks) writes `<parent>/.mcp.json` with each repository's codegraph, pointed at it with `--path` — `be-codegraph` and `fe-codegraph`. headroom keeps no repository state, so one user-level `headroom` serves both: `install-headroom.sh` registers it (`headroom mcp install`). Cursor, Codex and single-repository sessions keep `be-headroom` / `fe-headroom`.
+- **Both repositories** — the session runs from their parent (`/home/user`), where no repository's `.mcp.json` is read. `pnpm agent-os:session-hooks` (run by the Setup script and the bring-up, as for the hooks) registers each repository's codegraph at user level, in `~/.claude.json`, pointed at it with `--path` — `be-codegraph` and `fe-codegraph` — so both load whichever directory the session starts in. headroom keeps no repository state, so one user-level `headroom` serves both: `install-headroom.sh` registers it (`headroom mcp install`). Three local servers in all. Cursor, Codex and single-repository sessions keep `be-headroom` / `fe-headroom`.
 - **Startup limit** — each server gets 3 minutes to start: `agent-os/platforms/claude/settings.json` sets `env.MCP_TIMEOUT` to `180000`, and `pnpm agent-os:session-hooks` merges each repository's `env` into the parent's settings. Claude Code's default is 30 s, and on a freshly booted container — Docker, the stack and both bring-ups starting at once — codegraph and headroom started about 55 s after launch, so all three failed. The longer limit costs the first reply nothing: it waits at most 5 s for MCP servers (`MCP_CONNECT_TIMEOUT_MS`), and a slower server's tools join the session when it connects.
 
 The repo splits the MCP set into two tiers:

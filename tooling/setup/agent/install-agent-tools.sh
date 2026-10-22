@@ -37,8 +37,9 @@ tool_inputs() {
 stamp="$(tool_inputs | { sha256sum 2>/dev/null || shasum -a 256; } | cut -d' ' -f1)"
 
 # A session that holds several repositories reads hooks only from the parent directory's
-# .claude/settings.json and .mcp.json; agent-os:session-hooks writes every repository's hooks and
-# codegraph server there (a no-op in a single-repository checkout). Cheap, and it follows each repository's hooks.json, so every run.
+# .claude/settings.json, and no repository's .mcp.json; agent-os:session-hooks writes every
+# repository's hooks there and registers its codegraph server at user level (a no-op in a
+# single-repository checkout). Cheap, and it follows each repository's hooks.json, so every run.
 write_session_hooks() {
   pnpm agent-os:session-hooks || skip "agent-os:session-hooks failed (non-fatal)"
 }

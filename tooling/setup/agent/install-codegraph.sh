@@ -16,8 +16,8 @@
 #
 # MCP: Claude Code connects MCP servers when it starts, so the codegraph tools appear at the
 # next start, from the repository's .mcp.json (declared by install-headroom.sh) or, in a
-# session that holds both repositories, from the parent's .mcp.json that
-# `pnpm agent-os:session-hooks` writes. The CLI (`codegraph explore/query/status`) works at once.
+# session that holds both repositories, from the user-level config (~/.claude.json), where
+# `pnpm agent-os:session-hooks` registers it. The CLI (`codegraph explore/query/status`) works at once.
 #
 # Idempotent and best-effort: never hard-fails the setup chain. Diagnostics → stderr.
 set -uo pipefail

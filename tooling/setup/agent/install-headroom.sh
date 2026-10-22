@@ -15,8 +15,9 @@
 #
 # MCP: Claude Code connects MCP servers when it starts, so a server installed mid-session
 # loads at the next start. `headroom mcp install` (run below, best-effort) registers headroom
-# at user level: the one server a session holding both repositories uses (it runs from their
-# parent, where no repository's .mcp.json is read). A single-repository session reads the
+# at user level: the one headroom a session holding both repositories uses (it runs from their
+# parent, where no repository's .mcp.json is read; agent-os:session-hooks registers each
+# repository's codegraph beside it). A single-repository session reads the
 # repository's .mcp.json, which ensure_default_mcp_servers declares below.
 #
 # Idempotent and best-effort: never hard-fails the setup chain. Diagnostics → stderr.
