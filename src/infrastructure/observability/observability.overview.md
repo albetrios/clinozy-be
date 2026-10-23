@@ -21,6 +21,7 @@ The platform's instrumentation surface: Sentry (errors, traces, profiling, struc
 ## Operational concerns
 
 - **PII redaction**: the Sentry `beforeSend` hook strips emails, IP addresses, and tokens from breadcrumbs and event tags. The redaction list lives in [sentry.ts](src/infrastructure/observability/sentry/sentry.ts).
+- **No query string reaches Sentry (SEC-01)**: a query is what someone typed — a patient search's `?q=` holds a name, a mobile number or a record number — and no deny list of parameter names can know them all. `dataCollection.urlQueryParams: false` keeps every query out of events, server spans and outgoing-request breadcrumbs, and `redactSentryEvent` (on `beforeSend`, and on `beforeSendTransaction` for a kept transaction's request) cuts `request.url` at its path and drops `request.query_string` as the backstop. Request logs already carry the route template only (`request-context.middleware.ts`).
 - **Sample rate**: `SENTRY_TRACES_SAMPLE_RATE` controls trace sampling; we run at 1.0 in dev and a tunable rate in prod.
 - **Profile cadence**: continuous profiling runs in 60 s windows; Sentry merges them into the project's profile timeline.
 

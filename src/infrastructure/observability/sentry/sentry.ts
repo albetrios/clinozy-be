@@ -15,9 +15,10 @@ import {
 let initialized = false;
 
 /**
- * Header and query-parameter name fragments that identify the caller (forwarding chains, client
- * IPs, remote addresses, user ids) — denied from Sentry events, as `sendDefaultPii: false` did
- * before Sentry 11. The list is the SDK migration guide's equivalent of that default.
+ * Header name fragments that identify the caller (forwarding chains, client IPs, remote
+ * addresses, user ids) — denied from Sentry events, as `sendDefaultPii: false` did before
+ * Sentry 11. The list is the SDK migration guide's equivalent of that default. Query parameters
+ * are not filtered by name: none is collected (`urlQueryParams: false`, SEC-01).
  */
 const PERSONAL_DATA_KEY_DENY_TERMS = ['forwarded', '-ip', 'remote-', 'via', '-user'] as const;
 
@@ -32,6 +33,16 @@ function redactSentryBreadcrumbsInPlace(
   }
 }
 
+/** `url` up to its path — the query and the fragment cut off, for an absolute or a relative URL. */
+function urlWithoutQueryAndFragment(url: string): string {
+  const pathEnd = url.search(/[?#]/);
+  return pathEnd === -1 ? url : url.slice(0, pathEnd);
+}
+
+/**
+ * Redacts an event's request in place: secrets out of the headers, cookies and body, and nothing
+ * after the path of the URL (SEC-01).
+ */
 function redactSentryRequestInPlace(request: NonNullable<Sentry.ErrorEvent['request']>): void {
   if (request.headers) {
     request.headers = redactSensitive(request.headers);
@@ -42,16 +53,18 @@ function redactSentryRequestInPlace(request: NonNullable<Sentry.ErrorEvent['requ
   if (request.data !== undefined) {
     request.data = redactSensitive(request.data);
   }
-  if (request.query_string !== undefined) {
-    request.query_string = redactSensitive(request.query_string);
-  }
+  // SEC-01: a query is what someone typed — a patient search's `?q=` holds a name, a mobile number
+  // or a record number — and a key-based deny list cannot know every name it comes under, so no
+  // query leaves at all (`dataCollection.urlQueryParams: false` drops it first; this is the backstop).
+  delete request.query_string;
   if (request.url !== undefined) {
-    request.url = redactSensitive(request.url);
+    request.url = urlWithoutQueryAndFragment(request.url);
   }
 }
 
 /**
- * Scrubs secrets from a Sentry error event before it is sent upstream.
+ * Scrubs secrets from a Sentry error event before it is sent upstream — and the request URL down
+ * to its path, its query string dropped (SEC-01).
  * Shared by `beforeSend` and unit tests.
  */
 export function redactSentryEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
@@ -152,7 +165,9 @@ export function initSentry(): void {
         response: { deny: [...PERSONAL_DATA_KEY_DENY_TERMS] },
       },
       httpBodies: [],
-      urlQueryParams: { deny: [...PERSONAL_DATA_KEY_DENY_TERMS] },
+      // SEC-01: no query parameter at all — a search's `q` is a patient's name or number, under a
+      // name no deny list holds. Events, server spans and outgoing breadcrumbs carry no query.
+      urlQueryParams: false,
       genAI: { inputs: false, outputs: false },
       databaseQueryData: false,
       queues: false,
@@ -199,6 +214,10 @@ export function initSentry(): void {
       });
       if (tailDecision === 'drop') {
         return null;
+      }
+      // A transaction carries the request too (a 5xx is always kept) — the same path-only URL.
+      if (event.request) {
+        redactSentryRequestInPlace(event.request);
       }
       const slowTransactionTags = annotateSlowTransactionIfNeeded({
         input: event,

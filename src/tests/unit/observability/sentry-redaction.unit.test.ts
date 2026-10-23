@@ -4,15 +4,13 @@ import { redactSentryEvent } from '@/infrastructure/observability/sentry/sentry.
 import { SENSITIVE_REDACTION_PLACEHOLDER } from '@/shared/utils/security/sensitive-redaction.util.js';
 
 describe('redactSentryEvent', () => {
-  it('redacts request headers, body, query string, and url', () => {
+  it('redacts request headers, cookies and body', () => {
     const event: ErrorEvent = {
       type: undefined,
       request: {
         headers: { Authorization: 'Bearer secret', 'content-type': 'application/json' },
         cookies: { session_id: 'sess-123' },
         data: { password: 'hunter2', name: 'visible' },
-        query_string: 'token=abc&page=1',
-        url: 'https://api.example.com/v1/items?raw_key=sk_live',
       },
     };
 
@@ -25,10 +23,45 @@ describe('redactSentryEvent', () => {
       password: SENSITIVE_REDACTION_PLACEHOLDER,
       name: 'visible',
     });
-    expect(redacted.request?.query_string).toBe(`token=${SENSITIVE_REDACTION_PLACEHOLDER}&page=1`);
-    expect(redacted.request?.url).toBe(
-      `https://api.example.com/v1/items?raw_key=${SENSITIVE_REDACTION_PLACEHOLDER}`,
-    );
+  });
+
+  it('strips the query from a 5xx event on a patient search — request.url keeps its path, request.query_string is dropped (SEC-01)', () => {
+    const event: ErrorEvent = {
+      type: undefined,
+      message: 'Internal Server Error',
+      request: {
+        method: 'GET',
+        url: 'https://api.x.dev/api/v1/app/patients?limit=50&q=Priya%20Sharma',
+        query_string: 'limit=50&q=Priya%20Sharma',
+      },
+    };
+
+    const redacted = redactSentryEvent(event);
+
+    expect(JSON.stringify(redacted)).not.toContain('Priya');
+    expect(redacted.request?.url).toBe('https://api.x.dev/api/v1/app/patients');
+    expect(redacted.request).not.toHaveProperty('query_string');
+    expect(redacted.request?.method).toBe('GET');
+  });
+
+  it.each([
+    [
+      'an absolute URL with a fragment',
+      'https://api.x.dev/api/v1/app/leads?q=9876#top',
+      'https://api.x.dev/api/v1/app/leads',
+    ],
+    ['a relative URL', '/api/v1/app/appointments?q=%23123', '/api/v1/app/appointments'],
+    [
+      'a secret-bearing query',
+      'https://api.example.com/v1/items?raw_key=sk_live',
+      'https://api.example.com/v1/items',
+    ],
+    ['a fragment alone', '/api/v1/app/patients#q=Priya', '/api/v1/app/patients'],
+    ['a URL without a query', '/api/v1/app/patients', '/api/v1/app/patients'],
+  ])('strips the query and the fragment from request.url — %s (SEC-01)', (_label, url, path) => {
+    const redacted = redactSentryEvent({ type: undefined, request: { url } });
+
+    expect(redacted.request?.url).toBe(path);
   });
 
   it('redacts breadcrumbs, extras, and contexts', () => {
