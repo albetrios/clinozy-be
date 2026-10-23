@@ -6,7 +6,9 @@ indexNote: keep a PR merge-ready — triage reviews, resolve conflicts, fix CI i
 
 # PR babysit (clinozy-be)
 
-Get the current PR to **mergeable + green CI + review comments addressed**, then **merge it when green** (on the user's go-ahead).
+Get the current PR to **mergeable + green CI + review comments addressed**, then **merge it when green** (on the user's go-ahead). This is clinozy-be's babysit skill: agent-os names carry the `be-` prefix, so there is no bare `babysit` (or `steward`) skill. clinozy-fe's is **fe-pr-babysit**.
+
+Command: `/be-watch-pr <n>` (the watch loop) · `/be-merge-pr <n>` (auto-merge once green).
 
 ## Preconditions
 

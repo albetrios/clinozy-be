@@ -167,7 +167,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-pr-babysit/SKILL.md",
-      "computedHash": "eadd01ad7306b0a04913e9b98df342cc9abf09fb1f444f3112bdd7fa8182e550"
+      "computedHash": "3bd5076c6bb51bc1b71af4e1a83f5b3b6945ebbee246a248856ccaf19c5bd300"
     },
     "be-production-hardening-guard": {
       "source": "local",

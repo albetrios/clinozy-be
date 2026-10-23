@@ -174,6 +174,10 @@ See [docs/reference/architecture/documentation-system.md](docs/reference/archite
 
 Working branches are `<type>/<short-description>`; `main` is the only long-lived branch (`.husky/pre-push`). A web session starts on a throwaway `claude/<slug>` branch: **rename it before the first push** (`git branch -m <type>/<short-description>`), because the cloud git proxy rejects every branch delete. The full rule, deriving the name, and the merge policy (never merge on red): [`.github/CLAUDE.md`](.github/CLAUDE.md).
 
+## Driving a pull request
+
+To babysit a PR — make it green, fix CI, work the review threads, resolve a conflict, merge when asked — use the **`be-pr-babysit`** skill ([`agent-os/skills/be-pr-babysit/SKILL.md`](agent-os/skills/be-pr-babysit/SKILL.md)) and `/be-watch-pr <n>` to watch it; `/be-merge-pr` only on green. It is this repository's babysit: agent-os names carry the `be-` prefix, so there is no bare `babysit` or `steward` skill (`.claude/skills/babysit/` does not exist). The prompt router (`be-prompt-skill-router.mjs`) names it on a prompt like "make it green" or "fix CI".
+
 ## Commands
 
 Script namespaces: `ci:*`, `compose:*`, `test:*`, `validate:*`, `db:*`, `docs:*`, `routes:*`, `load:*`, `chaos:*`, `tool:*`, `setup:*`, `mcp:*`, `security:*`, `sonar:*`, `deps:*`, `agent-os:*`, `github:*`, `tsdoc:*`, `docker:*`, `dashboards:*`, `ops:*`, `sbom:*`, `guard:*`, `dev:*`, `build:*`, `lint:*`, `format:*`, `health:*`, `coverage:*`, `env:*`, `start:*`, `verify:*`, `iteration:*`. List all: `pnpm run`.

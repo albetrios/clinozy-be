@@ -47,6 +47,34 @@ function prDecision(options: { state: string; session: string }): string {
 afterEach(removeScratchFolders);
 
 /**
+ * Locks in that a prompt to drive a PR names this repository's babysit skill — be-pr-babysit, the
+ * be- prefixed name, since there is no bare `babysit` or `steward` skill — without a build verb,
+ * while an ordinary prompt still produces nothing. clinozy-fe pins the same for fe-pr-babysit.
+ */
+describe('be-prompt-skill-router.mjs routes a PR to drive to be-pr-babysit', () => {
+  it('names be-pr-babysit for babysit / make it green / fix CI, and stays silent otherwise', () => {
+    const state = createScratchFolder('pr-babysit-route-');
+    const context = (text: string) =>
+      runHook({
+        script: 'be-prompt-skill-router.mjs',
+        state,
+        payload: { session_id: 'routing', prompt: text },
+      }).stdout;
+
+    for (const text of [
+      'yes please create PRs and make it green',
+      'babysit the PR',
+      'CI is red — fix CI on the PR',
+      'watch the PR until it is merge-ready',
+    ]) {
+      expect(context(text), text).toContain('be-pr-babysit');
+    }
+    expect(context('what does the auth middleware do?')).toBe('');
+    expect(context('make the button green')).not.toContain('be-pr-babysit');
+  });
+});
+
+/**
  * Locks in that /be-ship and /be-open-pr are the explicit PR request: the turn they start opens
  * its PR without a second confirmation, every other turn still asks, and the next prompt clears it.
  */
