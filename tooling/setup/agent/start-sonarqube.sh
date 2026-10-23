@@ -3,13 +3,13 @@
 # stack is running, so the pre-push quality gate finds the server up instead of booting it (about
 # two minutes) on the first push that needs it.
 #
-# Launched detached, so nothing waits on it: by the backend's bootstrap.sh once the stack is live,
-# and by the frontend's session-start hook once it has started the dev server. It waits for
-#   1. no bring-up holding the agent-stack lock ($AGENT_STACK_DIR/lock, default /tmp/agent-stack),
-#      so SonarQube's boot does not compete with the migrations and the seed — first checked after
-#      a 30-second settle window, because the two repositories' session-start hooks run at the
-#      same moment and the backend's bootstrap.sh takes the lock a moment after the frontend's hook
-#      launches this script, so a check at once can find no lock while a bring-up is starting, then
+# Launched detached, so nothing waits on it: by each repository's bootstrap.sh once its own app is
+# live (the backend's stack, the frontend's dev server). It waits for
+#   1. no bring-up holding the backend's agent-stack lock ($AGENT_STACK_DIR/lock, default
+#      /tmp/agent-stack), so SonarQube's boot does not compete with the migrations and the seed —
+#      first checked after a 30-second settle window, because the two repositories' bring-ups
+#      start at the same moment and a check at once could find no lock while the backend's is
+#      starting, then
 #   2. a reachable Docker daemon,
 # and runs `docker compose -f docker-compose.sonar.yml up -d sonarqube` (a no-op when it is already
 # up). It skips when SONAR=0 (the switch `pnpm compose:up` reads) and gives up after
