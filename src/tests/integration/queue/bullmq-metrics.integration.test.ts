@@ -37,8 +37,8 @@ describe.runIf(runRedisTests)('Integration: BullMQ Prometheus metrics', () => {
     if (worker) await worker.close();
     if (queueEvents) await queueEvents.close();
     if (queue) {
-      // `removeOnComplete` drops the job, not the queue's meta/id/events keys — obliterate them so
-      // every run does not leave another uniquely named queue behind in Redis.
+      // Obliterate the job and the queue's meta/id/events keys so every run does not leave another
+      // uniquely named queue behind in Redis.
       await queue.obliterate({ force: true });
       await queue.close();
     }
@@ -79,7 +79,9 @@ describe.runIf(runRedisTests)('Integration: BullMQ Prometheus metrics', () => {
       });
     });
 
-    const job = await queue.add('metrics-smoke', { ping: 'pong' }, { removeOnComplete: true });
+    // No `removeOnComplete`: a job removed before `waitUntilFinished` checks it reads as missing,
+    // and the wait rejects although the job completed. afterAll obliterates the queue.
+    const job = await queue.add('metrics-smoke', { ping: 'pong' });
     await job.waitUntilFinished(queueEvents);
     await metricsRecorded;
 
