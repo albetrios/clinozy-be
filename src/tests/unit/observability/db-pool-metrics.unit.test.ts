@@ -27,6 +27,10 @@ vi.mock('@/infrastructure/observability/dlq-depth/db-pool-alert.service.js', () 
   resetPoolExhaustionAlertStateForTests: vi.fn(),
 }));
 
+const captureMessage = vi.fn();
+
+vi.mock('@/infrastructure/observability/sentry/sentry.js', () => ({ captureMessage }));
+
 describe('postgres pool metrics poll', () => {
   const originalMetricsEnabled = process.env.METRICS_ENABLED;
 
@@ -35,9 +39,14 @@ describe('postgres pool metrics poll', () => {
     process.env.METRICS_ENABLED = 'true';
     resetEnvCacheForTests();
     evaluatePoolExhaustionAndAlert.mockClear();
+    captureMessage.mockClear();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    const { resetPostgresPoolMonitoringForTests } = await import(
+      '@/infrastructure/observability/metrics/db-pool-metrics.js'
+    );
+    resetPostgresPoolMonitoringForTests();
     if (originalMetricsEnabled === undefined) {
       delete process.env.METRICS_ENABLED;
     } else {
@@ -82,5 +91,39 @@ describe('postgres pool metrics poll', () => {
     expect(evaluatePoolExhaustionAndAlert).toHaveBeenCalledWith(
       expect.objectContaining({ poolStatistics: POOL_STATISTICS }),
     );
+  });
+
+  it('raises the first sighting of each unscoped call site to Sentry, and only the first', async () => {
+    const { registerPostgresPoolMetrics } = await import(
+      '@/infrastructure/observability/metrics/db-pool-metrics.js'
+    );
+    const { recordUnscopedDatabaseAccess, resetUnscopedDatabaseAccessTrackingForTests } =
+      await import('@/infrastructure/database/pool/unscoped-query-counter.js');
+    resetUnscopedDatabaseAccessTrackingForTests();
+    registerPostgresPoolMetrics();
+
+    // One call site, reached three times: a hot offender is named once, not per query.
+    for (let call = 0; call < 3; call += 1) recordUnscopedDatabaseAccess();
+
+    expect(captureMessage).toHaveBeenCalledTimes(1);
+    expect(captureMessage).toHaveBeenCalledWith({
+      message: 'database.query.unscoped',
+      options: { level: 'warning', extra: { callSite: expect.stringMatching(/:\d+:\d+$/) } },
+    });
+  });
+
+  it('stops alerting once the test reset clears the observer', async () => {
+    const { registerPostgresPoolMetrics, resetPostgresPoolMonitoringForTests } = await import(
+      '@/infrastructure/observability/metrics/db-pool-metrics.js'
+    );
+    const { recordUnscopedDatabaseAccess, resetUnscopedDatabaseAccessTrackingForTests } =
+      await import('@/infrastructure/database/pool/unscoped-query-counter.js');
+    registerPostgresPoolMetrics();
+    resetPostgresPoolMonitoringForTests();
+    resetUnscopedDatabaseAccessTrackingForTests();
+
+    recordUnscopedDatabaseAccess();
+
+    expect(captureMessage).not.toHaveBeenCalled();
   });
 });

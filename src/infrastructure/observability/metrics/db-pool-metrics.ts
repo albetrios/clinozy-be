@@ -5,6 +5,7 @@ import { registerOrganizationRlsCheckoutHoldObserver } from '@/infrastructure/da
 import { registerUnscopedDatabaseAccessObserver } from '@/infrastructure/database/pool/unscoped-query-counter.js';
 import { getEnv } from '@/shared/config/env.config.js';
 import { isMetricsEnabled } from '@/infrastructure/observability/metrics/metrics-registry.js';
+import { captureMessage } from '@/infrastructure/observability/sentry/sentry.js';
 import {
   evaluatePoolExhaustionAndAlert,
   resetPoolExhaustionAlertStateForTests,
@@ -137,12 +138,17 @@ export function registerPostgresPoolMetrics(): void {
     recordOrganizationRlsCheckoutHold(sample);
   });
 
-  // Every unscoped access is counted; only the FIRST sighting of a given call site is logged,
-  // so a hot offender cannot flood the log while still being named once.
+  // Every unscoped access is counted; only the FIRST sighting of a given call site is logged
+  // and raised to Sentry, so a hot offender cannot flood either while still being named once.
+  // The alert is the point: a log line nobody reads left a missing context invisible.
   registerUnscopedDatabaseAccessObserver((sample) => {
     recordUnscopedDatabaseQuery();
     if (sample.isNewCallSite) {
       logger.warn({ callSite: sample.callSite }, 'database.query.unscoped');
+      captureMessage({
+        message: 'database.query.unscoped',
+        options: { level: 'warning', extra: { callSite: sample.callSite } },
+      });
     }
   });
 
@@ -169,5 +175,6 @@ export function resetPostgresPoolMonitoringForTests(): void {
   stopPostgresPoolMetricsPolling();
   resetPoolExhaustionAlertStateForTests();
   registerOrganizationRlsCheckoutHoldObserver(null);
+  registerUnscopedDatabaseAccessObserver(null);
   cachedAllowedApplicationConnections = null;
 }

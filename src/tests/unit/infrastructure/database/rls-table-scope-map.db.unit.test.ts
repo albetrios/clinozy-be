@@ -224,6 +224,48 @@ const PRINCIPAL_GUCS = ['app.current_organization_public_id', 'app.current_user_
  */
 const KNOWN_DEAD_POLICY_GUCS = new Set<string>([]);
 
+/**
+ * Policies whose WITH CHECK deliberately carries a bypass arm (`<schema>.<table> <policy>: <guc>`),
+ * each with the write it exists for. Every one is bound to the maintenance role like any other
+ * bypass arm (pinned above). A new entry needs the review audit H1 gave the tenant tables: name
+ * the system write, and why it cannot run under a tenant or user context instead.
+ */
+const REVIEWED_WRITE_BYPASS_ARMS = new Map<string, string>([
+  [
+    'tenancy.organizations organizations_tenant_isolation: app.global_retention_cleanup',
+    'the organization tombstone UPDATE (migration 20260827040000, fix 2)',
+  ],
+  [
+    'upload.uploads uploads_tenant_isolation: app.global_retention_cleanup',
+    'the pending-upload sweep UPDATEs status (migration 20260827030000)',
+  ],
+  [
+    'auth.user_data_exports user_data_exports_owner_access: app.global_retention_cleanup',
+    'the retention worker purges expired export rows across users',
+  ],
+  [
+    'auth.sessions sessions_user_access: app.session_retention_cleanup',
+    'the session retention worker revokes and purges sessions across users',
+  ],
+  ['auth.users users_self_or_admin_access: app.global_admin', 'platform admin user management'],
+  [
+    'auth.auth_methods auth_methods_self_or_admin_access: app.global_admin',
+    'platform admin user management',
+  ],
+  [
+    'audit.outbox audit_outbox_drain_update: app.audit_outbox_drain',
+    'the outbox drain marks rows delivered',
+  ],
+  [
+    'audit.outbox audit_outbox_tenant_isolation_insert: app.system_audit_insert',
+    'INSERT-only: tenantless system audit events',
+  ],
+  [
+    'audit.logs audit_logs_tenant_isolation_insert: app.system_audit_insert',
+    'INSERT-only: tenantless system audit events',
+  ],
+]);
+
 describe('RLS table → required-scope map (Phase 8)', () => {
   it('live pg_policies GUC references match the map exactly, table by table', async () => {
     const rows = await database.execute<{ table_key: string; gucs: string | null }>(
@@ -291,6 +333,44 @@ describe('RLS table → required-scope map (Phase 8)', () => {
       unboundArms,
       'A bypass arm that any role can open — bind it to the maintenance role the way ' +
         'migration 20261005170000 does (maintenanceBypassArm in the Drizzle schema).',
+    ).toEqual([]);
+  });
+
+  it('no bypass GUC arm sits in a WITH CHECK, across every live policy', async () => {
+    // USING decides which rows a process may find (and so read, update or delete); WITH CHECK
+    // decides which rows it may write. A bypass arm in WITH CHECK lets a maintenance process
+    // write a row under any tenant — the hole audit H1 closed table by table. The sample in
+    // tenant-isolation-with-check-retention.security.test.ts proves the behaviour on five
+    // tables; this pins the shape on every live policy, so a new write arm is a reviewed
+    // decision rather than a copy-paste of a USING clause.
+    const bypassGucs = Object.values(MAINTENANCE_CONTEXTS).flatMap((definition) =>
+      definition.guc === null ? [] : [definition.guc],
+    );
+    const rows = await database.execute<{ policy: string; with_check: string }>(
+      drizzleSql`
+        SELECT schemaname || '.' || tablename || ' ' || policyname AS policy,
+               COALESCE(with_check, '') AS with_check
+        FROM pg_policies
+      `,
+    );
+    const resultRows = Array.isArray(rows)
+      ? rows
+      : ((rows as { rows?: { policy: string; with_check: string }[] }).rows ?? []);
+
+    const writeArms = resultRows.flatMap((row) =>
+      bypassGucs
+        .filter((guc) => row.with_check.includes(`'${guc}'`))
+        .map((guc) => `${row.policy}: ${guc}`),
+    );
+
+    expect(
+      writeArms.filter((arm) => !REVIEWED_WRITE_BYPASS_ARMS.has(arm)),
+      'A bypass arm in WITH CHECK lets a maintenance process write under any tenant. Keep the ' +
+        'bypass in USING only, or add the arm to REVIEWED_WRITE_BYPASS_ARMS with the write it is for.',
+    ).toEqual([]);
+    expect(
+      [...REVIEWED_WRITE_BYPASS_ARMS.keys()].filter((arm) => !writeArms.includes(arm)),
+      'A REVIEWED_WRITE_BYPASS_ARMS entry no live policy carries — drop it.',
     ).toEqual([]);
   });
 
