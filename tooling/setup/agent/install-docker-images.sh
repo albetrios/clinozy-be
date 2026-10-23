@@ -90,11 +90,7 @@ if [ "$(uname -s)" = "Linux" ]; then
 
   if grep -q 'mirror.gcr.io' "${DAEMON_JSON}" 2>/dev/null && ! docker info 2>/dev/null | grep -q 'mirror.gcr.io'; then
     echo "install-docker-images: restarting dockerd to apply the mirror…" >&2
-    if ! service docker restart >/dev/null 2>&1; then
-      pkill -TERM dockerd 2>/dev/null || true
-      for _ in $(seq 1 20); do docker info >/dev/null 2>&1 || break; sleep 1; done
-      start_docker || true
-    fi
+    RESTART_DOCKERD=1 start_docker || true
   fi
 else
   echo "install-docker-images: $(uname -s) Docker pulls from Docker Hub directly — no mirror needed." >&2

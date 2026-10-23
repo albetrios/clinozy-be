@@ -5,6 +5,7 @@ const ensureDockerDaemonScript = readFileSync(
   'tooling/setup/agent/ensure-docker-daemon.sh',
   'utf8',
 );
+const installImagesScript = readFileSync('tooling/setup/agent/install-docker-images.sh', 'utf8');
 const bootstrapScript = readFileSync('tooling/setup/agent/bootstrap.sh', 'utf8');
 const stackScript = readFileSync('tooling/setup/agent/stack.sh', 'utf8');
 const cloudAgentOverride = readFileSync(
@@ -58,6 +59,26 @@ describe('agent Docker daemon setup scripts', () => {
     );
     expect(stop).toContain('dockerd_running || return 0');
     expect(stop).not.toContain('docker info');
+  });
+
+  it('restarts dockerd for the registry mirror only through ensure-docker-daemon.sh', () => {
+    // install-docker-images.sh restarted dockerd itself and waited only for its API to go quiet:
+    // the new dockerd started while the old one was still exiting, stopped on its pid file, and
+    // none was left running (Postgres, Redis and both SonarQube servers down, 23 Oct 2026).
+    expect(installImagesScript).toContain('RESTART_DOCKERD=1 start_docker || true');
+    expect(installImagesScript).toContain(
+      `start_docker() {\n  bash "\${agent_dir}/ensure-docker-daemon.sh" && wait_for_docker\n}`,
+    );
+    for (const ownStartOrStop of ['pkill', 'service docker', 'dockerd >']) {
+      expect(installImagesScript).not.toContain(ownStartOrStop);
+    }
+    // The helper stops the daemon the one way (stop_dockerd waits for the process to exit) before
+    // the check that would find it reachable, so its start path then runs.
+    const restart = `if [ "\${RESTART_DOCKERD:-0}" = "1" ] && dockerd_running; then\n  log "restarting dockerd to load its configuration."\n  stop_dockerd\nfi`;
+    expect(ensureDockerDaemonScript).toContain(restart);
+    expect(ensureDockerDaemonScript.indexOf(restart)).toBeLessThan(
+      ensureDockerDaemonScript.indexOf('log "Docker daemon already reachable'),
+    );
   });
 
   it('waits on a service manager only when it started a dockerd', () => {
