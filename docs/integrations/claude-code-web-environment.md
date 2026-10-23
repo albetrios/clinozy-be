@@ -87,19 +87,19 @@ flag in the background. See [Session startup — the live playground](#session-s
 
 **Both repos in one environment.** The Setup script runs once for the environment, so name each repo's
 script by its path — the clones sit side by side (in this setup `/home/user/clinozy-be` and
-`/home/user/clinozy-fe`):
+`/home/user/clinozy-fe`), and each has the same entry point at the same path:
 
 ```bash
 bash /home/user/clinozy-be/tooling/setup/agent/bootstrap.sh --install-only
-bash /home/user/clinozy-fe/agent-os/cloud-environment/install.sh --install-only
+bash /home/user/clinozy-fe/tooling/setup/agent/bootstrap.sh --install-only
 ```
 
 Both take the same switch, and each script is its repository's one entry point: without it, a
 session's run ends with the app left running (here the API and worker, in clinozy-fe the dev server
 on :5173); with it, the run only installs and starts no server. Any other option is refused by both,
 so a mistyped flag fails the line instead of being ignored. Run them one after the other, not in
-parallel: both start the Docker daemon and pull images. clinozy-fe's script also builds its codegraph index; the first build takes about 2–3
-minutes, later runs only sync it.
+parallel: both start the Docker daemon and pull images. clinozy-fe's script also builds its
+codegraph index; the first build takes about 2–3 minutes, later runs only sync it.
 
 Both scripts also register the session's hooks (`pnpm agent-os:session-hooks`,
 [`tooling/agent-os/session-hooks.ts`](../../tooling/agent-os/session-hooks.ts)). A session that holds

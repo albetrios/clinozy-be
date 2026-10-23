@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { PROJECT_SLUG } from '@/shared/constants/project-identity.constants.js';
 
 const sessionStart = readFileSync('agent-os/hooks/be-session-start.mjs', 'utf8');
 const bootstrap = readFileSync('tooling/setup/agent/bootstrap.sh', 'utf8');
@@ -277,6 +278,22 @@ describe('live playground stack policy', () => {
     for (const installer of installers) {
       expect(reached, installer).toContain(`"\${AGENT_DIR}/${installer}"`);
     }
+  });
+
+  it("the cached install calls bootstrap.sh --install-only itself, as clinozy-fe's does", () => {
+    // One entry point, at the same path in both repositories: Cursor's install runs the same line
+    // as the environment's Setup script, and no wrapper stands in front of it.
+    const environment = JSON.parse(
+      readFileSync('agent-os/cloud-environment/environment.json', 'utf8'),
+    ) as { install: string };
+    expect(environment.install).toBe('bash tooling/setup/agent/bootstrap.sh --install-only');
+    // The documented Setup script for a session that holds both repositories.
+    const guide = readFileSync('docs/integrations/claude-code-web-environment.md', 'utf8');
+    expect(guide).toContain(
+      `bash /home/user/${PROJECT_SLUG}/tooling/setup/agent/bootstrap.sh --install-only\n` +
+        'bash /home/user/clinozy-fe/tooling/setup/agent/bootstrap.sh --install-only\n',
+    );
+    expect(guide).not.toContain('cloud-environment/install.sh');
   });
 
   it('wait, status, verify, timeline and stop are one command each', () => {
