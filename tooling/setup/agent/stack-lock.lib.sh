@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
-# The live bring-up's lock (`$AGENT_STACK_DIR/lock/`), status line (`$AGENT_STACK_DIR/status`)
-# and timeline, shared by bootstrap.sh (takes the lock, writes the status and the timeline),
-# stack.sh (reports and waits on them) and agent-os/hooks/be-session-start.mjs (decides whether
-# to launch a bring-up).
+# A live bring-up's lock (`<stack directory>/lock/`), status line (`<stack directory>/status`)
+# and timeline. The backend's bootstrap.sh takes the lock and writes the status and the timeline
+# in $AGENT_STACK_DIR, its stack.sh reports and waits on them, and its session-start hook decides
+# whether to launch a bring-up. The frontend's bootstrap.sh and session-start hook use the lock
+# alone, in $AGENT_STACK_DIR/frontend, so the two repositories' bring-ups never wait on each
+# other. Identical in both repositories (the mirrored-files policy test).
 #
 # A lock outlives its bring-up when the container stops mid-run: the cached environment of
 # a cloud session can carry a `lock/pid` from another boot, and that pid can name an

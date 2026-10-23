@@ -35,7 +35,7 @@ source "${AGENT_DIR}/stack-lock.lib.sh"
 readonly STACK_DIR="${AGENT_STACK_DIR:-/tmp/agent-stack}"
 readonly API_URL="http://127.0.0.1:${PORT:-3000}"
 readonly WORKER_URL="http://127.0.0.1:${WORKER_HEALTH_PORT:-9090}"
-# clinozy-fe's dev server, as its session-start hook and healthcheck probe it (Vite binds localhost).
+# clinozy-fe's dev server, as its bootstrap.sh and healthcheck probe it (Vite binds localhost).
 readonly FRONTEND_URL="${FRONTEND_URL:-http://localhost:5173}"
 
 # curl prints 000 itself when nothing answers.
@@ -145,7 +145,7 @@ show_status() {
   if frontend_serves; then
     echo "  frontend   ${FRONTEND_URL}  serving the app shell"
   else
-    echo "  frontend   ${FRONTEND_URL}  not serving (clinozy-fe's session-start hook starts it; log ${STACK_DIR}/frontend.log)"
+    echo "  frontend   ${FRONTEND_URL}  not serving (clinozy-fe's bootstrap.sh starts it; logs ${STACK_DIR}/bootstrap-frontend.log, frontend.log)"
   fi
   echo "  SonarQube  backend :9000 $(sonarqube_state 9000) · frontend :9001 $(sonarqube_state 9001)"
   echo "  agent      $(agent_tools_state)"

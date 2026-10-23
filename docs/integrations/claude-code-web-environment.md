@@ -87,19 +87,19 @@ flag in the background. See [Session startup — the live playground](#session-s
 
 **Both repos in one environment.** The Setup script runs once for the environment, so name each repo's
 script by its path — the clones sit side by side (in this setup `/home/user/clinozy-be` and
-`/home/user/clinozy-fe`):
+`/home/user/clinozy-fe`), and each has the same entry point at the same path:
 
 ```bash
 bash /home/user/clinozy-be/tooling/setup/agent/bootstrap.sh --install-only
-bash /home/user/clinozy-fe/agent-os/cloud-environment/install.sh --install-only
+bash /home/user/clinozy-fe/tooling/setup/agent/bootstrap.sh --install-only
 ```
 
-Both take the same switch. clinozy-fe's `--install-only` skips its step 10, which in a Setup script
-only booted Vite to check the app shell and stopped it again (a session's start hook starts the dev
-server itself); any other option is refused by both, so a mistyped flag fails the line instead of
-being ignored. Run them one after the other, not in parallel: both start the Docker daemon and pull
-images. clinozy-fe's script also builds its codegraph index; the first build takes about 2–3
-minutes, later runs only sync it.
+Both take the same switch, and each script is its repository's one entry point: without it, a
+session's run ends with the app left running (here the API and worker, in clinozy-fe the dev server
+on :5173); with it, the run only installs and starts no server. Any other option is refused by both,
+so a mistyped flag fails the line instead of being ignored. Run them one after the other, not in
+parallel: both start the Docker daemon and pull images. clinozy-fe's script also builds its
+codegraph index; the first build takes about 2–3 minutes, later runs only sync it.
 
 Both scripts also register the session's hooks (`pnpm agent-os:session-hooks`,
 [`tooling/agent-os/session-hooks.ts`](../../tooling/agent-os/session-hooks.ts)). A session that holds
@@ -270,9 +270,10 @@ session starts → session-start hook (returns at once) → bootstrap.sh, detach
   → install-agent-tools.sh, detached: gh, CodeGraph sync, Headroom + MCP + session hooks,
     gitleaks, semgrep, k6 — the app needs none of them, so they never hold "live" up
   → start-sonarqube.sh, detached: once the bring-up's lock clears, SonarQube for the pre-push gate
-clinozy-fe in the same session → its own hook starts Vite on :5173 (pnpm dev), detached,
-  and its own start-sonarqube.sh (the same script), which waits for the same lock — first
-  checked after 30 s, since that hook can launch it before bootstrap.sh has taken the lock
+clinozy-fe in the same session → its own hook launches its own bootstrap.sh, detached:
+  Node → dependencies → .env.local → Vite on :5173, kept running → its agent tools, then its
+  own start-sonarqube.sh (the same script), which waits for this bring-up's lock — first
+  checked after 30 s, so a check at once cannot miss a bring-up that is just starting
 ```
 
 | You want | Do |

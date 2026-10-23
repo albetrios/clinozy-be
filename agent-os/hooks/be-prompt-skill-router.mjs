@@ -8,7 +8,8 @@
 // keyword→skill map mirrors agent-os/docs/skill-triggers.md.
 //
 // Conservative by design: requires a build/change verb AND a domain noun, so ordinary prompts
-// (questions, "run the tests", "explain this") produce nothing and never nag. A new prompt is a
+// (questions, "run the tests", "explain this") produce nothing and never nag; the one exception is
+// a PR to drive ("babysit", "make it green", "fix CI"), routed to be-pr-babysit. A new prompt is a
 // new turn: it clears the once-per-turn record (_be-turn-once.mjs) and marks a /be-ship or
 // /be-open-pr turn as the PR request. Fails OPEN: no payload, no prompt, or no match exits 0
 // silently.
@@ -30,6 +31,14 @@ const ROUTES = [
   [/\b(seed|seeds|seeder|seeding)\b/, "seed → be-seed-maintainer"],
 ];
 
+/**
+ * Driving a PR needs no build verb: "babysit the PR", "make it green", "fix CI" name the babysit
+ * skill, which carries the be- prefix (there is no bare `babysit` or `steward` skill to find).
+ */
+const PULL_REQUEST_INTENT = /\bbabysit|\bmake (it|them|the prs?|this pr) green\b|\bfix (the )?ci\b|\bci (is |went )?red\b|\bmerge[- ]ready\b|\bwatch (the |this )?prs?\b/;
+const PULL_REQUEST_ROUTE =
+  "PR to green / merge → be-pr-babysit (/be-watch-pr; one be-ci-investigator per red check; /be-merge-pr only when green and asked)";
+
 const payload = readHookPayload();
 let status = "silent";
 if (payload) {
@@ -42,13 +51,14 @@ if (payload) {
     markTurn({ session: payload.session_id, mark: "pr-requested" });
   }
   const lower = prompt.toLowerCase();
-  const hints = BUILD_INTENT.test(lower) ? ROUTES.filter(([pattern]) => pattern.test(lower)) : [];
+  const hints = BUILD_INTENT.test(lower) ? ROUTES.filter(([pattern]) => pattern.test(lower)).map(([, chain]) => chain) : [];
+  if (PULL_REQUEST_INTENT.test(lower)) hints.push(PULL_REQUEST_ROUTE);
   if (hints.length > 0) {
     addModelContext({
       event: "UserPromptSubmit",
       context: [
         "🧭 clinozy-be skill routing — consult agent-os/skills/be-skill-index/SKILL.md FIRST, then run:",
-        ...hints.map(([, chain]) => `  • ${chain}`),
+        ...hints.map((chain) => `  • ${chain}`),
         "New requirement? docs/getting-started/requirement-intake.md · Full map: agent-os/docs/skill-triggers.md",
       ].join("\n"),
     });

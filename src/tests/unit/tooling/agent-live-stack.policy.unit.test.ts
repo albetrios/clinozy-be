@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { PROJECT_SLUG } from '@/shared/constants/project-identity.constants.js';
 
 const sessionStart = readFileSync('agent-os/hooks/be-session-start.mjs', 'utf8');
 const bootstrap = readFileSync('tooling/setup/agent/bootstrap.sh', 'utf8');
@@ -257,14 +258,42 @@ describe('live playground stack policy', () => {
     );
     expect(live).toBeGreaterThan(-1);
     expect(bootstrap.indexOf('start_detached sonarqube-backend bash')).toBeGreaterThan(live);
-    // clinozy-fe's session-start hook launches the same script at the moment this repository's
-    // hook launches bootstrap.sh, which takes the lock a moment later: the first lock check
-    // waits out a settle window, so it cannot miss a bring-up that is just starting.
+    // clinozy-fe's bootstrap.sh launches the same script, and the two repositories' bring-ups
+    // start at the same moment: the first lock check waits out a settle window, so it cannot miss
+    // this repository's bring-up while it is just starting.
     const starter = readFileSync('tooling/setup/agent/start-sonarqube.sh', 'utf8');
     expect(starter).toContain('settle_seconds=30');
     expect(starter).toContain(
       `while [ "\${waited}" -lt "\${settle_seconds}" ] || [ -d "\${lock_directory}" ] || ! docker info`,
     );
+  });
+
+  it('every installer runs from bootstrap.sh, directly or through install-agent-tools.sh', () => {
+    // bootstrap.sh is the one entry point, in the Setup script and in a session alike: an
+    // installer that neither reaches would only ever run by hand. clinozy-fe pins the same.
+    const directory = 'tooling/setup/agent';
+    const reached = bootstrap + readFileSync(`${directory}/install-agent-tools.sh`, 'utf8');
+    const installers = readdirSync(directory).filter((file) => /^install-.+\.sh$/.test(file));
+    expect(installers).toContain('install-semgrep.sh');
+    for (const installer of installers) {
+      expect(reached, installer).toContain(`"\${AGENT_DIR}/${installer}"`);
+    }
+  });
+
+  it("the cached install calls bootstrap.sh --install-only itself, as clinozy-fe's does", () => {
+    // One entry point, at the same path in both repositories: Cursor's install runs the same line
+    // as the environment's Setup script, and no wrapper stands in front of it.
+    const environment = JSON.parse(
+      readFileSync('agent-os/cloud-environment/environment.json', 'utf8'),
+    ) as { install: string };
+    expect(environment.install).toBe('bash tooling/setup/agent/bootstrap.sh --install-only');
+    // The documented Setup script for a session that holds both repositories.
+    const guide = readFileSync('docs/integrations/claude-code-web-environment.md', 'utf8');
+    expect(guide).toContain(
+      `bash /home/user/${PROJECT_SLUG}/tooling/setup/agent/bootstrap.sh --install-only\n` +
+        'bash /home/user/clinozy-fe/tooling/setup/agent/bootstrap.sh --install-only\n',
+    );
+    expect(guide).not.toContain('cloud-environment/install.sh');
   });
 
   it('wait, status, verify, timeline and stop are one command each', () => {
