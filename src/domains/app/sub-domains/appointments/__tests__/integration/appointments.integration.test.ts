@@ -905,6 +905,88 @@ describe('Appointments — integration (routes-final §6)', () => {
     flow.expectValue('counts range: field', FIELDS, 'date_to');
   });
 
+  it('slots without the booking being moved (6.8 #3, exclude_appointment_id)', async () => {
+    flow.as('owner');
+    await flow.expect(
+      200,
+      'a 60-minute booking',
+      'POST',
+      '/app/appointments',
+      booking(chirag, laterDay, '15:00', { duration_minutes: 60 }),
+    );
+    const moving = flow.last('.data.id');
+    const read = `/app/appointments/slots?branch_id=${vesu}&appointment_date=${laterDay}&duration_minutes=60&doctor_membership_id=${doctor}&step_minutes=15`;
+    /** Its own start, two starts overlapping only it, the copy's 10:00, a free 16:00. */
+    const STARTS =
+      '[([.data.slots[].start_time] | index("15:00") != null), ([.data.slots[].start_time] | index("14:15") != null), ([.data.slots[].start_time] | index("15:45") != null), ([.data.slots[].start_time] | index("10:00") != null), ([.data.slots[].start_time] | index("16:00") != null)] | map(tostring) | join(",")';
+    await flow.expect(200, 'it blocks itself', 'GET', read);
+    flow.expectValue(
+      'own 15:00, 14:15 and 15:45 busy; the copy’s 10:00 busy; 16:00 free',
+      STARTS,
+      'false,false,false,false,true',
+    );
+    await flow.expect(200, 'without it', 'GET', `${read}&exclude_appointment_id=${moving}`);
+    flow.expectValue(
+      'its own starts free; every other booking still blocks',
+      STARTS,
+      'true,true,true,false,true',
+    );
+    await flow.expect(
+      400,
+      'no such booking',
+      'GET',
+      `${read}&exclude_appointment_id=${NOWHERE_APPOINTMENT}`,
+    );
+    flow.expectValue('unknown booking: field', FIELDS, 'exclude_appointment_id');
+    await flow.expect(400, 'not an id', 'GET', `${read}&exclude_appointment_id=nope`);
+    flow.expectValue('not an id: field', FIELDS, 'exclude_appointment_id');
+    await flow.expect(
+      200,
+      'a booking to delete',
+      'POST',
+      '/app/appointments',
+      booking(bela, laterDay, '17:00'),
+    );
+    const deleted = flow.last('.data.id');
+    await flow.expect(204, 'delete it', 'DELETE', `/app/appointments/${deleted}?reason=mistake`);
+    await flow.expect(400, 'a deleted booking', 'GET', `${read}&exclude_appointment_id=${deleted}`);
+    flow.expectValue('deleted booking: field', FIELDS, 'exclude_appointment_id');
+    await flow.expect(
+      200,
+      'a booking at Adajan',
+      'POST',
+      '/app/appointments',
+      booking(chirag, laterDay, '18:00', { branch_id: adajan }),
+    );
+    const elsewhere = flow.last('.data.id');
+    await flow.expect(
+      200,
+      'a 15-minute shift onto its own span saves',
+      'PATCH',
+      `/app/appointments/${moving}`,
+      { start_time: '15:15' },
+    );
+    flow.expectValue('moved within its own span', '.data.end_time', '16:15');
+    flow.as('front_desk');
+    await flow.expect(
+      200,
+      'front desk: without a Vesu booking',
+      'GET',
+      `${read}&exclude_appointment_id=${moving}`,
+    );
+    flow.expectValue(
+      'front desk: its own start free',
+      '[.data.slots[].start_time] | index("15:15") != null',
+      true,
+    );
+    await flow.expect(
+      404,
+      'front desk: a booking at Adajan (not their branch)',
+      'GET',
+      `${read}&exclude_appointment_id=${elsewhere}`,
+    );
+  });
+
   it('export and gates', async () => {
     flow.as('owner');
     await flow.expect(

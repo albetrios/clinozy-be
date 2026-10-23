@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { BaseRecordRepository, nullsLastSortKeys } from '@/domains/app/base-record.repository.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
@@ -186,12 +186,14 @@ export class AppointmentsRepository extends BaseRecordRepository {
 
   /**
    * The day's slot-holding bookings (walk-ins aside) of the named doctor, room or machine — the
-   * busy spans the slots view leaves out (6.8 #3).
+   * busy spans the slots view leaves out (6.8 #3) — but `excludeAppointmentId`, the booking being
+   * moved: only that one row leaves, every other booking still blocks.
    */
   async findBusySpans(options: {
     organizationId: number;
     date: string;
     resources: Readonly<Record<string, number | null>>;
+    excludeAppointmentId?: number | null;
   }): Promise<{ start: string; durationMinutes: number }[]> {
     const named = Object.entries(options.resources).filter(
       (entry): entry is [string, number] => entry[1] !== null,
@@ -208,6 +210,9 @@ export class AppointmentsRepository extends BaseRecordRepository {
           eq(appointments.is_walk_in, false),
           inArray(appointments.status, [...APPOINTMENT_SLOT_HOLDING_STATUS_VALUES]),
           or(...named.map(([column, id]) => eq(this.column(column), id))),
+          typeof options.excludeAppointmentId === 'number'
+            ? ne(appointments.id, options.excludeAppointmentId)
+            : undefined,
         ),
       )
       .orderBy(desc(appointments.start_time));

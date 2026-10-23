@@ -13,6 +13,15 @@ import {
   createMembership,
 } from '@/domains/tenancy/__tests__/factories/permission.factory.js';
 import { createTestWebhook } from '@/tests/factories/webhook.factory.js';
+import {
+  type AppFixture,
+  createAppFixture,
+} from '@/domains/app/__tests__/factories/app-fixture.factory.js';
+import {
+  AppFlow,
+  type AppFlowResponse,
+  calendarDay,
+} from '@/domains/app/__tests__/factories/app-flow.factory.js';
 
 /**
  * BOLA / IDOR cross-tenant sweep on the by-:id routes.
@@ -30,6 +39,10 @@ import { createTestWebhook } from '@/tests/factories/webhook.factory.js';
  *    flat route → 404 (the organization-scoped lookup runs under organization A's RLS context, so
  *    the foreign resource is invisible). Privileges in your organization must never reach
  *    another org's objects.
+ *  - foreign-resource-id in a query: an app read that names a record by id in its query
+ *    (`GET /app/appointments/slots?exclude_appointment_id=`) answers organization B's id exactly
+ *    as it answers an id that exists nowhere (400 on the field), and organization A's own answer
+ *    does not move.
  */
 const ALL_PERMISSIONS = [
   'webhook:read',
@@ -168,6 +181,103 @@ describe('Security: BOLA / IDOR cross-tenant (by-id)', () => {
         token: tokenScopedToA,
       });
       expect(response.statusCode).toBe(404);
+    });
+  });
+
+  // ─── foreign-resource-id in a query parameter (an app read inside organization A) ──────
+  //
+  // The slots read takes the booking being moved as `exclude_appointment_id`. Organization B's
+  // booking named there must be unknown inside organization A's claim context — the same 400 an
+  // id that exists nowhere gets — and must never change A's grid.
+
+  describe('foreign-resource-id in a query: organization B appointment inside organization A', () => {
+    const UNKNOWN_APPOINTMENT = 'appt_aaaaaaaaaaaaaaaaaaaaa';
+    const STARTS = '[.data.slots[].start_time] | join(",")';
+
+    /**
+     * A 60-minute booking at 15:00 with `fixture`'s doctor at Vesu — on `day`, or on the first day
+     * 30–44 days out that takes it.
+     */
+    async function bookDoctor(options: {
+      fixture: AppFixture;
+      phone: string;
+      day?: string;
+    }): Promise<{ day: string; appointmentId: string }> {
+      const flow = new AppFlow(app, options.fixture).as('owner');
+      const contact = await flow.call('POST', '/app/contacts', {
+        first_name: 'Asha',
+        last_name: 'Bola',
+        phones: [{ phone: options.phone, is_primary: true }],
+      });
+      expect(contact.status).toBe(200);
+      const contactId = flow.last('.data.id');
+      const candidates =
+        options.day === undefined
+          ? Array.from({ length: 15 }, (_, offset) => calendarDay(options.fixture, 30 + offset))
+          : [options.day];
+      for (const day of candidates) {
+        const booking = await flow.call('POST', '/app/appointments', {
+          contact_id: contactId,
+          branch_id: options.fixture.branches.vesu,
+          doctor_membership_id: options.fixture.members.doctor.membershipPublicId,
+          appointment_date: day,
+          start_time: '15:00',
+          duration_minutes: 60,
+          service_label: 'Consultation',
+        });
+        if (booking.status === 200) return { day, appointmentId: flow.last('.data.id') };
+      }
+      throw new Error('bookDoctor: the doctor takes no booking at 15:00 in those days');
+    }
+
+    /** A 400's `error`, with the id it names replaced — so two refusals compare as one. */
+    function refusalOf(response: AppFlowResponse, id: string): string {
+      return JSON.stringify((response.body as { error?: unknown }).error).replaceAll(id, '<id>');
+    }
+
+    it("slots with organization B's appointment as exclude_appointment_id inside organization A → 400, A's grid unchanged", async () => {
+      const attacker = await createAppFixture(app);
+      const victim = await createAppFixture(app);
+      const own = await bookDoctor({ fixture: attacker, phone: '+919812300021' });
+      const foreign = await bookDoctor({
+        fixture: victim,
+        phone: '+919812300022',
+        day: own.day,
+      });
+      // Organization A's owner, scoped to A by the `org` claim, reading A's own doctor's grid.
+      const attackFlow = new AppFlow(app, attacker).as('owner');
+      const read = `/app/appointments/slots?branch_id=${attacker.branches.vesu}&appointment_date=${own.day}&duration_minutes=60&doctor_membership_id=${attacker.members.doctor.membershipPublicId}&step_minutes=15`;
+
+      expect((await attackFlow.call('GET', read)).status).toBe(200);
+      const before = attackFlow.last(STARTS);
+      expect(before.split(',')).not.toContain('15:00');
+
+      const foreignRead = await attackFlow.call(
+        'GET',
+        `${read}&exclude_appointment_id=${foreign.appointmentId}`,
+      );
+      expect(foreignRead.status).toBe(400);
+      expect(attackFlow.last('[.error.errors[].field] | join(",")')).toBe('exclude_appointment_id');
+      const unknownRead = await attackFlow.call(
+        'GET',
+        `${read}&exclude_appointment_id=${UNKNOWN_APPOINTMENT}`,
+      );
+      expect(unknownRead.status).toBe(400);
+      // Nothing tells organization B's booking apart from one that does not exist.
+      expect(refusalOf(foreignRead, foreign.appointmentId)).toBe(
+        refusalOf(unknownRead, UNKNOWN_APPOINTMENT),
+      );
+
+      expect((await attackFlow.call('GET', read)).status).toBe(200);
+      expect(attackFlow.last(STARTS)).toBe(before);
+
+      // Baseline: A's own booking does leave A's grid — the refusal is specific to B's id.
+      const ownRead = await attackFlow.call(
+        'GET',
+        `${read}&exclude_appointment_id=${own.appointmentId}`,
+      );
+      expect(ownRead.status).toBe(200);
+      expect(attackFlow.last(STARTS).split(',')).toContain('15:00');
     });
   });
 
