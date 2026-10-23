@@ -85,7 +85,7 @@ start_dockerd() {
 }
 
 stop_dockerd() {
-  log "stopping existing dockerd before fallback restart."
+  log "stopping the running dockerd."
   if command -v service >/dev/null 2>&1; then
     if [ "${#sudo_cmd[@]}" -gt 0 ]; then
       "${sudo_cmd[@]}" service docker stop >/dev/null 2>&1 || true
@@ -203,6 +203,15 @@ fi
 if ! command -v docker >/dev/null 2>&1; then
   log "docker CLI is not installed."
   exit 1
+fi
+
+# install-docker-images.sh sets this when daemon.json holds a setting the running dockerd has not
+# loaded. The daemon is stopped here (stop_dockerd waits for its process to exit) and then started
+# below like any stopped daemon; a dockerd started while the old one was still exiting stopped on
+# its pid file and left none running.
+if [ "${RESTART_DOCKERD:-0}" = "1" ] && dockerd_running; then
+  log "restarting dockerd to load its configuration."
+  stop_dockerd
 fi
 
 if docker info >/dev/null 2>&1; then
