@@ -38,10 +38,14 @@ const PROJECT_IDENTITY_GENERATED_PATHS = [
   'src/shared/locales/en/openapi.json',
   'src/shared/locales/es/openapi.json',
   '.github/workflows',
+  'SECURITY.md',
+  'CODE_OF_CONDUCT.md',
 ].join(' ');
 
 export default {
-  'tooling/setup/setup.config.json': [
+  // A function, so lint-staged appends no file path: the generator takes no positional argument
+  // and refused the manifest's path ("Too many arguments").
+  'tooling/setup/setup.config.json': () => [
     'pnpm tool:generate-project-identity',
     `git add ${PROJECT_IDENTITY_GENERATED_PATHS}`,
   ],

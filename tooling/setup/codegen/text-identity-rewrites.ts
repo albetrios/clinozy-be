@@ -197,6 +197,26 @@ export const TEXT_REWRITE_TARGETS: readonly TextRewriteTarget[] = [
     reason: 'Dry-run database name and the local Postgres connection string.',
     rules: [...sqlIdentityRules(), ...localDatabaseRules()],
   },
+  {
+    path: 'SECURITY.md',
+    reason: 'The private vulnerability-report fallback address.',
+    rules: [
+      {
+        pattern: /(\*\*Alternative:\*\* Email <)[^>\s]+(>)/,
+        replace: (snapshot) => `$1${snapshot.securityContact}$2`,
+      },
+    ],
+  },
+  {
+    path: 'CODE_OF_CONDUCT.md',
+    reason: 'The enforcement contact address.',
+    rules: [
+      {
+        pattern: /(responsible for enforcement at <)[^>\s]+(>)/,
+        replace: (snapshot) => `$1${snapshot.securityContact}$2`,
+      },
+    ],
+  },
 ];
 
 /**

@@ -136,7 +136,11 @@ it later.
    pnpm github:sync
    ```
 
-5. Replace the placeholder contacts in `SECURITY.md` and `CONTRIBUTING.md` with your own.
+5. Set `project.securityContact` in `tooling/setup/setup.config.json` to your own monitored
+   mailbox, then run `pnpm tool:generate-project-identity`: it writes the address into
+   `SECURITY.md` and `CODE_OF_CONDUCT.md`. A fork otherwise keeps this project's address, and a
+   reserved documentation domain (`example.com`, `.test`, …) fails the manifest and
+   `security-contact.policy.unit.test.ts`.
 
 ---
 

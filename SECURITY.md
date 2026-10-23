@@ -5,7 +5,7 @@
 Please report security vulnerabilities **privately** so we can address them before public disclosure.
 
 - **Preferred:** Use GitHub **Security** → **Report a vulnerability** on this repository (private security advisory).
-- **Alternative:** Email <security@example.com> with the same details below.
+- **Alternative:** Email <security@clinozy.com> with the same details below.
 
 Include, where possible:
 
@@ -28,7 +28,7 @@ Dependency vulnerabilities are handled through Dependabot, CI dependency audit g
 ### Intake paths
 
 - **Dependabot security updates:** Dependabot opens a pull request. Review and merge manually after required PR CI checks pass, including `pnpm deps:audit`.
-- **Dependabot PR CI failures:** When PR CI fails on a Dependabot PR, [`.github/workflows/dependabot-ci-triage.yml`](../../.github/workflows/dependabot-ci-triage.yml) opens or updates a GitHub issue for maintainer triage (security failures use an urgent title).
+- **Dependabot PR CI failures:** When PR CI fails on a Dependabot PR, [`.github/workflows/dependabot-ci-triage.yml`](.github/workflows/dependabot-ci-triage.yml) opens or updates a GitHub issue for maintainer triage (security failures use an urgent title).
 - **CI audit failures:** Any pull request that introduces a vulnerable dependency is blocked by `pnpm deps:audit` and `pnpm deps:audit:prod`.
 - **Private reports:** Security reports for this repository's own source code follow the private reporting and coordinated disclosure process above.
 
