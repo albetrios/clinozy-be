@@ -48,6 +48,19 @@ If you set split counts instead of `DEPLOYMENT_TOTAL_REPLICA_COUNT`, the API and
 
 Worked example at the defaults — production (Neon, `max_connections` 450, `POSTGRES_MAX_CONNECTIONS` unset so the live value is read), 2 API + 1 worker: `3 × (70 + 10) = 240 ≤ 450 − 10 = 440`. Do **not** override `POSTGRES_MAX_CONNECTIONS` to a number smaller than the server's real `max_connections` (the 2026-10-13 incident set it to 100) — the guard then refuses a pool the database would actually accept.
 
+**Production headroom at the defaults:** 440 usable connections hold at most **5** processes at
+`70 + 10` each (`5 × 80 = 400 ≤ 440`). A sixth — for example 4 API + 2 worker, `6 × 80 = 480` — is
+refused at boot with the `Postgres connection budget exceeded` error. Each process checks the whole
+cluster at **its own** pool size (process count × its own `DATABASE_POOL_MAX +
+DATABASE_MAINTENANCE_POOL_MAX`), so the service with the largest pool decides: lowering
+`DATABASE_POOL_MAX` on the API service alone still leaves the worker refusing to boot. Before scaling
+past five, either lower `DATABASE_POOL_MAX` on **every** service — at six processes to at most `63`
+(`6 × 73 = 438`), which still covers the worker's demand of 54 but not its burst headroom of 68, so
+the worker boot warns (see [Worker Postgres pool demand](#worker-postgres-pool-demand-per-process)
+below); seven processes cannot cover it — or raise the Neon compute size so `max_connections` grows.
+CI boots get the same arithmetic against the service Postgres (`100 − 10 = 90`):
+`src/tests/unit/ci/ci-boot-connection-budget.policy.unit.test.ts`.
+
 | Variable                          | Meaning                                                         | Default                                      |
 | --------------------------------- | --------------------------------------------------------------- | -------------------------------------------- |
 | `DEPLOYMENT_TOTAL_REPLICA_COUNT`  | Shorthand: `api_replicas + worker_replicas`                     | required in production (or use split counts) |
