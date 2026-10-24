@@ -312,8 +312,12 @@ walks through the Secret-vs-Variable decision and the section placement in
    pnpm github:sync production
    ```
 
-6. **Add the key to [reusable-railway-deploy.yml](../../../.github/workflows/reusable-railway-deploy.yml)**
-   if it must be synced through to the Railway service variables step.
+6. **A runtime key needs no workflow edit**: the Railway service variables step of
+   [reusable-railway-deploy.yml](../../../.github/workflows/reusable-railway-deploy.yml)
+   pushes every key of the GitHub Environment it does not exclude. A key the API and worker
+   never read (GitHub Actions or local tooling only) goes under such a section of
+   `.env.example` **and** into that step's `exclude_regex`, so no CI credential lands in a
+   service's variables; `railway-variables-push.policy.unit.test.ts` fails until it is there.
 7. **Paste the "Environment variable changes" snippet** printed by
    `pnpm tool:sync-env-example` into the PR description so reviewers and the
    deploy workflow know what was added/removed.
