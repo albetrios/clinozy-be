@@ -45,7 +45,7 @@
       "be-read-cache-guard",
       "be-dependency-security",
       "be-production-hardening-guard",
-      "be-path-to-production-gate"
+      "be-path-to-production"
     ],
     "infra-config": [
       "be-env-schema-add",

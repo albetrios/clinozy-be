@@ -76,6 +76,8 @@ Granular procedures live in **skills** (invoked by name); these commands are **w
 | `/be-watch-pr <n>` | Subscribe to a PR; triage CI + review comments on PR events until green, then `/be-merge-pr`. |
 | `/be-merge-pr <n>` | Turn on GitHub auto-merge (squash): GitHub merges when every required check passes and the approvals are in; no up-to-date requirement, never `--admin`. |
 | `/be-ship [title]` | The full flow: pre-merge-review (a critical or major finding stops the push) → open-pr → watch-pr → merge-pr. |
+| `/be-prod-readiness` | Read-only production-readiness pipeline from `agent-os/agents/pipelines.json` (production reviewer, production-hardening reviewer, dependency auditor) over `main` since the last release tag; one report in `REVIEW.md` → Findings format. clinozy-fe: `/fe-prod-readiness`. |
+| `/be-release [review \| release]` | Take `main` to production (skill **be-path-to-production**): readiness plan the user approves → Release PR (release-please on demand) → merge → the production deploy the user approves in GitHub → **Environment fully live**. clinozy-fe: `/fe-release`. |
 
 **Maintenance**
 

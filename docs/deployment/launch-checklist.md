@@ -72,4 +72,4 @@ in [`docs/reviews/`](../reviews/) stay point-in-time snapshots; the frontend's h
 
 **No-go** until every blocker above is ticked. Then run the
 [production go-live runbook](runbooks/production-go-live.md), which includes the
-path-to-production gate.
+path-to-production gate (`/be-release`, skill **be-path-to-production**).

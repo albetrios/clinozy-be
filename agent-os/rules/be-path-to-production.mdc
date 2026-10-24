@@ -1,0 +1,20 @@
+---
+description: Before any path-to-production action (release, deploy, "ready for production"), follow the be-path-to-production skill — the readiness plan the user approves, then the Release PR, the production deploy the user approves, and the live check.
+globs: docs/deployment/runbooks/production-go-live.md
+alwaysApply: false
+---
+
+# Path to production
+
+When the user asks to **release**, **deploy to production**, **go live**, for **path to production**,
+a **pre-production review** or whether it is **ready for production**:
+
+1. **Read** `agent-os/skills/be-path-to-production/SKILL.md` and follow it (command: `/be-release`).
+2. Run its step 1 readiness review and **produce the plan** in the skill's template.
+3. **Ask the user to review the plan** and confirm before any production action.
+4. Then the release: the Release PR, its merge, the production deploy the user approves in GitHub,
+   and the live check. Never approve a production deployment yourself.
+5. When the frontend release depends on this one, finish here first; clinozy-fe follows with
+   **fe-path-to-production**.
+
+Refer to **`docs/deployment/runbooks/production-go-live.md`** for the workflow.
