@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.4.0](https://github.com/albetrios/clinozy-be/compare/v9.3.0...v9.4.0) (2026-10-24)
+
+
+### Added
+
+* **appointments:** the 17 Oct QA fixes — reschedule slots, Sentry query strings, security contact, CI budget ([#161](https://github.com/albetrios/clinozy-be/issues/161)) ([e9d8bd0](https://github.com/albetrios/clinozy-be/commit/e9d8bd0548b0017284fba830d037e2228b0dde9f))
+
+
+### Fixed
+
+* **agent-os:** the review pipelines carry the repository prefix ([#137](https://github.com/albetrios/clinozy-be/issues/137)) ([0fc60e5](https://github.com/albetrios/clinozy-be/commit/0fc60e525aa904dfe38f12f4c79e760bcf016c78))
+* **agent:** a cold session goes live in about 25 s and repairs a Postgres setup a pause cut short ([#149](https://github.com/albetrios/clinozy-be/issues/149)) ([35e0dfe](https://github.com/albetrios/clinozy-be/commit/35e0dfe1a595ba666c1407b954441720b00b6a67))
+* **agent:** a Docker pid file left by a pause no longer blocks the daemon's start ([#150](https://github.com/albetrios/clinozy-be/issues/150)) ([d8e3cff](https://github.com/albetrios/clinozy-be/commit/d8e3cffcdbf6d445fb70492ee1eb8858ad6f084e))
+* **agent:** a slow dockerd is waited for, not recorded as the restricted fallback ([#148](https://github.com/albetrios/clinozy-be/issues/148)) ([09b0ad4](https://github.com/albetrios/clinozy-be/commit/09b0ad411f3f594775f567ead097d13179f9476f))
+* **agent:** cloud sessions go live sooner, with the frontend up and the sign-in code filled in ([#134](https://github.com/albetrios/clinozy-be/issues/134)) ([2089465](https://github.com/albetrios/clinozy-be/commit/208946590963f8d5ffee0336049b3e382347bef2))
+* **agent:** restart dockerd only through ensure-docker-daemon.sh, which waits for it to exit ([#160](https://github.com/albetrios/clinozy-be/issues/160)) ([17018f2](https://github.com/albetrios/clinozy-be/commit/17018f23e248c222fb0e495c5a9aa8f2c29fd64d))
+* **agent:** the SonarQube starter waits for a bring-up that has not taken the lock yet ([#147](https://github.com/albetrios/clinozy-be/issues/147)) ([e67cec8](https://github.com/albetrios/clinozy-be/commit/e67cec8aeee848d046c725de71be6edd88aa161e))
+* **ci:** the Railway variables push skips the job token ([#142](https://github.com/albetrios/clinozy-be/issues/142)) ([fc7c52f](https://github.com/albetrios/clinozy-be/commit/fc7c52f3fbbaa815a24ea282ac39c028798a0afd))
+* **ci:** the Railway variables push stops at a token error ([#144](https://github.com/albetrios/clinozy-be/issues/144)) ([cb7e00b](https://github.com/albetrios/clinozy-be/commit/cb7e00bf29dd621961f35987802ba7b7c22dabe6))
+* **deps:** ip-address 10.7.4 for GHSA-rxp7-6hxx-x8q5 ([#157](https://github.com/albetrios/clinozy-be/issues/157)) ([d10e037](https://github.com/albetrios/clinozy-be/commit/d10e0370dd18e8cb65aabc9a56518a1b16dda051))
+* **gates:** repository statements name their organization, and a ci-failure issue tracks main only ([#125](https://github.com/albetrios/clinozy-be/issues/125)) ([2edb74b](https://github.com/albetrios/clinozy-be/commit/2edb74b458028134783fea0ce0670348885c2655))
+* **gates:** the smaller gaps the drill found ([#119](https://github.com/albetrios/clinozy-be/issues/119)) ([0f0998a](https://github.com/albetrios/clinozy-be/commit/0f0998a7130017281ae6dfe49eb40d43d7951d98))
+* **mail:** local and development drop reserved-domain recipients instead of sending them to Resend ([#145](https://github.com/albetrios/clinozy-be/issues/145)) ([7be7b02](https://github.com/albetrios/clinozy-be/commit/7be7b02b14f34cc8509a04a59df03b7e71a3c5c6))
+* **observability:** alert on unscoped database access and pin bypass arms in WITH CHECK ([#158](https://github.com/albetrios/clinozy-be/issues/158)) ([35baa6d](https://github.com/albetrios/clinozy-be/commit/35baa6ddffd908c92d2604baed1bd7ae4a33a9f9))
+* **pre-push:** a changed domain file runs its tests as the application role ([#130](https://github.com/albetrios/clinozy-be/issues/130)) ([c5dc26a](https://github.com/albetrios/clinozy-be/commit/c5dc26a1bfe0b8e9caa3ae969460383a43d2f722))
+* **pre-push:** a changed test runs the fixture policy first, and the policy sees every git call ([#115](https://github.com/albetrios/clinozy-be/issues/115)) ([2dd79e1](https://github.com/albetrios/clinozy-be/commit/2dd79e1669a74672a44ad4c9c636913fcda51e97))
+* **pre-push:** a new docs/routes.txt reader is checked at push ([#124](https://github.com/albetrios/clinozy-be/issues/124)) ([b38899a](https://github.com/albetrios/clinozy-be/commit/b38899a1b39455adc4c98f4050d06e8fa552c97b))
+* **pre-push:** a pushed agent-os change runs the integrity evals ([#131](https://github.com/albetrios/clinozy-be/issues/131)) ([3a33083](https://github.com/albetrios/clinozy-be/commit/3a33083eb2aa3771761cd92c741ac044d6bc7032))
+* **redis:** a client that is not connected no longer holds the process open on close ([#133](https://github.com/albetrios/clinozy-be/issues/133)) ([d385119](https://github.com/albetrios/clinozy-be/commit/d3851197ffea0a7e2341792c63014f738e04bc74))
+* **security:** the secret scan loads gitleaks' built-in rules ([#113](https://github.com/albetrios/clinozy-be/issues/113)) ([3551e5c](https://github.com/albetrios/clinozy-be/commit/3551e5ce6e8ef4caf5f24cbcf5922bd89db8ff97))
+* **validate:** the domain gate checks every domain again ([#114](https://github.com/albetrios/clinozy-be/issues/114)) ([5d44146](https://github.com/albetrios/clinozy-be/commit/5d44146ab0105508025bdc91728260ca33c6a40a))
+
+
+### Performance
+
+* **test-selection:** judge tenancy and user changes by the import graph ([#139](https://github.com/albetrios/clinozy-be/issues/139)) ([b6ee465](https://github.com/albetrios/clinozy-be/commit/b6ee465f213261af6d4fe4c81acb2deb2391f1d6))
+
+
+### Documentation
+
+* **pr-template:** a change to how a job gets its secrets names the run that proves it ([#128](https://github.com/albetrios/clinozy-be/issues/128)) ([825bfb1](https://github.com/albetrios/clinozy-be/commit/825bfb1827b80e820f107e51a121137c8f9ef7b8))
+
 ## [9.3.0](https://github.com/albetrios/clinozy-be/compare/v9.2.1...v9.3.0) (2026-10-19)
 
 
