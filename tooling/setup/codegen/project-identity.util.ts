@@ -86,6 +86,8 @@ export interface ProjectIdentitySnapshot {
   readonly previousOwners: readonly string[];
   readonly packageName: string;
   readonly description?: string | undefined;
+  /** Private security-report mailbox (SECURITY.md, CODE_OF_CONDUCT.md). */
+  readonly securityContact: string;
   /** Paired frontend repository name (see {@link resolveFrontendSlug}). */
   readonly frontendSlug: string;
   readonly artifacts: ProjectArtifacts;
@@ -229,6 +231,7 @@ export function buildProjectIdentitySnapshot(config: SetupConfig): ProjectIdenti
     previousOwners: config.project.previousOwners ?? [],
     packageName: config.project.packageName ?? config.project.name,
     description: config.project.description,
+    securityContact: config.project.securityContact,
     frontendSlug: resolveFrontendSlug(config),
     artifacts: resolveArtifacts(config),
     git: resolveGitMetadata(config),

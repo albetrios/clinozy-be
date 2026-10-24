@@ -35,8 +35,10 @@ describe('Sentry sampling policy (sentry.ts wiring)', () => {
     expect(sentrySource).toContain('PRODUCTION_PROFILE_SESSION_SAMPLE_RATE');
     expect(sentrySource).toContain('redactSentryEvent');
     expect(sentrySource).toContain('query_string');
-    // The request URL (and its query string) is redacted before an event leaves the process.
-    expect(sentrySource).toContain('request.url = redactSensitive(request.url)');
+    // The request URL leaves with its path only, its query string dropped (SEC-01).
+    expect(sentrySource).toContain('request.url = urlWithoutQueryAndFragment(request.url)');
+    expect(sentrySource).toContain('delete request.query_string');
+    expect(sentrySource).toContain('urlQueryParams: false');
     expect(utilSource).toContain('PRODUCTION_TRACES_SAMPLE_RATE = 0.05');
     expect(utilSource).toContain('PRODUCTION_PROFILE_SESSION_SAMPLE_RATE = 0.1');
   });

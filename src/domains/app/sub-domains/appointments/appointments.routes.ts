@@ -65,7 +65,7 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
         schema: {
           summary: 'Free slots for a day',
           description:
-            "Returns a day's free slots for a booking of `duration_minutes` at `branch_id`, every `step_minutes` (default 15): the branch's hours, working days and holidays, the doctor's working days and hours (A4), and the named doctor's, room's and machine's bookings. A closed day answers `is_open: false` with `closed_reason` (`past`, `branch_inactive`, `closed_day`, `holiday`, `doctor_off`) and the holiday's `closed_label`. A branch you cannot see is a 404. Requires appointment:read.",
+            "Returns a day's free slots for a booking of `duration_minutes` at `branch_id`, every `step_minutes` (default 15): the branch's hours, working days and holidays, the doctor's working days and hours (A4), and the named doctor's, room's and machine's bookings. `exclude_appointment_id` names the booking being moved (Edit, Reschedule): its own span does not block it, every other booking still does; an id that is no live booking of this organization is a 400 on the field, and a booking in a branch you cannot see is a 404. A closed day answers `is_open: false` with `closed_reason` (`past`, `branch_inactive`, `closed_day`, `holiday`, `doctor_off`) and the holiday's `closed_label`. A branch you cannot see is a 404. Requires appointment:read.",
           tags: ['Appointment'],
           querystring: slotsAppointmentsQueryDto,
         },

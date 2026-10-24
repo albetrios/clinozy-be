@@ -5,7 +5,8 @@
     "brandName": "Clinozy",
     "previousNames": ["core-be", "core-fe", "clinovia-be", "clinovia-fe"],
     "previousOwners": ["nikunjmavani"],
-    "packageName": "clinozy-be"
+    "packageName": "clinozy-be",
+    "securityContact": "nikunj.mavani@albetrios.com"
   },
   "git": {
     "protectedBranches": ["main"],

@@ -57,6 +57,7 @@ function buildConfig(overrides?: {
       displayName: 'Acme API',
       ...(overrides?.brandName ? { brandName: overrides.brandName } : {}),
       packageName: overrides?.name ?? 'acme-api',
+      securityContact: 'security@acme.dev',
     },
     git: { protectedBranches: ['main'], defaultBranch: 'main' },
     environments: [

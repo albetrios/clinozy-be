@@ -55,9 +55,11 @@ Import from `@/shared/constants/project-identity.constants.js`:
 
 `package.json` (`name`, `repository`, `bugs`, `homepage`), `.github/CODEOWNERS`,
 `.github/environments/production.json` reviewer handles, `sonar-project.properties`, and the
-`container_name:` values in `docker-compose*.yml` are all written by
-`pnpm tool:generate-project-identity`. Change `providers.github.owners` / `project.packageName` in
-the manifest and regenerate. CODEOWNERS remains the roster that
+`container_name:` values in `docker-compose*.yml`, and the private security-report address in
+`SECURITY.md` and `CODE_OF_CONDUCT.md` (`project.securityContact` — a reserved documentation domain
+such as `example.com` fails the manifest) are all written by
+`pnpm tool:generate-project-identity`. Change `providers.github.owners` / `project.packageName` /
+`project.securityContact` in the manifest and regenerate. CODEOWNERS remains the roster that
 `pnpm github:tool:governance-mode` reads; the generator owns only the handles, never the
 mode-coupled fields.
 

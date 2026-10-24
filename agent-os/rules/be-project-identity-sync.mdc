@@ -17,7 +17,7 @@ When you change any matched file:
 
 **In TypeScript** added or touched by your change: import from `@/shared/constants/project-identity.constants.js` per the table in `be-project-identity.mdc`. Do not introduce a new project-slug, image-name, or `'main'/'dev'` branch literal unless the constant already exists for that purpose.
 
-**Do not** hand-edit any generator output: `project-identity.constants.ts`, `.github/project-identity.env`, `.github/CODEOWNERS`, `docker-bake.hcl`, `sonar-project.properties`, `package.json` identity fields, `container_name:` values, or the production environment's reviewer handles.
+**Do not** hand-edit any generator output: `project-identity.constants.ts`, `.github/project-identity.env`, `.github/CODEOWNERS`, `docker-bake.hcl`, `sonar-project.properties`, `package.json` identity fields, `container_name:` values, the production environment's reviewer handles, or the security-report address in `SECURITY.md` / `CODE_OF_CONDUCT.md` (set `project.securityContact` instead).
 
 **Rename-safety rule for codegen:** a rewrite must never anchor its search on the CURRENT slug — match the surrounding shape or the service suffix instead. Anchoring on the literal is self-disabling: after the first rename it stops matching and the rewrite silently goes stale. Pinned by `src/tests/unit/ci/project-identity.policy.unit.test.ts`.
 

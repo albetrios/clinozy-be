@@ -406,8 +406,42 @@ function countsWindow(input: Record<string, unknown>): { from: string; days: num
 }
 
 /**
+ * The booking a `slots` read moves (`exclude_appointment_id`), as its internal id — a live booking
+ * of this organization (RLS and the organization filter: another clinic's id is unknown here, a
+ * 400 naming the field) in a branch the caller can see (a 404 otherwise, as its own read is).
+ */
+async function excludedAppointmentId({
+  publicId,
+  organizationId,
+  branchScope,
+  repository,
+}: {
+  publicId: unknown;
+  organizationId: number;
+  branchScope: BaseRecordCollectionInput['branchScope'];
+  repository: AppointmentsRepository;
+}): Promise<number | null> {
+  if (typeof publicId !== 'string') return null;
+  const row = await repository.findByPublicId(publicId, organizationId);
+  if (!row) {
+    throw fieldValidationError({
+      field: 'exclude_appointment_id',
+      messageKey: 'errors:validation.recordReferenceNotFound',
+      messageParams: { id: publicId, label: 'appointment' },
+    });
+  }
+  // Every branch the caller sees (none requested) — the slots' own scope is the one branch asked.
+  const visible = await branchScope();
+  if (visible && !visible.ids.includes(Number(row.branch_id))) {
+    throw new NotFoundError('Appointment');
+  }
+  return Number(row.id);
+}
+
+/**
  * The free slots of a day (6.8 #3): the branch's hours, working days and holidays, the doctor's
- * days and hours, and the doctor's, room's and machine's bookings — the exclusion rules' read.
+ * days and hours, and the doctor's, room's and machine's bookings — the exclusion rules' read. The
+ * booking being moved (`exclude_appointment_id`) does not block itself; every other one does.
  */
 async function slotsOfDay({
   collection: { input, context, branchScope, resolveReferences },
@@ -426,6 +460,12 @@ async function slotsOfDay({
   await resolveReferences(references);
   const branchId = Number(references.branch_id);
   if (scope && !scope.ids.includes(branchId)) throw new NotFoundError('Branch');
+  const excludeAppointmentId = await excludedAppointmentId({
+    publicId: input.exclude_appointment_id,
+    organizationId: context.organizationId,
+    branchScope,
+    repository,
+  });
   const date = String(input.appointment_date);
   const duration = Number(input.duration_minutes);
   const step = Number(input.step_minutes ?? DEFAULT_SLOT_STEP_MINUTES);
@@ -460,6 +500,7 @@ async function slotsOfDay({
         branch_room_id: idOf(references.branch_room_id),
         branch_machine_id: idOf(references.branch_machine_id),
       },
+      excludeAppointmentId,
     })
   ).map((span) => {
     const start = minutesOfClockTime(span.start);

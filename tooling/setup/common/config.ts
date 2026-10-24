@@ -30,6 +30,13 @@ const projectGitSchema = z.object({
   defaultBranch: z.string().min(1).optional(),
 });
 
+/**
+ * An address on a name reserved for documentation (RFC 2606 / RFC 6761): it reaches nobody.
+ * A security contact on one of these is a template placeholder that was never replaced.
+ */
+export const RESERVED_EMAIL_DOMAIN =
+  /@(?:[a-z0-9-]+\.)*(?:example\.(?:com|net|org)|example|test|invalid|localhost)$/i;
+
 export const setupConfigSchema = z.object({
   // ─── NAMING — SINGLE SOURCE OF TRUTH ────────────────────────────────────────
   // setup.config.json is the ONE place these names are defined. Every setup script
@@ -69,6 +76,12 @@ export const setupConfigSchema = z.object({
     // describe the BE↔FE contract (CORS origins, invitation links, shared Sonar
     // server). Defaults to this slug with a `-be` suffix swapped for `-fe`.
     frontendName: z.string().min(1).optional(),
+    // Where a researcher reports a vulnerability when GitHub private reporting is off or
+    // unreachable: SECURITY.md and CODE_OF_CONDUCT.md are generated from it. Required, and never
+    // an address on a name reserved for documentation (RFC 2606 / RFC 6761), which reaches nobody.
+    securityContact: z.email().refine((address) => !RESERVED_EMAIL_DOMAIN.test(address), {
+      message: 'project.securityContact is a placeholder: set a monitored mailbox',
+    }),
     artifacts: projectArtifactsSchema.optional(),
   }),
   git: projectGitSchema.optional(),

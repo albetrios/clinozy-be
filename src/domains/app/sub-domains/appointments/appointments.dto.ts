@@ -206,7 +206,10 @@ export const stageAppointmentDto = z
   })
   .strict();
 
-/** Query of `GET /app/appointments/slots` (6.8 #3). */
+/**
+ * Query of `GET /app/appointments/slots` (6.8 #3) — `exclude_appointment_id` names the booking
+ * being moved: its own span is not busy for it (the design's "except this booking").
+ */
 export const slotsAppointmentsQueryDto = z
   .object({
     branch_id: recordIdSchema,
@@ -220,6 +223,7 @@ export const slotsAppointmentsQueryDto = z
     branch_room_id: recordIdSchema.optional(),
     branch_machine_id: recordIdSchema.optional(),
     step_minutes: z.coerce.number().int().min(5).max(60).optional(),
+    exclude_appointment_id: recordIdSchema.optional(),
   })
   .strict();
 

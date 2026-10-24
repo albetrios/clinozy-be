@@ -48,6 +48,14 @@ no nested sub-domains (`visits/` went).
   resource — on create, move, reinstate, copy and restore.
 - **The slot rules (6.9):** a past start, a closed day (`branch_inactive`, `closed_day`, `holiday`,
   `doctor_off` — the doctor's days and hours, A4) and a time outside the branch's hours are 409s.
+- **The slots read leaves out only the booking being moved (6.8 #3):** `GET /app/appointments/slots`
+  drops every start that overlaps a slot-holding booking of the named doctor, room or machine;
+  `exclude_appointment_id` (Edit, Reschedule) leaves that one booking out of the busy spans
+  (`findBusySpans`), so its own start and the starts overlapping only it are offered, while every
+  other booking still blocks. The id must be a live booking of the organization (else a 400 on
+  the field — another clinic's id answers as an unknown one) in a branch the caller can see (else
+  a 404 `Appointment`, as its own read answers). The read only offers; the save still runs the
+  slot rules and the exclusion constraints.
 - **The lifecycle (A5):** `scheduled` → `confirmed` · `checked_in` · `cancelled` · `no_show`;
   `confirmed` → `checked_in` · `cancelled` · `no_show`; `checked_in` → `completed`; a move returns a
   confirmed booking to `scheduled`; `checked_in_at` / `completed_at` set exactly with their status.

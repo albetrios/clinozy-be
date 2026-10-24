@@ -133,6 +133,6 @@ Completing this once avoids broken defaults for contributors:
 - **Labels** — Create path labels used by [`.github/labeler.yml`](.github/labeler.yml) and PR size labels (`size/small`, `size/medium`, `size/large`, `size/x-large`) if you use automated labeling.
 - **Security advisories** — Ensure **private vulnerability reporting** is enabled (`Settings → Security → Code security`).
 - **Placeholders** — Replace any placeholders in **`SECURITY.md`** using your canonical GitHub slug (compare `git remote get-url origin`).
-- **Contacts** — Set a real **`security@…`** address in **`SECURITY.md`** and enforcement contact in **`CODE_OF_CONDUCT.md`** (currently placeholders).
+- **Contacts** — Set **`project.securityContact`** in `tooling/setup/setup.config.json` to a monitored mailbox and run `pnpm tool:generate-project-identity`; it writes the address into **`SECURITY.md`** and **`CODE_OF_CONDUCT.md`** (a reserved documentation domain such as `example.com` fails the manifest and `security-contact.policy.unit.test.ts`).
 
 Issue templates are not configured; use **Discussions** or open a **pull request** directly. Pull request starter text: [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md). Automation index: [`.github/README.md`](.github/README.md).
