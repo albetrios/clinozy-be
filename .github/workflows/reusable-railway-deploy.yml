@@ -567,8 +567,19 @@ jobs:
           #     ACTIONS_* / CI  GitHub Actions internals.
           #   - github_token    The secrets context's own key: toJSON(secrets)
           #                     always carries the job's token in lower case.
+          #   - CI-only keys    What .env.example files under "GitHub Actions only"
+          #                     or "local tooling only" (the release PAT, the
+          #                     Postman / Scalar / SonarQube keys, the restore
+          #                     drill's Neon key) and the variables only a
+          #                     workflow reads (ARTIFACT_ATTESTATIONS,
+          #                     DEVELOPMENT_API_URL, FORCE_JAVASCRIPT_ACTIONS_TO_NODE24).
+          #                     The API and worker never read them, and a
+          #                     credential in a service's variables is one more
+          #                     place it can leak from.
           # Anything else flows through to Railway as runtime config.
-          exclude_regex='^(RAILWAY_.*|GHCR_API_IMAGE|GHCR_WORKER_IMAGE|SMOKE_DEMO_EMAIL|SMOKE_DEMO_PASSWORD|GITHUB_TOKEN|github_token|ACTIONS_.*|CI)$'
+          # railway-variables-push.policy.unit.test.ts derives both CI-only lists
+          # and fails when a key in either one is not excluded here.
+          exclude_regex='^(RAILWAY_.*|GHCR_API_IMAGE|GHCR_WORKER_IMAGE|SMOKE_DEMO_EMAIL|SMOKE_DEMO_PASSWORD|GITHUB_TOKEN|github_token|ACTIONS_.*|CI|RELEASE_PLEASE_TOKEN|POSTMAN_API_KEY|POSTMAN_WORKSPACE_ID|SCALAR_API_KEY|SCALAR_NAMESPACE|SCALAR_SLUG|SONAR_TOKEN|SONAR_ADMIN_PASSWORD|MONTHLY_DATABASE_RESTORE_DRILL_NEON_API_KEY|ARTIFACT_ATTESTATIONS|DEVELOPMENT_API_URL|FORCE_JAVASCRIPT_ACTIONS_TO_NODE24)$'
 
           services="$RAILWAY_SERVICE_ID"
           if [ -n "${RAILWAY_WORKER_SERVICE_ID:-}" ]; then
@@ -613,7 +624,7 @@ jobs:
           done < "$payload_file"
 
           if [ "${#skipped_keys[@]}" -gt 0 ]; then
-            echo "Skipped ${#skipped_keys[@]} keys (Railway-managed / GHCR / smoke / GitHub Actions internals — not sent to Railway service variables):"
+            echo "Skipped ${#skipped_keys[@]} keys (Railway-managed / GHCR / smoke / GitHub Actions internals / CI-only — not sent to Railway service variables):"
             printf '  - %s\n' "${skipped_keys[@]}" | LC_ALL=C sort
           else
             echo "No keys matched the exclude regex; pushing all runtime variables."

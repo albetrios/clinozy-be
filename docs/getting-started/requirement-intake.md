@@ -404,7 +404,7 @@ flowchart LR
 | be-supabase-porting               | `.cursor/skills/be-supabase-porting/SKILL.md`               | Supabase Edge Functions → clinozy-be (manual)                |
 | be-code-quality-guard             | `.cursor/skills/be-code-quality-guard/SKILL.md`             | ESLint, Husky, CI security                                |
 | be-production-hardening-guard     | `.cursor/skills/be-production-hardening-guard/SKILL.md`     | Middleware, infra, security                               |
-| be-path-to-production-gate        | `.cursor/skills/be-path-to-production-gate/SKILL.md`        | Pre-release / deploy review                               |
+| be-path-to-production        | `.cursor/skills/be-path-to-production/SKILL.md`        | Pre-release / deploy review                               |
 | be-code-smells-and-best-practices | `.cursor/skills/be-code-smells-and-best-practices/SKILL.md` | Any edit under `src/`                                     |
 | be-lint-warnings-handler          | `.cursor/skills/be-lint-warnings-handler/SKILL.md`          | Detail guide (via code-smells)                            |
 | be-i18n-message-guard             | `.cursor/skills/be-i18n-message-guard/SKILL.md`             | User-facing messages / locales                            |

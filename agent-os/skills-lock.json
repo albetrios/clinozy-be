@@ -11,7 +11,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-auto-implement/SKILL.md",
-      "computedHash": "bad920a940f79268fcec5b43586dfd4cc052f8b40d815e8f1cf0a0d6ac10d3b7"
+      "computedHash": "a6dd5e40a353fbe6d9240bb29f3fa49cd16d1991818694685ced71e807bc4e7e"
     },
     "be-before-commit-guard": {
       "source": "local",
@@ -157,11 +157,11 @@
       "skillPath": "agent-os/skills/be-overview-doc-maintainer/SKILL.md",
       "computedHash": "54f23351a7b5474848b9b0f2eb94b9f78be751e581bbb0ee02b2aa3a8c0e0ab2"
     },
-    "be-path-to-production-gate": {
+    "be-path-to-production": {
       "source": "local",
       "sourceType": "local",
-      "skillPath": "agent-os/skills/be-path-to-production-gate/SKILL.md",
-      "computedHash": "e0f9f87e04e24252e04f98b2b4f2e5f07955b6c9bee593d9c204ccbb621c18af"
+      "skillPath": "agent-os/skills/be-path-to-production/SKILL.md",
+      "computedHash": "d5285b3f9e613f540d72e95deb7c1b56a65acb9c4d515c727f20d0612e10fe13"
     },
     "be-pr-babysit": {
       "source": "local",
@@ -215,7 +215,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-skill-index/SKILL.md",
-      "computedHash": "4f073ae7116f37f64faad4938a9e850b1f2b8120bf436e3480b3ba9440229d98"
+      "computedHash": "da9b0bfc5f197d4ea529de5fbee997058391423a92ad1b89c1ecd31ac8a3cc20"
     },
     "be-split-to-prs": {
       "source": "local",

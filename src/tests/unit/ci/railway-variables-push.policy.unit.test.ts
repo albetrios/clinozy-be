@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { envSchemaKeys } from '@/shared/config/env-schema.js';
 
 const deployWorkflow = readFileSync('.github/workflows/reusable-railway-deploy.yml', 'utf8');
 
@@ -74,6 +75,46 @@ function excludeRegex(): RegExp {
   return new RegExp(pattern);
 }
 
+/** A `.env.example` section that the API and worker never load: CI or local tooling only. */
+const RUNNER_ONLY_SECTION =
+  /GitHub Actions only|not loaded by API\/worker runtime|local tooling only/;
+
+/** Every key `.env.example` files under a {@link RUNNER_ONLY_SECTION} heading. */
+function runnerOnlyEnvironmentKeys(): string[] {
+  const lines = readFileSync('.env.example', 'utf8').split('\n');
+  const keys: string[] = [];
+  let runnerOnly = false;
+  lines.forEach((line, index) => {
+    const isRule = line.startsWith('# ---');
+    if (isRule && lines[index + 2]?.startsWith('# ---')) {
+      runnerOnly = RUNNER_ONLY_SECTION.test(lines[index + 1] ?? '');
+      return;
+    }
+    const key = /^([A-Z][A-Z0-9_]*)=/.exec(line)?.[1];
+    if (runnerOnly && key) keys.push(key);
+  });
+  return keys;
+}
+
+/** Every `vars.NAME` and `secrets.NAME` the workflows and composite actions read. */
+function workflowReadKeys(): string[] {
+  const files = [
+    ...readdirSync('.github/workflows').map((name) => join('.github/workflows', name)),
+    ...readdirSync('.github/actions', { recursive: true, encoding: 'utf8' })
+      .filter((name) => name.endsWith('.yml') || name.endsWith('.yaml'))
+      .map((name) => join('.github/actions', name)),
+  ];
+  const keys = new Set<string>();
+  for (const file of files) {
+    for (const match of readFileSync(file, 'utf8').matchAll(
+      /\b(?:vars|secrets)\.([A-Za-z_]\w*)/g,
+    )) {
+      if (match[1]) keys.add(match[1]);
+    }
+  }
+  return [...keys].sort();
+}
+
 /**
  * The Railway variables push merges `toJSON(vars)` and `toJSON(secrets)` and sends every key its
  * `exclude_regex` lets through. The secrets context always carries the job's token as
@@ -99,6 +140,24 @@ describe('Railway variables push (policy)', () => {
     for (const key of ['ALLOWED_ORIGINS', 'DATABASE_URL', 'JWT_PRIVATE_KEY', 'NODE_ENV']) {
       expect(regex.test(key), key).toBe(false);
     }
+  });
+
+  // Every deploy until 24 Oct pushed RELEASE_PLEASE_TOKEN, the Postman and Scalar keys and the
+  // restore drill's Neon key into both production services (run 40090399037 listed them among
+  // the 85 pushed keys), although .env.example files each one as GitHub Actions only.
+  it('never pushes a key .env.example keeps for GitHub Actions or local tooling', () => {
+    const regex = excludeRegex();
+    const keys = runnerOnlyEnvironmentKeys();
+    expect(keys).toEqual(expect.arrayContaining(['RELEASE_PLEASE_TOKEN', 'POSTMAN_API_KEY']));
+    expect(keys.filter((key) => !regex.test(key))).toEqual([]);
+  });
+
+  it('never pushes a variable or secret only a workflow reads', () => {
+    const regex = excludeRegex();
+    const schemaKeys = new Set<string>(envSchemaKeys);
+    const workflowOnly = workflowReadKeys().filter((key) => !schemaKeys.has(key));
+    expect(workflowOnly).toEqual(expect.arrayContaining(['DEVELOPMENT_API_URL']));
+    expect(workflowOnly.filter((key) => !regex.test(key))).toEqual([]);
   });
 
   it('filters the merged secrets with that one regex', () => {

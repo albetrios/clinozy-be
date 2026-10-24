@@ -71,7 +71,7 @@ rules, and skills all moved with it).
 - References chains and pipelines **by name only** — if a chain's steps change, this skill
   follows automatically.
 - Stops on the first red gate (checkpoint) — never bulldozes a broken step.
-- Ends every run at **be-pre-merge-review**; releases go through **be-path-to-production-gate**, not here.
+- Ends every run at **be-pre-merge-review**; releases go through **be-path-to-production**, not here.
 
 See [[be-skill-index]] for the chain/pipeline catalog and [[be-change-completeness-guard]] for the
 definition-of-done.
