@@ -144,9 +144,9 @@
         "docs/deployment/runbooks/production-go-live.md"
       ],
       "skills": [
-        "be-path-to-production-gate"
+        "be-path-to-production"
       ],
-      "note": "Or the user asks for path to production / ready for production — a plan the user approves before any production action"
+      "note": "Or the user asks to release / deploy to production / path to production — the readiness plan the user approves, then the Release PR, the approved deploy and the live check"
     },
     {
       "globs": [

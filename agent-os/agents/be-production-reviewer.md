@@ -3,7 +3,7 @@ name: be-production-reviewer
 description: Runs a full production-readiness review of clinozy-be and returns a prioritized plan (satisfied items, blocking gaps, optional improvements). Use before any path-to-production action — release, deploy, or "ready for production" sign-off. Read-only; produces a plan for the user to approve, never deploys.
 model: inherit
 background: true
-wrapsSkill: be-path-to-production-gate + be-production-hardening-guard
+wrapsSkill: be-path-to-production + be-production-hardening-guard
 useWhen: Pre-release / deploy sign-off — full readiness plan
 tools:
   - Read
@@ -26,7 +26,7 @@ You are read-only. You produce a plan for the user to review; you never run a re
 
 Read and follow these project skills, in order:
 
-1. `agent-os/skills/be-path-to-production-gate/SKILL.md` — the overall gate, the extra codebase checks (TODOs/placeholders, i18n raw strings, Stripe idempotency, organization/RLS, sensitive defaults), and the plan template.
+1. `agent-os/skills/be-path-to-production/SKILL.md` — the overall gate, the extra codebase checks (TODOs/placeholders, i18n raw strings, Stripe idempotency, organization/RLS, sensitive defaults), and the plan template.
 2. `agent-os/skills/be-production-hardening-guard/SKILL.md` — the per-area hardening checklist that forms the core of the review.
 
 For each checklist item, verify against the actual code and mark **Satisfied** (with a file/config reference) or **Gap** (with file path + what to do).

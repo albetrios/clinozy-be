@@ -7,9 +7,13 @@ development environment on every merge and to production on release.
 
 - Every change squash-merges into `main` via a PR ([trunk-based-workflow.md](../../process/trunk-based-workflow.md)),
   behind the `Quality gate` + `Checks` required checks.
-- `release-please` keeps one `chore: release X.Y.Z` Release PR open. **Merging it is the ship button** —
-  it tags the release and fires `release-deploy.yml` to deploy production (behind the environment
+- An ordinary merge never opens a Release PR: dispatch `post-merge-ci.yml` with `release_pr: true`
+  and `release-please` opens `chore(main): release X.Y.Z`. **Merging it is the ship button** — it
+  tags the release and fires `release-deploy.yml` to deploy production (behind the environment
   reviewer approval) ([release-versioning.md](../../process/release-versioning.md)).
+- The whole procedure, readiness plan to live, is the **be-path-to-production** skill
+  (`/be-release`); clinozy-fe runs the same one as `/fe-release`, after this
+  repository when its release depends on the API.
 - Urgent fixes: [hotfix-release.md](hotfix-release.md).
 - Rollback: [rollback-deploy.md](rollback-deploy.md).
 

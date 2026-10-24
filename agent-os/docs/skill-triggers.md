@@ -20,7 +20,7 @@ When you edit a file matching a pattern below, invoke the listed skill(s). Gener
 | `CLAUDE.md`, `AGENTS.md`, `agent-os/rules/**`, `agent-os/skills/**`, `agent-os/agents/**`, `agent-os/mcp/**`, `.mcp.example.json`, `.mcp.default.json`, `src/tests/load/k6/**` | be-structure-maintainer | Structure/naming; MCP template mirrors must stay identical (mcp-config test) |
 | `biome.json`, `.biomeignore`, `.husky/pre-commit`, `.husky/pre-push`, `tooling/validate/gates.ts`, `tooling/validate/run-gate.ts`, `tooling/ci/run-named-step.sh`, `.gitleaks.toml`, `.semgrepignore` | be-code-quality-guard | Lint/format/pre-commit/pre-push + branch-name policy |
 | `docs/**/*.md`, `.github/rulesets/*.json` | be-docs-maintainer | Hand-written docs — index + cross-links |
-| `docs/deployment/runbooks/production-go-live.md` | be-path-to-production-gate | Or the user asks for path to production / ready for production — a plan the user approves before any production action |
+| `docs/deployment/runbooks/production-go-live.md` | be-path-to-production | Or the user asks to release / deploy to production / path to production — the readiness plan the user approves, then the Release PR, the approved deploy and the live check |
 | `iterations/*/AS-BUILT.md` | be-kickoff-iteration | Iteration implementation — one ROUTE row at a time; every row's technical decisions go into AS-BUILT.md |
 | `iterations/*/plans/**` | be-iteration-planning | Iteration plans — requirements and decisions, plus the route review in routes-final.md (Step 5); KICKOFF.md is written at Step 6 |
 | `migrations/*.sql` | be-db-migration-maintainer | Migration files (schema changes go via the schema-change chain) |
