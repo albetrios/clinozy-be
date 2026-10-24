@@ -6,7 +6,7 @@
     "previousNames": ["core-be", "core-fe", "clinovia-be", "clinovia-fe"],
     "previousOwners": ["nikunjmavani"],
     "packageName": "clinozy-be",
-    "securityContact": "security@clinozy.com"
+    "securityContact": "nikunj.mavani@albetrios.com"
   },
   "git": {
     "protectedBranches": ["main"],
