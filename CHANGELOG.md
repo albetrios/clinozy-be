@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [9.4.1](https://github.com/albetrios/clinozy-be/compare/v9.4.0...v9.4.1) (2026-10-25)
+
+
+### Fixed
+
+* **ci:** CI-only secrets stay out of the runtime; one release skill and command in both repos ([#163](https://github.com/albetrios/clinozy-be/issues/163)) ([6abd9a3](https://github.com/albetrios/clinozy-be/commit/6abd9a3341be0c6225871b73686bfdff8f42f08c))
+
 ## [9.4.0](https://github.com/albetrios/clinozy-be/compare/v9.3.0...v9.4.0) (2026-10-24)
 
 
