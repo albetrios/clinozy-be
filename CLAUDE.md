@@ -176,7 +176,7 @@ Working branches are `<type>/<short-description>`; `main` is the only long-lived
 
 ## Driving a pull request
 
-To babysit a PR — make it green, fix CI, work the review threads, resolve a conflict, merge when asked — use the **`be-pr-babysit`** skill ([`agent-os/skills/be-pr-babysit/SKILL.md`](agent-os/skills/be-pr-babysit/SKILL.md)) and `/be-watch-pr <n>` to watch it; `/be-merge-pr` only on green. It is this repository's babysit: agent-os names carry the `be-` prefix, so there is no bare `babysit` or `steward` skill (`.claude/skills/babysit/` does not exist). The prompt router (`be-prompt-skill-router.mjs`) names it on a prompt like "make it green" or "fix CI".
+To babysit a PR — make it green, fix CI, work the review threads, resolve a conflict, merge when asked — use the **`be-pr-babysit`** skill ([`agent-os/skills/be-pr-babysit/SKILL.md`](agent-os/skills/be-pr-babysit/SKILL.md)) and `/be-watch-pr <n>` to watch it; `/be-merge-pr` only on green. It is this repository's babysit: agent-os names carry the `be-` prefix, so there is no bare `babysit` or `steward` skill folder to find. The prompt router (`be-prompt-skill-router.mjs`) names it on a prompt like "make it green" or "fix CI".
 
 ## Commands
 
