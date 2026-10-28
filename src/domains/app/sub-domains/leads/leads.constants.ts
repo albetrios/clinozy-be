@@ -1,8 +1,12 @@
-/** A lead's statuses (L8): four open, four closed — `clinic_visited` set by check-in only, final. */
+/**
+ * A lead's statuses (L8): five open, four closed — `appointment_scheduled` set by the person's
+ * bookings only, `clinic_visited` by check-in only, final.
+ */
 export const LEAD_STATUS = {
   NEW: 'new',
   CONTACTED: 'contacted',
   FOLLOW_UP: 'follow_up',
+  APPOINTMENT_SCHEDULED: 'appointment_scheduled',
   NO_RESPONSE: 'no_response',
   NOT_INTERESTED: 'not_interested',
   INVALID: 'invalid',
@@ -15,6 +19,7 @@ export const LEAD_STATUS_VALUES = [
   LEAD_STATUS.NEW,
   LEAD_STATUS.CONTACTED,
   LEAD_STATUS.FOLLOW_UP,
+  LEAD_STATUS.APPOINTMENT_SCHEDULED,
   LEAD_STATUS.NO_RESPONSE,
   LEAD_STATUS.NOT_INTERESTED,
   LEAD_STATUS.INVALID,
@@ -27,7 +32,19 @@ export const LEAD_OPEN_STATUS_VALUES = [
   LEAD_STATUS.NEW,
   LEAD_STATUS.CONTACTED,
   LEAD_STATUS.FOLLOW_UP,
+  LEAD_STATUS.APPOINTMENT_SCHEDULED,
   LEAD_STATUS.NO_RESPONSE,
+] as const;
+
+/**
+ * The closing statuses a lead with a live booking may still take by hand (L11): the person said
+ * no — the booking stays until the team cancels it. Every other move out of
+ * `appointment_scheduled` is the booking's.
+ */
+export const LEAD_BOOKED_CLOSING_STATUS_VALUES = [
+  LEAD_STATUS.NOT_INTERESTED,
+  LEAD_STATUS.INVALID,
+  LEAD_STATUS.LOST,
 ] as const;
 
 /** Allowed values of `leads.source`. */

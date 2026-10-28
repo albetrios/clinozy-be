@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import {
   BaseRecordRepository,
@@ -7,6 +8,8 @@ import {
 } from '@/domains/app/base-record.repository.js';
 import { memberships } from '@/domains/tenancy/sub-domains/membership/membership.schema.js';
 import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
+import { APPOINTMENT_MOVABLE_STATUS_VALUES } from '@/domains/app/sub-domains/appointments/appointments.constants.js';
+import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { contactLinkedSearchCondition } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
 import type { ContactLinkedSearch } from '@/domains/app/sub-domains/contacts/contacts.validator.js';
@@ -14,6 +17,7 @@ import {
   LEAD_INVOLVED_MEMBERSHIPS_MAX,
   LEAD_OPEN_STATUS_VALUES,
   LEAD_OWNERSHIP,
+  LEAD_STATUS,
 } from './leads.constants.js';
 import { leads, lead_involved_memberships } from './leads.schema.js';
 
@@ -30,6 +34,22 @@ const isOpenStatus = sql`${leads.status} in (${sql.join(
   LEAD_OPEN_STATUS_VALUES.map((status) => sql`${status}`),
   sql`, `,
 )})`;
+
+/**
+ * The contact has a booking still to happen (L11): a live appointment that is scheduled or
+ * confirmed (the movable statuses) — its date passed or not, it waits for a check-in, a no-show
+ * or a cancel.
+ */
+function liveBookingOf(contactId: SQL | AnyPgColumn): SQL {
+  const statuses = sql.join(
+    APPOINTMENT_MOVABLE_STATUS_VALUES.map((status) => sql`${status}`),
+    sql`, `,
+  );
+  return sql`exists (select 1 from ${appointments}
+    where ${appointments.contact_id} = ${contactId}
+      and ${appointments.deleted_at} is null
+      and ${appointments.status} in (${statuses}))`;
+}
 
 /** One column of the lead's contact (a correlated read of its primary key). */
 function contactColumn(column: SQL): SQL {
@@ -371,6 +391,48 @@ export class LeadsRepository extends BaseRecordRepository {
       .where(and(eq(leads.contact_id, options.contactId), isNull(leads.deleted_at), isOpenStatus))
       .returning({ id: leads.id });
     return rows[0]?.id ?? null;
+  }
+
+  /** Whether the contact has a booking still to happen — a live scheduled or confirmed one (L11). */
+  async hasLiveBooking(contactId: number): Promise<boolean> {
+    const rows = await getRequestDatabase()
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(and(eq(contacts.id, contactId), liveBookingOf(contacts.id)))
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  /**
+   * The bookings' move (L11): the contact's open lead follows the person's bookings — a live
+   * scheduled or confirmed appointment puts it in `appointment_scheduled`; with none left, a lead
+   * there goes back to `follow_up`, its follow-up date now, so the follow-up task opens again. A
+   * lead already where it belongs is not written. Returns the moved lead, or null.
+   */
+  async followBookings(options: {
+    contactId: number;
+    userId: number | null;
+  }): Promise<Record<string, unknown> | null> {
+    const scheduled = sql`${leads.status} = ${LEAD_STATUS.APPOINTMENT_SCHEDULED}`;
+    const booked = liveBookingOf(leads.contact_id);
+    const rows = await getRequestDatabase()
+      .update(leads)
+      .set({
+        status: sql`case when ${booked} then ${LEAD_STATUS.APPOINTMENT_SCHEDULED} else ${LEAD_STATUS.FOLLOW_UP} end`,
+        follow_up_at: sql`case when ${booked} then ${leads.follow_up_at} else now() end`,
+        updated_at: sql`greatest(now(), ${leads.created_at})`,
+        updated_by_user_id: options.userId,
+      })
+      .where(
+        and(
+          eq(leads.contact_id, options.contactId),
+          isNull(leads.deleted_at),
+          isOpenStatus,
+          sql`(${scheduled}) is distinct from (${booked})`,
+        ),
+      )
+      .returning();
+    return rows[0] ?? null;
   }
 
   /** The first interest of the contact's open lead — a message's `<interest>` (M9) — or null. */

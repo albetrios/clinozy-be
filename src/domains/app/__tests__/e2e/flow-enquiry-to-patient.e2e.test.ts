@@ -110,6 +110,12 @@ describe('Flow 1 — an enquiry becomes a patient (launch ROUTE #148)', () => {
       '[.data.status, .data.lead_id, (.data.patient_id | tostring)] | join(",")',
       `scheduled,${lead},null`,
     );
+    await flow.expect(200, 'the lead after the booking', 'GET', `/app/leads/${lead}`);
+    flow.expectValue(
+      'the booking moved the lead to Appointment scheduled (L11)',
+      '.data.status',
+      'appointment_scheduled',
+    );
 
     // 3. On the day, Today shows the visit in Booked → status Checked in.
     await dueToday(appointment);

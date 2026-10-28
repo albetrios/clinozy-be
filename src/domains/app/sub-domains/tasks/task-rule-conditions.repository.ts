@@ -11,7 +11,10 @@ import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js'
 import { contact_activities } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.schema.js';
 import { CONTACT_ACTIVITY_REMINDER_STOPPED_REASON } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
 import { lead_involved_memberships, leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
-import { LEAD_OPEN_STATUS_VALUES } from '@/domains/app/sub-domains/leads/leads.constants.js';
+import {
+  LEAD_OPEN_STATUS_VALUES,
+  LEAD_STATUS,
+} from '@/domains/app/sub-domains/leads/leads.constants.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { patient_treatments } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.schema.js';
@@ -232,9 +235,14 @@ function failedMessageRule(): TaskRuleSource {
   };
 }
 
-/** `follow_up`: an open lead's follow-up date is today or past — due 11:00 that day. */
+/**
+ * `follow_up`: an open lead's follow-up date is today or past — due 11:00 that day. A lead whose
+ * person has a booking still to happen (`appointment_scheduled`, L11) waits for the visit — the
+ * booking's own tasks follow it up; a cancel puts it back in `follow_up`, dated now.
+ */
 function followUpRule(scope: TaskRuleScope): TaskRuleSource {
   const followUpDate = localDate(scope, leads.follow_up_at);
+  const awaitingVisit = sql`${leads.status} = ${LEAD_STATUS.APPOINTMENT_SCHEDULED}`;
   return {
     rule: TASK_RULE.FOLLOW_UP,
     link: 'lead_id',
@@ -244,7 +252,7 @@ function followUpRule(scope: TaskRuleScope): TaskRuleSource {
     from: sql`${leads} join ${contacts} on ${contacts.id} = ${leads.contact_id}`,
     organizationColumn: leads.organization_id,
     recordId: sql`${leads.id}`,
-    qualifies: sql`${OPEN_LEAD} and ${leads.follow_up_at} is not null and ${followUpDate} <= ${today(scope)}`,
+    qualifies: sql`${OPEN_LEAD} and not ${awaitingVisit} and ${leads.follow_up_at} is not null and ${followUpDate} <= ${today(scope)}`,
     opens: sql`true`,
     due: () => localAt(scope, followUpDate, '11:00'),
     tracksDue: true,

@@ -65,7 +65,7 @@ export const leads = appSchema
       contact_id: bigint('contact_id', { mode: 'number' })
         .notNull()
         .references(() => contacts.id, { onDelete: 'restrict' }),
-      status: varchar('status', { length: 14 }).notNull().default('new'),
+      status: varchar('status', { length: 21 }).notNull().default('new'),
       source: varchar('source', { length: 9 }),
       interests: text('interests').array().notNull().default([]),
       // Server-set: an enquiry, or a re-target lead the task rules open (sub-domain 10)

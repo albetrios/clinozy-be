@@ -4,6 +4,7 @@ import {
   PAYMENT_EXPENSE_CATEGORY_VALUES,
   PAYMENT_MODE_VALUES,
 } from '@/domains/app/sub-domains/billing/payments/payments.constants.js';
+import { LEAD_STATUS_VALUES } from '@/domains/app/sub-domains/leads/leads.constants.js';
 import {
   TASK_DONE_BY_CLINOZY,
   TASK_NO_ANSWER_SNOOZE_HOURS,
@@ -540,18 +541,9 @@ export const leadsRecordSchema = {
     },
     status: {
       type: 'string',
-      enum: [
-        'new',
-        'contacted',
-        'follow_up',
-        'no_response',
-        'not_interested',
-        'invalid',
-        'lost',
-        'clinic_visited',
-      ],
+      enum: [...LEAD_STATUS_VALUES],
       description:
-        'Open: new, contacted, follow_up, no_response; `clinic_visited` is set by check-in only (L8)',
+        'Open: new, contacted, follow_up, appointment_scheduled, no_response; `appointment_scheduled` follows the bookings of the contact (L11), `clinic_visited` is set by check-in only (L8)',
     },
     source: {
       type: 'string',

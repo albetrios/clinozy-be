@@ -19,7 +19,7 @@ no nested sub-domains (`visits/` went).
 | `appointments.schema.ts` | `app.appointments` — the generated `time_range`, the CHECKs (status stamps, the floor stage only while checked in), indexes, RLS; the three `EXCLUDE` constraints live in the baseline migration only |
 | `appointments.constants.ts` | types, statuses (slot-holding, movable), floor stages in order, cancel reasons, the length rules, the constraint → resource map |
 | `appointments.{dto,validator,serializer,types}.ts` | request shapes (a booking or a walk-in; the copy's internal create), the list's `q` and inclusive day range, the response (`end_time`, the contact summary) |
-| `appointments.rules.ts` | the slot rules (past, closed day, branch hours, doctor's days and hours), a room or machine of the same branch, the service label from the offering, walk-ins, moves, the lifecycle's own checks, the check-in conversion, the team on the contact, the `slots` and `daily-counts` reads |
+| `appointments.rules.ts` | the slot rules (past, closed day, branch hours, doctor's days and hours), a room or machine of the same branch, the service label from the offering, walk-ins, moves, the lifecycle's own checks, the check-in conversion, the lead that follows the bookings (L11), the team on the contact, the `slots` and `daily-counts` reads |
 | `appointments.repository.ts` | the shared app record layers on this table: sorts (`appointment_date`, `visit_stage_changed_at`, `created_at`), the `search` filter, a contact's last and next visit, the busy spans, the in-use read |
 | `appointments.service.ts` / `.controller.ts` / `.routes.ts` | routes 1–20 below: the transitions, the `slot_taken` mapping, copy through the create path |
 
@@ -71,6 +71,11 @@ no nested sub-domains (`visits/` went).
   resume toggle `visit_paused_at`; undo check-in only while `waiting`.
 - **Check-in converts (A14):** the contact's open lead moves to `clinic_visited` (with a `system`
   line in its stream) and a contact without a patient file gets one, in the check-in's transaction.
+- **The lead follows the bookings (L11):** after every write the contact's open lead is
+  `appointment_scheduled` while a scheduled or confirmed booking is still to happen, and back in
+  `follow_up` (dated now) once the last one is cancelled, marked no-show or removed — a `system`
+  line in its stream when it moves (`LeadsRepository.followBookings`). A move (a reschedule) keeps
+  the booking, so the lead stays; a check-in still ends it in `clinic_visited`.
 - **The contact (A1, CT7, CT11):** `ON DELETE RESTRICT` and a live booking blocks the contact's
   delete; the doctor and therapist handle the contact.
 - **Tenant isolation:** ENABLE + FORCE RLS on the organization GUC with the retention-cleanup arm;

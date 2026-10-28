@@ -11,7 +11,11 @@ import { contactAwaitsReply } from '@/domains/app/sub-domains/contacts/contacts.
 import { ContactMembersRepository } from '@/domains/app/sub-domains/contacts/contact-members/contact-members.repository.js';
 import { ConflictError, ForbiddenError } from '@/shared/errors/index.js';
 import { toInstant } from '@/shared/utils/validation/record-fields.util.js';
-import { LEAD_OPEN_STATUS_VALUES, LEAD_STATUS } from './leads.constants.js';
+import {
+  LEAD_BOOKED_CLOSING_STATUS_VALUES,
+  LEAD_OPEN_STATUS_VALUES,
+  LEAD_STATUS,
+} from './leads.constants.js';
 import type { LeadsRepository } from './leads.repository.js';
 
 const contactsRepository = new ContactsRepository();
@@ -39,6 +43,11 @@ async function requireMembership({
 /** The 409 of a closed lead, with the message for the case (L8, L9). */
 function leadClosedError(messageKey: string): ConflictError {
   return new ConflictError(messageKey).withReason('lead_closed');
+}
+
+/** The 409 of a status the person's bookings own (L11), with the message for the case. */
+function leadStatusByBookingError(messageKey: string): ConflictError {
+  return new ConflictError(messageKey).withReason('lead_status_by_booking');
 }
 
 /** When a hold that starts now ends — the organization's `lead_hold_days` from now (D40). */
@@ -111,6 +120,48 @@ async function releaseLead({
 }
 
 /**
+ * L11: a lead with a booking still to happen leaves `appointment_scheduled` by hand only for a
+ * closing status (the person said no); back to working it is the booking's — cancel it. A lead
+ * whose bookings have all ended meanwhile moves freely.
+ */
+async function assertBookingAllowsMove({
+  repository,
+  status,
+  existing,
+}: {
+  repository: LeadsRepository;
+  status: unknown;
+  existing: BaseRecordRow;
+}): Promise<void> {
+  if (existing.status !== LEAD_STATUS.APPOINTMENT_SCHEDULED) return;
+  if ((LEAD_BOOKED_CLOSING_STATUS_VALUES as readonly unknown[]).includes(status)) return;
+  if (await repository.hasLiveBooking(existing.contact_id as number)) {
+    throw leadStatusByBookingError('errors:leadScheduledUntilBookingEnds');
+  }
+}
+
+/**
+ * L11: a lead created, reopened or restored while its person has a booking still to happen is
+ * `appointment_scheduled` at once — the response carries the moved row.
+ */
+async function followBookings({
+  repository,
+  row,
+  context,
+}: {
+  repository: LeadsRepository;
+  row: BaseRecordRow;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
+  if (!isOpen(row.status)) return;
+  const moved = await repository.followBookings({
+    contactId: row.contact_id as number,
+    userId: context.userId,
+  });
+  if (moved) Object.assign(row, moved);
+}
+
+/**
  * Adds what a lead reads of others to a page (L1, M3, L8): the contact summary, the contact's last
  * activity and reply state, and the contact's patient file — one read each.
  */
@@ -148,21 +199,25 @@ async function decorateLeads({
 }
 
 /**
- * The leads rules (launch ROUTE #131, routes-final 5): one open lead per contact, the
- * `clinic_visited` end state, the owner's hold, claim and release, and what a lead reads of its
- * contact.
+ * The leads rules (launch ROUTE #131, routes-final 5): one open lead per contact, the bookings'
+ * `appointment_scheduled`, the `clinic_visited` end state, the owner's hold, claim and release,
+ * and what a lead reads of its contact.
  *
  * @remarks
  * - **Algorithm:** a create, a reopening `PATCH` and a restore check the contact has no other open
  *   lead (L6 — the partial unique index backs it up), naming the one it has. `clinic_visited` is
- *   check-in's (L8): neither a create nor a `PATCH` sets it, and a lead in it keeps it. A new owner
- *   — on create, `PATCH` or claim — starts a hold of `lead_hold_days`; no owner, no hold. The owner
- *   a `PATCH` or claim replaces stays involved (L9); the owner is never also involved. After every
+ *   check-in's (L8): neither a create nor a `PATCH` sets it, and a lead in it keeps it.
+ *   `appointment_scheduled` is the person's bookings' (L11): neither a create nor a `PATCH` sets
+ *   it; while a booking is still to happen a `PATCH` leaves it only for a closing status
+ *   (`not_interested`, `invalid`, `lost`); a lead created, reopened or restored while one is
+ *   booked takes it at once ({@link LeadsRepository.followBookings}). A new owner — on create,
+ *   `PATCH` or claim — starts a hold of `lead_hold_days`; no owner, no hold. The owner a `PATCH`
+ *   or claim replaces stays involved (L9); the owner is never also involved. After every
  *   write the owner and involved members handle the contact (CT11). `claim` (a member; an open
  *   lead nobody else holds) and `release` (its owner; an open lead) — D40, L9. `decorate` adds the
  *   contact summary, the contact's activity fields and the patient file — one read each per page.
  * - **Failure modes:** `ConflictError` `lead_open_exists`, `lead_closed`, `lead_held`,
- *   `record_restore_conflict` (the contact was removed); `ForbiddenError` `not_a_member`,
+ *   `lead_status_by_booking`, `record_restore_conflict` (the contact was removed); `ForbiddenError` `not_a_member`,
  *   `lead_not_yours`.
  */
 export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
@@ -223,6 +278,9 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
       if (values.status === LEAD_STATUS.CLINIC_VISITED) {
         throw leadClosedError('errors:leadVisitedByCheckInOnly');
       }
+      if (values.status === LEAD_STATUS.APPOINTMENT_SCHEDULED) {
+        throw leadStatusByBookingError('errors:leadScheduledByBookingOnly');
+      }
       if (isOpen(values.status ?? LEAD_STATUS.NEW)) {
         await assertNoOtherOpenLead({ contactId: values.contact_id as number });
       }
@@ -238,6 +296,10 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
         if (status === LEAD_STATUS.CLINIC_VISITED) {
           throw leadClosedError('errors:leadVisitedByCheckInOnly');
         }
+        if (status === LEAD_STATUS.APPOINTMENT_SCHEDULED) {
+          throw leadStatusByBookingError('errors:leadScheduledByBookingOnly');
+        }
+        await assertBookingAllowsMove({ repository, status, existing });
         if (isOpen(status) && !isOpen(existing.status)) {
           await assertNoOtherOpenLead({
             contactId: existing.contact_id as number,
@@ -266,6 +328,11 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
     afterWrite: async (row, change, context) => {
       if (change.kind === 'delete') return;
       await settleTeam({ row, before: change.before, context });
+      const statusSet =
+        change.kind === 'create' ||
+        change.kind === 'restore' ||
+        row.status !== change.before?.status;
+      if (statusSet) await followBookings({ repository, row, context });
     },
     decorate: (outputs, context) => decorateLeads({ outputs, context }),
     actions: { claim: createClaimLead(repository), release: releaseLead },
