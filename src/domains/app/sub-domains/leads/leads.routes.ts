@@ -71,7 +71,7 @@ export function leadsRoutes(service: LeadsService): FastifyPluginAsync {
         schema: {
           summary: 'Get lead',
           description:
-            'Returns one lead with its contact summary, `patient_id` (the patient file check-in opened, L8), `last_activity_at` and `is_awaiting_reply`. A lead in a branch you cannot see is a 404. Requires lead:read.',
+            'Returns one lead with its contact summary, `patient_id` (the patient file check-in opened, L8), `closed_at` (when it last closed — null while open, D10), `last_activity_at` and `is_awaiting_reply`. A lead in a branch you cannot see is a 404. Requires lead:read.',
           tags: ['Lead'],
           params: leadsIdParamsDto,
         },
@@ -87,7 +87,7 @@ export function leadsRoutes(service: LeadsService): FastifyPluginAsync {
         schema: {
           summary: 'Update lead',
           description:
-            "Changes any of a lead's fields (at least one); null clears an optional one; `involved_membership_ids` replaces the set (the owner is never also involved — a 400 when both name them). A new owner starts holding it for `lead_hold_days` and the one replaced stays involved (L9); no owner, no hold. `clinic_visited` is set by check-in only and is final — setting it, or changing the status of a lead in it, is a 409 `lead_closed` (its other fields stay editable, L8). `appointment_scheduled` follows the person's bookings (L11): setting it is a 409 `lead_status_by_booking`, and while a scheduled or confirmed appointment is still to happen the lead leaves it only for `not_interested`, `invalid` or `lost` — another status is the same 409 (cancel the appointment to move it back to `follow_up`); a lead reopened while one is booked answers in `appointment_scheduled`. Reopening a closed lead while the contact has another open one is a 409 `lead_open_exists` (L6). Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` (D43). Requires lead:update.",
+            "Changes any of a lead's fields (at least one); null clears an optional one; `involved_membership_ids` replaces the set (the owner is never also involved — a 400 when both name them). A new owner starts holding it for `lead_hold_days` and the one replaced stays involved (L9); no owner, no hold. `clinic_visited` is set by check-in only and is final — setting it, or changing the status of a lead in it, is a 409 `lead_closed` (its other fields stay editable, L8). `appointment_scheduled` follows the person's bookings (L11): setting it is a 409 `lead_status_by_booking`, and while a scheduled or confirmed appointment is still to happen the lead leaves it only for `not_interested`, `invalid` or `lost` — another status is the same 409 (cancel the appointment to move it back to `follow_up`); a lead reopened while one is booked answers in `appointment_scheduled`. A closing status (`not_interested`, `invalid`, `lost`) stamps `closed_at`, a reopen empties it; `closed_at` is never sent (D10, D11). Reopening a closed lead while the contact has another open one is a 409 `lead_open_exists` (L6). Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` (D43). Requires lead:update.",
           tags: ['Lead'],
           params: leadsIdParamsDto,
           body: UpdateLeadDto,

@@ -19,7 +19,7 @@ contact (launch ROUTE #131 — routes-final §5). The person lives on the [conta
 | `leads.constants.ts` | statuses (open and closed — and the closing ones a booked lead may still take), sources, interests and their labels, kinds, the `ownership` filter values, the caps |
 | `leads.{dto,validator,serializer,types}.ts` | request shapes (`contact_id` or an inline `contact`); the `q` rules (the contact's text and numbers, `C-12345`, `#2371`); the response |
 | `leads.rules.ts` | the open-lead check that names the lead, `appointment_scheduled` (the bookings', L11), `clinic_visited` (check-in's, final), the owner's hold, the replaced owner kept involved, the team added to the contact's members, claim and release, the contact summary |
-| `leads.repository.ts` | the shared app record layers on this table: sorts (`created_at`, `name`, `status`, `source`, `follow_up_at`, `last_activity_at` — empty values last), derived filters (`search`, `interests`, `team_membership_id`, `is_awaiting_reply`, `ownership`), the contact and patient reads, the leave part, the moves the activity stream makes, the bookings' move (`followBookings`, L11) |
+| `leads.repository.ts` | the shared app record layers on this table: sorts (`created_at`, `name`, `status`, `source`, `follow_up_at`, `last_activity_at` — empty values last), derived filters (`search`, `interests`, `team_membership_id`, `is_awaiting_reply`, `ownership`), the contact and patient reads, the leave part, the moves the activity stream makes, the bookings' move (`followBookings`, L11), the check-in's win-back (`winBack`, D2) |
 | `leads.service.ts` / `.controller.ts` / `.routes.ts` | routes 1–9 below; an inline `contact` is created through the contacts service in the same transaction |
 | `seed/` | `seedLead` and `seedLeadsBulk` (two leads per organization on the contacts seed's people) |
 
@@ -44,7 +44,8 @@ contact (launch ROUTE #131 — routes-final §5). The person lives on the [conta
   create, a reopening `PATCH` or a restore of a second is a 409 `lead_open_exists` naming the one
   there; the partial unique index backs it up.
 - **`clinic_visited` is check-in's (L8):** set only when the person checks in at an appointment
-  (sub-domain 6) and final — a 409 `lead_closed` otherwise; claim and release work on open leads only. A claim is one guarded `UPDATE` (`LeadsRepository.claim`): two members claiming at once cannot both win — the loser gets the 409 `lead_held`.
+  (sub-domain 6) — the open lead, or one closed as `lost` / `not_interested` within 90 days won
+  back (`winBack`, D2) — and final; a 409 `lead_closed` otherwise; claim and release work on open leads only. A claim is one guarded `UPDATE` (`LeadsRepository.claim`): two members claiming at once cannot both win — the loser gets the 409 `lead_held`.
 - **`appointment_scheduled` follows the bookings (L11):** a scheduled or confirmed appointment of
   the person — booked, reinstated or restored — moves their open lead there; when the last one is
   cancelled, marked no-show or removed it goes back to `follow_up`, its `follow_up_at` now, so the
@@ -55,6 +56,10 @@ contact (launch ROUTE #131 — routes-final §5). The person lives on the [conta
   only for `not_interested`, `invalid` or `lost` (the same 409 otherwise — cancel the booking); a
   lead created, reopened or restored for a booked person starts in it. The `follow_up` task rule
   skips it — the booking's own tasks follow the person up.
+- **The close date (D10, D11, D13):** `closed_at` is stamped when a lead enters `not_interested`,
+  `invalid`, `lost` or `clinic_visited`, kept while it moves between them, emptied on a reopen;
+  output only (a body sending it is a 400) and held by `chk_leads_closed_at`. The win-back's 90
+  days count from it; the export carries it.
 - **The hold (D40, L9):** a new owner holds the lead for `lead_hold_days`; no owner, no hold
   (`chk_leads_held_until_owner`); the owner a claim or `PATCH` replaces stays involved, and the owner
   is never also involved. A member who leaves releases their leads and stays involved (K4).

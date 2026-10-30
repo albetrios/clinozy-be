@@ -13,6 +13,7 @@ import { ConflictError, ForbiddenError } from '@/shared/errors/index.js';
 import { toInstant } from '@/shared/utils/validation/record-fields.util.js';
 import {
   LEAD_BOOKED_CLOSING_STATUS_VALUES,
+  LEAD_CLOSED_STATUS_VALUES,
   LEAD_OPEN_STATUS_VALUES,
   LEAD_STATUS,
 } from './leads.constants.js';
@@ -23,6 +24,22 @@ const contactsRepository = new ContactsRepository();
 /** Whether a status is an open one (L6). */
 function isOpen(status: unknown): boolean {
   return (LEAD_OPEN_STATUS_VALUES as readonly unknown[]).includes(status);
+}
+
+/**
+ * The close date a status move leaves (LF4, D10): entering a closing status stamps now, moving
+ * between closing statuses keeps the date it closed, an open status has none.
+ */
+function closedAtAfter({
+  status,
+  previous,
+}: {
+  status: unknown;
+  previous?: BaseRecordRow | undefined;
+}): Date | null {
+  if (!(LEAD_CLOSED_STATUS_VALUES as readonly unknown[]).includes(status)) return null;
+  const stillClosed = previous && !isOpen(previous.status) && previous.closed_at instanceof Date;
+  return stillClosed ? (previous.closed_at as Date) : new Date();
 }
 
 /** The caller's membership in the organization — 403 for a caller who is not a member. */
@@ -210,7 +227,8 @@ async function decorateLeads({
  *   `appointment_scheduled` is the person's bookings' (L11): neither a create nor a `PATCH` sets
  *   it; while a booking is still to happen a `PATCH` leaves it only for a closing status
  *   (`not_interested`, `invalid`, `lost`); a lead created, reopened or restored while one is
- *   booked takes it at once ({@link LeadsRepository.followBookings}). A new owner — on create,
+ *   booked takes it at once ({@link LeadsRepository.followBookings}). `closed_at` follows the
+ *   status (LF4): entering a closing status stamps it, a reopen empties it. A new owner — on create,
  *   `PATCH` or claim — starts a hold of `lead_hold_days`; no owner, no hold. The owner a `PATCH`
  *   or claim replaces stays involved (L9); the owner is never also involved. After every
  *   write the owner and involved members handle the contact (CT11). `claim` (a member; an open
@@ -284,6 +302,7 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
       if (isOpen(values.status ?? LEAD_STATUS.NEW)) {
         await assertNoOtherOpenLead({ contactId: values.contact_id as number });
       }
+      values.closed_at = closedAtAfter({ status: values.status ?? LEAD_STATUS.NEW });
       if (typeof values.owner_membership_id === 'number')
         values.held_until = await holdEnd(context);
     },
@@ -306,6 +325,7 @@ export function createLeadsRules(repository: LeadsRepository): BaseRecordRules {
             exceptLeadId: existing.id,
           });
         }
+        values.closed_at = closedAtAfter({ status, previous: existing });
       }
       if (
         'owner_membership_id' in values &&

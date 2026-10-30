@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
@@ -757,7 +757,7 @@ describe('Leads — integration (routes-final §5)', () => {
     });
     // clinic_visited is set by check-in (sub-domain 6) — here by SQL
     await operatorQuery`
-      UPDATE app.leads SET status = 'clinic_visited' WHERE public_id = ${meeraLead}
+      UPDATE app.leads SET status = 'clinic_visited', closed_at = now() WHERE public_id = ${meeraLead}
     `;
     await flow.expect(
       409,
@@ -991,5 +991,53 @@ describe('Leads — integration (routes-final §5)', () => {
       `/app/leads/${riyaLead}/convert`,
     );
     await flow.expect(404, 'the reads route is gone (L10)', 'POST', `/app/leads/${riyaLead}/reads`);
+  });
+
+  it('the close date (LF4, D10): a close stamps it, a move between closes keeps it, a reopen empties it', async () => {
+    flow.as('owner');
+    /** Its own last name, so the earlier cases' lists and export counts stay as they are. */
+    const closedName = `y${S}`;
+    const closedContact = (firstName: string, suffix: string) => ({
+      first_name: firstName,
+      last_name: closedName,
+      phones: [{ phone: `+91${digits}${suffix}`, is_primary: true }],
+    });
+    await flow.expect(200, 'a lead filed as Lost', 'POST', '/app/leads', {
+      contact: closedContact('Tara', '61'),
+      status: 'lost',
+    });
+    const tara = flow.last('.data.id');
+    const closedAt = flow.last('.data.closed_at');
+    expect(Date.parse(closedAt), 'filed closed: stamped').not.toBeNaN();
+    await flow.expect(200, 'Lost to Not interested', 'PATCH', `/app/leads/${tara}`, {
+      status: 'not_interested',
+    });
+    flow.expectValue('a move between closes keeps the date', '.data.closed_at', closedAt);
+    await flow.expect(200, 'reopen', 'PATCH', `/app/leads/${tara}`, { status: 'follow_up' });
+    flow.expectValue('reopened: no close date', '.data.closed_at', 'null');
+    await flow.expect(200, 'close again', 'PATCH', `/app/leads/${tara}`, { status: 'invalid' });
+    expect(Date.parse(flow.last('.data.closed_at')), 'a fresh stamp').toBeGreaterThan(
+      Date.parse(closedAt),
+    );
+
+    await flow.expect(200, 'an open lead', 'POST', '/app/leads', {
+      contact: closedContact('Uma', '62'),
+    });
+    flow.expectValue('open: no close date', '.data.closed_at', 'null');
+    const uma = flow.last('.data.id');
+    await flow.expect(400, 'the close date is read-only (D11)', 'PATCH', `/app/leads/${uma}`, {
+      closed_at: '2026-01-01T00:00:00Z',
+    });
+    await expect(
+      operatorQuery`UPDATE app.leads SET closed_at = now() WHERE public_id = ${uma}`,
+      'the database holds it (D13)',
+    ).rejects.toThrow(/chk_leads_closed_at/);
+
+    await flow.expect(200, 'export them', 'GET', `/app/leads/exports?q=${closedName}`);
+    flow.expectValue(
+      'the export carries the close date',
+      '.data.content | split("\\n")[0] | split(",") | index("closed_at") != null',
+      true,
+    );
   });
 });

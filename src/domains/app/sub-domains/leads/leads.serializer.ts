@@ -30,6 +30,7 @@ export function serializeLead({
     involved_membership_ids: references.listOf({ field: 'involved_membership_ids', row }),
     held_until: toInstant(row.held_until),
     follow_up_at: toInstant(row.follow_up_at),
+    closed_at: toInstant(row.closed_at),
     branch_id: references.publicIdOf({ field: 'branch_id', row }),
     notes: row.notes as string | null,
     last_activity_at: null,

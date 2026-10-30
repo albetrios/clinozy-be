@@ -18,6 +18,8 @@ import {
   LEAD_OPEN_STATUS_VALUES,
   LEAD_OWNERSHIP,
   LEAD_STATUS,
+  LEAD_WIN_BACK_DAYS,
+  LEAD_WIN_BACK_STATUS_VALUES,
 } from './leads.constants.js';
 import { leads, lead_involved_memberships } from './leads.schema.js';
 
@@ -377,18 +379,55 @@ export class LeadsRepository extends BaseRecordRepository {
   }
 
   /**
-   * Check-in's move (L8, A14): the contact's open lead goes to `clinic_visited`, its last status —
-   * returns its id, or null when the contact has no open lead.
+   * Check-in's move (L8, A14): the contact's open lead goes to `clinic_visited`, its last status,
+   * closed now (LF4) — returns its id, or null when the contact has no open lead.
    */
   async markVisited(options: { contactId: number; userId: number | null }): Promise<number | null> {
     const rows = await getRequestDatabase()
       .update(leads)
       .set({
-        status: 'clinic_visited',
+        status: LEAD_STATUS.CLINIC_VISITED,
+        closed_at: sql`now()`,
         updated_at: sql`greatest(now(), ${leads.created_at})`,
         updated_by_user_id: options.userId,
       })
       .where(and(eq(leads.contact_id, options.contactId), isNull(leads.deleted_at), isOpenStatus))
+      .returning({ id: leads.id });
+    return rows[0]?.id ?? null;
+  }
+
+  /**
+   * The check-in's win-back (K-WB, LF6, D2): with no open lead, the contact's **latest** live lead —
+   * when it closed as `lost` or `not_interested` within the last {@link LEAD_WIN_BACK_DAYS} days —
+   * moves to `clinic_visited`, closed now. One guarded statement; returns its id, or null when
+   * nothing is won back (an open lead, an `invalid` or older latest lead, or none).
+   */
+  async winBack(options: { contactId: number; userId: number | null }): Promise<number | null> {
+    const latest = sql`(select latest.id from ${leads} as latest
+      where latest.contact_id = ${options.contactId} and latest.deleted_at is null
+      order by latest.created_at desc, latest.id desc limit 1)`;
+    const hasOpenLead = sql`exists (select 1 from ${leads} as open_lead
+      where open_lead.contact_id = ${options.contactId} and open_lead.deleted_at is null
+        and open_lead.status in (${sql.join(
+          LEAD_OPEN_STATUS_VALUES.map((status) => sql`${status}`),
+          sql`, `,
+        )}))`;
+    const rows = await getRequestDatabase()
+      .update(leads)
+      .set({
+        status: LEAD_STATUS.CLINIC_VISITED,
+        closed_at: sql`now()`,
+        updated_at: sql`greatest(now(), ${leads.created_at})`,
+        updated_by_user_id: options.userId,
+      })
+      .where(
+        and(
+          eq(leads.id, latest),
+          inArray(leads.status, [...LEAD_WIN_BACK_STATUS_VALUES]),
+          sql`${leads.closed_at} >= now() - make_interval(days => ${LEAD_WIN_BACK_DAYS})`,
+          sql`not ${hasOpenLead}`,
+        ),
+      )
       .returning({ id: leads.id });
     return rows[0]?.id ?? null;
   }
