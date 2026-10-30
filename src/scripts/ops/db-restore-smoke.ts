@@ -10,10 +10,12 @@
  *
  * Usage:
  *   DATABASE_URL=<app role> DATABASE_MIGRATION_URL=<migrator> TEST_MODE=true CAPTCHA_PROVIDER=disabled \
- *     pnpm db:restore:smoke                               # a drill's throwaway copy
+ *     RESEND_API_KEY=<any key> EMAIL_FROM_ADDRESS=<address> pnpm db:restore:smoke  # a drill's copy
  *   DATABASE_MIGRATION_URL=<migrator> pnpm db:restore:smoke --database-only    # a real restore
  *
  * `TEST_MODE=true` makes `send-code` return the code (forbidden in production by the env schema).
+ * `send-code` answers 503 until mail is configured; any key does, because the email only lands in
+ * the outbox and Redis and no worker runs (the drills pass the CI fixture key, never production's).
  * `--database-only` stops after the database checks: a real restore is live, and gets no drill user.
  * The database checks run as the migration role (`clinozy_be_migrator`, which bypasses row-level
  * security and owns the tables — see {@link findSequencesBehindTheirIds}): `DATABASE_MIGRATION_URL`
