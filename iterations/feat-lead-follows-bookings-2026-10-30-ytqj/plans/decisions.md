@@ -1,0 +1,31 @@
+# Decisions — feat-lead-follows-bookings-2026-10-30-ytqj
+
+Every blocking answer and every scope decision, add-only: a changed mind is a new row that supersedes
+an old one (and says so). Kind is `RED` (answered by the user), `AMBER` (a safe default, still open)
+or `SCOPE` (a scope decision during implementation). Row numbers (`D1`, `D2`, …) are cited by
+[coverage.md](coverage.md), the stories and `KICKOFF.md`.
+
+The same-named clinozy-fe iteration records the same answers in its own `plans/decisions.md` (same
+numbers for the shared rows).
+
+| # | Question | Options | Decision | Date | Who | Kind |
+| --- | --- | --- | --- | --- | --- | --- |
+| D1 | After Follow-up a lead cannot reach Clinic visited nor book from the lead — what should the journey be? | a booking step on the lead · leave it | **A booking step:** the lead's status becomes Appointment scheduled when its person is booked, Clinic visited at check-in, back to Follow-up when that booking is cancelled (not rescheduled) — "think about something unique to allow user that part" | 2026-10-28 | user | RED |
+| D2 | A walk-in after a cancel, when the person's lead was closed as Lost or Not interested | win it back within 90 days · no time limit · leave it closed | **Win it back within 90 days** of the close: the latest Lost / Not interested lead moves to Clinic visited and links to the patient file; Invalid never; older stays closed | 2026-10-30 | user | RED |
+| D3 | A walk-in while another booking of the person is still to happen | keep it + heads-up · keep it silently · auto-cancel it | **Keep it, with a heads-up** after Start visit — "Also booked · <day> · <time>" with Open; nothing is cancelled on its own | 2026-10-30 | user | RED |
+| D4 | How to record the work | lite fix · full feat · no record | **A `feat` iteration, full process, both repositories** (`--both`) | 2026-10-30 | user | RED |
+| D5 | The branch | keep `claude/gallant-mccarthy-cbakkm` · a new `<type>/<topic>` branch | **A new branch** — `feat/lead-follows-bookings` (the user picked "new `fix/…`"; the iteration is a `feat`, so the branch follows the type — said in the step review) | 2026-10-30 | user | RED |
+| D6 | How completed steps on the lead's Progress look (today a solid dark fill, darker than the current step) | light tint in its own colour · one green done colour · keep | **A light tint of the step's own colour** with a bold ✓ disc and a full bar; the current step a stronger tint with a ring in its colour; the next ones faint | 2026-10-30 | user | RED |
+| D7 | How the 90-day win-back window is measured — a lead has no close date | add a close date · use the last update | **Add a close date** to the lead, stamped when it closes (backfilled from the last update); a later edit of a closed lead does not restart the window | 2026-10-30 | user | RED |
+| D8 | Which iteration to plan | (one eligible: this one, `planning`) | **feat-lead-follows-bookings-2026-10-30-ytqj** — the user confirmed opening it and placing its brief | 2026-10-30 | user | RED |
+| D9 | The first slice was built before the iteration was opened (clinozy-be `6e92210`, clinozy-fe `7febaec`) — plan it again or record it | plan it with the rest and verify it at kickoff · leave it out | **Plan it with the rest** — the brief covers it (BRIEF.md:33–68); at kickoff each such row is verified against the code already written and recorded in `AS-BUILT.md` with its commit, not rebuilt | 2026-10-30 | Claude | AMBER |
+| D10 | Which statuses stamp the lead's close date (`closed_at`), which the win-back reads | every closing status · only Lost / Not interested | **Every closing status** — entering Lost, Not interested, Invalid or Clinic visited stamps it; a reopen empties it (routes-final LF4) | 2026-10-30 | user | RED |
+| D11 | Is the close date shown | read-only in the output · server-only | **Read-only in the lead's output** (list, one, export); never accepted in a body; the drawer's Info shows it on a closed lead (routes-final LF5) | 2026-10-30 | user | RED |
+| D12 | Who is told of a win-back | the stream line only · also the lead's owner | **The stream line only** — "Won back: moved to Clinic visited at check-in"; no notification (routes-final AF4) | 2026-10-30 | user | RED |
+| D13 | Is the close date held by the database too | a `CHECK` (set exactly when closing) · the service alone | **A `CHECK`** (`chk_leads_closed_at`), with the backfill before it and the seed writer stamping it — a writer that forgets it fails loudly (routes-final LF4) | 2026-10-30 | Claude | AMBER |
+| D14 | Which lead a check-in wins back | the person's latest lead · any closed lead within 90 days | **The person's latest live lead** (most recently created), only if it is Lost / Not interested closed ≤ 90 days ago and the person has no open lead (BRIEF.md:118–120; routes-final K-WB) | 2026-10-30 | Claude | AMBER |
+| D15 | A person who already has a patient file is won back at a check-in | relink the file to the won-back lead · keep the file's link | **Keep the file's link** — only a file this check-in opens takes the won-back lead (routes-final AF2) | 2026-10-30 | Claude | AMBER |
+| D16 | Route review §1 Leads (LF1–LF6) | final · change | **Final** (rev 1) | 2026-10-30 | user | RED |
+| D17 | Route review §2 Appointments (AF1–AF5) | final · change | **Final** (rev 1) | 2026-10-30 | user | RED |
+| D18 | Route review §3 Tasks (TF1) | final · change | **Final** (rev 1) — the route review is final; the frontend may kick off | 2026-10-30 | user | RED |
+| D19 | Approve the plan (backend R1–R6, frontend F1–F6) with the open AMBER defaults; how the kickoff runs | approve · change; run on · stop per row | **Approved** — rows **run on** (a /goal-style run: one-line report per row, AMBER logged, review at Close; a scope change or RED still stops) | 2026-10-30 | user | RED |
