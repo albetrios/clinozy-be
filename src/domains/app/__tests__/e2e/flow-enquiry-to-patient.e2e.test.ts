@@ -126,7 +126,7 @@ describe('Flow 1 — an enquiry becomes a patient (launch ROUTE #148)', () => {
     );
     await flow.expect(200, 'the lead after the booking', 'GET', `/app/leads/${lead}`);
     flow.expectValue(
-      'the booking moved the lead to Appointment scheduled (L11)',
+      'the booking moved the lead to Booked (L11)',
       '.data.status',
       'appointment_scheduled',
     );

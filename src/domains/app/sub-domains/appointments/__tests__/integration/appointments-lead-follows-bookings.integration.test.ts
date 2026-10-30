@@ -111,7 +111,6 @@ describe('Appointments — the lead follows the bookings (L11)', () => {
     return Number(rows[0]?.count ?? 0);
   }
 
-  /** The organization's rules run (TK4), as the worker runs it. */
   /** The person's open `rebook` rule tasks. */
   async function openRebookTasks(contact: string): Promise<number> {
     const rows = await operatorQuery<{ count: string }[]>`
@@ -122,6 +121,7 @@ describe('Appointments — the lead follows the bookings (L11)', () => {
     return Number(rows[0]?.count ?? 0);
   }
 
+  /** The organization's rules run (TK4), as the worker runs it. */
   function runRules() {
     return runOrganizationScopedWorkerJob({
       job: { organizationPublicId },
@@ -145,11 +145,11 @@ describe('Appointments — the lead follows the bookings (L11)', () => {
     await app.close();
   });
 
-  it('a booking moves the lead to Appointment scheduled; a reschedule keeps it there', async () => {
+  it('a booking moves the lead to Booked; a reschedule keeps it there', async () => {
     const { contact, lead } = await personWithLead('Asha');
     const appointment = await book(contact, '10:00');
     expect(await leadStatus(lead)).toBe('appointment_scheduled');
-    expect(await systemLines(contact)).toEqual(['Moved to Appointment scheduled at booking']);
+    expect(await systemLines(contact)).toEqual(['Moved to Booked: an appointment was booked']);
 
     await flow.expect(200, 'reschedule', 'PATCH', `/app/appointments/${appointment}`, {
       start_time: '11:00',
@@ -269,7 +269,7 @@ describe('Appointments — the lead follows the bookings (L11)', () => {
     expect(flow.last('.data.status')).toBe('appointment_scheduled');
   });
 
-  it('a lead created for a booked person starts in Appointment scheduled', async () => {
+  it('a lead created for a booked person starts in Booked', async () => {
     people += 1;
     await flow.expect(200, 'a contact', 'POST', '/app/contacts', {
       first_name: 'Hema',

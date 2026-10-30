@@ -389,7 +389,7 @@
   "leadClosed": "Este cliente potencial está cerrado: reclamar y liberar solo funcionan con clientes potenciales abiertos",
   "leadVisitedByCheckInOnly": "«Visitó la clínica» se marca cuando la persona hace el check-in de una cita",
   "leadVisitedFinal": "Este cliente potencial terminó con una visita a la clínica: su estado no puede cambiar",
-  "leadScheduledByBookingOnly": "«Cita programada» se marca cuando se reserva una cita para la persona",
+  "leadScheduledByBookingOnly": "«Reservado» se marca cuando se reserva una cita para la persona",
   "leadScheduledUntilBookingEnds": "Este cliente potencial tiene una cita reservada: cancela la cita para devolverlo a Seguimiento",
   "leadContactRemoved": "El contacto de este cliente potencial se eliminó: restaura primero el contacto",
   "contactIsPatient": "{{name}} ya tiene una ficha de paciente, PT-{{patient_number}} ({{patient_id}}): abre esa",

@@ -20,6 +20,8 @@ Baseline: none · KICKOFF.md approved 2026-10-30 · run on, reviewed at Close (D
 - **D20 (scope change, approved by the user):** at the review of the built drawer the user approved a redesign of the lead
   drawer's Progress (the Next step card, a follow-up time, saving at once). Its server part became R7 here; its screens
   became F7 in clinozy-fe.
+- **D21 (label, approved by the user at Close):** the status reads **Booked**; the booking's stream line and the 409
+  message follow. No wire, schema or route change.
 
 ## Summary
 

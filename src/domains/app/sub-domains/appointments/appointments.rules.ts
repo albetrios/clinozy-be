@@ -65,7 +65,7 @@ const CHECK_IN_ACTIVITY_BODY = 'Moved to Clinic visited at check-in';
 /** The activity line a check-in leaves when it wins back a closed lead (K-WB, AF2). */
 const WIN_BACK_ACTIVITY_BODY = 'Won back: moved to Clinic visited at check-in';
 /** The activity line a booking leaves when it moves the lead to `appointment_scheduled` (L11). */
-const LEAD_BOOKED_ACTIVITY_BODY = 'Moved to Appointment scheduled at booking';
+const LEAD_BOOKED_ACTIVITY_BODY = 'Moved to Booked: an appointment was booked';
 /** The activity line the end of the last booking leaves, by what ended it (L11). */
 const LEAD_BOOKING_ENDED_ACTIVITY_BODIES: Readonly<Record<string, string>> = {
   cancel: 'Moved back to Follow-up: the appointment was cancelled',
