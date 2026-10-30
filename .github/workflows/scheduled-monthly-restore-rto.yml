@@ -112,9 +112,9 @@ jobs:
       # take the pooled one, as in production.
       - name: Run migrations on restored branch
         env:
-          DATABASE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
-          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
-          DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.direct_database_url }}
+          DATABASE_URL: ${{ steps.neon_drill.outputs.application_database_url }}
+          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.maintenance_database_url }}
+          DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.migration_database_url }}
         run: pnpm db:migrate
 
       # The DR runbook's step after migrating (docs/process/dr-runbook.md): move every id sequence
@@ -123,9 +123,9 @@ jobs:
       # Actions logs are public, so only its last line (how many sequences moved) is shown.
       - name: Advance id sequences on restored branch
         env:
-          DATABASE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
-          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
-          DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.direct_database_url }}
+          DATABASE_URL: ${{ steps.neon_drill.outputs.application_database_url }}
+          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.maintenance_database_url }}
+          DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.migration_database_url }}
         run: |
           set -euo pipefail
           pnpm --silent db:sequences:advance | tail -n 1
@@ -137,9 +137,9 @@ jobs:
       # the branch is deleted.
       - name: Restore smoke on restored database
         env:
-          DATABASE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
-          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}
-          DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.direct_database_url }}
+          DATABASE_URL: ${{ steps.neon_drill.outputs.application_database_url }}
+          DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.maintenance_database_url }}
+          DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.migration_database_url }}
           TEST_MODE: 'true'
           CAPTCHA_PROVIDER: disabled
         run: pnpm db:restore:smoke

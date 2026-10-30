@@ -9,14 +9,17 @@
  * writes — the drill deletes its throwaway branch next.
  *
  * Usage:
- *   DATABASE_URL=postgresql://... TEST_MODE=true CAPTCHA_PROVIDER=disabled pnpm db:restore:smoke
- *                                                         # a drill's throwaway copy
- *   DATABASE_URL=postgresql://... pnpm db:restore:smoke --database-only     # a real restore
+ *   DATABASE_URL=<app role> DATABASE_MIGRATION_URL=<migrator> TEST_MODE=true CAPTCHA_PROVIDER=disabled \
+ *     pnpm db:restore:smoke                               # a drill's throwaway copy
+ *   DATABASE_MIGRATION_URL=<migrator> pnpm db:restore:smoke --database-only    # a real restore
  *
  * `TEST_MODE=true` makes `send-code` return the code (forbidden in production by the env schema).
  * `--database-only` stops after the database checks: a real restore is live, and gets no drill user.
- * Run it as the database owner, which bypasses row-level security (see
- * {@link findSequencesBehindTheirIds}).
+ * The database checks run as the migration role (`clinozy_be_migrator`, which bypasses row-level
+ * security and owns the tables — see {@link findSequencesBehindTheirIds}): `DATABASE_MIGRATION_URL`
+ * when set, else `DATABASE_URL` — the rule `pnpm db:sequences:advance` follows. The app boots on
+ * `DATABASE_URL`, so a drill passes the app's runtime role there, as production does: only the app
+ * and maintenance roles may run the SECURITY DEFINER auth functions sign-in needs.
  * Output names tables and sequences but never a row count or an id: the drill's logs are public.
  */
 import '@/shared/config/load-env-files.js';
@@ -315,9 +318,9 @@ async function main(): Promise<void> {
       args: process.argv.slice(2),
       options: { 'database-only': { type: 'boolean' } },
     }).values['database-only'] === true;
-  const connectionUrl = process.env.DATABASE_URL;
+  const connectionUrl = process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL;
   if (!connectionUrl) {
-    console.error('DATABASE_URL is required');
+    console.error('DATABASE_URL or DATABASE_MIGRATION_URL is required');
     process.exit(1);
   }
 
