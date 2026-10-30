@@ -68,7 +68,7 @@ jobs:
           versions="$(
             gh api "${package_path}/versions?per_page=100" \
               --paginate \
-              --jq '.[] | select(.metadata.container.tags | length > 0) | {id: .id, tags: (.metadata.container.tags | join(","))}' \
+              --jq '.[] | select(.metadata.container.tags | length > 0) | {id: .id, digest: .name, tags: (.metadata.container.tags | join(","))}' \
               | jq -s '.'
           )"
 
@@ -82,13 +82,43 @@ jobs:
           # is not the newest build (after a rollback, or an image_override deploy) — pruning it would
           # leave the next tag rotation without a :current and :previous stale.
           protected_regex='(^|,)(latest|current|previous|v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?|deploy-failed-[^,]+)(,|$)'
+          # cosign stores each image's signature and attestations as a version tagged
+          # sha256-<image digest> (optionally .sig / .att / .sbom). Release and rollback deploys run
+          # `cosign verify` on the images this job keeps, so such an artifact goes only with its
+          # image: it is deleted in the run that deletes the image it signs, never otherwise.
+          signature_regex='^sha256-[0-9a-f]{64}(\.[a-z]+)?(,sha256-[0-9a-f]{64}(\.[a-z]+)?)*$'
           deleted=0
           failed=0
           kept_sha=0
+          kept_signatures=0
+          deleted_digests=""
 
+          # Deletes one version (or, in a dry run, names it); returns 1 when the DELETE failed.
+          prune() {
+            local version_id="$1" tags="$2"
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "Would delete version ${version_id} (${tags})"
+              deleted=$((deleted + 1))
+              return 0
+            fi
+            echo "Deleting version ${version_id} (${tags})"
+            if gh api --method DELETE "${package_path}/versions/${version_id}"; then
+              deleted=$((deleted + 1))
+              return 0
+            fi
+            failed=$((failed + 1))
+            echo "::warning::Could not delete version ${version_id} (${tags})"
+            return 1
+          }
+
+          # Images first: the protected tags and the newest RETAIN SHA tag sets stay.
           while IFS= read -r row; do
             version_id="$(jq -r '.id' <<< "$row")"
+            digest="$(jq -r '.digest' <<< "$row")"
             tags="$(jq -r '.tags' <<< "$row")"
+            if echo "$tags" | grep -Eq "${signature_regex}"; then
+              continue
+            fi
             if echo "$tags" | grep -Eq "${protected_regex}"; then
               echo "Keeping protected tags: ${tags}"
               continue
@@ -100,21 +130,34 @@ jobs:
                 continue
               fi
             fi
-            if [ "${DRY_RUN}" = "true" ]; then
-              echo "Would delete version ${version_id} (${tags})"
-              deleted=$((deleted + 1))
-              continue
-            fi
-            echo "Deleting version ${version_id} (${tags})"
-            if gh api --method DELETE "${package_path}/versions/${version_id}"; then
-              deleted=$((deleted + 1))
-            else
-              failed=$((failed + 1))
-              echo "::warning::Could not delete version ${version_id} (${tags})"
+            if prune "$version_id" "$tags"; then
+              deleted_digests+="${digest}"$'\n'
             fi
           done < <(jq -c '.[]' <<< "${versions}")
 
-          echo "Cleanup complete for ${repository_name}/${PACKAGE}: deleted=${deleted}, failed=${failed}, kept_sha=${kept_sha} (dry run: ${DRY_RUN})"
+          # Then signatures and attestations: each goes only with the image it signs.
+          while IFS= read -r row; do
+            version_id="$(jq -r '.id' <<< "$row")"
+            tags="$(jq -r '.tags' <<< "$row")"
+            if ! echo "$tags" | grep -Eq "${signature_regex}"; then
+              continue
+            fi
+            subject_deleted=true
+            IFS=',' read -r -a signature_tags <<< "$tags"
+            for tag in "${signature_tags[@]}"; do
+              subject_hex="${tag#sha256-}"
+              if ! grep -qxF "sha256:${subject_hex%%.*}" <<< "${deleted_digests}"; then
+                subject_deleted=false
+              fi
+            done
+            if [ "${subject_deleted}" = "false" ]; then
+              kept_signatures=$((kept_signatures + 1))
+              continue
+            fi
+            prune "$version_id" "$tags" || true
+          done < <(jq -c '.[]' <<< "${versions}")
+
+          echo "Cleanup complete for ${repository_name}/${PACKAGE}: deleted=${deleted}, failed=${failed}, kept_sha=${kept_sha}, kept_signatures=${kept_signatures} (dry run: ${DRY_RUN})"
           if [ "${failed}" -gt 0 ]; then
             echo "::error::${failed} version(s) of ${repository_name}/${PACKAGE} could not be deleted"
             exit 1
