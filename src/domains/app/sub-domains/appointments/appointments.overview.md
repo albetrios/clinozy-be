@@ -69,8 +69,14 @@ no nested sub-domains (`visits/` went).
   task opens or closes at once.
 - **The floor (A10, A11):** the stage exists only while checked in, moves forward only; pause and
   resume toggle `visit_paused_at`; undo check-in only while `waiting`.
-- **Check-in converts (A14):** the contact's open lead moves to `clinic_visited` (with a `system`
-  line in its stream) and a contact without a patient file gets one, in the check-in's transaction.
+- **Check-in converts (A14, D2):** the contact's open lead moves to `clinic_visited` (a `system`
+  line "Moved to Clinic visited at check-in"); with no open lead, the person's latest live lead closed
+  as `lost` or `not_interested` within `LEAD_WIN_BACK_DAYS` (90) is won back to `clinic_visited`
+  ("Won back: moved to Clinic visited at check-in" — `LeadsRepository.winBack`; never `invalid`,
+  nobody notified). A contact without a patient file gets one linked to that lead; an existing file
+  keeps its link (D15). All in the check-in's transaction — a walk-in's create included.
+- **A walk-in keeps the other bookings (D3):** a walk-in after a cancel converts like any check-in;
+  a later booking of the person stays as it is (the app shows a heads-up).
 - **The lead follows the bookings (L11):** after every write the contact's open lead is
   `appointment_scheduled` while a scheduled or confirmed booking is still to happen, and back in
   `follow_up` (dated now) once the last one is cancelled, marked no-show or removed — a `system`

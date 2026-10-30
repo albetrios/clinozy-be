@@ -287,4 +287,143 @@ describe('Appointments — the lead follows the bookings (L11)', () => {
     await runRules();
     expect(await openFollowUpTasks(lead), 'cancelled: follow up again').toBe(1);
   });
+
+  /** A walk-in for the person — placed at now and checked in at once (A6). */
+  async function walkIn(contact: string): Promise<string> {
+    await flow.expect(200, 'a walk-in', 'POST', '/app/appointments', {
+      contact_id: contact,
+      branch_id: vesu,
+      doctor_membership_id: doctor,
+      is_walk_in: true,
+      service_label: 'Consultation',
+    });
+    return flow.last('.data.id');
+  }
+
+  /** The lead the person's patient file came from, as stored (null: none, or no file). */
+  async function fileLead(contact: string): Promise<string | null | undefined> {
+    const rows = await operatorQuery<{ lead_id: string | null }[]>`
+      SELECT lead.public_id AS lead_id FROM app.patients patient
+      JOIN app.contacts contact ON contact.id = patient.contact_id
+      LEFT JOIN app.leads lead ON lead.id = patient.lead_id
+      WHERE contact.public_id = ${contact} AND patient.deleted_at IS NULL
+    `;
+    return rows[0]?.lead_id;
+  }
+
+  /** Closes the lead by hand with `status`, then answers its close date. */
+  async function closeLead(lead: string, status: string): Promise<string> {
+    await flow.expect(200, `close as ${status}`, 'PATCH', `/app/leads/${lead}`, { status });
+    return flow.last('.data.closed_at');
+  }
+
+  it('a walk-in after a cancel ends the open lead in Clinic visited, closes its follow-up task and links the new file', async () => {
+    const { contact, lead } = await personWithLead('Jaya');
+    const booking = await book(contact, '18:00');
+    await flow.expect(200, 'cancel', 'POST', `/app/appointments/${booking}/cancel`, {
+      cancel_reason: 'patient_asked',
+    });
+    await runRules();
+    expect(await openFollowUpTasks(lead), 'cancelled: follow up again').toBe(1);
+
+    await walkIn(contact);
+    await runRules();
+    await flow.expect(200, 'the lead', 'GET', `/app/leads/${lead}`);
+    expect(flow.last('.data.status')).toBe('clinic_visited');
+    expect(flow.last('.data.closed_at')).not.toBe('null');
+    expect(await openFollowUpTasks(lead), 'visited: nothing to follow up').toBe(0);
+    expect(await fileLead(contact)).toBe(lead);
+    expect((await systemLines(contact)).at(-1)).toBe('Moved to Clinic visited at check-in');
+  });
+
+  it('a check-in wins back the latest lead closed as Lost or Not interested within 90 days', async () => {
+    const lost = await personWithLead('Kavya');
+    await closeLead(lost.lead, 'lost');
+    await walkIn(lost.contact);
+    await flow.expect(200, 'the lost lead', 'GET', `/app/leads/${lost.lead}`);
+    expect(flow.last('.data.status')).toBe('clinic_visited');
+    expect(await fileLead(lost.contact)).toBe(lost.lead);
+    expect((await systemLines(lost.contact)).at(-1)).toBe(
+      'Won back: moved to Clinic visited at check-in',
+    );
+
+    const notInterested = await personWithLead('Lalita');
+    await closeLead(notInterested.lead, 'not_interested');
+    const booking = await book(notInterested.contact, '10:00', 5);
+    expect(await leadStatus(notInterested.lead), 'a closed lead is not booked').toBe(
+      'not_interested',
+    );
+    await dueToday(booking, '01:00');
+    await flow.expect(200, 'check in', 'POST', `/app/appointments/${booking}/check-in`);
+    expect(await leadStatus(notInterested.lead)).toBe('clinic_visited');
+    expect(await fileLead(notInterested.contact)).toBe(notInterested.lead);
+  });
+
+  it('nothing is won back from Invalid, from a close older than 90 days, or past a later lead', async () => {
+    const invalid = await personWithLead('Mira');
+    await closeLead(invalid.lead, 'invalid');
+    await walkIn(invalid.contact);
+    expect(await leadStatus(invalid.lead)).toBe('invalid');
+    expect(await fileLead(invalid.contact), 'the file opens unlinked').toBeNull();
+
+    const old = await personWithLead('Naina');
+    await closeLead(old.lead, 'lost');
+    await operatorQuery`
+      UPDATE app.leads SET closed_at = now() - interval '91 days' WHERE public_id = ${old.lead}
+    `;
+    await walkIn(old.contact);
+    expect(await leadStatus(old.lead), 'closed 91 days ago').toBe('lost');
+
+    const twice = await personWithLead('Ojas');
+    await closeLead(twice.lead, 'lost');
+    await flow.expect(200, 'a later lead', 'POST', '/app/leads', {
+      contact_id: twice.contact,
+      source: 'walk_in',
+      status: 'invalid',
+    });
+    const later = flow.last('.data.id');
+    await walkIn(twice.contact);
+    expect(await leadStatus(twice.lead), 'not the latest lead').toBe('lost');
+    expect(await leadStatus(later)).toBe('invalid');
+  });
+
+  it('a person who already has a patient file keeps its link when a lead is won back', async () => {
+    flow.as('owner');
+    const { contact, lead } = await personWithLead('Pooja');
+    await flow.expect(200, 'their file', 'POST', '/app/patients', {
+      contact_id: contact,
+      home_branch_id: vesu,
+    });
+    await closeLead(lead, 'lost');
+    await walkIn(contact);
+    expect(await leadStatus(lead)).toBe('clinic_visited');
+    expect(await fileLead(contact), 'the existing file keeps its link').toBeNull();
+    flow.as('front_desk');
+  });
+
+  it('a walk-in keeps the person’s later booking, and a copy books the lead again', async () => {
+    const { contact, lead } = await personWithLead('Ragini');
+    await book(contact, '13:00');
+    const later = await book(contact, '13:00', 4);
+    await walkIn(contact);
+    await flow.expect(200, 'the later booking', 'GET', `/app/appointments/${later}`);
+    expect(flow.last('.data.status'), 'nothing cancelled on its own').toBe('scheduled');
+    expect(await leadStatus(lead)).toBe('clinic_visited');
+
+    const copied = await personWithLead('Sana');
+    const visit = await book(copied.contact, '18:00', 3);
+    await flow.expect(200, 'cancel', 'POST', `/app/appointments/${visit}/cancel`, {
+      cancel_reason: 'rescheduling_later',
+    });
+    expect(await leadStatus(copied.lead)).toBe('follow_up');
+    await flow.expect(200, 'rebook it', 'POST', `/app/appointments/${visit}/copy`, {
+      appointment_date: (
+        await operatorQuery<{ day: string }[]>`
+        SELECT to_char(appointment_date, 'YYYY-MM-DD') AS day FROM app.appointments WHERE public_id = ${visit}
+      `
+      )[0]?.day,
+      start_time: '17:00',
+    });
+    expect(await leadStatus(copied.lead)).toBe('appointment_scheduled');
+  });
 });

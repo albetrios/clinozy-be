@@ -62,6 +62,8 @@ const SLOT_FIELDS = [
 const DEFAULT_SLOT_STEP_MINUTES = 15;
 /** The activity line a check-in leaves when it moves the lead (6.10). */
 const CHECK_IN_ACTIVITY_BODY = 'Moved to Clinic visited at check-in';
+/** The activity line a check-in leaves when it wins back a closed lead (K-WB, AF2). */
+const WIN_BACK_ACTIVITY_BODY = 'Won back: moved to Clinic visited at check-in';
 /** The activity line a booking leaves when it moves the lead to `appointment_scheduled` (L11). */
 const LEAD_BOOKED_ACTIVITY_BODY = 'Moved to Appointment scheduled at booking';
 /** The activity line the end of the last booking leaves, by what ended it (L11). */
@@ -310,8 +312,9 @@ async function fillServiceLabel(values: Record<string, unknown>): Promise<void> 
 }
 
 /**
- * A check-in converts (A14, L8): the contact's open lead moves to `clinic_visited` (with a `system`
- * line in its stream) and a contact without a patient file gets one — home branch and usual doctor
+ * A check-in converts (A14, L8): the contact's open lead moves to `clinic_visited` — or, with none
+ * open, a lead closed Lost / Not interested within 90 days is won back (K-WB, AF2) — with a `system`
+ * line in its stream, and a contact without a patient file gets one — home branch and usual doctor
  * from the appointment, `lead_id` the lead (P10), not yet converted (P4) — in the check-in's
  * transaction.
  */
@@ -323,16 +326,19 @@ async function convertAtCheckIn({
   context: BaseRecordWriteContext;
 }): Promise<void> {
   const contactId = row.contact_id as number;
-  const leadId = await leadsRepository.markVisited({ contactId, userId: context.userId });
+  const userId = context.userId;
+  const visitedLeadId = await leadsRepository.markVisited({ contactId, userId });
+  // K-WB (AF2, D2): with no open lead, a lead closed Lost / Not interested lately is won back
+  const leadId = visitedLeadId ?? (await leadsRepository.winBack({ contactId, userId }));
   if (leadId !== null) {
     await contactActivitiesRepository.insert({
       organization_id: context.organizationId,
       contact_id: contactId,
       type: CONTACT_ACTIVITY_TYPE.SYSTEM,
-      body: CHECK_IN_ACTIVITY_BODY,
+      body: visitedLeadId === null ? WIN_BACK_ACTIVITY_BODY : CHECK_IN_ACTIVITY_BODY,
       appointment_id: row.id,
-      created_by_user_id: context.userId,
-      updated_by_user_id: context.userId,
+      created_by_user_id: userId,
+      updated_by_user_id: userId,
     });
   }
   if ((await contactsRepository.findPatientFile(contactId)) !== null) return;
@@ -795,7 +801,7 @@ async function prepareLifecycle({
  *   400 (A2); a booking without a label takes its offering's name (A13). A walk-in is placed at now
  *   and checked in at once, outside the slot rules. A move stamps `rescheduled_from`, counts
  *   `move_count` and returns a confirmed booking to `scheduled`. Check-in (or a walk-in) converts
- *   (A14). After every write the person's open lead follows their bookings (L11):
+ *   (A14) — the open lead, else a lead won back (K-WB). After every write the person's open lead follows their bookings (L11):
  *   `appointment_scheduled` while one is still to happen, back to `follow_up` when the last one is
  *   cancelled, missed or removed — a `system` line in their stream when it moves. The stage moves forward only; pause and resume toggle `visit_paused_at`.
  * - **Failure modes:** `ConflictError` `slot_in_past`, `slot_closed`, `slot_outside_hours`,

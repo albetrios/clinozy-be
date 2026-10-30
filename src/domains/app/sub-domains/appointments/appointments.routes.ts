@@ -195,7 +195,7 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
         schema: {
           summary: 'Check in',
           description:
-            "They arrived: a scheduled or confirmed booking becomes `checked_in` at stage `waiting` (`checked_in_at` — the visit's start); a booking on a later day is a 409 `appointment_not_due`. Check-in converts (A14): the contact's open lead moves to `clinic_visited` (with a line in its activity) and a contact without a patient file gets one — home branch and usual doctor from the appointment. Requires appointment:update.",
+            "They arrived: a scheduled or confirmed booking becomes `checked_in` at stage `waiting` (`checked_in_at` — the visit's start); a booking on a later day is a 409 `appointment_not_due`. Check-in converts (A14): the contact's open lead moves to `clinic_visited` (with a line in its activity); with no open lead, their latest lead closed as `lost` or `not_interested` within 90 days is won back to `clinic_visited` (D2). A contact without a patient file gets one, linked to that lead — home branch and usual doctor from the appointment. Any other booking of the person stays as it is. Requires appointment:update.",
           tags: ['Appointment'],
           params: appointmentsIdParamsDto,
         },
