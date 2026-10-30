@@ -36,6 +36,20 @@ export const LEAD_OPEN_STATUS_VALUES = [
   LEAD_STATUS.NO_RESPONSE,
 ] as const;
 
+/** The closing statuses (L8): a lead in one carries the date it closed, `closed_at` (D10). */
+export const LEAD_CLOSED_STATUS_VALUES = [
+  LEAD_STATUS.NOT_INTERESTED,
+  LEAD_STATUS.INVALID,
+  LEAD_STATUS.LOST,
+  LEAD_STATUS.CLINIC_VISITED,
+] as const;
+
+/** The closing statuses a check-in may win back to `clinic_visited` (K-WB, D2) — never `invalid`. */
+export const LEAD_WIN_BACK_STATUS_VALUES = [LEAD_STATUS.LOST, LEAD_STATUS.NOT_INTERESTED] as const;
+
+/** How many days after a lead closed a check-in still wins it back (K-WB, D2) — a fixed rule. */
+export const LEAD_WIN_BACK_DAYS = 90;
+
 /**
  * The closing statuses a lead with a live booking may still take by hand (L11): the person said
  * no — the booking stays until the team cancels it. Every other move out of

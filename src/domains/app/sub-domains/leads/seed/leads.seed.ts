@@ -5,6 +5,7 @@ import { memberships } from '@/domains/tenancy/sub-domains/membership/membership
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
 import { MILLISECONDS_PER_DAY } from '@/shared/constants/ttl.constants.js';
+import { LEAD_CLOSED_STATUS_VALUES } from '@/domains/app/sub-domains/leads/leads.constants.js';
 
 /** The default `lead_hold_days` (D40) — how long a seeded owner holds their lead. */
 const HOLD_DAYS = 3;
@@ -73,6 +74,10 @@ export async function seedLead(payload: SeedLeadPayload): Promise<number | null>
       organization_id: payload.organization_id,
       contact_id: contact.id,
       status: payload.status,
+      // A closed lead carries when it closed (D10) — here, when it came in
+      closed_at: (LEAD_CLOSED_STATUS_VALUES as readonly string[]).includes(payload.status)
+        ? (payload.details?.created_at ?? new Date())
+        : null,
       source: payload.source,
       interests: [...payload.interests],
       ...(owner
