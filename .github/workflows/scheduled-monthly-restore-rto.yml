@@ -130,14 +130,14 @@ jobs:
           set -euo pipefail
           pnpm --silent db:sequences:advance | tail -n 1
 
-      # Reads every table, checks every id sequence is past its column's ids, then boots the app and
-      # signs a new user in and out (src/scripts/ops/db-restore-smoke.ts). Never a test suite: their
-      # setup truncates every table, and this branch is a copy of production. TEST_MODE makes
-      # send-code return the sign-in code (no CAPTCHA in front of it); the drill user goes when
-      # the branch is deleted. send-code answers 503 until email is configured, so the step carries
-      # the Vitest harness's CI-only fixture key (as the k6 job does), never production's: the
-      # email only lands in the outbox and this runner's Redis — this job runs no worker — so
-      # nothing is sent.
+      # Reads every table, checks the seeded reference rows are there and every id sequence is past
+      # its column's ids, then boots the app and signs a new user in and out, into an organization
+      # (src/scripts/ops/db-restore-smoke.ts). Never a test suite: their setup truncates every
+      # table, and this branch is a copy of production. TEST_MODE makes send-code return the
+      # sign-in code (no CAPTCHA in front of it); the drill user goes when the branch is deleted.
+      # send-code answers 503 until email is configured, so the step carries the Vitest harness's
+      # CI-only fixture key (as the k6 job does), never production's: the email only lands in the
+      # outbox and this runner's Redis — this job runs no worker — so nothing is sent.
       - name: Restore smoke on restored database
         env:
           DATABASE_URL: ${{ steps.neon_drill.outputs.application_database_url }}
