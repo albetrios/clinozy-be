@@ -3,27 +3,36 @@
  * `pnpm db:sequences:advance` — and the check after a real restore (docs/process/dr-runbook.md).
  * It never deletes or truncates anything: the restored copy holds production's data.
  *
- * Checks, in order: every migration file is applied; every table in the app's schemas reads; every
- * bigint id sequence is ahead of the ids in its column; then the app boots on the copy and a new
- * user signs in by email code, reads `/auth/me/context` and logs out. That user is the only row it
- * writes — the drill deletes its throwaway branch next.
+ * Checks, in order: every migration file is applied; every table in the app's schemas reads; the
+ * reference tables every deploy seeds hold rows; every bigint id sequence is ahead of the ids in its
+ * column; then the app boots on the copy and a new user signs in by email code, reads
+ * `/auth/me/context` (which must carry an organization and its permissions) and logs out. That user
+ * is the only row it writes — the drill deletes its throwaway branch next.
  *
  * Usage:
- *   DATABASE_URL=postgresql://... TEST_MODE=true CAPTCHA_PROVIDER=disabled pnpm db:restore:smoke
- *                                                         # a drill's throwaway copy
- *   DATABASE_URL=postgresql://... pnpm db:restore:smoke --database-only     # a real restore
+ *   DATABASE_URL=<app role> DATABASE_MIGRATION_URL=<migrator> TEST_MODE=true CAPTCHA_PROVIDER=disabled \
+ *     RESEND_API_KEY=<any key> EMAIL_FROM_ADDRESS=<address> pnpm db:restore:smoke  # a drill's copy
+ *   DATABASE_MIGRATION_URL=<migrator> pnpm db:restore:smoke --database-only    # a real restore
  *
  * `TEST_MODE=true` makes `send-code` return the code (forbidden in production by the env schema).
+ * `send-code` answers 503 until mail is configured; any key does, because the email only lands in
+ * the outbox and Redis and no worker runs (the drills pass the CI fixture key, never production's).
  * `--database-only` stops after the database checks: a real restore is live, and gets no drill user.
- * Run it as the database owner, which bypasses row-level security (see
- * {@link findSequencesBehindTheirIds}).
+ * The database checks run as the migration role (`clinozy_be_migrator`, which bypasses row-level
+ * security and owns the tables — see {@link findSequencesBehindTheirIds}): `DATABASE_MIGRATION_URL`
+ * when set, else `DATABASE_URL` — the rule `pnpm db:sequences:advance` follows. The app boots on
+ * `DATABASE_URL`, so a drill passes the app's runtime role there, as production does: only the app
+ * and maintenance roles may run the SECURITY DEFINER auth functions sign-in needs.
  * Output names tables and sequences but never a row count or an id: the drill's logs are public.
  */
 import '@/shared/config/load-env-files.js';
 import { randomUUID } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { getTableConfig, type PgTable } from 'drizzle-orm/pg-core';
 import pg from 'pg';
+import { plans } from '@/domains/billing/sub-domains/plan/plan.schema.js';
+import { permissions } from '@/domains/tenancy/sub-domains/permission/permission.schema.js';
 import {
   resolveDatabaseSsl,
   withoutSslQueryParameters,
@@ -56,6 +65,26 @@ export const RESTORE_SMOKE_SCHEMA_NAMES: readonly string[] = [
     appSchema,
   ].map((schema) => schema.schemaName),
 ];
+
+/** A table named by its schema, as {@link findEmptyReferenceTables} reads it. */
+export interface QualifiedTableName {
+  schemaName: string;
+  tableName: string;
+}
+
+function toQualifiedTableName(table: PgTable): QualifiedTableName {
+  const { schema, name } = getTableConfig(table);
+  return { schemaName: schema ?? 'public', tableName: name };
+}
+
+/**
+ * The tables `pnpm db:seed` fills on every deploy — the permission catalog and the default plans
+ * (`src/scripts/seed/minimal.ts`). A restored copy without their rows is not production's data.
+ */
+export const RESTORE_SMOKE_REFERENCE_TABLES: readonly QualifiedTableName[] = [
+  permissions,
+  plans,
+].map(toQualifiedTableName);
 
 /** A table {@link findUnreadableTables} could not read, with the SQLSTATE that refused it. */
 export interface UnreadableTable {
@@ -130,6 +159,36 @@ export async function findUnreadableTables(options: {
     }
   }
   return unreadableTables;
+}
+
+/**
+ * The tables in `tables` that hold no row, as `schema.table`.
+ *
+ * @remarks
+ * - **Why:** every other database check passes on an empty database. Every deploy seeds these
+ *   reference rows (`pnpm db:seed`), so a copy without them is blank or not production's — the
+ *   one check that the restore brought data back, without depending on traffic.
+ * - **Algorithm:** `SELECT EXISTS (SELECT 1 FROM <table>)` per table, identifiers escaped.
+ * - **Failure modes:** a missing table throws (`42P01`) — the copy is not on this app's schema.
+ * - **Side effects:** reads only. Run as a role that bypasses row-level security, as the other
+ *   checks are. Prints nothing itself, and never a row count: the drill's logs are public.
+ */
+export async function findEmptyReferenceTables(options: {
+  client: pg.ClientBase;
+  tables: readonly QualifiedTableName[];
+}): Promise<string[]> {
+  const { client, tables } = options;
+  const emptyTableNames: string[] = [];
+  for (const table of tables) {
+    const qualifiedName = `${client.escapeIdentifier(table.schemaName)}.${client.escapeIdentifier(table.tableName)}`;
+    const {
+      rows: [row],
+    } = await client.query<{ has_rows: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM ${qualifiedName}) AS has_rows`,
+    );
+    if (row?.has_rows !== true) emptyTableNames.push(`${table.schemaName}.${table.tableName}`);
+  }
+  return emptyTableNames;
 }
 
 /**
@@ -219,6 +278,26 @@ export async function findSequencesBehindTheirIds(options: {
 }
 
 /**
+ * Whether a `GET /auth/me/context` response body carries an active organization and at least one
+ * permission.
+ *
+ * @remarks
+ * - **Why:** sign-in provisions the personal organization from the seeded permission codes, but
+ *   best-effort — `me/context` still answers 200 when that fails, with `active_organization: null`.
+ * - **Side effects:** none; reads the parsed body only.
+ */
+export function hasOrganizationWithPermissions(responseBody: unknown): boolean {
+  const context = (
+    responseBody as { data?: { active_organization?: unknown; my_permissions?: unknown } } | null
+  )?.data;
+  return (
+    Boolean(context?.active_organization) &&
+    Array.isArray(context?.my_permissions) &&
+    context.my_permissions.length > 0
+  );
+}
+
+/**
  * Boots the app on the restored database and signs a new user in and out by email code.
  *
  * @remarks
@@ -227,18 +306,22 @@ export async function findSequencesBehindTheirIds(options: {
  *   authenticated read and a logout.
  * - **Algorithm:** `GET /readyz` → `POST /auth/email/send-code` (a new `restore-drill-…@example.com`
  *   address) → `POST /auth/email/login` with the code `TEST_MODE` returns → `GET /auth/me/context`
- *   → `POST /auth/logout`, all in-process through `app.inject`.
- * - **Failure modes:** throws naming the step and its HTTP status; never prints a response body.
+ *   → `POST /auth/logout`, all in-process through `app.inject`. With personal organizations on,
+ *   `me/context` must carry an active organization and permissions: sign-in provisions the personal
+ *   organization from the seeded permission codes, but best-effort — the read answers 200 without it.
+ * - **Failure modes:** throws naming the step and its HTTP status, or the missing organization;
+ *   never prints a response body.
  * - **Side effects:** writes the drill user and its session; queues its sign-in email in Redis,
  *   which no worker sends. `app.close()` closes the database pool and the Redis clients.
  * - **Notes:** `@/app.js` is imported here, not at the top, so the database checks above load
  *   without the whole app.
  */
 export async function runSignInRoundTrip(): Promise<void> {
-  const [{ buildApp }, { connectRedis }, { connectBullMqRedis }] = await Promise.all([
+  const [{ buildApp }, { connectRedis }, { connectBullMqRedis }, { env }] = await Promise.all([
     import('@/app.js'),
     import('@/infrastructure/cache/redis.client.js'),
     import('@/infrastructure/cache/bullmq-redis.client.js'),
+    import('@/shared/config/env.config.js'),
   ]);
   await connectRedis();
   await connectBullMqRedis();
@@ -279,16 +362,17 @@ export async function runSignInRoundTrip(): Promise<void> {
     if (!accessToken) throw new Error('POST /auth/email/login returned no access token');
     const authorization = { authorization: `Bearer ${accessToken}` };
 
-    expectOk({
-      step: 'GET /auth/me/context',
-      statusCode: (
-        await app.inject({
-          method: 'GET',
-          url: `${apiPrefix}/auth/me/context`,
-          headers: authorization,
-        })
-      ).statusCode,
+    const meContext = await app.inject({
+      method: 'GET',
+      url: `${apiPrefix}/auth/me/context`,
+      headers: authorization,
     });
+    expectOk({ step: 'GET /auth/me/context', statusCode: meContext.statusCode });
+    if (env.PERSONAL_ORGANIZATION_ENABLED && !hasOrganizationWithPermissions(meContext.json())) {
+      throw new Error(
+        'GET /auth/me/context carries no organization with permissions — sign-in provisions the personal organization from the seeded permission codes (pnpm db:seed)',
+      );
+    }
 
     const cookies = Object.fromEntries(
       login.cookies.map((cookie) => [cookie.name, cookie.value] as const),
@@ -315,9 +399,9 @@ async function main(): Promise<void> {
       args: process.argv.slice(2),
       options: { 'database-only': { type: 'boolean' } },
     }).values['database-only'] === true;
-  const connectionUrl = process.env.DATABASE_URL;
+  const connectionUrl = process.env.DATABASE_MIGRATION_URL ?? process.env.DATABASE_URL;
   if (!connectionUrl) {
-    console.error('DATABASE_URL is required');
+    console.error('DATABASE_URL or DATABASE_MIGRATION_URL is required');
     process.exit(1);
   }
 
@@ -358,6 +442,20 @@ async function main(): Promise<void> {
       console.log('Tables: every table reads.');
     }
 
+    const emptyReferenceTables = await findEmptyReferenceTables({
+      client,
+      tables: RESTORE_SMOKE_REFERENCE_TABLES,
+    });
+    if (emptyReferenceTables.length > 0) {
+      failures.push(
+        `Reference tables with no rows (every deploy seeds them; run pnpm db:seed): ${emptyReferenceTables.join(', ')}`,
+      );
+    } else {
+      console.log(
+        `Reference rows: ${RESTORE_SMOKE_REFERENCE_TABLES.map((table) => `${table.schemaName}.${table.tableName}`).join(' and ')} hold rows.`,
+      );
+    }
+
     const sequencesBehind = await findSequencesBehindTheirIds({
       client,
       schemaNames: RESTORE_SMOKE_SCHEMA_NAMES,
@@ -383,7 +481,7 @@ async function main(): Promise<void> {
 
   await runSignInRoundTrip();
   console.log(
-    'Sign-in round trip: readyz → send-code → email login → me/context → logout all answered 200.',
+    'Sign-in round trip: readyz → send-code → email login → me/context (with an organization) → logout all answered 200.',
   );
   // The booted app leaves timers behind after `app.close()`; the drill step must still end.
   process.exit(0);

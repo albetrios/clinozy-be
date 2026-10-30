@@ -1722,6 +1722,7 @@ src/
     │   │   │   │   │   ├── member-role.repository.unit.test.ts
     │   │   │   │   │   ├── member-role.serializer.unit.test.ts
     │   │   │   │   │   ├── member-role.service.delete-guards.unit.test.ts
+    │   │   │   │   │   ├── member-role.service.directory-and-restore.unit.test.ts
     │   │   │   │   │   ├── member-role.service.unit.test.ts
     │   │   │   │   │   └── member-role.validator.unit.test.ts
     │   │   │   ├── member-role-permission/
@@ -1776,7 +1777,9 @@ src/
     │   │   │   │   │   ├── membership.repository.db.unit.test.ts
     │   │   │   │   │   ├── membership.serializer.unit.test.ts
     │   │   │   │   │   ├── membership.service.cache-invalidation.unit.test.ts
+    │   │   │   │   │   ├── membership.service.directory-and-lifecycle.unit.test.ts
     │   │   │   │   │   ├── membership.service.grantable-permissions.unit.test.ts
+    │   │   │   │   │   ├── membership.service.invitation-endings.unit.test.ts
     │   │   │   │   │   ├── membership.service.seat-downgrade.unit.test.ts
     │   │   │   │   │   ├── membership.service.unit.test.ts
     │   │   │   │   │   └── membership.validator.unit.test.ts
@@ -1798,6 +1801,7 @@ src/
     │   │   │   │   │   │   ├── membership-invitation.controller.unit.test.ts
     │   │   │   │   │   │   ├── membership-invitation.repository.db.unit.test.ts
     │   │   │   │   │   │   ├── membership-invitation.serializer.unit.test.ts
+    │   │   │   │   │   │   ├── membership-invitation.service.invitee-flows.unit.test.ts
     │   │   │   │   │   │   ├── membership-invitation.service.unit.test.ts
     │   │   │   │   │   │   └── membership-invitation.validator.unit.test.ts
     │   │   │   │   ├── events/
@@ -1926,6 +1930,7 @@ src/
     │   │   │   │   │   │   ├── organization-mfa-policy.unit.test.ts
     │   │   │   │   │   │   ├── organization-settings.controller.unit.test.ts
     │   │   │   │   │   │   ├── organization-settings.serializer.unit.test.ts
+    │   │   │   │   │   │   ├── organization-settings.service.setup-progress.unit.test.ts
     │   │   │   │   │   │   ├── organization-settings.service.unit.test.ts
     │   │   │   │   │   │   └── organization-settings.validator.unit.test.ts
     │   │   │   │   │   └── organization-settings.test.ts

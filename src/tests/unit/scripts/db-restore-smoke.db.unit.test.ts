@@ -1,9 +1,12 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  findEmptyReferenceTables,
   findSequencesBehindTheirIds,
   findUnappliedMigrations,
   findUnreadableTables,
+  hasOrganizationWithPermissions,
+  RESTORE_SMOKE_REFERENCE_TABLES,
   RESTORE_SMOKE_SCHEMA_NAMES,
 } from '@/scripts/ops/db-restore-smoke.js';
 
@@ -95,6 +98,50 @@ describe('restore smoke checks', () => {
       } finally {
         await client.query('RESET ROLE');
       }
+    });
+  });
+
+  it('requires the reference rows every deploy seeds: the permission catalog and the plans', () => {
+    expect(RESTORE_SMOKE_REFERENCE_TABLES).toEqual([
+      { schemaName: 'tenancy', tableName: 'permissions' },
+      { schemaName: 'billing', tableName: 'plans' },
+    ]);
+  });
+
+  describe('findEmptyReferenceTables', () => {
+    it('names only the tables that hold no row', async () => {
+      await expect(
+        findEmptyReferenceTables({
+          client,
+          tables: [
+            { schemaName: temporarySchemaName, tableName: 'restored_rows' },
+            { schemaName: temporarySchemaName, tableName: 'empty_rows' },
+          ],
+        }),
+      ).resolves.toEqual([`${temporarySchemaName}.empty_rows`]);
+    });
+  });
+
+  describe('hasOrganizationWithPermissions', () => {
+    it('accepts a context with an active organization and its permissions', () => {
+      expect(
+        hasOrganizationWithPermissions({
+          data: { active_organization: { id: 'org_example' }, my_permissions: ['members:read'] },
+        }),
+      ).toBe(true);
+    });
+
+    it('rejects the 200 me/context answers when personal-organization provisioning failed', () => {
+      expect(
+        hasOrganizationWithPermissions({ data: { active_organization: null, my_permissions: [] } }),
+      ).toBe(false);
+      expect(
+        hasOrganizationWithPermissions({
+          data: { active_organization: { id: 'org_example' }, my_permissions: [] },
+        }),
+      ).toBe(false);
+      expect(hasOrganizationWithPermissions({})).toBe(false);
+      expect(hasOrganizationWithPermissions(null)).toBe(false);
     });
   });
 
