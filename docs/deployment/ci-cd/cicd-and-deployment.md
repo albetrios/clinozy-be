@@ -280,7 +280,7 @@ Use **workflow_dispatch** when you need to run part of the pipeline without a fu
 
 **Rollback:** Dispatch **Reusable — Railway deploy** with `image_override=ghcr.io/<owner>/<repo>/clinozy-be-api:previous` (and the worker ref derived automatically when the override contains `clinozy-be-api`).
 
-**Cleanup:** [cleanup-cache.yml](../../../.github/workflows/cleanup-cache.yml) prunes Actions caches (outcome-aware LRU; daily safety net on `main`). [cleanup-ghcr.yml](../../../.github/workflows/cleanup-ghcr.yml) prunes stale GHCR manifests weekly while preserving `:latest`, `:current`, `:previous`, `:vX.Y.Z` release tags, and recent SHA tags; it addresses each package as `<repository>/<image>` under the owner's `/orgs/` or `/users/` scope, and a manual run with `dry_run` lists what it would prune without deleting.
+**Cleanup:** [cleanup-cache.yml](../../../.github/workflows/cleanup-cache.yml) prunes Actions caches (outcome-aware LRU; daily safety net on `main`). [cleanup-ghcr.yml](../../../.github/workflows/cleanup-ghcr.yml) prunes stale GHCR manifests weekly while preserving `:latest`, `:current`, `:previous`, `:vX.Y.Z` release tags, and recent SHA tags; it addresses each package as `<repository>/<image>` under the owner's `/orgs/` or `/users/` scope, and a manual run with `dry_run` lists what it would prune without deleting. An image's cosign signature and attestations (the version tagged `sha256-<image digest>`) are deleted only in the run that deletes that image, so every image it keeps still passes `release-deploy.yml`'s `cosign verify`.
 
 ---
 

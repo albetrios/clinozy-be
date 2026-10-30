@@ -72,3 +72,44 @@ describe('GHCR cleanup addresses the packages the build pushes', () => {
     );
   });
 });
+
+/**
+ * Policy: an image's cosign signature and attestations are deleted only with the image.
+ *
+ * cosign stores them as a separate version tagged `sha256-<image digest>` (optionally `.sig`,
+ * `.att`, `.sbom`), and `release-deploy.yml` runs `cosign verify` / `cosign verify-attestation`
+ * before a production deploy. The first working dry run (10-30) listed the artifacts of `:current`,
+ * `:previous`, `:latest` and every kept SHA image for deletion, because none of their tags matched
+ * the protected pattern; a real run would have left those images unverifiable.
+ */
+describe('GHCR cleanup keeps the signature of every image it keeps', () => {
+  const signaturePatternSource = workflow.match(/signature_regex='([^']+)'/)?.[1];
+  const signaturePattern = new RegExp(signaturePatternSource ?? '$^');
+  const digest = 'a'.repeat(64);
+
+  it('declares a signature-artifact pattern', () => {
+    expect(signaturePatternSource).toBeTruthy();
+  });
+
+  it.each([`sha256-${digest}`, `sha256-${digest}.sig`, `sha256-${digest}.att`])(
+    'recognises %s as a signature artifact',
+    (tags) => {
+      expect(signaturePattern.test(tags)).toBe(true);
+    },
+  );
+
+  it.each(['latest', 'c'.repeat(40), `sha256-${digest},latest`])(
+    'does not treat %s as a signature artifact',
+    (tags) => {
+      expect(signaturePattern.test(tags)).toBe(false);
+    },
+  );
+
+  it('deletes an artifact only when the image it signs was deleted in the same run', () => {
+    expect(workflow).toContain('digest: .name');
+    expect(workflow).toMatch(/if prune "\$version_id" "\$tags"; then\n\s+deleted_digests\+=/);
+    expect(workflow).toMatch(
+      /grep -qxF "sha256:\$\{subject_hex%%\.\*\}" <<< "\$\{deleted_digests\}"/,
+    );
+  });
+});
