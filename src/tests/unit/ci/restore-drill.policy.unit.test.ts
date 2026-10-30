@@ -44,7 +44,8 @@ describe('restore drill automation policy', () => {
   it("derives every Neon name from the environment — never Neon's defaults", () => {
     // One Neon project per environment (the infrastructure repository's rule): project
     // <slug>-<environment>, branch <environment>, database <slug_with_underscores>_<environment>,
-    // owner <database>_owner. Neon's `main` / `neondb` / `neondb_owner` exist nowhere.
+    // and the roles clinozy-infra provisions — <slug_with_underscores>_migrator / _app / _maintenance.
+    // Neon's `main` / `neondb` / `neondb_owner` and the project owner exist nowhere.
     const script = readFileSync(join(ROOT, 'tooling/ci/restore-drill-neon.sh'), 'utf8');
     for (const derivation of [
       // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
@@ -54,11 +55,20 @@ describe('restore drill automation policy', () => {
       // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
       'NEON_DATABASE_NAME="${NEON_PROJECT_NAME//-/_}"',
       // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
-      'NEON_OWNER_ROLE_NAME="${NEON_DATABASE_NAME}_owner"',
+      'NEON_ROLE_PREFIX="${NEON_DATABASE_NAME%_"${RESTORE_DRILL_ENVIRONMENT//-/_}"}"',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
+      'NEON_MIGRATION_ROLE_NAME="${NEON_ROLE_PREFIX}_migrator"',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
+      'NEON_APPLICATION_ROLE_NAME="${NEON_ROLE_PREFIX}_app"',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
+      'NEON_MAINTENANCE_ROLE_NAME="${NEON_ROLE_PREFIX}_maintenance"',
     ]) {
       expect(script).toContain(derivation);
     }
     expect(script).not.toMatch(/neondb/);
+    // Never Neon's project owner: it is not the role production runs as, and it may not run the
+    // SECURITY DEFINER auth functions (the 10-30 drills failed sign-in with 42501 as the owner).
+    expect(script).not.toMatch(/NEON_OWNER_ROLE_NAME|_owner"/);
     // The identity file is not shell-safe to `source` (an unquoted display name with a space).
     expect(script).not.toMatch(/^\s*(source|\.)\s+.*project-identity\.env/m);
   });
@@ -140,21 +150,32 @@ describe('restore drill automation policy', () => {
       }
     });
 
-    it('migrates over the direct endpoint and runs the app over the pooled one', () => {
+    it('logs in as the roles production uses: migrator direct, app and maintenance pooled', () => {
       for (const workflowFileName of drillWorkflowFileNames) {
         const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
-        expect(workflow, workflowFileName).toContain(
+        for (const wiring of [
           // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression in the workflow YAML — not a TS template.
-          'DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.direct_database_url }}',
-        );
-        expect(workflow, workflowFileName).toContain(
+          'DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.migration_database_url }}',
           // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression in the workflow YAML — not a TS template.
-          'DATABASE_URL: ${{ steps.neon_drill.outputs.pooled_database_url }}',
+          'DATABASE_URL: ${{ steps.neon_drill.outputs.application_database_url }}',
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression in the workflow YAML — not a TS template.
+          'DATABASE_MAINTENANCE_URL: ${{ steps.neon_drill.outputs.maintenance_database_url }}',
+        ]) {
+          expect(workflow, workflowFileName).toContain(wiring);
+        }
+        expect(workflow, workflowFileName).not.toMatch(
+          /outputs\.(database_url|pooled_database_url|direct_database_url)/,
         );
-        expect(workflow, workflowFileName).not.toContain('outputs.database_url');
       }
-      expect(script).toContain('neon_connection_uri "$project_id" "$branch_id" false');
-      expect(script).toContain('neon_connection_uri "$project_id" "$branch_id" true');
+      expect(script).toContain(
+        'neon_connection_uri "$project_id" "$branch_id" false "$NEON_MIGRATION_ROLE_NAME"',
+      );
+      expect(script).toContain(
+        'neon_connection_uri "$project_id" "$branch_id" true "$NEON_APPLICATION_ROLE_NAME"',
+      );
+      expect(script).toContain(
+        'neon_connection_uri "$project_id" "$branch_id" true "$NEON_MAINTENANCE_ROLE_NAME"',
+      );
     });
 
     it('shows only the count of advanced sequences — their values are production row counts', () => {

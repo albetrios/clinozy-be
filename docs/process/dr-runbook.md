@@ -60,7 +60,7 @@ flowchart TD
 2. Only if you restored into a **new branch** instead: a branch created from a protected branch gets **new passwords** for every role, so take its URLs from Neon (`neonctl connection-string <branch> --project-id <id> --role-name <user>`), not from `.env.production` — then update `DATABASE_URL`, `DATABASE_MAINTENANCE_URL` and `DATABASE_MIGRATION_URL` in Railway (API + worker) and GitHub (`pnpm github:sync`).
 3. Run `pnpm db:migrate` against the restored database (idempotent; fixes schema drift).
 4. **Advance the id sequences** ([below](#advance-the-id-sequences-after-a-restore)) before the API and worker serve traffic on the restored database — if they kept running through the restore, do it straight away.
-5. Check the restored database as its owner (`clinozy_be_production_owner`, which bypasses row-level security): `DATABASE_URL=<restored database URL> pnpm db:restore:smoke --database-only` — every migration applied, every table reads, every id sequence past its ids. The drills run the same checks plus a sign-in round trip on their throwaway copy; `--database-only` leaves the live database without a drill user.
+5. Check the restored database as the migration role (`clinozy_be_migrator`, which bypasses row-level security): `DATABASE_MIGRATION_URL=<restored database URL as clinozy_be_migrator> pnpm db:restore:smoke --database-only` — every migration applied, every table reads, every id sequence past its ids. The drills run the same checks plus a sign-in round trip on their throwaway copy; `--database-only` leaves the live database without a drill user.
 6. Verify row counts on critical tables (`tenancy.organizations`, `billing.subscriptions`, `auth.sessions`).
 
 #### Advance the id sequences after a restore

@@ -37,7 +37,7 @@ flowchart LR
 | **RTO clock** | Starts at branch creation; ends after smoke passes |
 | **Cleanup** | Ephemeral branch deleted; it also expires **1 hour** after creation |
 
-Each GitHub Environment has its own Neon project, and every name derives from it: project `clinozy-be-<environment>`, branch `<environment>`, database `clinozy_be_<environment>`, owner `clinozy_be_<environment>_owner` (the drill branch's login). Nothing is named after a git branch or Neon's defaults.
+Each GitHub Environment has its own Neon project, and every name derives from it: project `clinozy-be-<environment>`, branch `<environment>`, database `clinozy_be_<environment>`, and the drill branch logs in as the roles clinozy-infra provisions — `clinozy_be_migrator` (migrations and the smoke's checks), `clinozy_be_app` and `clinozy_be_maintenance` (the app) — never Neon's project owner. Nothing is named after a git branch or Neon's defaults.
 
 **Public logs.** This repository is public, and so are its Actions logs. The drill branch is a full copy of production, so the drill keeps it out of them:
 
