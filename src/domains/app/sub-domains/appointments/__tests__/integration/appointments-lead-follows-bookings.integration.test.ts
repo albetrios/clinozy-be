@@ -112,6 +112,16 @@ describe('Appointments — the lead follows the bookings (L11)', () => {
   }
 
   /** The organization's rules run (TK4), as the worker runs it. */
+  /** The person's open `rebook` rule tasks. */
+  async function openRebookTasks(contact: string): Promise<number> {
+    const rows = await operatorQuery<{ count: string }[]>`
+      SELECT count(*)::text AS count FROM app.tasks task
+      JOIN app.contacts contact ON contact.id = task.contact_id
+      WHERE contact.public_id = ${contact} AND task.rule_key = 'rebook' AND task.status = 'open'
+    `;
+    return Number(rows[0]?.count ?? 0);
+  }
+
   function runRules() {
     return runOrganizationScopedWorkerJob({
       job: { organizationPublicId },
@@ -186,6 +196,12 @@ describe('Appointments — the lead follows the bookings (L11)', () => {
     expect((await systemLines(missed.contact)).at(-1)).toBe(
       'Moved back to Follow-up: they did not come to the appointment',
     );
+    await runRules();
+    expect(await openFollowUpTasks(missed.lead), 'the lead is followed up').toBe(1);
+    expect(await openRebookTasks(missed.contact), 'no Rebook beside it: one task').toBe(0);
+    await closeLead(missed.lead, 'lost');
+    await runRules();
+    expect(await openRebookTasks(missed.contact), 'no open lead: Rebook takes over').toBe(1);
 
     flow.as('owner');
     const removed = await personWithLead('Divya');

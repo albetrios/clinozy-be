@@ -287,16 +287,10 @@ describe('Task rules — the clock and overlapping runs (TK4, TK10, D41)', () =>
     await ruleTasks('follow_up', `lead_id=${lead}`);
     flow.expectValue('00:xx — today, a follow-up task', '.data | length', 1);
     const followUp = flow.last('.data[0].id');
-    expect(new Date(flow.last('.data[0].due_at')).toISOString(), 'due 11:00 that day').toBe(
-      instantInTimeZone({
-        date: calendarDateInTimeZone({
-          timeZone: midnightZone,
-          at: new Date(nextHour + 5 * 60_000),
-        }),
-        time: '11:00',
-        timeZone: midnightZone,
-      }).toISOString(),
-    );
+    expect(
+      new Date(flow.last('.data[0].due_at')).toISOString(),
+      'due at its follow-up time, 00:05',
+    ).toBe(new Date(nextHour + 5 * 60_000).toISOString());
 
     // Snoozed to the next midnight: a run before it keeps it snoozed; once it has passed, it wakes.
     const nextMidnight = instantInTimeZone({
