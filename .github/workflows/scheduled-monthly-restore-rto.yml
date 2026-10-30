@@ -134,7 +134,10 @@ jobs:
       # signs a new user in and out (src/scripts/ops/db-restore-smoke.ts). Never a test suite: their
       # setup truncates every table, and this branch is a copy of production. TEST_MODE makes
       # send-code return the sign-in code (no CAPTCHA in front of it); the drill user goes when
-      # the branch is deleted.
+      # the branch is deleted. send-code answers 503 until email is configured, so the step carries
+      # the Vitest harness's CI-only fixture key (as the k6 job does), never production's: the
+      # email only lands in the outbox and this runner's Redis — this job runs no worker — so
+      # nothing is sent.
       - name: Restore smoke on restored database
         env:
           DATABASE_URL: ${{ steps.neon_drill.outputs.application_database_url }}
@@ -142,6 +145,8 @@ jobs:
           DATABASE_MIGRATION_URL: ${{ steps.neon_drill.outputs.migration_database_url }}
           TEST_MODE: 'true'
           CAPTCHA_PROVIDER: disabled
+          RESEND_API_KEY: re_test_contract_fixture_key
+          EMAIL_FROM_ADDRESS: noreply@example.com
         run: pnpm db:restore:smoke
 
       - name: Record restore duration and assert RTO

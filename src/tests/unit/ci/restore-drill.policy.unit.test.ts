@@ -200,6 +200,23 @@ describe('restore drill automation policy', () => {
       }
     });
 
+    it('configures mail on the smoke step with the CI-only fixture key, never the production key', () => {
+      // send-code answers 503 until RESEND_API_KEY is set (isMailConfigured checks only that). The
+      // sign-in email lands in the outbox and the runner's Redis, and the drill runs no worker.
+      for (const workflowFileName of drillWorkflowFileNames) {
+        const workflow = readFileSync(join(ROOT, '.github/workflows', workflowFileName), 'utf8');
+        const smokeStep = workflow.slice(
+          workflow.indexOf('- name: Restore smoke on restored database'),
+          workflow.indexOf('run: pnpm db:restore:smoke'),
+        );
+        expect(smokeStep, workflowFileName).toContain(
+          'RESEND_API_KEY: re_test_contract_fixture_key',
+        );
+        expect(smokeStep, workflowFileName).toContain('EMAIL_FROM_ADDRESS: noreply@example.com');
+        expect(workflow, workflowFileName).not.toMatch(/secrets\.RESEND_API_KEY/);
+      }
+    });
+
     it('masks the drill branch URLs and endpoint, and records the branch before anything can fail', () => {
       // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell parameter expansion — not a TS template.
       expect(script).toContain('echo "::add-mask::${database_url}"');
