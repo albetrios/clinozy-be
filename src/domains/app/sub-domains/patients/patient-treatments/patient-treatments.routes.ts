@@ -38,7 +38,7 @@ export function patientTreatmentsRoutes(service: PatientTreatmentsService): Fast
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: "List every patient's treatments",
-          description: `Returns one page of the organization's treatment sessions across patients — a doctor's or a therapist's sessions, with the total count on the first page. ${LIST_FILTERS} \`patient_id\` keeps one patient's. Requires patient_treatment:read.`,
+          description: `Returns one page of the organization's treatment sessions across patients — a doctor's or a therapist's sessions, with the total count on the first page. ${LIST_FILTERS} \`patient_id\` keeps one patient's. \`remark\` is null unless the caller holds patient:clinical_record:read, patient:update or patient_prescription:read (B1-1). Requires patient_treatment:read.`,
           tags: ['Patient file'],
           querystring: listPatientTreatmentsQueryDto,
         },
@@ -53,7 +53,7 @@ export function patientTreatmentsRoutes(service: PatientTreatmentsService): Fast
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: "List a patient's treatments",
-          description: `Returns one page of a patient's treatment sessions. ${LIST_FILTERS} The path's patient wins over \`?patient_id=\` (TR3); a removed or unknown patient is a 404. Requires patient_treatment:read.`,
+          description: `Returns one page of a patient's treatment sessions. ${LIST_FILTERS} The path's patient wins over \`?patient_id=\` (TR3); a removed or unknown patient is a 404. \`remark\` is null unless the caller holds patient:clinical_record:read, patient:update or patient_prescription:read (B1-1). Requires patient_treatment:read.`,
           tags: ['Patient file'],
           params: patientTreatmentsParentParamsDto,
           querystring: listPatientTreatmentsQueryDto,
@@ -87,7 +87,7 @@ export function patientTreatmentsRoutes(service: PatientTreatmentsService): Fast
         schema: {
           summary: 'Get a treatment session',
           description:
-            "Returns one of a patient's sessions with `is_billed` and `latest_check_in` — another patient's is a 404. Requires patient_treatment:read.",
+            "Returns one of a patient's sessions with `is_billed` and `latest_check_in` — another patient's is a 404. `remark` is null unless the caller holds patient:clinical_record:read, patient:update or patient_prescription:read (B1-1). Requires patient_treatment:read.",
           tags: ['Patient file'],
           params: patientTreatmentsIdParamsDto,
         },

@@ -29,6 +29,7 @@ src/
     │   │   ├── integration/
     │   │   │   ├── app-automation.integration.test.ts
     │   │   │   ├── app-branch-access.integration.test.ts
+    │   │   │   ├── app-clinical-access.integration.test.ts
     │   │   │   ├── app-races.integration.test.ts
     │   │   │   ├── app-read-only-mode.integration.test.ts
     │   │   │   ├── app-record-lifecycle.integration.test.ts

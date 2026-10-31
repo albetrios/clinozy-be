@@ -13,7 +13,8 @@ export interface PatientCheckInOutput {
   patient_id: string;
   appointment_id: string | null;
   patient_treatment_id: string | null;
-  context: string;
+  /** Clinical text — null to a caller who may not see a patient's medical details (B1-1), like the three below */
+  context: string | null;
   feel: string;
   score: number;
   score_change: number | null;
