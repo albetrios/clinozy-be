@@ -3034,6 +3034,7 @@ src/
     │   ├── database/
     │   │   ├── constraint-validation.integration.test.ts
     │   │   ├── database-constraints.integration.test.ts
+    │   │   ├── database-error-redaction.integration.test.ts
     │   │   ├── database-pool-priming.integration.test.ts
     │   │   ├── index-hygiene.integration.test.ts
     │   │   ├── migration-rollback.integration.test.ts

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { DrizzleQueryError } from 'drizzle-orm';
 import {
   isSensitiveKey,
+  listDatabaseErrorMessages,
   redactSensitive,
+  sanitizeDatabaseError,
   redactSensitiveQueryString,
   redactSensitiveUrl,
   SENSITIVE_KEY_FRAGMENTS,
@@ -243,5 +246,121 @@ describe('redactSensitiveUrl — relative paths', () => {
     expect(redactSensitiveUrl('/v1/callback?token=abc&id=1')).toBe(
       `/v1/callback?token=${SENSITIVE_REDACTION_PLACEHOLDER}&id=1`,
     );
+  });
+});
+
+/**
+ * C-1 — Drizzle's `Failed query: <sql>\nparams: <values>` and the driver error's row `detail`
+ * carry patient data; key-based redaction cannot see a value, so database failures are reduced to
+ * `{ name, code, constraint, table }` before they reach a log, Sentry or the dead-letter ledger.
+ */
+describe('sanitizeDatabaseError', () => {
+  const boundValue = 'Priya Sharma, +91 98200 00000';
+
+  function foreignKeyViolation(): Error {
+    const driverError = Object.assign(new Error('insert violates foreign key constraint'), {
+      code: '23503',
+      severity: 'ERROR',
+      constraint: 'patients_branch_id_fkey',
+      table: 'patients',
+      detail: `Failing row contains (17, ${boundValue}).`,
+    });
+    return new DrizzleQueryError(
+      'insert into "app"."patients" ("name", "branch_id") values ($1, $2)',
+      [boundValue, 99],
+      driverError,
+    );
+  }
+
+  it('keeps only the code, constraint and table of a Drizzle-wrapped server error', () => {
+    const sanitized = sanitizeDatabaseError(foreignKeyViolation()) as Error &
+      Record<string, unknown>;
+
+    expect(sanitized.name).toBe('DatabaseQueryError');
+    expect(sanitized.message).toBe(
+      'Database query failed (SQLSTATE 23503, constraint patients_branch_id_fkey, table patients)',
+    );
+    expect({ ...sanitized }).toEqual({
+      code: '23503',
+      constraint: 'patients_branch_id_fkey',
+      table: 'patients',
+    });
+    expect(sanitized.cause).toBeUndefined();
+    expect(sanitized.stack).toMatch(/^DatabaseQueryError: Database query failed \(SQLSTATE 23503/);
+    expect(sanitized.stack).toContain('\n    at ');
+    expect(JSON.stringify([sanitized.message, sanitized.stack])).not.toContain('Priya');
+  });
+
+  it('reduces a bare node-postgres DatabaseError (its message can quote an input value)', () => {
+    const driverError = Object.assign(
+      new Error('value "99999999999" is out of range for type integer'),
+      {
+        code: '22003',
+        severity: 'ERROR',
+      },
+    );
+    const sanitized = sanitizeDatabaseError(driverError) as Error;
+
+    expect(sanitized.message).toBe('Database query failed (SQLSTATE 22003)');
+    expect(sanitized.stack).not.toContain('99999999999');
+  });
+
+  it('names a client-side failure under a Drizzle wrapper and keeps it as the cause', () => {
+    const dropped = new Error('Connection terminated unexpectedly');
+    const sanitized = sanitizeDatabaseError(
+      new DrizzleQueryError('select 1 where id = $1', [boundValue], dropped),
+    ) as Error;
+
+    expect(sanitized.message).toBe('Database query failed: Connection terminated unexpectedly');
+    expect(sanitized.cause).toBe(dropped);
+    expect(sanitized.message).not.toContain('Priya');
+  });
+
+  it('returns any other value unchanged', () => {
+    const error = new Error('plain');
+    expect(sanitizeDatabaseError(error)).toBe(error);
+    expect(sanitizeDatabaseError('text')).toBe('text');
+    // A socket code is not a SQLSTATE: not a server error.
+    const socketError = Object.assign(new Error('reset'), { code: 'ECONNRESET' });
+    expect(sanitizeDatabaseError(socketError)).toBe(socketError);
+  });
+
+  it('is what redactSensitive does to a database failure anywhere in a log object', () => {
+    const redacted = redactSensitive({
+      error: foreignKeyViolation(),
+      nested: { cause: foreignKeyViolation() },
+    });
+
+    expect(redacted.error).toMatchObject({ code: '23503', table: 'patients' });
+    expect(redacted.error.message).toMatch(/^Database query failed/);
+    expect(JSON.stringify(redacted)).not.toContain('Priya');
+  });
+
+  it('scrubs Drizzle query text from plain strings — a logged message, a stack, a cut-short value', () => {
+    const error = foreignKeyViolation();
+    const cutShort = `${error.message.slice(0, 40)}...`;
+
+    expect(redactSensitive(error.message)).toBe('Database query failed');
+    expect(redactSensitive(error.stack)).toContain('Database query failed');
+    expect(redactSensitive(`job failed: ${cutShort}`)).toBe('job failed: Database query failed');
+    expect(redactSensitive(String(error.stack))).not.toContain('Priya');
+  });
+
+  it('lists each database failure on a cause chain with its sanitized message', () => {
+    const error = foreignKeyViolation();
+    const wrapped = new Error('unit of work failed', { cause: error });
+
+    expect(listDatabaseErrorMessages(wrapped)).toEqual([
+      {
+        message: error.message,
+        sanitizedMessage:
+          'Database query failed (SQLSTATE 23503, constraint patients_branch_id_fkey, table patients)',
+      },
+      {
+        message: 'insert violates foreign key constraint',
+        sanitizedMessage:
+          'Database query failed (SQLSTATE 23503, constraint patients_branch_id_fkey, table patients)',
+      },
+    ]);
   });
 });

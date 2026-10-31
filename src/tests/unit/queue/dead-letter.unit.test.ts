@@ -329,6 +329,61 @@ describe('dead-letter helpers', () => {
       expect(sentryCaptureExceptionMock).toHaveBeenCalledWith(finalError);
     });
 
+    it('C-1: stores, logs and reports a database failure without its statement or bound values', async () => {
+      const { attachDeadLetterAndAlerting } = await import(
+        '@/infrastructure/queue/dlq/dead-letter.js'
+      );
+      const { DrizzleQueryError } = await import('drizzle-orm');
+      const { logger } = await import('@/shared/utils/infrastructure/logger.util.js');
+      const errorSpy = vi.spyOn(logger, 'error');
+      const fakeWorker = new EventEmitter() as unknown as Worker;
+      attachDeadLetterAndAlerting({ worker: fakeWorker, queueName: 'notification' });
+
+      const driverError = Object.assign(new Error('insert or update violates foreign key'), {
+        code: '23503',
+        severity: 'ERROR',
+        constraint: 'notes_patient_id_fkey',
+        table: 'patient_notes',
+        detail: 'Key (patient_id)=(4711) is not present in table "patients".',
+      });
+      const finalError = new DrizzleQueryError(
+        'insert into "app"."patient_notes" ("patient_id", "body") values ($1, $2)',
+        [4711, 'Priya Sharma, +91 98200 00000, diabetic'],
+        driverError,
+      );
+      const job = {
+        id: 'job-c1',
+        name: 'dispatch-notification',
+        data: {},
+        attemptsMade: 3,
+        opts: { attempts: 3 },
+      } as Job;
+
+      fakeWorker.emit('failed', job, finalError, 'active');
+
+      await vi.waitFor(() => {
+        expect(insertDeadLetterJobMock).toHaveBeenCalledTimes(1);
+        expect(queueAddMock).toHaveBeenCalledTimes(1);
+      });
+      const stored = JSON.stringify([
+        insertDeadLetterJobMock.mock.calls[0]![0],
+        queueAddMock.mock.calls[0]![1],
+        errorSpy.mock.calls.map(([fields]) => fields),
+      ]);
+      const reported = sentryCaptureExceptionMock.mock.calls[0]![0] as Error;
+      for (const surface of [stored, reported.message, reported.stack ?? '']) {
+        expect(surface).not.toContain('Priya Sharma');
+        expect(surface).not.toContain('4711');
+        expect(surface).not.toContain('params:');
+      }
+      expect(insertDeadLetterJobMock.mock.calls[0]![0]).toMatchObject({
+        failed_reason:
+          'Database query failed (SQLSTATE 23503, constraint notes_patient_id_fkey, table patient_notes)',
+      });
+      expect(reported).toMatchObject({ code: '23503', constraint: 'notes_patient_id_fkey' });
+      errorSpy.mockRestore();
+    });
+
     it('still mirrors to Redis after a Postgres persist failure is captured to Sentry', async () => {
       const persistError = new Error('postgres-down');
       insertDeadLetterJobMock.mockRejectedValueOnce(persistError);

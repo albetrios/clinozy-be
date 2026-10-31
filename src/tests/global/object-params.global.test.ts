@@ -37,6 +37,8 @@ const FRAMEWORK_DICTATED = new Set([
   // Fastify onSend hooks registered by reference: (request, reply, payload)
   'src/shared/middlewares/core/idempotency.middleware.ts#idempotencyOnSend',
   'src/shared/middlewares/core/request-lifecycle.middleware.ts#finalizeWhenTheClientLeaves',
+  // Sentry's beforeSend(event, hint)
+  'src/infrastructure/observability/sentry/sentry.ts#beforeSend',
   // @fastify/rate-limit onExceeded(request, key)
   'src/shared/middlewares/rate-limit/rate-limit-presets.constants.ts#recordRouteRateLimitExceeded',
   'src/shared/middlewares/rate-limit/rate-limit.middleware.ts#recordGlobalRateLimitExceeded',

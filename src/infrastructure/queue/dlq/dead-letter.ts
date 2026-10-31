@@ -15,7 +15,19 @@ import { insertDeadLetterJob } from '@/infrastructure/queue/dlq/dead-letter.repo
 import { MILLISECONDS_PER_SECOND, THIRTY_DAYS_SECONDS } from '@/shared/constants/ttl.constants.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
-import { redactSensitive } from '@/shared/utils/security/sensitive-redaction.util.js';
+import {
+  redactSensitive,
+  sanitizeDatabaseError,
+} from '@/shared/utils/security/sensitive-redaction.util.js';
+
+/**
+ * The failure as it may be stored or reported: an `Error` (a thrown non-error is wrapped) with
+ * its message and stack redacted — a database failure reduced to `{ name, code, constraint,
+ * table }` (C-1), URL/query secrets scrubbed (audit-#W2).
+ */
+function toStorableError(error: unknown): Error {
+  return redactSensitive(error instanceof Error ? error : new Error(String(error)));
+}
 
 /** Suffix appended to a source queue name to derive its dead-letter queue (`<source>-dlq`). */
 export const DLQ_QUEUE_SUFFIX = '-dlq';
@@ -254,7 +266,7 @@ export async function enqueueDeadLetter({
     );
     return;
   }
-  const errorObject = error instanceof Error ? error : new Error(String(error));
+  const errorObject = toStorableError(error);
   const maxAttempts = resolveJobMaxAttempts(job);
 
   const data: DeadLetterJobData = omitUndefined({
@@ -263,11 +275,11 @@ export async function enqueueDeadLetter({
     original_job_name: job.name,
     original_data_summary: summarizeJobDataForDeadLetter(job.data),
     replay_depth: readReplayDepth(job.data),
-    // audit-#W2: scrub URL/query-embedded secrets from the free-text error fields before they land
-    // in the 30-day Redis mirror, mirroring the Sentry `beforeSend` path (payload_summary is already
-    // whitelisted). Latent today, but a future error message interpolating a token must not persist.
-    failed_reason: redactSensitive(errorObject.message),
-    error_stack: redactSensitive(errorObject.stack),
+    // audit-#W2 + C-1: the free-text error fields are redacted before they land in the 30-day
+    // Redis mirror, as on the Sentry `beforeSend` path (payload_summary is already whitelisted): no
+    // URL/query secret, and no database statement, bound value or row detail (`toStorableError`).
+    failed_reason: errorObject.message,
+    error_stack: errorObject.stack,
     attempts_made: job.attemptsMade,
     max_attempts: maxAttempts,
     failed_at: new Date().toISOString(),
@@ -313,7 +325,7 @@ async function persistDeadLetterFailureToPostgres({
   job: Job;
   error: unknown;
 }): Promise<void> {
-  const errorObject = error instanceof Error ? error : new Error(String(error));
+  const errorObject = toStorableError(error);
   const maxAttempts = resolveJobMaxAttempts(job);
 
   try {
@@ -323,9 +335,9 @@ async function persistDeadLetterFailureToPostgres({
       job_id: job.id ?? null,
       job_name: job.name,
       payload_summary: summarizeJobDataForDeadLetter(job.data),
-      // audit-#W2: same value-level redaction for the durable Postgres ledger.
-      failed_reason: redactSensitive(errorObject.message),
-      error_stack: redactSensitive(errorObject.stack ?? null),
+      // audit-#W2 + C-1: same redaction for the durable Postgres ledger (`toStorableError`).
+      failed_reason: errorObject.message,
+      error_stack: errorObject.stack ?? null,
       attempts_made: job.attemptsMade,
       max_attempts: maxAttempts,
       failed_at: new Date(),
@@ -417,7 +429,10 @@ function captureFinalFailureInSentry({
 }): void {
   if (!isSentryInitialized()) return;
 
-  const errorObject = error instanceof Error ? error : new Error(String(error));
+  // C-1: a database failure leaves as `{ name, code, constraint, table }` — no statement or values.
+  const errorObject = sanitizeDatabaseError(
+    error instanceof Error ? error : new Error(String(error)),
+  ) as Error;
 
   Sentry.withScope((scope) => {
     scope.setLevel('error');
@@ -441,7 +456,10 @@ function captureDeadLetterPersistFailureInSentry({
 }): void {
   if (!isSentryInitialized()) return;
 
-  const errorObject = error instanceof Error ? error : new Error(String(error));
+  // C-1: a database failure leaves as `{ name, code, constraint, table }` — no statement or values.
+  const errorObject = sanitizeDatabaseError(
+    error instanceof Error ? error : new Error(String(error)),
+  ) as Error;
 
   Sentry.withScope((scope) => {
     scope.setLevel('error');
@@ -479,7 +497,7 @@ export function attachDeadLetterAndAlerting({
   queueName: string;
 }): void {
   worker.on('failed', (job, error) => {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = toStorableError(error).message;
 
     if (!job) {
       logger.error({ queue: queueName, error: errorMessage }, 'queue.job.failed_without_job');

@@ -7,6 +7,8 @@
  * regardless of nesting depth or header casing.
  *
  * String values that look like URLs or query strings have sensitive parameter values scrubbed.
+ * A database failure (Drizzle's `Failed query: … params: …`, a node-postgres `DatabaseError` and
+ * its row `detail`) is reduced to `{ name, code, constraint, table }` ({@link sanitizeDatabaseError}).
  * Returns a redacted deep copy — never mutates the input. Cyclic references are tracked via
  * WeakMap so the original object graph is never returned from a cycle or depth boundary.
  */
@@ -139,7 +141,156 @@ export function redactSensitiveUrl(url: string): string {
   }
 }
 
-function redactSensitiveString(value: string): string {
+/** Name of the error {@link sanitizeDatabaseError} returns in place of a database failure. */
+export const DATABASE_QUERY_ERROR_NAME = 'DatabaseQueryError';
+
+/** What a database failure says once its query, bound values and row detail are withheld. */
+const DATABASE_QUERY_FAILED_MESSAGE = 'Database query failed';
+
+/**
+ * Drizzle's `DrizzleQueryError` message — `Failed query: <sql>\nparams: <bound values>` — up to the
+ * first stack frame or the end of the string. A Sentry value cut short before `params:` still
+ * matches, so no part of the statement or its values survives.
+ */
+const DRIZZLE_QUERY_ERROR_MESSAGE_PATTERN = /Failed query: [\s\S]*?(?=\n\s+at |$)/g;
+
+/**
+ * Replaces any Drizzle `Failed query: … params: …` text inside `value` (an error message, a stack,
+ * a log line) with {@link DATABASE_QUERY_FAILED_MESSAGE}.
+ */
+function redactDatabaseQueryErrorText(value: string): string {
+  if (!value.includes('Failed query: ')) return value;
+  return value.replace(DRIZZLE_QUERY_ERROR_MESSAGE_PATTERN, `${DATABASE_QUERY_FAILED_MESSAGE}`);
+}
+
+/**
+ * True for Drizzle's `DrizzleQueryError` — the wrapper whose message, `query` and `params` carry the
+ * statement and every bound value. Duck-typed (own `query` + `params`, the `Failed query:` message)
+ * so a second copy of `drizzle-orm` in the tree is still recognised.
+ */
+function isDrizzleQueryError(value: Error): boolean {
+  const candidate = value as Error & { query?: unknown };
+  return (
+    typeof candidate.query === 'string' &&
+    Object.hasOwn(candidate, 'params') &&
+    candidate.message.startsWith('Failed query: ')
+  );
+}
+
+/**
+ * True for node-postgres's `DatabaseError` — a server-side failure: a five-character SQLSTATE `code`
+ * plus a `severity`. Its `detail` quotes key values or the whole failing row, and its message can
+ * quote an input value (`22P02`, `22003`).
+ */
+function isPostgresServerError(value: unknown): value is Error & {
+  code: string;
+  constraint?: unknown;
+  table?: unknown;
+} {
+  if (!(value instanceof Error)) return false;
+  const { code, severity } = value as Error & { code?: unknown; severity?: unknown };
+  return typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) && typeof severity === 'string';
+}
+
+/** The stack frames of `error` (its `name: message` header removed), or `undefined`. */
+function stackFramesOf(error: Error): string | undefined {
+  if (typeof error.stack !== 'string') return undefined;
+  const header = `${error.name}: ${error.message}`;
+  return error.stack.startsWith(header) ? error.stack.slice(header.length) : undefined;
+}
+
+/**
+ * Replaces a database failure — Drizzle's `DrizzleQueryError` or node-postgres's `DatabaseError` —
+ * with an error that names only what failed: `{ name, code, constraint, table }`. Anything else is
+ * returned unchanged.
+ *
+ * @remarks
+ * - **Algorithm:** finds the Postgres server error (the input, or a Drizzle wrapper's `cause`) and
+ *   copies its SQLSTATE `code`, `constraint` and `table` onto a new `DatabaseQueryError` whose
+ *   message is `Database query failed (SQLSTATE …, constraint …, table …)`. The original stack
+ *   frames are kept (they are file paths); the header line that quoted the statement is rewritten.
+ *   A Drizzle wrapper around a client-side failure (a dropped connection, a read timeout) keeps
+ *   that failure as its `cause` and names it in the message — it carries no bound value, and
+ *   `isTransientConnectionError` still reads it.
+ * - **Failure modes:** none.
+ * - **Side effects:** none — returns a new error; the input is not touched.
+ * - **Notes:** C-1 — Drizzle 0.45 throws `Failed query: <sql>\nparams: <values>` and keeps
+ *   `query` / `params` on the error; the driver error's `detail` quotes key values or the whole
+ *   failing row (a patient's name, phone, notes). Key-based redaction cannot see a value, so every
+ *   place an error leaves the process — the logger, Sentry, the dead-letter ledger — goes through
+ *   this. `code`, `constraint` and `table` stay so `postgres-error.util.ts` keeps classifying it.
+ */
+export function sanitizeDatabaseError(error: unknown): unknown {
+  if (!(error instanceof Error)) return error;
+  const drizzleQueryError = isDrizzleQueryError(error);
+  if (!(drizzleQueryError || isPostgresServerError(error))) return error;
+
+  const cause = drizzleQueryError ? error.cause : error;
+  const serverError = isPostgresServerError(cause) ? cause : undefined;
+  const clientFailure = serverError === undefined && cause instanceof Error ? cause : undefined;
+
+  const fields: { code?: string; constraint?: string; table?: string } = {};
+  if (serverError) {
+    fields.code = serverError.code;
+    if (typeof serverError.constraint === 'string') fields.constraint = serverError.constraint;
+    if (typeof serverError.table === 'string') fields.table = serverError.table;
+  }
+  const described = [
+    fields.code ? `SQLSTATE ${fields.code}` : undefined,
+    fields.constraint ? `constraint ${fields.constraint}` : undefined,
+    fields.table ? `table ${fields.table}` : undefined,
+  ].filter((part) => part !== undefined);
+  let message = DATABASE_QUERY_FAILED_MESSAGE;
+  if (described.length > 0) message = `${message} (${described.join(', ')})`;
+  else if (clientFailure) message = `${message}: ${clientFailure.message}`;
+
+  const sanitized = new Error(message);
+  Object.defineProperty(sanitized, 'name', {
+    value: DATABASE_QUERY_ERROR_NAME,
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  });
+  Object.assign(sanitized, fields);
+  if (clientFailure) {
+    Object.defineProperty(sanitized, 'cause', {
+      value: clientFailure,
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  const frames = stackFramesOf(error);
+  if (frames === undefined) {
+    delete (sanitized as { stack?: string }).stack;
+  } else {
+    sanitized.stack = `${DATABASE_QUERY_ERROR_NAME}: ${message}${frames}`;
+  }
+  return sanitized;
+}
+
+/**
+ * Each database failure on `error`'s `cause` chain, as its original message and the message
+ * {@link sanitizeDatabaseError} gives it — for surfaces that copied the message out as text before
+ * the error could be sanitized (a Sentry event's `exception.values`).
+ */
+export function listDatabaseErrorMessages(
+  error: unknown,
+): { message: string; sanitizedMessage: string }[] {
+  const messages: { message: string; sanitizedMessage: string }[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < MAX_REDACTION_DEPTH && current instanceof Error; depth += 1) {
+    const sanitized = sanitizeDatabaseError(current);
+    if (sanitized !== current) {
+      messages.push({ message: current.message, sanitizedMessage: (sanitized as Error).message });
+    }
+    current = current.cause;
+  }
+  return messages;
+}
+
+function redactSensitiveString(input: string): string {
+  const value = redactDatabaseQueryErrorText(input);
   if (looksLikeUrl(value)) {
     return redactSensitiveUrl(value);
   }
@@ -172,6 +323,16 @@ function redactError({ input, context }: { input: Error; context: RedactionConte
   const existingError = context.visited.get(input);
   if (existingError !== undefined) {
     return existingError as Error;
+  }
+  // C-1: a database failure is first reduced to what failed — no statement, values or row detail.
+  const sanitizedDatabaseError = sanitizeDatabaseError(input);
+  if (sanitizedDatabaseError !== input) {
+    const redactedDatabaseError = redactError({
+      input: sanitizedDatabaseError as Error,
+      context,
+    });
+    context.visited.set(input, redactedDatabaseError);
+    return redactedDatabaseError;
   }
 
   const redactedMessage = redactSensitiveString(input.message);

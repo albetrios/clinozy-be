@@ -3,7 +3,11 @@ import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { env } from '@/shared/config/env.config.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
-import { redactSensitive } from '@/shared/utils/security/sensitive-redaction.util.js';
+import {
+  listDatabaseErrorMessages,
+  redactSensitive,
+  sanitizeDatabaseError,
+} from '@/shared/utils/security/sensitive-redaction.util.js';
 import {
   PRODUCTION_PROFILE_SESSION_SAMPLE_RATE,
   PRODUCTION_TRACES_SAMPLE_RATE,
@@ -59,6 +63,40 @@ function redactSentryRequestInPlace(request: NonNullable<Sentry.ErrorEvent['requ
   delete request.query_string;
   if (request.url !== undefined) {
     request.url = urlWithoutQueryAndFragment(request.url);
+  }
+}
+
+/**
+ * Replaces, in place, the exception values that quote a database failure on
+ * `hint.originalException`'s cause chain — the Drizzle wrapper and the driver error the
+ * linked-errors integration adds from its `cause` — with their sanitized messages (C-1).
+ *
+ * @remarks
+ * - **Algorithm:** {@link listDatabaseErrorMessages} gives each database failure's original and
+ *   sanitized message; a value equal to an original, or a prefix Sentry cut it down to (`...`
+ *   stripped), becomes the sanitized one.
+ * - **Failure modes:** none — an event without a database failure is left as it is.
+ * - **Side effects:** mutates `event.exception.values`.
+ * - **Notes:** runs in `beforeSend` before {@link redactSentryEvent}, whose string scrub also
+ *   replaces any Drizzle `Failed query: … params: …` text it meets without a hint. A driver message
+ *   can quote an input value (`22P02`, `22003`), which only the hint can recognise.
+ */
+export function redactSentryDatabaseExceptionValues({
+  event,
+  hint,
+}: {
+  event: Sentry.ErrorEvent;
+  hint: Sentry.EventHint | undefined;
+}): void {
+  const databaseErrorMessages = listDatabaseErrorMessages(hint?.originalException);
+  if (databaseErrorMessages.length === 0 || !event.exception?.values) return;
+  for (const value of event.exception.values) {
+    if (typeof value.value !== 'string') continue;
+    const shown = value.value.replace(/\.\.\.$/, '');
+    const databaseError = databaseErrorMessages.find(
+      ({ message }) => message === value.value || message.startsWith(shown),
+    );
+    if (databaseError) value.value = databaseError.sanitizedMessage;
   }
 }
 
@@ -202,7 +240,8 @@ export function initSentry(): void {
     },
 
     // ── Privacy / noise filters ─────────────────────────────────────
-    beforeSend(event) {
+    beforeSend(event, hint) {
+      redactSentryDatabaseExceptionValues({ event, hint });
       return redactSentryEvent(event);
     },
 
@@ -276,7 +315,8 @@ export function captureException({
         scope.setTag(key, value);
       }
     }
-    Sentry.captureException(error);
+    // C-1: a database failure leaves as `{ name, code, constraint, table }` — no statement or values.
+    Sentry.captureException(sanitizeDatabaseError(error));
   });
 }
 

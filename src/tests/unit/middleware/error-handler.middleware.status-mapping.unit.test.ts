@@ -96,6 +96,17 @@ async function createApp(): Promise<FastifyInstance> {
     throw Object.assign(new Error('Failed query'), { cause: driverError });
   });
 
+  // C-1: a Drizzle-wrapped driver error for each SQLSTATE the handler answers as a client error.
+  app.get('/postgres/:code', async (request) => {
+    const { code } = request.params as { code: string };
+    const driverError = Object.assign(new Error('driver failure'), { code, severity: 'ERROR' });
+    throw Object.assign(new Error('Failed query: insert …\nparams: secret'), {
+      query: 'insert …',
+      params: ['secret'],
+      cause: driverError,
+    });
+  });
+
   app.get('/unhandled', async () => {
     throw new Error('unexpected');
   });
@@ -323,6 +334,29 @@ describe('error-handler.middleware status + body mapping', () => {
       expect(response.statusCode).toBe(409);
       expect(response.json().error.code).toBe('conflict');
       expect(mockedCaptureException).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['23503', 409, 'conflict', 'errors:databaseReferenceConflict'],
+      ['23514', 422, 'unprocessable_entity', 'errors:databaseCheckViolation'],
+      ['22003', 422, 'unprocessable_entity', 'errors:databaseNumericOutOfRange'],
+      ['40P01', 409, 'conflict', 'errors:resourceBusy'],
+      ['40001', 409, 'conflict', 'errors:resourceBusy'],
+    ])(
+      'maps Postgres %s to %i, not a masked 500 captured to Sentry (C-1)',
+      async (code, status, errorCode, messageKey) => {
+        const response = await app.inject({ method: 'GET', url: `/postgres/${code}` });
+
+        expect(response.statusCode).toBe(status);
+        expect(response.json().error.code).toBe(errorCode);
+        expect(response.json().error.detail).toBe(`translated:${messageKey}`);
+        expect(mockedCaptureException).not.toHaveBeenCalled();
+      },
+    );
+
+    it('still answers an unlisted Postgres error (23505 reaching the handler) with a 500', async () => {
+      const response = await app.inject({ method: 'GET', url: '/postgres/23505' });
+      expect(response.statusCode).toBe(500);
     });
 
     it('maps a plain unhandled error to a masked 500 internal_error and captures it', async () => {
