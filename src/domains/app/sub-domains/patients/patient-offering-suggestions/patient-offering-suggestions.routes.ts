@@ -106,7 +106,7 @@ export function patientOfferingSuggestionsRoutes(
         schema: {
           summary: 'Remove from the plan',
           description:
-            "Removes a plan row with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other (PK10). Restorable until the organization's purge window ends (D38). Requires patient:update.",
+            'Removes a plan row with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other (PK10). Restorable at any time — a clinical record is never purged (G2-4). Requires patient:update.',
           tags: ['Patient file'],
           params: patientOfferingSuggestionsIdParamsDto,
           querystring: recordDeleteQuerySchema,

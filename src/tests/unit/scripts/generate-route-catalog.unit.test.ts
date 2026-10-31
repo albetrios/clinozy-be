@@ -115,4 +115,14 @@ describe('generate-route-catalog', () => {
     expect(paths).toContain('GET /internal/ops/circuit-breakers');
     expect(routes.length).toBeGreaterThan(100);
   });
+
+  it("reads a file's last route to its close — a long preHandler list keeps its idempotency flag", () => {
+    const restore = collectAllParsedRoutes().find(
+      (route) =>
+        route.method === 'POST' &&
+        route.fullPath ===
+          '/api/v1/app/patients/:patient_id/clinical-notes/:patient_clinical_note_id/restore',
+    );
+    expect(restore?.idempotencyRequired).toBe(true);
+  });
 });

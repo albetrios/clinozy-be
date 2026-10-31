@@ -114,7 +114,7 @@ export function medicalSalesRoutes(service: MedicalSalesService): FastifyPluginA
         schema: {
           summary: 'Void a medical sale',
           description:
-            "Voids a sale with nothing paid and nothing returned — something paid (or credited) is a 409 `sale_has_payments`, a return a 409 `sale_has_returns` — with why: `reason` (billed_by_mistake, wrong_items, customer_changed_mind, other) and a `note`, required for other. Each line goes back into its batch and the invoice is deleted. Undo with restore until the organization's purge window ends. Requires medicine:delete.",
+            'Voids a sale with nothing paid and nothing returned — something paid (or credited) is a 409 `sale_has_payments`, a return a 409 `sale_has_returns` — with why: `reason` (billed_by_mistake, wrong_items, customer_changed_mind, other) and a `note`, required for other. Each line goes back into its batch and the invoice is deleted. Undo with restore at any time — a financial record is never purged (G2-4). Requires medicine:delete.',
           tags: ['Medical store'],
           params: medicalSalesIdParamsDto,
           querystring: voidMedicalSaleQueryDto,

@@ -9,7 +9,8 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 
 /**
  * Erases deleted app records for good once their organization's restore window has passed
- * (WC-46, D38) — every `app.*` table, children before parents.
+ * (WC-46, D38) — every purged `app.*` table, children before parents; never a clinical or a
+ * financial one (`APP_RECORD_KEPT_TABLES`, G2-4).
  *
  * @remarks
  * - **Algorithm:** for each table of {@link APP_RECORD_TABLES}, batch-deletes the rows whose

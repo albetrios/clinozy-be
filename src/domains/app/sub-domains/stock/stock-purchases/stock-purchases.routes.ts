@@ -112,7 +112,7 @@ export function stockPurchasesRoutes(service: StockPurchasesService): FastifyPlu
         schema: {
           summary: 'Delete a stock purchase',
           description:
-            "Deletes an unpaid purchase (anything paid is a 409 `purchase_paid`) with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. What it received is taken back with `reverted` movements — some used since is a 409 `not_enough_stock` (its detail names what is left, in English with the unit; read the item for the live quantity). Restorable until the organization's purge window ends. Requires stock_item:delete.",
+            'Deletes an unpaid purchase (anything paid is a 409 `purchase_paid`) with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. What it received is taken back with `reverted` movements — some used since is a 409 `not_enough_stock` (its detail names what is left, in English with the unit; read the item for the live quantity). Restorable at any time — a financial record is never purged (G2-4). Requires stock_item:delete.',
           tags: ['Stock'],
           params: stockPurchasesIdParamsDto,
           querystring: recordDeleteQuerySchema,

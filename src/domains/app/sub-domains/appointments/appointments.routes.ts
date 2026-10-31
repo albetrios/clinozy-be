@@ -146,7 +146,7 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
         schema: {
           summary: 'Delete appointment',
           description:
-            "Soft-deletes a booking with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Its slot is free again; with no other scheduled or confirmed booking left, the contact's `appointment_scheduled` lead goes back to `follow_up`, its follow-up date now (L11). Restorable until the organization's purge window ends (D38). Requires appointment:delete.",
+            "Soft-deletes a booking with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Its slot is free again; with no other scheduled or confirmed booking left, the contact's `appointment_scheduled` lead goes back to `follow_up`, its follow-up date now (L11). Restorable at any time — a clinical record is never purged (G2-4). Requires appointment:delete.",
           tags: ['Appointment'],
           params: appointmentsIdParamsDto,
           querystring: recordDeleteQuerySchema,

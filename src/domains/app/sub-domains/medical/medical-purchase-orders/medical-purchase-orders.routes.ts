@@ -158,7 +158,7 @@ export function medicalPurchaseOrdersRoutes(
         schema: {
           summary: 'Cancel a medical purchase order',
           description:
-            "Cancels an order not yet received (a received one is a 409 `transition_not_allowed`), with why: `reason` (mistake, supplier_cant_deliver, price_changed, other) and a `note`, required for other. Undo with restore until the organization's purge window ends. Requires medicine:delete.",
+            'Cancels an order not yet received (a received one is a 409 `transition_not_allowed`), with why: `reason` (mistake, supplier_cant_deliver, price_changed, other) and a `note`, required for other. Undo with restore at any time — a financial record is never purged (G2-4). Requires medicine:delete.',
           tags: ['Medical store'],
           params: medicalPurchaseOrdersIdParamsDto,
           querystring: cancelMedicalPurchaseOrderQueryDto,

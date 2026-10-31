@@ -56,7 +56,12 @@ care, in the nested sub-domains below. **The person lives on the contact** (P1, 
   patient does so `ON DELETE RESTRICT`.
 - **The clinical gates (P14):** clinical notes, photos and reports are read with
   `patient:clinical_record:read` and written with `patient:update` and it; a private photo also
-  needs `patient:private_album:read` (P23).
+  needs `patient:private_album:read` (P23). Deleting or restoring a clinical note, photo, report or
+  check-in also needs `patient:delete` — Owner and Admin, like every other delete (D12, B1-2).
+- **Clinical records are never purged (G2-4):** the visit, clinical notes, diagnoses,
+  prescriptions, photos, reports, check-ins and the treatment plan are kept for good once deleted —
+  `APP_RECORD_KEPT_TABLES`, out of the purge like the file itself; the clinic's
+  `deleted_record_purge_days` does not apply to them.
 - **Medical details unless clinical (launch D83 (3)):** a file's `allergies`, `contraindications`
   and `notes` are `null` on every answer (the list, the file, the create / change / restore
   answers; the export's cells blank) unless the caller holds `patient:clinical_record:read`,

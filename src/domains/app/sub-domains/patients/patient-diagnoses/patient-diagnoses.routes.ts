@@ -100,7 +100,7 @@ export function patientDiagnosesRoutes(service: PatientDiagnosesService): Fastif
         schema: {
           summary: 'Delete a diagnosis',
           description:
-            "Removes a diagnosis from the catalogue with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other — the notes that named it keep their text. Restorable until the organization's purge window ends (D38). Requires patient_prescription:delete.",
+            'Removes a diagnosis from the catalogue with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other — the notes that named it keep their text. Restorable at any time — a clinical record is never purged (G2-4). Requires patient_prescription:delete.',
           tags: ['Patient file'],
           params: patientDiagnosesIdParamsDto,
           querystring: recordDeleteQuerySchema,

@@ -250,7 +250,7 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Update organization settings',
           description:
-            'Updates organization settings — notifications, locale, security policy and the operating settings. Requires ORGANIZATION_UPDATE permission.',
+            'Updates organization settings — notifications, locale, security policy and the operating settings. `deleted_record_purge_days` (1–90) is how long a deleted app record stays restorable before the daily purge erases it — never a clinical or a financial record, which is kept for good. Requires ORGANIZATION_UPDATE permission.',
           tags: ['Organization Settings'],
           body: updateOrganizationSettingsDto,
         },

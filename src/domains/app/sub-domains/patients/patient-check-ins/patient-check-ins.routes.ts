@@ -98,12 +98,15 @@ export function patientCheckInsRoutes(service: PatientCheckInsService): FastifyP
       '/patients/:patient_id/check-ins/:patient_check_in_id',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE)],
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_DELETE),
+        ],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Delete a check-in',
           description:
-            "Deletes a check-in with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Restorable until the organization's purge window ends (D38). Requires patient:update.",
+            'Deletes a check-in with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Restorable at any time — a clinical record is never purged (G2-4). Requires patient:update and patient:delete (B1-2).',
           tags: ['Patient file'],
           params: patientCheckInsIdParamsDto,
           querystring: recordDeleteQuerySchema,
@@ -115,12 +118,15 @@ export function patientCheckInsRoutes(service: PatientCheckInsService): FastifyP
       '/patients/:patient_id/check-ins/:patient_check_in_id/restore',
       {
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE)],
+        preHandler: [
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_DELETE),
+        ],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Restore a check-in',
           description:
-            "Undoes a check-in's delete. A live check-in is a 409 `record_not_deleted`. Requires patient:update.",
+            "Undoes a check-in's delete. A live check-in is a 409 `record_not_deleted`. Requires patient:update and patient:delete (B1-2).",
           tags: ['Patient file'],
           params: patientCheckInsIdParamsDto,
         },

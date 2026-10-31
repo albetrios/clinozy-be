@@ -104,6 +104,14 @@ Registered in `src/infrastructure/queue/scheduler.ts` (default stagger 05:44–0
 4. Child tombstones (webhooks, policies, memberships, roles, API keys)
 5. `user-tombstone-retention` — last
 
+**App records (D38, G2-4):** the daily `app-record-purge` erases a deleted `app.*` record once the
+clinic's restore window (`deleted_record_purge_days`, 1–90) has passed — only the tables in
+`APP_RECORD_TABLES` (`src/domains/app/app-record-tables.ts`). A clinical record (visits, clinical
+notes, diagnoses, prescriptions, photos, reports, check-ins, the treatment plan) and a financial one
+(bills, payments, credit notes, pending credits, packages bought, medical sales, purchases) is never
+purged: `APP_RECORD_KEPT_TABLES`, pinned by `app-record-purge.policy.unit.test.ts`. A deleted row a
+kept record still names (a contact with a visit, an offering on a bill) is skipped as blocked.
+
 Batch deletes use `deleteInBatchesByCondition` with per-row FK fallback (`blockedCount` logged as `batch-delete.fkBlocked`). Every delete runs in a savepoint: the purges run inside one retention transaction, and before the savepoints a single blocked row (an invitation still referencing its inviter, say) aborted that transaction and failed the run every night. One run deletes at most `BATCH_DELETE_MAX_BATCHES_PER_RUN` batches (250 000 rows at the default batch size) — bounding the transaction's locks and WAL — and logs `batch-delete.run_capped` when rows remain for the next run.
 
 ---

@@ -106,12 +106,13 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
         preHandler: [
           requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
           requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_DELETE),
         ],
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Delete a photo',
           description:
-            'Deletes a photo with why: `reason` (mistake — "Wrong patient", duplicate, not_needed — "Blurry / retake", other) and a `note`, required for other (P25). Its thumbnail is removed in the background (the full photo stays). Restorable until the organization\'s purge window ends (D38). Requires patient:update and patient:clinical_record:read (P14).',
+            'Deletes a photo with why: `reason` (mistake — "Wrong patient", duplicate, not_needed — "Blurry / retake", other) and a `note`, required for other (P25). Its thumbnail is removed in the background (the full photo stays). Restorable at any time — a clinical record is never purged (G2-4). Requires patient:update, patient:clinical_record:read (P14) and patient:delete (B1-2).',
           tags: ['Patient file'],
           params: patientImagesIdParamsDto,
           querystring: recordDeleteQuerySchema,
@@ -126,12 +127,13 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
         preHandler: [
           requireOrganizationPermission(APP_PERMISSIONS.PATIENT_UPDATE),
           requireOrganizationPermission(APP_PERMISSIONS.PATIENT_CLINICAL_RECORD_READ),
+          requireOrganizationPermission(APP_PERMISSIONS.PATIENT_DELETE),
         ],
         config: { ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config, idempotencyRequired: true },
         schema: {
           summary: 'Restore a photo',
           description:
-            "Undoes a photo's delete. Its thumbnail is made again in the background. A live photo is a 409 `record_not_deleted`. Requires patient:update and patient:clinical_record:read (P14).",
+            "Undoes a photo's delete. Its thumbnail is made again in the background. A live photo is a 409 `record_not_deleted`. Requires patient:update, patient:clinical_record:read (P14) and patient:delete (B1-2).",
           tags: ['Patient file'],
           params: patientImagesIdParamsDto,
         },
