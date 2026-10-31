@@ -14,13 +14,13 @@ nothing is renamed, removed or re-gated.
 
 | # | Change | Method | Path | Access | Operation | Source | Built |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| RC-1 | NEW | GET | `/api/v1/app/medical-purchase-orders/gst-summary` | medicine · read | the month's purchase GST by rate and HSN | `BRIEF.md:24–27`, `:46–47` | |
-| RC-2 | NEW | GET | `/api/v1/app/medical-purchase-orders/gst-summary/exports` | medicine · export (+ read) | the summary as CSV | `BRIEF.md:27`, `:47` | |
-| RC-3 | CHANGED — lines take `gst_percent`, `is_gst_inclusive` | POST | `/api/v1/app/medical-purchase-orders` | medicine · create | create an order | `BRIEF.md:17–22`, `:45` | |
-| RC-4 | CHANGED — as RC-3 | PATCH | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}` | medicine · update | change an order | `BRIEF.md:45` | |
-| RC-5 | CHANGED — unordered lines take them; totals from received lines | POST | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/receive` | medicine · update | receive goods | `BRIEF.md:45` | |
-| RC-6 | CHANGED — output: lines and totals carry GST | GET | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}` | medicine · read | one order | `BRIEF.md:23` | |
-| RC-7 | CHANGED — output (+ CSV columns) | GET | `/api/v1/app/medical-purchase-orders` (+ `/exports`) | medicine · read (export) | list orders | `BRIEF.md:23` | |
+| RC-1 | NEW | GET | `/api/v1/app/medical-purchase-orders/gst-summary` | medicine · read | the month's purchase GST by rate and HSN | `BRIEF.md:24–27`, `:46–47` | as proposed — `9caedd4` ([AS-BUILT #1–#2](../AS-BUILT.md)) |
+| RC-2 | NEW | GET | `/api/v1/app/medical-purchase-orders/gst-summary/exports` | medicine · export (+ read) | the summary as CSV | `BRIEF.md:27`, `:47` | as proposed — `9caedd4` ([AS-BUILT #1–#2](../AS-BUILT.md)) |
+| RC-3 | CHANGED — lines take `gst_percent`, `is_gst_inclusive` | POST | `/api/v1/app/medical-purchase-orders` | medicine · create | create an order | `BRIEF.md:17–22`, `:45` | as proposed — `9caedd4` ([AS-BUILT #1–#2](../AS-BUILT.md)) |
+| RC-4 | CHANGED — as RC-3 | PATCH | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}` | medicine · update | change an order | `BRIEF.md:45` | as proposed — `9caedd4` ([AS-BUILT #1–#2](../AS-BUILT.md)) |
+| RC-5 | CHANGED — unordered lines take them; totals from received lines | POST | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}/receive` | medicine · update | receive goods | `BRIEF.md:45` | as proposed — `9caedd4` ([AS-BUILT #1–#2](../AS-BUILT.md)) |
+| RC-6 | CHANGED — output: lines and totals carry GST | GET | `/api/v1/app/medical-purchase-orders/{medical_purchase_order_id}` | medicine · read | one order | `BRIEF.md:23` | as proposed — `9caedd4` ([AS-BUILT #1–#2](../AS-BUILT.md)) |
+| RC-7 | CHANGED — output (+ CSV columns) | GET | `/api/v1/app/medical-purchase-orders` (+ `/exports`) | medicine · read (export) | list orders | `BRIEF.md:23` | as proposed — `9caedd4` ([AS-BUILT #1–#2](../AS-BUILT.md)) |
 
 ## Relied on, unchanged
 

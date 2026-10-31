@@ -45,10 +45,10 @@ discounts on purchase lines, short deliveries (the next iteration); a CGST / SGS
 
 | # | Work item | Kind | Depends on | Skill/driver | Acceptance | Assignee | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | The purchase line's GST and the order's totals — schema, migration + fill, DTO, rules, repository, serializer, docs: [`routes-final.md` § 1](plans/routes-final.md), POC1, POC2 | sub-domain | — | `/be-build-requirement` (schema chain `be-schema-generator` → `be-sql-design-guard` → `be-db-migration-maintainer` → `be-rls-tenant-isolation-guard`; route chain `be-api-contract-guard`, `be-route-schema-doc-guard`, `be-test-generator`, `be-tsdoc-export-guard`) | A-1 – A-5 | Claude | planned |
-| 2 | The purchase GST summary and its CSV: POC3 | feature | 1 | `/be-build-requirement` (route chain + `be-route-catalog`, `be-i18n-message-guard`, `be-overview-doc-maintainer`) | A-6, A-7 | Claude | planned |
-| 3 | Seeds and the cross-cutting tests: POC4 | feature | 1, 2 | `be-seed-maintainer`, `be-test-generator` | A-1 – A-7 | Claude | planned |
-| 4 | Acceptance, the frontend route map, the gates | flow | 1–3 | `be-kickoff-iteration` › Close | A-1 – A-8 | Claude | planned |
+| 1 | The purchase line's GST and the order's totals — schema, migration + fill, DTO, rules, repository, serializer, docs: [`routes-final.md` § 1](plans/routes-final.md), POC1, POC2 | sub-domain | — | `/be-build-requirement` (schema chain `be-schema-generator` → `be-sql-design-guard` → `be-db-migration-maintainer` → `be-rls-tenant-isolation-guard`; route chain `be-api-contract-guard`, `be-route-schema-doc-guard`, `be-test-generator`, `be-tsdoc-export-guard`) | A-1 – A-5 | Claude | done |
+| 2 | The purchase GST summary and its CSV: POC3 | feature | 1 | `/be-build-requirement` (route chain + `be-route-catalog`, `be-i18n-message-guard`, `be-overview-doc-maintainer`) | A-6, A-7 | Claude | done |
+| 3 | Seeds and the cross-cutting tests: POC4 | feature | 1, 2 | `be-seed-maintainer`, `be-test-generator` | A-1 – A-7 | Claude | done |
+| 4 | Acceptance, the frontend route map, the gates | flow | 1–3 | `be-kickoff-iteration` › Close | A-1 – A-8 | Claude | done |
 
 ## 6. Requirements index
 
