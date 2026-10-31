@@ -52,6 +52,7 @@ export interface MedicalSaleLineRow {
   public_id: string;
   medicine_id: string | null;
   name: string;
+  description: string | null;
   batch_number: string | null;
   medicine_batch_id: number | null;
   expiry_month: string | null;
@@ -186,6 +187,7 @@ export class MedicalSalesRepository extends BaseRecordRepository {
         public_id: invoice_items.public_id,
         medicine_id: medicines.public_id,
         name: invoice_items.name,
+        description: invoice_items.description,
         batch_number: invoice_items.batch_number,
         medicine_batch_id: invoice_items.medicine_batch_id,
         expiry_month: medicine_batches.expiry_month,

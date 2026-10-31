@@ -715,6 +715,10 @@ class DemoClinicWriter {
           {
             offering_id: this.offeringIds.get(visit.offering)!,
             name: offering.name,
+            // A line's free text, as a front desk types it on a discounted bill (feat-bill-line-description)
+            ...(bill.discountPercent > 0
+              ? { description: `${bill.discountPercent}% off — returning client` }
+              : {}),
             quantity: 1,
             rate: offering.price,
             discount_percent: bill.discountPercent,

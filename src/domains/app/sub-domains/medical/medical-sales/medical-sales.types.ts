@@ -5,6 +5,8 @@ export interface MedicalSaleItemOutput {
   invoice_item_id: string;
   medicine_id: string | null;
   name: string;
+  /** The line's free text, typed on the bill (feat-bill-line-description). */
+  description: string | null;
   batch_number: string | null;
   expiry_month: string | null;
   quantity: number;

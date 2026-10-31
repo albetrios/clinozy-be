@@ -976,6 +976,7 @@ describe('Medical store — integration (routes-final §11)', () => {
       '246,33.33',
     );
     flow.expectEqual('two out of B1', await batchStock(glycolac, 'B1'), '3');
+    flow.expectValue('no description sent', '.data.items[0].description', 'null');
     await flow.expect(200, 'sell one, paid now', 'POST', '/app/medical-sales', {
       branch_id: vesu,
       contact_id: bela,
@@ -991,8 +992,19 @@ describe('Medical store — integration (routes-final §11)', () => {
     await flow.expect(200, 'sell across two batches', 'POST', '/app/medical-sales', {
       branch_id: vesu,
       contact_id: bela,
-      items: [{ medicine_id: glycolac, quantity: 3 }],
+      items: [{ medicine_id: glycolac, quantity: 3, description: 'Twice a day after food' }],
     });
+    flow.expectValue(
+      'the description on every line its batches draw (feat-bill-line-description)',
+      '[.data.items[].description] | unique | join(",")',
+      'Twice a day after food',
+    );
+    await flow.expect(200, 'read back', 'GET', `/app/medical-sales/${flow.last('.data.id')}`);
+    flow.expectValue(
+      'read: the same',
+      '[.data.items[].description] | unique | join(",")',
+      'Twice a day after food',
+    );
     const splitSale = flow.last('.data.id');
     flow.expectValue(
       "B1's last two, then B3 (MD5)",

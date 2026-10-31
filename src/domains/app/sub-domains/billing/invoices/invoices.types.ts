@@ -18,6 +18,7 @@ export interface InvoiceItemOutput {
   offering_id: string | null;
   medicine_id: string | null;
   name: string;
+  description: string | null;
   pack_size: string | null;
   quantity: number;
   rate: number;
@@ -89,6 +90,7 @@ export interface InvoicePreviewItemOutput {
   offering_id: string | null;
   medicine_id: string | null;
   name: string;
+  description: string | null;
   pack_size: string | null;
   quantity: number;
   rate: number;
