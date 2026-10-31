@@ -47,14 +47,6 @@
       }
     },
     {
-      "id": "be-no-unrequested-pr",
-      "script": "be-no-unrequested-pr.mjs",
-      "claude": {
-        "event": "PreToolUse",
-        "matcher": "mcp__github__create_pull_request"
-      }
-    },
-    {
       "id": "be-edit-hooks",
       "script": "be-edit-hooks.mjs",
       "claude": {
