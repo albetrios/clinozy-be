@@ -11,7 +11,10 @@ import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js'
 import { contact_activities } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.schema.js';
 import { CONTACT_ACTIVITY_REMINDER_STOPPED_REASON } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
 import { lead_involved_memberships, leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
-import { LEAD_OPEN_STATUS_VALUES } from '@/domains/app/sub-domains/leads/leads.constants.js';
+import {
+  LEAD_OPEN_STATUS_VALUES,
+  LEAD_STATUS,
+} from '@/domains/app/sub-domains/leads/leads.constants.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { patient_treatments } from '@/domains/app/sub-domains/patients/patient-treatments/patient-treatments.schema.js';
@@ -232,9 +235,15 @@ function failedMessageRule(): TaskRuleSource {
   };
 }
 
-/** `follow_up`: an open lead's follow-up date is today or past — due 11:00 that day. */
+/**
+ * `follow_up`: an open lead's follow-up date is today or past — due at its follow-up time, the one
+ * staff set in the lead drawer. A lead whose person has a booking still to happen
+ * (`appointment_scheduled`, L11) waits for the visit — the booking's own tasks follow it up; a
+ * cancel puts it back in `follow_up`, dated now.
+ */
 function followUpRule(scope: TaskRuleScope): TaskRuleSource {
   const followUpDate = localDate(scope, leads.follow_up_at);
+  const awaitingVisit = sql`${leads.status} = ${LEAD_STATUS.APPOINTMENT_SCHEDULED}`;
   return {
     rule: TASK_RULE.FOLLOW_UP,
     link: 'lead_id',
@@ -244,9 +253,9 @@ function followUpRule(scope: TaskRuleScope): TaskRuleSource {
     from: sql`${leads} join ${contacts} on ${contacts.id} = ${leads.contact_id}`,
     organizationColumn: leads.organization_id,
     recordId: sql`${leads.id}`,
-    qualifies: sql`${OPEN_LEAD} and ${leads.follow_up_at} is not null and ${followUpDate} <= ${today(scope)}`,
+    qualifies: sql`${OPEN_LEAD} and not ${awaitingVisit} and ${leads.follow_up_at} is not null and ${followUpDate} <= ${today(scope)}`,
     opens: sql`true`,
-    due: () => localAt(scope, followUpDate, '11:00'),
+    due: () => sql`${leads.follow_up_at}`,
     tracksDue: true,
     columns: {
       contactId: sql`${leads.contact_id}`,
@@ -351,7 +360,12 @@ function arriveRule(scope: TaskRuleScope): TaskRuleSource {
   };
 }
 
-/** `rebook`: a booking became a no-show (last 30 days) and nothing newer is booked — next day 11:00. */
+/**
+ * `rebook`: a booking became a no-show (last 30 days), nothing newer is booked and the person has
+ * no open lead — next day 11:00. A person with an open lead is followed up by its `follow_up` task
+ * instead (the missed visit puts the lead back in `follow_up`, dated now — L11), so one person gets
+ * one task.
+ */
 function rebookRule(scope: TaskRuleScope): TaskRuleSource {
   const newerBooking = sql`exists (select 1 from ${appointments} as booked
     where ${booked.contact_id} = ${appointments.contact_id}
@@ -367,7 +381,7 @@ function rebookRule(scope: TaskRuleScope): TaskRuleSource {
     from: sql`${appointments} join ${contacts} on ${contacts.id} = ${appointments.contact_id}`,
     organizationColumn: appointments.organization_id,
     recordId: sql`${appointments.id}`,
-    qualifies: sql`${appointments.deleted_at} is null and ${appointments.status} = 'no_show' and not ${newerBooking}`,
+    qualifies: sql`${appointments.deleted_at} is null and ${appointments.status} = 'no_show' and not ${newerBooking} and not exists (select 1 from ${leads} where ${leads.contact_id} = ${appointments.contact_id} and ${OPEN_LEAD})`,
     opens: sql`${appointments.appointment_date} >= ${today(scope)} - 30`,
     due: () => localAt(scope, sql`${appointments.appointment_date} + 1`, '11:00'),
     tracksDue: false,

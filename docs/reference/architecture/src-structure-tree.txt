@@ -47,6 +47,7 @@ src/
     │   │   ├── appointments/
     │   │   │   ├── __tests__/
     │   │   │   │   ├── integration/
+    │   │   │   │   │   ├── appointments-lead-follows-bookings.integration.test.ts
     │   │   │   │   │   ├── appointments-lifecycle.integration.test.ts
     │   │   │   │   │   ├── appointments-places.integration.test.ts
     │   │   │   │   │   └── appointments.integration.test.ts

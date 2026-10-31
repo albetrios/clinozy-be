@@ -563,6 +563,7 @@ Note app.lead_involved_memberships {
 
 Table app.leads {
   branch_id bigint
+  closed_at timestamptz
   contact_id bigint [not null]
   created_at timestamptz [not null]
   created_by_user_id bigint

@@ -17,6 +17,7 @@ import { ContactsRepository } from '@/domains/app/sub-domains/contacts/contacts.
 import { ContactActivitiesRepository } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.repository.js';
 import { CONTACT_ACTIVITY_TYPE } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.constants.js';
 import { ContactMembersRepository } from '@/domains/app/sub-domains/contacts/contact-members/contact-members.repository.js';
+import { LEAD_STATUS } from '@/domains/app/sub-domains/leads/leads.constants.js';
 import { LeadsRepository } from '@/domains/app/sub-domains/leads/leads.repository.js';
 import { OfferingsRepository } from '@/domains/app/sub-domains/offerings/offerings.repository.js';
 import { PatientsRepository } from '@/domains/app/sub-domains/patients/patients.repository.js';
@@ -61,6 +62,18 @@ const SLOT_FIELDS = [
 const DEFAULT_SLOT_STEP_MINUTES = 15;
 /** The activity line a check-in leaves when it moves the lead (6.10). */
 const CHECK_IN_ACTIVITY_BODY = 'Moved to Clinic visited at check-in';
+/** The activity line a check-in leaves when it wins back a closed lead (K-WB, AF2). */
+const WIN_BACK_ACTIVITY_BODY = 'Won back: moved to Clinic visited at check-in';
+/** The activity line a booking leaves when it moves the lead to `appointment_scheduled` (L11). */
+const LEAD_BOOKED_ACTIVITY_BODY = 'Moved to Booked: an appointment was booked';
+/** The activity line the end of the last booking leaves, by what ended it (L11). */
+const LEAD_BOOKING_ENDED_ACTIVITY_BODIES: Readonly<Record<string, string>> = {
+  cancel: 'Moved back to Follow-up: the appointment was cancelled',
+  'no-show': 'Moved back to Follow-up: they did not come to the appointment',
+  delete: 'Moved back to Follow-up: the appointment was removed',
+};
+/** The activity line when no booking is left for any other reason. */
+const LEAD_BOOKING_ENDED_ACTIVITY_BODY = 'Moved back to Follow-up: no appointment is booked';
 
 const branchHolidaysRepository = new BranchHolidaysRepository();
 const branchRoomsRepository = new BranchRoomsRepository();
@@ -299,8 +312,9 @@ async function fillServiceLabel(values: Record<string, unknown>): Promise<void> 
 }
 
 /**
- * A check-in converts (A14, L8): the contact's open lead moves to `clinic_visited` (with a `system`
- * line in its stream) and a contact without a patient file gets one — home branch and usual doctor
+ * A check-in converts (A14, L8): the contact's open lead moves to `clinic_visited` — or, with none
+ * open, a lead closed Lost / Not interested within 90 days is won back (K-WB, AF2) — with a `system`
+ * line in its stream, and a contact without a patient file gets one — home branch and usual doctor
  * from the appointment, `lead_id` the lead (P10), not yet converted (P4) — in the check-in's
  * transaction.
  */
@@ -312,16 +326,19 @@ async function convertAtCheckIn({
   context: BaseRecordWriteContext;
 }): Promise<void> {
   const contactId = row.contact_id as number;
-  const leadId = await leadsRepository.markVisited({ contactId, userId: context.userId });
+  const userId = context.userId;
+  const visitedLeadId = await leadsRepository.markVisited({ contactId, userId });
+  // K-WB (AF2, D2): with no open lead, a lead closed Lost / Not interested lately is won back
+  const leadId = visitedLeadId ?? (await leadsRepository.winBack({ contactId, userId }));
   if (leadId !== null) {
     await contactActivitiesRepository.insert({
       organization_id: context.organizationId,
       contact_id: contactId,
       type: CONTACT_ACTIVITY_TYPE.SYSTEM,
-      body: CHECK_IN_ACTIVITY_BODY,
+      body: visitedLeadId === null ? WIN_BACK_ACTIVITY_BODY : CHECK_IN_ACTIVITY_BODY,
       appointment_id: row.id,
-      created_by_user_id: context.userId,
-      updated_by_user_id: context.userId,
+      created_by_user_id: userId,
+      updated_by_user_id: userId,
     });
   }
   if ((await contactsRepository.findPatientFile(contactId)) !== null) return;
@@ -332,6 +349,47 @@ async function convertAtCheckIn({
     home_branch_id: row.branch_id,
     doctor_membership_id: row.doctor_membership_id,
     lead_id: leadId,
+    created_by_user_id: context.userId,
+    updated_by_user_id: context.userId,
+  });
+}
+
+/** What ended the person's last booking — the key of {@link LEAD_BOOKING_ENDED_ACTIVITY_BODIES}. */
+function bookingEndCause(change: BaseRecordChange): string {
+  return change.kind === 'transition' ? String(change.action) : change.kind;
+}
+
+/**
+ * L11: the person's open lead follows their bookings ({@link LeadsRepository.followBookings}) — a
+ * booking still to happen puts it in `appointment_scheduled`; the end of the last one (a cancel, a
+ * no-show, a removal) puts it back in `follow_up`, its follow-up date now — with a `system` line in
+ * the person's stream when it moves. A move (a reschedule) keeps the booking, so the lead stays.
+ * Runs after the check-in conversion, so a checked-in person's lead is already `clinic_visited`
+ * and stays.
+ */
+async function followLeadBookings({
+  row,
+  change,
+  context,
+}: {
+  row: BaseRecordRow;
+  change: BaseRecordChange;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
+  const contactId = Number(row.contact_id);
+  const moved = await leadsRepository.followBookings({ contactId, userId: context.userId });
+  if (!moved) return;
+  const body =
+    moved.status === LEAD_STATUS.APPOINTMENT_SCHEDULED
+      ? LEAD_BOOKED_ACTIVITY_BODY
+      : (LEAD_BOOKING_ENDED_ACTIVITY_BODIES[bookingEndCause(change)] ??
+        LEAD_BOOKING_ENDED_ACTIVITY_BODY);
+  await contactActivitiesRepository.insert({
+    organization_id: context.organizationId,
+    contact_id: contactId,
+    type: CONTACT_ACTIVITY_TYPE.SYSTEM,
+    body,
+    appointment_id: row.id,
     created_by_user_id: context.userId,
     updated_by_user_id: context.userId,
   });
@@ -733,7 +791,7 @@ async function prepareLifecycle({
 /**
  * The appointments rules (launch ROUTE #132, routes-final 6): the slot rules on every booking
  * (A3, A4), walk-ins (A6), moves (A5), the lifecycle and the floor (A5, A10, A11), the check-in
- * conversion (A14), the team on the contact (CT11), the contact summary, and the calendar's
+ * conversion (A14), the lead that follows the bookings (L11), the team on the contact (CT11), the contact summary, and the calendar's
  * `slots` and `daily-counts` reads.
  *
  * @remarks
@@ -743,7 +801,9 @@ async function prepareLifecycle({
  *   400 (A2); a booking without a label takes its offering's name (A13). A walk-in is placed at now
  *   and checked in at once, outside the slot rules. A move stamps `rescheduled_from`, counts
  *   `move_count` and returns a confirmed booking to `scheduled`. Check-in (or a walk-in) converts
- *   (A14). The stage moves forward only; pause and resume toggle `visit_paused_at`.
+ *   (A14) — the open lead, else a lead won back (K-WB). After every write the person's open lead follows their bookings (L11):
+ *   `appointment_scheduled` while one is still to happen, back to `follow_up` when the last one is
+ *   cancelled, missed or removed — a `system` line in their stream when it moves. The stage moves forward only; pause and resume toggle `visit_paused_at`.
  * - **Failure modes:** `ConflictError` `slot_in_past`, `slot_closed`, `slot_outside_hours`,
  *   `appointment_not_movable`, `appointment_not_due`, `visit_started`, `transition_not_allowed`;
  *   `ValidationError` on `branch_room_id`, `branch_machine_id`, `service_label`, `date_to`.
@@ -781,6 +841,7 @@ export function createAppointmentsRules(repository: AppointmentsRepository): Bas
         await addTeamToContact({ row, context });
       }
       if (change.kind === 'create') await involveBooker({ row, context });
+      await followLeadBookings({ row, change, context });
       await followBookingMessages({ repository, row, change, context });
     },
     decorate: (outputs, context) => decorateAppointments({ outputs, context }),

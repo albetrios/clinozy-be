@@ -27,6 +27,7 @@ import {
   LEAD_INTERESTS_VALUES,
   LEAD_KIND_VALUES,
   LEAD_NOTES_MAX,
+  LEAD_CLOSED_STATUS_VALUES,
   LEAD_OPEN_STATUS_VALUES,
   LEAD_SOURCE_VALUES,
   LEAD_STATUS_VALUES,
@@ -65,7 +66,7 @@ export const leads = appSchema
       contact_id: bigint('contact_id', { mode: 'number' })
         .notNull()
         .references(() => contacts.id, { onDelete: 'restrict' }),
-      status: varchar('status', { length: 14 }).notNull().default('new'),
+      status: varchar('status', { length: 21 }).notNull().default('new'),
       source: varchar('source', { length: 9 }),
       interests: text('interests').array().notNull().default([]),
       // Server-set: an enquiry, or a re-target lead the task rules open (sub-domain 10)
@@ -75,6 +76,8 @@ export const leads = appSchema
       owner_membership_id: bigint('owner_membership_id', { mode: 'number' }),
       held_until: timestamp('held_until', { withTimezone: true }),
       follow_up_at: timestamp('follow_up_at', { withTimezone: true }),
+      // When it last entered a closing status — set exactly while closed (D10); a check-in reads it
+      closed_at: timestamp('closed_at', { withTimezone: true }),
       // Where it is handled — none = every branch
       branch_id: bigint('branch_id', { mode: 'number' }).references(() => branches.id, {
         onDelete: 'set null',
@@ -144,6 +147,10 @@ export const leads = appSchema
       }).onDelete('set null'),
       check('chk_leads_lead_number', sql`${table.lead_number} > 0`),
       check('chk_leads_status', sql`${table.status} IN (${joinValues(LEAD_STATUS_VALUES)})`),
+      check(
+        'chk_leads_closed_at',
+        sql`(${table.status} IN (${joinValues(LEAD_CLOSED_STATUS_VALUES)})) = (${table.closed_at} IS NOT NULL)`,
+      ),
       check('chk_leads_source', sql`${table.source} IN (${joinValues(LEAD_SOURCE_VALUES)})`),
       check(
         'chk_leads_interests',

@@ -389,6 +389,8 @@
   "leadClosed": "This lead is closed — claim and release work on open leads only",
   "leadVisitedByCheckInOnly": "Clinic visited is set when the person checks in at an appointment",
   "leadVisitedFinal": "This lead ended with a clinic visit — its status cannot change",
+  "leadScheduledByBookingOnly": "Booked is set when an appointment is booked for the person",
+  "leadScheduledUntilBookingEnds": "This lead has an appointment booked — cancel the appointment to move the lead back to Follow-up",
   "leadContactRemoved": "This lead’s contact was removed — restore the contact first",
   "contactIsPatient": "{{name}} already has a patient file, PT-{{patient_number}} ({{patient_id}}) — open that one",
   "contactIsPatientGeneric": "This contact already has a patient file — open that one",

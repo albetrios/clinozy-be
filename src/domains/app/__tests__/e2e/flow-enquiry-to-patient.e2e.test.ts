@@ -13,7 +13,10 @@ import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow
  * Launch ROUTE #148 — Flow 1, an enquiry becomes a patient (flow-enquiry-to-patient.1, PRD
  * 3.2): the front desk adds a lead with a new contact, writes to them on WhatsApp, books the
  * visit from the chat, checks them in on the day — the lead moves to Clinic visited and the
- * check-in opens their patient file (A14) — and the doctor completes the visit.
+ * check-in opens their patient file (A14) — and the doctor completes the visit. Then the lead that
+ * follows the bookings (iteration feat-lead-follows-bookings): a cancel sends it back to follow-up,
+ * a walk-in still ends it in Clinic visited and keeps the person's later booking, and a check-in
+ * wins back a lead closed as Lost.
  */
 describe('Flow 1 — an enquiry becomes a patient (launch ROUTE #148)', () => {
   const S = String(Date.now());
@@ -45,6 +48,17 @@ describe('Flow 1 — an enquiry becomes a patient (launch ROUTE #148)', () => {
       UPDATE app.appointments SET appointment_date = ${today}, start_time = '00:00'
       WHERE public_id = ${appointment}
     `;
+  }
+
+  /** The person walks in today: placed at now and checked in at once (A6). */
+  async function walkIn(contact: string): Promise<void> {
+    await flow.expect(200, 'a walk-in', 'POST', '/app/appointments', {
+      contact_id: contact,
+      branch_id: vesu,
+      doctor_membership_id: doctor,
+      is_walk_in: true,
+      service_label: 'Consultation',
+    });
   }
 
   beforeAll(async () => {
@@ -110,6 +124,12 @@ describe('Flow 1 — an enquiry becomes a patient (launch ROUTE #148)', () => {
       '[.data.status, .data.lead_id, (.data.patient_id | tostring)] | join(",")',
       `scheduled,${lead},null`,
     );
+    await flow.expect(200, 'the lead after the booking', 'GET', `/app/leads/${lead}`);
+    flow.expectValue(
+      'the booking moved the lead to Booked (L11)',
+      '.data.status',
+      'appointment_scheduled',
+    );
 
     // 3. On the day, Today shows the visit in Booked → status Checked in.
     await dueToday(appointment);
@@ -172,5 +192,92 @@ describe('Flow 1 — an enquiry becomes a patient (launch ROUTE #148)', () => {
       '[.data.patient_id, .data.last_visit_on] | join(",")',
       `${patient},${today}`,
     );
+  });
+
+  it('flow-enquiry-to-patient.2: booked → cancelled (Follow-up again) → booked later → walks in (Clinic visited, the later booking kept)', async () => {
+    flow.as('front_desk');
+    await flow.expect(200, 'a new lead', 'POST', '/app/leads', {
+      contact: {
+        first_name: 'Asha',
+        last_name: lastName,
+        phones: [{ phone: `+91${digits}02`, is_primary: true }],
+      },
+      source: 'google',
+      interests: ['lhr'],
+      branch_id: vesu,
+    });
+    const lead = flow.last('.data.id');
+    const contact = flow.last('.data.contact_id');
+    await flow.expect(200, 'book from the lead', 'POST', '/app/appointments', {
+      contact_id: contact,
+      branch_id: vesu,
+      doctor_membership_id: doctor,
+      appointment_date: workDay(1),
+      start_time: '12:00',
+      service_label: 'Consultation',
+    });
+    const booking = flow.last('.data.id');
+    await flow.expect(200, 'they cancel', 'POST', `/app/appointments/${booking}/cancel`, {
+      cancel_reason: 'patient_asked',
+    });
+    await flow.expect(200, 'the lead after the cancel', 'GET', `/app/leads/${lead}`);
+    flow.expectValue(
+      'back to Follow-up, due now (L11)',
+      '[.data.status, (.data.follow_up_at != null)] | map(tostring) | join(",")',
+      'follow_up,true',
+    );
+
+    await flow.expect(200, 'booked again, later', 'POST', '/app/appointments', {
+      contact_id: contact,
+      branch_id: vesu,
+      doctor_membership_id: doctor,
+      appointment_date: workDay(3),
+      start_time: '12:00',
+      service_label: 'Consultation',
+    });
+    const later = flow.last('.data.id');
+    await walkIn(contact);
+    await flow.expect(200, 'the lead after the walk-in', 'GET', `/app/leads/${lead}`);
+    flow.expectValue(
+      'the walk-in ended it in Clinic visited, the file linked, the close dated',
+      '[.data.status, (.data.patient_id != null), (.data.closed_at != null)] | map(tostring) | join(",")',
+      'clinic_visited,true,true',
+    );
+    await flow.expect(200, 'the later booking', 'GET', `/app/appointments/${later}`);
+    flow.expectValue('the later booking is kept (D3)', '.data.status', 'scheduled');
+  });
+
+  it('flow-enquiry-to-patient.3: a lead closed as Lost is won back when the person checks in', async () => {
+    flow.as('front_desk');
+    await flow.expect(200, 'a new lead', 'POST', '/app/leads', {
+      contact: {
+        first_name: 'Bina',
+        last_name: lastName,
+        phones: [{ phone: `+91${digits}03`, is_primary: true }],
+      },
+      source: 'instagram',
+      interests: ['peel'],
+      branch_id: vesu,
+    });
+    const lead = flow.last('.data.id');
+    const contact = flow.last('.data.contact_id');
+    await flow.expect(200, 'they stop answering — Lost', 'PATCH', `/app/leads/${lead}`, {
+      status: 'lost',
+    });
+    flow.expectValue('closed and dated', '.data.closed_at != null', true);
+
+    await walkIn(contact);
+    await flow.expect(200, 'the lead after the walk-in', 'GET', `/app/leads/${lead}`);
+    const patient = flow.last('.data.patient_id');
+    flow.expectValue('won back to Clinic visited (D2)', '.data.status', 'clinic_visited');
+    flow.expectValue('the new file is linked to it', '.data.patient_id != null', true);
+    await flow.expect(200, 'the stream', 'GET', `/app/contacts/${contact}/activities`);
+    flow.expectValue(
+      'the stream says it was won back',
+      '[.data[] | select(.type == "system") | .body] | index("Won back: moved to Clinic visited at check-in") != null',
+      true,
+    );
+    await flow.expect(200, 'the patient file', 'GET', `/app/patients/${patient}`);
+    flow.expectValue("the file is the contact's", '.data.contact_id', contact);
   });
 });

@@ -35,6 +35,8 @@ export interface LeadOutput {
   /** The owner's hold — open to the team after it (D40) */
   held_until: string | null;
   follow_up_at: string | null;
+  /** When it last closed (D10) — null while open; read-only */
+  closed_at: string | null;
   branch_id: string | null;
   notes: string | null;
   last_activity_at: string | null;

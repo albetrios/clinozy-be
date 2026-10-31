@@ -97,7 +97,7 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
         schema: {
           summary: 'Book an appointment',
           description:
-            "Books a contact with a doctor at a branch: `contact_id`, `branch_id` (one of yours unless you hold branch:read), `doctor_membership_id`, `appointment_date`, `start_time`; optional `type`, `offering_id`, `service_label` (defaults to the offering's name — a 400 without either), `therapist_membership_id`, `branch_room_id` / `branch_machine_id` (of the same branch — a 400 otherwise, A2), `duration_minutes` (5–240, a multiple of 5), `reason`, `notes`, `follow_up_at`. A walk-in sends `is_walk_in: true` and no date or start: it is placed at now and checked in at once, exempt from clashes (A6). Refused with a 409: `slot_in_past`; `slot_closed` (the branch inactive, a closed day, a holiday, the doctor off or outside their hours — A4); `slot_outside_hours`; `slot_taken` when the doctor, room or machine is booked then (A3). The doctor and therapist handle the contact (CT11); a walk-in's check-in converts as route 11 does. Requires appointment:create.",
+            "Books a contact with a doctor at a branch: `contact_id`, `branch_id` (one of yours unless you hold branch:read), `doctor_membership_id`, `appointment_date`, `start_time`; optional `type`, `offering_id`, `service_label` (defaults to the offering's name — a 400 without either), `therapist_membership_id`, `branch_room_id` / `branch_machine_id` (of the same branch — a 400 otherwise, A2), `duration_minutes` (5–240, a multiple of 5), `reason`, `notes`, `follow_up_at`. A walk-in sends `is_walk_in: true` and no date or start: it is placed at now and checked in at once, exempt from clashes (A6). Refused with a 409: `slot_in_past`; `slot_closed` (the branch inactive, a closed day, a holiday, the doctor off or outside their hours — A4); `slot_outside_hours`; `slot_taken` when the doctor, room or machine is booked then (A3). The doctor and therapist handle the contact (CT11); the contact's open lead moves to `appointment_scheduled` (with a line in its activity, L11); a walk-in's check-in converts as route 11 does. Requires appointment:create.",
           tags: ['Appointment'],
           body: CreateAppointmentDto,
         },
@@ -129,7 +129,7 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
         schema: {
           summary: 'Change or move appointment',
           description:
-            "Changes any field of the booking but `contact_id` and `is_walk_in` (at least one; null clears an optional one). Changing the branch, date, start, length, doctor, room or machine moves it: only a scheduled or confirmed booking moves (a 409 `appointment_not_movable`), the slot rules apply again (the create's 409s), a new date or start stamps `rescheduled_from`, adds one to `move_count` and returns a confirmed booking to `scheduled` (A5). Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` (D43). Requires appointment:update.",
+            "Changes any field of the booking but `contact_id` and `is_walk_in` (at least one; null clears an optional one). Changing the branch, date, start, length, doctor, room or machine moves it: only a scheduled or confirmed booking moves (a 409 `appointment_not_movable`), the slot rules apply again (the create's 409s), a new date or start stamps `rescheduled_from`, adds one to `move_count` and returns a confirmed booking to `scheduled` (A5) — a reschedule, so the contact's lead stays `appointment_scheduled` (L11). Send `expected_updated_at` (the `updated_at` you read) and a save over a newer change is a 409 `record_changed` (D43). Requires appointment:update.",
           tags: ['Appointment'],
           params: appointmentsIdParamsDto,
           body: UpdateAppointmentDto,
@@ -146,7 +146,7 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
         schema: {
           summary: 'Delete appointment',
           description:
-            "Soft-deletes a booking with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Its slot is free again. Restorable until the organization's purge window ends (D38). Requires appointment:delete.",
+            "Soft-deletes a booking with why: `reason` (mistake, duplicate, not_needed, other) and a `note`, required for other. Its slot is free again; with no other scheduled or confirmed booking left, the contact's `appointment_scheduled` lead goes back to `follow_up`, its follow-up date now (L11). Restorable until the organization's purge window ends (D38). Requires appointment:delete.",
           tags: ['Appointment'],
           params: appointmentsIdParamsDto,
           querystring: recordDeleteQuerySchema,
@@ -195,7 +195,7 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
         schema: {
           summary: 'Check in',
           description:
-            "They arrived: a scheduled or confirmed booking becomes `checked_in` at stage `waiting` (`checked_in_at` — the visit's start); a booking on a later day is a 409 `appointment_not_due`. Check-in converts (A14): the contact's open lead moves to `clinic_visited` (with a line in its activity) and a contact without a patient file gets one — home branch and usual doctor from the appointment. Requires appointment:update.",
+            "They arrived: a scheduled or confirmed booking becomes `checked_in` at stage `waiting` (`checked_in_at` — the visit's start); a booking on a later day is a 409 `appointment_not_due`. Check-in converts (A14): the contact's open lead moves to `clinic_visited` (with a line in its activity); with no open lead, their latest lead closed as `lost` or `not_interested` within 90 days is won back to `clinic_visited` (D2). A contact without a patient file gets one, linked to that lead — home branch and usual doctor from the appointment. Any other booking of the person stays as it is. Requires appointment:update.",
           tags: ['Appointment'],
           params: appointmentsIdParamsDto,
         },
@@ -227,7 +227,7 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
         schema: {
           summary: 'Mark no-show',
           description:
-            'They did not come: a scheduled or confirmed booking becomes `no_show` and frees its slot; before its start it is a 409 `appointment_not_due`. Requires appointment:update.',
+            "They did not come: a scheduled or confirmed booking becomes `no_show` and frees its slot; with no other scheduled or confirmed booking left, the contact's `appointment_scheduled` lead goes back to `follow_up`, its follow-up date now (L11). Before its start it is a 409 `appointment_not_due`. Requires appointment:update.",
           tags: ['Appointment'],
           params: appointmentsIdParamsDto,
         },
@@ -243,7 +243,7 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
         schema: {
           summary: 'Cancel appointment',
           description:
-            'Cancels a scheduled or confirmed booking with `cancel_reason` (patient_asked, unreachable, doctor_unavailable, resource_unavailable, rescheduling_later, booked_by_mistake, other) and an optional `cancel_note`; its slot is free again. Requires appointment:update.',
+            "Cancels a scheduled or confirmed booking with `cancel_reason` (patient_asked, unreachable, doctor_unavailable, resource_unavailable, rescheduling_later, booked_by_mistake, other) and an optional `cancel_note`; its slot is free again. With no other scheduled or confirmed booking left, the contact's `appointment_scheduled` lead goes back to `follow_up`, its follow-up date now, with a line in its activity (L11) — a reschedule is a move (route 7), not a cancel. Requires appointment:update.",
           tags: ['Appointment'],
           params: appointmentsIdParamsDto,
           body: cancelAppointmentDto,
@@ -260,7 +260,7 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
         schema: {
           summary: 'Reinstate appointment',
           description:
-            "Undoes a cancel: the booking is `scheduled` again if its slot is still bookable — the create's 409s (`slot_in_past`, `slot_closed`, `slot_outside_hours`, `slot_taken`). Requires appointment:update.",
+            "Undoes a cancel: the booking is `scheduled` again if its slot is still bookable — the create's 409s (`slot_in_past`, `slot_closed`, `slot_outside_hours`, `slot_taken`); the contact's open lead moves to `appointment_scheduled` again (L11). Requires appointment:update.",
           tags: ['Appointment'],
           params: appointmentsIdParamsDto,
         },

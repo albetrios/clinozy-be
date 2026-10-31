@@ -4,6 +4,7 @@ import {
   PAYMENT_EXPENSE_CATEGORY_VALUES,
   PAYMENT_MODE_VALUES,
 } from '@/domains/app/sub-domains/billing/payments/payments.constants.js';
+import { LEAD_STATUS_VALUES } from '@/domains/app/sub-domains/leads/leads.constants.js';
 import {
   TASK_DONE_BY_CLINOZY,
   TASK_NO_ANSWER_SNOOZE_HOURS,
@@ -540,18 +541,9 @@ export const leadsRecordSchema = {
     },
     status: {
       type: 'string',
-      enum: [
-        'new',
-        'contacted',
-        'follow_up',
-        'no_response',
-        'not_interested',
-        'invalid',
-        'lost',
-        'clinic_visited',
-      ],
+      enum: [...LEAD_STATUS_VALUES],
       description:
-        'Open: new, contacted, follow_up, no_response; `clinic_visited` is set by check-in only (L8)',
+        'Open: new, contacted, follow_up, appointment_scheduled, no_response; `appointment_scheduled` follows the bookings of the contact (L11), `clinic_visited` is set by check-in only (L8)',
     },
     source: {
       type: 'string',
@@ -574,6 +566,13 @@ export const leadsRecordSchema = {
       description: "The owner's hold (`lead_hold_days`, D40)",
     },
     follow_up_at: { type: 'string', format: 'date-time', nullable: true },
+    closed_at: {
+      type: 'string',
+      format: 'date-time',
+      nullable: true,
+      description:
+        'When it last closed (not_interested, invalid, lost or clinic_visited) — null while open; server-set (D10, D11)',
+    },
     branch_id: { type: 'string', nullable: true, description: 'None = every branch' },
     notes: { type: 'string', maxLength: 2000, nullable: true },
     last_activity_at: {
@@ -611,6 +610,7 @@ export const leadsRecordExample = {
   involved_membership_ids: [],
   held_until: '2026-10-10T10:30:00.000Z',
   follow_up_at: null,
+  closed_at: null,
   branch_id: null,
   notes: null,
   last_activity_at: '2026-10-07T10:30:00.000Z',
