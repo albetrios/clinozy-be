@@ -954,6 +954,11 @@ describe('Patients — integration (routes-final §7)', () => {
       '[(.data.file_url | test("^https://")), (.data.file_url | contains("cheek.jpg")), (.data.file_url | test("X-Amz-Expires=900")), (.data.file_url | test("response-content-disposition=inline"))] | map(tostring) | join(",")',
       'true,true,true,true',
     );
+    flow.expectValue(
+      'no thumbnail yet (the background job makes it): the grid shows the full photo',
+      '[(.data.thumbnail_key == null), (.data.thumbnail_url == .data.file_url)] | map(tostring) | join(",")',
+      'true,true',
+    );
     await flow.expect(409, 'the same upload again (P25)', 'POST', images, { file_key: jpgKey });
     flow.expectValue('again: why', REASON, 'image_exists');
     await flow.expect(400, 'a PDF', 'POST', images, { file_key: pdfKey });

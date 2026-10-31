@@ -1385,6 +1385,9 @@ const UNWIRED_PORTS: BaseRecordPorts = {
   fileReadUrls: () => {
     throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
   },
+  thumbnailReadUrls: () => {
+    throw new Error('BaseRecordService ports are not wired (app.container.ts → usePorts)');
+  },
 };
 
 /**

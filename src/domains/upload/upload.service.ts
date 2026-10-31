@@ -13,7 +13,9 @@ import type { OrganizationService } from '@/domains/tenancy/sub-domains/organiza
 import type { UserService } from '@/domains/user/user.service.js';
 import {
   UPLOAD_PURPOSE_CONFIG,
+  UPLOAD_PURPOSE_REQUIRED_TARGET,
   UPLOAD_PURPOSES,
+  type UploadPurposeConfig,
   PRESIGNED_URL_EXPIRY_SECONDS,
   UPLOAD_OFFBOARDING_DELETE_BATCH_SIZE,
   UPLOAD_OFFBOARDING_DELETE_CONCURRENCY,
@@ -26,6 +28,13 @@ import {
 } from './upload.constants.js';
 import { getCanonicalExtensionForContentType } from './utils/upload-content-type.util.js';
 import { isSvgContentType, sanitizeSvgBuffer } from './utils/upload-svg.util.js';
+import {
+  buildThumbnailObjectKey,
+  createImageThumbnail,
+  UPLOAD_THUMBNAIL_CONTENT_TYPE,
+  UPLOAD_THUMBNAIL_KEY_SUFFIX,
+  UploadThumbnailSourceError,
+} from './utils/upload-thumbnail.util.js';
 import {
   isMagicByteVerifiable,
   MAGIC_BYTE_PREFIX_LENGTH,
@@ -73,6 +82,33 @@ interface ReservePendingUploadSlotParams {
   contentType: string;
   fileSize: number;
   bucket: string;
+}
+
+/** Whether a key is a thumbnail {@link UploadService.createThumbnail} writes. */
+function isThumbnailObjectKey(key: string): boolean {
+  return key.endsWith(UPLOAD_THUMBNAIL_KEY_SUFFIX);
+}
+
+/**
+ * The organization-target purpose that opts in to thumbnails and whose
+ * `<prefix>/<organization public id>/` holds `fileKey` — null for any other key (another
+ * organization's, a user's, a purpose without thumbnails, a path that climbs out).
+ */
+function organizationThumbnailPurpose(options: {
+  organizationPublicId: string;
+  fileKey: string;
+}): UploadPurposeConfig | null {
+  if (options.organizationPublicId === '' || options.fileKey.includes('..')) return null;
+  for (const purpose of Object.values(UPLOAD_PURPOSES)) {
+    const config = UPLOAD_PURPOSE_CONFIG[purpose];
+    if (UPLOAD_PURPOSE_REQUIRED_TARGET[purpose] !== UPLOAD_TARGETS.ORGANIZATION) continue;
+    if (config.thumbnailTypes.length === 0) continue;
+    const prefix = `${config.keyPrefix}/${options.organizationPublicId}/`;
+    if (options.fileKey.startsWith(prefix) && options.fileKey.length > prefix.length) {
+      return config;
+    }
+  }
+  return null;
 }
 
 /**
@@ -487,10 +523,128 @@ export class UploadService {
   }
 
   /**
+   * Makes a thumbnail of an organization's stored image next to it (`<key without
+   * extension>.thumb.webp`) — any purpose that opts in through
+   * {@link UPLOAD_PURPOSE_CONFIG}'s `thumbnailTypes` (patient photos today).
+   *
+   * @remarks
+   * - **Algorithm:** checks the key sits under an opted-in purpose's prefix for the organization
+   *   ({@link isOrganizationThumbnailSource}); reads the stored object; when its type is one the
+   *   purpose opts in, makes the thumbnail ({@link createImageThumbnail}) and writes it. No
+   *   database access — it runs between a worker's database contexts.
+   * - **Failure modes:** answers `skipped` (never throws) for a key outside the organization's
+   *   opted-in prefixes (`not_opted_in`), a stored file that is gone (`source_missing`), a type
+   *   the purpose does not opt in or bytes no decoder reads (`source_unusable`); any other
+   *   storage error propagates (the caller retries).
+   * - **Side effects:** one GET and one PUT on the object store; overwrites an earlier thumbnail
+   *   of the same source (the same bytes — idempotent).
+   */
+  async createThumbnail(options: {
+    organizationPublicId: string;
+    fileKey: string;
+  }): Promise<
+    | { kind: 'created'; thumbnailKey: string }
+    | { kind: 'skipped'; reason: 'not_opted_in' | 'source_missing' | 'source_unusable' }
+  > {
+    const purpose = organizationThumbnailPurpose(options);
+    if (purpose === null || isThumbnailObjectKey(options.fileKey)) {
+      return { kind: 'skipped', reason: 'not_opted_in' };
+    }
+    const stored = await this.readStoredObject(options.fileKey);
+    if (stored === null) return { kind: 'skipped', reason: 'source_missing' };
+    const contentType = stored.contentType?.toLowerCase();
+    if (contentType === undefined || !purpose.thumbnailTypes.includes(contentType)) {
+      return { kind: 'skipped', reason: 'source_unusable' };
+    }
+    let thumbnail: Buffer;
+    try {
+      thumbnail = await createImageThumbnail(stored.body);
+    } catch (error) {
+      if (error instanceof UploadThumbnailSourceError) {
+        return { kind: 'skipped', reason: 'source_unusable' };
+      }
+      throw error;
+    }
+    const thumbnailKey = buildThumbnailObjectKey(options.fileKey);
+    await this.objectStorage.putObject({
+      key: thumbnailKey,
+      body: thumbnail,
+      contentType: UPLOAD_THUMBNAIL_CONTENT_TYPE,
+    });
+    logger.info({ fileKey: options.fileKey, thumbnailKey }, 'upload.thumbnail_created');
+    return { kind: 'created', thumbnailKey };
+  }
+
+  /**
+   * Deletes a thumbnail {@link UploadService.createThumbnail} made — the organization's own only.
+   *
+   * @remarks
+   * - **Failure modes:** `ValidationError` (`uploadNotConfirmed`) for a key that is no thumbnail
+   *   of the organization; throws when the store refuses the delete (the caller retries). A
+   *   thumbnail already gone is a delete (S3 deletes are idempotent).
+   * - **Side effects:** one DELETE on the object store; no database access.
+   */
+  async deleteThumbnail(options: {
+    organizationPublicId: string;
+    thumbnailKey: string;
+  }): Promise<void> {
+    if (
+      !isThumbnailObjectKey(options.thumbnailKey) ||
+      organizationThumbnailPurpose({
+        organizationPublicId: options.organizationPublicId,
+        fileKey: options.thumbnailKey,
+      }) === null
+    ) {
+      throw new ValidationError('errors:validation.uploadNotConfirmed', undefined, undefined, [
+        { field: 'key', messageKey: 'errors:validation.uploadNotConfirmed' },
+      ]);
+    }
+    const result = await this.objectStorage.deleteObject(options.thumbnailKey);
+    if (result.kind === 'failed') throw new Error('upload.thumbnail_delete_failed');
+    logger.info({ thumbnailKey: options.thumbnailKey }, 'upload.thumbnail_deleted');
+  }
+
+  /**
+   * A short-lived view link for each of the organization's thumbnails among `thumbnailKeys` — a
+   * thumbnail is no upload row, so the key itself is checked: under an opted-in purpose's
+   * prefix for the organization, with the thumbnail suffix. Any other key gets no link.
+   *
+   * @remarks
+   * - **Algorithm:** a presigned GET valid {@link PRESIGNED_URL_EXPIRY_SECONDS} per key, served
+   *   inline. Signing is local — no request, no database access.
+   * - **Side effects:** none; the caller decides who may hold the links (the record's own gate).
+   */
+  async createThumbnailReadUrls(options: {
+    organizationPublicId: string;
+    thumbnailKeys: readonly string[];
+  }): Promise<Map<string, string>> {
+    const links = new Map<string, string>();
+    for (const thumbnailKey of new Set(options.thumbnailKeys)) {
+      const isOwn =
+        isThumbnailObjectKey(thumbnailKey) &&
+        organizationThumbnailPurpose({
+          organizationPublicId: options.organizationPublicId,
+          fileKey: thumbnailKey,
+        }) !== null;
+      if (!isOwn) continue;
+      links.set(
+        thumbnailKey,
+        await this.objectStorage.createPresignedDownloadUrl({
+          key: thumbnailKey,
+          expiresInSeconds: PRESIGNED_URL_EXPIRY_SECONDS,
+        }),
+      );
+    }
+    return links;
+  }
+
+  /**
    * The stored object, or `null` when it is gone — a failed read is told apart from a missing
    * object by a HEAD, only on the failure path; any other failure (an outage, a denial) throws.
    */
-  private async readStoredObject(key: string): Promise<{ body: Buffer } | null> {
+  private async readStoredObject(
+    key: string,
+  ): Promise<{ body: Buffer; contentType: string | undefined } | null> {
     try {
       return await this.objectStorage.getObject(key);
     } catch (error) {

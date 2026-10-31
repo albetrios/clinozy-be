@@ -10,6 +10,7 @@ import { closeWebhookDeliveryQueue } from '@/domains/notify/sub-domains/webhook/
 import { closeSubscriptionSeatSyncQueue } from '@/domains/billing/sub-domains/subscription/queues/subscription-seat-sync.queue.js';
 import { closeStripeWebhookQueue } from '@/domains/billing/sub-domains/stripe-webhook/queues/stripe-webhook.queue.js';
 import { closeUserDataExportQueue } from '@/domains/user/sub-domains/user-data-export/queues/user-data-export.queue.js';
+import { closePatientImageThumbnailQueue } from '@/domains/app/sub-domains/patients/patient-images/queues/patient-image-thumbnail.queue.js';
 import { flushSentry } from '@/infrastructure/observability/sentry/sentry.js';
 import { shutdownPostHog } from '@/infrastructure/observability/posthog/posthog.js';
 import { closeBullMQMetricsQueues } from '@/infrastructure/observability/metrics/bullmq-metrics.js';
@@ -74,6 +75,8 @@ const shutdownMiddleware: FastifyPluginAsync = async (app) => {
       // graceful shutdown (previously only 4 of the 6 producer queues were drained here).
       closeStripeWebhookQueue(),
       closeUserDataExportQueue(),
+      // A patient photo's create, delete or restore enqueues its thumbnail job after the commit.
+      closePatientImageThumbnailQueue(),
     ]);
     // The same pooled BullMQ clients the readiness probe uses — released before the shared
     // connections so the API does not leave Redis sockets open on the way out.

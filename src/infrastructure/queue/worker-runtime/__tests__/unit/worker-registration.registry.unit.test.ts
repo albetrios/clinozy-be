@@ -54,7 +54,7 @@ describe('worker-registration.registry', () => {
     // delivery and callback-processing workers, the one-minute sweep and the callbacks' purge; +2 for
     // the AI ideas sweep and its per-organization refreshes (D80, WC-47); +1 for the membership
     // invitation expiry sweep (launch D84).
-    expect(definitions).toHaveLength(39);
+    expect(definitions).toHaveLength(40);
     for (const definition of definitions) {
       expect(definition.queueName).toBeTruthy();
       expect(definition.logLabel).toBeTruthy();
@@ -82,12 +82,13 @@ describe('worker-registration.registry', () => {
     // record purge and the day auto-close sweep add two more, and the auto-close jobs one
     // Postgres-backed, event-driven (the sweep adds them), throughput worker; the task rules sweep and
     // its runs the same pair again; the membership invitation expiry sweep (D84) one Postgres-backed,
-    // scheduled, maintenance worker.
-    expect(definitions.filter((definition) => definition.usesPostgres)).toHaveLength(36);
-    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(33);
+    // scheduled, maintenance worker; the patient image thumbnail worker (its 15-minute sweep rides the
+    // same queue) one Postgres-backed, scheduled, throughput worker.
+    expect(definitions.filter((definition) => definition.usesPostgres)).toHaveLength(37);
+    expect(definitions.filter((definition) => definition.scheduled)).toHaveLength(34);
     expect(
       definitions.filter((definition) => definition.criticality === 'throughput'),
-    ).toHaveLength(8);
+    ).toHaveLength(9);
     expect(
       definitions.filter((definition) => definition.criticality === 'maintenance'),
     ).toHaveLength(29);

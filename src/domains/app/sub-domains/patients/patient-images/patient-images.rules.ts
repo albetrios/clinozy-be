@@ -1,3 +1,4 @@
+import { runEnqueueAfterCommit } from '@/core/events/event-bus.js';
 import { toText } from '@/shared/utils/validation/record-fields.util.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import { requireConfirmedUploads } from '@/domains/app/base-record.service.js';
@@ -20,6 +21,7 @@ import {
   PATIENT_IMAGE_MIME_TYPES,
 } from './patient-images.constants.js';
 import type { PatientImagesRepository } from './patient-images.repository.js';
+import { requestPatientImageThumbnailSync } from './queues/patient-image-thumbnail.queue.js';
 
 const contactActivitiesRepository = new ContactActivitiesRepository();
 
@@ -109,7 +111,10 @@ async function assertLinks({
  *   refuses a future `taken_on`, another contact's or an unvisited appointment, another patient's
  *   session. After a create a `system` entry links the photo in the contact's activity — a private
  *   one marked so only the album's holders see it; a move in or out of the album re-marks its
- *   entries (M10, PC16). `decorate` adds each visit's `service_label` and each photo's `file_url` (one read each per page, D86).
+ *   entries (M10, PC16). `decorate` adds each visit's `service_label` and each photo's `file_url` (one read each per page, D86)
+ *   and `thumbnail_url` (the thumbnail's link, else `file_url` — signed locally, no read). A
+ *   create, delete or restore asks for the photo's thumbnail job after the commit (made, removed,
+ *   made again — feat-patient-image-thumbnails); a Redis outage fails nothing (the sweep re-adds it).
  * - **Failure modes:** `ForbiddenError('field_permission_required')`; `ValidationError` on
  *   `file_key`, `taken_on`, `appointment_id` or `patient_treatment_id`.
  */
@@ -142,6 +147,14 @@ export function createPatientImagesRules(repository: PatientImagesRepository): B
       await assertLinks({ values, patientId: existing.patient_id as number });
     },
     afterWrite: async (row, change, context) => {
+      if (change.kind === 'create' || change.kind === 'delete' || change.kind === 'restore') {
+        // The thumbnail follows the row: made after a create or restore, removed after a delete
+        const { organizationPublicId } = context.scope;
+        const patientImagePublicId = String(row.public_id);
+        await runEnqueueAfterCommit(() =>
+          requestPatientImageThumbnailSync({ organizationPublicId, patientImagePublicId }),
+        );
+      }
       const isPrivate = row.album === PATIENT_IMAGE_ALBUM.PRIVATE;
       if (change.kind === 'create') {
         await writePatientFileActivity({
@@ -166,6 +179,21 @@ export function createPatientImagesRules(repository: PatientImagesRepository): B
       });
       for (const output of outputs) {
         output.file_url = links.get(toText(output.file_key))?.url ?? null;
+      }
+      // The grid's image: the thumbnail's link, else the full photo's (none made yet, or unreadable)
+      const thumbnailKeys = outputs.flatMap((output) =>
+        typeof output.thumbnail_key === 'string' ? [output.thumbnail_key] : [],
+      );
+      const thumbnailLinks =
+        thumbnailKeys.length === 0
+          ? new Map<string, string>()
+          : await context.ports.thumbnailReadUrls({
+              organizationPublicId: context.scope.organizationPublicId,
+              thumbnailKeys,
+            });
+      for (const output of outputs) {
+        const thumbnailKey = typeof output.thumbnail_key === 'string' ? output.thumbnail_key : '';
+        output.thumbnail_url = thumbnailLinks.get(thumbnailKey) ?? output.file_url ?? null;
       }
       const appointmentIds = [
         ...new Set(

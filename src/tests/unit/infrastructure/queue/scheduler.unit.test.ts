@@ -51,10 +51,10 @@ describe('infrastructure queue scheduler', () => {
     vi.resetModules();
   });
 
-  it('getScheduledJobs returns audit, session, stripe retention, audit export, tombstone retention, membership invitation expiry, app record purge, idempotency, dlq depth, mail sweeper, upload pending sweep, stripe reclaim, day auto-close sweep, task rules sweep, webhook delivery reclaim, and audit-outbox drain jobs', async () => {
+  it('getScheduledJobs returns audit, session, stripe retention, audit export, tombstone retention, membership invitation expiry, app record purge, idempotency, dlq depth, mail sweeper, upload pending sweep, stripe reclaim, day auto-close sweep, task rules sweep, patient image thumbnail sweep, webhook delivery reclaim, and audit-outbox drain jobs', async () => {
     const { getScheduledJobs } = await import('@/infrastructure/queue/scheduler.js');
     const scheduledJobs = getScheduledJobs();
-    expect(scheduledJobs).toHaveLength(33);
+    expect(scheduledJobs).toHaveLength(34);
     expect(scheduledJobs.map((job) => job.queueName)).toEqual([
       'audit-retention',
       'audit-outbox-drain',
@@ -80,6 +80,8 @@ describe('infrastructure queue scheduler', () => {
       'day-close-auto-close-sweep',
       // TK4: the five-minute task rules sweep
       'task-rules-sweep',
+      // The thumbnail sweep rides the thumbnail queue (job `reconcile-patient-image-thumbnails`).
+      'patient-image-thumbnail',
       'mail-outbox-sweeper',
       'upload-pending-sweep',
       'stripe-webhook-event-reclaim',
@@ -158,14 +160,14 @@ describe('infrastructure queue scheduler', () => {
   it('registerScheduledJobs registers one repeatable job per cleanup queue when enabled', async () => {
     const { registerScheduledJobs } = await import('@/infrastructure/queue/scheduler.js');
     const schedulerHandle = await registerScheduledJobs();
-    expect(upsertJobSchedulerMock).toHaveBeenCalledTimes(33);
-    // Each scheduled job opens one Queue for upsert (33) + the reconcile pass opens one Queue per
-    // unique queue name (33 — the seat reconcile and the export reclaim ride queues no other cron
-    // uses), each closed in its own loop iteration. The upsert queues are closed as soon as
+    expect(upsertJobSchedulerMock).toHaveBeenCalledTimes(34);
+    // Each scheduled job opens one Queue for upsert (34) + the reconcile pass opens one Queue per
+    // unique queue name (34 — the seat reconcile, the export reclaim and the thumbnail sweep ride
+    // queues no other cron uses), each closed in its own loop iteration. The upsert queues are closed as soon as
     // registration ends — not held open for the life of the process.
-    expect(queueCloseMock).toHaveBeenCalledTimes(66);
+    expect(queueCloseMock).toHaveBeenCalledTimes(68);
     await schedulerHandle.close();
-    expect(queueCloseMock).toHaveBeenCalledTimes(66);
+    expect(queueCloseMock).toHaveBeenCalledTimes(68);
   });
 
   it('registerScheduledJobs does not instantiate queues when SCHEDULER_ENABLED is false', async () => {

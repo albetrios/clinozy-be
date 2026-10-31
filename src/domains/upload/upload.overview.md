@@ -56,6 +56,17 @@ This domain implements the contracts documented in [src/PATTERNS.md](src/PATTERN
   (`src/shared/utils/security/image-location.util.ts`) and written back under the same key, before
   the photo is filed.
 
+- **A thumbnail next to a stored image (common; patient photos first):** `UploadService.createThumbnail`
+  reads an image under an opted-in purpose's `<prefix>/<organization public id>/` (the purpose's
+  `UPLOAD_PURPOSE_CONFIG.thumbnailTypes` — image types only; today `organization-file` opts in
+  JPEG, PNG and WebP) and writes a 320 px WebP (quality 80, EXIF orientation applied, metadata
+  stripped, never enlarged — `utils/upload-thumbnail.util.ts`, `sharp`) at
+  `<key without extension>.thumb.webp`; `deleteThumbnail` removes it; `createThumbnailReadUrls`
+  signs 15-minute links. A thumbnail is no upload row, so each call checks the key itself (the
+  organization's own prefix and the thumbnail suffix); none touches the database, so a worker
+  calls them between its database contexts. A missing or unreadable source is a `skipped` answer,
+  never an error. Callers: the patient image thumbnail job.
+
 The upload domain is consumed by other domains rather than driving any flow itself. Notable consumers:
 
 - `user-data-export` (in [user/sub-domains/user-data-export/](src/domains/user/sub-domains/user-data-export/)) presigns the download URL for the GDPR export bundle.

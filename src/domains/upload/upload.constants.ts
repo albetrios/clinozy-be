@@ -43,33 +43,43 @@ export interface UploadPurposeConfig {
   allowedTypes: readonly string[];
   maxSize: number;
   keyPrefix: string;
+  /**
+   * The image types of this purpose that may have a thumbnail made next to them
+   * (`UploadService.createThumbnail`) — empty: none. Image types only.
+   */
+  thumbnailTypes: readonly string[];
 }
 
 /**
  * Per-purpose policy table consulted by the validator and presigned-URL
- * service: allowed MIME types, max byte size, and the S3 key prefix used
- * when constructing object keys.
+ * service: allowed MIME types, max byte size, the S3 key prefix used
+ * when constructing object keys, and the image types that may have a thumbnail.
  */
 export const UPLOAD_PURPOSE_CONFIG: Record<UploadPurpose, UploadPurposeConfig> = {
   [UPLOAD_PURPOSES.AVATAR]: {
     allowedTypes: ['image/png', 'image/jpeg', 'image/webp'],
     maxSize: 2 * 1024 * 1024, // 2 MB
     keyPrefix: 'avatars',
+    thumbnailTypes: [],
   },
   [UPLOAD_PURPOSES.ORGANIZATION_LOGO]: {
     allowedTypes: ['image/png', 'image/jpeg', 'image/webp'],
     maxSize: 5 * 1024 * 1024, // 5 MB
     keyPrefix: 'organization-logos',
+    thumbnailTypes: [],
   },
   [UPLOAD_PURPOSES.USER_FILE]: {
     allowedTypes: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'],
     maxSize: 10 * 1024 * 1024, // 10 MB
     keyPrefix: 'user-files',
+    thumbnailTypes: [],
   },
   [UPLOAD_PURPOSES.ORGANIZATION_FILE]: {
     allowedTypes: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'],
     maxSize: 10 * 1024 * 1024, // 10 MB
     keyPrefix: 'organization-files',
+    // Patient photos (app patient images) are organization files
+    thumbnailTypes: ['image/jpeg', 'image/png', 'image/webp'],
   },
 } as const;
 

@@ -33,7 +33,9 @@ import {
  * - **Notes:** the album is a column, not three tables (P23 — the private album is an application
  *   rule, not RLS); an upload is filed once (`idx_patient_images_organization_file_key`, P25); the
  *   body part from the patient file's one list (TR8). The patient `ON DELETE RESTRICT` (P7). RLS on
- *   the organization GUC with the retention-cleanup arm for the deleted-record purge.
+ *   the organization GUC with the retention-cleanup arm for the deleted-record purge and the
+ *   thumbnail sweep. `thumbnail_key` is the background thumbnail (feat-patient-image-thumbnails),
+ *   null until it exists.
  */
 export const patient_images = appSchema
   .table(
@@ -60,6 +62,8 @@ export const patient_images = appSchema
       stage: varchar('stage', { length: 6 }),
       // The confirmed upload's object key
       file_key: varchar('file_key', { length: 512 }).notNull(),
+      // Its thumbnail's object key — null until the thumbnail job makes one (and after a delete)
+      thumbnail_key: varchar('thumbnail_key', { length: 512 }),
       // From the upload (P25)
       file_name: varchar('file_name', { length: 120 }).notNull(),
       // The drawer's Name

@@ -44,6 +44,8 @@ import {
 import { STRIPE_WEBHOOK_EVENT_RECLAIM_QUEUE_NAME } from '@/domains/billing/sub-domains/stripe-webhook/workers/stripe-webhook-event-reclaim.constants.js';
 import { SUBSCRIPTION_SEAT_RECONCILE_JOB_NAME } from '@/domains/billing/sub-domains/subscription/workers/subscription-seat-reconcile.constants.js';
 import { SUBSCRIPTION_SEAT_SYNC_QUEUE_NAME } from '@/domains/billing/sub-domains/subscription/queues/subscription-seat-sync.queue.js';
+import { PATIENT_IMAGE_THUMBNAIL_QUEUE_NAME } from '@/domains/app/sub-domains/patients/patient-images/queues/patient-image-thumbnail.queue.js';
+import { PATIENT_IMAGE_THUMBNAIL_RECONCILE_JOB_NAME } from '@/domains/app/sub-domains/patients/patient-images/workers/patient-image-thumbnail.constants.js';
 import { WEBHOOK_DELIVERY_RECLAIM_QUEUE_NAME } from '@/domains/notify/sub-domains/webhook/webhook-delivery/workers/webhook-delivery-reclaim.constants.js';
 import { USER_DATA_EXPORT_QUEUE_NAME } from '@/domains/user/sub-domains/user-data-export/queues/user-data-export.queue.js';
 import { USER_DATA_EXPORT_RECLAIM_JOB_NAME } from '@/domains/user/sub-domains/user-data-export/workers/user-data-export-reclaim.constants.js';
@@ -101,6 +103,8 @@ const DEFAULT_APP_RECORD_PURGE_CRON = '56 5 * * *';
 const DEFAULT_DAY_CLOSE_AUTO_CLOSE_SWEEP_CRON = '7 * * * *';
 /** Every five minutes: rule tasks open and close, snoozed tasks wake, the app takes its steps (TK4). */
 const DEFAULT_TASK_RULES_SWEEP_CRON = '*/5 * * * *';
+// With the 10-minute grace, a photo whose thumbnail enqueue was lost gets one within ~25 minutes.
+const DEFAULT_PATIENT_IMAGE_THUMBNAIL_RECONCILE_CRON = '*/15 * * * *';
 const DEFAULT_MEMBER_ROLE_TOMBSTONE_RETENTION_CRON = '51 5 * * *';
 const DEFAULT_ORGANIZATION_API_KEY_TOMBSTONE_RETENTION_CRON = '52 5 * * *';
 const DEFAULT_USER_TOMBSTONE_RETENTION_CRON = '53 5 * * *';
@@ -357,6 +361,15 @@ function getAppSweepScheduledJobs(timezone: string | undefined): ScheduledJob[] 
         schedulerId: 'task-rules-sweep',
         jobName: 'find-organizations-for-task-rules',
         cronPattern: DEFAULT_TASK_RULES_SWEEP_CRON,
+      },
+    }),
+    withSchedulerTimezone({
+      timezone,
+      job: {
+        queueName: PATIENT_IMAGE_THUMBNAIL_QUEUE_NAME,
+        schedulerId: 'patient-image-thumbnail-reconcile',
+        jobName: PATIENT_IMAGE_THUMBNAIL_RECONCILE_JOB_NAME,
+        cronPattern: DEFAULT_PATIENT_IMAGE_THUMBNAIL_RECONCILE_CRON,
       },
     }),
   ];

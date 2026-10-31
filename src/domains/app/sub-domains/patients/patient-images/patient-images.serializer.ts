@@ -3,8 +3,8 @@ import type { BaseRecordReferenceLookup } from '@/domains/app/base-record.types.
 import type { PatientImageOutput } from './patient-images.types.js';
 
 /**
- * Shapes an `app.patient_images` row as the API returns it (routes-final 7.F.6). `service_label`
- * and `file_url` are the rules' `decorate` (one read each per page) — empty here.
+ * Shapes an `app.patient_images` row as the API returns it (routes-final 7.F.6). `service_label`,
+ * `file_url` and `thumbnail_url` are the rules' `decorate` (one read each per page) — empty here.
  */
 export function serializePatientImage({
   row,
@@ -22,7 +22,9 @@ export function serializePatientImage({
     stage: row.stage as string | null,
     file_key: row.file_key as string,
     file_name: row.file_name as string,
+    thumbnail_key: row.thumbnail_key as string | null,
     file_url: null,
+    thumbnail_url: null,
     display_name: row.display_name as string | null,
     caption: row.caption as string | null,
     body_part: row.body_part as string | null,
