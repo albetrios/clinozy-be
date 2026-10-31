@@ -163,6 +163,20 @@ export class MemberRoleService {
     return role;
   }
 
+  /**
+   * The organization's live system role with this name, or null when it has none — the Admin role
+   * a former owner moves to on an ownership transfer. MUST run inside the organization's context.
+   */
+  async findSystemRoleForOrganization({
+    organization_id,
+    name,
+  }: {
+    organization_id: number;
+    name: string;
+  }): Promise<MemberRoleRow | null> {
+    return this.memberRoleRepository.findSystemRoleByName(name, organization_id);
+  }
+
   async requireRoleRecordByPublicId({
     organization_public_id,
     role_public_id,

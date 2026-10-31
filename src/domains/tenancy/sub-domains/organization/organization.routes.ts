@@ -152,7 +152,7 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Delete organization',
           description:
-            'Deletes an organization: it disappears from every read at once, its uploads are tombstoned and its subscription is canceled, and the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires ORGANIZATION_DELETE permission. Requires a recent step-up on this session (`POST /auth/step-up`, within 10 minutes).',
+            'Deletes an organization: it disappears from every read at once, its uploads are tombstoned and its subscription is canceled, and the rows are hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires ORGANIZATION_DELETE permission, and only the organization owner may delete it (403 `owner_only` for anyone else, an API key included). Requires a recent step-up on this session (`POST /auth/step-up`, within 10 minutes).',
           tags: ['Organization'],
         },
         onRequest: [app.authenticate],

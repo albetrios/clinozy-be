@@ -75,9 +75,11 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { MembershipAdditionalRolesRepository } from './membership-additional-roles/membership-additional-roles.repository.js';
 import {
   MEMBERSHIP_DELETE_REASON,
+  MEMBERSHIP_ROLE_IDS_MAX,
   MEMBERSHIP_STATUS,
   type MembershipDeleteReason,
 } from './membership.constants.js';
+import { ADMIN_ROLE_NAME } from '@/domains/tenancy/sub-domains/member-roles/member-role.constants.js';
 import type { CreateMembershipInput, UpdateMembershipInput } from './membership.dto.js';
 
 /** A role row as the member-role service resolves it. */
@@ -203,6 +205,20 @@ function ownerMembershipFixedError(messageKey: string): ForbiddenError {
   return new ForbiddenError(messageKey).withReason('owner_membership_fixed');
 }
 
+/** The 400 on `former_owner_role_id` of an ownership transfer, with the given message key. */
+function formerOwnerRoleError(options: {
+  messageKey: string;
+  messageParams?: Record<string, string>;
+}): ValidationError {
+  return new ValidationError(options.messageKey, options.messageParams, undefined, [
+    {
+      field: 'former_owner_role_id',
+      messageKey: options.messageKey,
+      ...(options.messageParams ? { messageParams: options.messageParams } : {}),
+    },
+  ]);
+}
+
 /**
  * The checks of an edit of a live member (T10, K3, sec-new-T1): their name follows their profile,
  * the owner's status is locked, working hours end after they start, and an invited member's status
@@ -290,9 +306,10 @@ function assertOwnerKeepsMainRole(options: {
  *   {@link withAppDatabaseContext} and resolves the caller's
  *   organization through
  *   {@link OrganizationService.requireOrganizationRecordByPublicId}
- *   before touching the membership repository. `transferOwnership` is
- *   delegated to {@link OrganizationService.transferOrganizationOwnership} so
- *   the `owner_user_id` flip and the membership update happen atomically.
+ *   before touching the membership repository. `transferOwnership` flips
+ *   `owner_user_id` through {@link OrganizationService.transferOrganizationOwnership}
+ *   and moves both people's main roles (the Owner role to the new owner, the
+ *   former owner to Admin) in the same transaction.
  *   When a brand-new member is created, the service also pushes the
  *   organization's default locale onto the new user via
  *   {@link UserSettingsService.update} if the user is still on factory-default
@@ -309,7 +326,7 @@ function assertOwnerKeepsMainRole(options: {
  * - **Side effects:** writes through `MembershipRepository` (insert / update /
  *   soft-delete with `deleted_at`); calls {@link invalidatePermissions} after
  *   every membership mutation that changes effective permissions (create,
- *   update, delete, leave) so the affected user's Redis permission cache is
+ *   update, delete, leave, transfer) so the affected user's Redis permission cache is
  *   purged immediately instead of lingering for the cache TTL; updates
  *   {@link UserSettingsService} for locale defaults.
  * - **Notes:** `getPermissions` reads through
@@ -1879,6 +1896,26 @@ export class MembershipService {
     this.enqueueSeatQuantitySync(organization_public_id);
   }
 
+  /**
+   * Hands the organization to another active member (launch D81 (4)): `owner_user_id` moves, the
+   * role the owner holds as their main one (the locked Owner role) becomes the new owner's main role,
+   * and the former owner moves to the Admin role — or to `former_owner_role_id` — in one transaction.
+   *
+   * @remarks
+   * - **Algorithm:** inside the organization context — the caller must be the owner; the new owner
+   *   must be an active member; the former owner's new main role is resolved (the named one, else
+   *   the Admin system role, else the new owner's current main role) and may never be the Owner
+   *   role. Then the guarded `owner_user_id` flip
+   *   ({@link OrganizationService.transferOrganizationOwnership}), the new owner's main role (their
+   *   previous main role stays as an extra role) and the former owner's (the Owner role leaves their
+   *   extra roles too), and one `membership.updated` each. After commit, both people's cached
+   *   permissions are purged.
+   * - **Failure modes:** `ForbiddenError('errors:onlyOwnerCanTransfer')` for a non-owner;
+   *   `NotFoundError('User' | 'Membership')`; `ValidationError` on `former_owner_role_id` (no live
+   *   role here, or the Owner role itself); `ConflictError` when the new owner stopped being
+   *   active before the write.
+   * - **Notes:** naming the owner themselves is a no-op that changes nothing.
+   */
   async transferOwnership({
     scope,
     body,
@@ -1918,20 +1955,65 @@ export class MembershipService {
           // is no such member.
           throw new NotFoundError('Membership');
         }
+        if (newOwnerUserId === currentUserId) {
+          return this.resolveAndSerializeMembership({
+            membership: newOwnerMembership,
+            organization,
+          });
+        }
+        const formerOwnerMembership = await this.membershipRepository.findByUserAndOrganization(
+          currentUserId,
+          organization.id,
+        );
+        // The owner's main role is fixed while they own the organization (assertOwnerKeepsMainRole),
+        // so it is the role that gives them the whole organization — the locked Owner role.
+        const ownerRoleId = formerOwnerMembership?.role_id;
+        const formerOwnerRoleId =
+          ownerRoleId === undefined
+            ? undefined
+            : await this.resolveFormerOwnerRoleId({
+                organizationId: organization.id,
+                requestedRolePublicId: parsed.former_owner_role_id,
+                ownerRoleId,
+                newOwnerMainRoleId: newOwnerMembership.role_id,
+              });
         const transferred = await this.organizationService.transferOrganizationOwnership({
           organization_public_id,
           new_owner_user_id: newOwnerUserId,
         });
-        // Serialized against the new owner, so the answer reads `is_owner: true`.
-        return this.resolveAndSerializeMembership({
+        if (
+          !(formerOwnerMembership && ownerRoleId !== undefined && formerOwnerRoleId !== undefined)
+        ) {
+          return this.resolveAndSerializeMembership({
+            membership: newOwnerMembership,
+            organization: transferred,
+          });
+        }
+        const newOwnerUpdated = await this.moveMainRole({
+          organizationId: organization.id,
           membership: newOwnerMembership,
+          mainRoleId: ownerRoleId,
+          keepPreviousMainRole: true,
+          actingUserId: currentUserId,
+        });
+        const formerOwnerUpdated = await this.moveMainRole({
+          organizationId: organization.id,
+          membership: formerOwnerMembership,
+          mainRoleId: formerOwnerRoleId,
+          keepPreviousMainRole: false,
+          actingUserId: currentUserId,
+        });
+        // Serialized against the new owner, so the answer reads `is_owner: true`.
+        const [output] = await this.emitMembershipEvents({
+          type: MEMBERSHIP_EVENT.UPDATED,
+          memberships: [newOwnerUpdated, formerOwnerUpdated],
           organization: transferred,
         });
+        return output!;
       },
     });
-    // sec-R11b: ownership itself is a live DB check (never cached), but invalidate both parties'
-    // cached permission sets after commit for defense-in-depth and consistency with the other
-    // membership mutations, so no owner-implied permission can ever linger in cache.
+    // sec-R11b: purge both people's cached permission sets after commit — their main roles just
+    // changed, so the former owner loses the Owner role's codes at once, not after the cache TTL.
     await invalidatePermissions({
       userId: current_user_public_id,
       organizationId: organization_public_id,
@@ -1941,6 +2023,83 @@ export class MembershipService {
       organizationId: organization_public_id,
     });
     return result;
+  }
+
+  /**
+   * The main role a former owner moves to on a transfer: the role the request names, else the
+   * organization's Admin system role, else the new owner's current main role — never the Owner role.
+   */
+  private async resolveFormerOwnerRoleId(options: {
+    organizationId: number;
+    requestedRolePublicId: string | undefined;
+    ownerRoleId: number;
+    newOwnerMainRoleId: number;
+  }): Promise<number> {
+    let roleId: number;
+    if (options.requestedRolePublicId === undefined) {
+      const admin = await this.memberRoleService.findSystemRoleForOrganization({
+        organization_id: options.organizationId,
+        name: ADMIN_ROLE_NAME,
+      });
+      roleId = admin?.id ?? options.newOwnerMainRoleId;
+    } else {
+      const requested = await this.memberRoleService
+        .requireRoleRecordForOrganization({
+          organization_id: options.organizationId,
+          role_public_id: options.requestedRolePublicId,
+        })
+        .catch((error: unknown) => {
+          if (!(error instanceof NotFoundError)) throw error;
+          throw formerOwnerRoleError({
+            messageKey: 'errors:validation.membershipRoleNotFound',
+            messageParams: { role_id: options.requestedRolePublicId ?? '' },
+          });
+        });
+      roleId = requested.id;
+    }
+    if (roleId === options.ownerRoleId) {
+      throw formerOwnerRoleError({
+        messageKey: 'errors:validation.formerOwnerRoleIsOwnerRole',
+      });
+    }
+    return roleId;
+  }
+
+  /**
+   * Makes `mainRoleId` a membership's main role, keeping its other roles: with
+   * `keepPreviousMainRole` the role it held as main stays as an extra role (first), and the new
+   * main role leaves the extra roles. MUST run inside the organization context.
+   */
+  private async moveMainRole(options: {
+    organizationId: number;
+    membership: MembershipRow;
+    mainRoleId: number;
+    keepPreviousMainRole: boolean;
+    actingUserId: number;
+  }): Promise<MembershipRow> {
+    const { membership } = options;
+    const extraRoleIds = await this.membershipAdditionalRolesRepository.listRoleIdsForMembership(
+      membership.id,
+    );
+    const keptRoleIds = [
+      ...new Set([...(options.keepPreviousMainRole ? [membership.role_id] : []), ...extraRoleIds]),
+    ]
+      .filter((roleId) => roleId !== options.mainRoleId)
+      .slice(0, MEMBERSHIP_ROLE_IDS_MAX - 1);
+    const updated = await this.membershipRepository.update(
+      membership.public_id,
+      options.organizationId,
+      { role_id: options.mainRoleId },
+      options.actingUserId,
+    );
+    if (!updated) throw new NotFoundError('Membership');
+    await this.membershipAdditionalRolesRepository.replaceForMembership({
+      membership_id: membership.id,
+      organization_id: options.organizationId,
+      role_ids: keptRoleIds,
+      created_by_user_id: options.actingUserId,
+    });
+    return updated;
   }
 
   /**

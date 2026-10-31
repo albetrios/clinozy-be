@@ -4,6 +4,7 @@ import {
   type AppAccessSection,
 } from '@/domains/app/app-access-sections.js';
 import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
+import { ADMIN_ROLE_NAME } from '@/domains/tenancy/sub-domains/member-roles/member-role.constants.js';
 import { CHIP_TONE, type ChipTone } from '@/shared/constants/record-fields.constants.js';
 
 /** A table action a matrix checkbox grants — `read` is the matrix's View, `update` its Edit. */
@@ -302,7 +303,7 @@ export const APP_BOOKABLE_ROLE_NAMES: readonly string[] = [
 export function appRolePresets(adminCodes: readonly string[]): readonly AppRolePreset[] {
   return [
     {
-      name: 'Admin',
+      name: ADMIN_ROLE_NAME,
       description: 'Runs the organization: every section, settings, team and roles.',
       tone: CHIP_TONE.LAVENDER,
       isLocked: true,

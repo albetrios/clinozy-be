@@ -205,6 +205,26 @@ export class MemberRoleRepository {
     return (rows[0] ?? null) as MemberRoleRow | null;
   }
 
+  /**
+   * The organization's live system role with this name (`Owner`, `Admin`, the clinic roles), or
+   * null — system role names are fixed, so the name identifies the role.
+   */
+  async findSystemRoleByName(name: string, organization_id: number): Promise<MemberRoleRow | null> {
+    const rows = await getRequestDatabase()
+      .select()
+      .from(roles)
+      .where(
+        and(
+          eq(roles.name, name),
+          eq(roles.organization_id, organization_id),
+          eq(roles.is_system, true),
+          isNull(roles.deleted_at),
+        ),
+      )
+      .limit(1);
+    return (rows[0] ?? null) as MemberRoleRow | null;
+  }
+
   async findByInternalId(
     role_internal_id: number,
     organization_id: number,

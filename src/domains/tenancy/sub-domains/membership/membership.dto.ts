@@ -141,11 +141,14 @@ export const listMembershipsQueryDto = listSearchSortSchema(['name', 'created_at
 
 /**
  * Zod schema for the `POST /organization/transfer-ownership` request
- * body. `new_owner_user_id` is the target user's public id.
+ * body. `new_owner_user_id` is the target user's public id; the optional `former_owner_role_id`
+ * (`rol_…`) is the main role the current owner moves to — the organization's Admin role when
+ * absent. It can never be the role the owner holds now (the Owner role passes to the new owner).
  */
 export const transferOwnershipDto = z
   .object({
     new_owner_user_id: trimmedStringMinMax({ min: 1, max: 28 }),
+    former_owner_role_id: trimmedStringMinMax({ min: 1, max: 28 }).optional(),
   })
   .strict();
 

@@ -85,6 +85,7 @@ describe('MembershipService', () => {
     requireRoleRecordForOrganization: vi.fn().mockResolvedValue(role),
     resolveRolePublicIdByInternalId: vi.fn().mockResolvedValue('role_public'),
     resolveRolePublicIdForOrganization: vi.fn().mockResolvedValue('role_public'),
+    findSystemRoleForOrganization: vi.fn().mockResolvedValue(null),
   } as unknown as MemberRoleService;
 
   const memberRolePermissionService = {
@@ -749,6 +750,31 @@ describe('MembershipService', () => {
       membershipAdditionalRolesRepository,
     );
 
+    // B2-1: the owner (user 99) holds the Owner role (3) as main; the new owner (user 10) is on 5.
+    const ownerRoleId = 3;
+    const adminRoleId = 7;
+    const newOwnerRow = { ...membershipRow, id: 41, public_id: 'mem_new', user_id: 10, role_id: 5 };
+    const formerOwnerRow = {
+      ...membershipRow,
+      id: 42,
+      public_id: 'mem_former',
+      user_id: 99,
+      role_id: ownerRoleId,
+    };
+    vi.mocked(membershipRepository.findByUserAndOrganization).mockImplementation(
+      async (userId: number) => (userId === 10 ? newOwnerRow : formerOwnerRow) as never,
+    );
+    vi.mocked(membershipRepository.update).mockImplementation(
+      async (publicId: string, _organizationId: number, data: { role_id?: number }) =>
+        ({
+          ...(publicId === 'mem_new' ? newOwnerRow : formerOwnerRow),
+          role_id: data.role_id,
+        }) as never,
+    );
+    vi.mocked(memberRoleService.findSystemRoleForOrganization).mockResolvedValue({
+      id: adminRoleId,
+    } as never);
+
     const transferred = await transferService.transferOwnership({
       scope: asScope('org_public'),
       body: { new_owner_user_id: 'new_owner_public' },
@@ -757,6 +783,19 @@ describe('MembershipService', () => {
     expect(transferOrganizationOwnership).toHaveBeenCalled();
     // The new owner's membership (user 10) reads as the owner (D81 (4)).
     expect(transferred.is_owner).toBe(true);
+    // The Owner role becomes the new owner's main role; the former owner moves to Admin.
+    expect(membershipRepository.update).toHaveBeenCalledWith(
+      'mem_new',
+      1,
+      { role_id: ownerRoleId },
+      99,
+    );
+    expect(membershipRepository.update).toHaveBeenCalledWith(
+      'mem_former',
+      1,
+      { role_id: adminRoleId },
+      99,
+    );
   });
 
   it('transferOwnership rejects non-owner caller', async () => {

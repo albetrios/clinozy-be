@@ -227,6 +227,21 @@ export class OrganizationService {
     if (!updated) throw new NotFoundError('Organization');
   }
 
+  /**
+   * Refuses a caller who is not the organization's owner (`owner_user_id`) — an API key, which has
+   * no user, included. MUST run inside the organization's database context.
+   */
+  private async assertCallerOwnsOrganization(options: {
+    organization: Pick<Organization, 'owner_user_id'>;
+    callerUserPublicId: string | undefined;
+    messageKey: string;
+  }): Promise<void> {
+    const callerUserId = await this.repository.resolveUserIdByPublicId(options.callerUserPublicId);
+    if (callerUserId === null || callerUserId !== options.organization.owner_user_id) {
+      throw new ForbiddenError(options.messageKey).withReason('owner_only');
+    }
+  }
+
   async requireOrganizationByPublicId(public_id: string): Promise<OrganizationBillingContext> {
     const organization = await this.requireOrganizationRecordByPublicId(public_id);
     return {
@@ -669,15 +684,34 @@ export class OrganizationService {
    *   the next tick; a PERSONAL organization (never deletable standalone, and excluded by the
    *   reconciler scan) would surface `ConflictError`.
    * - **Side effects:** same as `delete`.
-   * - **Notes:** thin alias kept distinct from `delete` so the reconciler's intent is
-   *   explicit at the call site.
+   * - **Notes:** kept distinct from `delete` so the reconciler's intent is explicit at the call
+   *   site; it re-drives a deletion the owner already started, so it runs without a caller (no
+   *   owner check).
    */
   async resumeOffboarding(scope: OrganizationPrincipalDatabaseScope): Promise<void> {
-    await this.delete(scope);
+    await this.offboardOrganization({
+      scope,
+      options: { personalAllowed: false, ownerOnly: false },
+    });
   }
 
+  /**
+   * Deletes the organization on its owner's request (`DELETE /tenancy/organization`).
+   *
+   * @remarks
+   * - **Algorithm:** the {@link OrganizationService.offboardOrganization} sequence, after checking
+   *   the caller is the organization's owner — holding `organization:delete` is not enough (B2-1:
+   *   a former owner, or a role edited to carry the code, must not delete the clinic).
+   * - **Failure modes:** `ForbiddenError('errors:onlyOwnerCanDeleteOrganization')` (`owner_only`)
+   *   for anyone but the owner, an API key included; `NotFoundError('Organization')`;
+   *   `ConflictError` for a PERSONAL organization.
+   * - **Side effects:** as `offboardOrganization`.
+   */
   async delete(scope: OrganizationPrincipalDatabaseScope): Promise<void> {
-    await this.offboardOrganization({ scope, options: { personalAllowed: false } });
+    await this.offboardOrganization({
+      scope,
+      options: { personalAllowed: false, ownerOnly: true },
+    });
   }
 
   /**
@@ -699,17 +733,20 @@ export class OrganizationService {
     if (personalOrganizationPublicId === null) return;
     await this.offboardOrganization({
       scope: PRINCIPAL_SCOPE.VERIFIED({ organizationPublicId: personalOrganizationPublicId }),
-      options: { personalAllowed: true },
+      options: { personalAllowed: true, ownerOnly: false },
     });
   }
 
-  /** The deletion sequence behind {@link delete} and {@link offboardPersonalOrganization}. */
+  /**
+   * The deletion sequence behind {@link delete}, {@link resumeOffboarding} and
+   * {@link offboardPersonalOrganization}; `ownerOnly` refuses a caller who is not the owner.
+   */
   private async offboardOrganization({
     scope,
     options,
   }: {
     scope: OrganizationPrincipalDatabaseScope;
-    options: { personalAllowed: boolean };
+    options: { personalAllowed: boolean; ownerOnly: boolean };
   }): Promise<void> {
     const public_id = scope.organizationPublicId;
     const organization = await withAppDatabaseContext({
@@ -717,6 +754,13 @@ export class OrganizationService {
       callback: async () => {
         const found = await this.repository.findByPublicId(public_id);
         if (!found) throw new NotFoundError('Organization');
+        if (options.ownerOnly) {
+          await this.assertCallerOwnsOrganization({
+            organization: found,
+            callerUserPublicId: scope.userPublicId,
+            messageKey: 'errors:onlyOwnerCanDeleteOrganization',
+          });
+        }
         // A PERSONAL organization is the user's own account-level workspace — it is never
         // deletable on its own; it goes only with the account (offboardPersonalOrganization).
         if (!options.personalAllowed)
