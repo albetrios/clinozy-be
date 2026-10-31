@@ -53,6 +53,9 @@ previews answer what a bill or a change would come to and write nothing (D81, Q2
   sessions a live extra-sessions offer gives. A kept line keeps its rate and its sessions per unit.
 - **A preview writes nothing (D81, Q2):** it plans exactly as the save does and refuses what the
   save would (a bill's contact may wait until the patient is picked).
+- **A line's description (feat-bill-line-description BD4):** optional free text (1–280), printed
+  under the line's name; on a change a kept line keeps it unless sent, `null` clears it. It never
+  moves an amount. Medical sale lines show it too (taken on `POST /app/medical-sales`).
 - **Editable until settled (B12):** a payment on a closed day freezes it (`409 invoice_settled`);
   the total never goes under what is paid; the date stays in its financial year.
 - **Deleted only unpaid (B14):** nothing paid and no credit note; its patient offerings go and

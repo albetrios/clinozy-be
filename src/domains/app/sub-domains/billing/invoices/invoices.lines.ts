@@ -516,6 +516,7 @@ async function planLine(options: {
       line_number: options.index + 1,
       quantity: item.quantity,
       discount_percent: item.discount_percent ?? toAmount(kept?.discount_percent) ?? 0,
+      description: item.description === undefined ? (kept?.description ?? null) : item.description,
       batch_number:
         item.batch_number === undefined ? (kept?.batch_number ?? null) : item.batch_number,
       ...(item.medicine_batch_id === undefined

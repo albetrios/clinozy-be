@@ -105,7 +105,7 @@ async function resolveMemberIds({
 /**
  * MD5, MD19: each line's medicine taken from its unexpired batches, earliest expiry first — the
  * invoice's lines, one per batch drawn (its number and id), at the line's discount (the medicine's
- * near-expiry discount unless sent).
+ * near-expiry discount unless sent), each carrying the item's description.
  */
 async function drawSaleLines(options: {
   items: CreateMedicalSaleInput['items'];
@@ -135,6 +135,7 @@ async function drawSaleLines(options: {
         medicine_id: item.medicine_id,
         quantity: draw.quantity,
         discount_percent: discount,
+        description: item.description ?? null,
         batch_number: draw.batch.batch_number,
         medicine_batch_id: draw.batch.id,
       });
@@ -356,6 +357,7 @@ function lineOutput(line: MedicalSaleLineRow): Record<string, unknown> {
     invoice_item_id: line.public_id,
     medicine_id: line.medicine_id,
     name: line.name,
+    description: line.description,
     pack_size: line.pack_size,
     hsn_code: line.hsn_code,
     units_per_pack: line.units_per_pack ?? 1,

@@ -469,6 +469,7 @@ Table app.invoice_items {
   batch_number varchar(20)
   created_at timestamptz [not null]
   created_by_user_id bigint
+  description varchar(280)
   discount_amount numeric(12, 2) [not null]
   discount_percent numeric(5, 2) [not null]
   gst_amount numeric(12, 2) [not null]

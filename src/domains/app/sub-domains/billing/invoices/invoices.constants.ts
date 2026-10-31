@@ -40,6 +40,9 @@ export const INVOICE_ITEM_QUANTITY_MAX = RECORD_COUNT_MAX;
 /** Most members credited on one invoice (B15). */
 export const INVOICE_MEMBERS_MAX = 10;
 
+/** The longest description a line carries, printed under its name (feat-bill-line-description BD1). */
+export const INVOICE_ITEM_DESCRIPTION_MAX = 280;
+
 /** The longest printed remark. */
 export const INVOICE_REMARK_MAX = 500;
 

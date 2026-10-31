@@ -52,6 +52,7 @@ export interface MedicalSaleLineRow {
   public_id: string;
   medicine_id: string | null;
   name: string;
+  description: string | null;
   pack_size: string | null;
   hsn_code: string | null;
   units_per_pack: number | null;
@@ -189,6 +190,7 @@ export class MedicalSalesRepository extends BaseRecordRepository {
         public_id: invoice_items.public_id,
         medicine_id: medicines.public_id,
         name: invoice_items.name,
+        description: invoice_items.description,
         pack_size: invoice_items.pack_size,
         hsn_code: invoice_items.hsn_code,
         units_per_pack: medicines.units_per_pack,

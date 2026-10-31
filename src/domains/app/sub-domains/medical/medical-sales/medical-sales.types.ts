@@ -9,6 +9,8 @@ export interface MedicalSaleItemOutput {
   invoice_item_id: string;
   medicine_id: string | null;
   name: string;
+  /** The line's free text, typed on the bill (feat-bill-line-description). */
+  description: string | null;
   pack_size: string | null;
   hsn_code: string | null;
   units_per_pack: number;
