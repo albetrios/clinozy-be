@@ -6,10 +6,7 @@
 //     (.env.<env> / .setup-credentials / .setup-state.*), same predicate as
 //     be-guardrails.mjs;
 //   - deny destructive shell smuggled through an MCP tool's command-like input
-//     (rm -rf, git push --force, mkfs/dd), same patterns as cursor-shell-guard;
-//   - escalate GitHub PR creation to the user (parity with be-no-unrequested-pr.mjs)
-//     — deny with an instruction to ask the user, since Cursor hooks have no
-//     native "ask" decision.
+//     (rm -rf, git push --force, mkfs/dd), same patterns as cursor-shell-guard.
 //
 // Reads the hook payload on stdin; prints { permission: "allow" | "deny" }.
 // Fail-open: any error allows the call.
@@ -39,13 +36,6 @@ try {
   inputText = typeof input === "string" ? input : JSON.stringify(input);
 } catch {
   allow();
-}
-
-// PR creation must be user-requested (parity with be-no-unrequested-pr.mjs).
-if (/create_pull_request/i.test(toolName)) {
-  deny(
-    "clinozy-be guardrail: opening a GitHub PR via MCP requires an explicit user request. Confirm with the user, then have them approve the PR creation.",
-  );
 }
 
 // Secrets file referenced anywhere in the MCP input (the one rule set, _be-guard-rules.mjs).

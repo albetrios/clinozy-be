@@ -51,32 +51,21 @@ export function withoutQuotedText(command) {
     .replace(/"[^"]*"/g, " ");
 }
 
-/** The enforcement wiring: an edit here needs the user's explicit confirmation (rule R5). */
-const ENFORCEMENT_WIRING =
-  /(agent-os\/hooks\/hooks\.json|agent-os\/platforms\/targets\.json|agent-os\/platforms\/(claude\/settings|cursor\/hooks)\.json|\.claude\/settings(\.local)?\.json|\.cursor\/hooks\.json|agent-os\/hooks\/(_be-guard-rules|be-guard-edits|be-guardrails|be-cursor-shell-guard|be-cursor-edit-guard|be-cursor-read-guard|be-cursor-mcp-guard|be-injection-scan)\.mjs)$/;
-
 /** Generated files: change the source and run the generator instead (rule R3). */
 const GENERATED_FILE =
   /(pnpm-lock\.yaml|docs\/routes\.txt|docs\/openapi\/openapi[^/]*\.json|docs\/postman-collection\.json|project-identity\.constants\.ts|docs\/database\/clinozy-be\.dbml|\.codex\/hooks\.json|agent-os\/platforms\/codex\/hooks\.json)$/;
 
 /**
- * The hard rules an edit breaks, in the order they are checked: `{ rule, decision, reason }` with
- * `decision` `ask` (R5) or `deny` (R1–R4).
+ * The hard rules an edit breaks, in the order they are checked: `{ rule, decision, reason }`,
+ * every `decision` a `deny`.
  *
  * R1–R4 are clinozy-be's conventions, so they judge only files in this repository
  * (`inRepository`); a session holding several repositories runs every repository's hooks on every
- * edit (tooling/agent-os/session-hooks.ts). R5 guards every path.
+ * edit (tooling/agent-os/session-hooks.ts).
  */
 export function editRuleViolations({ filePath, content, inRepository }) {
   const violations = [];
   const base = filePath.split("/").pop();
-  if (ENFORCEMENT_WIRING.test(filePath)) {
-    violations.push({
-      rule: "R5",
-      decision: "ask",
-      reason: `'${base}' is part of the agent-guard enforcement wiring. Confirm this change is user-requested — hooks/guards must never be weakened or disabled without explicit approval (agent-os/hooks/README.md).`,
-    });
-  }
   if (!inRepository) return violations;
   if (GENERATED_FILE.test(filePath)) {
     violations.push({
