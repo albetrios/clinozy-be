@@ -363,6 +363,8 @@ describe('createMembershipController', () => {
     expect(service.revokeInvitation).toHaveBeenCalledWith({
       scope: expect.objectContaining({ organizationPublicId }),
       membership_public_id: membershipPublicId,
+      // A user caller: no API-key scopes for role ordering (B2-11).
+      options: {},
     });
     expect(reply.code).toHaveBeenCalledWith(204);
 

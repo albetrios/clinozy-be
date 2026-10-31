@@ -318,7 +318,7 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Update API key',
           description:
-            'Updates an API key (name or status). Requires API_KEY_MANAGE permission. Reactivating a revoked key (status REVOKED → ACTIVE) is a fresh grant of its scopes: the caller must be a user holding every scope on the key (403 otherwise; API-key principals are refused).',
+            "Updates an API key (name or status). Requires API_KEY_MANAGE permission. Reactivating a revoked key (status REVOKED → ACTIVE) is a fresh grant of its scopes: the caller must be a user holding every scope on the key (403 otherwise; API-key principals are refused). A key another member created is changed, rotated or deleted only by a caller holding every code its creator holds (403 otherwise) — a lower-ranked manager cannot touch the owner's or an Admin's keys.",
           tags: ['API Key'],
           params: apiKeyIdParamsDto,
           body: updateOrganizationApiKeyDto,
@@ -338,7 +338,7 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Delete API key',
           description:
-            'Deletes an API key: it stops authenticating at once and the row is hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires API_KEY_MANAGE permission.',
+            "Deletes an API key: it stops authenticating at once and the row is hard-deleted after TOMBSTONE_RETENTION_DAYS (default 90). Requires API_KEY_MANAGE permission. A key another member created is changed, rotated or deleted only by a caller holding every code its creator holds (403 otherwise) — a lower-ranked manager cannot touch the owner's or an Admin's keys.",
           tags: ['API Key'],
           params: apiKeyIdParamsDto,
         },
@@ -354,7 +354,7 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Rotate API key',
           description:
-            'Regenerates the API key secret. The old key is immediately invalidated. Requires a user principal with API_KEY_MANAGE permission.',
+            "Regenerates the API key secret. The old key is immediately invalidated. Requires a user principal with API_KEY_MANAGE permission. A key another member created is changed, rotated or deleted only by a caller holding every code its creator holds (403 otherwise) — a lower-ranked manager cannot touch the owner's or an Admin's keys.",
           tags: ['API Key'],
           params: apiKeyIdParamsDto,
         },

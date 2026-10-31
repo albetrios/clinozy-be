@@ -385,6 +385,82 @@ describe('Security: Organization API key authentication', () => {
     });
   });
 
+  describe("role ordering over another member's key (B2-11)", () => {
+    it("refuses a lower-ranked manager changing or deleting a senior member's key; their own goes", async () => {
+      const senior = await createTestUser();
+      const organization = await createTestOrganization({ ownerUserId: senior.id });
+      const seniorRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [
+          TENANCY_PERMISSIONS.API_KEY_MANAGE,
+          TENANCY_PERMISSIONS.API_KEY_READ,
+          TENANCY_PERMISSIONS.ROLE_UPDATE,
+        ],
+      });
+      await createMembership({
+        userId: senior.id,
+        organizationId: organization.id,
+        roleId: seniorRole.id,
+      });
+      const manager = await createTestUser();
+      const managerRole = await createRoleWithPermissions({
+        organizationId: organization.id,
+        permissionCodes: [TENANCY_PERMISSIONS.API_KEY_MANAGE, TENANCY_PERMISSIONS.API_KEY_READ],
+      });
+      await createMembership({
+        userId: manager.id,
+        organizationId: organization.id,
+        roleId: managerRole.id,
+      });
+      const tokenFor = (userPublicId: string) =>
+        generateTestToken({ userId: userPublicId, organizationPublicId: organization.public_id });
+      const seniorToken = await tokenFor(senior.public_id);
+      const managerToken = await tokenFor(manager.public_id);
+      const createKey = async (token: string) => {
+        const created = await injectAuthenticated(app, {
+          method: 'POST',
+          url: testApiPath('/tenancy/organization/api-keys'),
+          token,
+          payload: { name: 'Ordering key', scopes: [TENANCY_PERMISSIONS.API_KEY_READ] },
+        });
+        expect(created.statusCode, created.body).toBe(200);
+        return created.json() as ApiKeyCreateResponse;
+      };
+      const seniorKey = await createKey(seniorToken);
+      const managerKey = await createKey(managerToken);
+      const keyPath = (keyPublicId: string) =>
+        testApiPath(`/tenancy/organization/api-keys/${keyPublicId}`);
+
+      const deleteSenior = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: keyPath(seniorKey.data.api_key.id),
+        token: managerToken,
+      });
+      expect(deleteSenior.statusCode, deleteSenior.body).toBe(403);
+      const revokeSenior = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: keyPath(seniorKey.data.api_key.id),
+        token: managerToken,
+        payload: { status: 'REVOKED' },
+      });
+      expect(revokeSenior.statusCode, revokeSenior.body).toBe(403);
+      // The senior member's key still works.
+      const seniorKeyRead = await injectRoute(app, {
+        method: 'GET',
+        url: testApiPath('/tenancy/organization/api-keys'),
+        headers: { authorization: `ApiKey ${seniorKey.data.raw_key}` },
+      });
+      expect(seniorKeyRead.statusCode).toBe(200);
+
+      const deleteOwn = await injectAuthenticated(app, {
+        method: 'DELETE',
+        url: keyPath(managerKey.data.api_key.id),
+        token: managerToken,
+      });
+      expect(deleteOwn.statusCode, deleteOwn.body).toBe(204);
+    });
+  });
+
   describe('the organization and the creator must still be there', () => {
     function readKeysWithKey(rawKey: string) {
       return injectRoute(app, {

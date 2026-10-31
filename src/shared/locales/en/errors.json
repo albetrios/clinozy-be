@@ -281,6 +281,7 @@
   "ownershipTransferTargetNotActive": "Ownership cannot be transferred: the selected member is no longer an active member of the organization",
   "membershipAlreadyExists": "This user is already a member of the organization",
   "membershipNotDeleted": "This member has not been removed",
+  "membershipNotRestorable": "This member left, deleted their account, or turned down or let their invite lapse — invite them again instead",
   "roleLocked": "This role's access is fixed and cannot be changed",
   "webhookUrlExists": "A webhook for \"{{url}}\" already exists in this organization",
   "webhookMaxReached": "Maximum number of webhooks ({{max}}) reached for this organization. Delete an existing webhook before adding another.",

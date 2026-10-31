@@ -82,6 +82,17 @@ import {
 import { ADMIN_ROLE_NAME } from '@/domains/tenancy/sub-domains/member-roles/member-role.constants.js';
 import type { CreateMembershipInput, UpdateMembershipInput } from './membership.dto.js';
 
+/**
+ * Ends a manager cannot undo (B2-6): the person left or deleted their account, or the invite was
+ * declined or expired — only the person can come back, by a new invite.
+ */
+const UNRESTORABLE_DELETE_REASONS: ReadonlySet<MembershipDeleteReason> = new Set([
+  MEMBERSHIP_DELETE_REASON.LEFT,
+  MEMBERSHIP_DELETE_REASON.ACCOUNT_DELETED,
+  MEMBERSHIP_DELETE_REASON.DECLINED,
+  MEMBERSHIP_DELETE_REASON.INVITATION_EXPIRED,
+]);
+
 /** A role row as the member-role service resolves it. */
 type ResolvedRole = Awaited<ReturnType<MemberRoleService['requireRoleRecordForOrganization']>>;
 
@@ -457,14 +468,14 @@ export class MembershipService {
    * permission the roles grant together (access is their union, D5).
    */
   private async assertCallerCanGrantRoles(options: {
-    roles: readonly ResolvedRole[];
+    roleIds: readonly number[];
     callerUserPublicId: string | undefined;
     organizationPublicId: string;
   }): Promise<void> {
     const requestedPermissionCodes = new Set<string>();
-    for (const role of options.roles) {
+    for (const roleId of options.roleIds) {
       for (const code of await this.memberRolePermissionService.listPermissionCodesForRole(
-        role.id,
+        roleId,
       )) {
         requestedPermissionCodes.add(code);
       }
@@ -1015,6 +1026,57 @@ export class MembershipService {
     });
   }
 
+  /**
+   * The checks a member add must pass, in order — a TEAM organization, `role_ids` that are live roles
+   * here (main first, D5), the caller holding every code those roles grant, and a free seat — and
+   * what passed them. MUST run inside the organization's database context; the seat check takes the
+   * per-organization seat lock, held until that context commits.
+   *
+   * @remarks
+   * - **Failure modes:** `UnprocessableEntityError` for a PERSONAL organization; `ValidationError` on
+   *   `role_ids`; `ForbiddenError` (`cannotGrantPermissionNotHeld`); `ConflictError`
+   *   (`seat_limit_reached`).
+   */
+  private async assertMemberAddAllowed(options: {
+    organizationPublicId: string;
+    rolePublicIds: readonly string[];
+    invitedByUserPublicId: string | undefined;
+  }): Promise<{
+    organization: OrganizationMembershipContext;
+    role: ResolvedRole;
+    additionalRoles: ResolvedRole[];
+  }> {
+    const organization = await this.organizationService.requireOrganizationRecordByPublicId(
+      options.organizationPublicId,
+    );
+    // Capability matrix: a PERSONAL organization is single-member by definition. Collaboration
+    // requires a TEAM organization — reject here so the single-member invariant holds at every door.
+    assertTeamOrganization({ organization, capability: 'MEMBERS' });
+    // `role_ids`, main first (D5): the main role is the membership's `role_id`, the rest are
+    // its additional roles.
+    const roles = await this.resolveRoleIds({
+      organizationId: organization.id,
+      rolePublicIds: options.rolePublicIds,
+    });
+    const [role, ...additionalRoles] = roles;
+    if (!role) throw new ValidationError('errors:invalidInput');
+    // Privilege-escalation guard: the caller must already hold every permission the assigned roles
+    // would grant, or a MEMBERSHIP_CREATE holder could mint an Admin membership for a throwaway
+    // address and accept it → full organization takeover. Runs BEFORE any row is persisted.
+    await this.assertCallerCanGrantRoles({
+      roleIds: roles.map((resolved) => resolved.id),
+      callerUserPublicId: options.invitedByUserPublicId,
+      organizationPublicId: options.organizationPublicId,
+    });
+    // REQ-4: enforce the plan seat limit before persisting the new membership. Runs INSIDE the
+    // caller's organization transaction so the per-organization advisory lock (plus the FOR UPDATE
+    // row lock when a subscription exists) serializes concurrent adds — two simultaneous adds cannot
+    // both pass the same count and exceed the limit, on the paid OR the free-tier path (audit-#M1).
+    // Ceiling of null (unlimited plan / unwired port) is a no-op.
+    await this.assertSeatAvailableForMemberAdd(organization.id);
+    return { organization, role, additionalRoles };
+  }
+
   async create({
     scope,
     body,
@@ -1042,44 +1104,33 @@ export class MembershipService {
         { field: 'email', messageKey: 'errors:disposableEmail' },
       ]).withReason('disposable_email');
     }
+    // B2-7: every check that can refuse the add (team organization, roles, the grant guard, a free
+    // seat) runs first, in a short unit of work of its own — a refused invite never provisions a
+    // login for the address. They run again inside the write below, which holds the seat lock.
+    await withAppDatabaseContext({
+      scope,
+      callback: () =>
+        this.assertMemberAddAllowed({
+          organizationPublicId: organization_public_id,
+          rolePublicIds: parsed.role_ids,
+          invitedByUserPublicId: invited_by_user_public_id,
+        }),
+    });
     // Provision/find the invitee in its OWN transaction (BEFORE the organization context) so the public-id
     // collision retry can open fresh transactions — a pinned organization transaction would abort on retry.
-    // A user left with no membership by a later failure is harmless and reused on the next attempt.
+    // A user left with no membership by a later failure (a race past the checks above) is harmless and
+    // reused on the next attempt.
     const inviteeUser = await userService.findOrCreateInvitedByEmail({
       email: parsed.email,
     });
     const result = await withAppDatabaseContext({
       scope,
       callback: async () => {
-        const organization =
-          await this.organizationService.requireOrganizationRecordByPublicId(
-            organization_public_id,
-          );
-        // Capability matrix: a PERSONAL organization is single-member by definition. Collaboration
-        // requires a TEAM organization — reject here so the single-member invariant holds at every door.
-        assertTeamOrganization({ organization, capability: 'MEMBERS' });
-        // `role_ids`, main first (D5): the main role is the membership's `role_id`, the rest are
-        // its additional roles.
-        const roles = await this.resolveRoleIds({
-          organizationId: organization.id,
-          rolePublicIds: parsed.role_ids,
-        });
-        const [role, ...additionalRoles] = roles;
-        if (!role) throw new ValidationError('errors:invalidInput');
-        // Privilege-escalation guard: the caller must already hold every permission the assigned roles
-        // would grant, or a MEMBERSHIP_CREATE holder could mint an Admin membership for a throwaway
-        // address and accept it → full organization takeover. Runs BEFORE any row is persisted.
-        await this.assertCallerCanGrantRoles({
-          roles,
-          callerUserPublicId: invited_by_user_public_id,
+        const { organization, role, additionalRoles } = await this.assertMemberAddAllowed({
           organizationPublicId: organization_public_id,
+          rolePublicIds: parsed.role_ids,
+          invitedByUserPublicId: invited_by_user_public_id,
         });
-        // REQ-4: enforce the plan seat limit before persisting the new membership. Runs INSIDE the
-        // existing organization transaction so the per-organization advisory lock (plus the FOR UPDATE row lock when a
-        // subscription exists) serializes concurrent adds — two simultaneous adds cannot both pass the
-        // same count and exceed the limit, on the paid OR the free-tier path (audit-#M1). Ceiling of
-        // null (unlimited plan / unwired port) is a no-op.
-        await this.assertSeatAvailableForMemberAdd(organization.id);
         const inviterId =
           await this.organizationService.resolveUserInternalIdByPublicId(invited_by_user_public_id);
         if (inviterId === null) throw new NotFoundError('User');
@@ -1274,7 +1325,7 @@ export class MembershipService {
           // permission the roles grant together, so a MEMBERSHIP_UPDATE holder cannot escalate a
           // member past their own access.
           await this.assertCallerCanGrantRoles({
-            roles,
+            roleIds: roles.map((resolved) => resolved.id),
             callerUserPublicId: updated_by_user_public_id,
             organizationPublicId: organization_public_id,
           });
@@ -1482,22 +1533,28 @@ export class MembershipService {
    *
    * @remarks
    * - **Algorithm:** inside the organization context, find the soft-deleted membership (404 when
-   *   none; 409 when it is live), re-check the plan's seat limit when the row takes a seat, clear
-   *   `deleted_at` and the removal reason; after commit, drop the person's cached permissions and
-   *   reconcile the seat count.
+   *   none; 409 when it is live), refuse an end that is not a manager's removal (B2-6: the person
+   *   left, deleted their account or declined, or the invite expired or was revoked), run role
+   *   ordering and the grant guard over the roles the row would bring back (B2-2), re-check the
+   *   plan's seat limit when the row takes a seat, clear `deleted_at` and the removal reason; after
+   *   commit, drop the person's cached permissions and reconcile the seat count.
    * - **Failure modes:** `NotFoundError('Membership')`; `ConflictError` (`membership_not_deleted`)
-   *   for a live row, (`membership_already_exists`) when the person already has a live membership
-   *   again, (`seat_limit_reached`) when no seat is free.
+   *   for a live row, (`membership_not_restorable`) for an end only the person (or their invite)
+   *   can undo, (`membership_already_exists`) when the person already has a live membership again,
+   *   (`seat_limit_reached`) when no seat is free; `ForbiddenError` when the roles hold a code the
+   *   caller does not.
    * - **Notes:** the API keys revoked at removal stay revoked.
    */
   async restore({
     scope,
     membership_public_id,
     restored_by_user_public_id,
+    options,
   }: {
     scope: OrganizationPrincipalDatabaseScope;
     membership_public_id: string;
     restored_by_user_public_id: string | undefined;
+    options?: MembershipActionOptions | undefined;
   }): Promise<MembershipOutput> {
     const organization_public_id = scope.organizationPublicId;
     let restoredUserInternalId: number | undefined;
@@ -1525,6 +1582,25 @@ export class MembershipService {
           }
           throw new NotFoundError('Membership');
         }
+        await this.assertMembershipRestorable(deleted);
+        // B2-2: restoring hands the roles back, so it passes the same guards as giving them —
+        // role ordering over the member and the grant guard over every role the row holds.
+        await this.assertCallerHoldsMemberPermissions({
+          organizationPublicId: organization_public_id,
+          membership: deleted,
+          callerUserPublicId: restored_by_user_public_id,
+          callerApiKeyScopes: options?.callerApiKeyScopes,
+        });
+        await this.assertCallerCanGrantRoles({
+          roleIds: [
+            deleted.role_id,
+            ...(await this.membershipAdditionalRolesRepository.listRoleIdsForMembership(
+              deleted.id,
+            )),
+          ],
+          callerUserPublicId: restored_by_user_public_id,
+          organizationPublicId: organization_public_id,
+        });
         seatTaken = membershipStatusConsumesSeat(deleted.status);
         if (seatTaken) await this.assertSeatAvailableForMemberAdd(organization.id);
         const userId = await this.organizationService.resolveUserInternalIdByPublicId(
@@ -1561,24 +1637,51 @@ export class MembershipService {
   }
 
   /**
+   * Refuses to undo an end that was not a manager's removal (B2-6): the person left, deleted their
+   * account or declined the invite, the invite expired — or, for a row still `invited`, its invite
+   * is no longer open (revoked or expired). Only the person can come back from those, by a new
+   * invite.
+   */
+  private async assertMembershipRestorable(membership: MembershipRow): Promise<void> {
+    const reason = membership.delete_reason as MembershipDeleteReason | null;
+    let restorable = reason === null || !UNRESTORABLE_DELETE_REASONS.has(reason);
+    if (restorable && membership.status === MEMBERSHIP_STATUS.INVITED) {
+      const invitations = await this.membershipRepository.resolveLiveInvitationsByMembershipIds([
+        membership.id,
+      ]);
+      const invitation = invitations.get(membership.id);
+      restorable = invitation !== undefined && invitation.expires_at.getTime() > Date.now();
+    }
+    if (!restorable) {
+      throw new ConflictError('errors:membershipNotRestorable').withReason(
+        'membership_not_restorable',
+      );
+    }
+  }
+
+  /**
    * Revokes an invited member's pending invite (launch §2.C route 9): the invite is revoked and the
    * invited membership ends (`not_needed`) through the one leave step, in one transaction.
    *
    * @remarks
-   * - **Algorithm:** inside the organization context — the live `invited` member, its pending
-   *   invitation (revoked), then {@link MembershipService.endMembershipInContext}. After commit: the
-   *   permission cache and the seat sync (an invited member holds a seat).
+   * - **Algorithm:** inside the organization context — the live `invited` member, role ordering
+   *   (B2-11: the caller must hold every code the invited member's roles grant, as for a removal),
+   *   its pending invitation (revoked), then {@link MembershipService.endMembershipInContext}. After
+   *   commit: the permission cache and the seat sync (an invited member holds a seat).
    * - **Failure modes:** `NotFoundError('Membership invitation')` when there is no pending invite —
-   *   accepted, revoked, or the member removed.
+   *   accepted, revoked, or the member removed; `ForbiddenError`
+   *   (`cannotManageMemberWithPermissionsNotHeld`) for an invite above the caller.
    * - **Side effects:** writes `tenancy.membership_invitations`, `tenancy.memberships` and, through
    *   the leave step, the app's tables.
    */
   async revokeInvitation({
     scope,
     membership_public_id,
+    options,
   }: {
     scope: OrganizationPrincipalDatabaseScope;
     membership_public_id: string;
+    options?: MembershipActionOptions | undefined;
   }): Promise<void> {
     const organization_public_id = scope.organizationPublicId;
     const invitationService = this.requireInvitationService();
@@ -1597,6 +1700,12 @@ export class MembershipService {
         if (membership?.status !== MEMBERSHIP_STATUS.INVITED) {
           throw new NotFoundError('Membership invitation');
         }
+        await this.assertCallerHoldsMemberPermissions({
+          organizationPublicId: organization_public_id,
+          membership,
+          callerUserPublicId: scope.userPublicId,
+          callerApiKeyScopes: options?.callerApiKeyScopes,
+        });
         const revoked = await invitationService.revokePendingForMembership(membership.id);
         if (!revoked) throw new NotFoundError('Membership invitation');
         const ended = await this.endMembershipInContext({

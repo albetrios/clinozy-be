@@ -281,6 +281,7 @@
   "ownershipTransferTargetNotActive": "No se puede transferir la propiedad: el miembro seleccionado ya no es un miembro activo de la organización",
   "membershipAlreadyExists": "Este usuario ya es miembro de la organización",
   "membershipNotDeleted": "Este miembro no ha sido eliminado",
+  "membershipNotRestorable": "Este miembro se fue, eliminó su cuenta, o rechazó o dejó caducar su invitación — invítalo de nuevo",
   "roleLocked": "El acceso de este rol es fijo y no se puede cambiar",
   "webhookUrlExists": "Ya existe un webhook para \"{{url}}\" en esta organización",
   "webhookMaxReached": "Se alcanzó el número máximo de webhooks ({{max}}) para esta organización. Elimina un webhook existente antes de agregar otro.",

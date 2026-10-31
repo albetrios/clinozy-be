@@ -187,7 +187,9 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
         requestedPermissionCodes: adminPermissionCodes,
       }),
     );
-    expect(persistOrder).toEqual(['guard', 'create']);
+    // B2-7: the guard runs once before the invitee login is provisioned, then again inside the
+    // write — both before any membership row is persisted.
+    expect(persistOrder).toEqual(['guard', 'guard', 'create']);
   });
 
   it('refuses to persist when caller cannot grant the target role permission codes', async () => {
@@ -204,6 +206,8 @@ describe('MembershipService.create — grantable-permissions guard (sec-T1)', ()
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     expect(membershipRepository.create).not.toHaveBeenCalled();
+    // B2-7: a refused invite never provisions a login for the address.
+    expect(userService.findOrCreateInvitedByEmail).not.toHaveBeenCalled();
   });
 
   it('propagates the caller principal even when undefined (anonymous principal → guard fails closed)', async () => {
