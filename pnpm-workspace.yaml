@@ -71,6 +71,13 @@ overrides:
   # esbuild <=0.24.2 — GHSA-67mh-4wv8-2f99 (moderate). @esbuild-kit/core-utils (via
   # drizzle-kit) pins ~0.18.20; confined to it, on the 0.25 line drizzle-kit itself declares.
   '@esbuild-kit/core-utils>esbuild': '^0.25.12'
+  # glob >=9.0.0 <=14.0.1 — GHSA-3g3m-2fjr-6pw4 (moderate, a walk keeps traversing after its
+  # AbortSignal fires). The production tree: @fastify/static (via @bull-board/fastify) and
+  # @sentry/bundler-plugins (via @sentry/node) declare glob 13 and no 13.x fix exists, so the
+  # jump is confined to those two. glob 14 brings minimatch 11, which clears minimatch <11.0.1 —
+  # GHSA-g3hv-75wg-m249 (moderate, globparts amplification DoS) — on the same paths.
+  '@fastify/static>glob': '^14.0.2'
+  '@sentry/bundler-plugins>glob': '^14.0.2'
 
 # Vitest 5 joins suite + test names with " > "; @stryker-mutator/vitest-runner 10.0.0 joins its test ids
 # with spaces, so no test matched and every mutant ran zero tests. Drop once the runner ships the fix
