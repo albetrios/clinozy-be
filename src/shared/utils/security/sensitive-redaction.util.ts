@@ -177,16 +177,15 @@ function isDrizzleQueryError(value: Error): boolean {
   );
 }
 
+/** node-postgres's `DatabaseError`, as far as {@link sanitizeDatabaseError} reads it. */
+type PostgresServerError = Error & { code: string; constraint?: unknown; table?: unknown };
+
 /**
  * True for node-postgres's `DatabaseError` — a server-side failure: a five-character SQLSTATE `code`
  * plus a `severity`. Its `detail` quotes key values or the whole failing row, and its message can
  * quote an input value (`22P02`, `22003`).
  */
-function isPostgresServerError(value: unknown): value is Error & {
-  code: string;
-  constraint?: unknown;
-  table?: unknown;
-} {
+function isPostgresServerError(value: unknown): value is PostgresServerError {
   if (!(value instanceof Error)) return false;
   const { code, severity } = value as Error & { code?: unknown; severity?: unknown };
   return typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) && typeof severity === 'string';
@@ -222,45 +221,106 @@ function stackFramesOf(error: Error): string | undefined {
  */
 export function sanitizeDatabaseError(error: unknown): unknown {
   if (!(error instanceof Error)) return error;
-  const drizzleQueryError = isDrizzleQueryError(error);
-  if (!(drizzleQueryError || isPostgresServerError(error))) return error;
+  const failure = findDatabaseFailure(error);
+  if (failure === undefined) return error;
+  const fields = databaseErrorFieldsOf(failure.serverError);
+  const message = describeDatabaseFailure({ fields, clientFailure: failure.clientFailure });
+  return buildDatabaseQueryError({
+    original: error,
+    message,
+    fields,
+    clientFailure: failure.clientFailure,
+  });
+}
 
+/** What {@link sanitizeDatabaseError} keeps of a Postgres server error. */
+type DatabaseErrorFields = { code?: string; constraint?: string; table?: string };
+
+/** A database failure: the Postgres server error, or else the client-side failure behind it. */
+type DatabaseFailure = {
+  serverError: PostgresServerError | undefined;
+  clientFailure: Error | undefined;
+};
+
+/**
+ * The database failure behind `error`: the Postgres server error (the input, or a Drizzle wrapper's
+ * `cause`), or the client-side failure a Drizzle wrapper carries. `undefined` for any other error.
+ */
+function findDatabaseFailure(error: Error): DatabaseFailure | undefined {
+  const drizzleQueryError = isDrizzleQueryError(error);
+  if (!(drizzleQueryError || isPostgresServerError(error))) return undefined;
   const cause = drizzleQueryError ? error.cause : error;
   const serverError = isPostgresServerError(cause) ? cause : undefined;
   const clientFailure = serverError === undefined && cause instanceof Error ? cause : undefined;
+  return { serverError, clientFailure };
+}
 
-  const fields: { code?: string; constraint?: string; table?: string } = {};
-  if (serverError) {
-    fields.code = serverError.code;
-    if (typeof serverError.constraint === 'string') fields.constraint = serverError.constraint;
-    if (typeof serverError.table === 'string') fields.table = serverError.table;
-  }
+/** The SQLSTATE `code`, `constraint` and `table` of `serverError` — the only fields kept. */
+function databaseErrorFieldsOf(serverError: PostgresServerError | undefined): DatabaseErrorFields {
+  const fields: DatabaseErrorFields = {};
+  if (serverError === undefined) return fields;
+  fields.code = serverError.code;
+  if (typeof serverError.constraint === 'string') fields.constraint = serverError.constraint;
+  if (typeof serverError.table === 'string') fields.table = serverError.table;
+  return fields;
+}
+
+/** `Database query failed (SQLSTATE …, constraint …, table …)`, or `…: <client failure>`. */
+function describeDatabaseFailure({
+  fields,
+  clientFailure,
+}: {
+  fields: DatabaseErrorFields;
+  clientFailure: Error | undefined;
+}): string {
   const described = [
     fields.code ? `SQLSTATE ${fields.code}` : undefined,
     fields.constraint ? `constraint ${fields.constraint}` : undefined,
     fields.table ? `table ${fields.table}` : undefined,
   ].filter((part) => part !== undefined);
-  let message = DATABASE_QUERY_FAILED_MESSAGE;
-  if (described.length > 0) message = `${message} (${described.join(', ')})`;
-  else if (clientFailure) message = `${message}: ${clientFailure.message}`;
+  if (described.length > 0) return `${DATABASE_QUERY_FAILED_MESSAGE} (${described.join(', ')})`;
+  if (clientFailure) return `${DATABASE_QUERY_FAILED_MESSAGE}: ${clientFailure.message}`;
+  return DATABASE_QUERY_FAILED_MESSAGE;
+}
 
-  const sanitized = new Error(message);
-  Object.defineProperty(sanitized, 'name', {
-    value: DATABASE_QUERY_ERROR_NAME,
+/** Defines `key` on `target` the way an `Error`'s own `name` / `cause` is: non-enumerable. */
+function defineNonEnumerable({
+  target,
+  key,
+  value,
+}: {
+  target: Error;
+  key: 'name' | 'cause';
+  value: unknown;
+}): void {
+  Object.defineProperty(target, key, {
+    value,
     writable: true,
     enumerable: false,
     configurable: true,
   });
+}
+
+/**
+ * The new `DatabaseQueryError`: `message`, the kept `fields`, the client failure as `cause`, and
+ * `original`'s stack frames under a rewritten header line.
+ */
+function buildDatabaseQueryError({
+  original,
+  message,
+  fields,
+  clientFailure,
+}: {
+  original: Error;
+  message: string;
+  fields: DatabaseErrorFields;
+  clientFailure: Error | undefined;
+}): Error {
+  const sanitized = new Error(message);
+  defineNonEnumerable({ target: sanitized, key: 'name', value: DATABASE_QUERY_ERROR_NAME });
   Object.assign(sanitized, fields);
-  if (clientFailure) {
-    Object.defineProperty(sanitized, 'cause', {
-      value: clientFailure,
-      writable: true,
-      enumerable: false,
-      configurable: true,
-    });
-  }
-  const frames = stackFramesOf(error);
+  if (clientFailure) defineNonEnumerable({ target: sanitized, key: 'cause', value: clientFailure });
+  const frames = stackFramesOf(original);
   if (frames === undefined) {
     delete (sanitized as { stack?: string }).stack;
   } else {

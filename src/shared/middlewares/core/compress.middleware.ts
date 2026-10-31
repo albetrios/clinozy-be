@@ -17,7 +17,7 @@ const PRIVATE_RESPONSE_CACHE_CONTROL = 'no-store, private';
  * (`/api/v<n>/app/…` — patients, notes, photos, bills) and the caller's own account
  * (`/api/v<n>/users/me…`). Query string ignored.
  */
-const PRIVATE_RESPONSE_PATH_PATTERN = /^\/api\/v[1-9][0-9]*\/(?:app|users\/me)(?:[/?]|$)/;
+const PRIVATE_RESPONSE_PATH_PATTERN = /^\/api\/v[1-9]\d*\/(?:app|users\/me)(?:[/?]|$)/;
 
 /**
  * True when a response must never be stored by a browser, proxy or CDN (G2-7): it is under
@@ -97,7 +97,16 @@ const compressMiddlewareInner: FastifyPluginAsync = async (app) => {
     return SECRET_FRAGMENTS.some((fragment) => lower.includes(fragment));
   }
 
-  app.addHook('onSend', async (request, reply, payload) => {
+  /** Sets the caching / compression headers the response body and path call for (payload untouched). */
+  function applyResponseHardeningHeaders({
+    request,
+    reply,
+    payload,
+  }: {
+    request: FastifyRequest;
+    reply: FastifyReply;
+    payload: unknown;
+  }): void {
     if (
       typeof payload === 'string' &&
       likelyContainsSecretFields(payload) &&
@@ -105,13 +114,17 @@ const compressMiddlewareInner: FastifyPluginAsync = async (app) => {
     ) {
       reply.header('cache-control', SECRET_RESPONSE_CACHE_CONTROL);
       reply.header('content-encoding', 'identity-no-compress');
-      return payload;
+      return;
     }
     // G2-7: patient and account responses carried no Cache-Control at all, so a shared proxy or
     // the browser's disk cache could keep a patient file after sign-out.
     if (isPrivateResponse({ request, reply })) {
       reply.header('cache-control', PRIVATE_RESPONSE_CACHE_CONTROL);
     }
+  }
+
+  app.addHook('onSend', async (request, reply, payload) => {
+    applyResponseHardeningHeaders({ request, reply, payload });
     return payload;
   });
 
