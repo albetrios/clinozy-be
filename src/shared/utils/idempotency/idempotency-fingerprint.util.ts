@@ -45,6 +45,10 @@ const IDEMPOTENCY_SECRET_RESPONSE_FIELD_NAMES = new Set([
   'recovery_codes',
   'download_url',
   'upload_url',
+  // C-5: a patient photo's or report's signed read URL (`file_url`) and a photo's signed
+  // thumbnail (`thumbnail_url`) — the same `X-Amz-Signature` grant, minted on every read.
+  'file_url',
+  'thumbnail_url',
 ]);
 
 /**
@@ -101,19 +105,34 @@ function canonicalSerializeForFingerprint(value: unknown): string {
 }
 
 /**
- * Builds a stable SHA-256 fingerprint segment from HTTP method, normalized route, and body.
- * Two requests with the same idempotency key but different method, route, or body must not replay.
+ * Builds a stable SHA-256 fingerprint segment from HTTP method, normalized route, path parameters
+ * and body. Two requests with the same idempotency key but a different method, route, record or
+ * body must not replay.
  *
  * @remarks
  * sec-M6: uses {@link canonicalSerializeForFingerprint} so `undefined`
  * values and key ordering can't produce silent collisions.
+ *
+ * G2-6: `routePath` is the route TEMPLATE (`/app/patients/:patient_id`), so without the path
+ * parameters a key reused on another record — the same body sent to `PATCH …/pat_B` — matched
+ * `PATCH …/pat_A`'s fingerprint and replayed patient A's response. The canonical
+ * `pathParameters` (Fastify's `request.params`) now join the fingerprint; a route without path
+ * parameters fingerprints exactly as before.
  */
 export function buildIdempotencyRequestFingerprint(parameters: {
   method: string;
   routePath: string;
+  pathParameters?: unknown;
   body: unknown;
 }): string {
   const normalizedRoute = normalizeIdempotencyRoutePath(parameters.routePath);
+  const pathParameters = parameters.pathParameters;
+  const routeSegment =
+    typeof pathParameters === 'object' &&
+    pathParameters !== null &&
+    Object.keys(pathParameters).length > 0
+      ? `${normalizedRoute}:${canonicalSerializeForFingerprint(pathParameters)}`
+      : normalizedRoute;
   let bodySegment: string;
   if (parameters.body === undefined || parameters.body === null) {
     bodySegment = '';
@@ -122,7 +141,7 @@ export function buildIdempotencyRequestFingerprint(parameters: {
   } else {
     bodySegment = canonicalSerializeForFingerprint(parameters.body);
   }
-  const canonical = `${(parameters.method ?? 'GET').toUpperCase()}:${normalizedRoute}:${bodySegment}`;
+  const canonical = `${(parameters.method ?? 'GET').toUpperCase()}:${routeSegment}:${bodySegment}`;
   return createHash('sha256').update(canonical, 'utf8').digest('hex').slice(0, 16);
 }
 

@@ -307,6 +307,56 @@ describe('idempotency middleware happy paths and conflicts', () => {
     expect(send).toHaveBeenCalledWith({ id: 'created' });
   });
 
+  it('G2-6: answers 422 when a key is reused on another record of the same route, never replaying it', async () => {
+    // The fingerprint used the route TEMPLATE, so the same key and body sent to another record
+    // matched and replayed the first record's response.
+    const routeTemplate = '/api/v1/app/patients/:patient_id';
+    const body = { name: 'same payload' };
+    mockRedisGet.mockResolvedValue(
+      JSON.stringify({
+        state: 'completed',
+        statusCode: 200,
+        body: JSON.stringify({ data: { id: 'pat_A', name: 'Patient A' } }),
+        headers: { 'content-type': 'application/json' },
+        fingerprint: buildIdempotencyRequestFingerprint({
+          method: 'PATCH',
+          routePath: routeTemplate,
+          pathParameters: { patient_id: 'pat_A' },
+          body,
+        }),
+      }),
+    );
+    const { claimPreHandler } = await registerIdempotencyHooks();
+
+    const request = {
+      id: 'req-other-record',
+      method: 'PATCH',
+      headers: { [IDEMPOTENCY_KEY_HEADER]: IDEMPOTENCY_TEST_KEY },
+      auth: { kind: 'user' as const, userId: TEST_USER_PUBLIC_ID },
+      routeOptions: { url: routeTemplate },
+      params: { patient_id: 'pat_B' },
+      body,
+      _idempotencyKey: IDEMPOTENCY_TEST_KEY,
+    } as unknown as FastifyRequest;
+    const send = vi.fn();
+    const reply = {
+      sent: false,
+      status: vi.fn().mockReturnThis(),
+      header: vi.fn().mockReturnThis(),
+      send,
+    } as unknown as FastifyReply;
+
+    await claimPreHandler(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(422);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.objectContaining({ code: 'idempotency_key_reuse' }),
+      }),
+    );
+    expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.anything() }));
+  });
+
   it('returns 409 in_flight when an in-flight entry already exists', async () => {
     mockRedisGet.mockResolvedValue(buildInFlightEntry());
     const { claimPreHandler } = await registerIdempotencyHooks();

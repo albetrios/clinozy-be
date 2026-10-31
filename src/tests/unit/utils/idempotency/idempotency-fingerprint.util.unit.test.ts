@@ -33,6 +33,58 @@ describe('buildIdempotencyRequestFingerprint', () => {
   });
 });
 
+describe('buildIdempotencyRequestFingerprint — the concrete record (G2-6)', () => {
+  const routePath = '/api/v1/app/patients/:patient_id';
+  const body = { name: 'Same body' };
+
+  it('differs when the same template and body target another record', () => {
+    const patientA = buildIdempotencyRequestFingerprint({
+      method: 'PATCH',
+      routePath,
+      pathParameters: { patient_id: 'pat_A' },
+      body,
+    });
+    const patientB = buildIdempotencyRequestFingerprint({
+      method: 'PATCH',
+      routePath,
+      pathParameters: { patient_id: 'pat_B' },
+      body,
+    });
+    expect(patientB).not.toBe(patientA);
+  });
+
+  it('is stable across path-parameter key order', () => {
+    const first = buildIdempotencyRequestFingerprint({
+      method: 'PATCH',
+      routePath: '/api/v1/app/patients/:patient_id/notes/:note_id',
+      pathParameters: { patient_id: 'pat_A', note_id: 'note_A' },
+      body,
+    });
+    const reordered = buildIdempotencyRequestFingerprint({
+      method: 'PATCH',
+      routePath: '/api/v1/app/patients/:patient_id/notes/:note_id',
+      pathParameters: { note_id: 'note_A', patient_id: 'pat_A' },
+      body,
+    });
+    expect(reordered).toBe(first);
+  });
+
+  it('fingerprints a route without path parameters exactly as before', () => {
+    const withoutParameters = buildIdempotencyRequestFingerprint({
+      method: 'POST',
+      routePath: '/api/v1/app/patients',
+      body,
+    });
+    const withEmptyParameters = buildIdempotencyRequestFingerprint({
+      method: 'POST',
+      routePath: '/api/v1/app/patients',
+      pathParameters: {},
+      body,
+    });
+    expect(withEmptyParameters).toBe(withoutParameters);
+  });
+});
+
 describe('isIdempotencyRouteExcluded', () => {
   // Matched against the full prefixed Fastify route template (request.routeOptions.url), e.g.
   // `/api/v1/auth/login` — the patterns are suffix-anchored so the /api/v{n} prefix is irrelevant.
@@ -85,6 +137,16 @@ describe('responseBodyContainsSecretFields', () => {
     expect(
       responseBodyContainsSecretFields(JSON.stringify({ data: { upload_url: 'https://s3/...' } })),
     ).toBe(true);
+  });
+
+  it('C-5: flags the signed patient photo / report URLs', () => {
+    for (const field of ['file_url', 'thumbnail_url']) {
+      expect(
+        responseBodyContainsSecretFields(
+          JSON.stringify({ data: { [field]: 'https://s3/key?X-Amz-Signature=abc' } }),
+        ),
+      ).toBe(true);
+    }
   });
 
   it('sec-C/M #12: catches sensitive fields via the isSensitiveKey backstop (beyond the named allowlist)', () => {

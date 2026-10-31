@@ -125,7 +125,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-idempotency-guard/SKILL.md",
-      "computedHash": "83357df5dce8e8b5db6fc8633466c31d3694199f0f4dc121cf01f6f388711ec6"
+      "computedHash": "0a43dcab12cd8b3573e27ace6952a403ead41366d6fd81c361acf48094ad149c"
     },
     "be-iteration-planning": {
       "source": "local",
@@ -173,7 +173,7 @@
       "source": "local",
       "sourceType": "local",
       "skillPath": "agent-os/skills/be-production-hardening-guard/SKILL.md",
-      "computedHash": "632b48445276aac6d0263f0ef190b86d6685e7dbc3ad096b658cfa957dc09d6e"
+      "computedHash": "e40f56439d2c7153fac36c308e701ac75206842d9490d3ab694e3dacb247bf96"
     },
     "be-read-cache-guard": {
       "source": "local",

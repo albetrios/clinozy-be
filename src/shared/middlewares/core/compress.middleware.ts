@@ -1,10 +1,39 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import fastifyCompress from '@fastify/compress';
 import { responseBodyContainsSecretFields } from '@/shared/utils/idempotency/idempotency-fingerprint.util.js';
 
 /** Minimum response size (bytes) before compression is applied (1 KiB). */
 const COMPRESSION_THRESHOLD_BYTES = 1024;
+
+/** `Cache-Control` of a response that carries a secret field. */
+const SECRET_RESPONSE_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, private';
+
+/** `Cache-Control` of every private (patient / account) response. */
+const PRIVATE_RESPONSE_CACHE_CONTROL = 'no-store, private';
+
+/**
+ * Paths whose every response is private, whatever its body or status: the clinic rooms
+ * (`/api/v<n>/app/…` — patients, notes, photos, bills) and the caller's own account
+ * (`/api/v<n>/users/me…`). Query string ignored.
+ */
+const PRIVATE_RESPONSE_PATH_PATTERN = /^\/api\/v[1-9][0-9]*\/(?:app|users\/me)(?:[/?]|$)/;
+
+/**
+ * True when a response must never be stored by a browser, proxy or CDN (G2-7): it is under
+ * {@link PRIVATE_RESPONSE_PATH_PATTERN}, or it answers an authenticated caller and the route set
+ * no `Cache-Control` of its own (a catalog's explicit public caching is kept).
+ */
+function isPrivateResponse({
+  request,
+  reply,
+}: {
+  request: FastifyRequest;
+  reply: FastifyReply;
+}): boolean {
+  if (PRIVATE_RESPONSE_PATH_PATTERN.test(request.url)) return true;
+  return Boolean(request.auth) && !reply.hasHeader('cache-control');
+}
 
 const compressMiddlewareInner: FastifyPluginAsync = async (app) => {
   // sec-C/M finding #26 + sec-re-03 fix: BREACH/CRIME defense-in-depth. A future route
@@ -60,20 +89,28 @@ const compressMiddlewareInner: FastifyPluginAsync = async (app) => {
     'recovery_code', // recovery_codes
     'download_url',
     'upload_url',
+    'file_url', // C-5: signed patient photo / report URL
+    'thumbnail_url', // C-5: signed patient photo thumbnail URL
   ];
   function likelyContainsSecretFields(body: string): boolean {
     const lower = body.toLowerCase();
     return SECRET_FRAGMENTS.some((fragment) => lower.includes(fragment));
   }
 
-  app.addHook('onSend', async (_request, reply, payload) => {
+  app.addHook('onSend', async (request, reply, payload) => {
     if (
       typeof payload === 'string' &&
       likelyContainsSecretFields(payload) &&
       responseBodyContainsSecretFields(payload)
     ) {
-      reply.header('cache-control', 'no-store, no-cache, must-revalidate, private');
+      reply.header('cache-control', SECRET_RESPONSE_CACHE_CONTROL);
       reply.header('content-encoding', 'identity-no-compress');
+      return payload;
+    }
+    // G2-7: patient and account responses carried no Cache-Control at all, so a shared proxy or
+    // the browser's disk cache could keep a patient file after sign-out.
+    if (isPrivateResponse({ request, reply })) {
+      reply.header('cache-control', PRIVATE_RESPONSE_CACHE_CONTROL);
     }
     return payload;
   });

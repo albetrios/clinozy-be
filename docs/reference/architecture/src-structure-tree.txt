@@ -3197,6 +3197,7 @@ src/
     │   │   ├── csp.security.test.ts
     │   │   ├── header-injection.security.test.ts
     │   │   ├── helmet-headers.security.test.ts
+    │   │   ├── private-response-cache-control.security.test.ts
     │   │   └── trust-proxy.security.test.ts
     │   ├── infrastructure/
     │   │   ├── api-versioning.security.test.ts

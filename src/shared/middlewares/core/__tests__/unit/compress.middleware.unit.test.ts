@@ -110,6 +110,103 @@ describe('compress.middleware — sec-re-03: BREACH suppression', () => {
   );
 });
 
+describe('compress.middleware — C-5: signed patient media URLs are secrets', () => {
+  it.each(['file_url', 'thumbnail_url'])(
+    'marks a body carrying %s no-store and uncompressed',
+    async (field) => {
+      const app = fastify();
+      await app.register(compressMiddleware);
+      app.get('/photo', async () => ({
+        data: { [field]: 'https://bucket.s3/key?X-Amz-Signature=abc', note: 'x'.repeat(2048) },
+      }));
+      const response = await app.inject({
+        method: 'GET',
+        url: '/photo',
+        headers: { 'accept-encoding': 'gzip, br' },
+      });
+      await app.close();
+
+      expect(response.headers['cache-control']).toContain('no-store');
+      expect(response.headers['content-encoding']).toBe('identity-no-compress');
+    },
+  );
+});
+
+describe('compress.middleware — G2-7: private responses are never stored', () => {
+  async function buildApp() {
+    const app = fastify();
+    app.decorateRequest('auth', null);
+    // Stands in for `authenticate`: a request with `x-test-auth` is an authenticated one.
+    app.addHook('onRequest', async (request) => {
+      if (request.headers['x-test-auth']) {
+        (request as { auth: unknown }).auth = { kind: 'user', userId: 'user_public' };
+      }
+    });
+    await app.register(compressMiddleware);
+    app.get('/api/v1/app/patients/:patient_id', async () => ({ data: { name: 'A patient' } }));
+    app.get('/api/v1/users/me', async () => ({ data: { display_name: 'Me' } }));
+    app.get('/api/v1/users/me/settings', async () => ({ data: { theme: 'dark' } }));
+    app.get('/api/v1/tenancy/organization', async () => ({ data: { name: 'Clinic' } }));
+    app.get('/api/v1/tenancy/permissions', async (_request, reply) => {
+      reply.header('cache-control', 'public, max-age=300');
+      return { data: [] };
+    });
+    app.get('/api/v1/billing/plans', async () => ({ data: [] }));
+    await app.ready();
+    return app;
+  }
+
+  it.each([
+    '/api/v1/app/patients/pat_000000000000000000001',
+    '/api/v1/app/patients/pat_000000000000000000001?include=notes',
+    '/api/v1/users/me',
+    '/api/v1/users/me/settings',
+    '/api/v1/app/no-such-room',
+  ])('answers %s with Cache-Control: no-store, whatever its status', async (url) => {
+    const app = await buildApp();
+    const response = await app.inject({ method: 'GET', url });
+    await app.close();
+
+    expect(response.headers['cache-control']).toBe('no-store, private');
+  });
+
+  it('marks any other authenticated response no-store', async () => {
+    const app = await buildApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/tenancy/organization',
+      headers: { 'x-test-auth': '1' },
+    });
+    await app.close();
+
+    expect(response.headers['cache-control']).toBe('no-store, private');
+  });
+
+  it("keeps an authenticated route's own Cache-Control, and leaves public responses alone", async () => {
+    const app = await buildApp();
+    const catalog = await app.inject({
+      method: 'GET',
+      url: '/api/v1/tenancy/permissions',
+      headers: { 'x-test-auth': '1' },
+    });
+    const publicPlans = await app.inject({ method: 'GET', url: '/api/v1/billing/plans' });
+    await app.close();
+
+    expect(catalog.headers['cache-control']).toBe('public, max-age=300');
+    expect(publicPlans.headers['cache-control']).toBeUndefined();
+  });
+
+  it('does not take /users/meetings for the caller account', async () => {
+    const app = fastify();
+    await app.register(compressMiddleware);
+    app.get('/api/v1/users/meetings', async () => ({ data: [] }));
+    const response = await app.inject({ method: 'GET', url: '/api/v1/users/meetings' });
+    await app.close();
+
+    expect(response.headers['cache-control']).toBeUndefined();
+  });
+});
+
 describe('compress.middleware — audit #4: inbound decompression disabled', () => {
   it('does NOT inflate a gzip-encoded request body (no CPU-amplification surface)', async () => {
     const { gzipSync } = await import('node:zlib');
