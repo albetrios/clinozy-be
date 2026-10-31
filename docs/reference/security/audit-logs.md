@@ -42,7 +42,7 @@ through a resolver that sees deleted organizations.
 | `auth.mfa.enroll_init` | `mfa_method` | MFA enrollment started |
 | `auth.mfa.enroll_confirm` | `mfa_method` | MFA enrollment confirmed — recovery codes issued |
 | `auth.mfa.delete` | `mfa_method` | MFA method removed |
-| `auth.mfa.step_up` | `mfa_method` | MFA step-up passed |
+| `auth.mfa.step_up` | `mfa_method` | MFA step-up passed (`metadata.factor`: `mfa`, or `provisional_mfa` for a factor still provisional — A-1) |
 | `auth.mfa.step_up_failure` | `mfa_method` | MFA step-up failed |
 | `auth.mfa.recovery_code_used` | `mfa_method` | Login completed with an MFA recovery code (`WARNING`) |
 | `auth.webauthn.register` | `webauthn_credential` | Passkey registered |

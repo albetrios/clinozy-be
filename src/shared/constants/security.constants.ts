@@ -70,6 +70,17 @@ export const MAX_PASSWORD_STEP_UP_ATTEMPTS = 5;
 export const PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS = 15 * 60;
 
 /**
+ * How long a second factor enrolled under an email-code step-up window stays provisional (72 h).
+ *
+ * @remarks
+ * A-1 — brief access to the mailbox of a passwordless account opens an email-code step-up, which
+ * can enroll a factor. Until this period has passed — and never on the session that enrolled it —
+ * an MFA step-up with that factor opens only a weak window, so it cannot revoke the owner's
+ * sessions or remove their credentials; the owner is emailed about the enrollment meanwhile.
+ */
+export const PROVISIONAL_FACTOR_PERIOD_SECONDS = 72 * 60 * 60;
+
+/**
  * Maximum concurrent active (non-revoked, non-expired) sessions per user.
  *
  * @remarks

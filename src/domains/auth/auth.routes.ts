@@ -441,7 +441,7 @@ export const authRoutesPlugin: FastifyPluginAsync = async (app) => {
       schema: {
         summary: 'Verify MFA code',
         description:
-          "Validates a TOTP code as an authenticated MFA step-up. On success the current session is marked as having proved a second factor, so organizations requiring MFA admit it: re-mint the token (switch organization or refresh) to receive `amr: ['mfa']`.",
+          "Validates a TOTP code as an authenticated MFA step-up. On success the current session is marked as having proved a second factor, so organizations requiring MFA admit it: re-mint the token (switch organization or refresh) to receive `amr: ['mfa']`. A factor enrolled under an email-code step-up window opens only a weak step-up window (enough to enroll, not to revoke sessions or delete a credential) for 72 hours after enrollment, and always on the session that enrolled it.",
         tags: ['MFA'],
         body: MfaVerifyDto,
       },

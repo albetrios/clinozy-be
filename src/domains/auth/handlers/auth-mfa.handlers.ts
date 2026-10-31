@@ -15,8 +15,13 @@ import { getUserAgent } from '@/shared/utils/http/user-agent.util.js';
 import { validateMfaMethodIdParam } from '@/domains/auth/auth.validator.js';
 import { AuthSerializer } from '@/domains/auth/auth.serializer.js';
 import type { AuthContainer } from '@/domains/auth/auth.container.js';
+import { toSupportedLanguage } from '@/shared/constants/i18n.constants.js';
+import { ACCOUNT_SECURITY_NOTICE } from '@/domains/auth/sub-domains/auth-method/events/auth.events.js';
 
-type AuthMfaHandlersDependencies = Pick<AuthContainer, 'mfaService' | 'authSessionService'>;
+type AuthMfaHandlersDependencies = Pick<
+  AuthContainer,
+  'mfaService' | 'authSessionService' | 'authMethodService'
+>;
 
 /**
  * Best-effort discriminator for a FAILED MFA login attempt, inferred from which credential field the
@@ -35,6 +40,7 @@ function mfaLoginSourceFromBody(body: unknown): LoginAuditSource {
 export function createAuthMfaHandlers({
   mfaService,
   authSessionService,
+  authMethodService,
 }: AuthMfaHandlersDependencies) {
   return {
     verifyMfaLogin: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -74,7 +80,11 @@ export function createAuthMfaHandlers({
       const auth = requireAuth(request);
       let data: Awaited<ReturnType<typeof mfaService.verify>>;
       try {
-        data = await mfaService.verify({ userPublicId: auth.userId, body: request.body });
+        data = await mfaService.verify({
+          userPublicId: auth.userId,
+          sessionPublicId: auth.sessionPublicId,
+          body: request.body,
+        });
       } catch (error) {
         await recordScopedAuditEvent({
           request,
@@ -95,7 +105,8 @@ export function createAuthMfaHandlers({
         redis: redisConnection,
         userPublicId: auth.userId,
         sessionPublicId: auth.sessionPublicId,
-        factor: 'mfa',
+        // A-1: a provisional factor (enrolled under an email-code window) opens only a weak window.
+        factor: data.factor,
       });
       // The session has now proved a second factor: organizations requiring MFA admit it
       // (switch / refresh re-mint its token with `amr: ['mfa']`).
@@ -106,10 +117,11 @@ export function createAuthMfaHandlers({
           actorUserPublicId: auth.userId,
           action: 'auth.mfa.step_up',
           resource_type: 'mfa_method',
+          metadata: { factor: data.factor },
         },
       });
       return successResponse({
-        data: AuthSerializer.mfaVerified(data),
+        data: AuthSerializer.mfaVerified({ verified: data.verified }),
         request_id: getRequestIdentifier(request),
       });
     },
@@ -133,6 +145,7 @@ export function createAuthMfaHandlers({
       const auth = requireAuth(request);
       const data = await mfaService.enrollConfirm({
         userPublicId: auth.userId,
+        sessionPublicId: auth.sessionPublicId,
         body: request.body,
       });
       // Confirming enrollment verified a fresh code from the new factor — a second factor proven
@@ -148,6 +161,11 @@ export function createAuthMfaHandlers({
           resource_type: 'mfa_method',
           metadata: { mfa_method_id: data.method_public_id },
         },
+      });
+      await authMethodService.sendAccountSecurityNotice({
+        userPublicId: auth.userId,
+        notice: ACCOUNT_SECURITY_NOTICE.FACTOR_ENROLLED,
+        locale: toSupportedLanguage(request.language),
       });
       return successResponse({
         data: AuthSerializer.mfaEnrollConfirm(data),

@@ -11,7 +11,10 @@ import { env } from '@/shared/config/env.config.js';
 import { DEFAULT_FRONTEND_URL } from '@/shared/constants/index.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import {
+  ACCOUNT_SECURITY_NOTICE,
   AUTH_EVENT,
+  type AccountSecurityNotice,
+  type AccountSecurityNoticePayload,
   type EmailVerificationCodePayload,
   type PasswordResetEmailPayload,
 } from './auth.events.js';
@@ -92,6 +95,70 @@ async function handlePasswordResetEmail({
   });
 }
 
+/** The `mail:` keys of each account security notice's subject and opening paragraph. */
+const ACCOUNT_SECURITY_NOTICE_MAIL_KEYS: Record<
+  AccountSecurityNotice,
+  { subject: string; html: string }
+> = {
+  [ACCOUNT_SECURITY_NOTICE.FACTOR_ENROLLED]: {
+    subject: 'mail:securityNoticeFactorEnrolledSubject',
+    html: 'mail:securityNoticeFactorEnrolledHtml',
+  },
+  [ACCOUNT_SECURITY_NOTICE.SESSIONS_REVOKED]: {
+    subject: 'mail:securityNoticeSessionsRevokedSubject',
+    html: 'mail:securityNoticeSessionsRevokedHtml',
+  },
+  [ACCOUNT_SECURITY_NOTICE.PASSWORD_CHANGED]: {
+    subject: 'mail:securityNoticePasswordChangedSubject',
+    html: 'mail:securityNoticePasswordChangedHtml',
+  },
+};
+
+/**
+ * Records the account security notice email (A-1): what changed, then the "this wasn't me" line.
+ * Best-effort — with mail not configured it logs and sends nothing, since the change it reports
+ * has already happened and must not fail on the notice.
+ */
+async function handleAccountSecurityNoticeEmail({
+  payload,
+  requestId,
+}: {
+  payload: AccountSecurityNoticePayload;
+  requestId?: string | undefined;
+}): Promise<void> {
+  if (!isMailConfigured()) {
+    logger.warn({ notice: payload.notice }, 'auth.account_security_notice.mail_not_configured');
+    return;
+  }
+  const keys = ACCOUNT_SECURITY_NOTICE_MAIL_KEYS[payload.notice];
+  const html = `${i18next.t(keys.html, { lng: payload.locale })}${i18next.t(
+    'mail:securityNoticeNotYouHtml',
+    { lng: payload.locale },
+  )}`;
+  await recordAndScheduleOutboxEmail({
+    data: {
+      to: payload.email,
+      subject: i18next.t(keys.subject, { lng: payload.locale }),
+      html,
+      tags: [{ name: 'category', value: 'account-security-notice' }],
+    },
+    options: requestId !== undefined ? { requestId } : undefined,
+  });
+}
+
+async function onAccountSecurityNoticeEvent(event: DomainEvent): Promise<void> {
+  const payload = event.payload as AccountSecurityNoticePayload;
+  try {
+    await handleAccountSecurityNoticeEmail({ payload, requestId: event.requestId });
+  } catch (error) {
+    logger.warn(
+      { error, eventType: event.type, notice: payload.notice },
+      'auth.account_security_notice.email.enqueue.failed',
+    );
+    throw error;
+  }
+}
+
 async function onVerificationCodeEmailEvent(event: DomainEvent): Promise<void> {
   const payload = event.payload as EmailVerificationCodePayload;
   try {
@@ -129,9 +196,13 @@ function registerAuthMethodEmailEventHandlers(): void {
     eventType: AUTH_EVENT.PASSWORD_RESET_REQUESTED,
     handler: onPasswordResetEmailEvent,
   });
+  eventBus.on({
+    eventType: AUTH_EVENT.ACCOUNT_SECURITY_NOTICE_REQUESTED,
+    handler: onAccountSecurityNoticeEvent,
+  });
 }
 
-/** Subscribes the auth-method side-effect handlers to the in-process event bus (email verification code and password reset emails). Idempotent: subsequent calls are no-ops. */
+/** Subscribes the auth-method side-effect handlers to the in-process event bus (email verification code, password reset and account security notice emails). Idempotent: subsequent calls are no-ops. */
 export function registerAuthMethodEventHandlers(): void {
   if (authEventHandlersRegistered) return;
   authEventHandlersRegistered = true;

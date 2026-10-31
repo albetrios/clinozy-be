@@ -28,6 +28,8 @@ import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import type { UserService } from '@/domains/user/user.service.js';
 import {
   AUTH_EVENT,
+  type AccountSecurityNotice,
+  type AccountSecurityNoticePayload,
   type PasswordResetEmailPayload,
 } from '@/domains/auth/sub-domains/auth-method/events/auth.events.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
@@ -330,6 +332,42 @@ export class AuthMethodService {
         this.authMethodRepository.findMethodRevocationState(userId, methodType, provider),
     });
     return state.hasRevoked && !state.hasActive;
+  }
+
+  /**
+   * Emails the account owner that their account changed — a new second factor or passkey, every
+   * other session signed out, the password changed — with a "this wasn't me" line.
+   *
+   * @remarks
+   * - **Algorithm:** resolves the owner's address, then emits
+   *   `AUTH_EVENT.ACCOUNT_SECURITY_NOTICE_REQUESTED`; the auth-method event handler records the
+   *   outbox email in `locale`.
+   * - **Failure modes:** none surfaced — best-effort: the change has already happened, so a missing
+   *   user or a failed enqueue is logged, never thrown.
+   * - **Side effects:** a `mail_outbox` row and its post-commit dispatch.
+   * - **Notes:** A-1 — brief access to the mailbox of a passwordless account could enroll a factor
+   *   or sign the owner out everywhere unseen; the notice tells the owner at once.
+   */
+  async sendAccountSecurityNotice({
+    userPublicId,
+    notice,
+    locale,
+  }: {
+    userPublicId: string;
+    notice: AccountSecurityNotice;
+    locale: SupportedLanguage;
+  }): Promise<void> {
+    try {
+      const user = await this.userService.findUserRecordByPublicId(userPublicId);
+      if (!user) return;
+      await eventBus.emit({
+        type: AUTH_EVENT.ACCOUNT_SECURITY_NOTICE_REQUESTED,
+        payload: { email: user.email, notice, locale } satisfies AccountSecurityNoticePayload,
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      logger.warn({ error, notice }, 'auth.account_security_notice.failed');
+    }
   }
 
   async findByProviderUserId({

@@ -10,8 +10,11 @@ export const RECENT_STEP_UP_TTL_SECONDS = 10 * 60;
  * @remarks `email_code` is a bootstrap-only factor (a passwordless account enrolling its FIRST
  * MFA/passkey). It CANNOT satisfy {@link hasRecentStrongStepUp}, so an email-code step-up window
  * can enroll a factor but can never revoke a session or delete a credential.
+ * `provisional_mfa` is an MFA step-up with a factor that was enrolled under an email-code window
+ * and is still provisional (A-1, `PROVISIONAL_FACTOR_PERIOD_SECONDS`, or the enrolling session) —
+ * weak like `email_code`.
  */
-export const STEP_UP_FACTORS = ['password', 'mfa', 'email_code'] as const;
+export const STEP_UP_FACTORS = ['password', 'mfa', 'email_code', 'provisional_mfa'] as const;
 /** A factor accepted by `POST /auth/step-up` / MFA verify — see {@link STEP_UP_FACTORS}. */
 export type StepUpFactor = (typeof STEP_UP_FACTORS)[number];
 
@@ -69,6 +72,27 @@ export async function recordRecentStepUp({
     'EX',
     RECENT_STEP_UP_TTL_SECONDS,
   );
+}
+
+/**
+ * The factor of the session's current step-up window, or `undefined` when it has none.
+ *
+ * @remarks A-1 — MFA enrollment reads it to tell an enrollment under an email-code window (a
+ * provisional factor) from one under a password or MFA window. Fails closed on a missing session
+ * id (`undefined`) and on a stored value that is not a known factor.
+ */
+export async function findRecentStepUpFactor({
+  redis,
+  userPublicId,
+  sessionPublicId,
+}: {
+  redis: Redis;
+  userPublicId: string;
+  sessionPublicId: string | undefined;
+}): Promise<StepUpFactor | undefined> {
+  if (!sessionPublicId) return undefined;
+  const value = await redis.get(buildRecentStepUpKey({ userPublicId, sessionPublicId }));
+  return STEP_UP_FACTORS.find((factor) => factor === value);
 }
 
 /**

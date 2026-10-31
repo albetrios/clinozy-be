@@ -15,11 +15,19 @@ import {
   recordLoginFailureAuditEvent,
 } from '@/domains/auth/shared/audit-login.util.js';
 import type { AuthContainer } from '@/domains/auth/auth.container.js';
+import { ACCOUNT_SECURITY_NOTICE } from '@/domains/auth/sub-domains/auth-method/events/auth.events.js';
+import { toSupportedLanguage } from '@/shared/constants/i18n.constants.js';
 
-type AuthWebauthnHandlersDependencies = Pick<AuthContainer, 'webauthnService'>;
+type AuthWebauthnHandlersDependencies = Pick<
+  AuthContainer,
+  'webauthnService' | 'authMethodService'
+>;
 
 /** Builds the WebAuthn Fastify handlers: `webauthnRegisterOptions` / `webauthnRegisterVerify` for credential enrollment, `webauthnAuthenticateOptions` / `webauthnAuthenticateVerify` for passkey login (sets the session cookie on success), and `webauthnListCredentials` / `webauthnRevokeCredential` for owner-scoped passkey management. */
-export function createAuthWebauthnHandlers({ webauthnService }: AuthWebauthnHandlersDependencies) {
+export function createAuthWebauthnHandlers({
+  webauthnService,
+  authMethodService,
+}: AuthWebauthnHandlersDependencies) {
   return {
     webauthnRegisterOptions: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
@@ -43,6 +51,11 @@ export function createAuthWebauthnHandlers({ webauthnService }: AuthWebauthnHand
           resource_type: 'webauthn_credential',
           metadata: { credential_id: data.credential_id },
         },
+      });
+      await authMethodService.sendAccountSecurityNotice({
+        userPublicId: auth.userId,
+        notice: ACCOUNT_SECURITY_NOTICE.FACTOR_ENROLLED,
+        locale: toSupportedLanguage(request.language),
       });
       return successResponse({ data, request_id: getRequestIdentifier(request) });
     },

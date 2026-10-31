@@ -211,4 +211,39 @@ describe('auth event handlers', () => {
       },
     );
   });
+
+  it('A-1: an account security notice is written in the request language with the not-me line', async () => {
+    await emitAndFlushOnCommit({
+      type: AUTH_EVENT.ACCOUNT_SECURITY_NOTICE_REQUESTED,
+      payload: { email: 'owner@example.com', notice: 'factor_enrolled', locale: 'es' },
+      timestamp: new Date(),
+    });
+
+    expect(recordOutboxEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'owner@example.com',
+        subject: 'Se añadió un nuevo factor de inicio de sesión a tu cuenta',
+        html: expect.stringContaining('¿No fuiste tú?'),
+        tags: [{ name: 'category', value: 'account-security-notice' }],
+      }),
+    );
+  });
+
+  it('A-1: without mail configured an account security notice is skipped, not thrown', async () => {
+    vi.mocked(isMailConfigured).mockReturnValue(false);
+    const handlerFailure = vi.spyOn(logger, 'error');
+
+    await emitAndFlushOnCommit({
+      type: AUTH_EVENT.ACCOUNT_SECURITY_NOTICE_REQUESTED,
+      payload: { email: 'owner@example.com', notice: 'password_changed', locale: 'en' },
+      timestamp: new Date(),
+    });
+
+    expect(recordOutboxEmailMock).not.toHaveBeenCalled();
+    expect(handlerFailure).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: AUTH_EVENT.ACCOUNT_SECURITY_NOTICE_REQUESTED }),
+      'Domain event handler failed',
+    );
+    handlerFailure.mockRestore();
+  });
 });

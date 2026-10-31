@@ -111,6 +111,7 @@ describe('createAuthController', () => {
     forgotPassword: vi.fn().mockResolvedValue({ messageKey: 'success:forgotPassword' }),
     resetPassword: vi.fn().mockResolvedValue(undefined),
     changePassword: vi.fn().mockResolvedValue(undefined),
+    sendAccountSecurityNotice: vi.fn().mockResolvedValue(undefined),
   };
 
   const emailLoginService = {
@@ -137,7 +138,7 @@ describe('createAuthController', () => {
   };
 
   const mfaService = {
-    verify: vi.fn().mockResolvedValue({ verified: true }),
+    verify: vi.fn().mockResolvedValue({ verified: true, factor: 'mfa' }),
     // sec-A finding #3: two-phase enrollment. `enrollInit` stages the secret in Redis and
     // returns only `{ secret, provisioning_uri }`; `enrollConfirm` verifies a code and
     // returns the freshly minted plaintext recovery codes plus the method_id.

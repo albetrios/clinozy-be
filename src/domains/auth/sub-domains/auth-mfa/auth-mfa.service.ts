@@ -48,6 +48,9 @@ import {
 } from './auth-mfa-recovery-code.repository.js';
 import { generateMfaRecoveryCodes } from './auth-mfa-recovery-code.util.js';
 import { sessionExpiresAtFromNow } from '@/domains/auth/sub-domains/auth-session/session-lifetime.js';
+import { findRecentStepUpFactor } from '@/shared/utils/auth/recent-step-up.util.js';
+import { PROVISIONAL_FACTOR_PERIOD_SECONDS } from '@/shared/constants/security.constants.js';
+import { MILLISECONDS_PER_SECOND } from '@/shared/constants/ttl.constants.js';
 import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
@@ -69,6 +72,25 @@ const MFA_VERIFICATION_FAILURE_KEY_PREFIX = 'mfa:verify:fail:';
  * every step-up (and the other way round).
  */
 type MfaVerificationFlow = 'login' | 'step_up';
+
+/**
+ * Whether a second factor is still provisional for a step-up on `sessionPublicId` (A-1): it was
+ * enrolled under an email-code window and its `provisional_until` has not passed, or this is the
+ * session that enrolled it.
+ */
+function isProvisionalFactor({
+  factor,
+  sessionPublicId,
+  now = new Date(),
+}: {
+  factor: { provisional_until: Date | null; enrolled_on_session_public_id: string | null };
+  sessionPublicId: string | undefined;
+  now?: Date;
+}): boolean {
+  if (factor.provisional_until === null) return false;
+  if (factor.provisional_until > now) return true;
+  return sessionPublicId === undefined || factor.enrolled_on_session_public_id === sessionPublicId;
+}
 
 function mfaVerificationFailureKey(options: {
   userPublicId: string;
@@ -344,14 +366,22 @@ export class MfaService {
     };
   }
 
-  /** Verify TOTP code for the current user. Requires authenticated request (user public_id). */
+  /**
+   * Verify TOTP code for the current user. Requires authenticated request (user public_id).
+   *
+   * @remarks A-1 — `factor` is the step-up factor the verification earns on `sessionPublicId`:
+   * `mfa`, or the weak `provisional_mfa` while the TOTP factor is provisional (enrolled under an
+   * email-code window: until its `provisional_until`, and always on the session that enrolled it).
+   */
   async verify({
     userPublicId,
+    sessionPublicId,
     body,
   }: {
     userPublicId: string;
+    sessionPublicId?: string | undefined;
     body: unknown;
-  }): Promise<{ verified: boolean }> {
+  }): Promise<{ verified: boolean; factor: 'mfa' | 'provisional_mfa' }> {
     const parsed = validateMfaVerify(body);
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new UnauthorizedError(ERROR_KEY_MFA_USER_NOT_FOUND);
@@ -385,7 +415,8 @@ export class MfaService {
           userId: user.id,
         }),
     });
-    return { verified: true };
+    const provisional = isProvisionalFactor({ factor: totpMethod, sessionPublicId });
+    return { verified: true, factor: provisional ? 'provisional_mfa' : 'mfa' };
   }
 
   /**
@@ -463,14 +494,22 @@ export class MfaService {
    */
   async enrollConfirm({
     userPublicId,
+    sessionPublicId,
     body,
   }: {
     userPublicId: string;
+    sessionPublicId?: string | undefined;
     body: unknown;
   }): Promise<{ recovery_codes: string[]; method_public_id: string }> {
     const parsed = validateMfaEnrollConfirm(body);
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new UnauthorizedError(ERROR_KEY_MFA_USER_NOT_FOUND);
+    // A-1: an enrollment authorized by an email-code step-up window (all that brief mailbox access
+    // opens on a passwordless account) yields a provisional factor.
+    const provisionalFields = await this.provisionalFieldsForEnrollment({
+      userPublicId: user.public_id,
+      sessionPublicId,
+    });
 
     const stageKey = `${MFA_TOTP_ENROLLMENT_STAGE_KEY_PREFIX}${user.public_id}`;
     // GETDEL is atomic in Redis 6.2+; a single network round-trip prevents two
@@ -531,6 +570,7 @@ export class MfaService {
           encrypted_secret: encryptFieldSecret(secret),
           is_primary: false,
           created_by_user_id: user.id,
+          ...provisionalFields,
         });
         await insertMfaRecoveryCodes(user.id, recoveryCodeHashes);
         // sec-re-06: flip is_mfa_enabled INSIDE the same withAppDatabaseContext (user scope)
@@ -550,6 +590,31 @@ export class MfaService {
     return {
       recovery_codes: plaintextRecoveryCodes,
       method_public_id: record.public_id,
+    };
+  }
+
+  /**
+   * The provisional-factor columns for a factor enrolled now on `sessionPublicId` (A-1): set when the
+   * session's step-up window was opened by an email code, empty otherwise.
+   */
+  private async provisionalFieldsForEnrollment({
+    userPublicId,
+    sessionPublicId,
+  }: {
+    userPublicId: string;
+    sessionPublicId: string | undefined;
+  }): Promise<{ provisional_until?: Date; enrolled_on_session_public_id?: string }> {
+    const stepUpFactor = await findRecentStepUpFactor({
+      redis: this.redis,
+      userPublicId,
+      sessionPublicId,
+    });
+    if (stepUpFactor !== 'email_code' || !sessionPublicId) return {};
+    return {
+      provisional_until: new Date(
+        Date.now() + PROVISIONAL_FACTOR_PERIOD_SECONDS * MILLISECONDS_PER_SECOND,
+      ),
+      enrolled_on_session_public_id: sessionPublicId,
     };
   }
 
