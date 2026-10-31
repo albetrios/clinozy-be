@@ -246,4 +246,39 @@ describe('Record access per role — integration (B1-1, B1-5)', () => {
     marketing.expectValue('the lead (lead:read)', '.data[0].open_lead_id | type', 'string');
     marketing.expectValue('no visit without appointment:read', '.data[0].next_visit_on', 'null');
   });
+
+  it("B1-4: payment:update lowers a package's sessions; raising them needs offering:update", async () => {
+    await owner.expect(200, 'a five-session package', 'POST', '/app/offerings', {
+      name: `Laser five ${S}`,
+      category: 'package',
+      price: 5000,
+      sessions: 5,
+      validity_days: 90,
+    });
+    await owner.expect(200, 'bill it', 'POST', '/app/invoices', {
+      branch_id: fixture.branches.vesu,
+      contact_id: contact,
+      items: [{ offering_id: owner.last('.data.id'), quantity: 1 }],
+    });
+    await owner.expect(200, 'her packages', 'GET', `/app/patients/${patient}/offerings`);
+    const bought = `/app/patients/${patient}/offerings/${owner.last('.data[0].id')}`;
+
+    const frontDesk = as('front_desk');
+    await frontDesk.expect(403, 'the front desk adds no unpaid session', 'PATCH', bought, {
+      sessions_total: 8,
+    });
+    frontDesk.expectValue('why', '.error.reason', 'field_permission_required');
+    await frontDesk.expect(200, 'but lowers them (a refund)', 'PATCH', bought, {
+      sessions_total: 3,
+    });
+    await as('counsellor').expect(
+      200,
+      'the counsellor (offering:update) raises them',
+      'PATCH',
+      bought,
+      {
+        sessions_total: 5,
+      },
+    );
+  });
 });

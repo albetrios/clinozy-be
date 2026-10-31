@@ -393,6 +393,7 @@
   "offeringNameTaken": "Otro servicio ya tiene este nombre",
   "contactPhoneExists": "{{phone}} ya pertenece a {{name}} (C-{{contact_number}}) en otro hogar: usa ese contacto o añade este a su hogar",
   "contactPhoneInAnotherHousehold": "Uno de estos números ya pertenece a un contacto de otro hogar",
+  "invoiceAmountTooLarge": "La factura superaría {{max}}: divídala en facturas más pequeñas",
   "recordTransitionNotAllowed": "No se puede {{action}} un registro que está {{status}}",
   "recordChangedSinceOpened": "{{updated_by}} modificó este registro a las {{updated_at}} — recarga e inténtalo de nuevo",
   "fieldNeedsPermission": "Necesitas el permiso {{permission}} para cambiar {{field}}",

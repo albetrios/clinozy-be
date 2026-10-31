@@ -393,6 +393,7 @@
   "offeringNameTaken": "Another offering already has this name",
   "contactPhoneExists": "{{phone}} is already on {{name}} (C-{{contact_number}}) in another household — use that contact or add this one to their household",
   "contactPhoneInAnotherHousehold": "One of these numbers is already on a contact in another household",
+  "invoiceAmountTooLarge": "The bill would come to more than {{max}} — split it into smaller bills",
   "recordTransitionNotAllowed": "Cannot {{action}} a record that is {{status}}",
   "recordChangedSinceOpened": "This record was changed by {{updated_by}} at {{updated_at}} — reload and try again",
   "fieldNeedsPermission": "You need the {{permission}} permission to change {{field}}",
