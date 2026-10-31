@@ -1,78 +1,89 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import fp from 'fastify-plugin';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type * as i18nextHttpMiddleware from 'i18next-http-middleware';
-
-type I18nextHandleMiddleware = (
-  request: unknown,
-  response: unknown,
-  callback: (error?: Error) => void,
-) => void;
-
-const i18nextMocks = vi.hoisted(() => ({
-  handleImplementation: null as null | (() => I18nextHandleMiddleware),
-}));
-
-vi.mock('i18next-http-middleware', async (importOriginal) => {
-  const actual = await importOriginal<typeof i18nextHttpMiddleware>();
-  return {
-    ...actual,
-    handle: (...arguments_: Parameters<typeof actual.handle>) => {
-      if (i18nextMocks.handleImplementation) {
-        return i18nextMocks.handleImplementation();
-      }
-      return actual.handle(...arguments_);
-    },
-  };
-});
-
+import i18next from 'i18next';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import i18nMiddleware from '@/shared/middlewares/core/i18n.middleware.js';
+import { SUPPORTED_LANGUAGES } from '@/shared/constants/i18n.constants.js';
 
-async function registerI18nForTests(application: ReturnType<typeof Fastify>): Promise<void> {
-  await application.register(fp(i18nMiddleware, { name: 'i18n-middleware-hook-test' }));
-}
-
+/**
+ * D-1 — the language a request names must never grow what i18next loads.
+ *
+ * The middleware used to run `i18next-http-middleware`'s handler, which took any `?lng=`,
+ * `i18next` cookie or `Accept-Language` value, cloned the instance and called `loadLanguages`
+ * with it: every new code was appended to `i18next.options.preload` for good and the whole list
+ * reloaded, so a stream of anonymous requests with random codes wedged the event loop. These run
+ * against the real i18next singleton and the real locale files.
+ */
 describe('i18n.middleware (onRequest hook)', () => {
-  let application: ReturnType<typeof Fastify>;
+  let application: FastifyInstance;
 
-  beforeEach(() => {
-    i18nextMocks.handleImplementation = null;
-  });
+  function loadedLanguages(): string[] {
+    return Object.keys(i18next.store.data).sort();
+  }
 
-  afterEach(async () => {
-    if (application) {
-      await application.close();
-    }
-  });
-
-  it('uses the fallback translator when i18next does not attach req.t', async () => {
-    i18nextMocks.handleImplementation = () => (_request, _response, callback) => {
-      callback();
-    };
-
+  beforeAll(async () => {
     application = Fastify({ logger: false });
-    await registerI18nForTests(application);
-    application.get('/fallback', async (request: { t?: (key: string) => string }) => ({
-      translated: (request as { t?: (key: string) => string }).t?.('errors:routeNotFound'),
+    await application.register(fp(i18nMiddleware, { name: 'i18n-middleware-hook-test' }));
+    application.get('/probe', async (request) => ({
+      language: request.language ?? null,
+      translated: request.t?.('errors:routeNotFound') ?? null,
     }));
     await application.ready();
-
-    const response = await application.inject({ method: 'GET', url: '/fallback' });
-    expect(response.statusCode).toBe(200);
-    expect(response.json().translated).toBe('Route not found');
   });
 
-  it('propagates i18next handler errors through the onRequest hook', async () => {
-    i18nextMocks.handleImplementation = () => (_request, _response, callback) => {
-      callback(new Error('i18n initialization failed'));
-    };
+  afterAll(async () => {
+    await application.close();
+  });
 
-    application = Fastify({ logger: false });
-    await registerI18nForTests(application);
-    application.get('/should-not-run', async () => ({ ok: true }));
-    await application.ready();
+  it('answers in the supported language the request asks for', async () => {
+    const response = await application.inject({
+      method: 'GET',
+      url: '/probe',
+      headers: { 'accept-language': 'es-ES,es;q=0.9' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-language']).toBe('es');
+    expect(response.json()).toEqual({ language: 'es', translated: 'Ruta no encontrada' });
+  });
 
-    const response = await application.inject({ method: 'GET', url: '/should-not-run' });
-    expect(response.statusCode).toBe(500);
+  it('answers in English when the request names no language', async () => {
+    const response = await application.inject({ method: 'GET', url: '/probe' });
+    expect(response.headers['content-language']).toBe('en');
+    expect(response.json()).toEqual({ language: 'en', translated: 'Route not found' });
+  });
+
+  it.each([
+    ['a ?lng= query', { url: '/probe?lng=zz-audit' }],
+    ['an i18next cookie', { url: '/probe', headers: { cookie: 'i18next=zz-cookie' } }],
+    ['an Accept-Language header', { url: '/probe', headers: { 'accept-language': 'zz-header' } }],
+    [
+      'a region of a supported language',
+      { url: '/probe', headers: { 'accept-language': 'es-ZZ' } },
+    ],
+  ])('leaves i18next untouched for an unknown code in %s', async (_label, request) => {
+    const preloadBefore = [...(i18next.options.preload as readonly string[])];
+    const loadedBefore = loadedLanguages();
+
+    const response = await application.inject({ method: 'GET', ...request });
+
+    expect(response.statusCode).toBe(200);
+    expect(SUPPORTED_LANGUAGES).toContain(response.headers['content-language']);
+    expect(i18next.options.preload).toEqual(preloadBefore);
+    expect(loadedLanguages()).toEqual(loadedBefore);
+  });
+
+  it('keeps the preload list fixed across many random codes', async () => {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const code = `x${attempt.toString(36)}-audit`;
+      await application.inject({
+        method: 'GET',
+        url: `/probe?lng=${code}`,
+        headers: { 'accept-language': code, cookie: `i18next=${code}` },
+      });
+    }
+    expect([...(i18next.options.preload as readonly string[])].sort()).toEqual(
+      [...SUPPORTED_LANGUAGES].sort(),
+    );
+    expect(loadedLanguages()).toEqual([...SUPPORTED_LANGUAGES].sort());
   });
 });

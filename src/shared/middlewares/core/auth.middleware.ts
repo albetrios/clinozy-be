@@ -185,7 +185,7 @@ export function attachRequestPrincipalScope(request: FastifyRequest): void {
  *   and re-attach the request i18n helpers with it.
  * - **Failure modes:** none surfaced — locale resolution errors fall back to the
  *   default locale inside the settings service.
- * - **Side effects:** may rebind `request.t` / `request.language` / `request.i18n`.
+ * - **Side effects:** may rebind `request.t` / `request.language`.
  */
 async function applyOrganizationDefaultLocale(request: FastifyRequest): Promise<void> {
   if (request.headers['accept-language']) return;
@@ -195,11 +195,7 @@ async function applyOrganizationDefaultLocale(request: FastifyRequest): Promise<
   if (!organizationSettingsService) return; // minimal entrypoints / unit harnesses without tenancy wiring
   const organizationDefaultLocale =
     await organizationSettingsService.resolveDefaultLocaleForOrganization(organizationPublicId);
-  attachRequestI18nHelpers({
-    request,
-    req: request as unknown as Parameters<typeof attachRequestI18nHelpers>[0]['req'],
-    organizationDefaultLocale,
-  });
+  attachRequestI18nHelpers({ request, organizationDefaultLocale });
 }
 
 const authMiddleware: FastifyPluginAsync = async (app) => {

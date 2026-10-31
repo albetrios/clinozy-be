@@ -11,6 +11,7 @@ import {
 vi.mock('i18next', () => ({
   default: {
     t: (key: string) => `i18n:${key}`,
+    getFixedT: (language: string) => (key: string) => `i18n:${language}:${key}`,
   },
 }));
 
@@ -45,37 +46,32 @@ describe('i18n.middleware helpers', () => {
     expect(() => verifyLocalesAvailable()).toThrow(/Locales directory not found/);
   });
 
-  it('attachRequestI18nHelpers copies language and uses req.t when provided', () => {
+  it('attachRequestI18nHelpers sets the resolved language and a translator fixed to it', () => {
     const request = { headers: { 'accept-language': 'es-ES' } } as FastifyRequest;
-    const req: { language?: string; t: (key: string) => string } = {
-      t: (key: string) => `custom:${key}`,
-    };
-    attachRequestI18nHelpers({ request, req });
-    expect(req.language).toBe('es');
-    expect((request as { language?: string }).language).toBe('es');
-    expect((request as { t?: (key: string) => string }).t?.('errors:invalidInput')).toBe(
-      'custom:errors:invalidInput',
-    );
+    attachRequestI18nHelpers({ request });
+    expect(request.language).toBe('es');
+    expect(request.t?.('errors:invalidInput')).toBe('i18n:es:errors:invalidInput');
   });
 
-  it('attachRequestI18nHelpers falls back to i18next.t when req.t is absent', () => {
+  it('attachRequestI18nHelpers falls back to English when no language is named', () => {
     const request = { headers: {} } as FastifyRequest;
-    const req: { language?: string } = {};
-    attachRequestI18nHelpers({ request, req });
-    expect(req.language).toBe('en');
-    expect((request as { t?: (key: string) => string }).t?.('errors:invalidInput')).toBe(
-      'i18n:errors:invalidInput',
-    );
+    attachRequestI18nHelpers({ request });
+    expect(request.language).toBe('en');
+    expect(request.t?.('errors:invalidInput')).toBe('i18n:en:errors:invalidInput');
   });
 
-  it('attachRequestI18nHelpers uses English when request language is cleared before translate', () => {
+  it('attachRequestI18nHelpers applies the organization default locale when the header is absent', () => {
     const request = { headers: {} } as FastifyRequest;
-    const req: { language?: string } = {};
-    attachRequestI18nHelpers({ request, req });
-    delete (request as { language?: string }).language;
-    expect((request as { t?: (key: string) => string }).t?.('errors:invalidInput')).toBe(
-      'i18n:errors:invalidInput',
-    );
+    attachRequestI18nHelpers({ request, organizationDefaultLocale: 'es' });
+    expect(request.language).toBe('es');
+    expect(request.t?.('errors:invalidInput')).toBe('i18n:es:errors:invalidInput');
+  });
+
+  it('attachRequestI18nHelpers never hands an unsupported code to i18next', () => {
+    const request = { headers: { 'accept-language': 'zz-audit' } } as FastifyRequest;
+    attachRequestI18nHelpers({ request });
+    expect(request.language).toBe('en');
+    expect(request.t?.('errors:invalidInput')).toBe('i18n:en:errors:invalidInput');
   });
 
   it('verifyLocalesAvailable throws when a required namespace file is missing', () => {

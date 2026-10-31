@@ -272,7 +272,6 @@
     "fastify-type-provider-zod": "^7.0.0",
     "i18next": "^26.5.2",
     "i18next-fs-backend": "^2.6.9",
-    "i18next-http-middleware": "^3.9.9",
     "ioredis": "6.0.0",
     "ipaddr.js": "^2.5.0",
     "isomorphic-dompurify": "^4.6.0",
