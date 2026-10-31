@@ -133,7 +133,12 @@ describe('tooling/agent-os/session-hooks.ts', () => {
   });
 
   it("with no record yet, rebuilds the root's ask rules from the repositories, and keeps its own allow and deny", () => {
-    const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other: OTHER_SETTINGS });
+    // Neither real repository declares an ask any more, so the other checkout carries one.
+    const otherWithAsk = JSON.stringify({
+      ...JSON.parse(OTHER_SETTINGS),
+      permissions: { ask: ['Bash(deploy *)'] },
+    });
+    const sessionRoot = makeSessionRoot({ own: REAL_SETTINGS, other: otherWithAsk });
     mkdirSync(join(sessionRoot, '.claude'), { recursive: true });
     writeFileSync(
       sessionSettingsPath(sessionRoot),
@@ -149,7 +154,7 @@ describe('tooling/agent-os/session-hooks.ts', () => {
     const permissions = readSessionSettings(sessionRoot).permissions as Record<string, string[]>;
     // A dropped ask rule would outrank every allow for the rest of the session.
     expect(permissions.ask).not.toContain('Bash(pnpm exec *)');
-    expect(permissions.ask).toContain('Bash(gh pr create *)');
+    expect(permissions.ask).toContain('Bash(deploy *)');
     expect(permissions.allow).toContain('Bash');
     expect(permissions.deny).toContain('Bash(rm -rf /)');
   });

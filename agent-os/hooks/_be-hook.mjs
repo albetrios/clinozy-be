@@ -71,7 +71,7 @@ export function writeHookOutput(output) {
   process.stdout.write(`${JSON.stringify(output)}\n`);
 }
 
-/** Writes the PreToolUse `decision` (`deny` or `ask`) with `reason` shown to the model. */
+/** Writes the PreToolUse `decision` (`deny`) with `reason` shown to the model. */
 export function writePermissionDecision({ decision, reason }) {
   writeHookOutput({
     hookSpecificOutput: {

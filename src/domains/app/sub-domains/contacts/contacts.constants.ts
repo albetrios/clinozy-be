@@ -63,3 +63,9 @@ export const CONTACT_IDS_MAX = 100;
 
 /** Most team members handling one contact (CT11). */
 export const CONTACT_MEMBERSHIP_IDS_MAX = 50;
+
+/** The youngest age a contact can be registered with instead of a birth date (AG1). */
+export const CONTACT_AGE_MIN = 0;
+
+/** The oldest age a contact can be registered with, and the age filters' upper bound (AG1, AG4). */
+export const CONTACT_AGE_MAX = 120;

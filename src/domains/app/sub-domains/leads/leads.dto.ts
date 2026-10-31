@@ -8,7 +8,10 @@ import {
   recordIdSchema,
   valueListSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
-import { CreateContactDto } from '@/domains/app/sub-domains/contacts/contacts.dto.js';
+import {
+  CreateContactDto,
+  contactAgeRangeQueryFields,
+} from '@/domains/app/sub-domains/contacts/contacts.dto.js';
 import {
   LEAD_INTERESTS_VALUES,
   LEAD_INVOLVED_MEMBERSHIPS_MAX,
@@ -111,8 +114,8 @@ export const UpdateLeadDto = z
  * Query of the leads list and export (routes-final 5.8 #1, #2, L7) — `q` (the contact's names,
  * numbers, contact number; the lead number `#2371`), `status` / `source` / `interests` (several,
  * comma-separated), `kind`, `contact_id`, `owner_membership_id`, `team_membership_id` (owner or
- * involved), `is_awaiting_reply`, `ownership`, `branch_id`, `branch_ids`, the follow-up and created
- * ranges; sort `created_at` (default, newest first) | `name` | `status` | `source` | `follow_up_at`
+ * involved), `is_awaiting_reply`, `ownership`, `branch_id`, `branch_ids`, the contact's age
+ * (`age_from` / `age_to`, AG4), the follow-up and created ranges; sort `created_at` (default, newest first) | `name` | `status` | `source` | `follow_up_at`
  * | `last_activity_at` — a sort on a column that can be empty keeps those rows, last. The saved-view
  * registry checks a view's `filters` against it.
  */
@@ -136,6 +139,7 @@ export const listLeadsQueryDto = listSearchSortSchema([
     ownership: z.enum(LEAD_OWNERSHIP_VALUES).optional(),
     branch_id: recordIdSchema.optional(),
     branch_ids: recordIdListSchema.optional(),
+    ...contactAgeRangeQueryFields,
     follow_up_at_from: instantSchema.optional(),
     follow_up_at_to: instantSchema.optional(),
     created_from: instantSchema.optional(),

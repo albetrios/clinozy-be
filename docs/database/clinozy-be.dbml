@@ -366,6 +366,7 @@ Table app.contacts {
   created_at timestamptz [not null]
   created_by_user_id bigint
   date_of_birth date
+  date_of_birth_is_approximate boolean [not null]
   default_channel varchar(9) [not null]
   delete_note varchar(280)
   delete_reason varchar(20)

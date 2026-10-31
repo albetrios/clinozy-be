@@ -1,11 +1,19 @@
-import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
+import type {
+  BaseRecordActionInput,
+  BaseRecordRules,
+  BaseRecordWriteContext,
+} from '@/domains/app/base-record.types.js';
 import {
   type BaseRecordRow,
   listChildRows,
   replaceChildRows,
 } from '@/domains/app/base-record.repository.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
-import { calendarDateInTimeZone } from '@/shared/utils/validation/record-fields.util.js';
+import {
+  calendarDateInTimeZone,
+  subtractYearsFromCalendarDate,
+  wholeYearsBetweenCalendarDates,
+} from '@/shared/utils/validation/record-fields.util.js';
 import { CONTACT_REFERRAL_SOURCE } from './contacts.constants.js';
 import {
   CONTACT_PHONES_CHILD,
@@ -93,6 +101,37 @@ async function organizationToday(context: BaseRecordWriteContext): Promise<strin
   return calendarDateInTimeZone({ timeZone: timezone });
 }
 
+/**
+ * AG2: a typed `age` becomes an approximate `date_of_birth` — the organization's today minus that
+ * many years — flagged `date_of_birth_is_approximate`; a sent `date_of_birth` (or `null`) is a real
+ * one, so the flag turns off. `age` itself is never stored.
+ *
+ * @remarks
+ * - **Notes:** the approximate date is never after the database's today (AA8) — just after midnight
+ *   in India the organization's today is ahead of UTC's, and age 0 would otherwise break
+ *   `chk_contacts_date_of_birth_past`.
+ */
+async function applyTypedAge({
+  values,
+  context,
+}: {
+  values: Record<string, unknown>;
+  context: BaseRecordWriteContext;
+}): Promise<void> {
+  if (typeof values.age === 'number') {
+    const approximate = subtractYearsFromCalendarDate({
+      date: await organizationToday(context),
+      years: values.age,
+    });
+    const databaseToday = calendarDateInTimeZone({ timeZone: DATABASE_TIME_ZONE });
+    values.date_of_birth = approximate > databaseToday ? databaseToday : approximate;
+    values.date_of_birth_is_approximate = true;
+  } else if ('date_of_birth' in values) {
+    values.date_of_birth_is_approximate = false;
+  }
+  delete values.age;
+}
+
 /** CT7: a live lead, patient file or appointment points at the contact. */
 async function isInUse({
   repository,
@@ -110,7 +149,8 @@ async function isInUse({
 
 /**
  * Adds what a contact reads of the records about it to a page (4.A.6): its open lead (#131), its
- * patient file and its last and next visit (#132) — one read each.
+ * patient file and its last and next visit (#132) — one read each — and its `age` on the
+ * organization's today (AG3).
  */
 async function decorateContacts({
   repository,
@@ -124,10 +164,11 @@ async function decorateContacts({
   const ids = outputs.map((output) => String(output.id));
   const openLeads = await leadsRepository.findOpenLeadsOfContacts(ids, context.organizationId);
   const patientFiles = await repository.findPatientFiles(ids, context.organizationId);
+  const today = await organizationToday(context);
   const visits = await appointmentsRepository.findLastAndNextVisits({
     organizationId: context.organizationId,
     contactPublicIds: ids,
-    today: await organizationToday(context),
+    today,
   });
   for (const output of outputs) {
     const id = String(output.id);
@@ -139,13 +180,62 @@ async function decorateContacts({
     output.patient_number = patientFile?.patient_number ?? null;
     output.last_visit_on = visits.last.get(id)?.appointment_date ?? null;
     output.next_visit_on = visits.next.get(id)?.appointment_date ?? null;
+    output.age =
+      typeof output.date_of_birth === 'string'
+        ? wholeYearsBetweenCalendarDates({ from: output.date_of_birth, to: today })
+        : null;
   }
 }
 
 /**
+ * The hover card (route 7): the contact (no `phones`) plus its open lead, patient file and the next
+ * and last appointment — the appointments only for `appointment:read` holders (D61).
+ */
+async function previewContact({
+  repository,
+  existing,
+  present,
+  context,
+}: Pick<BaseRecordActionInput, 'existing' | 'present' | 'context'> & {
+  repository: ContactsRepository;
+}): Promise<ContactPreviewOutput> {
+  const [contact] = (await present([existing])) as ContactPreviewOutput[];
+  const openLead = (
+    await leadsRepository.findOpenLeadsOfContacts([existing.public_id], context.organizationId)
+  ).get(existing.public_id);
+  const patientFile = (
+    await repository.findPatientFiles([existing.public_id], context.organizationId)
+  ).get(existing.public_id);
+  const visits = (await context.can(APP_PERMISSIONS.APPOINTMENT_READ))
+    ? await appointmentsRepository.findLastAndNextVisits({
+        organizationId: context.organizationId,
+        contactPublicIds: [existing.public_id],
+        today: await organizationToday(context),
+      })
+    : null;
+  const appointmentOf = (visit: ContactVisit | undefined) =>
+    visit
+      ? {
+          id: visit.id,
+          appointment_date: visit.appointment_date,
+          start_time: visit.start_time,
+          service_label: visit.service_label,
+          status: visit.status,
+        }
+      : null;
+  return {
+    ...contact!,
+    open_lead: openLead ?? null,
+    patient: patientFile ?? null,
+    next_appointment: appointmentOf(visits?.next.get(existing.public_id)),
+    last_appointment: appointmentOf(visits?.last.get(existing.public_id)),
+  } satisfies ContactPreviewOutput;
+}
+
+/**
  * The contacts rules (launch ROUTE #129, routes-final 4.A): the primary number's copy, the
- * household and its numbers (CT2, CT3), the numbers' soft delete with their contact, and the
- * preview (route 7).
+ * household and its numbers (CT2, CT3), the numbers' soft delete with their contact, a typed age
+ * (AG2), and the preview (route 7).
  *
  * @remarks
  * - **Algorithm:** a write's `phones` sets `primary_phone`. A named household is the household of
@@ -159,7 +249,9 @@ async function decorateContacts({
  *   household that holds others (they would point at a contact of another household).
  *   A contact a live lead, patient file or appointment points at cannot be removed
  *   (`contact_in_use`, CT7); the open lead (#131), the patient file and the last and next visit
- *   (#132) are read per page; the preview's appointments only for `appointment:read` holders.
+ *   (#132) are read per page, with the `age` on the organization's today (AG3); the preview's
+ *   appointments only for `appointment:read` holders. A typed `age` writes an approximate
+ *   `date_of_birth` and its flag (AG2).
  * - **Notes:** a patient file points at its contact once a check-in opens it (#132, D68); every
  *   file does once #133 rebuilds the patient file.
  */
@@ -211,6 +303,7 @@ export function createContactsRules(repository: ContactsRepository): BaseRecordR
 
   return {
     prepareCreate: async (values, context) => {
+      await applyTypedAge({ values, context });
       const phones = values.phones as ContactPhoneInput[];
       values.primary_phone = primaryPhoneOf(phones);
       if (typeof values.household_contact_id === 'number') {
@@ -224,6 +317,7 @@ export function createContactsRules(repository: ContactsRepository): BaseRecordR
       });
     },
     prepareUpdate: async (values, existing, context) => {
+      await applyTypedAge({ values, context });
       const target = await householdMove({ values, existing });
       if (target === undefined) delete values.household_contact_id;
       else values.household_contact_id = target;
@@ -263,44 +357,7 @@ export function createContactsRules(repository: ContactsRepository): BaseRecordR
       }
     },
     views: {
-      // The hover card: the contact (no `phones`) plus its open lead, patient file and the next and
-      // last appointment — the patient file and the appointments null until #133 and #132 (D61).
-      preview: async ({ existing, present, context }) => {
-        const [contact] = (await present([existing])) as ContactPreviewOutput[];
-        const openLead = (
-          await leadsRepository.findOpenLeadsOfContacts(
-            [existing.public_id],
-            context.organizationId,
-          )
-        ).get(existing.public_id);
-        const patientFile = (
-          await repository.findPatientFiles([existing.public_id], context.organizationId)
-        ).get(existing.public_id);
-        const visits = (await context.can(APP_PERMISSIONS.APPOINTMENT_READ))
-          ? await appointmentsRepository.findLastAndNextVisits({
-              organizationId: context.organizationId,
-              contactPublicIds: [existing.public_id],
-              today: await organizationToday(context),
-            })
-          : null;
-        const appointmentOf = (visit: ContactVisit | undefined) =>
-          visit
-            ? {
-                id: visit.id,
-                appointment_date: visit.appointment_date,
-                start_time: visit.start_time,
-                service_label: visit.service_label,
-                status: visit.status,
-              }
-            : null;
-        return {
-          ...contact!,
-          open_lead: openLead ?? null,
-          patient: patientFile ?? null,
-          next_appointment: appointmentOf(visits?.next.get(existing.public_id)),
-          last_appointment: appointmentOf(visits?.last.get(existing.public_id)),
-        } satisfies ContactPreviewOutput;
-      },
+      preview: (input) => previewContact({ ...input, repository }),
     },
   };
 }
