@@ -344,6 +344,12 @@ export function appRouteGetQuery(options: {
   if (path === '/app/appointments/daily-counts') {
     return `?date_from=${references.today}&date_to=${references.laterDay}`;
   }
+  if (
+    path === '/app/medical-purchase-orders/gst-summary' ||
+    path === '/app/medical-purchase-orders/gst-summary/exports'
+  ) {
+    return `?month=${references.today.slice(0, 7)}`;
+  }
   if (path === '/app/appointments/slots') {
     return `?branch_id=${references.branchId}&appointment_date=${references.laterDay}&duration_minutes=30`;
   }
