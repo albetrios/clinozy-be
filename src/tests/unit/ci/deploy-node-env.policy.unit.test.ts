@@ -30,7 +30,7 @@ describe('deploy NODE_ENV (policy)', () => {
   });
 
   it('sets NODE_ENV to the target in both mirrors — to the runner and to Railway', () => {
-    const merge = "'($vars + $secrets + {NODE_ENV: $environment})";
+    const merge = '\'($vars + $secrets + {NODE_ENV: $environment, HOSTED_DEPLOYMENT: "true"})';
     expect(deployWorkflow.split(merge)).toHaveLength(3);
     expect(deployWorkflow.split('--arg environment "$ENVIRONMENT"')).toHaveLength(3);
     // No mirror may still copy the GitHub Environment without the derived NODE_ENV.

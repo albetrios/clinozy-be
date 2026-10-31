@@ -1625,6 +1625,100 @@ describe('env-schema', () => {
       const parsed = envSchema.safeParse({ ...productionRequiredBase });
       expect(parsed.success).toBe(true);
     });
+
+    it('rejects the committed test keypair on a hosted development deploy (H-10)', () => {
+      const parsed = envSchema.safeParse({
+        ...commonRequiredBase,
+        NODE_ENV: 'development',
+        HOSTED_DEPLOYMENT: 'true',
+        CAPTCHA_PROVIDER: 'turnstile',
+        CAPTCHA_SECRET: 'turnstile-secret',
+        JWT_PRIVATE_KEY: COMMITTED_TEST_PRIVATE_KEY,
+        JWT_PUBLIC_KEY: COMMITTED_TEST_PUBLIC_KEY,
+      });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues.some((issue) => issue.path.includes('JWT_PRIVATE_KEY'))).toBe(
+          true,
+        );
+      }
+    });
+  });
+
+  // A-4 (owner decision): test-only switches are refused on EVERY hosted deploy — the Railway
+  // deploy sets HOSTED_DEPLOYMENT=true for development and production alike — and stay allowed on
+  // local machines and CI runners, which never carry the marker.
+  describe('A-4: hosted deploys refuse test-only switches', () => {
+    const hostedDevelopmentBase = {
+      ...commonRequiredBase,
+      NODE_ENV: 'development',
+      HOSTED_DEPLOYMENT: 'true',
+      CAPTCHA_PROVIDER: 'turnstile',
+      CAPTCHA_SECRET: 'turnstile-secret',
+    };
+
+    it('accepts a hosted development deploy that sets none of them (control)', () => {
+      const parsed = envSchema.safeParse(hostedDevelopmentBase);
+      expect(parsed.success).toBe(true);
+      expect(parsed.success && parsed.data.HOSTED_DEPLOYMENT).toBe(true);
+    });
+
+    it('defaults HOSTED_DEPLOYMENT to false', () => {
+      const parsed = envSchema.safeParse({ ...commonRequiredBase, NODE_ENV: 'development' });
+      expect(parsed.success && parsed.data.HOSTED_DEPLOYMENT).toBe(false);
+    });
+
+    const TEST_SWITCHES: Array<[string, string, string]> = [
+      ['TEST_MODE', 'true', 'TEST_MODE'],
+      ['CAPTCHA_BYPASS_ALLOWED', 'true', 'CAPTCHA_BYPASS_ALLOWED'],
+      ['RATE_LIMIT_RELAXED_CAPS', 'true', 'RATE_LIMIT_RELAXED_CAPS'],
+      ['RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED', 'true', 'RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED'],
+      [
+        'MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED',
+        'true',
+        'MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED',
+      ],
+      [
+        'AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED',
+        'false',
+        'AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED',
+      ],
+      ['CAPTCHA_PROVIDER', 'disabled', 'CAPTCHA_PROVIDER'],
+      // A Cloudflare always-pass test secret.
+      ['CAPTCHA_SECRET', '1x0000000000000000000000000000000AA', 'CAPTCHA_SECRET'], // gitleaks:allow
+    ];
+
+    it.each(TEST_SWITCHES)('rejects %s=%s on a hosted development deploy', (key, value, path) => {
+      const parsed = envSchema.safeParse({ ...hostedDevelopmentBase, [key]: value });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues.some((issue) => issue.path.includes(path))).toBe(true);
+      }
+    });
+
+    it.each(TEST_SWITCHES)(
+      'still allows %s=%s on a development runner without the marker (CI, local)',
+      (key, value) => {
+        const parsed = envSchema.safeParse({
+          ...commonRequiredBase,
+          NODE_ENV: 'development',
+          CAPTCHA_PROVIDER: 'turnstile',
+          CAPTCHA_SECRET: 'turnstile-secret',
+          [key]: value,
+        });
+        expect(parsed.success).toBe(true);
+      },
+    );
+
+    it('rejects HOSTED_DEPLOYMENT=true with NODE_ENV=local (a deploy names a deploy target)', () => {
+      const parsed = envSchema.safeParse({ ...hostedDevelopmentBase, NODE_ENV: 'local' });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues.some((issue) => issue.path.includes('HOSTED_DEPLOYMENT'))).toBe(
+          true,
+        );
+      }
+    });
   });
 });
 

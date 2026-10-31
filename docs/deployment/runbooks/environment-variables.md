@@ -329,7 +329,7 @@ instead of running insecure — you cannot ship the dev value:
 
 | Setting                               | dev / load-test value     | Enforced in production                                                  |
 | ------------------------------------- | ------------------------- | --------------------------------------------------------------------------------- |
-| `CAPTCHA_PROVIDER` + `CAPTCHA_SECRET` | `disabled`                | `turnstile` **and** `CAPTCHA_SECRET` required (public auth routes)                 |
+| `CAPTCHA_PROVIDER` + `CAPTCHA_SECRET` | `disabled`                | `turnstile` **and** a real (not Cloudflare test) `CAPTCHA_SECRET` required — on every hosted deploy too (A-4) |
 | `SECRETS_ENCRYPTION_KEY`              | all-zero placeholder      | high-entropy 32-byte key (`openssl rand -hex 32`); low-entropy rejected           |
 | `ALLOWED_ORIGINS`                     | `http://localhost:3000`   | absolute `https://` only; no `*`, path, userinfo, query, or trailing slash        |
 | `FRONTEND_URL`                        | optional (dev fallback)   | **required**, `https://` (emailed links and the OAuth callback are built from it) |
@@ -342,8 +342,20 @@ instead of running insecure — you cannot ship the dev value:
 | `METRICS_SCRAPE_TOKEN`                | optional                  | **required (≥32 chars)** when `METRICS_ENABLED=true`                               |
 | `EMAIL_FROM_ADDRESS`                  | optional                  | **required** when `RESEND_API_KEY` or `STRIPE_SECRET_KEY` is set                   |
 | `PATIENT_IMAGE_LOCATION_REMOVAL_ENABLED` | `true` (tests: `false`) | `true` — a patient photo is never filed with where it was taken (launch D79)      |
-| `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` | `true` on `local`     | refused outside `local` / `development` — the accept token leaves only by email    |
+| `MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED` | `true` on `local`     | refused outside `local` / `development` and on every hosted deploy — the accept token leaves only by email |
 | `MAIL_RESERVED_DOMAIN_SKIP_ENABLED`   | `true` on `local`         | refused outside `local` / `development` — every recipient goes to Resend           |
+
+**Hosted deploys refuse test-only switches (A-4, H-10).** The Railway deploy
+(`reusable-railway-deploy.yml`) sets `HOSTED_DEPLOYMENT=true` on every service it deploys and on its
+own runner steps — the hosted `development` environment as well as `production`. With the marker,
+boot (and the deploy's `pnpm db:seed` step, before Railway is touched) refuses `TEST_MODE=true`,
+`CAPTCHA_BYPASS_ALLOWED=true`, `RATE_LIMIT_RELAXED_CAPS=true`, `RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED=true`,
+`MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED=true`, `AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED=false`,
+captcha off or on a Cloudflare test secret, and the committed CI JWT keypair. The image never sets
+the marker — CI runs it with `TEST_MODE` for clinozy-fe's e2e — and neither does any env file; local
+machines and CI runners (restore drills, k6) keep these switches. A hosted `.env.development`
+scaffolded from `.env.example` must drop the dev values it copied (`RATE_LIMIT_RELAXED_CAPS=true`,
+the token echo, the cooldown switch).
 
 **Verify before deploy:** `NODE_ENV=production pnpm dev` with `.env.production`
 filled — boot fails loudly on any violation. The deploy workflow's `validate:github-env-runtime`

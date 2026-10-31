@@ -5,7 +5,7 @@
 
 Allowed values + description come from the explicit registry; the **default** and **required/optional**
 status are read from each Zod field, so this can never disagree with what boots. Registry coverage:
-**17 / 245** variables migrated to an explicit `{ allowed, description }` entry.
+**17 / 246** variables migrated to an explicit `{ allowed, description }` entry.
 
 | Variable | Allowed values | Default | In registry | Description |
 | --- | --- | --- | :---: | --- |
@@ -91,6 +91,7 @@ status are read from each Zod field, so this can never disagree with what boots.
 | `GLOBAL_ADMIN_ACCESS_TOKEN_EXPIRY_SECONDS` | — | `300` |  | — |
 | `GLOBAL_ADMIN_EMAILS` | — | — *(optional)* |  | — |
 | `HEALTH_VERBOSE_BODY_ENABLED` | — | `false` |  | — |
+| `HOSTED_DEPLOYMENT` | — | `false` |  | — |
 | `HSTS_INCLUDE_SUBDOMAINS` | — | `false` |  | — |
 | `HSTS_PRELOAD_REGISTERED` | — | `false` |  | — |
 | `HTTP_BIND_HOST` | non-empty string (host or IP) | `0.0.0.0` | ✓ | Fastify HTTP bind address (the worker health server also binds here). |

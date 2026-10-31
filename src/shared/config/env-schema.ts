@@ -466,9 +466,23 @@ const envSchemaBase = z.object({
   /** Category-B. Fail boot when TRUST_PROXY is unset/false (behind a load balancer the client IP collapses). */
   TRUST_PROXY_REQUIRED: booleanString('true'),
   /**
+   * A-4: the hosted-deploy marker. `.github/workflows/reusable-railway-deploy.yml` sets it `true`
+   * for every Railway service it deploys (both environments) and for the runner steps that act on
+   * them; no env file, image or other workflow sets it — so CI runners (which run the image with
+   * TEST_MODE for clinozy-fe's e2e, the restore drills and k6) and developer machines keep `false`.
+   *
+   * @remarks
+   * When `true`, refines refuse every test-only switch — TEST_MODE, CAPTCHA_BYPASS_ALLOWED, the
+   * Turnstile requirement and its always-pass test secrets, RATE_LIMIT_RELAXED_CAPS,
+   * RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED, the invitation-token echo, the send-code cooldown switch
+   * and the committed CI JWT keypair (H-10) — on the hosted `development` deploy too, not only in
+   * production. It changes no runtime behaviour itself; runtime code never reads it.
+   */
+  HOSTED_DEPLOYMENT: booleanString('false'),
+  /**
    * Category-B. Marks a test run or a dev box — the master gate for test-only affordances: the
    * send-code `debug_verification_code` echo and the harness's DB/Redis wipe helpers. Defaults false;
-   * a refine forbids `true` in production; the test harness and `pnpm setup:local` (in `.env.local`)
+   * a refine forbids `true` in production and on any hosted deploy (`HOSTED_DEPLOYMENT`); the test harness and `pnpm setup:local` (in `.env.local`)
    * set it true. A test-only capability must additionally check `env.TEST_MODE`.
    */
   TEST_MODE: booleanString('false'),
@@ -1356,6 +1370,15 @@ function isValidProductionWebauthnRelyingPartyId(data: {
 }
 
 /**
+ * A-4: where test-only switches are refused — the production target, or any hosted deploy (the
+ * `HOSTED_DEPLOYMENT` marker the Railway deploy sets, which covers the hosted `development`
+ * environment too). Local machines and CI runners carry neither.
+ */
+function refusesTestSwitches(data: { NODE_ENV: string; HOSTED_DEPLOYMENT: boolean }): boolean {
+  return data.NODE_ENV === 'production' || data.HOSTED_DEPLOYMENT;
+}
+
+/**
  * Process environment Zod schema. Refines `envSchemaBase` with cross-field invariants
  * (idempotency threshold ordering, METRICS_ENABLED → token, CAPTCHA configuration,
  * production Turnstile requirement, Redis topology, FRONTEND_URL protocol, the settings
@@ -1409,26 +1432,25 @@ export const envSchema = envSchemaBase
   )
   .refine(
     (data) => {
-      if (data.NODE_ENV !== 'production') {
+      if (!refusesTestSwitches(data)) {
         return true;
       }
       return data.CAPTCHA_PROVIDER === 'turnstile' && Boolean(data.CAPTCHA_SECRET);
     },
     {
       message:
-        'In production, CAPTCHA_PROVIDER=turnstile and CAPTCHA_SECRET are required on public auth routes',
+        'In production and on every hosted deploy (HOSTED_DEPLOYMENT=true), CAPTCHA_PROVIDER=turnstile and CAPTCHA_SECRET are required on public auth routes',
       path: ['CAPTCHA_PROVIDER'],
     },
   )
   .refine(
     (data) =>
-      data.NODE_ENV !== 'production' ||
-      !TURNSTILE_TEST_SECRET_PATTERN.test(data.CAPTCHA_SECRET ?? ''),
+      !(refusesTestSwitches(data) && TURNSTILE_TEST_SECRET_PATTERN.test(data.CAPTCHA_SECRET ?? '')),
     {
       // A Cloudflare test secret passes (or fails) every token and skips the verifier's hostname
       // pin — local CAPTCHA only (`pnpm setup:local --with-captcha`), never a deployed backend.
       message:
-        'In production, CAPTCHA_SECRET must be a real Turnstile secret, not a Cloudflare test secret',
+        'In production and on every hosted deploy (HOSTED_DEPLOYMENT=true), CAPTCHA_SECRET must be a real Turnstile secret, not a Cloudflare test secret',
       path: ['CAPTCHA_SECRET'],
     },
   )
@@ -1723,9 +1745,9 @@ export const envSchema = envSchemaBase
       'SENTRY_DSN must be set in production (without it every error, final job failure and alert is dropped silently).',
     path: ['SENTRY_DSN'],
   })
-  .refine((data) => data.NODE_ENV !== 'production' || data.CAPTCHA_BYPASS_ALLOWED === false, {
+  .refine((data) => !refusesTestSwitches(data) || data.CAPTCHA_BYPASS_ALLOWED === false, {
     message:
-      'CAPTCHA_BYPASS_ALLOWED must be false in production (captcha bypass is a dev/test affordance only).',
+      'CAPTCHA_BYPASS_ALLOWED must be false in production and on every hosted deploy (captcha bypass is a dev/test affordance only).',
     path: ['CAPTCHA_BYPASS_ALLOWED'],
   })
   .refine((data) => data.NODE_ENV !== 'production' || data.CAPTCHA_FAIL_OPEN === false, {
@@ -1800,30 +1822,33 @@ export const envSchema = envSchemaBase
       path: ['OPS_ADMIN_TOKEN'],
     },
   )
-  .refine((data) => data.NODE_ENV !== 'production' || data.TEST_MODE === false, {
+  .refine((data) => !refusesTestSwitches(data) || data.TEST_MODE === false, {
     message:
-      'TEST_MODE must be false in production (it gates test-only affordances that must never be reachable on a deployed runtime).',
+      'TEST_MODE must be false in production and on every hosted deploy (HOSTED_DEPLOYMENT=true) — it gates test-only affordances, such as the sign-in code echo, that must never be reachable on a deployed runtime.',
     path: ['TEST_MODE'],
+  })
+  .refine((data) => !data.HOSTED_DEPLOYMENT || data.NODE_ENV !== 'local', {
+    message:
+      "HOSTED_DEPLOYMENT=true names a deploy, so NODE_ENV must be a deploy target ('development' or 'production'), not 'local'.",
+    path: ['HOSTED_DEPLOYMENT'],
   })
   .refine(
     (data) =>
       data.AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED ||
-      data.NODE_ENV === 'local' ||
-      data.NODE_ENV === 'development',
+      (!data.HOSTED_DEPLOYMENT && (data.NODE_ENV === 'local' || data.NODE_ENV === 'development')),
     {
       message:
-        "AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED may only be false on the 'local' or 'development' targets (it is the anti-mail-bomb spacing on send-code, so a deployed runtime must keep it on). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
+        "AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED may only be false on the 'local' or 'development' targets off a hosted deploy — a local machine or a CI runner (it is the anti-mail-bomb spacing on send-code, so a deployed runtime must keep it on). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
       path: ['AUTH_EMAIL_CODE_RESEND_COOLDOWN_ENABLED'],
     },
   )
   .refine(
     (data) =>
       !data.MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED ||
-      data.NODE_ENV === 'local' ||
-      data.NODE_ENV === 'development',
+      (!data.HOSTED_DEPLOYMENT && (data.NODE_ENV === 'local' || data.NODE_ENV === 'development')),
     {
       message:
-        "MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED may only be true on the 'local' or 'development' targets (it returns the raw invitation accept token in the add-member and resend answers, so a deployed runtime must deliver it only through the email). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
+        "MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED may only be true on the 'local' or 'development' targets off a hosted deploy — a local machine or a CI runner (it returns the raw invitation accept token in the add-member and resend answers, so a deployed runtime must deliver it only through the email). Stated as an allowlist rather than a not-production test so a target added to the enum later is refused by default.",
       path: ['MEMBERSHIP_INVITATION_TOKEN_ECHO_ENABLED'],
     },
   )
@@ -1843,17 +1868,16 @@ export const envSchema = envSchemaBase
       'REDIS_READY_CHECK_ENABLED must be true in production (the ready-check must stay on outside the test harness).',
     path: ['REDIS_READY_CHECK_ENABLED'],
   })
-  .refine((data) => data.NODE_ENV !== 'production' || data.RATE_LIMIT_RELAXED_CAPS === false, {
+  .refine((data) => !refusesTestSwitches(data) || data.RATE_LIMIT_RELAXED_CAPS === false, {
     message:
-      'RATE_LIMIT_RELAXED_CAPS must be false in production (credential-stuffing rate caps must stay tight).',
+      'RATE_LIMIT_RELAXED_CAPS must be false in production and on every hosted deploy (credential-stuffing rate caps must stay tight).',
     path: ['RATE_LIMIT_RELAXED_CAPS'],
   })
   .refine(
-    (data) =>
-      data.NODE_ENV !== 'production' || data.RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED === false,
+    (data) => !refusesTestSwitches(data) || data.RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED === false,
     {
       message:
-        'RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED must be false in production (a stray RUN_REDIS_TESTS=0 must never downgrade the Redis limiter to per-process counting).',
+        'RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED must be false in production and on every hosted deploy (a stray RUN_REDIS_TESTS=0 must never downgrade the Redis limiter to per-process counting).',
       path: ['RATE_LIMIT_IN_MEMORY_FALLBACK_ALLOWED'],
     },
   )
@@ -1865,7 +1889,9 @@ export const envSchema = envSchemaBase
       // issuing forgeable tokens. Non-production (incl. the test harness running as `development`)
       // is unaffected. Rotate: recompute fingerprints via
       //   node -e "require('crypto');..." over src/tests/setup.ts and update FORBIDDEN_TEST_JWT_KEY_FINGERPRINTS.
-      if (data.NODE_ENV !== 'production') {
+      // H-10: refused on every hosted deploy (HOSTED_DEPLOYMENT), not only production — a hosted
+      // development API signing with a public key mints tokens anyone can forge for it.
+      if (!refusesTestSwitches(data)) {
         return true;
       }
       return !(
@@ -1875,7 +1901,7 @@ export const envSchema = envSchemaBase
     },
     {
       message:
-        'JWT_PRIVATE_KEY / JWT_PUBLIC_KEY must not be the committed test keypair (src/tests/setup.ts) in production — generate a fresh RSA keypair for the production environment.',
+        'JWT_PRIVATE_KEY / JWT_PUBLIC_KEY must not be the committed test keypair (src/tests/setup.ts) in production or on any hosted deploy — generate a fresh RSA keypair for the environment.',
       path: ['JWT_PRIVATE_KEY'],
     },
   )

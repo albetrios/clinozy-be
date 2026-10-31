@@ -200,6 +200,7 @@ describe('Railway variables push: retries (policy)', () => {
     const run = runVariablesStep({ message: 'Set variables', exitCode: 0 });
     expect(run.status).toBe(0);
     expect(run.railwayCalls).toBe(1);
-    expect(run.output).toContain('Pushed 3 variables to Railway service api-service on attempt 1');
+    // ALLOWED_ORIGINS + LOG_LEVEL + the derived NODE_ENV and HOSTED_DEPLOYMENT (github_token is excluded).
+    expect(run.output).toContain('Pushed 4 variables to Railway service api-service on attempt 1');
   });
 });

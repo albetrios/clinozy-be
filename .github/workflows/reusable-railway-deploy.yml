@@ -222,6 +222,13 @@ jobs:
         # GitHub Environment missing it ran its services as production, silently. A
         # GitHub Environment value naming ANOTHER environment is a misconfiguration and
         # stops the deploy. Pinned by src/tests/unit/ci/deploy-node-env.policy.unit.test.ts.
+        #
+        # Both mirrors also set HOSTED_DEPLOYMENT=true (A-4): the hosted-deploy marker under which
+        # the env schema refuses every test-only switch (TEST_MODE, relaxed rate caps, captcha
+        # bypass, the committed CI JWT keypair, …) on development as well as production. Only this
+        # workflow sets it — never the image (CI runs the image with TEST_MODE for clinozy-fe's
+        # e2e) — and the literal wins over any GitHub Environment value. Pinned by
+        # src/tests/unit/ci/hosted-deployment-marker.policy.unit.test.ts.
         run: |
           set -euo pipefail
           configured="$(jq -nr \
@@ -255,7 +262,7 @@ jobs:
             --argjson vars "$GH_VARS_JSON" \
             --argjson secrets "$GH_SECRETS_JSON" \
             --arg environment "$ENVIRONMENT" \
-            '($vars + $secrets + {NODE_ENV: $environment})
+            '($vars + $secrets + {NODE_ENV: $environment, HOSTED_DEPLOYMENT: "true"})
               | to_entries
               | map(select(.value != null and .value != ""))
               | .[]
@@ -595,7 +602,7 @@ jobs:
             --argjson vars "$GH_VARS_JSON" \
             --argjson secrets "$GH_SECRETS_JSON" \
             --arg environment "$ENVIRONMENT" \
-            '($vars + $secrets + {NODE_ENV: $environment})
+            '($vars + $secrets + {NODE_ENV: $environment, HOSTED_DEPLOYMENT: "true"})
               | to_entries
               | map(select(.value != null and .value != ""))
               | .[]
