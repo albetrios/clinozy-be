@@ -1,10 +1,5 @@
 import { normalizeIP } from '@fastify/rate-limit';
-
-/**
- * How many leading bits of an IPv6 address one rate-limit bucket covers: a /64, the smallest
- * allocation an ISP hands a single customer site.
- */
-export const RATE_LIMIT_IPV6_SUBNET_PREFIX_LENGTH = 64;
+import { RATE_LIMIT_IPV6_SUBNET_PREFIX_LENGTH } from '@/shared/constants/security.constants.js';
 
 /**
  * The rate-limit bucket identity of a client address — what every IP-keyed limiter keys on.

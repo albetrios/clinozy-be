@@ -86,6 +86,12 @@ export const IP_FAILED_LOGIN_THRESHOLD = 50;
 export const IP_FAILED_LOGIN_WINDOW_SECONDS = 15 * 60;
 
 /**
+ * How many leading bits of an IPv6 address one rate-limit bucket covers: a /64, the smallest
+ * allocation an ISP hands a single customer site (D-3 — see `rateLimitIpKey`).
+ */
+export const RATE_LIMIT_IPV6_SUBNET_PREFIX_LENGTH = 64;
+
+/**
  * Grace window (ms) during which the refresh compare-and-swap also accepts the immediately-previous
  * refresh hash (audit-#2).
  *

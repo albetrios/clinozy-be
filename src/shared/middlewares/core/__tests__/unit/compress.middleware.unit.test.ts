@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fastify from 'fastify';
 import compressMiddleware from '@/shared/middlewares/core/compress.middleware.js';
+import { testApiPath } from '@/tests/helpers/test-api-prefix.helper.js';
 
 /**
  * Build a Fastify app with the compress middleware registered and a single
@@ -143,25 +144,27 @@ describe('compress.middleware — G2-7: private responses are never stored', () 
       }
     });
     await app.register(compressMiddleware);
-    app.get('/api/v1/app/patients/:patient_id', async () => ({ data: { name: 'A patient' } }));
-    app.get('/api/v1/users/me', async () => ({ data: { display_name: 'Me' } }));
-    app.get('/api/v1/users/me/settings', async () => ({ data: { theme: 'dark' } }));
-    app.get('/api/v1/tenancy/organization', async () => ({ data: { name: 'Clinic' } }));
-    app.get('/api/v1/tenancy/permissions', async (_request, reply) => {
+    app.get(testApiPath('/app/patients/:patient_id'), async () => ({
+      data: { name: 'A patient' },
+    }));
+    app.get(testApiPath('/users/me'), async () => ({ data: { display_name: 'Me' } }));
+    app.get(testApiPath('/users/me/settings'), async () => ({ data: { theme: 'dark' } }));
+    app.get(testApiPath('/tenancy/organization'), async () => ({ data: { name: 'Clinic' } }));
+    app.get(testApiPath('/tenancy/permissions'), async (_request, reply) => {
       reply.header('cache-control', 'public, max-age=300');
       return { data: [] };
     });
-    app.get('/api/v1/billing/plans', async () => ({ data: [] }));
+    app.get(testApiPath('/billing/plans'), async () => ({ data: [] }));
     await app.ready();
     return app;
   }
 
   it.each([
-    '/api/v1/app/patients/pat_000000000000000000001',
-    '/api/v1/app/patients/pat_000000000000000000001?include=notes',
-    '/api/v1/users/me',
-    '/api/v1/users/me/settings',
-    '/api/v1/app/no-such-room',
+    testApiPath('/app/patients/pat_000000000000000000001'),
+    testApiPath('/app/patients/pat_000000000000000000001?include=notes'),
+    testApiPath('/users/me'),
+    testApiPath('/users/me/settings'),
+    testApiPath('/app/no-such-room'),
   ])('answers %s with Cache-Control: no-store, whatever its status', async (url) => {
     const app = await buildApp();
     const response = await app.inject({ method: 'GET', url });
@@ -174,7 +177,7 @@ describe('compress.middleware — G2-7: private responses are never stored', () 
     const app = await buildApp();
     const response = await app.inject({
       method: 'GET',
-      url: '/api/v1/tenancy/organization',
+      url: testApiPath('/tenancy/organization'),
       headers: { 'x-test-auth': '1' },
     });
     await app.close();
@@ -186,10 +189,10 @@ describe('compress.middleware — G2-7: private responses are never stored', () 
     const app = await buildApp();
     const catalog = await app.inject({
       method: 'GET',
-      url: '/api/v1/tenancy/permissions',
+      url: testApiPath('/tenancy/permissions'),
       headers: { 'x-test-auth': '1' },
     });
-    const publicPlans = await app.inject({ method: 'GET', url: '/api/v1/billing/plans' });
+    const publicPlans = await app.inject({ method: 'GET', url: testApiPath('/billing/plans') });
     await app.close();
 
     expect(catalog.headers['cache-control']).toBe('public, max-age=300');
@@ -199,8 +202,8 @@ describe('compress.middleware — G2-7: private responses are never stored', () 
   it('does not take /users/meetings for the caller account', async () => {
     const app = fastify();
     await app.register(compressMiddleware);
-    app.get('/api/v1/users/meetings', async () => ({ data: [] }));
-    const response = await app.inject({ method: 'GET', url: '/api/v1/users/meetings' });
+    app.get(testApiPath('/users/meetings'), async () => ({ data: [] }));
+    const response = await app.inject({ method: 'GET', url: testApiPath('/users/meetings') });
     await app.close();
 
     expect(response.headers['cache-control']).toBeUndefined();
