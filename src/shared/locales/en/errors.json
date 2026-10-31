@@ -83,6 +83,7 @@
     "offerExtraValue": "An extra-sessions offer takes a whole number of sessions from 1 to 99",
     "offerEndsBeforeStarts": "The offer must end on or after the day it starts",
     "contactDateOfBirthFuture": "The date of birth can't be in the future",
+    "contactAgeOrDateOfBirth": "Send an age or a date of birth, not both",
     "contactReferredByNotPatient": "Name the referring contact only when the referral source is patient",
     "contactSearchTooShort": "Type at least 3 letters, 4 digits of a number, or a whole contact number such as C-12345",
     "contactHouseholdHasMembers": "This contact is the first of a household with others in it, so it stays in its own household",

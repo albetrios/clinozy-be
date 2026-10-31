@@ -17,7 +17,7 @@ export function contactAwaitsReply(times: Readonly<Record<string, unknown>>): bo
  * Shapes an `app.contacts` row as the API returns it (routes-final 4.A.6): public ids, ISO times,
  * `phones` only on a single-contact response (the lookup has them), the reply state from the
  * activity times. The open lead, patient file and visit fields are the rules' `decorate` (one read
- * each per page, #131–#132).
+ * each per page, #131–#132), and so is `age` (the organization's today, AG3).
  */
 export function serializeContact({
   row,
@@ -36,6 +36,8 @@ export function serializeContact({
     last_name: row.last_name as string | null,
     gender: row.gender as string | null,
     date_of_birth: row.date_of_birth as string | null,
+    date_of_birth_is_approximate: row.date_of_birth_is_approximate as boolean,
+    age: null,
     primary_phone: row.primary_phone as string,
     ...(phones === undefined ? {} : { phones }),
     email: row.email as string | null,

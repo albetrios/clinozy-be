@@ -78,6 +78,10 @@ export const contacts = appSchema
       last_name: varchar('last_name', { length: 60 }),
       gender: varchar('gender', { length: 6 }),
       date_of_birth: date('date_of_birth', { mode: 'string' }),
+      // true when date_of_birth came from a typed age (the organization's today minus it)
+      date_of_birth_is_approximate: boolean('date_of_birth_is_approximate')
+        .notNull()
+        .default(false),
       email: varchar('email', { length: 120 }),
       // "Area, city"
       address: varchar('address', { length: 240 }),
@@ -165,6 +169,10 @@ export const contacts = appSchema
       check(
         'chk_contacts_date_of_birth_past',
         sql`${table.date_of_birth} IS NULL OR ${table.date_of_birth} <= CURRENT_DATE`,
+      ),
+      check(
+        'chk_contacts_date_of_birth_approximate',
+        sql`NOT ${table.date_of_birth_is_approximate} OR ${table.date_of_birth} IS NOT NULL`,
       ),
       check(
         'chk_contacts_instagram_handles',

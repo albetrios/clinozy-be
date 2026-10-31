@@ -83,6 +83,7 @@
     "offerExtraValue": "Una oferta de sesiones extra lleva un número entero de sesiones del 1 al 99",
     "offerEndsBeforeStarts": "La oferta debe terminar el mismo día en que empieza o después",
     "contactDateOfBirthFuture": "La fecha de nacimiento no puede ser futura",
+    "contactAgeOrDateOfBirth": "Envía una edad o una fecha de nacimiento, no ambas",
     "contactReferredByNotPatient": "Indica el contacto que lo refirió solo cuando el origen de la referencia es paciente",
     "contactSearchTooShort": "Escribe al menos 3 letras, 4 dígitos de un número o un número de contacto completo, como C-12345",
     "contactHouseholdHasMembers": "Este contacto es el primero de un hogar con otros contactos, así que se queda en su propio hogar",

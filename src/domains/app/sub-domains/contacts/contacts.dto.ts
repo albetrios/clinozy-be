@@ -9,6 +9,8 @@ import {
   recordIdSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
 import {
+  CONTACT_AGE_MAX,
+  CONTACT_AGE_MIN,
   CONTACT_DEFAULT_CHANNEL_VALUES,
   CONTACT_GENDER_VALUES,
   CONTACT_IDS_MAX,
@@ -58,6 +60,8 @@ const contactFields = {
   last_name: trimmedStringMinMax({ min: 1, max: 60 }).nullable(),
   gender: z.enum(CONTACT_GENDER_VALUES).nullable(),
   date_of_birth: calendarDateSchema.nullable(),
+  // Whole years — stands in for date_of_birth: stored as an approximate one (AG1, AG2)
+  age: z.number().int().min(CONTACT_AGE_MIN).max(CONTACT_AGE_MAX),
   phones: contactPhonesSchema,
   email: trimmedStringMinMax({ min: 3, max: 120 }).pipe(z.email()).nullable(),
   address: trimmedStringMinMax({ min: 1, max: 240 }).nullable(),
@@ -76,6 +80,33 @@ const contactFields = {
   referred_by_name: trimmedStringMinMax({ min: 1, max: 120 }).nullable(),
 };
 
+/** A body sends `age` or `date_of_birth`, never both (AG1). */
+const notAgeAndDateOfBirth = (value: { age?: unknown; date_of_birth?: unknown }) =>
+  value.age === undefined || value.date_of_birth === undefined;
+
+/** The refusal of a body with both `age` and `date_of_birth` — a 400 on `age`. */
+const AGE_OR_DATE_OF_BIRTH = {
+  message: 'errors:validation.contactAgeOrDateOfBirth',
+  path: ['age'],
+};
+
+/** One bound of an age filter — whole years (AG4). */
+const ageQuerySchema = z.coerce.number().int().min(CONTACT_AGE_MIN).max(CONTACT_AGE_MAX);
+
+/**
+ * The age filters of a list of people (AG4) — `age_from` / `age_to`, whole years, inclusive, read
+ * from the contact's real or approximate birth date in the organization's time zone; a person
+ * without a birth date never matches. Spread into the contacts, patients and leads list queries.
+ */
+export const contactAgeRangeQueryFields = {
+  age_from: ageQuerySchema
+    .meta({ description: 'Whole years, inclusive — the youngest age to list.', example: 30 })
+    .optional(),
+  age_to: ageQuerySchema
+    .meta({ description: 'Whole years, inclusive — the oldest age to list.', example: 40 })
+    .optional(),
+};
+
 /** Path params of the by-id `contacts` routes. */
 export const contactsIdParamsDto = z
   .object({
@@ -86,7 +117,8 @@ export const contactsIdParamsDto = z
 /**
  * Body of `POST /app/contacts` — a new contact (routes-final 4.A.8 #2): `first_name` and 1–5
  * `phones` with exactly one primary; `household_contact_id` puts it in that contact's household
- * (absent = its own, CT3).
+ * (absent = its own, CT3); `age` (whole years) instead of `date_of_birth` stores an approximate
+ * birth date — never both (AG1).
  */
 export const CreateContactDto = z
   .object({
@@ -95,6 +127,7 @@ export const CreateContactDto = z
     last_name: contactFields.last_name.optional(),
     gender: contactFields.gender.optional(),
     date_of_birth: contactFields.date_of_birth.optional(),
+    age: contactFields.age.optional(),
     referral_source: contactFields.referral_source.optional(),
     referred_by_contact_id: contactFields.referred_by_contact_id.optional(),
     referred_by_name: contactFields.referred_by_name.optional(),
@@ -106,12 +139,13 @@ export const CreateContactDto = z
     has_marketing_consent: contactFields.has_marketing_consent.optional(),
     household_contact_id: recordIdSchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine(notAgeAndDateOfBirth, AGE_OR_DATE_OF_BIRTH);
 
 /**
  * Body of `PATCH /app/contacts/{contact_id}` — any field of the create (at least one; null clears
  * an optional one); `phones` replaces the set; `household_contact_id` null = its own household;
- * `expected_updated_at` refuses a stale save (D43).
+ * `expected_updated_at` refuses a stale save (D43); `age` or `date_of_birth`, never both (AG1).
  */
 export const UpdateContactDto = z
   .object({
@@ -120,6 +154,7 @@ export const UpdateContactDto = z
     last_name: contactFields.last_name.optional(),
     gender: contactFields.gender.optional(),
     date_of_birth: contactFields.date_of_birth.optional(),
+    age: contactFields.age.optional(),
     referral_source: contactFields.referral_source.optional(),
     referred_by_contact_id: contactFields.referred_by_contact_id.optional(),
     referred_by_name: contactFields.referred_by_name.optional(),
@@ -135,7 +170,8 @@ export const UpdateContactDto = z
   .strict()
   .refine((value) => Object.keys(value).some((key) => key !== 'expected_updated_at'), {
     message: 'errors:validation.sendAtLeastOneField',
-  });
+  })
+  .refine(notAgeAndDateOfBirth, AGE_OR_DATE_OF_BIRTH);
 
 /**
  * Query of `GET /app/contacts` (routes-final 4.A.8 #1) — keyset paging, `q` (names, email,
@@ -144,7 +180,7 @@ export const UpdateContactDto = z
  * first while `q` is set) | `created_at` | `last_activity_at`, and the filters: `phone` (every
  * contact with that number), `ids` (up to 100, CT12), `is_patient`, `has_open_lead`,
  * `is_awaiting_reply`, `member_membership_id`, `household_contact_id`, `preference_tags` (several,
- * comma-separated — any of).
+ * comma-separated — any of), `age_from` / `age_to` (whole years, inclusive — AG4).
  */
 export const listContactsQueryDto = listSearchSortSchema([
   'name',
@@ -172,6 +208,7 @@ export const listContactsQueryDto = listSearchSortSchema([
         example: 'no_calls,after_six_pm',
       })
       .optional(),
+    ...contactAgeRangeQueryFields,
     created_from: z.iso.datetime({ offset: true }).optional(),
     created_to: z.iso.datetime({ offset: true }).optional(),
   })

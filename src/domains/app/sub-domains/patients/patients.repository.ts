@@ -1,9 +1,15 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { BaseRecordRepository, nullsLastSortKeys } from '@/domains/app/base-record.repository.js';
-import { contactLinkedSearchCondition } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
+import {
+  contactLinkedAgeCondition,
+  contactLinkedSearchCondition,
+} from '@/domains/app/sub-domains/contacts/contacts.repository.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
-import type { ContactLinkedSearch } from '@/domains/app/sub-domains/contacts/contacts.validator.js';
+import type {
+  ContactAgeRange,
+  ContactLinkedSearch,
+} from '@/domains/app/sub-domains/contacts/contacts.validator.js';
 import { patients } from './patients.schema.js';
 
 /** A patient as a record about them names them (a prescription's `patient`, MD29). */
@@ -24,7 +30,7 @@ export interface PatientSummaryRow {
  *   Instagram, every number) or contact number, and the patient number (`PT-0412`, `#412`) — the
  *   validator reads which. Sorts: `created_at` (newest first), `patient_number`, `follow_up_at` (a
  *   file without one last in either order — {@link nullsLastSortKeys}). Derived filters: `search`,
- *   `types` (any of them — `&&`, the GIN index).
+ *   `types` (any of them — `&&`, the GIN index), `age` (the contact's age, AG4).
  * - **Failure modes:** a unique violation propagates (the service maps it — `contact_is_patient`).
  */
 export class PatientsRepository extends BaseRecordRepository {
@@ -48,6 +54,12 @@ export class PatientsRepository extends BaseRecordRepository {
         },
       },
       derivedFilters: {
+        age: (value, organizationId) =>
+          contactLinkedAgeCondition({
+            range: value as ContactAgeRange,
+            contactIdColumn: patients.contact_id,
+            organizationId,
+          }),
         search: (value, organizationId) =>
           contactLinkedSearchCondition({
             search: value as ContactLinkedSearch,

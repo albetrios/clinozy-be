@@ -23,8 +23,12 @@ export interface ContactOutput {
   first_name: string;
   last_name: string | null;
   gender: string | null;
-  /** `YYYY-MM-DD`; never in the future (CT13). */
+  /** `YYYY-MM-DD`; never in the future (CT13) — approximate when it came from a typed age (AG2). */
   date_of_birth: string | null;
+  /** True when `date_of_birth` came from a typed age: the organization's today minus it (AG2). */
+  date_of_birth_is_approximate: boolean;
+  /** Whole years from `date_of_birth` to the organization's today; null without one (AG3). */
+  age: number | null;
   /** The primary number (CT2). */
   primary_phone: string;
   phones?: ContactPhoneOutput[];

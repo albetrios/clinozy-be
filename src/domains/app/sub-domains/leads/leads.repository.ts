@@ -11,8 +11,14 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { APPOINTMENT_MOVABLE_STATUS_VALUES } from '@/domains/app/sub-domains/appointments/appointments.constants.js';
 import { appointments } from '@/domains/app/sub-domains/appointments/appointments.schema.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
-import { contactLinkedSearchCondition } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
-import type { ContactLinkedSearch } from '@/domains/app/sub-domains/contacts/contacts.validator.js';
+import {
+  contactLinkedAgeCondition,
+  contactLinkedSearchCondition,
+} from '@/domains/app/sub-domains/contacts/contacts.repository.js';
+import type {
+  ContactAgeRange,
+  ContactLinkedSearch,
+} from '@/domains/app/sub-domains/contacts/contacts.validator.js';
 import {
   LEAD_INVOLVED_MEMBERSHIPS_MAX,
   LEAD_OPEN_STATUS_VALUES,
@@ -75,7 +81,8 @@ function membershipIdOf(publicId: string, organizationId: number): SQL {
  *   contact's) — on a value that can be empty, those rows come last in either order
  *   ({@link nullsLastSortKeys}). Derived filters: `search`, `interests` (`&&`, the GIN index),
  *   `team_membership_id` (owner or involved), `is_awaiting_reply` (the contact's), `ownership`
- *   (`open` · `held` · `releasing_today` — the hold ends before the organization's tomorrow).
+ *   (`open` · `held` · `releasing_today` — the hold ends before the organization's tomorrow),
+ *   `age` (the contact's age, AG4).
  * - **Failure modes:** a unique violation propagates (the service maps it — `lead_open_exists`).
  */
 export class LeadsRepository extends BaseRecordRepository {
@@ -130,6 +137,12 @@ export class LeadsRepository extends BaseRecordRepository {
         },
       },
       derivedFilters: {
+        age: (value, organizationId) =>
+          contactLinkedAgeCondition({
+            range: value as ContactAgeRange,
+            contactIdColumn: leads.contact_id,
+            organizationId,
+          }),
         search: (value, organizationId) =>
           contactLinkedSearchCondition({
             search: value as ContactLinkedSearch,
