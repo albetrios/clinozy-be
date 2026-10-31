@@ -1,6 +1,10 @@
 import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
-import { BaseRecordRepository, nullsLastSortKeys } from '@/domains/app/base-record.repository.js';
+import {
+  BaseRecordRepository,
+  inVisibleBranches,
+  nullsLastSortKeys,
+} from '@/domains/app/base-record.repository.js';
 import { contacts } from '@/domains/app/sub-domains/contacts/contacts.schema.js';
 import { contactLinkedSearchCondition } from '@/domains/app/sub-domains/contacts/contacts.repository.js';
 import { contact_activities } from '@/domains/app/sub-domains/contacts/contact-activities/contact-activities.schema.js';
@@ -140,6 +144,8 @@ export class AppointmentsRepository extends BaseRecordRepository {
     organizationId: number;
     contactPublicIds: readonly string[];
     today: string;
+    /** The caller's branches (D9) — `null` (the default) for every branch. */
+    branchIds?: readonly number[] | null;
   }): Promise<{ last: Map<string, ContactVisitRow>; next: Map<string, ContactVisitRow> }> {
     const last = new Map<string, ContactVisitRow>();
     const next = new Map<string, ContactVisitRow>();
@@ -160,6 +166,10 @@ export class AppointmentsRepository extends BaseRecordRepository {
           eq(appointments.organization_id, options.organizationId),
           inArray(contacts.public_id, [...options.contactPublicIds]),
           isNull(appointments.deleted_at),
+          inVisibleBranches({
+            column: appointments.branch_id,
+            branchIds: options.branchIds ?? null,
+          }),
           or(
             and(
               inArray(appointments.status, VISITED_STATUS_VALUES),

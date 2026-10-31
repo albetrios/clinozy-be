@@ -1,21 +1,24 @@
 import { afterAll, beforeAll, describe, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
+import { operatorQuery } from '@/tests/helpers/operator-database.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import {
   type AppFixture,
   type AppFixtureRole,
   createAppFixture,
 } from '@/domains/app/__tests__/factories/app-fixture.factory.js';
-import { AppFlow } from '@/domains/app/__tests__/factories/app-flow.factory.js';
+import { AppFlow, calendarDay } from '@/domains/app/__tests__/factories/app-flow.factory.js';
 
 /**
- * Who reads a patient's clinical text, per role (B1-1): a check-in's text, the activity entry a
- * check-in writes and a session's remark go to the medical-detail readers only
+ * Who reads what about a patient, per role. B1-1: a check-in's text, the activity entry a check-in
+ * writes and a session's remark go to the medical-detail readers only
  * (`patient:clinical_record:read`, `patient:update` or `patient_prescription:read`); the
- * Accountant and Marketing, who read the file's name and contact, see none of it.
+ * Accountant and Marketing, who read the file's name and contact, see none of it. B1-5: a
+ * contact's open lead, patient number and visits follow `lead:read`, `patient:read`,
+ * `appointment:read` and the caller's branches.
  */
-describe('Clinical access per role — integration (B1-1)', () => {
+describe('Record access per role — integration (B1-1, B1-5)', () => {
   const S = String(Date.now());
   const ROLES = '/tenancy/organization/roles';
 
@@ -163,5 +166,84 @@ describe('Clinical access per role — integration (B1-1)', () => {
       `/app/patients/${patient}/treatments/${treatment}`,
     );
     doctor.expectValue('the remark', '.data.remark', 'Reacted to 30% glycolic');
+  });
+
+  /** The first working day (Monday–Saturday) from tomorrow, in the organization's zone. */
+  function nextWorkDay(): string {
+    for (let offset = 1; offset < 8; offset += 1) {
+      const day = calendarDay(fixture, offset);
+      if (new Date(`${day}T12:00:00Z`).getUTCDay() !== 0) return day;
+    }
+    throw new Error('no working day in a week');
+  }
+
+  /** A contact with an open lead and a visit on the next working day at `branch`; answers its id. */
+  async function personAt(branch: 'vesu' | 'adajan', suffix: string): Promise<string> {
+    await owner.expect(200, `a contact at ${branch}`, 'POST', '/app/contacts', {
+      first_name: `Lead${suffix}`,
+      last_name: `c${S}`,
+      phones: [{ phone: `+916${S.slice(-7)}${suffix}`, is_primary: true }],
+    });
+    const id = owner.last('.data.id');
+    await owner.expect(200, 'an open lead', 'POST', '/app/leads', {
+      contact_id: id,
+      branch_id: fixture.branches.vesu,
+      source: 'walk_in',
+    });
+    const lead = owner.last('.data.id');
+    await owner.expect(200, 'a visit', 'POST', '/app/appointments', {
+      contact_id: id,
+      branch_id: fixture.branches.vesu,
+      doctor_membership_id: fixture.members.doctor.membershipPublicId,
+      appointment_date: nextWorkDay(),
+      start_time: `1${suffix.slice(-1)}:00`,
+      duration_minutes: 15,
+      service_label: 'Consultation',
+    });
+    const visit = owner.last('.data.id');
+    if (branch === 'adajan') {
+      await operatorQuery`UPDATE app.leads SET branch_id = ${fixture.branchIds.adajan} WHERE public_id = ${lead}`;
+      await operatorQuery`UPDATE app.appointments SET branch_id = ${fixture.branchIds.adajan} WHERE public_id = ${visit}`;
+    }
+    return id;
+  }
+
+  it("B1-5: a contact's lead, file and visits follow the caller's codes and branches", async () => {
+    const atVesu = await personAt('vesu', '41');
+    const atAdajan = await personAt('adajan', '42');
+    await owner.expect(200, 'a file at Vesu', 'POST', '/app/patients', {
+      contact_id: atVesu,
+      home_branch_id: fixture.branches.vesu,
+    });
+
+    await owner.expect(200, 'the owner reads Adajan', 'GET', `/app/contacts/${atAdajan}`);
+    owner.expectValue('the lead', '.data.open_lead_id | type', 'string');
+    owner.expectValue('the visit', '.data.next_visit_on | type', 'string');
+
+    const frontDesk = as('front_desk');
+    await frontDesk.expect(200, 'the front desk reads Vesu', 'GET', `/app/contacts/${atVesu}`);
+    frontDesk.expectValue('its lead', '.data.open_lead_id | type', 'string');
+    frontDesk.expectValue('its visit', '.data.next_visit_on | type', 'string');
+    await frontDesk.expect(200, 'and Adajan', 'GET', `/app/contacts/${atAdajan}`);
+    frontDesk.expectValue("not another branch's lead", '.data.open_lead_id', 'null');
+    frontDesk.expectValue("nor another branch's visit", '.data.next_visit_on', 'null');
+    await frontDesk.expect(200, 'the hover card', 'GET', `/app/contacts/${atAdajan}/preview`);
+    frontDesk.expectValue('no lead on it', '.data.open_lead', 'null');
+    frontDesk.expectValue('no visit on it', '.data.next_appointment', 'null');
+
+    const accountant = as('accountant');
+    await accountant.expect(200, 'the Accountant reads Vesu', 'GET', `/app/contacts/${atVesu}`);
+    accountant.expectValue('no lead without lead:read', '.data.open_lead_status', 'null');
+    accountant.expectValue('no visit without appointment:read', '.data.next_visit_on', 'null');
+    accountant.expectValue(
+      'the file number (patient:read)',
+      '.data.patient_number | type',
+      'number',
+    );
+
+    const marketing = as('marketing');
+    await marketing.expect(200, 'Marketing lists them', 'GET', `/app/contacts?ids=${atVesu}`);
+    marketing.expectValue('the lead (lead:read)', '.data[0].open_lead_id | type', 'string');
+    marketing.expectValue('no visit without appointment:read', '.data[0].next_visit_on', 'null');
   });
 });

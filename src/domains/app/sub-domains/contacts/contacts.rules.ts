@@ -6,6 +6,7 @@ import type {
 import {
   type BaseRecordRow,
   listChildRows,
+  listVisibleBranchIds,
   replaceChildRows,
 } from '@/domains/app/base-record.repository.js';
 import { ConflictError, fieldValidationError } from '@/shared/errors/index.js';
@@ -147,10 +148,89 @@ async function isInUse({
   );
 }
 
+/** What a caller may read of the records about a contact (B1-5). */
+interface ContactRecordAccess {
+  /** `lead:read` — the open lead. */
+  leads: boolean;
+  /** `patient:read` — the patient file. */
+  patients: boolean;
+  /** `appointment:read` — the last and next visit. */
+  visits: boolean;
+  /** The caller's branches (D9), `null` for every branch — the lead and the visits are a branch's. */
+  branchIds: readonly number[] | null;
+}
+
+/**
+ * B1-5: a contact is every member's (CT5), the records about it are not — its open lead needs
+ * `lead:read`, its patient file `patient:read`, its visits `appointment:read`, and the lead and the
+ * visits must be in one of the caller's branches unless they hold `branch:read` (D9).
+ */
+async function contactRecordAccess(context: BaseRecordWriteContext): Promise<ContactRecordAccess> {
+  const [leads, patients, visits, everyBranch] = await Promise.all([
+    context.can(APP_PERMISSIONS.LEAD_READ),
+    context.can(APP_PERMISSIONS.PATIENT_READ),
+    context.can(APP_PERMISSIONS.APPOINTMENT_READ),
+    context.can(APP_PERMISSIONS.BRANCH_READ),
+  ]);
+  let branchIds: readonly number[] | null = null;
+  if (!everyBranch) {
+    branchIds =
+      context.userId === null
+        ? []
+        : await listVisibleBranchIds({
+            organizationId: context.organizationId,
+            userId: context.userId,
+          });
+  }
+  return { leads, patients, visits, branchIds };
+}
+
+/** Each contact's open lead in the caller's branches — none without `lead:read` (B1-5). */
+function readOpenLeads({
+  ids,
+  access,
+  context,
+}: {
+  ids: readonly string[];
+  access: ContactRecordAccess;
+  context: BaseRecordWriteContext;
+}) {
+  return access.leads
+    ? leadsRepository.findOpenLeadsOfContacts(ids, context.organizationId, access.branchIds)
+    : Promise.resolve(
+        new Map<string, { id: string; status: string; owner_membership_id: string | null }>(),
+      );
+}
+
+/** Each contact's last and next visit in the caller's branches — none without `appointment:read`. */
+function readVisits({
+  ids,
+  access,
+  context,
+  today,
+}: {
+  ids: readonly string[];
+  access: ContactRecordAccess;
+  context: BaseRecordWriteContext;
+  today: string;
+}) {
+  return access.visits
+    ? appointmentsRepository.findLastAndNextVisits({
+        organizationId: context.organizationId,
+        contactPublicIds: ids,
+        today,
+        branchIds: access.branchIds,
+      })
+    : Promise.resolve({
+        last: new Map<string, ContactVisit>(),
+        next: new Map<string, ContactVisit>(),
+      });
+}
+
 /**
  * Adds what a contact reads of the records about it to a page (4.A.6): its open lead (#131), its
- * patient file and its last and next visit (#132) — one read each — and its `age` on the
- * organization's today (AG3).
+ * patient file and its last and next visit (#132) — one read each, each only as far as the caller
+ * may read it (B1-5) — and its `age` on the organization's today (AG3).
  */
 async function decorateContacts({
   repository,
@@ -162,14 +242,13 @@ async function decorateContacts({
   context: BaseRecordWriteContext;
 }): Promise<void> {
   const ids = outputs.map((output) => String(output.id));
-  const openLeads = await leadsRepository.findOpenLeadsOfContacts(ids, context.organizationId);
-  const patientFiles = await repository.findPatientFiles(ids, context.organizationId);
+  const access = await contactRecordAccess(context);
+  const openLeads = await readOpenLeads({ ids, access, context });
+  const patientFiles = access.patients
+    ? await repository.findPatientFiles(ids, context.organizationId)
+    : new Map<string, { id: string; patient_number: number }>();
   const today = await organizationToday(context);
-  const visits = await appointmentsRepository.findLastAndNextVisits({
-    organizationId: context.organizationId,
-    contactPublicIds: ids,
-    today,
-  });
+  const visits = await readVisits({ ids, access, context, today });
   for (const output of outputs) {
     const id = String(output.id);
     const lead = openLeads.get(id);
@@ -189,7 +268,9 @@ async function decorateContacts({
 
 /**
  * The hover card (route 7): the contact (no `phones`) plus its open lead, patient file and the next
- * and last appointment — the appointments only for `appointment:read` holders (D61).
+ * and last appointment — each only as far as the caller may read it: the lead for `lead:read`, the
+ * file for `patient:read`, the appointments for `appointment:read` (D61), the lead and the
+ * appointments in the caller's branches (B1-5).
  */
 async function previewContact({
   repository,
@@ -200,19 +281,18 @@ async function previewContact({
   repository: ContactsRepository;
 }): Promise<ContactPreviewOutput> {
   const [contact] = (await present([existing])) as ContactPreviewOutput[];
-  const openLead = (
-    await leadsRepository.findOpenLeadsOfContacts([existing.public_id], context.organizationId)
-  ).get(existing.public_id);
-  const patientFile = (
-    await repository.findPatientFiles([existing.public_id], context.organizationId)
-  ).get(existing.public_id);
-  const visits = (await context.can(APP_PERMISSIONS.APPOINTMENT_READ))
-    ? await appointmentsRepository.findLastAndNextVisits({
-        organizationId: context.organizationId,
-        contactPublicIds: [existing.public_id],
-        today: await organizationToday(context),
-      })
-    : null;
+  const ids = [existing.public_id];
+  const access = await contactRecordAccess(context);
+  const openLead = (await readOpenLeads({ ids, access, context })).get(existing.public_id);
+  const patientFile = access.patients
+    ? (await repository.findPatientFiles(ids, context.organizationId)).get(existing.public_id)
+    : undefined;
+  const visits = await readVisits({
+    ids,
+    access,
+    context,
+    today: await organizationToday(context),
+  });
   const appointmentOf = (visit: ContactVisit | undefined) =>
     visit
       ? {
@@ -227,8 +307,8 @@ async function previewContact({
     ...contact!,
     open_lead: openLead ?? null,
     patient: patientFile ?? null,
-    next_appointment: appointmentOf(visits?.next.get(existing.public_id)),
-    last_appointment: appointmentOf(visits?.last.get(existing.public_id)),
+    next_appointment: appointmentOf(visits.next.get(existing.public_id)),
+    last_appointment: appointmentOf(visits.last.get(existing.public_id)),
   } satisfies ContactPreviewOutput;
 }
 

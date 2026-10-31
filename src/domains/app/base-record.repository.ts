@@ -307,6 +307,25 @@ export function nullsLastSortKeys(options: {
   ];
 }
 
+/**
+ * `column` within the caller's branches (D9) — no condition for `null` (every branch); a nullable
+ * column also keeps its rows of no branch. Shared by the lists and the reads of another table's
+ * records a page shows (a contact's open lead and visits, B1-5).
+ */
+export function inVisibleBranches({
+  column,
+  branchIds,
+}: {
+  column: AnyPgColumn;
+  branchIds: readonly number[] | null;
+}): SQL | undefined {
+  if (branchIds === null) return undefined;
+  const ids = [...branchIds];
+  // A NOT NULL branch column: a plain IN, so each branch is one index range (H4).
+  if (column.notNull) return ids.length === 0 ? sql`false` : inArray(column, ids);
+  return ids.length === 0 ? isNull(column) : (or(inArray(column, ids), isNull(column)) as SQL);
+}
+
 /** A named column of `table` (throws on a typo — the generator names them). */
 export function columnOf(table: PgTable, name: string): AnyPgColumn {
   const column = (getTableColumns(table) as Record<string, AnyPgColumn>)[name];
@@ -754,11 +773,10 @@ export class BaseRecordRepository {
 
   /** Rows of the scope's branches — or of no branch, on a nullable branch column (D9). */
   private branchCondition(branchScope: { column: string; ids: readonly number[] }): SQL {
-    const column = this.column(branchScope.column);
-    const ids = [...branchScope.ids];
-    // A NOT NULL branch column: a plain IN, so each branch is one index range (H4).
-    if (column.notNull) return ids.length === 0 ? sql`false` : inArray(column, ids);
-    return ids.length === 0 ? isNull(column) : (or(inArray(column, ids), isNull(column)) as SQL);
+    return inVisibleBranches({
+      column: this.column(branchScope.column),
+      branchIds: branchScope.ids,
+    }) as SQL;
   }
 
   /** The conditions of the table's own derived filters ({@link BaseRecordTableConfig.derivedFilters}). */
