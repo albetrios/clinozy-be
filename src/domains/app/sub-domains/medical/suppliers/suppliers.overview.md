@@ -41,3 +41,6 @@ their routes under `/suppliers/{supplier_id}/credits` (MD34).
 - **Paying** applies the open credits first, then one `supplier_bill` payment per received order
   still due, oldest first, the splits taken mode by mode (`409 more_than_due` over the payable).
 - **Delete only with nothing owed**, no open credit and no order waiting (`409 supplier_has_dues`).
+- **Contact (change-pharmacy-record-fields):** `email` (a valid address, ≤ 120) and `address`
+  (≤ 240), each optional; a credit is priced per unit — the batch's pack rate over the medicine's
+  `units_per_pack`.

@@ -50,6 +50,8 @@ export const suppliers = appSchema
       name: varchar('name', { length: 120 }).notNull(),
       phone: varchar('phone', { length: 13 }),
       gst_number: varchar('gst_number', { length: 15 }),
+      email: varchar('email', { length: 120 }),
+      address: varchar('address', { length: 240 }),
       // Added inline from a picker (the design's "Add supplier")
       is_quick: boolean('is_quick').notNull().default(false),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -92,6 +94,8 @@ export const suppliers = appSchema
         'chk_suppliers_gst_number',
         sql`${table.gst_number} ~ ${sqlLiteral(GST_NUMBER_PATTERN)}`,
       ),
+      check('chk_suppliers_email', sql`char_length(${table.email}) >= 3`),
+      check('chk_suppliers_address', sql`char_length(${table.address}) > 0`),
       check('chk_suppliers_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_suppliers_delete_reason',

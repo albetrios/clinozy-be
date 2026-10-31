@@ -1,10 +1,17 @@
 import type { BilledContactOutput } from '@/domains/app/sub-domains/billing/invoices/invoices.types.js';
 
-/** One sold line (11.H.6) — a batch a medicine was drawn from; `expiry_month` as `YYYY-MM`. */
+/**
+ * One sold line (11.H.6) — a batch a medicine was drawn from; `expiry_month` as `YYYY-MM`;
+ * `quantity` and `rate` per unit (a pack while `units_per_pack` is 1), with the pack label and HSN
+ * code snapshotted when billed.
+ */
 export interface MedicalSaleItemOutput {
   invoice_item_id: string;
   medicine_id: string | null;
   name: string;
+  pack_size: string | null;
+  hsn_code: string | null;
+  units_per_pack: number;
   batch_number: string | null;
   expiry_month: string | null;
   quantity: number;

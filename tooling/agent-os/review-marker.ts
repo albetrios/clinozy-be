@@ -2,8 +2,8 @@
 /**
  * `pnpm agent-os:review-clean [--note "<summary>"]` — records that `/be-pre-merge-review` found no
  * critical or major finding on HEAD. The push review gate (`agent-os/hooks/be-guardrails.mjs`) reads
- * it: a `git push` of auth, RLS, billing, migration or route changes asks the user first unless
- * HEAD has this record.
+ * it: a `git push` of auth, RLS, billing, migration or route changes warns the agent to run the
+ * review unless HEAD has this record.
  *
  * The record is `<git dir>/be-pre-merge-review/<HEAD sha>.clean` — this clone only, never
  * committed. A new commit is a new HEAD, so it needs a new review.

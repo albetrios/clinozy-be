@@ -13,6 +13,12 @@ export const MEDICINE_DEFAULT_MAX_STOCK = 10;
 /** The highest stock level and batch quantity (the design's 4-digit steppers). */
 export const MEDICINE_QUANTITY_MAX = 9999;
 
+/**
+ * The most loose units one pack holds (`chk_medicines_units_per_pack`). 1 = sold in whole packs;
+ * above 1 = loose strips or tablets, and the medicine's stock counts units.
+ */
+export const MEDICINE_UNITS_PER_PACK_MAX = 1000;
+
 /** A medicine's stock against its reorder level (MD12). */
 export const MEDICINE_STOCK_LEVEL = {
   OK: 'ok',

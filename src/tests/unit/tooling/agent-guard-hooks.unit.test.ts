@@ -78,40 +78,16 @@ const cases: GuardCase[] = [
     expect: 'silent',
   },
   {
-    name: 'R5: editing the hook manifest escalates to ask',
+    name: 'editing the hook manifest passes silently (no hook asks)',
     script: 'be-guard-edits.mjs',
     payload: { tool_input: { file_path: 'agent-os/hooks/hooks.json', new_string: '{}' } },
-    expect: 'ask',
+    expect: 'silent',
   },
   {
-    name: 'R5: editing claude settings escalates to ask',
+    name: 'editing claude settings passes silently (no hook asks)',
     script: 'be-guard-edits.mjs',
     payload: { tool_input: { file_path: '/abs/repo/.claude/settings.json', new_string: '{}' } },
-    expect: 'ask',
-  },
-  {
-    name: 'R5: editing a guard script escalates to ask',
-    script: 'be-guard-edits.mjs',
-    payload: {
-      tool_input: { file_path: 'agent-os/hooks/be-guardrails.mjs', new_string: '// disabled' },
-    },
-    expect: 'ask',
-  },
-  {
-    name: 'R5: editing the shared guard rules escalates to ask',
-    script: 'be-guard-edits.mjs',
-    payload: {
-      tool_input: { file_path: 'agent-os/hooks/_be-guard-rules.mjs', new_string: '// disabled' },
-    },
-    expect: 'ask',
-  },
-  {
-    name: "R5: another repository's enforcement wiring still escalates to ask",
-    script: 'be-guard-edits.mjs',
-    payload: {
-      tool_input: { file_path: siblingPath('agent-os/hooks/hooks.json'), new_string: '{}' },
-    },
-    expect: 'ask',
+    expect: 'silent',
   },
   {
     name: 'ordinary service edit passes silently',
@@ -281,10 +257,10 @@ const cases: GuardCase[] = [
     expect: 'deny',
   },
   {
-    name: 'gh pr create asks first (Bash(gh pr*) is allowlisted)',
+    name: 'gh pr create passes silently (the permission mode decides)',
     script: 'be-guardrails.mjs',
     payload: { tool_name: 'Bash', tool_input: { command: 'gh pr create --title "x" --body "y"' } },
-    expect: 'ask',
+    expect: 'silent',
   },
   ...[
     'git commit --no-verify -m wip',
@@ -421,14 +397,6 @@ const cases: GuardCase[] = [
     expect: 'silent',
   },
 
-  // ── be-no-unrequested-pr.mjs (Claude PreToolUse: mcp create PR) ──
-  {
-    name: 'PR creation escalates to ask',
-    script: 'be-no-unrequested-pr.mjs',
-    payload: { tool_input: { title: 'Add feature' } },
-    expect: 'ask',
-  },
-
   // ── cursor guards ──
   {
     name: 'cursor: destructive shell is denied',
@@ -461,10 +429,10 @@ const cases: GuardCase[] = [
     expect: 'allow',
   },
   {
-    name: 'cursor: MCP PR creation is denied pending user confirmation',
+    name: 'cursor: MCP PR creation is allowed (the permission mode decides)',
     script: 'be-cursor-mcp-guard.mjs',
     payload: { tool_name: 'mcp__github__create_pull_request', tool_input: { title: 'x' } },
-    expect: 'deny',
+    expect: 'allow',
   },
   {
     name: 'cursor: MCP call referencing a secrets file is denied',

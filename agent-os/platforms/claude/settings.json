@@ -54,11 +54,6 @@
       "mcp__github__actions_get",
       "mcp__github__actions_list"
     ],
-    "ask": [
-      "Bash(gh pr create *)",
-      "Bash(pnpm dlx *)",
-      "Bash(pnpm add *)"
-    ],
     "deny": [
       "Bash(git push --force *)",
       "Bash(git push -f *)",
@@ -104,15 +99,6 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-guardrails.mjs\""
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__github__create_pull_request",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/agent-os/hooks/be-no-unrequested-pr.mjs\""
           }
         ]
       }

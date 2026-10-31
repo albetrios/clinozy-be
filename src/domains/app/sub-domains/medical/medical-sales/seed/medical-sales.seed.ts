@@ -10,6 +10,9 @@ export interface SeedMedicalSaleLine {
   medicine_batch_id: number;
   batch_number: string;
   name: string;
+  /** The medicine's pack label and HSN code, snapshotted on the line. */
+  pack_size: string;
+  hsn_code: string;
   quantity: number;
   /** The MRP per pack, in rupees. */
   rate: number;

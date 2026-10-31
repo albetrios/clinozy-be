@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   GST_NUMBER_PATTERN,
+  HSN_CODE_PATTERN,
   MOBILE_NUMBER_PATTERN,
   PHONE_NUMBER_PATTERN,
   CHIP_TONE_VALUES,
@@ -53,6 +54,12 @@ export const mobileNumberSchema = trimmedString().regex(
 export const gstNumberSchema = trimmedString().regex(
   new RegExp(GST_NUMBER_PATTERN),
   'errors:validation.invalidGstin',
+);
+
+/** An HSN code: 4, 6 or 8 digits ({@link HSN_CODE_PATTERN}) — a medicine's, a bill line's. */
+export const hsnCodeSchema = trimmedString().regex(
+  new RegExp(HSN_CODE_PATTERN),
+  'errors:validation.hsnCodeFormat',
 );
 
 /**

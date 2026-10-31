@@ -11,13 +11,19 @@ import {
   valueListSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
 import { MEDICINE_QUANTITY_MAX } from '@/domains/app/sub-domains/medical/medicines/medicines.constants.js';
-import { expiryMonthSchema } from '@/domains/app/sub-domains/medical/medicines/medicines.dto.js';
+import {
+  expiryMonthSchema,
+  printedMrpSchema,
+} from '@/domains/app/sub-domains/medical/medicines/medicines.dto.js';
 import {
   MEDICAL_PURCHASE_ORDER_CANCEL_REASON_VALUES,
   MEDICAL_PURCHASE_ORDER_ITEMS_MAX,
   MEDICAL_PURCHASE_ORDER_PAYMENT_STATUS_VALUES,
   MEDICAL_PURCHASE_ORDER_STAGE_VALUES,
 } from './medical-purchase-orders.constants.js';
+
+/** What the desk notes on an order ("30 DAYS DUE", "without gst bill"). */
+const noteSchema = trimmedStringMinMax({ min: 1, max: 500 });
 
 /** True when every entry of a list is different. */
 const distinct = (values: readonly unknown[]) => new Set(values).size === values.length;
@@ -29,6 +35,7 @@ const medicalPurchaseOrderItemFields = z.object({
   quantity: z.number().int().min(1).max(MEDICINE_QUANTITY_MAX),
   free_quantity: z.number().int().min(0).max(MEDICINE_QUANTITY_MAX).optional(),
   rate: moneySchema.refine((rate) => rate > 0, { message: 'errors:validation.moreThanZero' }),
+  mrp: printedMrpSchema.nullable().optional(),
 });
 
 /** Exactly one of `medicine_id` and `new_medicine_name` names a line's medicine. */
@@ -39,19 +46,24 @@ const oneMedicine = (item: {
 
 /**
  * One order line (MD15): a medicine — or `new_medicine_name`, a quick one added as typed —
- * `quantity*` (1–9999), `free_quantity`, `rate*` (above 0).
+ * `quantity*` (1–9999 packs), `free_quantity`, `rate*` (a pack's, above 0), `mrp` (printed on
+ * the packs).
  */
 const medicalPurchaseOrderItemDto = medicalPurchaseOrderItemFields
   .strict()
   .refine(oneMedicine, { message: 'errors:validation.medicineIdOrNewMedicineName' });
 
-/** How an ordered line arrived (MD16): ticked (default) or not, its batch number and expiry. */
+/**
+ * How an ordered line arrived (MD16): ticked (default) or not, its batch number, expiry and the
+ * MRP printed on it (the order line's unless sent).
+ */
 const receivedOrderedLineDto = z
   .object({
     id: recordIdSchema,
     is_received: z.boolean().optional(),
     batch_number: trimmedStringMinMax({ min: 1, max: 20 }).optional(),
     expiry_month: expiryMonthSchema.optional(),
+    mrp: printedMrpSchema.nullable().optional(),
   })
   .strict();
 
@@ -85,26 +97,29 @@ export const medicalPurchaseOrdersIdParamsDto = z
 
 /**
  * Body of `POST /app/medical-purchase-orders` (11.E.8 #27): `supplier_id*`, `items*`; optional
- * `supplier_bill_number`, `order_date` (today unless sent, never after it).
+ * `supplier_bill_number`, `note`, `order_date` (today unless sent, never after it).
  */
 export const CreateMedicalPurchaseOrderDto = z
   .object({
     supplier_id: recordIdSchema,
     items: itemsSchema,
     supplier_bill_number: supplierBillNumberSchema.optional(),
+    note: noteSchema.optional(),
     order_date: calendarDateSchema.optional(),
   })
   .strict();
 
 /**
  * Body of `PATCH /app/medical-purchase-orders/{medical_purchase_order_id}` (11.E.8 #29) — an order
- * not yet received: `supplier_id`, `supplier_bill_number` (null clears it), `order_date`, `items`
- * (the whole list); `expected_updated_at` refuses a stale save.
+ * not yet received: `supplier_id`, `supplier_bill_number` (null clears it), `note` (null clears
+ * it — the one field a received order still changes), `order_date`, `items` (the whole list);
+ * `expected_updated_at` refuses a stale save.
  */
 export const UpdateMedicalPurchaseOrderDto = z
   .object({
     supplier_id: recordIdSchema.optional(),
     supplier_bill_number: supplierBillNumberSchema.nullable().optional(),
+    note: noteSchema.nullable().optional(),
     order_date: calendarDateSchema.optional(),
     items: itemsSchema.optional(),
     expected_updated_at: expectedUpdatedAtSchema,
@@ -116,9 +131,9 @@ export const UpdateMedicalPurchaseOrderDto = z
 
 /**
  * Body of `POST …/{medical_purchase_order_id}/receive` (11.E.8 #32, MD16, MD26): optional `items` —
- * an ordered line (`id*`, `is_received` — default yes — `batch_number`, `expiry_month`) or goods
- * not ordered (no `id`: the medicine or `new_medicine_name`, `quantity*`, `free_quantity`, `rate*`,
- * `batch_number`, `expiry_month`) — and `supplier_bill_number`.
+ * an ordered line (`id*`, `is_received` — default yes — `batch_number`, `expiry_month`, `mrp`) or
+ * goods not ordered (no `id`: the medicine or `new_medicine_name`, `quantity*`, `free_quantity`,
+ * `rate*`, `mrp`, `batch_number`, `expiry_month`) — `supplier_bill_number` and `note`.
  */
 export const ReceiveMedicalPurchaseOrderDto = z
   .object({
@@ -130,6 +145,7 @@ export const ReceiveMedicalPurchaseOrderDto = z
       })
       .optional(),
     supplier_bill_number: supplierBillNumberSchema.optional(),
+    note: noteSchema.optional(),
   })
   .strict();
 

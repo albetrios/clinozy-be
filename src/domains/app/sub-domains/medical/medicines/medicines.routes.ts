@@ -35,7 +35,7 @@ export function medicinesRoutes(service: MedicinesService): FastifyPluginAsync {
         ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'List medicines',
-          description: `Returns one page of the store's medicines — the Medicines tab and the pickers — each with its stock (\`quantity\`, \`stock_level\`), batches with stock (earliest expiry first), \`nearest_expiry\`, supplier prices, \`best_rate\` and \`margin_percent\`. ${LIST_QUERY_TEXT} Requires medicine:read.`,
+          description: `Returns one page of the store's medicines — the Medicines tab and the pickers — each with \`hsn_code\`, \`pack_label\`, \`units_per_pack\`, its stock (\`quantity\` — in units, packs while \`units_per_pack\` is 1 — and \`stock_level\`), batches with stock (each with the \`mrp\` printed on it, earliest expiry first), \`nearest_expiry\`, supplier prices, \`best_rate\` and \`margin_percent\`. ${LIST_QUERY_TEXT} Requires medicine:read.`,
           tags: ['Medical store'],
           querystring: listMedicinesQueryDto,
         },
@@ -66,7 +66,7 @@ export function medicinesRoutes(service: MedicinesService): FastifyPluginAsync {
         schema: {
           summary: 'Add a medicine',
           description:
-            'Adds a medicine: `name*` (1–120, unique in any case — a 409 `record_already_exists`), `mrp*` (GST inside, above 0) and `manufacturer_id*` — both optional when `is_quick`; optional `composition`, `is_prescription_only`, `gst_percent` (0, 5, 12 — the default — 18, 28), `min_stock` ("Reorder at", default 2) and `max_stock` ("Fill up to", default 10, never under it — a 400), `near_expiry_discount_percent` (1–90), `batches` (up to 50: `batch_number*`, `expiry_month*` `YYYY-MM`, `quantity*` 0–9999, `purchase_rate`, `supplier_id`) and `supplier_prices` (up to 20: `supplier_id*`, `rate*`, `free_quantity`, `lead_days`). The batches make its stock. Requires medicine:create.',
+            'Adds a medicine: `name*` (1–120, unique in any case — a 409 `record_already_exists`), `mrp*` (GST inside, above 0) and `manufacturer_id*` — both optional when `is_quick`; optional `composition`, `is_prescription_only`, `hsn_code` (4, 6 or 8 digits), `pack_label` (1–30, as printed — a bill line snapshots it), `units_per_pack` (1–1000, default 1; above 1 the medicine sells loose and its stock, levels and batch quantities count units), `gst_percent` (0, 5, 12 — the default — 18, 28), `min_stock` ("Reorder at", default 2) and `max_stock` ("Fill up to", default 10, never under it — a 400), `near_expiry_discount_percent` (1–90), `batches` (up to 50: `batch_number*`, `expiry_month*` `YYYY-MM`, `quantity*` 0–9999, `purchase_rate`, `mrp` (printed on the batch, above 0 — a sale charges it), `supplier_id`) and `supplier_prices` (up to 20: `supplier_id*`, `rate*`, `free_quantity`, `lead_days`). The batches make its stock. Requires medicine:create.',
           tags: ['Medical store'],
           body: CreateMedicineDto,
         },
@@ -98,7 +98,7 @@ export function medicinesRoutes(service: MedicinesService): FastifyPluginAsync {
         schema: {
           summary: 'Get a medicine',
           description:
-            'Returns one medicine with its batches, supplier prices, nearest expiry, best rate and margin. Requires medicine:read.',
+            'Returns one medicine with its HSN code, pack label, units per pack, its batches (each with its MRP), supplier prices, nearest expiry, best rate and margin. Requires medicine:read.',
           tags: ['Medical store'],
           params: medicinesIdParamsDto,
         },
@@ -114,7 +114,7 @@ export function medicinesRoutes(service: MedicinesService): FastifyPluginAsync {
         schema: {
           summary: 'Change a medicine',
           description:
-            "Changes any field of the add but `is_quick` (a quick medicine loses the flag once its MRP and composition are set; `null` clears the composition and the discount). `batches` is the whole list: a kept batch (its `id` — another medicine's is a 400) changes its details and its quantity moves by the difference, a new one is added, one left out goes to zero; a batch number the medicine already holds is a 409 `record_already_exists`. `supplier_prices` replaces the prices. Send `expected_updated_at` and a save over a newer change (a sale meanwhile) is a 409 `record_changed`. Requires medicine:update.",
+            "Changes any field of the add but `is_quick` (a quick medicine loses the flag once its MRP and composition are set; `null` clears the composition, the HSN code, the pack label and the discount; `units_per_pack` changes only while the medicine holds no stock — a 409 `medicine_has_stock`). `batches` is the whole list: a kept batch (its `id` — another medicine's is a 400) changes its details and its quantity moves by the difference, a new one is added, one left out goes to zero; a batch number the medicine already holds is a 409 `record_already_exists`. `supplier_prices` replaces the prices. Send `expected_updated_at` and a save over a newer change (a sale meanwhile) is a 409 `record_changed`. Requires medicine:update.",
           tags: ['Medical store'],
           params: medicinesIdParamsDto,
           body: UpdateMedicineDto,

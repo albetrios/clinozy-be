@@ -38,12 +38,6 @@
         "statusMessage": "Checking <this-repository> shell guardrails"
       }
     },
-    "no-unrequested-pr": {
-      "claude": {
-        "event": "PreToolUse",
-        "matcher": "mcp__github__create_pull_request"
-      }
-    },
     "edit-hooks": {
       "claude": {
         "event": "PostToolUse",

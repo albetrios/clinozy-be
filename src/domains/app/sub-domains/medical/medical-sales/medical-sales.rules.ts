@@ -356,6 +356,9 @@ function lineOutput(line: MedicalSaleLineRow): Record<string, unknown> {
     invoice_item_id: line.public_id,
     medicine_id: line.medicine_id,
     name: line.name,
+    pack_size: line.pack_size,
+    hsn_code: line.hsn_code,
+    units_per_pack: line.units_per_pack ?? 1,
     batch_number: line.batch_number,
     expiry_month: line.expiry_month?.slice(0, 7) ?? null,
     quantity: line.quantity,
@@ -403,7 +406,10 @@ async function decorateSales(options: {
     const ownReturns = returns.filter((entry) => entry.medical_sale_id === row.id);
     const salePaise = own.reduce((total, line) => total + paiseOf(line.amount), 0);
     const costPaise = own.reduce(
-      (total, line) => total + Math.round(paiseOf(line.purchase_rate) * line.quantity),
+      // The batch's purchase rate is a pack's; the line counts units (change-pharmacy-record-fields D5)
+      (total, line) =>
+        total +
+        Math.round((paiseOf(line.purchase_rate) * line.quantity) / (line.units_per_pack ?? 1)),
       0,
     );
     output.invoice = invoice
