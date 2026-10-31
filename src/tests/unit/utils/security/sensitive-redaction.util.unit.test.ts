@@ -346,6 +346,24 @@ describe('sanitizeDatabaseError', () => {
     expect(redactSensitive(String(error.stack))).not.toContain('Priya');
   });
 
+  it('cuts the query text at the first stack frame and keeps scrubbing after it', () => {
+    const text =
+      'Failed query: select 1\nparams: Priya\n    at first (a.ts:1:1)\n' +
+      'Caused by: Failed query: select 2\nparams: Ravi\n\n   at second (b.ts:2:2)';
+
+    expect(redactSensitive(text)).toBe(
+      'Database query failed\n    at first (a.ts:1:1)\nCaused by: Database query failed\n\n   at second (b.ts:2:2)',
+    );
+  });
+
+  it('stays linear on input built to make a backtracking pattern explode (SonarQube S5852)', () => {
+    const hostile = `Failed query: ${'\n '.repeat(100_000)}x${'\n'.repeat(100_000)}y`;
+    const startedAt = performance.now();
+
+    expect(redactSensitive(hostile)).toBe('Database query failed');
+    expect(performance.now() - startedAt).toBeLessThan(1000);
+  });
+
   it('lists each database failure on a cause chain with its sanitized message', () => {
     const error = foreignKeyViolation();
     const wrapped = new Error('unit of work failed', { cause: error });

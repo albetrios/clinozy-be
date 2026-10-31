@@ -147,20 +147,48 @@ export const DATABASE_QUERY_ERROR_NAME = 'DatabaseQueryError';
 /** What a database failure says once its query, bound values and row detail are withheld. */
 const DATABASE_QUERY_FAILED_MESSAGE = 'Database query failed';
 
+/** Opens Drizzle's `DrizzleQueryError` message — `Failed query: <sql>\nparams: <bound values>`. */
+const DRIZZLE_FAILED_QUERY_PREFIX = 'Failed query: ';
+
 /**
- * Drizzle's `DrizzleQueryError` message — `Failed query: <sql>\nparams: <bound values>` — up to the
- * first stack frame or the end of the string. A Sentry value cut short before `params:` still
- * matches, so no part of the statement or its values survives.
+ * Index of the first stack frame line (`\n`, whitespace, `at `) at or after `from`, or
+ * `value.length` when none follows.
+ *
+ * @remarks
+ * A single forward pass: a whitespace run that does not end in `at ` is skipped whole, so no
+ * character is examined more than twice whatever the input (a regex lookahead here backtracked
+ * super-linearly — SonarQube S5852).
  */
-const DRIZZLE_QUERY_ERROR_MESSAGE_PATTERN = /Failed query: [\s\S]*?(?=\n\s+at |$)/g;
+function indexOfNextStackFrame({ value, from }: { value: string; from: number }): number {
+  let index = value.indexOf('\n', from);
+  while (index !== -1) {
+    let afterWhitespace = index + 1;
+    while (afterWhitespace < value.length && /\s/.test(value.charAt(afterWhitespace))) {
+      afterWhitespace += 1;
+    }
+    if (afterWhitespace > index + 1 && value.startsWith('at ', afterWhitespace)) return index;
+    index = value.indexOf('\n', Math.max(afterWhitespace, index + 1));
+  }
+  return value.length;
+}
 
 /**
  * Replaces any Drizzle `Failed query: … params: …` text inside `value` (an error message, a stack,
- * a log line) with {@link DATABASE_QUERY_FAILED_MESSAGE}.
+ * a log line) with {@link DATABASE_QUERY_FAILED_MESSAGE} — from `Failed query: ` up to the first
+ * stack frame or the end of the string. A Sentry value cut short before `params:` is still
+ * replaced, so no part of the statement or its values survives.
  */
 function redactDatabaseQueryErrorText(value: string): string {
-  if (!value.includes('Failed query: ')) return value;
-  return value.replace(DRIZZLE_QUERY_ERROR_MESSAGE_PATTERN, `${DATABASE_QUERY_FAILED_MESSAGE}`);
+  let start = value.indexOf(DRIZZLE_FAILED_QUERY_PREFIX);
+  if (start === -1) return value;
+  let redacted = '';
+  let cursor = 0;
+  while (start !== -1) {
+    redacted += `${value.slice(cursor, start)}${DATABASE_QUERY_FAILED_MESSAGE}`;
+    cursor = indexOfNextStackFrame({ value, from: start + DRIZZLE_FAILED_QUERY_PREFIX.length });
+    start = value.indexOf(DRIZZLE_FAILED_QUERY_PREFIX, cursor);
+  }
+  return `${redacted}${value.slice(cursor)}`;
 }
 
 /**
