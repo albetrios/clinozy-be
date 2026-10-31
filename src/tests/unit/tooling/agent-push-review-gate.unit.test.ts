@@ -44,20 +44,26 @@ function decision(options: { root: string; command: string }): string {
     env: { ...gitEnvironmentWithoutInheritedRepository(), CLAUDE_PROJECT_DIR: options.root },
   });
   const output = result.stdout.trim();
-  if (!output.startsWith('{"hookSpecificOutput"')) return '';
-  return (JSON.parse(output) as { hookSpecificOutput: { permissionDecision: string } })
-    .hookSpecificOutput.permissionDecision;
+  if (!output.startsWith('{')) return '';
+  const parsed = JSON.parse(output) as {
+    hookSpecificOutput?: { permissionDecision?: string };
+    systemMessage?: string;
+  };
+  if (parsed.hookSpecificOutput?.permissionDecision) {
+    return parsed.hookSpecificOutput.permissionDecision;
+  }
+  return parsed.systemMessage?.includes('push review gate') ? 'warn' : '';
 }
 
 /**
  * Locks in the push review gate: an agent push of auth, RLS, billing, migration or route changes
- * asks the user first until /be-pre-merge-review records a clean result for HEAD; other pushes,
- * and pushes in another repository, go through.
+ * warns until /be-pre-merge-review records a clean result for HEAD, and never asks the user;
+ * other pushes, and pushes in another repository, go through silently.
  */
 describe('be-guardrails.mjs push review gate', () => {
-  it('asks before pushing an unreviewed auth change, not after a clean review of HEAD', () => {
+  it('warns on pushing an unreviewed auth change, not after a clean review of HEAD', () => {
     const root = repository('src/domains/auth/auth.service.ts');
-    expect(decision({ root, command: 'git push -u origin feat/change' })).toBe('ask');
+    expect(decision({ root, command: 'git push -u origin feat/change' })).toBe('warn');
     const recorded = spawnSync(
       TSX,
       ['--tsconfig', join(process.cwd(), 'tsconfig.json'), REVIEW_MARKER, '--note', 'clean'],
@@ -71,16 +77,16 @@ describe('be-guardrails.mjs push review gate', () => {
     expect(decision({ root, command: 'git push -u origin feat/change' })).toBe('');
   });
 
-  it('asks for migrations and routes too, and lets a docs-only push through', () => {
+  it('warns for migrations and routes too, and lets a docs-only push through', () => {
     expect(
       decision({ root: repository('migrations/20261017000000_x.sql'), command: 'git push' }),
-    ).toBe('ask');
+    ).toBe('warn');
     expect(
       decision({
         root: repository('src/domains/app/sub-domains/leads/leads.routes.ts'),
         command: 'git push',
       }),
-    ).toBe('ask');
+    ).toBe('warn');
     expect(decision({ root: repository('docs/reference/commands.md'), command: 'git push' })).toBe(
       '',
     );

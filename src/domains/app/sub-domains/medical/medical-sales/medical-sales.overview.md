@@ -48,3 +48,7 @@ ROUTE #186–#187). The store's Payments tab moved to [`medical-payments/`](../m
   a refund or a store-credit return never raises it, launch D93); the refund is a credit note with
   its refund payment;
   `unused`, `doctor_changed` and `wrong_item` packs go back into their batch.
+- **Price per unit (change-pharmacy-record-fields D2, D6):** a line is charged its batch's MRP (the
+  medicine's when the batch has none) over the medicine's `units_per_pack`, rounded down to the
+  paisa; the line snapshots the pack label (`pack_size`) and `hsn_code`. The sale's cost is the
+  batch's purchase rate per unit.

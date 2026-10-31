@@ -32,7 +32,10 @@ import {
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
 import { patient_offering_suggestions } from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.schema.js';
 import { patient_prescriptions } from '@/domains/app/sub-domains/patients/patient-prescriptions/patient-prescriptions.schema.js';
-import { RECORD_DELETE_REASON_VALUES } from '@/shared/constants/record-fields.constants.js';
+import {
+  HSN_CODE_PATTERN,
+  RECORD_DELETE_REASON_VALUES,
+} from '@/shared/constants/record-fields.constants.js';
 import {
   INVOICE_ITEM_DESCRIPTION_MAX,
   INVOICE_ITEM_GST_PERCENT_VALUES,
@@ -246,6 +249,7 @@ export const invoice_items = appSchema
       // Typed on the line, printed under its name — never a snapshot (BD4)
       description: varchar('description', { length: INVOICE_ITEM_DESCRIPTION_MAX }),
       pack_size: varchar('pack_size', { length: 30 }),
+      hsn_code: varchar('hsn_code', { length: 8 }),
       quantity: smallint('quantity').notNull(),
       rate: numeric('rate', { precision: 12, scale: 2 }).notNull(),
       discount_percent: numeric('discount_percent', { precision: 5, scale: 2 })
@@ -320,6 +324,7 @@ export const invoice_items = appSchema
         sql`${table.quantity} BETWEEN 1 AND ${sqlLiteral(INVOICE_ITEM_QUANTITY_MAX)}`,
       ),
       check('chk_invoice_items_rate', sql`${table.rate} >= 0`),
+      check('chk_invoice_items_hsn_code', sql`${table.hsn_code} ~ ${sqlLiteral(HSN_CODE_PATTERN)}`),
       check('chk_invoice_items_discount_percent', sql`${table.discount_percent} BETWEEN 0 AND 100`),
       check(
         'chk_invoice_items_gst_percent',

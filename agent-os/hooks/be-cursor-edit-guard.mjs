@@ -4,8 +4,8 @@
 // Cursor cannot veto a file edit before it lands, so this is the after-the-fact mirror of the
 // Claude `be-guard-edits.mjs` PreToolUse rules — the same rules, from _be-guard-rules.mjs: when an
 // edit that just landed violates a hard rule (R1 worker getRequestDatabase, R2 `../` import under
-// src/, R3 generated file, R4 removed NODE_ENV value, R5 enforcement wiring), it tells the agent
-// to revert/fix NOW instead of at pre-commit/CI.
+// src/, R3 generated file, R4 removed NODE_ENV value), it tells the agent to revert/fix NOW
+// instead of at pre-commit/CI.
 //
 // Reads the hook payload on stdin; prints { agentMessage } when a rule is hit (advisory — Cursor
 // applies no permission semantics to afterFileEdit). Fail-open: any error exits 0 silently.

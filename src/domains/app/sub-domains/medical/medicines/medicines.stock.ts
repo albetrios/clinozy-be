@@ -2,6 +2,7 @@ import type { BaseRecordRow } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { organizationToday } from '@/domains/app/sub-domains/patients/patients.rules.js';
 import { ConflictError } from '@/shared/errors/index.js';
+import { roundToPaise } from '@/shared/utils/validation/record-fields.util.js';
 import { MEDICINE_QUANTITY_MAX } from './medicines.constants.js';
 import { type MedicineBatchRow, MedicinesRepository } from './medicines.repository.js';
 
@@ -11,6 +12,37 @@ const medicinesRepository = new MedicinesRepository();
 export interface MedicineBatchDraw {
   batch: MedicineBatchRow;
   quantity: number;
+}
+
+/**
+ * D6 (change-pharmacy-record-fields): what one unit of a medicine sells for — the pack's MRP over
+ * its units per pack, rounded down to the paisa so a loose unit never sells above the printed MRP;
+ * the MRP itself while the medicine sells whole packs.
+ */
+export function unitSellingRate({
+  packMrp,
+  unitsPerPack,
+}: {
+  packMrp: number;
+  unitsPerPack: number;
+}): number {
+  if (unitsPerPack <= 1) return packMrp;
+  return Math.floor(Math.round(packMrp * 100) / unitsPerPack) / 100;
+}
+
+/**
+ * D5 (change-pharmacy-record-fields): what one unit cost — the pack's purchase rate over its units
+ * per pack, to the paisa; the rate itself while the medicine sells whole packs.
+ */
+export function unitPurchaseRate({
+  packRate,
+  unitsPerPack,
+}: {
+  packRate: number;
+  unitsPerPack: number;
+}): number {
+  if (unitsPerPack <= 1) return packRate;
+  return roundToPaise(packRate / unitsPerPack);
 }
 
 /** `2026-10-01` — the first day of the organization's month; a batch before it is expired (MD5). */

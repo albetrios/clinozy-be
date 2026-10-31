@@ -138,6 +138,7 @@ async function resolveLines(options: {
       quantity: item.quantity,
       free_quantity: item.free_quantity ?? 0,
       rate,
+      mrp: item.mrp == null ? null : item.mrp.toFixed(2),
       amount: ((item.quantity * paiseOf(item.rate)) / 100).toFixed(2),
     });
   }
@@ -168,14 +169,16 @@ function defaultExpiryMonth(orderDate: string): string {
 
 /**
  * MD16: one received line goes into its batch — a new one, or the medicine's batch of that number
- * (another expiry is a 409 `record_already_exists`), its rate now this line's — and adds
- * `quantity + free_quantity`; the supplier's price follows. Returns the batch id.
+ * (another expiry is a 409 `record_already_exists`), its rate now this line's and its MRP the
+ * line's when the line has one (D8) — and adds `quantity + free_quantity` packs, as units (× the
+ * medicine's units per pack, D5); the supplier's price follows. Returns the batch id.
  */
 async function receiveLine(options: {
   order: BaseRecordRow;
   line: MedicalPurchaseOrderItemRow;
   batchNumber: string;
   expiryMonth: string;
+  mrp: string | null;
   context: BaseRecordWriteContext;
 }): Promise<number> {
   const { order, line, context } = options;
@@ -184,6 +187,7 @@ async function receiveLine(options: {
     purchase_rate: line.rate,
     supplier_id: supplierId,
     medical_purchase_order_id: order.id,
+    ...(options.mrp === null ? {} : { mrp: options.mrp }),
   };
   const existing = await medicinesRepository.findBatchByNumber({
     medicineId: line.medicine_id,
@@ -209,7 +213,13 @@ async function receiveLine(options: {
   if (existing) {
     await medicinesRepository.updateBatch({ id: batchId, values: details, userId: context.userId });
   }
-  await moveMedicineBatch({ context, batchId, change: line.quantity + line.free_quantity });
+  const medicine = await medicinesRepository.findById(line.medicine_id);
+  const unitsPerPack = Number(medicine?.units_per_pack ?? 1);
+  await moveMedicineBatch({
+    context,
+    batchId,
+    change: (line.quantity + line.free_quantity) * unitsPerPack,
+  });
   await medicinesRepository.upsertPrice({
     medicineId: line.medicine_id,
     supplierId,
@@ -219,11 +229,12 @@ async function receiveLine(options: {
   return batchId;
 }
 
-/** How one line arrived — ticked or not, its batch and expiry as sent (defaults otherwise). */
+/** How one line arrived — ticked or not, its batch, expiry and MRP as sent (defaults otherwise). */
 interface ReceivedLineChoice {
   is_received?: boolean | undefined;
   batch_number?: string | undefined;
   expiry_month?: string | undefined;
+  mrp?: number | null | undefined;
 }
 
 /**
@@ -245,14 +256,16 @@ async function receiveOrderLine(options: {
     choice?.expiry_month === undefined
       ? defaultExpiryMonth(String(order.order_date))
       : `${choice.expiry_month}-01`;
+  const mrp = choice?.mrp === undefined ? line.mrp : (choice.mrp?.toFixed(2) ?? null);
   const batchId = isReceived
-    ? await receiveLine({ order, line, batchNumber, expiryMonth, context })
+    ? await receiveLine({ order, line, batchNumber, expiryMonth, mrp, context })
     : null;
   await repository.markItemReceived({
     id: line.id,
     isReceived,
     batchNumber: isReceived ? batchNumber : null,
     expiryMonth: isReceived ? expiryMonth : null,
+    mrp,
     medicineBatchId: batchId,
   });
   return isReceived ? paiseOf(line.amount) : 0;
@@ -362,6 +375,7 @@ async function receiveOrder(input: BaseRecordActionInput): Promise<BaseRecordRow
       ...(body.supplier_bill_number === undefined
         ? {}
         : { supplier_bill_number: body.supplier_bill_number }),
+      ...(body.note === undefined ? {} : { note: body.note }),
     },
     context.userId,
   );
@@ -392,6 +406,7 @@ async function decorateOrders(options: {
     output.items = own.map(({ medical_purchase_order_id: _order, ...item }) => ({
       ...item,
       rate: toAmount(item.rate) ?? 0,
+      mrp: toAmount(item.mrp),
       amount: toAmount(item.amount) ?? 0,
       expiry_month: item.expiry_month?.slice(0, 7) ?? null,
     }));
@@ -416,7 +431,9 @@ async function decorateOrders(options: {
  * @remarks
  * - **Algorithm:** a save resolves its lines (a listed medicine, or a quick one added as typed)
  *   and stores their total; the lines go in after the row. A change or a cancel of a received
- *   order is refused. The `receive` action moves each ticked line into its batch (MD4), refreshes
+ *   order is refused — a change of the note alone excepted (D10). The `receive` action moves each
+ *   ticked line into its batch (MD4) as units (× the medicine's units per pack) with the line's
+ *   MRP, refreshes
  *   the supplier's price, sets the total to the received lines', and applies the supplier's open
  *   credits (MD11). Paying is the payments ledger's (MD7). Every read adds the lines, their counts
  *   and the supplier's name.
@@ -434,6 +451,8 @@ export function createMedicalPurchaseOrdersRules(
       await holdLines({ values, supplierId: values.supplier_id as number, context });
     },
     prepareUpdate: async (values, existing, context) => {
+      // D10: a received order still takes its note — and nothing else
+      if (Object.keys(values).every((key) => key === 'note')) return;
       assertNotReceived({ existing, action: 'change' });
       await assertOrderDate({ date: values.order_date, context });
       await holdLines({

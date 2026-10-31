@@ -2,7 +2,11 @@ import { resolveRecordIds, type BaseRecordRow } from '@/domains/app/base-record.
 import type { BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import { medicines } from '@/domains/app/sub-domains/medical/medicines/medicines.schema.js';
-import { MedicinesRepository } from '@/domains/app/sub-domains/medical/medicines/medicines.repository.js';
+import {
+  type MedicineBatchRow,
+  MedicinesRepository,
+} from '@/domains/app/sub-domains/medical/medicines/medicines.repository.js';
+import { unitSellingRate } from '@/domains/app/sub-domains/medical/medicines/medicines.stock.js';
 import { offerings } from '@/domains/app/sub-domains/offerings/offerings.schema.js';
 import { OfferingsRepository } from '@/domains/app/sub-domains/offerings/offerings.repository.js';
 import { PATIENT_OFFERING_SUGGESTION_STATUS } from '@/domains/app/sub-domains/patients/patient-offering-suggestions/patient-offering-suggestions.constants.js';
@@ -242,11 +246,14 @@ function billedPriceOfOffering(options: {
 
 /**
  * The snapshot of a line's item (B9): its name, rate, GST — the offering's billed price (M26), or
- * the medicine's MRP.
+ * a medicine's unit price: the MRP printed on the batch it draws from, else the medicine's, over
+ * its units per pack, rounded down (change-pharmacy-record-fields D2, D6) — with the medicine's
+ * pack label and HSN code (D3).
  */
 function snapshotOf(options: {
   offering: BaseRecordRow | null;
   medicine: BaseRecordRow | null;
+  batch: MedicineBatchRow | null;
   billed: InvoiceBilledPrice | null;
 }): Record<string, unknown> {
   const { offering, medicine } = options;
@@ -256,6 +263,7 @@ function snapshotOf(options: {
       medicine_id: null,
       name: offering.name,
       pack_size: null,
+      hsn_code: null,
       rate: options.billed?.rate ?? toAmount(offering.price) ?? 0,
       gst_percent: offering.gst_percent,
       is_gst_inclusive: offering.is_gst_inclusive,
@@ -265,8 +273,12 @@ function snapshotOf(options: {
     offering_id: null,
     medicine_id: medicine?.id,
     name: medicine?.name,
-    pack_size: null,
-    rate: toAmount(medicine?.mrp) ?? 0,
+    pack_size: medicine?.pack_label ?? null,
+    hsn_code: medicine?.hsn_code ?? null,
+    rate: unitSellingRate({
+      packMrp: toAmount(options.batch?.mrp) ?? toAmount(medicine?.mrp) ?? 0,
+      unitsPerPack: Number(medicine?.units_per_pack ?? 1),
+    }),
     gst_percent: medicine?.gst_percent,
     is_gst_inclusive: true,
   };
@@ -373,6 +385,7 @@ function keptSnapshot(kept: InvoiceItemWriteRow): Record<string, unknown> {
     medicine_id: kept.medicine_id,
     name: kept.name,
     pack_size: kept.pack_size,
+    hsn_code: kept.hsn_code,
     rate: toAmount(kept.rate) ?? 0,
     gst_percent: kept.gst_percent,
     is_gst_inclusive: kept.is_gst_inclusive,
@@ -464,7 +477,13 @@ async function planLine(options: {
     offering && !keepsItem
       ? billedPriceOfOffering({ offering, header, offers: plan.offers })
       : null;
-  const snapshot = keepsItem ? keptSnapshot(kept) : snapshotOf({ offering, medicine, billed });
+  const batch =
+    medicine === null || item.medicine_batch_id === undefined
+      ? null
+      : await medicinesRepository.findBatch(item.medicine_batch_id);
+  const snapshot = keepsItem
+    ? keptSnapshot(kept)
+    : snapshotOf({ offering, medicine, batch, billed });
   const sessionsTotal = sessionsOf({
     offering,
     kept,

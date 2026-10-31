@@ -60,6 +60,26 @@ function assertMedicineComplete(values: Readonly<Record<string, unknown>>): void
   }
 }
 
+/**
+ * D7 (change-pharmacy-record-fields): units per pack changes only while the medicine holds no
+ * stock — its batches count units, which would change meaning — a 409 `medicine_has_stock`.
+ */
+function assertUnitsPerPackChangeable({
+  values,
+  existing,
+}: {
+  values: Readonly<Record<string, unknown>>;
+  existing: BaseRecordRow;
+}): void {
+  if (values.units_per_pack === undefined) return;
+  if (Number(values.units_per_pack) === Number(existing.units_per_pack)) return;
+  if (Number(existing.quantity) > 0) {
+    throw new ConflictError('errors:medicineUnitsPerPackHasStock', {
+      name: String(existing.name),
+    }).withReason('medicine_has_stock');
+  }
+}
+
 /** MD13: the suppliers a save's batches and prices name — live here, else a 400 on that list. */
 async function resolveSaveSuppliers(options: {
   batches: readonly MedicineBatchInput[] | undefined;
@@ -167,6 +187,9 @@ function batchDetails({
   };
   if (batch.purchase_rate !== undefined) {
     details.purchase_rate = batch.purchase_rate === null ? null : batch.purchase_rate.toFixed(2);
+  }
+  if (batch.mrp !== undefined) {
+    details.mrp = batch.mrp === null ? null : batch.mrp.toFixed(2);
   }
   if (batch.supplier_id !== undefined) {
     details.supplier_id =
@@ -290,6 +313,7 @@ async function decorateMedicines(options: {
       ...batch,
       expiry_month: batch.expiry_month.slice(0, 7),
       purchase_rate: toAmount(batch.purchase_rate),
+      mrp: toAmount(batch.mrp),
     }));
     const nearest = ownBatches.find((batch) => !batch.is_expired);
     output.nearest_expiry = nearest
@@ -338,14 +362,15 @@ async function setNearExpiryDiscount(input: BaseRecordCollectionInput): Promise<
  *
  * @remarks
  * - **Algorithm:** a medicine that is not quick needs an MRP above 0 and a manufacturer; "Fill up
- *   to" is never under "Reorder at". A quick one loses its flag once its MRP and composition are
+ *   to" is never under "Reorder at"; units per pack changes only while it holds no stock. A quick one loses its flag once its MRP and composition are
  *   set. The batches are the whole list on a save — kept ones move by the difference, new ones
  *   arrive, left-out ones go to zero (MD13), each through the guarded batch move (MD4); the prices
  *   are replaced. Every read adds the stocked batches (earliest expiry first), the prices (lowest
  *   first), the nearest expiry, the best rate and the margin, and the manufacturer's name and tone.
  * - **Failure modes:** `ValidationError` on `mrp`, `manufacturer_id`, `max_stock`, `batches`,
  *   `supplier_prices`; `ConflictError` `record_already_exists` (a batch number),
- *   `not_enough_stock`, `batch_full`, `medicine_has_stock`.
+ *   `not_enough_stock`, `batch_full`, `medicine_has_stock` (a delete, or a units-per-pack change,
+ *   with stock).
  */
 export function createMedicinesRules(repository: MedicinesRepository): BaseRecordRules {
   return {
@@ -358,6 +383,7 @@ export function createMedicinesRules(repository: MedicinesRepository): BaseRecor
     prepareUpdate: async (values, existing, context) => {
       const merged = { ...existing, ...values };
       assertMedicineComplete(merged);
+      assertUnitsPerPackChangeable({ values, existing });
       if (
         existing.is_quick === true &&
         (toAmount(merged.mrp) ?? 0) > 0 &&

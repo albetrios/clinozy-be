@@ -20,6 +20,8 @@ vi.mock('@/domains/app/sub-domains/patients/patients.rules.js', () => ({
 import {
   drawMedicineFromBatches,
   moveMedicineBatch,
+  unitPurchaseRate,
+  unitSellingRate,
 } from '@/domains/app/sub-domains/medical/medicines/medicines.stock.js';
 
 const CONTEXT = { organizationId: 1, userId: 2 } as never;
@@ -137,5 +139,33 @@ describe('moveMedicineBatch', () => {
     await expect(
       moveMedicineBatch({ context: CONTEXT, batchId: 1, change: 5 }),
     ).rejects.toMatchObject({ reason: 'batch_full' });
+  });
+});
+
+/** D5, D6 (change-pharmacy-record-fields): a loose unit's price and cost from a pack's. */
+describe('unitSellingRate', () => {
+  it('answers the MRP itself for a medicine sold in whole packs', () => {
+    expect(unitSellingRate({ packMrp: 125.55, unitsPerPack: 1 })).toBe(125.55);
+  });
+
+  it('divides the MRP by the units and rounds down to the paisa — never above the MRP', () => {
+    expect(unitSellingRate({ packMrp: 125.55, unitsPerPack: 10 })).toBe(12.55);
+    expect(unitSellingRate({ packMrp: 100, unitsPerPack: 3 })).toBe(33.33);
+    expect(unitSellingRate({ packMrp: 100, unitsPerPack: 3 }) * 3).toBeLessThanOrEqual(100);
+  });
+
+  it('keeps an even split exact', () => {
+    expect(unitSellingRate({ packMrp: 120, unitsPerPack: 10 })).toBe(12);
+  });
+});
+
+describe('unitPurchaseRate', () => {
+  it('answers the pack rate itself for a medicine sold in whole packs', () => {
+    expect(unitPurchaseRate({ packRate: 80, unitsPerPack: 1 })).toBe(80);
+  });
+
+  it('divides the pack rate by the units, to the paisa', () => {
+    expect(unitPurchaseRate({ packRate: 80, unitsPerPack: 10 })).toBe(8);
+    expect(unitPurchaseRate({ packRate: 100, unitsPerPack: 3 })).toBe(33.33);
   });
 });

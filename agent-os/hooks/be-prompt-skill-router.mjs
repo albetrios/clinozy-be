@@ -10,12 +10,11 @@
 // Conservative by design: requires a build/change verb AND a domain noun, so ordinary prompts
 // (questions, "run the tests", "explain this") produce nothing and never nag; the one exception is
 // a PR to drive ("babysit", "make it green", "fix CI"), routed to be-pr-babysit. A new prompt is a
-// new turn: it clears the once-per-turn record (_be-turn-once.mjs) and marks a /be-ship or
-// /be-open-pr turn as the PR request. Fails OPEN: no payload, no prompt, or no match exits 0
-// silently.
+// new turn: it clears the once-per-turn record (_be-turn-once.mjs). Fails OPEN: no payload, no
+// prompt, or no match exits 0 silently.
 import { addModelContext, readHookPayload } from "./_be-hook.mjs";
 import { recordTelemetry } from "./_be-telemetry.mjs";
-import { markTurn, resetTurn } from "./_be-turn-once.mjs";
+import { resetTurn } from "./_be-turn-once.mjs";
 
 const BUILD_INTENT = /\b(add|create|new|implement|build|introduce|scaffold|generate|wire|register|expose|rename)\b/;
 
@@ -44,12 +43,6 @@ let status = "silent";
 if (payload) {
   resetTurn(payload.session_id);
   const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
-  // /be-ship and /be-open-pr are the user asking for a PR in so many words: be-no-unrequested-pr.mjs
-  // lets this turn's PR creation through without a second confirmation. (The hook sees the prompt
-  // as typed — `/be-ship <title>` — checked on Claude Code 2.1.302.)
-  if (/^\s*\/be-(ship|open-pr)(\s|$)/m.test(prompt)) {
-    markTurn({ session: payload.session_id, mark: "pr-requested" });
-  }
   const lower = prompt.toLowerCase();
   const hints = BUILD_INTENT.test(lower) ? ROUTES.filter(([pattern]) => pattern.test(lower)).map(([, chain]) => chain) : [];
   if (PULL_REQUEST_INTENT.test(lower)) hints.push(PULL_REQUEST_ROUTE);

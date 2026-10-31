@@ -20,6 +20,7 @@ export interface InvoiceItemOutput {
   name: string;
   description: string | null;
   pack_size: string | null;
+  hsn_code: string | null;
   quantity: number;
   rate: number;
   discount_percent: number;
@@ -92,6 +93,7 @@ export interface InvoicePreviewItemOutput {
   name: string;
   description: string | null;
   pack_size: string | null;
+  hsn_code: string | null;
   quantity: number;
   rate: number;
   discount_percent: number;

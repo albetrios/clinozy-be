@@ -3,10 +3,9 @@
 //
 // BLOCKS edits that introduce a hard-rule violation documented in CLAUDE.md and already enforced
 // by global tests / CI — moving enforcement left from "you find out at pre-commit/CI" to an
-// instant denial at the keystroke — and ASKS before an edit to the enforcement wiring itself. The
-// rules (R1 worker getRequestDatabase, R2 `../` import under src/, R3 generated file, R4 removed
-// NODE_ENV value, R5 enforcement wiring) live in _be-guard-rules.mjs, shared with the Cursor mirror
-// (be-cursor-edit-guard.mjs), so the two platforms enforce one set.
+// instant denial at the keystroke. The rules (R1 worker getRequestDatabase, R2 `../` import under
+// src/, R3 generated file, R4 removed NODE_ENV value) live in _be-guard-rules.mjs, shared with the
+// Cursor mirror (be-cursor-edit-guard.mjs), so the two platforms enforce one set.
 //
 // Fails OPEN: any read or parse error allows the edit. A hook bug must never brick a session.
 import { isInsideRepository, readHookPayload, writePermissionDecision } from "./_be-hook.mjs";

@@ -593,6 +593,10 @@ export interface DemoMedicine {
   composition: string;
   manufacturer: DemoManufacturerKey;
   isPrescriptionOnly: boolean;
+  /** The GST HSN code a bill line prints. */
+  hsnCode: string;
+  /** The pack as printed — a bill line snapshots it. */
+  packLabel: string;
   /** Rupees per pack, GST inside — what a sale bills. */
   mrp: number;
   /** Medicines carry 5% (the GST rates since September 2025); skin-care products 18%. */
@@ -624,6 +628,8 @@ export const DEMO_MEDICINES: readonly DemoMedicine[] = [
     composition: 'Broad-spectrum sunscreen, SPF 50 PA+++',
     manufacturer: 'sunPharma',
     isPrescriptionOnly: false,
+    hsnCode: '33049990',
+    packLabel: '50GM',
     mrp: 695,
     gstPercent: 18,
     minStock: 4,
@@ -639,6 +645,8 @@ export const DEMO_MEDICINES: readonly DemoMedicine[] = [
     composition: 'Broad-spectrum sunscreen, SPF 50+',
     manufacturer: 'fixderma',
     isPrescriptionOnly: false,
+    hsnCode: '33049990',
+    packLabel: '75GM',
     mrp: 799,
     gstPercent: 18,
     minStock: 4,
@@ -654,6 +662,8 @@ export const DEMO_MEDICINES: readonly DemoMedicine[] = [
     composition: 'Adapalene 0.1% w/w',
     manufacturer: 'galderma',
     isPrescriptionOnly: true,
+    hsnCode: '30049099',
+    packLabel: '15GM',
     mrp: 433,
     gstPercent: 5,
     minStock: 3,
@@ -669,6 +679,8 @@ export const DEMO_MEDICINES: readonly DemoMedicine[] = [
     composition: 'Tretinoin 0.025% w/w',
     manufacturer: 'johnson',
     isPrescriptionOnly: true,
+    hsnCode: '30049099',
+    packLabel: '20GM',
     mrp: 365,
     gstPercent: 5,
     minStock: 3,
@@ -685,6 +697,8 @@ export const DEMO_MEDICINES: readonly DemoMedicine[] = [
     composition: 'Minoxidil 5% w/v',
     manufacturer: 'drReddys',
     isPrescriptionOnly: true,
+    hsnCode: '30049099',
+    packLabel: '60ML',
     mrp: 799,
     gstPercent: 5,
     minStock: 3,
@@ -700,6 +714,8 @@ export const DEMO_MEDICINES: readonly DemoMedicine[] = [
     composition: 'Minoxidil 5% w/v',
     manufacturer: 'cipla',
     isPrescriptionOnly: true,
+    hsnCode: '30049099',
+    packLabel: '60ML',
     mrp: 745,
     gstPercent: 5,
     minStock: 2,
@@ -715,6 +731,8 @@ export const DEMO_MEDICINES: readonly DemoMedicine[] = [
     composition: 'Isotretinoin 20 mg',
     manufacturer: 'cipla',
     isPrescriptionOnly: true,
+    hsnCode: '30049099',
+    packLabel: '1*10',
     mrp: 285,
     gstPercent: 5,
     minStock: 4,
@@ -730,6 +748,8 @@ export const DEMO_MEDICINES: readonly DemoMedicine[] = [
     composition: 'Soap-free cleanser for sensitive skin',
     manufacturer: 'galderma',
     isPrescriptionOnly: false,
+    hsnCode: '34013090',
+    packLabel: '125ML',
     mrp: 499,
     gstPercent: 18,
     minStock: 3,
@@ -745,6 +765,8 @@ export const DEMO_MEDICINES: readonly DemoMedicine[] = [
     composition: 'Glycerin, petrolatum and sweet almond oil',
     manufacturer: 'galderma',
     isPrescriptionOnly: false,
+    hsnCode: '33049990',
+    packLabel: '80GM',
     mrp: 545,
     gstPercent: 18,
     minStock: 3,
@@ -760,6 +782,8 @@ export const DEMO_MEDICINES: readonly DemoMedicine[] = [
     composition: 'Clotrimazole 1% w/w',
     manufacturer: 'glenmark',
     isPrescriptionOnly: false,
+    hsnCode: '30049099',
+    packLabel: '100GM',
     mrp: 165,
     gstPercent: 5,
     minStock: 4,
@@ -775,6 +799,8 @@ export const DEMO_MEDICINES: readonly DemoMedicine[] = [
     composition: 'Mometasone furoate 0.1% w/w',
     manufacturer: 'glenmark',
     isPrescriptionOnly: true,
+    hsnCode: '30049099',
+    packLabel: '15GM',
     mrp: 232,
     gstPercent: 5,
     minStock: 3,
@@ -790,6 +816,8 @@ export const DEMO_MEDICINES: readonly DemoMedicine[] = [
     composition: 'Ketoconazole 2% w/v',
     manufacturer: 'johnson',
     isPrescriptionOnly: false,
+    hsnCode: '33051090',
+    packLabel: '100ML',
     mrp: 389,
     gstPercent: 5,
     minStock: 2,

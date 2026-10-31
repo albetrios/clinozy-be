@@ -41,6 +41,7 @@ export interface InvoiceItemReadRow {
   name: string;
   description: string | null;
   pack_size: string | null;
+  hsn_code: string | null;
   quantity: number;
   rate: string;
   discount_percent: string;
@@ -65,6 +66,7 @@ export interface InvoiceItemWriteRow {
   name: string;
   description: string | null;
   pack_size: string | null;
+  hsn_code: string | null;
   quantity: number;
   rate: string;
   discount_percent: string;
@@ -123,6 +125,7 @@ export class InvoicesRepository extends BaseRecordRepository {
         name: invoice_items.name,
         description: invoice_items.description,
         pack_size: invoice_items.pack_size,
+        hsn_code: invoice_items.hsn_code,
         quantity: invoice_items.quantity,
         rate: invoice_items.rate,
         discount_percent: invoice_items.discount_percent,
@@ -185,6 +188,7 @@ export class InvoicesRepository extends BaseRecordRepository {
         name: invoice_items.name,
         description: invoice_items.description,
         pack_size: invoice_items.pack_size,
+        hsn_code: invoice_items.hsn_code,
         quantity: invoice_items.quantity,
         rate: invoice_items.rate,
         discount_percent: invoice_items.discount_percent,

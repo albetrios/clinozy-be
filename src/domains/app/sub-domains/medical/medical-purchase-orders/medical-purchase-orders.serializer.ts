@@ -24,6 +24,7 @@ export function serializeMedicalPurchaseOrder({
       gst_number: null,
     },
     supplier_bill_number: (row.supplier_bill_number as string | null) ?? null,
+    note: (row.note as string | null) ?? null,
     order_date: row.order_date as string,
     stage: row.stage as string,
     received_at: toInstant(row.received_at),

@@ -21,6 +21,9 @@ export interface SeedInvoiceLine {
   name: string;
   /** The line's free text, printed under its name. */
   description?: string;
+  /** A medicine line's snapshots — its pack label and HSN code. */
+  pack_size?: string;
+  hsn_code?: string;
   quantity: number;
   /** Per unit, in rupees. */
   rate: number;
@@ -103,6 +106,8 @@ export async function seedInvoice(
         batch_number: line.batch_number,
         name: line.name,
         description: line.description,
+        pack_size: line.pack_size,
+        hsn_code: line.hsn_code,
         quantity: line.quantity,
         rate: line.rate.toFixed(2),
         discount_percent: line.discount_percent.toFixed(2),
