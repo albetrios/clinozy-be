@@ -11,6 +11,9 @@ import { generateTestToken } from '@/tests/helpers/test-auth.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 import { auth_methods } from '@/domains/auth/sub-domains/auth-method/auth-method.schema.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
+import { users } from '@/domains/user/user.schema.js';
+import { MAX_PASSWORD_STEP_UP_ATTEMPTS } from '@/shared/constants/security.constants.js';
+import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
 describe('Auth Method Sub-Domain — Integration', () => {
@@ -136,6 +139,42 @@ describe('Auth Method Sub-Domain — Integration', () => {
         token,
       });
       expect(remove.statusCode, remove.body).toBe(204);
+    });
+  });
+
+  describe('POST /api/v1/auth/step-up — password attempt budget (A-3)', () => {
+    it('counts wrong passwords toward the login lockout and signs the session out once the budget is spent', async () => {
+      const { user } = await createTestUserWithPassword();
+      const token = await generateTestToken({ userId: user.public_id });
+      const stepUp = () =>
+        injectAuthenticated(app, {
+          method: 'POST',
+          url: testApiPath('/auth/step-up'),
+          token,
+          payload: { password: 'Not-The-Password-1!' },
+        });
+
+      for (let attempt = 1; attempt < MAX_PASSWORD_STEP_UP_ATTEMPTS; attempt += 1) {
+        const wrong = await stepUp();
+        expect(wrong.statusCode, wrong.body).toBe(401);
+      }
+      const [counted] = await getOperatorDatabase()
+        .select({ failedLoginCount: users.failed_login_count })
+        .from(users)
+        .where(eq(users.id, user.id));
+      expect(counted?.failedLoginCount).toBe(MAX_PASSWORD_STEP_UP_ATTEMPTS - 1);
+
+      const spent = await stepUp();
+      expect(spent.statusCode, spent.body).toBe(401);
+      expect(spent.body).toContain('signed out');
+
+      // The session that spent the budget no longer authenticates.
+      const afterwards = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/auth/me/auth-methods'),
+        token,
+      });
+      expect(afterwards.statusCode, afterwards.body).toBe(401);
     });
   });
 });

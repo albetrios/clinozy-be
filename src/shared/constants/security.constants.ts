@@ -55,6 +55,21 @@ export const MAX_WEBAUTHN_CREDENTIALS_PER_USER = 20;
 export const ACCOUNT_LOCKOUT_MINUTES = 30;
 
 /**
+ * Password step-up attempts (`POST /auth/step-up` with a password) one user may make in a
+ * {@link PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS} window.
+ *
+ * @remarks
+ * A-3 — the step-up re-verifies the password of a caller who already holds a session, so without
+ * a budget a stolen session is an unlimited online password oracle. Each wrong password also
+ * counts toward {@link MAX_FAILED_LOGIN_ATTEMPTS}, and the session that spends the budget is
+ * revoked.
+ */
+export const MAX_PASSWORD_STEP_UP_ATTEMPTS = 5;
+
+/** Fixed window of the per-user password step-up budget ({@link MAX_PASSWORD_STEP_UP_ATTEMPTS}). */
+export const PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS = 15 * 60;
+
+/**
  * Maximum concurrent active (non-revoked, non-expired) sessions per user.
  *
  * @remarks

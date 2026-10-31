@@ -24,6 +24,7 @@
   "recentStepUpRequired": "Recent step-up authentication is required for this action",
   "strongStepUpRequired": "This action requires a recent step-up with your password or MFA; an email-code step-up is not sufficient.",
   "passwordStepUpRequired": "Step up with your password for this action; email-code step-up is only available to accounts with no password and no MFA.",
+  "stepUpAttemptsExhausted": "Too many incorrect passwords. You have been signed out; sign in again to continue.",
   "originNotAllowed": "Request origin is not allowed for this operation.",
   "invalidRefererOrigin": "Referer header is missing or invalid for this operation.",
   "invalidCsrfToken": "CSRF token is missing or invalid for this operation.",

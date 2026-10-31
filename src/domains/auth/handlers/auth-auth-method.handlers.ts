@@ -139,10 +139,17 @@ export function createAuthAuthMethodHandlers({
     stepUp: async (request: FastifyRequest, _reply: FastifyReply) => {
       const auth = requireAuth(request);
       const parsed = validateStepUpVerify(request.body);
+      // Step-up sentinel is per-(user, session) (sec-A2); fail closed if session id is missing —
+      // before any attempt is counted, since a spent password budget revokes this session (A-3).
+      const sessionPublicId = auth.sessionPublicId;
+      if (!sessionPublicId) {
+        throw new ForbiddenError('errors:recentStepUpRequired');
+      }
       let factor: StepUpFactor;
       if ('password' in parsed) {
         await authMethodService.verifyPasswordForStepUp({
           userPublicId: auth.userId,
+          sessionPublicId,
           password: parsed.password,
         });
         factor = 'password';
@@ -157,14 +164,10 @@ export function createAuthAuthMethodHandlers({
         });
         factor = 'email_code';
       }
-      // Step-up sentinel is per-(user, session) (sec-A2); fail closed if session id is missing.
-      if (!auth.sessionPublicId) {
-        throw new ForbiddenError('errors:recentStepUpRequired');
-      }
       await recordRecentStepUp({
         redis: redisConnection,
         userPublicId: auth.userId,
-        sessionPublicId: auth.sessionPublicId,
+        sessionPublicId,
         factor,
       });
       await recordScopedAuditEvent({

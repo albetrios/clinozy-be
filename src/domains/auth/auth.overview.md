@@ -26,6 +26,7 @@ What it does not own: user profile (lives in [user](src/domains/user/)), organiz
 - **Login default organization**: every issuance path (and the refresh fallback when a session's organization is no longer valid) mints the token for `resolveDefaultActiveOrganizationPublicId` — the clinic the user pinned (`auth.user_settings.default_organization_id`, through `PATCH /users/me/settings`), else the clinic they last switched to (`auth.users.last_active_organization_id`, remembered by `POST /auth/switch-to-organization`, best-effort and only when it changes) while that membership is active, else the most recently joined clinic, else the personal organization. With TEAM organizations disabled the personal organization stays first. A clinic beats the personal workspace because the frontend answers a personal workspace with the organization picker.
 - **Short JWT lifetime**: `ACCESS_TOKEN_EXPIRY_SECONDS = 900` (15 min). Refresh requires the Origin-checked session cookie.
 - **Lockout**: `MAX_FAILED_LOGIN_ATTEMPTS = 10` per account; locks for `ACCOUNT_LOCKOUT_MINUTES = 30`. The lock is checked after password verification, so a correct password always bypasses it (no victim-account DoS); it only rejects further wrong attempts. Online brute force is bounded by the per-IP + per-email rate limits and CAPTCHA on `/login`.
+- **Password step-up budget** (A-3): `POST /auth/step-up` with a password is counted up front against `MAX_PASSWORD_STEP_UP_ATTEMPTS = 5` per user per `PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS` (15 min); each wrong password also counts toward the login lockout above, and the session that spends the budget is revoked (`errors:stepUpAttemptsExhausted`). A correct password clears the budget.
 - **No manual OAuth identity binding**: `POST` auth-method create rejects `provider: manual` with a client-supplied provider identity — only OAuth completion paths may attach provider subjects, preventing account takeover via forged provider linkage.
 
 ## Sub-domains
@@ -99,3 +100,5 @@ See [src/POLICIES.md](src/POLICIES.md) for the full rationale of each:
 - `SESSION_TOKEN_CACHE_TTL_SECONDS = 60`
 - `MAX_FAILED_LOGIN_ATTEMPTS = 10`
 - `ACCOUNT_LOCKOUT_MINUTES = 30`
+- `MAX_PASSWORD_STEP_UP_ATTEMPTS = 5`
+- `PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS = 900`

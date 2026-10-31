@@ -7,7 +7,14 @@ import {
   UnauthorizedError,
   ValidationError,
 } from '@/shared/errors/index.js';
-import { MAX_LINKED_AUTH_METHODS_PER_USER } from '@/shared/constants/security.constants.js';
+import {
+  ACCOUNT_LOCKOUT_MINUTES,
+  MAX_FAILED_LOGIN_ATTEMPTS,
+  MAX_LINKED_AUTH_METHODS_PER_USER,
+  MAX_PASSWORD_STEP_UP_ATTEMPTS,
+  PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS,
+} from '@/shared/constants/security.constants.js';
+import { incrementWithExpiryOnFirst } from '@/shared/utils/infrastructure/redis-counter.util.js';
 import type { Redis } from 'ioredis';
 import { isDisposableEmailBlocked } from '@/shared/utils/text/email.util.js';
 import { enforceMinimumDuration } from '@/shared/utils/security/anti-enumeration.util.js';
@@ -50,6 +57,9 @@ const PASSWORD_RESET_EXPIRES_IN_MINUTES = 60;
 
 /** Redis key prefix for the per-email password-reset send cooldown (anti-mail-bomb spacing). */
 const PASSWORD_RESET_COOLDOWN_KEY_PREFIX = 'auth:password_reset_cooldown:';
+
+/** Redis key prefix for the per-user (public id) password step-up attempt budget (A-3). */
+const PASSWORD_STEP_UP_ATTEMPT_KEY_PREFIX = 'auth:password_step_up_attempts:';
 
 /**
  * Auth-method types that can mint a session on their own (sec-A5). Used by
@@ -638,10 +648,10 @@ export class AuthMethodService {
   }
 
   /**
-   * Re-verifies the caller's password for a step-up ("sudo") re-authentication, without
-   * mutating any state. Used by `POST /auth/step-up` so password users can open a short
-   * recent-step-up window before a sensitive credential mutation. Throws on a missing user,
-   * a passwordless account, or an incorrect password.
+   * Re-verifies the caller's password for a step-up ("sudo") re-authentication. Used by
+   * `POST /auth/step-up` so password users can open a short recent-step-up window before a
+   * sensitive credential mutation. Throws on a missing user, a passwordless account, an incorrect
+   * password, or a spent attempt budget.
    *
    * @remarks
    * MFA-enabled users are rejected with `ForbiddenError('errors:mfaStepUpRequired')` BEFORE
@@ -651,19 +661,71 @@ export class AuthMethodService {
    * stolen bearer into permanent password-only access. MFA users must step up via
    * `/auth/me/mfa/verify` (which records the same recent-step-up sentinel). The check fires
    * before `verifyPassword` to avoid a password-timing oracle for MFA users (sec-A1).
+   *
+   * A-3 — each attempt is counted up front against a per-user budget
+   * ({@link MAX_PASSWORD_STEP_UP_ATTEMPTS} per {@link PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS}),
+   * so concurrent guesses cannot overspend it; a wrong password also counts toward the login
+   * lockout ({@link UserService.registerFailedLoginAttempt}); the session that spends the budget is
+   * revoked (`errors:stepUpAttemptsExhausted`). A correct password clears the budget.
    */
   async verifyPasswordForStepUp(options: {
     userPublicId: string;
+    sessionPublicId: string;
     password: string;
   }): Promise<void> {
-    const { userPublicId, password } = options;
+    const { userPublicId, sessionPublicId, password } = options;
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
     if (user.is_mfa_enabled) {
       throw new ForbiddenError('errors:mfaStepUpRequired');
     }
     if (!user.password_hash) throw new UnauthorizedError('errors:passwordAuthNotEnabled');
+    const attemptKey = `${PASSWORD_STEP_UP_ATTEMPT_KEY_PREFIX}${user.public_id}`;
+    const attempts = await incrementWithExpiryOnFirst({
+      redis: this.redis,
+      key: attemptKey,
+      ttlSeconds: PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS,
+    });
+    if (attempts > MAX_PASSWORD_STEP_UP_ATTEMPTS) {
+      await this.revokeSessionAfterSpentStepUpBudget({ userPublicId, sessionPublicId });
+    }
     const { valid } = await verifyPassword({ plaintext: password, storedHash: user.password_hash });
-    if (!valid) throw new UnauthorizedError('errors:currentPasswordIncorrect');
+    if (!valid) {
+      await this.userService.registerFailedLoginAttempt({
+        public_id: user.public_id,
+        options: {
+          maxAttempts: MAX_FAILED_LOGIN_ATTEMPTS,
+          lockoutMinutes: ACCOUNT_LOCKOUT_MINUTES,
+        },
+      });
+      if (attempts === MAX_PASSWORD_STEP_UP_ATTEMPTS) {
+        await this.revokeSessionAfterSpentStepUpBudget({ userPublicId, sessionPublicId });
+      }
+      throw new UnauthorizedError('errors:currentPasswordIncorrect');
+    }
+    await this.redis.del(attemptKey);
+  }
+
+  /**
+   * Ends the session that spent the password step-up budget (A-3) and refuses the attempt.
+   * An already-revoked session is not an error.
+   */
+  private async revokeSessionAfterSpentStepUpBudget({
+    userPublicId,
+    sessionPublicId,
+  }: {
+    userPublicId: string;
+    sessionPublicId: string;
+  }): Promise<never> {
+    logger.warn(
+      { user_public_id: userPublicId, session_public_id: sessionPublicId },
+      'auth.step_up.password_attempts_exhausted',
+    );
+    try {
+      await this.authSessionService.revoke({ userPublicId, sessionPublicId });
+    } catch (error) {
+      if (!(error instanceof NotFoundError)) throw error;
+    }
+    throw new UnauthorizedError('errors:stepUpAttemptsExhausted');
   }
 }
