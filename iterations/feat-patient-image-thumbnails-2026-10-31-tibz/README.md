@@ -9,7 +9,7 @@
 | Opened | 2026-10-31 |
 | Branch | feat/patient-image-thumbnails |
 | Baseline | none |
-| Status | implementing |
+| Status | frozen |
 | Summary | Patient photo grids load a 320 px WebP thumbnail made by a background job; the opened photo stays full size |
 | Drop placed | 2026-10-31 |
 | Drop source | /tmp/claude-0/-home-user-clinozy-be/0d073a64-bb15-547a-ac00-bd77d87451a9/scratchpad/brief |
@@ -23,3 +23,5 @@
 - 2026-10-31 · planning → ready-for-approval · — · Claude
 - 2026-10-31 · ready-for-approval → approved · — · Claude
 - 2026-10-31 · approved → implementing · — · Claude
+- 2026-10-31 · implementing → done · — · Claude
+- 2026-10-31 · done → frozen · — · Claude

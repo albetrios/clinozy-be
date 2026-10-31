@@ -1,0 +1,33 @@
+# feat-patient-image-thumbnails-2026-10-31-tibz — as built
+
+Baseline: none · KICKOFF.md approved 2026-10-31 ([PT17](plans/decisions.md)) · branch `feat/patient-image-thumbnails`
+
+## Rows
+
+| # | Planned | Actually built | Difference | Why | Decision | Commit |
+| --- | --- | --- | --- | --- | --- | --- |
+| #1 | ROUTE 1 — upload thumbnail capability + `sharp` | `sharp@^0.35.5` (no install script, so no `allowBuilds` entry). `src/domains/upload/utils/upload-thumbnail.util.ts`: `createImageThumbnail` (`rotate()` by EXIF, `resize` 320 inside, no enlargement, `webp` q80, metadata dropped; an undecodable source throws `UploadThumbnailSourceError`) and `buildThumbnailObjectKey` (`<key without extension>.thumb.webp`). `UPLOAD_PURPOSE_CONFIG[…].thumbnailTypes` — `organization-file` opts in JPEG/PNG/WebP, the other purposes none. `UploadService.createThumbnail` / `deleteThumbnail` / `createThumbnailReadUrls` — no database access; each checks the key sits under an opted-in organization purpose's `<prefix>/<organization public id>/` (and `..`-free; the thumbnail suffix for delete/sign). Docker: both build stages copy `@img/sharp-linux*` + `@img/sharp-libvips-linux*` (dereferenced) and both runtimes copy them into `node_modules/@img`, keeping `--no-optional`. Audit: `@hono/node-server` lifted to 2.1.3 and the dev-only minimatch advisory waived with its reason (main's #182 brought the same glob override, kept once). **Verified:** `upload-thumbnail.util.unit.test.ts` (6: 1600×800 → 320×160 WebP with no EXIF/ICC; orientation 6 → 160×320; 120×90 not enlarged; garbage refused; the key builder) and `upload.service.thumbnail.unit.test.ts` (13); both production images built locally (`docker build … --target worker` / `--target api`) and `require('sharp')` inside each made a WebP: `sharp 0.35.5 vips 8.18.7` | the local image build skipped the runtime's `apk upgrade` (scratch copy only) | the sandbox's network policy answers 403 for the Alpine CDN; the step does not touch `node_modules` | PT2–PT4, PT12, PT14, PT15 | `20852b7`, `d00fb72` |
+| #2 | ROUTE 2 — `thumbnail_key`, the queue, worker, sweep and the rules' enqueue | Migration `20261031041630_patient_images_thumbnail_key.sql` (nullable `varchar(512)`, RLS unchanged), the schema column, DBML. `queues/patient-image-thumbnail.{queue,job.schema}.ts` (`{ organizationPublicId, patientImagePublicId }` + trace; 5 attempts, 30 s exponential + jitter; `deduplication { id: patient-image-thumbnail-<id>, keepLastIfActive }` + unique `jobId`); `workers/patient-image-thumbnail.{worker,processor,constants}.ts` + `patient-image-thumbnail-reconcile.processor.ts` (provider-pausable on `s3`, concurrency 1; read in a short organization context → S3 outside → compare-and-set write in a second context; the sweep rides the queue as `reconcile-patient-image-thumbnails`, every 15 min, reads under `runGlobalRetentionWorkerJob`, adds after); `patient-image-thumbnail.repository.ts` (the job's read names the organization — the harness's organization-filter audit requires it). Registry (`retention`, scheduled, throughput), `WORKER_QUEUE_NAMES` + `WORKER_THROUGHPUT_QUEUE_NAMES`, `scheduler.ts`, the producer closed in `worker.ts` and the API's shutdown. `patient-images.rules.ts` `afterWrite`: create / delete / restore → `runEnqueueAfterCommit(requestPatientImageThumbnailSync)`. Docs: the counts in resource-limits (40 workers, 37 Postgres, peak 55), bull-board, workers-and-events, redis-topology. **Verified:** unit — queue (3), processor (7: storage calls outside any context), sweep (2); the registry and scheduler pins (40 / 34); `patient-image-thumbnail.integration.test.ts` (4: create → no thumbnail, fallback; job → key set, signed thumbnail link on GET and list, re-run is `in_sync`; delete → sweep sees it, job removes and clears; restore → made again) green, and green again as the RLS-subject role (`pnpm test:rls-role`) | the sweep is a second job name on the thumbnail queue, not its own queue | rules §7.2 — no worker or connection budget of its own | PT7–PT11 | `20852b7` |
+| #3 | ROUTE 3 — `thumbnail_url` on the image routes | Serializer + `PatientImageOutput`: `thumbnail_key`, `thumbnail_url`; `decorate` signs thumbnails through the new `thumbnailReadUrls` port (wired in `wireAppUploads`), falling back to `file_url`. Route descriptions (list, read, add, delete, restore), the OpenAPI response map (schema + example), both overviews. **Verified:** `patients.integration.test.ts` (a new photo: `thumbnail_key` null, `thumbnail_url == file_url`), the thumbnail integration test above; `pnpm docs:check`, `pnpm routes:catalog:check` (449, unchanged) | `thumbnail_key` is returned beside `file_key` | it is what `decorate` signs, and a client can tell a thumbnail from the fallback | PT5, PT19 | `20852b7` |
+| #4 | ROUTE 4 — the backfill | `src/scripts/ops/patient-image-thumbnails-backfill.ts` + `pnpm ops:patient-image-thumbnails-backfill [--apply] [--organization <org_…>]` (dry run by default; keyset over organizations, then each one's live photos without a thumbnail; one deduplicated job per photo); `docs/reference/commands.md`. **Verified:** a dry run on the local database (`organizationCount 0`); its two reads in the integration test (the organization and photo listed before, gone after the job). Not run against any hosted database | — | — | PT13 | `20852b7` |
+| #5 | ROUTE 5 — acceptance, the frontend map, the gates | `plans/acceptance.md` A-1 – A-7 pass; `plans/frontend-route-map.md` (§ 1, 2, 4 by hand, § 3 generated, `--check` green). **Gates:** `pnpm validate` ✓, `pnpm tsdoc:check` 0/0 ✓, `pnpm routes:catalog:check` ✓, `pnpm docs:check` ✓, `pnpm db:migrate:lint` ✓ (0 violations), `pnpm validate:domain` ✓, `pnpm validate:test-naming` ✓, `pnpm agent-os:check` ✓, `pnpm deps:audit` + `:prod` ✓, `pnpm test:global` 34 / 142 ✓, `pnpm test:unit` 764 / 6408 ✓, the touched e2e / integration suites 5 / 58 ✓, the pre-commit guard 24/24 ✓ | `pnpm ci:local` not run as a whole | the PR's CI runs the full suite | — | (this commit) |
+
+## Revisions to upcoming rows
+
+- PT18: clinozy-fe was attached mid-session; its same-named iteration builds the grids.
+
+## Summary
+
+- Planned, not built: none.
+- Built, not planned: the audit fixes on `main`'s tree (PT15).
+- Follow-ups: deploy the worker before the API reads `thumbnail_url` widely (the fallback covers
+  the gap); then run the backfill per environment (`--apply`), with the release owner's go —
+  never from this work.
+
+## Standing deviations
+
+Baseline `none` — none.
+
+| Item | Design says | Built as | Since iteration | Decision |
+| --- | --- | --- | --- | --- |
+| — | — | — | — | — |
