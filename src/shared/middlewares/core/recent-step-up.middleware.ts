@@ -43,14 +43,41 @@ export function requireRecentStepUpWhenBodyHas(
   field: string,
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const body = request.body;
-    if (!(body && typeof body === 'object')) return;
-    if ((body as Record<string, unknown>)[field] === undefined) return;
+    if (!bodyCarries({ request, field })) return;
     if (request.auth?.kind !== 'user') {
       throw new ForbiddenError('errors:recentStepUpRequired');
     }
     await requireRecentStepUpPreHandler(request, reply);
   };
+}
+
+/**
+ * PreHandler factory: {@link requireStrongRecentStepUpPreHandler}, but only when the request body
+ * carries `field` — for an admin edit whose `status` alone suspends an account (A-2) while the
+ * rest of the body is routine.
+ *
+ * @remarks
+ * - **Algorithm:** a body without `field` (or with it `undefined`) passes; otherwise a user must
+ *   hold a recent password or MFA step-up on this session. An API key can never step up.
+ * - **Failure modes:** `ForbiddenError('errors:strongStepUpRequired')`.
+ */
+export function requireStrongRecentStepUpWhenBodyHas(
+  field: string,
+): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (!bodyCarries({ request, field })) return;
+    if (request.auth?.kind !== 'user') {
+      throw new ForbiddenError('errors:strongStepUpRequired');
+    }
+    await requireStrongRecentStepUpPreHandler(request, reply);
+  };
+}
+
+/** Whether the parsed request body sets `field` (to anything but `undefined`). */
+function bodyCarries({ request, field }: { request: FastifyRequest; field: string }): boolean {
+  const body = request.body;
+  if (!(body && typeof body === 'object')) return false;
+  return (body as Record<string, unknown>)[field] !== undefined;
 }
 
 /**

@@ -4,7 +4,14 @@ import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectAuthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { createTestUser } from '@/tests/factories/user.factory.js';
-import { generateTestToken, generateTestTokenAndSession } from '@/tests/helpers/test-auth.js';
+import {
+  generateSuperAdminToken,
+  generateTestToken,
+  generateTestTokenAndSession,
+  makeTestUserSuperAdmin,
+} from '@/tests/helpers/test-auth.js';
+import { seedRecentStepUpForTestUser } from '@/tests/helpers/test-step-up.helper.js';
+import { MFA_AUTHENTICATION_METHOD } from '@/shared/utils/security/jwt.util.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { eq } from 'drizzle-orm';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
@@ -48,7 +55,7 @@ describe('User admin routes — happy paths', () => {
     // SUPER_ADMIN is re-derived per request from GLOBAL_ADMIN_EMAILS (sec-A6):
     // the actor's email must be allowlisted, ACTIVE, and verified.
     const admin = await createTestUser({ email: 'ops@example.com', isEmailVerified: true });
-    adminToken = await generateTestToken({ userId: admin.public_id, role: 'super_admin' });
+    adminToken = await generateSuperAdminToken(admin.public_id);
   });
 
   it('GET /users returns the paginated user list for an admin', async () => {
@@ -412,6 +419,86 @@ describe('User admin routes — happy paths', () => {
         token: targetToken,
       });
       expect(withOldSession.statusCode, withOldSession.body).toBe(401);
+    });
+  });
+
+  /**
+   * A-2: a platform admin on one factor could suspend or delete any account. The role needs an
+   * MFA-verified session, and the destructive admin routes a recent password or MFA step-up.
+   */
+  describe('platform admin needs a second factor (A-2)', () => {
+    it('refuses a super_admin whose session has not proved MFA', async () => {
+      // Takes over the allowlisted address from the beforeEach admin.
+      const admin = await createTestUser({ isEmailVerified: true });
+      await makeTestUserSuperAdmin(admin.public_id);
+      const singleFactorToken = await generateTestToken({
+        userId: admin.public_id,
+        role: 'super_admin',
+      });
+
+      const response = await injectAuthenticated(app, {
+        method: 'GET',
+        url: testApiPath('/users'),
+        token: singleFactorToken,
+      });
+
+      expect(response.statusCode, response.body).toBe(403);
+      expect((response.json() as { error: { reason?: string } }).error.reason).toBe('mfa_required');
+    });
+
+    it('delete, suspend and a status edit need a strong step-up; a name edit does not', async () => {
+      // Takes over the allowlisted address from the beforeEach admin.
+      const admin = await createTestUser({ isEmailVerified: true });
+      await makeTestUserSuperAdmin(admin.public_id);
+      const { token, sessionPublicId } = await generateTestTokenAndSession({
+        userId: admin.public_id,
+        role: 'super_admin',
+        authenticationMethods: [MFA_AUTHENTICATION_METHOD],
+      });
+      const target = await createTestUser({ email: 'step-up-target@example.com' });
+      const attempts = [
+        { method: 'DELETE' as const, url: `/users/${target.public_id}` },
+        { method: 'POST' as const, url: `/users/${target.public_id}/suspend` },
+        {
+          method: 'PATCH' as const,
+          url: `/users/${target.public_id}`,
+          payload: { status: 'SUSPENDED' },
+        },
+      ];
+
+      for (const attempt of attempts) {
+        const refused = await injectAuthenticated(app, {
+          ...attempt,
+          url: testApiPath(attempt.url),
+          token,
+        });
+        expect(refused.statusCode, `${attempt.method} ${attempt.url}: ${refused.body}`).toBe(403);
+      }
+
+      // An email-code window is not strong enough.
+      await seedRecentStepUpForTestUser(admin.public_id, sessionPublicId, 'email_code');
+      const weak = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/users/${target.public_id}/suspend`),
+        token,
+      });
+      expect(weak.statusCode, weak.body).toBe(403);
+
+      const rename = await injectAuthenticated(app, {
+        method: 'PATCH',
+        url: testApiPath(`/users/${target.public_id}`),
+        token,
+        payload: { first_name: 'Renamed' },
+      });
+      expect(rename.statusCode, rename.body).toBe(200);
+
+      await seedRecentStepUpForTestUser(admin.public_id, sessionPublicId, 'mfa');
+      const suspended = await injectAuthenticated(app, {
+        method: 'POST',
+        url: testApiPath(`/users/${target.public_id}/suspend`),
+        token,
+      });
+      expect(suspended.statusCode, suspended.body).toBe(200);
     });
   });
 });

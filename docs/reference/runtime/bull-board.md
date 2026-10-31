@@ -57,7 +57,7 @@ When a job exhausts retries, the worker enqueues a snapshot to **`<queue-name>-d
 
 ### Get a super_admin JWT
 
-For local/dev, sign in as a super_admin with the script. It needs an account whose email is on `GLOBAL_ADMIN_EMAILS`; create one with `DEMO_EMAIL=<admin email> pnpm db:seed:demo-admin`. Then, with the server running:
+For local/dev, sign in as a super_admin with the script. It needs an account whose email is on `GLOBAL_ADMIN_EMAILS`; create one with `DEMO_EMAIL=<admin email> pnpm db:seed:demo-admin`. A super_admin also needs an enrolled MFA factor and a session that proved it (A-2): a token from a password-only sign-in carries `user`, and a super_admin token without the MFA claim is refused with 403 `mfa_required`. `pnpm tool:admin-token` signs in with a password only, so it cannot complete that MFA step yet — enroll MFA for the admin account and sign in through `POST /auth/login` + `POST /auth/mfa/login` instead. Then, with the server running:
 
 ```bash
 pnpm tool:admin-token

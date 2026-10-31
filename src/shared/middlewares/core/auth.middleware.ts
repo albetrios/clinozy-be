@@ -68,6 +68,9 @@ async function rederiveSuperAdminRole({
   // closed for any non-active OR unverified account (defense in depth alongside the session-layer
   // status check).
   if (user.status !== 'ACTIVE' || !user.is_email_verified) return undefined;
+  // A-2: the minting side grants super_admin only with an enrolled MFA factor; a factor removed
+  // since the token was minted downgrades the claim here.
+  if (!user.is_mfa_enabled) return GLOBAL_ROLES.USER;
   const currentGlobalRole = resolveGlobalRoleForEmail(user.email);
   if (currentGlobalRole === GLOBAL_ROLES.SUPER_ADMIN) {
     return GLOBAL_ROLES.SUPER_ADMIN;

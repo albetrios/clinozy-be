@@ -302,6 +302,7 @@ export class MfaService {
       email: string;
       status: string;
       is_email_verified: boolean;
+      is_mfa_enabled: boolean;
     };
     ipAddress: string;
     userAgent?: string | undefined;
@@ -317,6 +318,7 @@ export class MfaService {
         email: user.email,
         status: user.status,
         isEmailVerified: user.is_email_verified,
+        isMfaEnabled: user.is_mfa_enabled,
       }),
       organizationPublicId,
       // The second factor was just verified: the session is MFA-assured from the start, so

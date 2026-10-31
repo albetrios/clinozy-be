@@ -355,7 +355,7 @@ The same signals are observable live via `GET /readyz` (verbose), `GET /metrics`
 ### 7. Admin
 
 - **File**: `src/tests/load/k6/scenarios/admin.js`
-- **Auth**: A `super_admin` session. Sign-in grants that role only to an email on `GLOBAL_ADMIN_EMAILS`; `pnpm tool:admin-token` signs in as one (see below).
+- **Auth**: A `super_admin` session. Sign-in grants that role only to an email on `GLOBAL_ADMIN_EMAILS` whose account has an enrolled MFA factor, and only a session that proved the second factor may use it (A-2); `pnpm tool:admin-token` signs in as one (see below) but does not complete the MFA step yet, so the admin scenarios need a token from an MFA sign-in.
 - **Env**: `ADMIN_TOKEN` (required)
 - **Run**: `pnpm load:admin` with `ADMIN_TOKEN`, or `ADMIN_TOKEN=<token> k6 run src/tests/load/k6/scenarios/admin.js`. Obtain token via: `pnpm tool:admin-token` (see below).
 

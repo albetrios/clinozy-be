@@ -39,13 +39,14 @@ describe('global-admin-role.util', () => {
     expect(resolveGlobalRoleForEmail('admin@example.com')).toBeUndefined();
   });
 
-  it('resolveAccessTokenRoleForUser elevates allowlisted ACTIVE + verified email to super_admin', () => {
+  it('resolveAccessTokenRoleForUser elevates allowlisted ACTIVE + verified + MFA-enrolled email to super_admin', () => {
     mockEnv.GLOBAL_ADMIN_EMAILS = 'admin@example.com';
     expect(
       resolveAccessTokenRoleForUser({
         email: 'admin@example.com',
         status: 'ACTIVE',
         isEmailVerified: true,
+        isMfaEnabled: true,
       }),
     ).toBe(GLOBAL_ROLES.SUPER_ADMIN);
   });
@@ -57,6 +58,7 @@ describe('global-admin-role.util', () => {
         email: 'admin@example.com',
         status: 'ACTIVE',
         isEmailVerified: false,
+        isMfaEnabled: true,
       }),
     ).toBe(GLOBAL_ROLES.USER);
   });
@@ -68,6 +70,7 @@ describe('global-admin-role.util', () => {
         email: 'admin@example.com',
         status: 'SUSPENDED',
         isEmailVerified: true,
+        isMfaEnabled: true,
       }),
     ).toBeUndefined();
   });
@@ -78,6 +81,7 @@ describe('global-admin-role.util', () => {
         email: 'user@example.com',
         status: 'ACTIVE',
         isEmailVerified: true,
+        isMfaEnabled: true,
       }),
     ).toBe(GLOBAL_ROLES.USER);
   });
@@ -88,7 +92,20 @@ describe('global-admin-role.util', () => {
         email: 'user@example.com',
         status: 'SUSPENDED',
         isEmailVerified: true,
+        isMfaEnabled: true,
       }),
     ).toBeUndefined();
+  });
+
+  it('A-2: resolveAccessTokenRoleForUser never grants super_admin to an account without an enrolled MFA factor', () => {
+    mockEnv.GLOBAL_ADMIN_EMAILS = 'admin@example.com';
+    expect(
+      resolveAccessTokenRoleForUser({
+        email: 'admin@example.com',
+        status: 'ACTIVE',
+        isEmailVerified: true,
+        isMfaEnabled: false,
+      }),
+    ).toBe(GLOBAL_ROLES.USER);
   });
 });

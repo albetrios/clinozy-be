@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { env } from '@/shared/config/env.config.js';
 import { sessionExpiresAtFromNow } from '@/domains/auth/sub-domains/auth-session/session-lifetime.js';
-import { signAccessToken } from '@/shared/utils/security/jwt.util.js';
+import { MFA_AUTHENTICATION_METHOD, signAccessToken } from '@/shared/utils/security/jwt.util.js';
 import { AuthSessionRepository } from '@/domains/auth/sub-domains/auth-session/auth-session.repository.js';
 import {
   PRINCIPAL_SCOPE,
@@ -92,6 +92,8 @@ async function alignUserWithSuperAdminAllowlist(userPublicId: string): Promise<v
       email: superAdminEmail,
       email_hash: createHash('sha256').update(superAdminEmail).digest('hex'),
       is_email_verified: true,
+      // A-2: super_admin is granted only to an account with an enrolled MFA factor.
+      is_mfa_enabled: true,
       status: 'ACTIVE',
     })
     .where(eq(users.public_id, userPublicId));
@@ -145,11 +147,15 @@ export async function generateTestTokenAndSession(options: {
   userId: string;
   role?: string;
   organizationPublicId?: string;
+  authenticationMethods?: string[];
 }): Promise<{ token: string; sessionPublicId: string }> {
   const token = await signAccessToken({
     userId: options.userId,
     role: options.role ?? 'user',
     ...(options.organizationPublicId ? { organizationPublicId: options.organizationPublicId } : {}),
+    ...(options.authenticationMethods
+      ? { authenticationMethods: options.authenticationMethods }
+      : {}),
   });
   const sessionPublicId = await persistActiveSessionForToken(options.userId, token);
   if (!sessionPublicId) {
@@ -162,10 +168,28 @@ export async function generateTestTokenAndSession(options: {
 
 /**
  * Generate a test token for a super admin user.
+ *
+ * @remarks A-2: the account gets an enrolled MFA factor, the token's session has proved it
+ * (`amr: ['mfa']`, which `requireRole` demands of a super_admin) and holds a recent password
+ * step-up (the admin delete / suspend routes demand a strong one). A test of either refusal mints
+ * its own token with {@link generateTestToken}.
  */
 export async function generateSuperAdminToken(userId = 'test-super-admin'): Promise<string> {
   await alignUserWithSuperAdminAllowlist(userId);
-  return generateTestToken({ userId, role: 'super_admin' });
+  return generateTestToken({
+    userId,
+    role: 'super_admin',
+    authenticationMethods: [MFA_AUTHENTICATION_METHOD],
+    stepUp: true,
+  });
+}
+
+/**
+ * Makes `userPublicId` the allowlisted platform admin (verified, ACTIVE, MFA enrolled) without
+ * minting a token — for a test that needs a super_admin token of a particular shape.
+ */
+export async function makeTestUserSuperAdmin(userPublicId: string): Promise<void> {
+  await alignUserWithSuperAdminAllowlist(userPublicId);
 }
 
 /**

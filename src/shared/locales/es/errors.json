@@ -334,6 +334,7 @@
   "mfaOnlyTotpSupported": "Solo se admite MFA_TOTP",
   "mfaEnrollExpired": "La inscripción en MFA ha caducado o no se inició. Reinicia el flujo de inscripción.",
   "insufficientRolePrivileges": "Privilegios de rol insuficientes",
+  "superAdminRequiresMfa": "La administración de la plataforma requiere una sesión verificada con autenticación multifactor. Vuelve a iniciar sesión con tu segundo factor.",
   "organizationContextRequired": "Contexto de organización requerido",
   "insufficientOrganizationPermissions": "Permisos de organización insuficientes",
   "organizationRequiresMfa": "Esta organización requiere autenticación multifactor. Verifica con tu segundo factor y vuelve a intentarlo.",

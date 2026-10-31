@@ -78,6 +78,7 @@ export async function completeFirstFactorAuth(options: {
       email: options.user.email,
       status: options.user.status,
       isEmailVerified: options.user.is_email_verified,
+      isMfaEnabled: options.user.is_mfa_enabled,
     }),
     organizationPublicId,
   });

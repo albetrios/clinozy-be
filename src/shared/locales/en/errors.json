@@ -334,6 +334,7 @@
   "mfaOnlyTotpSupported": "Only MFA_TOTP is supported",
   "mfaEnrollExpired": "MFA enrollment has expired or was not started. Please restart the enrollment flow.",
   "insufficientRolePrivileges": "Insufficient role privileges",
+  "superAdminRequiresMfa": "Platform administration requires a session verified with multi-factor authentication. Sign in again with your second factor.",
   "organizationContextRequired": "Organization context required",
   "insufficientOrganizationPermissions": "Insufficient organization permissions",
   "organizationRequiresMfa": "This organization requires multi-factor authentication. Verify with your second factor, then try again.",

@@ -61,7 +61,35 @@ describe('auth.middleware — super_admin per-request re-derive (sec-A6)', () =>
       email: 'admin@example.com',
       status: 'ACTIVE',
       is_email_verified: true,
+      is_mfa_enabled: true,
     });
+  });
+
+  it('A-2: downgrades a SUPER_ADMIN JWT to USER once the account has no enrolled MFA factor', async () => {
+    vi.mocked(resolveGlobalRoleForEmail).mockReturnValue(GLOBAL_ROLES.SUPER_ADMIN);
+    findUserRecordByPublicId.mockResolvedValue({
+      id: 1,
+      public_id: 'user_pub',
+      email: 'admin@example.com',
+      status: 'ACTIVE',
+      is_email_verified: true,
+      is_mfa_enabled: false,
+    });
+    await setup();
+    const accessToken = await signAccessToken({
+      userId: generatePublicId('user'),
+      role: GLOBAL_ROLES.SUPER_ADMIN,
+    });
+
+    const response = await application.inject({
+      method: 'GET',
+      url: '/protected',
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect((response.json() as { role?: string }).role).toBe(GLOBAL_ROLES.USER);
+    await application.close();
   });
 
   it('downgrades a SUPER_ADMIN JWT to USER when the email is no longer in GLOBAL_ADMIN_EMAILS', async () => {
