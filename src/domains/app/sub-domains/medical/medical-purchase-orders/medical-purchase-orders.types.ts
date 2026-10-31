@@ -9,7 +9,14 @@ export interface MedicalPurchaseOrderItemOutput {
   rate: number;
   /** The MRP printed on the line's packs — the batch it fills takes it. */
   mrp: number | null;
+  /** Now `taxable_amount + gst_amount` — quantity × rate when the rate includes GST (PG4). */
   amount: number;
+  /** The line's GST rate — 0, 5, 12, 18 or 28 (PG3). */
+  gst_percent: number;
+  /** Whether the rate includes GST. */
+  is_gst_inclusive: boolean;
+  taxable_amount: number;
+  gst_amount: number;
   is_received: boolean | null;
   batch_number: string | null;
   expiry_month: string | null;
@@ -37,7 +44,10 @@ export interface MedicalPurchaseOrderOutput {
   items: MedicalPurchaseOrderItemOutput[];
   item_count: number;
   free_count: number;
+  /** `taxable_total + gst_total` — its lines', the received ones' once received (PG7). */
   total: number;
+  taxable_total: number;
+  gst_total: number;
   paid_amount: number;
   credited_amount: number;
   due_amount: number;

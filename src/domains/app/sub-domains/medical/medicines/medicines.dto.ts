@@ -9,6 +9,7 @@ import {
   recordIdListSchema,
   recordIdSchema,
   valueListSchema,
+  yearMonthSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
 import {
   MEDICINE_BATCHES_MAX,
@@ -33,9 +34,7 @@ export const printedMrpSchema = moneySchema.refine((mrp) => mrp > 0, {
 });
 
 /** `2027-03` — a batch's expiry month (MD5). */
-export const expiryMonthSchema = z
-  .string()
-  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'errors:validation.yearMonthFormat');
+export const expiryMonthSchema = yearMonthSchema;
 
 /** The near-expiry discount, 1–90 % (MD14). */
 const discountPercentSchema = z

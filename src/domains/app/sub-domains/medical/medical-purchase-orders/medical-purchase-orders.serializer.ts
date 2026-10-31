@@ -32,6 +32,8 @@ export function serializeMedicalPurchaseOrder({
     item_count: 0,
     free_count: 0,
     total: toAmount(row.total) ?? 0,
+    taxable_total: toAmount(row.taxable_total) ?? 0,
+    gst_total: toAmount(row.gst_total) ?? 0,
     paid_amount: toAmount(row.paid_amount) ?? 0,
     credited_amount: toAmount(row.credited_amount) ?? 0,
     due_amount: toAmount(row.due_amount) ?? 0,

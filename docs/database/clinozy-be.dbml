@@ -618,7 +618,10 @@ Table app.medical_purchase_order_items {
   created_at timestamptz [not null]
   expiry_month date
   free_quantity int [not null]
+  gst_amount numeric(12, 2) [not null]
+  gst_percent smallint [not null]
   id bigint [pk, increment, not null]
+  is_gst_inclusive boolean [not null]
   is_received boolean
   line_number smallint [not null]
   medical_purchase_order_id bigint [not null]
@@ -629,6 +632,7 @@ Table app.medical_purchase_order_items {
   public_id varchar(28) [not null]
   quantity int [not null]
   rate numeric(12, 2) [not null]
+  taxable_amount numeric(12, 2) [not null]
   updated_at timestamptz [not null]
 }
 
@@ -644,6 +648,7 @@ Table app.medical_purchase_orders {
   delete_reason varchar(21)
   deleted_at timestamptz
   due_amount numeric(12, 2)
+  gst_total numeric(12, 2) [not null]
   id bigint [pk, increment, not null]
   note varchar(500)
   order_date date [not null]
@@ -656,6 +661,7 @@ Table app.medical_purchase_orders {
   stage varchar(8) [not null]
   supplier_bill_number varchar(30)
   supplier_id bigint [not null]
+  taxable_total numeric(12, 2) [not null]
   total numeric(12, 2) [not null]
   updated_at timestamptz [not null]
   updated_by_user_id bigint
@@ -830,7 +836,7 @@ Table app.medicines {
   delete_reason varchar(20)
   deleted_at timestamptz
   gst_percent smallint [not null]
-  hsn_code varchar(8) [not null]
+  hsn_code varchar(8)
   id bigint [pk, increment, not null]
   is_prescription_only boolean [not null]
   is_quick boolean [not null]
@@ -842,8 +848,10 @@ Table app.medicines {
   name varchar(120) [not null]
   near_expiry_discount_percent numeric(5, 2)
   organization_id bigint [not null]
+  pack_label varchar(30)
   public_id varchar(28) [not null]
   quantity int [not null]
+  units_per_pack smallint [not null]
   updated_at timestamptz [not null]
   updated_by_user_id bigint
 }
@@ -1600,6 +1608,8 @@ Table app.supplier_credits {
   created_at timestamptz [not null]
   created_by_membership_id bigint
   created_by_user_id bigint
+  delete_note varchar(280)
+  delete_reason varchar(16)
   deleted_at timestamptz
   id bigint [pk, increment, not null]
   medicine_batch_id bigint [not null]
@@ -1633,6 +1643,7 @@ Note app.supplier_manufacturers {
 }
 
 Table app.suppliers {
+  address varchar(240)
   created_at timestamptz [not null]
   created_by_user_id bigint
   delete_note varchar(280)
@@ -1958,6 +1969,8 @@ Note auth.user_notification_preferences {
 
 Table auth.user_settings {
   analytics_consent varchar(10)
+  analytics_consent_at timestamptz
+  analytics_consent_version int
   created_at timestamptz [not null]
   default_organization_id bigint
   is_dark_mode_enabled boolean [not null]
@@ -2221,7 +2234,7 @@ Table tenancy.membership_invitations {
   email varchar(255) [not null]
   expires_at timestamptz [not null]
   id bigint [pk, increment, not null]
-  invited_by_user_id bigint [not null]
+  invited_by_user_id bigint
   membership_id bigint [not null]
   public_id varchar(28) [not null]
   revoked_at timestamptz
@@ -2295,6 +2308,12 @@ Table tenancy.organization_settings {
   retarget_after_days int [not null]
   security_policy jsonb [not null]
   setup_answered_steps text [not null]
+  setup_completed_at timestamptz
+  setup_completed_by_membership_id bigint
+  setup_deferred_at timestamptz
+  setup_guide_done_at timestamptz
+  setup_guide_hidden_at timestamptz
+  setup_skipped_items text [not null]
   updated_at timestamptz [not null]
   updated_by_user_id bigint
 }
@@ -2393,7 +2412,7 @@ Table upload.uploads {
   storage_provider varchar(20) [not null]
   updated_at timestamptz [not null]
   uploaded_at timestamptz
-  user_id bigint [not null]
+  user_id bigint
 }
 
 Note upload.uploads {

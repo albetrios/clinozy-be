@@ -362,6 +362,7 @@ src/
     │   │   │   ├── __tests__/
     │   │   │   │   └── integration/
     │   │   │   │   │   ├── medical-batches.integration.test.ts
+    │   │   │   │   │   ├── medical-purchase-gst.integration.test.ts
     │   │   │   │   │   ├── medical-record-fields.integration.test.ts
     │   │   │   │   │   └── medical.integration.test.ts
     │   │   │   ├── manufacturers/
@@ -396,6 +397,7 @@ src/
     │   │   │   │   ├── medical-purchase-orders.constants.ts
     │   │   │   │   ├── medical-purchase-orders.controller.ts
     │   │   │   │   ├── medical-purchase-orders.dto.ts
+    │   │   │   │   ├── medical-purchase-orders.gst-summary.ts
     │   │   │   │   ├── medical-purchase-orders.overview.md
     │   │   │   │   ├── medical-purchase-orders.repository.ts
     │   │   │   │   ├── medical-purchase-orders.routes.ts

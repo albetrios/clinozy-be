@@ -24,7 +24,10 @@ import {
   medicine_batches,
   medicines,
 } from '@/domains/app/sub-domains/medical/medicines/medicines.schema.js';
-import { MEDICINE_QUANTITY_MAX } from '@/domains/app/sub-domains/medical/medicines/medicines.constants.js';
+import {
+  MEDICINE_GST_PERCENT_VALUES,
+  MEDICINE_QUANTITY_MAX,
+} from '@/domains/app/sub-domains/medical/medicines/medicines.constants.js';
 import {
   MEDICAL_PURCHASE_ORDER_CANCEL_REASON_VALUES,
   MEDICAL_PURCHASE_ORDER_STAGE,
@@ -48,8 +51,9 @@ const DUE = sql.raw(
  *
  * @remarks
  * - **Notes:** `stage` is `ordered` or `received` (with `received_at`); "Paid" is the generated
- *   `payment_status` on the generated `due_amount` = total − paid − credited (MD15). `paid_amount`
- *   moves with its supplier-bill payments (MD7), `credited_amount` with the supplier's credits
+ *   `payment_status` on the generated `due_amount` = total − paid − credited (MD15); `total` =
+ *   `taxable_total` + `gst_total`, its lines' (PG7). `paid_amount` moves with its supplier-bill
+ *   payments (MD7), `credited_amount` with the supplier's credits
  *   (MD11). The cancel is the soft delete, with its own reasons, only while ordered. The supplier
  *   stays (`RESTRICT`). RLS on the organization GUC with the retention-cleanup arm for the purge.
  */
@@ -75,6 +79,10 @@ export const medical_purchase_orders = appSchema
         .default(MEDICAL_PURCHASE_ORDER_STAGE.ORDERED),
       received_at: timestamp('received_at', { withTimezone: true }),
       total: numeric('total', { precision: 12, scale: 2 }).notNull().default('0.00'),
+      taxable_total: numeric('taxable_total', { precision: 12, scale: 2 })
+        .notNull()
+        .default('0.00'),
+      gst_total: numeric('gst_total', { precision: 12, scale: 2 }).notNull().default('0.00'),
       paid_amount: numeric('paid_amount', { precision: 12, scale: 2 }).notNull().default('0.00'),
       credited_amount: numeric('credited_amount', { precision: 12, scale: 2 })
         .notNull()
@@ -113,6 +121,10 @@ export const medical_purchase_orders = appSchema
         .on(table.organization_id, table.created_at, table.id)
         .where(sql`${table.deleted_at} IS NULL`),
       index('idx_medical_purchase_orders_supplier_id').on(table.supplier_id),
+      // The month's received orders — the purchase GST summary (PG15)
+      index('idx_medical_purchase_orders_organization_received')
+        .on(table.organization_id, table.received_at)
+        .where(sql`${table.deleted_at} IS NULL AND ${table.received_at} IS NOT NULL`),
       // What each supplier is owed, oldest first (MD10, MD11)
       index('idx_medical_purchase_orders_supplier_due')
         .on(table.supplier_id, table.received_at, table.id)
@@ -143,6 +155,10 @@ export const medical_purchase_orders = appSchema
         sql`${table.total} >= 0 AND ${table.paid_amount} >= 0 AND ${table.credited_amount} >= 0 AND ${table.paid_amount} + ${table.credited_amount} <= ${table.total}`,
       ),
       check('chk_medical_purchase_orders_note', sql`char_length(${table.note}) > 0`),
+      check(
+        'chk_medical_purchase_orders_totals',
+        sql`${table.taxable_total} >= 0 AND ${table.gst_total} >= 0 AND ${table.total} = ${table.taxable_total} + ${table.gst_total}`,
+      ),
       check('chk_medical_purchase_orders_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_medical_purchase_orders_delete_reason',
@@ -173,7 +189,8 @@ export const medical_purchase_orders = appSchema
  * MD15, MD16); no routes of its own (K1) — written with the order, ticked by receive.
  *
  * @remarks
- * - **Notes:** `amount` = quantity × rate; `is_received` is null until the order is received;
+ * - **Notes:** `amount` = `taxable_amount` + `gst_amount` (the invoice calculation, PG4) —
+ *   quantity × rate when `is_gst_inclusive`, quantity × rate plus GST otherwise; `is_received` is null until the order is received;
  *   a received line names the batch it went into. The medicine and batch stay (`RESTRICT`); the
  *   line goes with its order. RLS on the organization GUC.
  */
@@ -199,6 +216,10 @@ export const medical_purchase_order_items = appSchema
       // The MRP printed on the line's packs — the batch it fills takes it
       mrp: numeric('mrp', { precision: 12, scale: 2 }),
       amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+      gst_percent: smallint('gst_percent').notNull(),
+      is_gst_inclusive: boolean('is_gst_inclusive').notNull().default(true),
+      taxable_amount: numeric('taxable_amount', { precision: 12, scale: 2 }).notNull(),
+      gst_amount: numeric('gst_amount', { precision: 12, scale: 2 }).notNull(),
       is_received: boolean('is_received'),
       batch_number: varchar('batch_number', { length: 20 }),
       expiry_month: date('expiry_month', { mode: 'string' }),
@@ -232,8 +253,13 @@ export const medical_purchase_order_items = appSchema
       check('chk_medical_purchase_order_items_rate', sql`${table.rate} > 0`),
       check('chk_medical_purchase_order_items_mrp', sql`${table.mrp} > 0`),
       check(
+        'chk_medical_purchase_order_items_gst_percent',
+        sql`${table.gst_percent} IN (${sqlLiteralList(MEDICINE_GST_PERCENT_VALUES)})`,
+      ),
+      // PG4: quantity × rate is the amount when the rate includes GST, the taxable value otherwise
+      check(
         'chk_medical_purchase_order_items_amount',
-        sql`${table.amount} = ${table.quantity} * ${table.rate}`,
+        sql`${table.taxable_amount} >= 0 AND ${table.gst_amount} >= 0 AND ${table.amount} = ${table.taxable_amount} + ${table.gst_amount} AND ${table.quantity} * ${table.rate} = CASE WHEN ${table.is_gst_inclusive} THEN ${table.amount} ELSE ${table.taxable_amount} END`,
       ),
       check(
         'chk_medical_purchase_order_items_expiry_month',

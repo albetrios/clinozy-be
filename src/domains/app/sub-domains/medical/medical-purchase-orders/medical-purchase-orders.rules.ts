@@ -4,6 +4,8 @@ import type {
   BaseRecordRules,
   BaseRecordWriteContext,
 } from '@/domains/app/base-record.types.js';
+import { computeInvoiceAmounts } from '@/domains/app/sub-domains/billing/invoices/invoices.amounts.js';
+import { MEDICINE_DEFAULT_GST_PERCENT } from '@/domains/app/sub-domains/medical/medicines/medicines.constants.js';
 import { MedicinesRepository } from '@/domains/app/sub-domains/medical/medicines/medicines.repository.js';
 import { medicines } from '@/domains/app/sub-domains/medical/medicines/medicines.schema.js';
 import { moveMedicineBatch } from '@/domains/app/sub-domains/medical/medicines/medicines.stock.js';
@@ -27,6 +29,10 @@ import type {
   MedicalPurchaseOrderItemValues,
   MedicalPurchaseOrdersRepository,
 } from './medical-purchase-orders.repository.js';
+import {
+  purchaseGstSummary,
+  purchaseGstSummaryExport,
+} from './medical-purchase-orders.gst-summary.js';
 import { medical_purchase_orders } from './medical-purchase-orders.schema.js';
 
 const medicinesRepository = new MedicinesRepository();
@@ -101,7 +107,50 @@ async function quickMedicineId(options: {
   return created.id;
 }
 
-/** MD15: a save's lines — each medicine live here (or added as typed), amount = quantity × rate. */
+/** A line's money as stored — rupees with two decimals. */
+interface PurchaseLineMoney {
+  rate: string;
+  taxable_amount: string;
+  gst_amount: string;
+  amount: string;
+}
+
+/**
+ * PG4: a purchase line's amounts — the invoice calculation with no discount: inclusive, taxable =
+ * quantity × rate ÷ (1 + GST ÷ 100) and GST the rest (the amount is quantity × rate); exclusive,
+ * GST on top of quantity × rate. Rounded per line to the paisa.
+ */
+function purchaseLineMoney(options: {
+  quantity: number;
+  rate: number;
+  gstPercent: number;
+  isGstInclusive: boolean;
+}): PurchaseLineMoney {
+  const [line] = computeInvoiceAmounts({
+    lines: [
+      {
+        quantity: options.quantity,
+        rate: options.rate,
+        discountPercent: 0,
+        gstPercent: options.gstPercent,
+        isGstInclusive: options.isGstInclusive,
+      },
+    ],
+    overallDiscount: 0,
+  }).lines;
+  return {
+    rate: options.rate.toFixed(2),
+    taxable_amount: (line?.taxableAmount ?? 0).toFixed(2),
+    gst_amount: (line?.gstAmount ?? 0).toFixed(2),
+    amount: (line?.amount ?? 0).toFixed(2),
+  };
+}
+
+/**
+ * MD15, PG3–PG5: a save's lines — each medicine live here (or added as typed), its GST rate the
+ * one sent or else the medicine's, inclusive unless sent otherwise, its amounts the invoice
+ * calculation's.
+ */
 async function resolveLines(options: {
   items: readonly MedicalPurchaseOrderItemInput[];
   supplierId: number;
@@ -113,15 +162,14 @@ async function resolveLines(options: {
     organizationId: context.organizationId,
     publicIds: items.flatMap((item) => (item.medicine_id === undefined ? [] : [item.medicine_id])),
   });
-  const lines: MedicalPurchaseOrderItemValues[] = [];
-  for (const [index, item] of items.entries()) {
-    const rate = item.rate.toFixed(2);
+  const medicineIds: number[] = [];
+  for (const item of items) {
     const medicineId =
       item.medicine_id === undefined
         ? await quickMedicineId({
             name: item.new_medicine_name!,
             supplierId: options.supplierId,
-            rate,
+            rate: item.rate.toFixed(2),
             context,
           })
         : ids.get(item.medicine_id);
@@ -132,20 +180,65 @@ async function resolveLines(options: {
         messageParams: { id: String(item.medicine_id) },
       });
     }
-    lines.push({
+    medicineIds.push(medicineId);
+  }
+  const live = await medicinesRepository.findLive(medicineIds);
+  return items.map((item, index) => {
+    const medicineId = medicineIds[index] as number;
+    const gstPercent =
+      item.gst_percent ?? Number(live.get(medicineId)?.gst_percent ?? MEDICINE_DEFAULT_GST_PERCENT);
+    const isGstInclusive = item.is_gst_inclusive ?? true;
+    return {
       line_number: index + 1,
       medicine_id: medicineId,
       quantity: item.quantity,
       free_quantity: item.free_quantity ?? 0,
-      rate,
       mrp: item.mrp == null ? null : item.mrp.toFixed(2),
-      amount: ((item.quantity * paiseOf(item.rate)) / 100).toFixed(2),
-    });
-  }
-  return lines;
+      gst_percent: gstPercent,
+      is_gst_inclusive: isGstInclusive,
+      ...purchaseLineMoney({
+        quantity: item.quantity,
+        rate: item.rate,
+        gstPercent,
+        isGstInclusive,
+      }),
+    };
+  });
 }
 
-/** Plans a save's lines and the order's total (its lines'), kept for `afterWrite`. */
+/** An order's three totals in paise — what its counted lines come to (PG7). */
+interface OrderTotalsPaise {
+  taxable: number;
+  gst: number;
+  amount: number;
+}
+
+/** Adds one line's money to running totals (paise). */
+function addLine({
+  totals,
+  line,
+}: {
+  totals: OrderTotalsPaise;
+  line: PurchaseLineMoney | null;
+}): OrderTotalsPaise {
+  if (line === null) return totals;
+  return {
+    taxable: totals.taxable + paiseOf(line.taxable_amount),
+    gst: totals.gst + paiseOf(line.gst_amount),
+    amount: totals.amount + paiseOf(line.amount),
+  };
+}
+
+/** PG7: the totals an order row stores — `total = taxable_total + gst_total`. */
+function totalsValues(totals: OrderTotalsPaise): Record<string, string> {
+  return {
+    total: (totals.amount / 100).toFixed(2),
+    taxable_total: (totals.taxable / 100).toFixed(2),
+    gst_total: (totals.gst / 100).toFixed(2),
+  };
+}
+
+/** Plans a save's lines and the order's totals (its lines', PG7), kept for `afterWrite`. */
 async function holdLines(options: {
   values: Record<string, unknown>;
   supplierId: number;
@@ -156,7 +249,12 @@ async function holdLines(options: {
   delete values.items;
   if (items === undefined) return;
   const lines = await resolveLines({ items, supplierId: options.supplierId, context });
-  values.total = (lines.reduce((total, line) => total + paiseOf(line.amount), 0) / 100).toFixed(2);
+  Object.assign(
+    values,
+    totalsValues(
+      lines.reduce((totals, line) => addLine({ totals, line }), { taxable: 0, gst: 0, amount: 0 }),
+    ),
+  );
   pendingLines.set(context, lines);
 }
 
@@ -239,8 +337,8 @@ interface ReceivedLineChoice {
 
 /**
  * MD16: one line of a receive — ticked (default) it goes into its batch (number default
- * `NEW-<order number>`, expiry default 24 months on) and counts in the total; either way the line
- * records how it arrived. Returns what it adds to the total, in paise.
+ * `NEW-<order number>`, expiry default 24 months on) and counts in the totals; either way the
+ * line records how it arrived. Returns what it adds to the totals — nothing when ticked off.
  */
 async function receiveOrderLine(options: {
   repository: MedicalPurchaseOrdersRepository;
@@ -248,7 +346,7 @@ async function receiveOrderLine(options: {
   line: MedicalPurchaseOrderItemRow;
   choice: ReceivedLineChoice | undefined;
   context: BaseRecordWriteContext;
-}): Promise<number> {
+}): Promise<PurchaseLineMoney | null> {
   const { repository, order, line, choice, context } = options;
   const isReceived = choice?.is_received ?? true;
   const batchNumber = choice?.batch_number ?? `NEW-${Number(order.purchase_order_number)}`;
@@ -268,7 +366,7 @@ async function receiveOrderLine(options: {
     mrp,
     medicineBatchId: batchId,
   });
-  return isReceived ? paiseOf(line.amount) : 0;
+  return isReceived ? line : null;
 }
 
 /**
@@ -341,26 +439,32 @@ async function receiveOrder(input: BaseRecordActionInput): Promise<BaseRecordRow
     items: unordered,
     context,
   });
-  let totalPaise = 0;
+  let totals: OrderTotalsPaise = { taxable: 0, gst: 0, amount: 0 };
   for (const line of lines) {
-    totalPaise += await receiveOrderLine({
-      repository,
-      order,
-      line,
-      choice: sent.get(line.public_id),
-      context,
+    totals = addLine({
+      totals,
+      line: await receiveOrderLine({
+        repository,
+        order,
+        line,
+        choice: sent.get(line.public_id),
+        context,
+      }),
     });
   }
   for (const [index, line] of added.entries()) {
-    totalPaise += await receiveOrderLine({
-      repository,
-      order,
-      line,
-      choice: { ...unordered[index], is_received: true },
-      context,
+    totals = addLine({
+      totals,
+      line: await receiveOrderLine({
+        repository,
+        order,
+        line,
+        choice: { ...unordered[index], is_received: true },
+        context,
+      }),
     });
   }
-  if (totalPaise === 0) {
+  if (totals.amount === 0) {
     throw fieldValidationError({
       field: 'items',
       messageKey: 'errors:validation.medicalPurchaseOrderNothingReceived',
@@ -371,7 +475,7 @@ async function receiveOrder(input: BaseRecordActionInput): Promise<BaseRecordRow
     {
       stage: MEDICAL_PURCHASE_ORDER_STAGE.RECEIVED,
       received_at: new Date(),
-      total: (totalPaise / 100).toFixed(2),
+      ...totalsValues(totals),
       ...(body.supplier_bill_number === undefined
         ? {}
         : { supplier_bill_number: body.supplier_bill_number }),
@@ -408,6 +512,8 @@ async function decorateOrders(options: {
       rate: toAmount(item.rate) ?? 0,
       mrp: toAmount(item.mrp),
       amount: toAmount(item.amount) ?? 0,
+      taxable_amount: toAmount(item.taxable_amount) ?? 0,
+      gst_amount: toAmount(item.gst_amount) ?? 0,
       expiry_month: item.expiry_month?.slice(0, 7) ?? null,
     }));
     output.item_count = own.length;
@@ -430,13 +536,14 @@ async function decorateOrders(options: {
  *
  * @remarks
  * - **Algorithm:** a save resolves its lines (a listed medicine, or a quick one added as typed)
- *   and stores their total; the lines go in after the row. A change or a cancel of a received
+ *   and stores their totals — each line's GST by the invoice calculation (PG4), the order's taxable
+ *   and GST totals (PG7); the lines go in after the row. A change or a cancel of a received
  *   order is refused — a change of the note alone excepted (D10). The `receive` action moves each
  *   ticked line into its batch (MD4) as units (× the medicine's units per pack) with the line's
  *   MRP, refreshes
- *   the supplier's price, sets the total to the received lines', and applies the supplier's open
+ *   the supplier's price, sets the totals to the received lines', and applies the supplier's open
  *   credits (MD11). Paying is the payments ledger's (MD7). Every read adds the lines, their counts
- *   and the supplier's name.
+ *   and the supplier's name. The GST summary and its CSV are collection views (PG9).
  * - **Failure modes:** `ValidationError` on `items`, `order_date`; `ConflictError`
  *   `transition_not_allowed`, `record_already_exists` (a batch number with another expiry),
  *   `batch_full`, `record_changed`.
@@ -474,6 +581,10 @@ export function createMedicalPurchaseOrdersRules(
       });
     },
     actions: { receive: receiveOrder },
+    collectionViews: {
+      'gst-summary': (collection) => purchaseGstSummary({ repository, collection }),
+      'gst-summary-exports': (collection) => purchaseGstSummaryExport({ repository, collection }),
+    },
     decorate: (outputs, context) => decorateOrders({ repository, outputs, context }),
   };
 }

@@ -170,6 +170,11 @@ export function httpsLinkSchema(maxLength: number): z.ZodType<string> {
 /** A calendar date as `YYYY-MM-DD` (Postgres `date`). */
 export const calendarDateSchema = z.iso.date();
 
+/** A calendar month as `YYYY-MM` — a batch's expiry, a report's month. */
+export const yearMonthSchema = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'errors:validation.yearMonthFormat');
+
 /** An instant as ISO 8601 with an offset (the validator turns it into a `Date` for `timestamptz`). */
 export const instantSchema = z.iso.datetime({ offset: true });
 

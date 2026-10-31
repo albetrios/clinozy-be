@@ -73,6 +73,7 @@ import { listMedicinesQueryDto as appMedicinesListQueryDto } from '@/domains/app
 import {
   cancelMedicalPurchaseOrderQueryDto as appCancelMedicalPurchaseOrderQueryDto,
   listMedicalPurchaseOrdersQueryDto as appMedicalPurchaseOrdersListQueryDto,
+  medicalPurchaseGstSummaryQueryDto as appMedicalPurchaseGstSummaryQueryDto,
 } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.dto.js';
 import {
   listMedicalSalesQueryDto as appMedicalSalesListQueryDto,
@@ -175,6 +176,9 @@ export const routeQuerySchemaMap: Record<string, ZodTypeAny> = {
   'GET /api/v1/app/payments/exports': appPaymentsListQueryDto,
   'GET /api/v1/app/medicines/exports': appMedicinesListQueryDto,
   'GET /api/v1/app/medical-purchase-orders/exports': appMedicalPurchaseOrdersListQueryDto,
+  'GET /api/v1/app/medical-purchase-orders/gst-summary': appMedicalPurchaseGstSummaryQueryDto,
+  'GET /api/v1/app/medical-purchase-orders/gst-summary/exports':
+    appMedicalPurchaseGstSummaryQueryDto,
   'GET /api/v1/app/medical-sales/exports': appMedicalSalesListQueryDto,
   'GET /api/v1/app/medical-sales/dues': appMedicalSaleDuesQueryDto,
   'GET /api/v1/app/stock-items/exports': appStockItemsListQueryDto,
