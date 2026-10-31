@@ -721,8 +721,22 @@ src/
     │   │   │   │   └── patient-ideas.validator.ts
     │   │   │   ├── patient-images/
     │   │   │   │   ├── __tests__/
+    │   │   │   │   │   ├── integration/
+    │   │   │   │   │   │   └── patient-image-thumbnail.integration.test.ts
     │   │   │   │   │   └── unit/
+    │   │   │   │   │   │   ├── patient-image-thumbnail-reconcile.processor.unit.test.ts
+    │   │   │   │   │   │   ├── patient-image-thumbnail.processor.unit.test.ts
+    │   │   │   │   │   │   ├── patient-image-thumbnail.queue.unit.test.ts
     │   │   │   │   │   │   └── patient-images.service.unit.test.ts
+    │   │   │   │   ├── queues/
+    │   │   │   │   │   ├── patient-image-thumbnail.job.schema.ts
+    │   │   │   │   │   └── patient-image-thumbnail.queue.ts
+    │   │   │   │   ├── workers/
+    │   │   │   │   │   ├── patient-image-thumbnail-reconcile.processor.ts
+    │   │   │   │   │   ├── patient-image-thumbnail.constants.ts
+    │   │   │   │   │   ├── patient-image-thumbnail.processor.ts
+    │   │   │   │   │   └── patient-image-thumbnail.worker.ts
+    │   │   │   │   ├── patient-image-thumbnail.repository.ts
     │   │   │   │   ├── patient-images.constants.ts
     │   │   │   │   ├── patient-images.controller.ts
     │   │   │   │   ├── patient-images.dto.ts
@@ -2022,6 +2036,7 @@ src/
     │   │   │   ├── upload-pending-sweep.processor.unit.test.ts
     │   │   │   ├── upload-routes-rate-limit.policy.unit.test.ts
     │   │   │   ├── upload-svg.util.unit.test.ts
+    │   │   │   ├── upload-thumbnail.util.unit.test.ts
     │   │   │   ├── upload-tombstone-retention.processor.boundary.unit.test.ts
     │   │   │   ├── upload-tombstone-retention.worker.unit.test.ts
     │   │   │   ├── upload.controller.unit.test.ts
@@ -2034,6 +2049,7 @@ src/
     │   │   │   ├── upload.service.organization-quota-concurrency.db.unit.test.ts
     │   │   │   ├── upload.service.quota-concurrency.db.unit.test.ts
     │   │   │   ├── upload.service.remove-image-location.unit.test.ts
+    │   │   │   ├── upload.service.thumbnail.unit.test.ts
     │   │   │   ├── upload.service.unit.test.ts
     │   │   │   ├── upload.validator.mime-and-size.unit.test.ts
     │   │   │   └── upload.validator.unit.test.ts
@@ -2044,7 +2060,8 @@ src/
     │   │   └── upload.faker.ts
     │   ├── utils/
     │   │   ├── upload-content-type.util.ts
-    │   │   └── upload-svg.util.ts
+    │   │   ├── upload-svg.util.ts
+    │   │   └── upload-thumbnail.util.ts
     │   ├── workers/
     │   │   ├── upload-pending-sweep.constants.ts
     │   │   ├── upload-pending-sweep.processor.ts
@@ -2538,6 +2555,7 @@ src/
     │   ├── db-sequences-advance.ts
     │   ├── memory-soak.ts
     │   ├── next-migration-prefix.ts
+    │   ├── patient-image-thumbnails-backfill.ts
     │   ├── probe-live-api.ts
     │   ├── process-tree.util.ts
     │   ├── route-coverage-audit.ts

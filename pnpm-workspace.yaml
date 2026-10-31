@@ -27,6 +27,13 @@ auditConfig:
     # globs, never user input; the production tree is clean (`pnpm deps:audit:prod`).
     # Remove when braces publishes a fix, then add an override for it.
     - GHSA-vfj7-8cjw-p6xm
+    # minimatch <11.0.1 — GHSA-g3hv-75wg-m249 (moderate): DoS through globparts amplification.
+    # Dev-only here: @scalar/cli (@stoplight/spectral-*, @rollup/plugin-commonjs) and
+    # @stryker-mutator/core pin minimatch 3–10 and no fix exists below 11, a major whose API they
+    # do not use; they expand repo-controlled globs, never user input. The production tree is clean
+    # (the glob override below lifts its paths onto glob 14 / minimatch 11; `pnpm deps:audit:prod`).
+    # Remove when those tools move to minimatch 11.
+    - GHSA-g3hv-75wg-m249
 
 overrides:
   # Only advisories a dependency pins or caps below the fix. A version selector (`pkg@<fixed`)
@@ -68,6 +75,9 @@ overrides:
   'markdown-it@<15.0.3': '^15.0.3'
   # yaml 1.10.2 — stack overflow on deeply nested collections (moderate), fixed in 1.10.3.
   yaml@1.10.2: 1.10.3
+  # @hono/node-server <2.1.3 (moderate, fixed 2.1.3). Dev tree only: the @scalar/cli servers
+  # resolved 2.1.1; the same major.
+  '@hono/node-server@<2.1.3': '^2.1.3'
   # esbuild <=0.24.2 — GHSA-67mh-4wv8-2f99 (moderate). @esbuild-kit/core-utils (via
   # drizzle-kit) pins ~0.18.20; confined to it, on the 0.25 line drizzle-kit itself declares.
   '@esbuild-kit/core-utils>esbuild': '^0.25.12'

@@ -48,6 +48,17 @@ A private photo also needs `patient:private_album:read` on every route (P23).
   inline under the uploaded file's name; `null` when the upload is gone. Only a photo the caller may
   read is answered at all, so a private photo's link reaches only the album's holders (the
   `fileReadUrls` port, one upload read per page).
+- **A thumbnail for the grids (feat-patient-image-thumbnails):** after a photo's create or
+  restore commits, the `patient-image-thumbnail` job asks the upload domain for a 320 px WebP next
+  to the photo (`UploadService.createThumbnail`, `<file_key without extension>.thumb.webp`) and
+  sets `thumbnail_key`; after a delete it removes the thumbnail and clears the key (the full photo
+  stays). Every read answers `thumbnail_url` — the thumbnail's 15-minute link (the
+  `thumbnailReadUrls` port, signed locally), or `file_url`'s while there is none — and grids show
+  it, an opened photo `file_url`. The job reconciles the row (deduplicated per photo, one more kept
+  behind a running one); a failed enqueue or thumbnail never fails the write — the 15-minute
+  `reconcile-patient-image-thumbnails` sweep re-adds photos created 10 minutes to 7 days ago
+  without one and deleted ones still holding one, and `pnpm ops:patient-image-thumbnails-backfill`
+  (dry run unless `--apply`) the older ones, organization by organization.
 - **Pairing (WC-43):** a session's `before` and `after` photos of one body part pair on
   `patient_treatment_id`, `stage` and `body_part` (P24) — read, not computed.
 - **The links (P24, P25, TR3):** the visit is the patient's contact's and checked in or completed;

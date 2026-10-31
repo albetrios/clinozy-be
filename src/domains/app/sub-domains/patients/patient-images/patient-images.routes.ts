@@ -35,7 +35,7 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
         schema: {
           summary: "List a patient's photos",
           description:
-            'Returns one page of a patient\'s photos (newest `taken_on` first; `sort=created_at` by upload), each with its visit\'s `service_label` (the date groups) and `file_url` — a link that shows the photo, valid 15 minutes and made fresh on every read (null when its upload is gone, D86) — and `meta.album_counts` — the live photos per album you can see (`general`, `lhr`, and `private` only with the album code — the tab counts, P26). Filters: `album` (the tab; none = every album you can see), `appointment_id`, `has_appointment=false` ("Not attached to a visit"), `patient_treatment_id`, `stage`, `body_part`, `q` (the name or file name), the created range. A private photo shows only to patient:private_album:read holders (P23). Requires patient:clinical_record:read (P14).',
+            'Returns one page of a patient\'s photos (newest `taken_on` first; `sort=created_at` by upload), each with its visit\'s `service_label` (the date groups) `file_url` — a link that shows the full photo, valid 15 minutes and made fresh on every read (null when its upload is gone, D86) — and `thumbnail_url` — the image a photo grid shows: a 15-minute link to its 320 px thumbnail, or the link of the full photo while it has none — and `meta.album_counts` — the live photos per album you can see (`general`, `lhr`, and `private` only with the album code — the tab counts, P26). Filters: `album` (the tab; none = every album you can see), `appointment_id`, `has_appointment=false` ("Not attached to a visit"), `patient_treatment_id`, `stage`, `body_part`, `q` (the name or file name), the created range. A private photo shows only to patient:private_album:read holders (P23). Requires patient:clinical_record:read (P14).',
           tags: ['Patient file'],
           params: patientImagesParentParamsDto,
           querystring: listPatientImagesQueryDto,
@@ -55,7 +55,7 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
         schema: {
           summary: 'Add a photo',
           description:
-            "Files a confirmed upload as a photo: `file_key` — a confirmed JPG or PNG of the organization, up to 15 MB (a 400 otherwise; its `file_name` is the upload's, P19, P25), filed once (a 409 `image_exists`); optional `album` (`general` default · `private` — needs patient:private_album:read, a 403 `field_permission_required` otherwise · `lhr`), `stage` (`before` · `after`), `appointment_id` (a checked-in or completed visit of the patient's — a 400 otherwise), `patient_treatment_id` (a session of the patient's, P24), `body_part` (the patient file's 15 parts), `taken_on` (default today, never in the future), `display_name` (≤ 60), `caption` (≤ 200). A `system` entry joins the contact's activity — a private photo's for the album's holders only (M10). Requires patient:update and patient:clinical_record:read (P14).",
+            "Files a confirmed upload as a photo: `file_key` — a confirmed JPG or PNG of the organization, up to 15 MB (a 400 otherwise; its `file_name` is the upload's, P19, P25), filed once (a 409 `image_exists`); optional `album` (`general` default · `private` — needs patient:private_album:read, a 403 `field_permission_required` otherwise · `lhr`), `stage` (`before` · `after`), `appointment_id` (a checked-in or completed visit of the patient's — a 400 otherwise), `patient_treatment_id` (a session of the patient's, P24), `body_part` (the patient file's 15 parts), `taken_on` (default today, never in the future), `display_name` (≤ 60), `caption` (≤ 200). A `system` entry joins the contact's activity — a private photo's for the album's holders only (M10). A 320 px thumbnail is made in the background after the photo is filed: `thumbnail_url` is the full photo's link until it exists, and a failed thumbnail never fails the add. Requires patient:update and patient:clinical_record:read (P14).",
           tags: ['Patient file'],
           params: patientImagesParentParamsDto,
           body: CreatePatientImageDto,
@@ -72,7 +72,7 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
         schema: {
           summary: 'Get a photo',
           description:
-            "Returns one of a patient's photos, with `file_url` (a 15-minute link that shows it, D86) — another patient's, or a private one without the album code, is a 404. Requires patient:clinical_record:read (P14).",
+            "Returns one of a patient's photos, with `file_url` (a 15-minute link that shows the full photo, D86) and `thumbnail_url` (its thumbnail's, else the full photo's) — another patient's, or a private one without the album code, is a 404. Requires patient:clinical_record:read (P14).",
           tags: ['Patient file'],
           params: patientImagesIdParamsDto,
         },
@@ -111,7 +111,7 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
         schema: {
           summary: 'Delete a photo',
           description:
-            'Deletes a photo with why: `reason` (mistake — "Wrong patient", duplicate, not_needed — "Blurry / retake", other) and a `note`, required for other (P25). Restorable until the organization\'s purge window ends (D38). Requires patient:update and patient:clinical_record:read (P14).',
+            'Deletes a photo with why: `reason` (mistake — "Wrong patient", duplicate, not_needed — "Blurry / retake", other) and a `note`, required for other (P25). Its thumbnail is removed in the background (the full photo stays). Restorable until the organization\'s purge window ends (D38). Requires patient:update and patient:clinical_record:read (P14).',
           tags: ['Patient file'],
           params: patientImagesIdParamsDto,
           querystring: recordDeleteQuerySchema,
@@ -131,7 +131,7 @@ export function patientImagesRoutes(service: PatientImagesService): FastifyPlugi
         schema: {
           summary: 'Restore a photo',
           description:
-            "Undoes a photo's delete. A live photo is a 409 `record_not_deleted`. Requires patient:update and patient:clinical_record:read (P14).",
+            "Undoes a photo's delete. Its thumbnail is made again in the background. A live photo is a 409 `record_not_deleted`. Requires patient:update and patient:clinical_record:read (P14).",
           tags: ['Patient file'],
           params: patientImagesIdParamsDto,
         },

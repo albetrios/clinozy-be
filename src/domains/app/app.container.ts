@@ -100,6 +100,9 @@ export function createAppContainer({
     fileReadUrls: () => {
       throw new Error('App uploads are not wired (domain-containers.plugin.ts → wireAppUploads)');
     },
+    thumbnailReadUrls: () => {
+      throw new Error('App uploads are not wired (domain-containers.plugin.ts → wireAppUploads)');
+    },
   };
   for (const service of Object.values(records)) service.usePorts(ports);
   return {
@@ -166,10 +169,15 @@ export interface AppUploadChecker {
     organizationInternalId: number;
     fileKeys: readonly string[];
   }): Promise<ReadonlyMap<string, BaseRecordFileLink>>;
+  createThumbnailReadUrls(options: {
+    organizationPublicId: string;
+    thumbnailKeys: readonly string[];
+  }): Promise<ReadonlyMap<string, string>>;
 }
 
 /**
- * Wires the app's upload ports (`findConfirmedUpload`, `removeImageLocation`, `fileReadUrls`) to
+ * Wires the app's upload ports (`findConfirmedUpload`, `removeImageLocation`, `fileReadUrls`,
+ * `thumbnailReadUrls`) to
  * the upload domain — called by the
  * composition root once both containers exist (the upload container registers after the app's).
  *
@@ -199,6 +207,8 @@ export function wireAppUploads({
     uploads.removeImageLocation({ scope, fileKey, organizationInternalId: organizationId });
   container.ports.fileReadUrls = ({ organizationId, fileKeys }) =>
     uploads.createReadUrls({ organizationInternalId: organizationId, fileKeys });
+  container.ports.thumbnailReadUrls = ({ organizationPublicId, thumbnailKeys }) =>
+    uploads.createThumbnailReadUrls({ organizationPublicId, thumbnailKeys });
 }
 
 /** Decorates `appDomain` on the Fastify instance (after the tenancy container). */

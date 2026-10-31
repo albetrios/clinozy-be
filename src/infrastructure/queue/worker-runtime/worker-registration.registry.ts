@@ -46,6 +46,8 @@ import { createTaskRulesSweepWorker } from '@/domains/app/sub-domains/tasks/work
 import { createTaskRulesWorker } from '@/domains/app/sub-domains/tasks/workers/task-rules.worker.js';
 import { TASK_RULES_SWEEP_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/workers/task-rules.constants.js';
 import { TASK_RULES_QUEUE_NAME } from '@/domains/app/sub-domains/tasks/queues/task-rules.queue.js';
+import { PATIENT_IMAGE_THUMBNAIL_QUEUE_NAME } from '@/domains/app/sub-domains/patients/patient-images/queues/patient-image-thumbnail.queue.js';
+import { createPatientImageThumbnailWorker } from '@/domains/app/sub-domains/patients/patient-images/workers/patient-image-thumbnail.worker.js';
 import { APP_RECORD_PURGE_QUEUE_NAME } from '@/domains/app/workers/app-record-purge.constants.js';
 import { createMemberRoleTombstoneRetentionWorker } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.worker.js';
 import { MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME } from '@/domains/tenancy/sub-domains/member-roles/workers/member-role-tombstone-retention.constants.js';
@@ -429,6 +431,21 @@ const WORKER_QUEUE_REGISTRATION_DEFINITIONS: WorkerQueueRegistrationDefinition[]
     holdsConnectionDuringExternalIo: false,
     resolvePostgresConcurrency: () => RETENTION_WORKER_CONCURRENCY,
     create: () => createTaskRulesWorker(),
+  },
+  // Patient photo thumbnails: made after a photo's create (and restore), removed after its delete,
+  // plus the 15-minute `reconcile-patient-image-thumbnails` job (lost enqueues) on the same queue.
+  // S3-bound and pausable; its Postgres checkouts are short and never held across the S3 call.
+  {
+    queueName: PATIENT_IMAGE_THUMBNAIL_QUEUE_NAME,
+    family: 'retention',
+    logLabel: 'patient image thumbnail worker',
+    usesPostgres: true,
+    scheduled: true,
+    criticality: 'throughput',
+    holdsConnectionDuringExternalIo: false,
+    resolvePostgresConcurrency: () => RETENTION_WORKER_CONCURRENCY,
+    create: (workerContainers) =>
+      createPatientImageThumbnailWorker(workerContainers.uploadDomain.uploadService),
   },
   retentionDefinition({
     queueName: MEMBER_ROLE_TOMBSTONE_RETENTION_QUEUE_NAME,

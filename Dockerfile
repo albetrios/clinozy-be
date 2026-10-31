@@ -51,6 +51,12 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 # pnpm validates every patchedDependencies file (pnpm-workspace.yaml) at install, used or not.
 COPY patches ./patches
 RUN pnpm install --frozen-lockfile
+# sharp (the image thumbnails) loads its prebuilt libvips from platform packages it declares as
+# optional dependencies; the runtime's --no-optional install (which keeps the optional MCP SDK
+# out) skips them, so the build's copy for this platform and libc is carried over, dereferenced.
+RUN mkdir -p /sharp-runtime/@img \
+  && cp -RL node_modules/.pnpm/node_modules/@img/sharp-linux* \
+    node_modules/.pnpm/node_modules/@img/sharp-libvips-linux* /sharp-runtime/@img/
 
 COPY . .
 RUN pnpm build && pnpm build:check \
@@ -101,6 +107,8 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts \
     /usr/local/bin/pnpm \
     /usr/local/bin/pnpx \
     /usr/local/lib/node_modules/npm
+# Node resolves sharp's `@img/sharp-<platform>` from here (see the build stage).
+COPY --from=build /sharp-runtime/@img ./node_modules/@img
 
 USER node
 

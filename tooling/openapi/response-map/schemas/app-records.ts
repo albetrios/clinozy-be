@@ -983,13 +983,26 @@ export const patientImagesRecordSchema = {
     album: { type: 'string', enum: ['general', 'private', 'lhr'] },
     stage: { type: 'string', enum: ['before', 'after'], nullable: true },
     file_key: { type: 'string' },
+    thumbnail_key: {
+      type: 'string',
+      nullable: true,
+      description:
+        'Its thumbnail (a 320 px WebP next to the photo), made in the background after the photo is filed — null until then',
+    },
     file_name: { type: 'string', description: "The upload's (P25)" },
     file_url: {
       type: 'string',
       format: 'uri',
       nullable: true,
       description:
-        'A link that shows the photo, valid 15 minutes and made fresh on every read — null when its upload is gone (D86)',
+        'A link that shows the full photo (open it with this), valid 15 minutes and made fresh on every read — null when its upload is gone (D86)',
+    },
+    thumbnail_url: {
+      type: 'string',
+      format: 'uri',
+      nullable: true,
+      description:
+        "The grid's image: a 15-minute link to the thumbnail, or the full photo's link (`file_url`) while there is none",
     },
     display_name: { type: 'string', maxLength: 60, nullable: true },
     caption: { type: 'string', maxLength: 200, nullable: true },
@@ -1034,9 +1047,12 @@ export const patientImagesRecordExample = {
   album: 'general',
   stage: 'before',
   file_key: 'uploads/org_k7x9m2pqr4w8n1v3a1b2c/3f1c2b7e.jpg',
+  thumbnail_key: 'uploads/org_k7x9m2pqr4w8n1v3a1b2c/3f1c2b7e.thumb.webp',
   file_name: 'cheek-left.jpg',
   file_url:
     'https://clinozy-uploads.s3.amazonaws.com/uploads/org_k7x9m2pqr4w8n1v3a1b2c/3f1c2b7e.jpg?X-Amz-Expires=900&X-Amz-Signature=…',
+  thumbnail_url:
+    'https://clinozy-uploads.s3.amazonaws.com/uploads/org_k7x9m2pqr4w8n1v3a1b2c/3f1c2b7e.thumb.webp?X-Amz-Expires=900&X-Amz-Signature=…',
   display_name: 'Left cheek',
   caption: null,
   body_part: 'face',

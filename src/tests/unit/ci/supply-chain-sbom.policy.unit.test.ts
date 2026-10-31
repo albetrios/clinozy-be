@@ -56,10 +56,13 @@ describe('supply chain SBOM policy (#94 p3-sbom-syft)', () => {
       workspace.indexOf('overrides:'),
     );
     const ignored = [...block.matchAll(/^\s+- (GHSA-[a-z0-9-]+)$/gm)].map((match) => match[1]);
-    expect(ignored).toEqual(['GHSA-vfj7-8cjw-p6xm']);
+    expect(ignored).toEqual(['GHSA-vfj7-8cjw-p6xm', 'GHSA-g3hv-75wg-m249']);
     // Every waiver carries its path and its removal condition right above it.
     expect(block).toContain('No patched release');
     expect(block).toContain('Remove when braces publishes a fix');
+    // minimatch: dev-only, no fix below the major the tools pin; the production tree is clean
+    expect(block).toContain('The production tree is clean');
+    expect(block).toContain('Remove when those tools move to minimatch 11');
   });
 
   it('generates CycloneDX SBOM post-merge and attaches it when release-please publishes', () => {

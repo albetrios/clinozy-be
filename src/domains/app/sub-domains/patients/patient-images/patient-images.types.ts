@@ -11,6 +11,11 @@ export interface PatientImageOutput {
   stage: string | null;
   /** The confirmed upload's object key */
   file_key: string;
+  /**
+   * Its thumbnail's object key (a 320 px WebP next to the photo), made in the background after the
+   * photo is filed — null until then, or when none can be made
+   */
+  thumbnail_key: string | null;
   /** The upload's file name (P25) */
   file_name: string;
   /**
@@ -18,6 +23,11 @@ export interface PatientImageOutput {
    * upload is gone
    */
   file_url: string | null;
+  /**
+   * The grid's image: a 15-minute link to the thumbnail, or `file_url`'s link while the photo has
+   * none — open the photo with `file_url`
+   */
+  thumbnail_url: string | null;
   display_name: string | null;
   caption: string | null;
   body_part: string | null;

@@ -162,6 +162,16 @@ export interface BaseRecordPorts {
     organizationId: number;
     fileKeys: readonly string[];
   }) => Promise<ReadonlyMap<string, BaseRecordFileLink>>;
+  /**
+   * A short-lived view link for each of the organization's thumbnails among `thumbnailKeys` (a
+   * patient photo's grid image) — late-wired from the upload domain; a key that is no thumbnail
+   * under the organization's own prefix has no entry. Signing is local (no request); the record's
+   * own gate decides who receives the links.
+   */
+  thumbnailReadUrls: (options: {
+    organizationPublicId: string;
+    thumbnailKeys: readonly string[];
+  }) => Promise<ReadonlyMap<string, string>>;
 }
 
 /** A stored file's short-lived view link and the name the person uploaded it under. */
