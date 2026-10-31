@@ -51,8 +51,26 @@ import { MILLISECONDS_PER_MINUTE } from '@/shared/constants/ttl.constants.js';
 /** Token category persisted in `verification_tokens.token_type` for the email verification-code login flow. */
 const EMAIL_CODE_TOKEN_TYPE = 'EMAIL_CODE';
 
-/** Redis key prefix for the per-user (public id) email verification-code attempt counter (brute-force cap). */
+/** Redis key prefix for the per-user (public id) email verification-code attempt counters (brute-force cap). */
 const EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX = 'auth:email_code_verify_attempts:';
+
+/**
+ * The flow an email-code verification belongs to — each has its own attempt counter (A-8): the
+ * public sign-in (`login`) and the authenticated bootstrap step-up (`step_up`). With one shared
+ * counter, anyone who knows the address could spend the public sign-in budget and lock the
+ * signed-in owner out of the step-up that enrolls their first factor.
+ */
+type EmailCodeVerifyFlow = 'login' | 'step_up';
+
+function emailCodeVerifyAttemptKey(options: {
+  userPublicId: string;
+  flow: EmailCodeVerifyFlow;
+}): string {
+  return `${EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX}${options.flow}:${options.userPublicId}`;
+}
+
+/** Every email-code flow — a freshly issued code restores the budget of each. */
+const EMAIL_CODE_VERIFY_FLOWS: readonly EmailCodeVerifyFlow[] = ['login', 'step_up'];
 
 /** Redis key prefix for the per-email verification-code send cooldown (anti-mail-bomb spacing). */
 const EMAIL_CODE_SEND_COOLDOWN_KEY_PREFIX = 'auth:email_code_send_cooldown:';
@@ -321,7 +339,10 @@ export class EmailLoginService {
     // means an attacker who burned the cap cannot keep the legitimate owner locked out — requesting a
     // new code restores their attempts. Brute-force is unaffected (each code is an independent random
     // target over a large keyspace, and `sendCode` is itself per-email + per-IP rate-limited).
-    await this.clearVerifyAttemptCounter(user.public_id);
+    await this.clearVerifyAttemptCounter({
+      userPublicId: user.public_id,
+      flows: EMAIL_CODE_VERIFY_FLOWS,
+    });
     return code;
   }
 
@@ -335,9 +356,16 @@ export class EmailLoginService {
    * warning rather than throwing (which, under enableOfflineQueue:false, would otherwise turn a
    * successful issue/login into a 500).
    */
-  private async clearVerifyAttemptCounter(userPublicId: string): Promise<void> {
+  private async clearVerifyAttemptCounter(options: {
+    userPublicId: string;
+    flows: readonly EmailCodeVerifyFlow[];
+  }): Promise<void> {
     try {
-      await this.redis.del(`${EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX}${userPublicId}`);
+      await this.redis.del(
+        ...options.flows.map((flow) =>
+          emailCodeVerifyAttemptKey({ userPublicId: options.userPublicId, flow }),
+        ),
+      );
     } catch (error) {
       logger.warn({ err: error }, 'email_login.verify_attempt_reset_unavailable');
     }
@@ -369,7 +397,7 @@ export class EmailLoginService {
       throw new UnauthorizedError('errors:invalidOrExpiredVerificationCode');
     }
 
-    const attemptKey = `${EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX}${user.public_id}`;
+    const attemptKey = emailCodeVerifyAttemptKey({ userPublicId: user.public_id, flow: 'login' });
     const attempts = await incrementWithExpiryOnFirst({
       redis: this.redis,
       key: attemptKey,
@@ -454,7 +482,7 @@ export class EmailLoginService {
     });
 
     // Clear the attempt counter so a verified user's later legitimate flows are never pre-throttled.
-    await this.clearVerifyAttemptCounter(user.public_id);
+    await this.clearVerifyAttemptCounter({ userPublicId: user.public_id, flows: ['login'] });
 
     // On the first successful login, ensure the personal organization exists — a bare invited
     // placeholder is created WITHOUT one, so an email-code claimer would otherwise have no personal
@@ -506,9 +534,9 @@ export class EmailLoginService {
     }
     // Parity with `login` (sec-review): bound online code-guessing with the same per-user attempt cap
     // (checked AFTER the MFA/password guards so a legitimate wrong-method rejection is not counted as
-    // a guess), not just the route rate limit. Shares the EMAIL_CODE_VERIFY_ATTEMPT counter so login
-    // and step-up draw from one budget.
-    const attemptKey = `${EMAIL_CODE_VERIFY_ATTEMPT_KEY_PREFIX}${user.public_id}`;
+    // a guess), not just the route rate limit. A-8: its own budget, apart from the public sign-in's,
+    // so a stranger spending the sign-in attempts cannot lock the signed-in owner out of the step-up.
+    const attemptKey = emailCodeVerifyAttemptKey({ userPublicId: user.public_id, flow: 'step_up' });
     const attempts = await incrementWithExpiryOnFirst({
       redis: this.redis,
       key: attemptKey,
@@ -528,7 +556,7 @@ export class EmailLoginService {
     );
     if (!record) throw new UnauthorizedError('errors:invalidOrExpiredVerificationCode');
     await this.verificationTokenRepository.invalidateAllForUser(user.id, EMAIL_CODE_TOKEN_TYPE);
-    // Clear the shared attempt counter so a later legitimate login/step-up is not pre-throttled.
-    await this.clearVerifyAttemptCounter(user.public_id);
+    // Clear the step-up attempt counter so a later legitimate step-up is not pre-throttled.
+    await this.clearVerifyAttemptCounter({ userPublicId: user.public_id, flows: ['step_up'] });
   }
 }

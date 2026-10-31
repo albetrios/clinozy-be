@@ -281,7 +281,7 @@ describe('MfaService', () => {
     expect(redis.eval).toHaveBeenCalledWith(
       expect.any(String),
       1,
-      'mfa:verify:fail:user_public',
+      'mfa:verify:fail:step_up:user_public',
       expect.any(String),
     );
   });
@@ -303,7 +303,7 @@ describe('MfaService', () => {
     expect(redis.eval).toHaveBeenCalledWith(
       expect.any(String),
       1,
-      'mfa:verify:fail:user_public',
+      'mfa:verify:fail:step_up:user_public',
       expect.any(String),
     );
     expect(redis.get).not.toHaveBeenCalled();
@@ -311,7 +311,7 @@ describe('MfaService', () => {
 
   it('verify clears the failure counter on success (audit-#12)', async () => {
     await service.verify({ userPublicId: 'user_public', body: { code: '123456' } });
-    expect(redis.del).toHaveBeenCalledWith('mfa:verify:fail:user_public');
+    expect(redis.del).toHaveBeenCalledWith('mfa:verify:fail:step_up:user_public');
   });
 
   it('verifyLoginMfa records a failure on an invalid TOTP code (audit-#12)', async () => {
@@ -326,9 +326,27 @@ describe('MfaService', () => {
     expect(redis.eval).toHaveBeenCalledWith(
       expect.any(String),
       1,
-      'mfa:verify:fail:user_public',
+      'mfa:verify:fail:login:user_public',
       expect.any(String),
     );
+  });
+
+  it('A-8: the sign-in challenge and the step-up count on separate budgets', async () => {
+    const { verify } = await import('otplib');
+    vi.mocked(verify).mockResolvedValue({ valid: false } as never);
+    await expect(
+      service.verifyLoginMfa({
+        body: { mfa_session_token: 'session-token', totp_code: '000000' },
+        ipAddress: '127.0.0.1',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+    await expect(
+      service.verify({ userPublicId: 'user_public', body: { code: '000000' } }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+    const countedKeys = redis.eval.mock.calls.map((call: unknown[]) => call[2]);
+    expect(countedKeys).toContain('mfa:verify:fail:login:user_public');
+    expect(countedKeys).toContain('mfa:verify:fail:step_up:user_public');
+    vi.mocked(verify).mockResolvedValue({ valid: true } as never);
   });
 
   it('verify rejects when MFA not enabled', async () => {
