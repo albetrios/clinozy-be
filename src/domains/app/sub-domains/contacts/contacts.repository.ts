@@ -108,7 +108,7 @@ export function contactAgeCondition(options: {
       sql`${dateOfBirthColumn} > (${today} - make_interval(years => ${range.to + 1}::int))::date`,
     );
   }
-  return conditions.length === 0 ? sql`true` : sql`(${sql.join(conditions, sql` and `)})`;
+  return and(...conditions) ?? sql`true`;
 }
 
 /**
