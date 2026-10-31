@@ -28,6 +28,8 @@ const FRAMEWORK_DICTATED = new Set([
   'src/infrastructure/mail/queues/mail-backoff.util.ts#mailBackoffStrategy',
   // @fastify/rate-limit store: incr(key, callback, timeWindow, max)
   'src/shared/middlewares/rate-limit/rate-limit-fallback-store.ts#incr',
+  // @fastify/rate-limit store: read(key, callback, timeWindow, max) — the `{ increment: false }` twin
+  'src/shared/middlewares/rate-limit/rate-limit-fallback-store.ts#read',
   // ioredis custom Lua command: positional KEYS / ARGV
   'src/infrastructure/resilience/circuit-breaker.ts#circuitMutate',
   // BullMQ Worker's `on(event, listener)`, typed structurally

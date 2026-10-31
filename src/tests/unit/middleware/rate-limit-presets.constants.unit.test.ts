@@ -139,6 +139,25 @@ describe('rate-limit-presets', () => {
     expect(key).toBe('ip:203.0.113.7');
   });
 
+  it('every IP fallback keys an IPv6 caller on its /64 (D-3)', async () => {
+    const {
+      STRICT_PUBLIC_RATE_LIMIT,
+      STRICT_AUTHED_RATE_LIMIT,
+      ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+      STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS,
+    } = await import('@/shared/middlewares/rate-limit/rate-limit-presets.constants.js');
+    const request = { ip: '2001:db8:1:2:aaaa:bbbb:cccc:dddd', body: {}, auth: null } as never;
+    const keyGenerators = [
+      STRICT_PUBLIC_RATE_LIMIT.config.rateLimit.keyGenerator,
+      STRICT_AUTHED_RATE_LIMIT.config.rateLimit.keyGenerator,
+      ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT.config.rateLimit.keyGenerator,
+      STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS.keyGenerator,
+    ];
+    for (const keyGenerator of keyGenerators) {
+      expect(await keyGenerator?.(request)).toBe('ip:2001:db8:1:2::');
+    }
+  });
+
   it('org-scoped key namespaces the organization by actor so victim buckets are isolated (audit #14)', async () => {
     const { ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT } = await import(
       '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js'

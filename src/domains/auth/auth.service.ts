@@ -8,6 +8,7 @@ import {
   ValidationError,
 } from '@/shared/errors/index.js';
 import { assertUserAccountActive } from '@/shared/utils/auth/account-status.util.js';
+import { rateLimitIpKey } from '@/shared/utils/http/rate-limit-ip-key.util.js';
 import { isDisposableEmailBlocked } from '@/shared/utils/text/email.util.js';
 import { resolveAccessTokenRoleForUser } from '@/shared/utils/auth/global-admin-role.util.js';
 import { MFA_AUTHENTICATION_METHOD, signAccessToken } from '@/shared/utils/security/jwt.util.js';
@@ -118,7 +119,9 @@ export class AuthService {
   ) {}
 
   private buildIpKey(ipAddress: string): string {
-    return `${IP_FAILED_LOGIN_KEY_PREFIX}${createHash('sha256').update(ipAddress).digest('hex')}`;
+    // The bucket is the caller's rate-limit identity (an IPv6 /64, not the full address — D-3).
+    const bucket = rateLimitIpKey(ipAddress);
+    return `${IP_FAILED_LOGIN_KEY_PREFIX}${createHash('sha256').update(bucket).digest('hex')}`;
   }
 
   /**

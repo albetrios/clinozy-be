@@ -53,8 +53,10 @@ export const middlewarePlugins = [
   encryptionMiddleware,
   zodTypeProviderMiddleware,
   authMiddleware,
-  // `rateLimitMiddleware` runs after auth so per-user / per-organization keys are available
-  // (the global limiter is keyed on `request.ip`, but per-route limits need the principal).
+  // `rateLimitMiddleware` registers after auth so its `failedAuthenticationRateLimit` decorator and
+  // the per-route presets (keyed on the principal) sit on top of the auth decorators. Its global
+  // per-IP limit is an app-level `onRequest` hook, so it still runs before every route-level
+  // `onRequest: [app.authenticate]` and on the not-found handler (D-2).
   rateLimitMiddleware,
   healthMiddleware,
   httpMetricsPlugin,

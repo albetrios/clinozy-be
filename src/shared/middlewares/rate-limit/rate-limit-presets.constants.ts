@@ -3,6 +3,7 @@ import type { FastifyRequest } from 'fastify';
 import type { RateLimitOptions } from '@fastify/rate-limit';
 import { env } from '@/shared/config/env.config.js';
 import { getAuthenticatedActorId } from '@/shared/utils/http/request.util.js';
+import { rateLimitIpKey } from '@/shared/utils/http/rate-limit-ip-key.util.js';
 import { Sentry } from '@/infrastructure/observability/sentry/sentry.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { MILLISECONDS_PER_MINUTE } from '@/shared/constants/ttl.constants.js';
@@ -11,10 +12,11 @@ import { shouldEmitRateLimitTelemetry } from '@/shared/middlewares/rate-limit/ra
 /**
  * Per-route rate limit presets for high-risk endpoints.
  * Authenticated presets use hook `preHandler` so `keyGenerator` runs after `app.authenticate`.
+ * Every IP fallback keys on {@link rateLimitIpKey} (IPv6 masked to its /64 — D-3).
  * @see https://github.com/fastify/fastify-rate-limit#custom-hook-example-usage-after-authentication
  */
 function buildRateLimitKeyFromIpAddress(request: FastifyRequest): string {
-  return `ip:${request.ip}`;
+  return `ip:${rateLimitIpKey(request.ip)}`;
 }
 
 /**
@@ -91,13 +93,13 @@ function buildRateLimitKeyFromRequestBodyEmail(request: FastifyRequest): string 
       return `email:${emailHashPrefix}`;
     }
   }
-  return `ip:${request.ip}`;
+  return `ip:${rateLimitIpKey(request.ip)}`;
 }
 
 function buildRateLimitKeyFromAuthenticatedUserOrIpAddress(request: FastifyRequest): string {
   const auth = request.auth;
   const userId = auth && auth.kind === 'user' ? auth.userId : undefined;
-  return userId ? `user:${userId}` : `ip:${request.ip}`;
+  return userId ? `user:${userId}` : `ip:${rateLimitIpKey(request.ip)}`;
 }
 
 /**
@@ -136,7 +138,7 @@ function buildRateLimitKeyFromOrganizationActorOrIpAddress(request: FastifyReque
   if (actorId) {
     return `actor:${actorId}`;
   }
-  return `ip:${request.ip}`;
+  return `ip:${rateLimitIpKey(request.ip)}`;
 }
 
 // Read from the validated env config: RATE_LIMIT_RELAXED_CAPS defaults false (hardened); development

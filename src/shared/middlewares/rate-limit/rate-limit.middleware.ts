@@ -8,6 +8,8 @@ import { Sentry } from '@/infrastructure/observability/sentry/sentry.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { createRedisFallbackRateLimitStore } from '@/shared/middlewares/rate-limit/rate-limit-fallback-store.js';
 import { shouldEmitRateLimitTelemetry } from '@/shared/middlewares/rate-limit/rate-limit-telemetry-throttle.js';
+import { FAILED_AUTHENTICATION_RATE_LIMIT_OPTIONS } from '@/shared/middlewares/rate-limit/failed-authentication-rate-limit.js';
+import { rateLimitIpKey } from '@/shared/utils/http/rate-limit-ip-key.util.js';
 
 /**
  * Observes a request the global limiter has just REJECTED: emits a structured
@@ -58,14 +60,24 @@ function recordGlobalRateLimitExceeded(request: FastifyRequest, key: string): vo
 const RATE_LIMIT_ALLOWLISTED_PATHS = new Set(['/livez', '/readyz']);
 
 /**
- * Global rate limiting, keyed strictly on `request.ip`.
+ * Global rate limiting, keyed strictly on the client address ({@link rateLimitIpKey}: IPv4 as-is,
+ * IPv6 masked to its /64 — D-3).
  *
- * This limiter runs in the `onRequest` phase, before route authentication (which happens
- * in a later `preHandler` via `app.authenticate`). The only tenant signal available here is
- * any request-asserted organization value, which is NOT verified against
- * the caller's membership. Keying on that value would let an unauthenticated client rotate a
- * fresh organization id per request to mint a new bucket (bypassing the per-IP cap) or reuse a victim
- * org's id to burn its shared bucket (cross-tenant throttling). It is therefore IP-only.
+ * The global limiter is an **app-level `onRequest` hook**, so it runs before every route-level
+ * hook — `onRequest: [app.authenticate]` included — and before the not-found handler (D-2). The
+ * plugin's own `global: true` mode appended it to each route's `onRequest` array AFTER
+ * `authenticate`, so every 401 skipped it, and it never reached the not-found handler at all:
+ * failed authentication and unknown URLs were unmetered. A route that declares its own
+ * `config.rateLimit` (a preset, or `false`) keeps it in place of the global limit, as before.
+ * Failed authentication on such a route is metered by the separate per-address budget
+ * (`failed-authentication-rate-limit.ts`, decorated here as `failedAuthenticationRateLimit` and
+ * applied by the auth middleware).
+ *
+ * The only tenant signal available before authentication is a request-asserted organization
+ * value, which is NOT verified against the caller's membership. Keying on that value would let an
+ * unauthenticated client rotate a fresh organization id per request to mint a new bucket
+ * (bypassing the per-IP cap) or reuse a victim org's id to burn its shared bucket (cross-tenant
+ * throttling). It is therefore IP-only.
  *
  * Org- and user-scoped quotas are applied per route in a post-auth `preHandler` via the
  * presets in `rate-limit-presets.constants.ts` (e.g. `ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT`),
@@ -89,9 +101,10 @@ const RATE_LIMIT_ALLOWLISTED_PATHS = new Set(['/livez', '/readyz']);
  * middleware which intentionally fail-closes for write safety.
  *
  * Wrapped with `fastify-plugin` so `@fastify/rate-limit` decorates the root app rather than an
- * encapsulated child context. This is required for two reasons: (1) the `global: true` limiter's
- * `onRequest` hook must apply to every route (and run before any handler opens a database
- * transaction, so a throttled request never takes a pooled connection), and (2) per-route presets that build a second
+ * encapsulated child context. This is required for two reasons: (1) the global limiter's
+ * `onRequest` hook must apply to every route and the not-found handler (and run before any
+ * handler opens a database transaction, so a throttled request never takes a pooled connection),
+ * and (2) per-route presets that build a second
  * limiter via `app.rateLimit(...)` (e.g. the per-email throttle in `auth.routes.ts`) need the
  * `rateLimit` decorator visible at the instance where routes register.
  */
@@ -99,13 +112,14 @@ const rateLimitMiddleware: FastifyPluginAsync = async (app) => {
   const plugin = fastifyRateLimit as unknown as FastifyPluginAsync<RateLimitPluginOptions>;
 
   const options: RateLimitPluginOptions = {
-    global: true,
+    // Not the plugin's per-route global mode: the global limit is the app-level hook below.
+    global: false,
     max: env.RATE_LIMIT_MAX,
     timeWindow: env.RATE_LIMIT_WINDOW_MS,
     // Exact-match the liveness/readiness probe paths so unmetered bypass cannot be
     // smuggled via a prefix collision like `/healthxyz` (the old `startsWith('/health')`).
     allowList: (request) => RATE_LIMIT_ALLOWLISTED_PATHS.has(request.url.split('?', 1)[0] ?? ''),
-    keyGenerator: (request) => request.ip,
+    keyGenerator: (request) => rateLimitIpKey(request.ip),
     // Last-resort guard only — the fallback store below already degrades to in-process limiting
     // on Redis errors, so this should never actually skip. See @remarks above.
     skipOnError: true,
@@ -128,6 +142,21 @@ const rateLimitMiddleware: FastifyPluginAsync = async (app) => {
   }
 
   await app.register(plugin, options);
+
+  // The global limit as an app-level hook: ahead of every route-level `onRequest` (authenticate)
+  // and on the not-found handler. A route's own `config.rateLimit` (a preset, or `false`) replaces
+  // it, exactly as in the plugin's global mode; `app.rateLimit()` shares the plugin's store and
+  // global parameters, so the bucket and the `X-RateLimit-*` headers are the ones it always had.
+  const globalRateLimit = app.rateLimit();
+  app.addHook('onRequest', async (request, reply) => {
+    if (request.routeOptions.config?.rateLimit != null) return;
+    await globalRateLimit.call(app, request, reply);
+  });
+
+  app.decorate(
+    'failedAuthenticationRateLimit',
+    app.createRateLimit(FAILED_AUTHENTICATION_RATE_LIMIT_OPTIONS),
+  );
 };
 
 export default fp(rateLimitMiddleware, { name: 'rate-limit-middleware' });

@@ -10,6 +10,7 @@ import type { UploadContainer } from '@/domains/upload/upload.container.js';
 import type { UserContainer } from '@/domains/user/user.container.js';
 import type { AuthContext } from '@/shared/types/index.js';
 import type { PrincipalDatabaseScope } from '@/infrastructure/database/contexts/database-context.js';
+import type { FailedAuthenticationRateLimit } from '@/shared/middlewares/rate-limit/failed-authentication-rate-limit.js';
 import type { FastifyReply } from 'fastify';
 import type Stripe from 'stripe';
 
@@ -48,6 +49,11 @@ declare module 'fastify' {
 
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    /**
+     * Per-address failed-authentication limiter (`rate-limit.middleware.ts`); absent on minimal
+     * harnesses that do not register the rate-limit middleware.
+     */
+    failedAuthenticationRateLimit?: FailedAuthenticationRateLimit;
     /** Wired by domain `register*Container` functions via `domainContainersPlugin`. */
     userDomain: UserContainer;
     tenancyDomain: TenancyContainer;

@@ -2703,6 +2703,7 @@ src/
     │   │   ├── shutdown.middleware.ts
     │   │   └── zod-type-provider.middleware.ts
     │   ├── rate-limit/
+    │   │   ├── failed-authentication-rate-limit.ts
     │   │   ├── rate-limit-fallback-store.ts
     │   │   ├── rate-limit-presets.constants.ts
     │   │   ├── rate-limit-telemetry-throttle.ts
@@ -2732,12 +2733,14 @@ src/
     │   ├── http/
     │   │   ├── __tests__/
     │   │   │   └── unit/
-    │   │   │   │   └── http-cache.util.unit.test.ts
+    │   │   │   │   ├── http-cache.util.unit.test.ts
+    │   │   │   │   └── rate-limit-ip-key.util.unit.test.ts
     │   │   ├── api-versioning.util.ts
     │   │   ├── fastify-server.util.ts
     │   │   ├── http-cache.util.ts
     │   │   ├── list-query.util.ts
     │   │   ├── pagination.util.ts
+    │   │   ├── rate-limit-ip-key.util.ts
     │   │   ├── request.util.ts
     │   │   ├── response.util.ts
     │   │   ├── trust-proxy.util.ts
@@ -3222,6 +3225,7 @@ src/
     │   ├── rate-limit/
     │   │   ├── billing-mutation-rate-limit.security.test.ts
     │   │   ├── cross-tenant-rate-limit.security.test.ts
+    │   │   ├── failed-authentication-rate-limit.security.test.ts
     │   │   ├── notify-mutation-rate-limit.security.test.ts
     │   │   ├── preset-authed-burst.security.test.ts
     │   │   ├── rate-limit-burst.security.test.ts
