@@ -1024,24 +1024,33 @@ export class BaseRecordRepository {
       .groupBy(...options.columns.map((name) => this.column(name)))) as Record<string, unknown>[];
   }
 
-  /** A live row by its internal id (a reference column's value), or null. */
-  async findById(id: number): Promise<BaseRecordRow | null> {
-    const rows = (await getRequestDatabase()
+  /**
+   * A live row by its internal id (a reference column's value), or null; `forUpdate` locks it until
+   * the unit of work ends — a write that depends on another record's state (a receipt on an
+   * invoice) holds it still while it checks and writes (G2-1).
+   */
+  async findById(id: number, options: { forUpdate?: boolean } = {}): Promise<BaseRecordRow | null> {
+    const query = getRequestDatabase()
       .select()
       .from(this.config.table)
       .where(and(eq(this.column('id'), id), liveRowFilter(this.config.table)))
-      .limit(1)) as BaseRecordRow[];
+      .limit(1);
+    const rows = (await (options.forUpdate ? query.for('update') : query)) as BaseRecordRow[];
     return rows[0] ?? null;
   }
 
-  /** A row of the organization by public id — live, or only a deleted one when asked. */
+  /**
+   * A row of the organization by public id — live, or only a deleted one when asked; `forUpdate`
+   * locks it (`FOR UPDATE`) until the unit of work ends, so a write validates the row it changes
+   * (G2-1).
+   */
   async findByPublicId(
     public_id: string,
     organization_id: number,
-    options: { deleted?: boolean } = {},
+    options: { deleted?: boolean; forUpdate?: boolean } = {},
   ): Promise<BaseRecordRow | null> {
     if (options.deleted && !this.softDeletes) return null;
-    const rows = (await getRequestDatabase()
+    const query = getRequestDatabase()
       .select()
       .from(this.config.table)
       .where(
@@ -1051,7 +1060,8 @@ export class BaseRecordRepository {
           options.deleted ? isNotNull(this.column('deleted_at')) : liveRowFilter(this.config.table),
         ),
       )
-      .limit(1)) as BaseRecordRow[];
+      .limit(1);
+    const rows = (await (options.forUpdate ? query.for('update') : query)) as BaseRecordRow[];
     return rows[0] ?? null;
   }
 
@@ -1068,11 +1078,15 @@ export class BaseRecordRepository {
     });
   }
 
-  /** Updates a live row; returns it, or null when it no longer exists. */
+  /**
+   * Updates a live row; returns it, or null when it no longer exists — or, with `statusGuard`, when
+   * its status is no longer one of `from` (a lifecycle rule in the statement itself, G2-1).
+   */
   async update(
     id: number,
     values: Record<string, unknown>,
     updated_by_user_id: number | null,
+    statusGuard?: { column: string; from: readonly string[] },
   ): Promise<BaseRecordRow | null> {
     const rows = (await getRequestDatabase()
       .update(this.config.table)
@@ -1081,7 +1095,13 @@ export class BaseRecordRepository {
         updated_at: sql`greatest(${this.column('created_at')}, now())`,
         updated_by_user_id,
       } as never)
-      .where(and(eq(this.column('id'), id), liveRowFilter(this.config.table)))
+      .where(
+        and(
+          eq(this.column('id'), id),
+          liveRowFilter(this.config.table),
+          statusGuard ? inArray(this.column(statusGuard.column), [...statusGuard.from]) : undefined,
+        ),
+      )
       .returning()) as BaseRecordRow[];
     return rows[0] ?? null;
   }

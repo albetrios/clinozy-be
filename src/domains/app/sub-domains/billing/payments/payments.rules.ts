@@ -84,7 +84,8 @@ async function assertInvoiceOfReceipt({
       messageKey: 'errors:validation.paymentInvoiceOnlyReceipt',
     });
   }
-  const invoice = await invoicesRepository.findById(values.invoice_id);
+  // Locked: an invoice deleted meanwhile waits for this receipt (and then refuses), never under it.
+  const invoice = await invoicesRepository.findById(values.invoice_id, { forUpdate: true });
   if (invoice?.contact_id !== values.contact_id) {
     throw fieldValidationError({
       field: 'contact_id',

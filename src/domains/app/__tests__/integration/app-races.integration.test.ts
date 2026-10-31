@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createTestApp } from '@/tests/helpers/test-app.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
-import { operatorQuery } from '@/tests/helpers/operator-database.js';
+import { getOperatorPool, operatorQuery } from '@/tests/helpers/operator-database.js';
 import { jsonQuery } from '@/tests/helpers/json-query.helper.js';
 import {
   type AppFixture,
@@ -20,7 +20,7 @@ interface RaceAnswer {
 /** One call of a race: who sends it, and what. */
 interface RaceCall {
   as: AppFixtureRole;
-  method: 'POST' | 'PATCH';
+  method: 'POST' | 'PATCH' | 'DELETE';
   path: string;
   body?: unknown;
 }
@@ -310,6 +310,156 @@ describe('App races — integration (A3, S5, MD5, TR7, L5)', () => {
       ?.read('.data.owner_membership_id');
     await flow.expect(200, 'the lead', 'GET', `/app/leads/${lead}`);
     flow.expectValue('owned by the winner', '.data.owner_membership_id', winner ?? '');
+  });
+
+  /** Asha's patient file id. */
+  async function ashaFile(): Promise<string> {
+    const [row] = await operatorQuery<{ public_id: string }[]>`
+      SELECT p.public_id FROM app.patients p JOIN app.contacts c ON c.id = p.contact_id
+      WHERE c.public_id = ${asha} AND p.deleted_at IS NULL
+    `;
+    return row?.public_id ?? '';
+  }
+
+  it('G2-1: an edit queued behind the approval — 409 prescription_approved, never an edit of an approved one', async () => {
+    flow.as('doctor');
+    const prescriptions = `/app/patients/${await ashaFile()}/prescriptions`;
+    await flow.expect(200, 'a draft', 'POST', prescriptions, {
+      doctor_membership_id: doctor,
+      prescription_date: calendarDay(fixture, 0),
+      items: [{ medicine_name: `Sunscreen ${T}` }],
+    });
+    const id = flow.last('.data.id');
+    const prescription = `${prescriptions}/${id}`;
+    const pause = () => new Promise((resolve) => setTimeout(resolve, 250));
+    // Hold the row so both writes read it as a draft and queue: the approval first, then the edit.
+    const holder = await getOperatorPool().connect();
+    let answers: RaceAnswer[];
+    try {
+      await holder.query('BEGIN');
+      await holder.query(
+        'SELECT 1 FROM app.patient_prescriptions WHERE public_id = $1 FOR UPDATE',
+        [id],
+      );
+      const approve = atOnce([{ as: 'doctor', method: 'POST', path: `${prescription}/approve` }]);
+      await pause();
+      const edit = atOnce([
+        {
+          as: 'doctor',
+          method: 'PATCH',
+          path: prescription,
+          body: { items: [{ medicine_name: `Edited ${T}` }] },
+        },
+      ]);
+      await pause();
+      await holder.query('COMMIT');
+      answers = [...(await approve), ...(await edit)];
+    } finally {
+      holder.release();
+    }
+
+    expect(answers.map((answer) => answer.status)).toEqual([200, 409]);
+    expect(answers[1]?.read(REASON)).toBe('prescription_approved');
+    const [row] = await operatorQuery<{ status: string; name: string }[]>`
+      SELECT status, items->0->>'medicine_name' AS name FROM app.patient_prescriptions
+      WHERE public_id = ${id}
+    `;
+    expect([row?.status, row?.name], 'approved as the doctor read it').toEqual([
+      'approved',
+      `Sunscreen ${T}`,
+    ]);
+  });
+
+  it('G2-1: one session reversed twice at once — one reversal, the session given back once', async () => {
+    flow.as('owner');
+    await flow.expect(200, 'a two-session package', 'POST', '/app/offerings', {
+      name: `Double peel ${T}`,
+      category: 'package',
+      price: 2000,
+      sessions: 2,
+      validity_days: 30,
+    });
+    await flow.expect(200, 'bill Asha the package', 'POST', '/app/invoices', {
+      branch_id: vesu,
+      contact_id: asha,
+      items: [{ offering_id: flow.last('.data.id'), quantity: 1 }],
+    });
+    const [bought] = await operatorQuery<{ public_id: string }[]>`
+      SELECT o.public_id FROM app.patient_offerings o
+        JOIN app.patients p ON p.id = o.patient_id
+        JOIN app.contacts c ON c.id = p.contact_id
+      WHERE c.public_id = ${asha} AND o.deleted_at IS NULL
+      ORDER BY o.id DESC LIMIT 1
+    `;
+    const treatments = `/app/patients/${await ashaFile()}/treatments`;
+    flow.as('doctor');
+    await flow.expect(200, 'spend one session', 'POST', treatments, {
+      name: 'Peel',
+      patient_offering_id: bought?.public_id,
+    });
+    const reverse = `${treatments}/${flow.last('.data.id')}/reverse`;
+    const answers = await atOnce([
+      { as: 'doctor', method: 'POST', path: reverse, body: { reason: 'Wrong patient' } },
+      { as: 'therapist', method: 'POST', path: reverse, body: { reason: 'Wrong patient' } },
+    ]);
+
+    expect(statuses(answers)).toEqual([200, 409]);
+    expect(answers.find((answer) => answer.status === 409)?.read(REASON)).toBe(
+      'transition_not_allowed',
+    );
+    const [row] = await operatorQuery<{ used: number }[]>`
+      SELECT sessions_used AS used FROM app.patient_offerings
+      WHERE public_id = ${bought?.public_id ?? ''}
+    `;
+    expect(row?.used, 'the one session came back once').toBe(0);
+  });
+
+  it('G2-1: a bill deleted while a receipt is taken against it — never money on a deleted bill', async () => {
+    flow.as('owner');
+    await flow.expect(200, 'an offering', 'POST', '/app/offerings', {
+      name: `Consult ${T}`,
+      price: 500,
+    });
+    const offering = flow.last('.data.id');
+    for (let round = 0; round < 3; round += 1) {
+      await flow.expect(200, 'a bill', 'POST', '/app/invoices', {
+        branch_id: vesu,
+        contact_id: bela,
+        items: [{ offering_id: offering, quantity: 1 }],
+      });
+      const invoice = flow.last('.data.id');
+      const answers = await atOnce([
+        { as: 'owner', method: 'DELETE', path: `/app/invoices/${invoice}?reason=mistake` },
+        {
+          as: 'owner',
+          method: 'POST',
+          path: '/app/payments',
+          body: {
+            kind: 'receipt',
+            branch_id: vesu,
+            contact_id: bela,
+            invoice_id: invoice,
+            splits: [{ mode: 'cash', amount: 100 }],
+          },
+        },
+      ]);
+
+      expect(answers.filter((answer) => answer.status >= 400)).toHaveLength(1);
+      const [row] = await operatorQuery<{ deleted: boolean; paid: string; receipts: number }[]>`
+        SELECT i.deleted_at IS NOT NULL AS deleted, i.paid_amount::text AS paid,
+          (SELECT count(*)::int FROM app.payments p
+            WHERE p.invoice_id = i.id AND p.deleted_at IS NULL) AS receipts
+        FROM app.invoices i WHERE i.public_id = ${invoice}
+      `;
+      if (row?.deleted) {
+        expect([row.paid, row.receipts], 'a deleted bill holds no money').toEqual(['0.00', 0]);
+      } else {
+        expect([row?.paid, row?.receipts], 'the receipt landed on the live bill').toEqual([
+          '100.00',
+          1,
+        ]);
+      }
+    }
   });
 
   it('keeps the races on today out of the books (a sanity read of the day)', async () => {

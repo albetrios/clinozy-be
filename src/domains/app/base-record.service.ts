@@ -63,6 +63,9 @@ import { branches } from '@/domains/app/sub-domains/branches/branches.schema.js'
  *   `ConflictError` for a unique clash, a record changed since it was opened (`expected_updated_at`,
  *   D43), an action its status does not allow, or a restore of a live record.
  * - **Side effects:** writes stamp the acting user; a delete keeps the row (purged later, D38).
+ * - **Notes:** every write (change, action, delete, restore) reads its row `FOR UPDATE` in its own
+ *   unit of work, so a rule checks the row the write changes and a concurrent write waits; an
+ *   action's `from` statuses ride in its `UPDATE` too, as a backstop (G2-1).
  */
 export class BaseRecordService<Output> {
   constructor(
@@ -386,7 +389,13 @@ export class BaseRecordService<Output> {
       callback: async () => {
         const organizationId = await this.organizationId(scope);
         const userId = await this.userId(actingUserPublicId);
-        const existing = await this.requireRow({ organizationId, publicId, userId, visibility });
+        const existing = await this.requireRow({
+          organizationId,
+          publicId,
+          userId,
+          visibility,
+          lock: true,
+        });
         await this.assertUnderParent({
           organizationId,
           row: existing,
@@ -457,7 +466,13 @@ export class BaseRecordService<Output> {
       callback: async () => {
         const organizationId = await this.organizationId(scope);
         const userId = await this.userId(actingUserPublicId);
-        const existing = await this.requireRow({ organizationId, publicId, userId, visibility });
+        const existing = await this.requireRow({
+          organizationId,
+          publicId,
+          userId,
+          visibility,
+          lock: true,
+        });
         await this.assertUnderParent({
           organizationId,
           row: existing,
@@ -466,23 +481,25 @@ export class BaseRecordService<Output> {
           visibility,
         });
         const statusColumn = transition.statusColumn ?? 'status';
-        const currentStatus = existing[statusColumn];
-        const status = typeof currentStatus === 'string' ? currentStatus : '';
-        if (transition.from && !transition.from.includes(status)) {
-          throw new ConflictError('errors:recordTransitionNotAllowed', {
-            action,
-            status,
-          }).withReason('transition_not_allowed');
-        }
+        assertTransitionAllowed({ action, transition, status: existing[statusColumn] });
         const values: Record<string, unknown> = { ...(transition.set ?? {}), ...extra };
         for (const column of transition.stamp ?? []) values[column] = new Date();
         await this.resolveReferences({ organizationId, values });
         const context = this.writeContext({ scope, organizationId, userId, visibility });
         await this.descriptor.prepareTransition?.(action, values, existing, context);
         this.descriptor.checkValues?.({ ...existing, ...values });
+        // The status rule rides in the statement too — the row lock is the guard, this the backstop.
         const updated = await this.mapConflicts(() =>
-          this.descriptor.repository.update(existing.id, values, userId),
+          this.descriptor.repository.update(
+            existing.id,
+            values,
+            userId,
+            transition.from ? { column: statusColumn, from: transition.from } : undefined,
+          ),
         );
+        if (!updated && transition.from) {
+          throw transitionNotAllowed({ action, status: existing[statusColumn] });
+        }
         if (!updated) throw new NotFoundError(this.descriptor.label);
         await this.descriptor.afterWrite?.(
           updated,
@@ -519,7 +536,13 @@ export class BaseRecordService<Output> {
       callback: async () => {
         const organizationId = await this.organizationId(scope);
         const userId = await this.userId(actingUserPublicId);
-        const existing = await this.requireRow({ organizationId, publicId, userId, visibility });
+        const existing = await this.requireRow({
+          organizationId,
+          publicId,
+          userId,
+          visibility,
+          lock: true,
+        });
         await this.assertUnderParent({
           organizationId,
           row: existing,
@@ -568,6 +591,7 @@ export class BaseRecordService<Output> {
           publicId: options.publicId,
           userId,
           visibility: options.visibility,
+          lock: true,
         });
         await this.assertUnderParent({
           organizationId,
@@ -758,6 +782,7 @@ export class BaseRecordService<Output> {
         const { repository } = this.descriptor;
         const deleted = await repository.findByPublicId(publicId, organizationId, {
           deleted: true,
+          forUpdate: true,
         });
         if (
           deleted &&
@@ -955,19 +980,27 @@ export class BaseRecordService<Output> {
     );
   }
 
-  /** A live row of the organization by public id (the actor's own, when owned); 404 otherwise. */
+  /**
+   * A live row of the organization by public id (the actor's own, when owned); 404 otherwise. A
+   * write passes `lock`: the row is read `FOR UPDATE`, so its status rules are checked against the
+   * row the write changes and a concurrent write waits for this one (G2-1).
+   */
   protected async requireRow({
     organizationId,
     publicId,
     userId,
     visibility,
+    lock = false,
   }: {
     organizationId: number;
     publicId: string;
     userId: number | null;
     visibility?: BaseRecordVisibility | undefined;
+    lock?: boolean;
   }): Promise<BaseRecordRow> {
-    const row = await this.descriptor.repository.findByPublicId(publicId, organizationId);
+    const row = await this.descriptor.repository.findByPublicId(publicId, organizationId, {
+      forUpdate: lock,
+    });
     if (!row) throw new NotFoundError(this.descriptor.label);
     if (!(await this.isOwnersRow({ organizationId, row, userId }))) {
       throw new NotFoundError(this.descriptor.label);
@@ -1369,6 +1402,29 @@ function referenceNotFound({
     undefined,
     [{ field: reference.field, messageKey: 'errors:validation.recordReferenceNotFound' }],
   );
+}
+
+/** The 409 of a lifecycle action the record's status does not allow. */
+function transitionNotAllowed({ action, status }: { action: string; status: unknown }) {
+  return new ConflictError('errors:recordTransitionNotAllowed', {
+    action,
+    status: typeof status === 'string' ? status : '',
+  }).withReason('transition_not_allowed');
+}
+
+/** Refuses an action whose `from` statuses do not include the record's (409). */
+function assertTransitionAllowed({
+  action,
+  transition,
+  status,
+}: {
+  action: string;
+  transition: { from?: readonly string[] | undefined };
+  status: unknown;
+}): void {
+  if (!transition.from) return;
+  if (typeof status === 'string' && transition.from.includes(status)) return;
+  throw transitionNotAllowed({ action, status });
 }
 
 /** Ports before the app container wires them — a rule that calls one fails loudly. */
