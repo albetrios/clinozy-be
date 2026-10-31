@@ -62,6 +62,7 @@ describe('completeOAuthUserSession', () => {
     linkOAuthProviderIfMissing: vi.fn().mockResolvedValue(undefined),
     findByProviderUserId: vi.fn().mockResolvedValue(null),
     hasActiveLoginCredential: vi.fn().mockResolvedValue(false),
+    isLoginMethodTurnedOff: vi.fn().mockResolvedValue(false),
   };
   const authSessionService = {
     createSessionForUser: vi.fn().mockResolvedValue({ public_id: 'session_public' }),
@@ -96,6 +97,46 @@ describe('completeOAuthUserSession', () => {
     userService.updateEmailVerified.mockResolvedValue(null);
     authMethodService.findByProviderUserId.mockResolvedValue(null);
     authMethodService.hasActiveLoginCredential.mockResolvedValue(false);
+    authMethodService.isLoginMethodTurnedOff.mockResolvedValue(false);
+  });
+
+  it('A-5: refuses sign-in through a provider the owner removed, without re-linking it', async () => {
+    userService.findByEmail.mockResolvedValue({
+      id: 42,
+      public_id: 'owner_public',
+      email: 'victim@example.com',
+      status: 'ACTIVE',
+      is_email_verified: true,
+    });
+    authMethodService.isLoginMethodTurnedOff.mockResolvedValue(true);
+
+    const error = await callCompleteOAuthUserSession().catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ForbiddenError);
+    expect(error).toMatchObject({ messageKey: 'errors:loginMethodTurnedOff' });
+    expect(authMethodService.isLoginMethodTurnedOff).toHaveBeenCalledWith({
+      userPublicId: 'owner_public',
+      userId: 42,
+      methodType: 'OAUTH',
+      provider: 'google',
+    });
+    expect(authMethodService.linkOAuthProviderIfMissing).not.toHaveBeenCalled();
+    expect(authSessionService.createSessionForUser).not.toHaveBeenCalled();
+  });
+
+  it('A-5: an identity that is still linked never consults the removal check', async () => {
+    userService.findByEmail.mockResolvedValue({
+      id: 42,
+      public_id: 'owner_public',
+      email: 'victim@example.com',
+      status: 'ACTIVE',
+      is_email_verified: true,
+    });
+    authMethodService.findByProviderUserId.mockResolvedValue({ id: 7, user_id: 42 });
+
+    await callCompleteOAuthUserSession();
+
+    expect(authMethodService.isLoginMethodTurnedOff).not.toHaveBeenCalled();
   });
 
   it('blocks OAuth signup when disposable email is not allowed', async () => {

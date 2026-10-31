@@ -321,6 +321,7 @@
   "githubFetchUserFailed": "Error al obtener la información del usuario de GitHub",
   "githubUserMissingVerifiedEmail": "Se requiere un correo principal y verificado de GitHub. Verifica tu correo con GitHub e inténtalo de nuevo.",
   "oauthLinkRequiresVerifiedAccount": "Ya existe una cuenta para este correo. Inicia sesión con tu método existente y vincula este proveedor desde la configuración de tu cuenta.",
+  "loginMethodTurnedOff": "Este método de inicio de sesión está desactivado para esta cuenta. Inicia sesión de otra forma.",
   "emailVerificationRequiredForCredential": "Verifica tu dirección de correo electrónico antes de agregar la autenticación de dos factores o una clave de acceso.",
   "oauthInvalidState": "Estado OAuth no válido o caducado. Inténtalo de nuevo.",
   "mfaUserNotFound": "Usuario no encontrado",

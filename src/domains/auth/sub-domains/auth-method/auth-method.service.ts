@@ -160,15 +160,22 @@ export class AuthMethodService {
    *   passkeys so a passkey-only user can still delete their last passkey), this counts passkeys —
    *   the account-claim guards must treat a passkey-only account as a real, non-bare account so
    *   takeover safety does not rely on the implicit "passkey ⇒ verified email" invariant.
+   *   A-7 — an `EMAIL_CODE` row on a still-unverified email is not counted: the first code sign-in
+   *   verifies the email, so that row was never used — it is what `POST /auth/email/send-code`
+   *   leaves behind for an address anyone can type, and counting it let a stranger's send-code block
+   *   the owner's OAuth sign-in.
    */
   async hasActiveLoginCredential(userPublicId: string): Promise<boolean> {
     const user = await this.userService.requireUserRecordByPublicId(userPublicId);
     if (!user) throw new NotFoundError('User');
+    const isCountedMethod = (methodType: string): boolean =>
+      LOGIN_CAPABLE_METHOD_TYPES.has(methodType) &&
+      (user.is_email_verified || methodType !== AUTH_METHOD_TYPE.EMAIL_CODE);
     return withAppDatabaseContext({
       scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
       callback: async () => {
         const methods = await this.authMethodRepository.listByUserId(user.id);
-        if (methods.some((method) => LOGIN_CAPABLE_METHOD_TYPES.has(String(method.method_type)))) {
+        if (methods.some((method) => isCountedMethod(String(method.method_type)))) {
           return true;
         }
         const passkeys = await this.webauthnCredentialRepository.listActiveByUserId(user.id);
@@ -290,6 +297,39 @@ export class AuthMethodService {
       scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId: userPublicId }),
       callback: () => this.verificationTokenRepository.invalidateAllByUser(user.id),
     });
+  }
+
+  /**
+   * Whether the user turned a login method off: they hold a revoked `methodType` row (of `provider`,
+   * for OAuth) and no active one.
+   *
+   * @remarks
+   * - **Algorithm:** one aggregate read of the user's `auth_methods` rows of that type, revoked ones
+   *   included, under the owner database context.
+   * - **Failure modes:** none — a user who never held the method reads `false`.
+   * - **Side effects:** none.
+   * - **Notes:** A-5 — removing the email-code or an OAuth method used to leave that login path
+   *   open (email-code login never looked at the method; OAuth re-linked a fresh row). The email-code
+   *   and OAuth sign-ins consult this and refuse a turned-off method. A user who never held the row
+   *   (a password signup signing in by email code) is unaffected.
+   */
+  async isLoginMethodTurnedOff({
+    userPublicId,
+    userId,
+    methodType,
+    provider,
+  }: {
+    userPublicId: string;
+    userId: number;
+    methodType: string;
+    provider?: string;
+  }): Promise<boolean> {
+    const state = await withAppDatabaseContext({
+      scope: PRINCIPAL_SCOPE.VERIFIED({ userPublicId }),
+      callback: () =>
+        this.authMethodRepository.findMethodRevocationState(userId, methodType, provider),
+    });
+    return state.hasRevoked && !state.hasActive;
   }
 
   async findByProviderUserId({

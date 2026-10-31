@@ -27,6 +27,7 @@ What it does not own: user profile (lives in [user](src/domains/user/)), organiz
 - **Short JWT lifetime**: `ACCESS_TOKEN_EXPIRY_SECONDS = 900` (15 min). Refresh requires the Origin-checked session cookie.
 - **Lockout**: `MAX_FAILED_LOGIN_ATTEMPTS = 10` per account; locks for `ACCOUNT_LOCKOUT_MINUTES = 30`. The lock is checked after password verification, so a correct password always bypasses it (no victim-account DoS); it only rejects further wrong attempts. Online brute force is bounded by the per-IP + per-email rate limits and CAPTCHA on `/login`.
 - **Password step-up budget** (A-3): `POST /auth/step-up` with a password is counted up front against `MAX_PASSWORD_STEP_UP_ATTEMPTS = 5` per user per `PASSWORD_STEP_UP_ATTEMPT_WINDOW_SECONDS` (15 min); each wrong password also counts toward the login lockout above, and the session that spends the budget is revoked (`errors:stepUpAttemptsExhausted`). A correct password clears the budget.
+- **Removed login methods stay closed** (A-5): email-code login and the OAuth callback refuse (`errors:loginMethodTurnedOff`, 403) a method the owner revoked (`AuthMethodService.isLoginMethodTurnedOff`); OAuth no longer re-links a fresh row over the removal.
 - **No manual OAuth identity binding**: `POST` auth-method create rejects `provider: manual` with a client-supplied provider identity — only OAuth completion paths may attach provider subjects, preventing account takeover via forged provider linkage.
 
 ## Sub-domains

@@ -130,6 +130,7 @@ describe('EmailLoginService', () => {
 
   const authMethodService = {
     createEmailCodeMethod: vi.fn().mockResolvedValue(undefined),
+    isLoginMethodTurnedOff: vi.fn().mockResolvedValue(false),
   } as unknown as AuthMethodService;
 
   const verificationTokenRepository = {

@@ -31,6 +31,7 @@ import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/
 import type { AuthSessionService } from '@/domains/auth/sub-domains/auth-session/auth-session.service.js';
 import type { MfaService } from '@/domains/auth/sub-domains/auth-mfa/auth-mfa.service.js';
 import type { VerificationTokenRepository } from './verification-token/verification-token.repository.js';
+import { AUTH_METHOD_TYPE } from '@/domains/auth/sub-domains/auth-method/auth-method.constants.js';
 import { eventBus } from '@/core/events/event-bus.js';
 import { withTransaction } from '@/infrastructure/database/transaction.js';
 import {
@@ -448,6 +449,18 @@ export class EmailLoginService {
               status: user.status,
               deleted_at: user.deleted_at,
             });
+            // A-5: the owner turned email-code sign-in off (revoked their EMAIL_CODE method). Checked
+            // after the code is consumed, so only the mailbox holder learns it; the throw rolls the
+            // consume back.
+            if (
+              await this.authMethodService.isLoginMethodTurnedOff({
+                userPublicId: user.public_id,
+                userId: user.id,
+                methodType: AUTH_METHOD_TYPE.EMAIL_CODE,
+              })
+            ) {
+              throw new ForbiddenError('errors:loginMethodTurnedOff');
+            }
             // Completing the code proves the user controls this email, so mark it verified (parity with
             // OAuth, and the natural completion of email-code auto-signup).
             if (isFirstVerification) {

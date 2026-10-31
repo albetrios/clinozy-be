@@ -4,7 +4,11 @@ import { createTestApp } from '@/tests/helpers/test-app.js';
 import { injectUnauthenticated } from '@/tests/helpers/test-http-inject.helper.js';
 import { cleanupDatabase } from '@/tests/helpers/test-database.js';
 import { ServiceUnavailableError } from '@/shared/errors/index.js';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
+import { auth_methods } from '@/domains/auth/sub-domains/auth-method/auth-method.schema.js';
+import { users } from '@/domains/user/user.schema.js';
 import type { OAuthProfile } from '@/domains/auth/sub-domains/auth-method/oauth/oauth.types.js';
+import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
 /**
@@ -149,5 +153,60 @@ describe('GET /api/v1/auth/oauth/:provider/callback — Integration', () => {
       'Sign-in with this provider is temporarily unavailable. Please try again.',
     );
     expect(response.cookies.session_id).toBeUndefined();
+  });
+
+  /** Runs one full authorize → callback round-trip with the stubbed Google profile. */
+  async function signInWithGoogle() {
+    const { state, nonce } = await beginAuthorizeFlow();
+    return injectUnauthenticated(app, {
+      method: 'GET',
+      url: testApiPath(`/auth/oauth/google/callback?code=provider-code&state=${state}`),
+      cookies: { [OAUTH_NONCE_COOKIE]: nonce },
+    });
+  }
+
+  it('A-5: refuses Google sign-in once the owner removed their Google method, instead of re-linking it', async () => {
+    const first = await signInWithGoogle();
+    expect(first.statusCode, first.body).toBe(200);
+    const [owner] = await getOperatorDatabase()
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, 'oauth-callback@example.com'));
+    expect(owner).toBeDefined();
+    await getOperatorDatabase()
+      .update(auth_methods)
+      .set({ revoked_at: new Date() })
+      .where(and(eq(auth_methods.user_id, owner!.id), eq(auth_methods.method_type, 'OAUTH')));
+
+    const refused = await signInWithGoogle();
+
+    expect(refused.statusCode, refused.body).toBe(403);
+    expect(refused.cookies.session_id).toBeUndefined();
+    const activeOAuthRows = await getOperatorDatabase()
+      .select({ id: auth_methods.id, revokedAt: auth_methods.revoked_at })
+      .from(auth_methods)
+      .where(and(eq(auth_methods.user_id, owner!.id), eq(auth_methods.method_type, 'OAUTH')));
+    expect(activeOAuthRows.every((row) => row.revokedAt !== null)).toBe(true);
+  });
+
+  it('A-7: claims an unverified account that a send-code pre-registration left behind', async () => {
+    // Anyone can type the owner's address into send-code; that creates an unverified account
+    // holding only an EMAIL_CODE method. Google proving the address must still let the owner in.
+    const preRegistered = await injectUnauthenticated(app, {
+      method: 'POST',
+      url: testApiPath('/auth/email/send-code'),
+      payload: { email: 'oauth-callback@example.com' },
+    });
+    expect(preRegistered.statusCode, preRegistered.body).toBe(200);
+
+    const response = await signInWithGoogle();
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.cookies.session_id).toBeTruthy();
+    const [claimed] = await getOperatorDatabase()
+      .select({ verified: users.is_email_verified })
+      .from(users)
+      .where(eq(users.email, 'oauth-callback@example.com'));
+    expect(claimed?.verified).toBe(true);
   });
 });

@@ -6,6 +6,9 @@ import { injectUnauthenticated } from '@/tests/helpers/test-http-inject.helper.j
 import { createTestUser } from '@/tests/factories/user.factory.js';
 import { seedEmailVerificationCode } from '@/domains/auth/__tests__/factories/verification-code-token.factory.js';
 import { captureNextVerificationCode } from '@/tests/helpers/verification-code.helper.js';
+import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
+import { auth_methods } from '@/domains/auth/sub-domains/auth-method/auth-method.schema.js';
+import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import type { FastifyInstance } from 'fastify';
 
 describe('Auth e2e: email verification-code login flow', () => {
@@ -168,5 +171,49 @@ describe('Auth e2e: email verification-code login flow', () => {
       payload: { email: user.email, code: secondCode },
     });
     expect(secondLogin.statusCode).toBe(401);
+  });
+
+  describe('a removed email-code method closes the email-code sign-in (A-5)', () => {
+    async function giveEmailCodeMethod({
+      userId,
+      revokedAt,
+    }: {
+      userId: number;
+      revokedAt: Date | null;
+    }): Promise<void> {
+      await getOperatorDatabase()
+        .insert(auth_methods)
+        .values({
+          public_id: generatePublicId('authMethod'),
+          user_id: userId,
+          method_type: 'EMAIL_CODE',
+          is_primary: false,
+          verified_at: new Date(),
+          revoked_at: revokedAt,
+        });
+    }
+
+    it('refuses a valid code once the owner removed the email-code method, and keeps the code unspent', async () => {
+      const user = await createTestUser({ email: 'email-login-turned-off@example.com' });
+      await giveEmailCodeMethod({ userId: user.id, revokedAt: new Date() });
+      const code = await seedEmailVerificationCode(user);
+
+      const refused = await injectUnauthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/email/login'),
+        payload: { email: user.email, code },
+      });
+      expect(refused.statusCode, refused.body).toBe(403);
+      expect(refused.cookies.session_id).toBeUndefined();
+
+      // Adding the method back reopens the path with the same code (the refusal rolled the consume back).
+      await giveEmailCodeMethod({ userId: user.id, revokedAt: null });
+      const reopened = await injectUnauthenticated(app, {
+        method: 'POST',
+        url: testApiPath('/auth/email/login'),
+        payload: { email: user.email, code },
+      });
+      expect(reopened.statusCode, reopened.body).toBe(200);
+    });
   });
 });

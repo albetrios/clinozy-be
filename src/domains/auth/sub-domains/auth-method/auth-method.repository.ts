@@ -35,6 +35,31 @@ export class AuthMethodRepository {
     });
   }
 
+  /**
+   * Whether the user holds an active and/or a revoked row of `methodType` (of `provider`, when
+   * given) — revoked rows included, so a login path can tell a method the user turned off (A-5).
+   */
+  async findMethodRevocationState(
+    userId: number,
+    methodType: string,
+    provider?: string,
+  ): Promise<{ hasActive: boolean; hasRevoked: boolean }> {
+    const rows = await getRequestDatabase()
+      .select({
+        hasActive: sql<boolean>`coalesce(bool_or(${auth_methods.revoked_at} IS NULL), false)`,
+        hasRevoked: sql<boolean>`coalesce(bool_or(${auth_methods.revoked_at} IS NOT NULL), false)`,
+      })
+      .from(auth_methods)
+      .where(
+        and(
+          eq(auth_methods.user_id, userId),
+          eq(auth_methods.method_type, methodType),
+          provider === undefined ? undefined : eq(auth_methods.provider, provider),
+        ),
+      );
+    return { hasActive: rows[0]?.hasActive ?? false, hasRevoked: rows[0]?.hasRevoked ?? false };
+  }
+
   async countActiveByUserId(userId: number): Promise<number> {
     const rows = await getRequestDatabase()
       .select({ value: sql<number>`count(*)::int` })

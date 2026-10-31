@@ -120,6 +120,7 @@ describe('AuthMethodService', () => {
     findByIdForUser: vi.fn().mockResolvedValue(null),
     findByPublicIdForUser: vi.fn().mockResolvedValue(null),
     listMfaByUserId: vi.fn().mockResolvedValue([]),
+    findMethodRevocationState: vi.fn().mockResolvedValue({ hasActive: false, hasRevoked: false }),
   } as unknown as AuthMethodRepository;
 
   const verificationTokenRepository = {
@@ -210,6 +211,41 @@ describe('AuthMethodService', () => {
     });
   });
 
+  describe('isLoginMethodTurnedOff (A-5)', () => {
+    const query = {
+      userPublicId: 'user_public',
+      userId: 1,
+      methodType: 'OAUTH',
+      provider: 'google',
+    };
+
+    it('is true for a revoked method with no active row of it', async () => {
+      vi.mocked(authMethodRepository.findMethodRevocationState).mockResolvedValueOnce({
+        hasActive: false,
+        hasRevoked: true,
+      });
+      await expect(service.isLoginMethodTurnedOff(query)).resolves.toBe(true);
+      expect(authMethodRepository.findMethodRevocationState).toHaveBeenCalledWith(
+        1,
+        'OAUTH',
+        'google',
+      );
+    });
+
+    it('is false once the method was added back, or when it was never held', async () => {
+      vi.mocked(authMethodRepository.findMethodRevocationState).mockResolvedValueOnce({
+        hasActive: true,
+        hasRevoked: true,
+      });
+      await expect(service.isLoginMethodTurnedOff(query)).resolves.toBe(false);
+      vi.mocked(authMethodRepository.findMethodRevocationState).mockResolvedValueOnce({
+        hasActive: false,
+        hasRevoked: false,
+      });
+      await expect(service.isLoginMethodTurnedOff(query)).resolves.toBe(false);
+    });
+  });
+
   describe('hasActiveLoginCredential (counts passkeys — bare-account guard)', () => {
     it('returns true on a login-capable method and does not even query passkeys (short-circuit)', async () => {
       vi.mocked(authMethodRepository.listByUserId).mockResolvedValue([
@@ -230,6 +266,29 @@ describe('AuthMethodService', () => {
       ] as never);
       await expect(service.hasActiveLoginCredential('user_public')).resolves.toBe(true);
       expect(webauthnCredentialRepository.listActiveByUserId).toHaveBeenCalledWith(user.id);
+    });
+
+    it('A-7: an EMAIL_CODE row on an unverified email is not a credential (send-code pre-registration)', async () => {
+      vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue({
+        ...user,
+        is_email_verified: false,
+      } as never);
+      vi.mocked(authMethodRepository.listByUserId).mockResolvedValue([
+        { id: 6, user_id: 1, method_type: 'EMAIL_CODE' },
+      ] as never);
+      vi.mocked(webauthnCredentialRepository.listActiveByUserId).mockResolvedValue([] as never);
+      await expect(service.hasActiveLoginCredential('user_public')).resolves.toBe(false);
+    });
+
+    it('A-7: an EMAIL_CODE row on a verified email still counts', async () => {
+      vi.mocked(userService.requireUserRecordByPublicId).mockResolvedValue({
+        ...user,
+        is_email_verified: true,
+      } as never);
+      vi.mocked(authMethodRepository.listByUserId).mockResolvedValue([
+        { id: 6, user_id: 1, method_type: 'EMAIL_CODE' },
+      ] as never);
+      await expect(service.hasActiveLoginCredential('user_public')).resolves.toBe(true);
     });
 
     it('returns false when there is no login-capable method and no passkey (truly bare)', async () => {

@@ -39,7 +39,7 @@ describe('EmailLoginService.login (one-time-code atomicity — audit-#12)', () =
       organizationSettingsServiceStub as never,
       { createMfaSession: vi.fn() } as never,
       authSessionServiceStub as never,
-      {} as never,
+      { isLoginMethodTurnedOff: vi.fn().mockResolvedValue(false) } as never,
       redisStub,
     );
   }
