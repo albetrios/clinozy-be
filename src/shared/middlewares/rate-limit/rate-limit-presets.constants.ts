@@ -313,3 +313,24 @@ export const EXPENSIVE_AUTHED_RATE_LIMIT = {
     },
   },
 } as const;
+
+/**
+ * Bulk list exports (D-4): 5 per 5 minutes in production, keyed by organization + actor
+ * (`organization:<id>:actor:<actorId>`) like {@link ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT}, so one
+ * member's downloads never spend another's and a member of two clinics has a budget in each. An
+ * export reads up to 5,000 rows into memory, so its budget is {@link EXPENSIVE_AUTHED_RATE_LIMIT}'s;
+ * the per-organization concurrency cap sits beside it (`withOrganizationExportSlot`). Lifted when
+ * RATE_LIMIT_RELAXED_CAPS is set (development/test) so suites that export from one loopback
+ * member do not produce flaky 429s.
+ */
+export const EXPORT_AUTHED_RATE_LIMIT = {
+  config: {
+    rateLimit: {
+      max: RATE_LIMIT_CAPS_RELAXED ? 5000 : 5,
+      timeWindow: 5 * MILLISECONDS_PER_MINUTE,
+      hook: 'preHandler' as const,
+      keyGenerator: buildRateLimitKeyFromOrganizationActorOrIpAddress,
+      onExceeded: recordRouteRateLimitExceeded,
+    },
+  },
+} as const;

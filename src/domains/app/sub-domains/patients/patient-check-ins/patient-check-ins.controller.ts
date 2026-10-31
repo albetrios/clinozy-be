@@ -14,6 +14,8 @@ export class PatientCheckInsController extends BaseRecordController<PatientCheck
   constructor(service: PatientCheckInsService) {
     super(service, {
       resource: 'patient_check_in',
+      // G2-3: a clinical record's reads are audited
+      auditReads: true,
       idParam: 'patient_check_in_id',
       parentParam: 'patient_id',
       hiddenFields: {

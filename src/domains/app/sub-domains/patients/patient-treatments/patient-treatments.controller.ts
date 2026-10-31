@@ -13,6 +13,8 @@ export class PatientTreatmentsController extends BaseRecordController<PatientTre
   constructor(service: PatientTreatmentsService) {
     super(service, {
       resource: 'patient_treatment',
+      // G2-3: a clinical record's reads are audited
+      auditReads: true,
       idParam: 'patient_treatment_id',
       parentParam: 'patient_id',
       hiddenFields: { remark: PATIENT_MEDICAL_DETAIL_READERS },

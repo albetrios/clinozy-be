@@ -24,6 +24,17 @@ as the launch's ROUTE builds them.
   `organization_read_only`, reads stay open (owner decision D3; only while
   `BILLING_READ_ONLY_ENFORCED` is on). The check is billing's `SubscriptionService`, reached through
   the `planAccess` port the composition root wires.
+- Every record write reads its row `FOR UPDATE` in its unit of work, and an action's allowed
+  statuses ride in its `UPDATE` too (G2-1).
+- Clinical and financial tables are never purged (`APP_RECORD_KEPT_TABLES`, G2-4); the
+  deleted-record purge erases only `APP_RECORD_TABLES`.
+- Every `GET /app/…/exports` spends `EXPORT_AUTHED_RATE_LIMIT` (5 per 5 minutes per organization
+  and actor), takes one of the organization's two export slots (`app-export-gate.ts`, a 429
+  `export_busy` with `Retry-After` when both are taken) and stages a fail-closed
+  `app.<resource>.export` audit row — who, the filters, the row count, never a row (B1-3, D-4); a
+  patient export with the medical cells needs a strong step-up. A clinical table's controller sets
+  `auditReads`: each list page and record read stages an `app.<resource>.list` / `.read` row with
+  its count, filters and the signed file links it handed out (G2-3).
 
 ## Sub-domains
 

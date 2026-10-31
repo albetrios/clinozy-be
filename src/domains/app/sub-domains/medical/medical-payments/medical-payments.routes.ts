@@ -1,6 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
+import {
+  EXPORT_AUTHED_RATE_LIMIT,
+  ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+} from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import { requireOrganizationPermission } from '@/shared/utils/auth/authorization.util.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
 import type { PaymentsService } from '@/domains/app/sub-domains/billing/payments/payments.service.js';
@@ -53,10 +56,10 @@ export function medicalPaymentsRoutes(services: {
       {
         onRequest: [app.authenticate],
         preHandler: [requireOrganizationPermission(APP_PERMISSIONS.MEDICINE_EXPORT)],
-        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        ...EXPORT_AUTHED_RATE_LIMIT,
         schema: {
           summary: "Export the medical store's payments",
-          description: `Returns the store's payments the same filters and sort as its Payments tab would, as a CSV (\`medical-payments-YYYY-MM-DD.csv\`, up to 5,000 rows; \`is_truncated\` when there are more) — ${STORE_SLICE_TEXT} Requires medicine:export and medicine:read.`,
+          description: `Returns the store's payments the same filters and sort as its Payments tab would, as a CSV (\`medical-payments-YYYY-MM-DD.csv\`, up to 5,000 rows; \`is_truncated\` when there are more) — ${STORE_SLICE_TEXT} Each download is audited (who, the filters, the row count); at most 5 per 5 minutes per member and 2 at a time per clinic, else a 429 with Retry-After (B1-3, D-4). Requires medicine:export and medicine:read.`,
           tags: ['Medical store'],
           querystring: listMedicalPaymentsQueryDto,
         },

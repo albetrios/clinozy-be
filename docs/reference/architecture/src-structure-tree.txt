@@ -29,6 +29,7 @@ src/
     │   │   ├── integration/
     │   │   │   ├── app-automation.integration.test.ts
     │   │   │   ├── app-branch-access.integration.test.ts
+    │   │   │   ├── app-exports.integration.test.ts
     │   │   │   ├── app-races.integration.test.ts
     │   │   │   ├── app-read-only-mode.integration.test.ts
     │   │   │   ├── app-record-access.integration.test.ts
@@ -39,6 +40,7 @@ src/
     │   │   │   └── clinozy-messages.integration.test.ts
     │   │   └── unit/
     │   │   │   ├── app-access-sections.policy.unit.test.ts
+    │   │   │   ├── app-export-routes.policy.unit.test.ts
     │   │   │   ├── app-record-purge.policy.unit.test.ts
     │   │   │   ├── app-record-purge.worker.unit.test.ts
     │   │   │   ├── app-role-presets.policy.unit.test.ts
@@ -1046,6 +1048,7 @@ src/
     │   │   └── app-record-purge.worker.ts
     │   ├── CLAUDE.md
     │   ├── app-access-sections.ts
+    │   ├── app-export-gate.ts
     │   ├── app-member-reference.ts
     │   ├── app-membership-leave.ts
     │   ├── app-plan-access.ts
@@ -2271,6 +2274,8 @@ src/
     │   └── scalar-api-reference.ts
     ├── cache/
     │   ├── __tests__/
+    │   │   ├── integration/
+    │   │   │   └── redis-semaphore.integration.test.ts
     │   │   └── unit/
     │   │   │   ├── assert-redis-eviction-policy.unit.test.ts
     │   │   │   ├── assert-redis-tls-safety.unit.test.ts
@@ -2286,6 +2291,7 @@ src/
     │   ├── redis-lock.util.ts
     │   ├── redis-prefix.util.ts
     │   ├── redis-scan.util.ts
+    │   ├── redis-semaphore.util.ts
     │   ├── redis-tombstone-cache.util.ts
     │   ├── redis-topology-warn.util.ts
     │   ├── redis-url.parse.util.ts

@@ -7,6 +7,8 @@ export class PatientImagesController extends BaseRecordController<PatientImageOu
   constructor(service: PatientImagesService) {
     super(service, {
       resource: 'patient_image',
+      // G2-3: a clinical record's reads are audited
+      auditReads: true,
       idParam: 'patient_image_id',
       parentParam: 'patient_id',
     });

@@ -35,6 +35,7 @@
   "idempotencyKeyReuse": "This idempotency key was already used with a different request payload",
   "idempotencyPerActorCapExceeded": "Too many idempotent requests. Reuse a key for retries or wait for the window to reset.",
   "notImplemented": "Please raise a feature request",
+  "exportBusy": "Your clinic is already preparing other downloads — try again in a moment",
   "rateLimited": "Too many requests",
   "payloadTooLarge": "Payload too large",
   "unprocessableEntity": "Unprocessable entity",

@@ -49,7 +49,10 @@ Per organization and UTC date:
 
 ## Retention
 
-- Hot store: `audit-retention` worker deletes rows after `AUDIT_RETENTION_DAYS`
+- Hot store: `audit-retention` worker deletes rows after `AUDIT_RETENTION_DAYS` (1–2557, up to
+  7 years). A clinic's patient-record reads and exports (`app.<resource>.list` / `.read` /
+  `.export`, G2-3) are audit rows too: keep them at least as long as the medical record (6+ years)
+  — a long `AUDIT_RETENTION_DAYS`, or this daily export kept that long in the bucket.
 - Each run exports the **last three UTC calendar days** (`AUDIT_EXPORT_LOOKBACK_DAYS`) for every organization that has no `manifest.json` for that day yet: an exported day costs one S3 HEAD, and a day a failed run left out is exported on the next one (the job has a single attempt per day). All of it lands long before the hot delete for that range.
 - Every database read (the day's organizations, each keyset batch) runs in its own short retention context and every S3 call outside one — a single transaction across the export used to sit idle through each S3 request, and one upload slower than the 30-second `idle_in_transaction_session_timeout` ended the session mid-export.
 - See [data-lifecycle-deletion.md](../data/data-lifecycle-deletion.md)

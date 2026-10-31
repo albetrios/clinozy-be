@@ -35,6 +35,7 @@
   "idempotencyKeyReuse": "Esta clave de idempotencia ya se usó con una carga de solicitud diferente",
   "idempotencyPerActorCapExceeded": "Demasiadas solicitudes idempotentes. Reutiliza una clave para reintentos o espera a que se restablezca la ventana.",
   "notImplemented": "Por favor, solicite esta función",
+  "exportBusy": "Su clínica ya está preparando otras descargas: vuelva a intentarlo en un momento",
   "rateLimited": "Demasiadas solicitudes",
   "payloadTooLarge": "Carga demasiado grande",
   "unprocessableEntity": "Entidad no procesable",

@@ -1,6 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT } from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
+import {
+  EXPORT_AUTHED_RATE_LIMIT,
+  ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+} from '@/shared/middlewares/rate-limit/rate-limit-presets.constants.js';
 import { requireOrganizationPermission } from '@/shared/utils/auth/authorization.util.js';
 import { recordDeleteQuerySchema } from '@/shared/utils/validation/record-fields.util.js';
 import { APP_PERMISSIONS } from '@/domains/app/app.permissions.js';
@@ -45,11 +48,11 @@ export function appointmentsRoutes(service: AppointmentsService): FastifyPluginA
       {
         onRequest: [app.authenticate],
         preHandler: [requireOrganizationPermission(APP_PERMISSIONS.APPOINTMENT_EXPORT)],
-        ...ORGANIZATION_SCOPED_AUTHED_RATE_LIMIT,
+        ...EXPORT_AUTHED_RATE_LIMIT,
         schema: {
           summary: 'Export appointments',
           description:
-            'Returns the appointments the same filters and sort as the list would (every page, up to 5,000 rows; `limit` and `after` ignored) as a CSV file inside the JSON envelope (`file_name` `appointments-YYYY-MM-DD.csv`, `content_type`, `row_count`, `is_truncated`, `content`). Requires appointment:export (A9) and appointment:read.',
+            'Returns the appointments the same filters and sort as the list would (every page, up to 5,000 rows; `limit` and `after` ignored) as a CSV file inside the JSON envelope (`file_name` `appointments-YYYY-MM-DD.csv`, `content_type`, `row_count`, `is_truncated`, `content`). Each download is audited (who, the filters, the row count); at most 5 per 5 minutes per member and 2 at a time per clinic, else a 429 with Retry-After (B1-3, D-4). Requires appointment:export (A9) and appointment:read.',
           tags: ['Appointment'],
           querystring: listAppointmentsQueryDto,
         },

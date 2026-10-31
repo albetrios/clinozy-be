@@ -24,6 +24,9 @@ export class PatientsController extends BaseRecordController<PatientOutput> {
         contraindications: PATIENT_MEDICAL_DETAIL_READERS,
         notes: PATIENT_MEDICAL_DETAIL_READERS,
       },
+      // B1-3: a download with the medical cells needs a strong step-up; G2-3: reads are audited
+      exportStepUpFields: ['allergies', 'contraindications', 'notes'],
+      auditReads: true,
     });
   }
 }
