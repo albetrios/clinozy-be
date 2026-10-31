@@ -11,6 +11,8 @@ export function serializeSupplier({ row }: { row: BaseRecordRow }): SupplierOutp
     name: row.name as string,
     phone: (row.phone as string | null) ?? null,
     gst_number: (row.gst_number as string | null) ?? null,
+    email: (row.email as string | null) ?? null,
+    address: (row.address as string | null) ?? null,
     is_quick: row.is_quick as boolean,
     manufacturers: [],
     payable: 0,

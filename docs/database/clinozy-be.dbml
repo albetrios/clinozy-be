@@ -472,6 +472,7 @@ Table app.invoice_items {
   discount_percent numeric(5, 2) [not null]
   gst_amount numeric(12, 2) [not null]
   gst_percent smallint [not null]
+  hsn_code varchar(8)
   id bigint [pk, increment, not null]
   invoice_id bigint [not null]
   is_gst_inclusive boolean [not null]
@@ -622,6 +623,7 @@ Table app.medical_purchase_order_items {
   medical_purchase_order_id bigint [not null]
   medicine_batch_id bigint
   medicine_id bigint [not null]
+  mrp numeric(12, 2)
   organization_id bigint [not null]
   public_id varchar(28) [not null]
   quantity int [not null]
@@ -642,6 +644,7 @@ Table app.medical_purchase_orders {
   deleted_at timestamptz
   due_amount numeric(12, 2)
   id bigint [pk, increment, not null]
+  note varchar(500)
   order_date date [not null]
   organization_id bigint [not null]
   paid_amount numeric(12, 2) [not null]
@@ -786,6 +789,7 @@ Table app.medicine_batches {
   id bigint [pk, increment, not null]
   medical_purchase_order_id bigint
   medicine_id bigint [not null]
+  mrp numeric(12, 2)
   organization_id bigint [not null]
   public_id varchar(28) [not null]
   purchase_rate numeric(12, 2)
@@ -825,6 +829,7 @@ Table app.medicines {
   delete_reason varchar(20)
   deleted_at timestamptz
   gst_percent smallint [not null]
+  hsn_code varchar(8) [not null]
   id bigint [pk, increment, not null]
   is_prescription_only boolean [not null]
   is_quick boolean [not null]
@@ -1632,6 +1637,7 @@ Table app.suppliers {
   delete_note varchar(280)
   delete_reason varchar(20)
   deleted_at timestamptz
+  email varchar(120)
   gst_number varchar(15)
   id bigint [pk, increment, not null]
   is_quick boolean [not null]

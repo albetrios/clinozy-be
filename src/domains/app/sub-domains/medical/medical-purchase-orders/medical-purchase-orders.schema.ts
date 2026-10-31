@@ -67,6 +67,8 @@ export const medical_purchase_orders = appSchema
         .notNull()
         .references(() => suppliers.id, { onDelete: 'restrict' }),
       supplier_bill_number: varchar('supplier_bill_number', { length: 30 }),
+      // What the desk noted ("30 DAYS DUE", "without gst bill") — the one field a received order changes
+      note: varchar('note', { length: 500 }),
       order_date: date('order_date', { mode: 'string' }).notNull(),
       stage: varchar('stage', { length: 8 })
         .notNull()
@@ -140,6 +142,7 @@ export const medical_purchase_orders = appSchema
         'chk_medical_purchase_orders_money',
         sql`${table.total} >= 0 AND ${table.paid_amount} >= 0 AND ${table.credited_amount} >= 0 AND ${table.paid_amount} + ${table.credited_amount} <= ${table.total}`,
       ),
+      check('chk_medical_purchase_orders_note', sql`char_length(${table.note}) > 0`),
       check('chk_medical_purchase_orders_updated', sql`${table.updated_at} >= ${table.created_at}`),
       check(
         'chk_medical_purchase_orders_delete_reason',
@@ -193,6 +196,8 @@ export const medical_purchase_order_items = appSchema
       quantity: integer('quantity').notNull(),
       free_quantity: integer('free_quantity').notNull().default(0),
       rate: numeric('rate', { precision: 12, scale: 2 }).notNull(),
+      // The MRP printed on the line's packs — the batch it fills takes it
+      mrp: numeric('mrp', { precision: 12, scale: 2 }),
       amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
       is_received: boolean('is_received'),
       batch_number: varchar('batch_number', { length: 20 }),
@@ -225,6 +230,7 @@ export const medical_purchase_order_items = appSchema
         sql`${table.free_quantity} >= 0 AND ${table.free_quantity} <= ${sql.raw(String(MEDICINE_QUANTITY_MAX))}`,
       ),
       check('chk_medical_purchase_order_items_rate', sql`${table.rate} > 0`),
+      check('chk_medical_purchase_order_items_mrp', sql`${table.mrp} > 0`),
       check(
         'chk_medical_purchase_order_items_amount',
         sql`${table.amount} = ${table.quantity} * ${table.rate}`,

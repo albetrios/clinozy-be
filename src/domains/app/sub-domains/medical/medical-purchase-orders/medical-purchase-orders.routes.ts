@@ -71,7 +71,7 @@ export function medicalPurchaseOrdersRoutes(
         schema: {
           summary: 'Create a medical purchase order',
           description:
-            "Orders from a supplier: `supplier_id*` (a live supplier), `items*` (1–50: a `medicine_id` — or `new_medicine_name`, a quick medicine at MRP 0 added as typed — `quantity*` 1–9999, `free_quantity`, `rate*` above 0; a 400 `items` otherwise); optional `supplier_bill_number`, `order_date` (today unless sent, never after it — a 400). The total is its lines'. It stays `ordered` until received. Requires medicine:create.",
+            'Orders from a supplier: `supplier_id*` (a live supplier), `items*` (1–50: a `medicine_id` — or `new_medicine_name`, a quick medicine at MRP 0 added as typed — `quantity*` 1–9999 packs, `free_quantity`, `rate*` (a pack\'s) above 0, `mrp` (printed on the packs, above 0); a 400 `items` otherwise); optional `supplier_bill_number`, `note` (1–500 — "30 DAYS DUE"), `order_date` (today unless sent, never after it — a 400). The total is its lines\'. It stays `ordered` until received. Requires medicine:create.',
           tags: ['Medical store'],
           body: CreateMedicalPurchaseOrderDto,
         },
@@ -102,7 +102,7 @@ export function medicalPurchaseOrdersRoutes(
         schema: {
           summary: 'Change a medical purchase order',
           description:
-            'Changes an order not yet received — a received one is a 409 `transition_not_allowed`: `supplier_id`, `supplier_bill_number` (null clears it), `order_date`, `items` (the whole list, checked as on create). Send `expected_updated_at` and a save over a newer change is a 409 `record_changed`. Requires medicine:update.',
+            'Changes an order not yet received — a received one is a 409 `transition_not_allowed`, unless the change sends only `note`: `supplier_id`, `supplier_bill_number`, `note` (null clears either), `order_date`, `items` (the whole list, checked as on create). Send `expected_updated_at` and a save over a newer change is a 409 `record_changed`. Requires medicine:update.',
           tags: ['Medical store'],
           params: medicalPurchaseOrdersIdParamsDto,
           body: UpdateMedicalPurchaseOrderDto,
@@ -152,7 +152,7 @@ export function medicalPurchaseOrdersRoutes(
         schema: {
           summary: 'Receive a medical purchase order',
           description:
-            "\"Receive goods\": each line is received unless `items` ticks it off (`id*`, `is_received`, `batch_number` — default `NEW-<order number>` — `expiry_month` `YYYY-MM`, default 24 months after the order date). Goods that came but were not ordered are lines without `id` — the `medicine_id` (or `new_medicine_name`, a quick medicine added as typed), `quantity*`, `free_quantity`, `rate*`, `batch_number`, `expiry_month` — added to the order as received lines (the order holds at most 50; a 400 `items` otherwise). A received line adds `quantity + free_quantity` to that batch of its medicine (a new one, or the same number — with another expiry a 409 `record_already_exists`) at this line's rate, and refreshes the supplier's price. The total becomes the received lines' (none received — or a line not of this order — is a 400 `items`); `supplier_bill_number` may come with the goods; the supplier's open credits are applied. A received order is a 409 `transition_not_allowed`. Pay it through `POST /payments` (`medical_purchase_order_id`) or the supplier's payments route. Requires medicine:update.",
+            "\"Receive goods\": each line is received unless `items` ticks it off (`id*`, `is_received`, `batch_number` — default `NEW-<order number>` — `expiry_month` `YYYY-MM`, default 24 months after the order date, `mrp` — the order line's unless sent). Goods that came but were not ordered are lines without `id` — the `medicine_id` (or `new_medicine_name`, a quick medicine added as typed), `quantity*`, `free_quantity`, `rate*`, `mrp`, `batch_number`, `expiry_month` — added to the order as received lines (the order holds at most 50; a 400 `items` otherwise). A received line adds `quantity + free_quantity` packs — as units, × the medicine's `units_per_pack` — to that batch of its medicine (a new one, or the same number — with another expiry a 409 `record_already_exists`) at this line's rate, puts the line's MRP on the batch when it has one (a sale charges it), and refreshes the supplier's price. The total becomes the received lines' (none received — or a line not of this order — is a 400 `items`); `supplier_bill_number` and `note` may come with the goods; the supplier's open credits are applied. A received order is a 409 `transition_not_allowed`. Pay it through `POST /payments` (`medical_purchase_order_id`) or the supplier's payments route. Requires medicine:update.",
           tags: ['Medical store'],
           params: medicalPurchaseOrdersIdParamsDto,
           body: ReceiveMedicalPurchaseOrderDto,

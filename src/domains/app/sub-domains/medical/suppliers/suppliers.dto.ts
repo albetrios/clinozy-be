@@ -19,6 +19,8 @@ const supplierFields = {
   name: trimmedStringMinMax({ min: 1, max: 120 }),
   phone: phoneNumberSchema.nullable(),
   gst_number: gstNumberSchema.nullable(),
+  email: trimmedStringMinMax({ min: 3, max: 120 }).pipe(z.email()).nullable(),
+  address: trimmedStringMinMax({ min: 1, max: 240 }).nullable(),
   manufacturer_ids: z
     .array(recordIdSchema)
     .max(SUPPLIER_MANUFACTURERS_MAX)
@@ -34,14 +36,16 @@ export const suppliersIdParamsDto = z
 
 /**
  * Body of `POST /app/suppliers` (11.B.8 #8): `name*` ("Agency name", unique in any case);
- * optional `phone` (`+91` and ten digits), `gst_number` (a GSTIN), `manufacturer_ids`
- * ("Distributes", up to 50), `is_quick` (a picker's inline add).
+ * optional `phone` (`+91` and ten digits), `gst_number` (a GSTIN), `email`, `address`,
+ * `manufacturer_ids` ("Distributes", up to 50), `is_quick` (a picker's inline add).
  */
 export const CreateSupplierDto = z
   .object({
     name: supplierFields.name,
     phone: supplierFields.phone.optional(),
     gst_number: supplierFields.gst_number.optional(),
+    email: supplierFields.email.optional(),
+    address: supplierFields.address.optional(),
     manufacturer_ids: supplierFields.manufacturer_ids.optional(),
     is_quick: z.boolean().optional(),
   })
@@ -57,6 +61,8 @@ export const UpdateSupplierDto = z
     name: supplierFields.name.optional(),
     phone: supplierFields.phone.optional(),
     gst_number: supplierFields.gst_number.optional(),
+    email: supplierFields.email.optional(),
+    address: supplierFields.address.optional(),
     manufacturer_ids: supplierFields.manufacturer_ids.optional(),
     expected_updated_at: expectedUpdatedAtSchema,
   })

@@ -19,6 +19,7 @@ export interface InvoiceItemOutput {
   medicine_id: string | null;
   name: string;
   pack_size: string | null;
+  hsn_code: string | null;
   quantity: number;
   rate: number;
   discount_percent: number;
@@ -90,6 +91,7 @@ export interface InvoicePreviewItemOutput {
   medicine_id: string | null;
   name: string;
   pack_size: string | null;
+  hsn_code: string | null;
   quantity: number;
   rate: number;
   discount_percent: number;

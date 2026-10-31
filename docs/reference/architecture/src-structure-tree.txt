@@ -361,6 +361,7 @@ src/
     │   │   │   ├── __tests__/
     │   │   │   │   └── integration/
     │   │   │   │   │   ├── medical-batches.integration.test.ts
+    │   │   │   │   │   ├── medical-record-fields.integration.test.ts
     │   │   │   │   │   └── medical.integration.test.ts
     │   │   │   ├── manufacturers/
     │   │   │   │   ├── __tests__/
