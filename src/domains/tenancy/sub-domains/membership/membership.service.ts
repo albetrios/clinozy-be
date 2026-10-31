@@ -682,8 +682,8 @@ export class MembershipService {
    * The single-member version above resolves one internal id per call, so running it in a loop
    * costs a round trip per member — and the seat-ceiling path's loop is as long as the number
    * of members being suspended, which a large downgrade makes unbounded. One batch resolve,
-   * then the Redis purges together: `invalidatePermissions` swallows its own failures and
-   * fails open by design, so no purge can reject the others.
+   * then the Redis purges together: `invalidatePermissions` swallows its own failures (it retries,
+   * then fails closed by bypassing the cache — B2-9), so no purge can reject the others.
    *
    * An id the resolver does not return has no active user, which is exactly the case the
    * single-member version skips on `null`.

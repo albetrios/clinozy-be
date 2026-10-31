@@ -61,6 +61,102 @@ const PERMISSION_CACHE_BUMP_VERSION_LUA =
  */
 const PERMISSION_CACHE_ORGANIZATION_VERSION_TTL_SECONDS = 24 * 60 * 60;
 
+/** Attempts per invalidation write before it counts as failed (B2-9). */
+const PERMISSION_CACHE_INVALIDATION_ATTEMPTS = 3;
+
+/** Pause before the second invalidation attempt; it doubles for each one after. */
+const PERMISSION_CACHE_INVALIDATION_RETRY_BASE_MS = 25;
+
+/**
+ * The longest a cached permission set can live — its TTL plus the largest jitter. A failed
+ * invalidation bypasses the organization's cache in this process for this long (B2-9).
+ */
+const PERMISSION_CACHE_MAX_ENTRY_LIFETIME_MS =
+  (PERMISSION_CACHE_DEFAULT_TTL_SECONDS + PERMISSION_CACHE_JITTER_MAX_SECONDS) * 1000;
+
+/** The gap between background retries of an organization version bump that failed (B2-9). */
+const PERMISSION_CACHE_BACKGROUND_BUMP_INTERVAL_MS = 5_000;
+
+/**
+ * Organizations whose cache this process bypasses after a failed invalidation, with the epoch-ms
+ * time the bypass ends — reads of them are cache misses (fresh from Postgres) until then.
+ */
+const bypassedOrganizations = new Map<string, number>();
+
+/** The background version-bump retry scheduled for an organization, at most one each. */
+const pendingVersionBumps = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Runs a Redis write up to {@link PERMISSION_CACHE_INVALIDATION_ATTEMPTS} times, backing off. */
+async function withInvalidationRetries<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < PERMISSION_CACHE_INVALIDATION_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      const delayMs = PERMISSION_CACHE_INVALIDATION_RETRY_BASE_MS * 2 ** (attempt - 1);
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    }
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+/** Whether this process bypasses the organization's cache after a failed invalidation. */
+function isOrganizationCacheBypassed(organizationId: string): boolean {
+  const bypassEndsAt = bypassedOrganizations.get(organizationId);
+  if (bypassEndsAt === undefined) return false;
+  if (bypassEndsAt <= Date.now()) {
+    bypassedOrganizations.delete(organizationId);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Fails closed after an invalidation could not reach Redis (B2-9): this process stops reading
+ * the organization's cached sets for as long as a stale one could live, and keeps retrying the
+ * organization version bump in the background — once it lands, every process stops serving the
+ * stale sets and the bypass is lifted.
+ */
+function failClosedForOrganization(organizationId: string): void {
+  const bypassEndsAt = Date.now() + PERMISSION_CACHE_MAX_ENTRY_LIFETIME_MS;
+  bypassedOrganizations.set(organizationId, bypassEndsAt);
+  scheduleBackgroundVersionBump({ organizationId, deadline: bypassEndsAt });
+}
+
+/** Schedules the next background version bump for the organization, until it lands or `deadline`. */
+function scheduleBackgroundVersionBump(options: {
+  organizationId: string;
+  deadline: number;
+}): void {
+  const { organizationId, deadline } = options;
+  if (pendingVersionBumps.has(organizationId)) return;
+  const timer = setTimeout(() => {
+    pendingVersionBumps.delete(organizationId);
+    bumpOrganizationCacheVersion(organizationId).then(
+      () => {
+        bypassedOrganizations.delete(organizationId);
+        logger.info({ organizationId }, 'permission-cache.invalidate.background_bump.landed');
+      },
+      (error: unknown) => {
+        if (Date.now() + PERMISSION_CACHE_BACKGROUND_BUMP_INTERVAL_MS < deadline) {
+          scheduleBackgroundVersionBump({ organizationId, deadline });
+          return;
+        }
+        // The stale sets have expired by now; the bypass ends with them.
+        logger.warn(
+          { error, organizationId },
+          'permission-cache.invalidate.background_bump.gave_up',
+        );
+      },
+    );
+  }, PERMISSION_CACHE_BACKGROUND_BUMP_INTERVAL_MS);
+  timer.unref?.();
+  pendingVersionBumps.set(organizationId, timer);
+}
+
 function buildOrganizationVersionKey(organizationId: string): string {
   return `${PERMISSION_CACHE_ORGANIZATION_VERSION_PREFIX}:${organizationId}:v`;
 }
@@ -128,7 +224,9 @@ function buildRecomputeLockKey({
  *   the value.
  * - **Failure modes:** Redis errors are caught, logged
  *   (`permission-cache.get.failed`), and surface as `null` so the caller
- *   falls back to a fresh database resolution.
+ *   falls back to a fresh database resolution. An organization whose
+ *   invalidation failed in this process reads as `null` too, until the stale
+ *   window closes or the background version bump lands (B2-9).
  * - **Side effects:** none — read-only Redis lookups; never blocks the
  *   request path.
  * - **Notes:** versioned keys are why
@@ -142,6 +240,8 @@ export async function getCachedPermissions({
   userId: string;
   organizationId: string;
 }): Promise<string[] | null> {
+  // B2-9: after an invalidation this process could not land, a cached set may be stale.
+  if (isOrganizationCacheBypassed(organizationId)) return null;
   try {
     const version = await getOrganizationCacheVersion(organizationId);
     const cached = await redisConnection.get(buildKey({ version, userId, organizationId }));
@@ -376,9 +476,13 @@ export async function withPermissionCacheRecomputeLock({
  * @remarks
  * - **Algorithm:** issues a single Redis `DEL` for both the versioned cache
  *   entry and the recompute lock for `(user, organization)`.
- * - **Failure modes:** Redis errors are caught and logged
- *   (`permission-cache.invalidate.failed`); the function still resolves so
- *   callers (membership create/update) never block on cache invalidation.
+ * - **Failure modes:** each write is retried (3 attempts, backing off); a
+ *   final failure is logged (`permission-cache.invalidate.failed`), sent to
+ *   Sentry and backstopped by an organization version bump (also retried). If
+ *   that fails too, the organization's cache is bypassed in this process for the
+ *   longest a stale set can live while the bump keeps retrying in the background
+ *   (B2-9). The function still resolves so callers (membership create/update)
+ *   never block on cache invalidation.
  * - **Side effects:** Redis `DEL` of two keys.
  * - **Notes:** for organization-wide changes (e.g. role-permission set replaced),
  *   prefer {@link invalidateOrganizationPermissions}, which bumps the organization
@@ -392,16 +496,19 @@ export async function invalidatePermissions({
   organizationId: string;
 }): Promise<void> {
   try {
-    const version = await getOrganizationCacheVersion(organizationId);
-    await redisConnection.del(
-      buildKey({ version, userId, organizationId }),
-      buildRecomputeLockKey({ userId, organizationId }),
-    );
+    // B2-9: a transient blip must not leave the old set cached — retry before giving up.
+    await withInvalidationRetries(async () => {
+      const version = await getOrganizationCacheVersion(organizationId);
+      await redisConnection.del(
+        buildKey({ version, userId, organizationId }),
+        buildRecomputeLockKey({ userId, organizationId }),
+      );
+    });
   } catch (error) {
-    // A failed invalidation leaves the OLD (over-broad) permission set cached until its TTL — a
-    // privilege-retention window after a role/membership change. Fail-open is deliberate (callers
-    // must not block on cache), but surface it to Sentry so the operational risk is VISIBLE, not
-    // buried in a warn log.
+    // A failed invalidation would leave the OLD (over-broad) permission set cached until its TTL —
+    // a privilege-retention window after a role/membership change. Callers must not block on the
+    // cache, so this resolves; it is surfaced to Sentry and closed below (backstop bump, else a
+    // cache bypass while the bump retries in the background — B2-9).
     logger.warn({ error }, 'permission-cache.invalidate.failed');
     captureException({
       error,
@@ -417,9 +524,11 @@ export async function invalidatePermissions({
     // over-invalidates the organization (everyone recomputes once) — the security-favouring tradeoff. If
     // Redis is fully down this also fails, harmlessly.
     try {
-      await bumpOrganizationCacheVersion(organizationId);
+      await withInvalidationRetries(() => bumpOrganizationCacheVersion(organizationId));
     } catch (backstopError) {
       logger.warn({ error: backstopError }, 'permission-cache.invalidate.backstop.failed');
+      // B2-9: neither write landed — fail closed rather than serve the old set until its TTL.
+      failClosedForOrganization(organizationId);
     }
   }
 }
@@ -435,9 +544,11 @@ export async function invalidatePermissions({
  *   TTL in one Lua round-trip ({@link bumpOrganizationCacheVersion}). All subsequent
  *   reads/writes go through {@link buildKey} with the new version, so every previously
  *   cached entry for the organization is instantly unreachable.
- * - **Failure modes:** Redis errors are caught and logged
- *   (`permission-cache.invalidate-organization.failed`); the function still
- *   resolves so callers (role/permission edits) never block on cache
+ * - **Failure modes:** the bump is retried (3 attempts, backing off); a final
+ *   failure is logged (`permission-cache.invalidate-organization.failed`), sent
+ *   to Sentry, and fails closed — the organization's cache is bypassed in this
+ *   process while the bump keeps retrying in the background (B2-9). The function
+ *   still resolves so callers (role/permission edits) never block on cache
  *   invalidation.
  * - **Side effects:** single Redis `INCR` + `EXPIRE`; orphans existing keys which
  *   expire naturally via their TTL — keeps invalidation O(1).
@@ -447,7 +558,7 @@ export async function invalidatePermissions({
  */
 export async function invalidateOrganizationPermissions(organizationId: string): Promise<void> {
   try {
-    await bumpOrganizationCacheVersion(organizationId);
+    await withInvalidationRetries(() => bumpOrganizationCacheVersion(organizationId));
   } catch (error) {
     // Same privilege-retention risk as invalidatePermissions, organization-wide: a failed version bump
     // leaves every user's cached permission set live until TTL. Surface to Sentry.
@@ -459,5 +570,8 @@ export async function invalidateOrganizationPermissions(organizationId: string):
         tags: { subsystem: 'permission-cache', operation: 'invalidate-organization' },
       },
     });
+    // B2-9: fail closed — no cached set of this organization is served by this process until the
+    // stale window closes or the background bump lands.
+    failClosedForOrganization(organizationId);
   }
 }
