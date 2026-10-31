@@ -12,7 +12,10 @@ import {
   valueListSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
 import { invoicePaidNowDto } from '@/domains/app/sub-domains/billing/invoices/invoices.dto.js';
-import { INVOICE_REMARK_MAX } from '@/domains/app/sub-domains/billing/invoices/invoices.constants.js';
+import {
+  INVOICE_ITEM_DESCRIPTION_MAX,
+  INVOICE_REMARK_MAX,
+} from '@/domains/app/sub-domains/billing/invoices/invoices.constants.js';
 import { MEDICINE_QUANTITY_MAX } from '@/domains/app/sub-domains/medical/medicines/medicines.constants.js';
 import {
   MEDICAL_SALE_ITEMS_MAX,
@@ -39,7 +42,7 @@ export const medicalSalesIdParamsDto = z
 /**
  * Body of `POST /app/medical-sales` (11.H.8 #46, MD19): `branch_id*` (one of yours), `contact_id*`
  * (the buyer), `items*` (1–50: `medicine_id*` — each once — `quantity*`, `discount_percent`, the
- * medicine's near-expiry discount unless sent); optional `overall_discount`, `member_ids`
+ * medicine's near-expiry discount unless sent, `description` — printed under the line); optional `overall_discount`, `member_ids`
  * ("Prescribed by", up to 10), `patient_prescription_id`, `remark`, `payment` ("Paid now" —
  * needs payment:create).
  */
@@ -54,6 +57,10 @@ export const CreateMedicalSaleDto = z
             medicine_id: recordIdSchema,
             quantity: packsSchema,
             discount_percent: percentSchema.optional(),
+            // Printed under the line's name — on every line its batches draw (a sale's bill is locked)
+            description: trimmedStringMinMax({ min: 1, max: INVOICE_ITEM_DESCRIPTION_MAX })
+              .nullable()
+              .optional(),
           })
           .strict(),
       )

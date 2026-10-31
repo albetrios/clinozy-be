@@ -39,6 +39,7 @@ export interface InvoiceItemReadRow {
   offering_id: string | null;
   medicine_id: string | null;
   name: string;
+  description: string | null;
   pack_size: string | null;
   hsn_code: string | null;
   quantity: number;
@@ -63,6 +64,7 @@ export interface InvoiceItemWriteRow {
   offering_id: number | null;
   medicine_id: number | null;
   name: string;
+  description: string | null;
   pack_size: string | null;
   hsn_code: string | null;
   quantity: number;
@@ -121,6 +123,7 @@ export class InvoicesRepository extends BaseRecordRepository {
         offering_id: offerings.public_id,
         medicine_id: medicines.public_id,
         name: invoice_items.name,
+        description: invoice_items.description,
         pack_size: invoice_items.pack_size,
         hsn_code: invoice_items.hsn_code,
         quantity: invoice_items.quantity,
@@ -183,6 +186,7 @@ export class InvoicesRepository extends BaseRecordRepository {
         offering_id: invoice_items.offering_id,
         medicine_id: invoice_items.medicine_id,
         name: invoice_items.name,
+        description: invoice_items.description,
         pack_size: invoice_items.pack_size,
         hsn_code: invoice_items.hsn_code,
         quantity: invoice_items.quantity,

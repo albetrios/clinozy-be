@@ -1647,4 +1647,78 @@ describe('Billing — integration (routes-final §8)', () => {
       },
     );
   });
+
+  it("BD4: a line's description — taken, kept, replaced, cleared (feat-bill-line-description)", async () => {
+    const DESCRIPTIONS = '[.data.items[].description] | map(tostring) | join("|")';
+    flow.as('owner');
+    const note = 'LHR Axilla 10 sessions =10*550';
+    await flow.expect(
+      200,
+      'the preview echoes it',
+      'POST',
+      '/app/invoices/preview',
+      invoiceBody(vesu, asha, facial, {}, { description: `  ${note}  ` }),
+    );
+    flow.expectValue('preview: trimmed', DESCRIPTIONS, note);
+    await flow.expect(
+      400,
+      'longer than 280',
+      'POST',
+      '/app/invoices',
+      invoiceBody(vesu, asha, facial, {}, { description: 'x'.repeat(281) }),
+    );
+    flow.expectValue('too long: field', FIELDS, 'body.items/0/description');
+    await flow.expect(400, 'empty text — null clears', 'POST', '/app/invoices', {
+      ...invoiceBody(vesu, asha, facial, {}, { description: '' }),
+    });
+    flow.expectValue('empty: field', FIELDS, 'body.items/0/description');
+
+    await flow.expect(200, 'a bill of two lines, one described', 'POST', '/app/invoices', {
+      branch_id: vesu,
+      contact_id: asha,
+      items: [
+        { offering_id: facial, quantity: 1, description: note },
+        { offering_id: facial, quantity: 1 },
+      ],
+    });
+    const bill = flow.last('.data.id');
+    const [first, second] = [flow.last('.data.items[0].id'), flow.last('.data.items[1].id')];
+    flow.expectValue('created: stored, none on the other', DESCRIPTIONS, `${note}|null`);
+    const total = flow.last('.data.total');
+    await flow.expect(200, 'read back', 'GET', `/app/invoices/${bill}`);
+    flow.expectValue('read: the same', DESCRIPTIONS, `${note}|null`);
+    await flow.expect(200, 'the list returns it', 'GET', `/app/invoices?contact_id=${asha}`);
+    flow.expectValue(
+      "list: the bill's lines",
+      `[.data[] | select(.id == "${bill}") | .items[].description] | map(tostring) | join("|")`,
+      `${note}|null`,
+    );
+
+    await flow.expect(200, 'the change preview keeps it', 'POST', `/app/invoices/${bill}/preview`, {
+      items: [
+        { id: first, quantity: 1 },
+        { id: second, quantity: 1, description: '+2 sessions free' },
+      ],
+    });
+    flow.expectValue('change preview', DESCRIPTIONS, `${note}|+2 sessions free`);
+    await flow.expect(200, 'kept when omitted, set when sent', 'PATCH', `/app/invoices/${bill}`, {
+      items: [
+        { id: first, quantity: 1 },
+        { id: second, quantity: 1, description: '+2 sessions free' },
+      ],
+    });
+    flow.expectValue('changed', DESCRIPTIONS, `${note}|+2 sessions free`);
+    flow.expectValue('the amounts never move (K1)', '.data.total', Number(total));
+    await flow.expect(200, 'a header-only change keeps them', 'PATCH', `/app/invoices/${bill}`, {
+      remark: 'Window seat',
+    });
+    flow.expectValue('header change', DESCRIPTIONS, `${note}|+2 sessions free`);
+    await flow.expect(200, 'null clears, text replaces', 'PATCH', `/app/invoices/${bill}`, {
+      items: [
+        { id: first, quantity: 1, description: null },
+        { id: second, quantity: 1, description: 'Replaced' },
+      ],
+    });
+    flow.expectValue('cleared and replaced', DESCRIPTIONS, 'null|Replaced');
+  });
 });

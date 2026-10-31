@@ -126,7 +126,8 @@ src/
     │   │   │   │   │   │   ├── invoices.amounts.property.unit.test.ts
     │   │   │   │   │   │   ├── invoices.amounts.unit.test.ts
     │   │   │   │   │   │   ├── invoices.pricing.unit.test.ts
-    │   │   │   │   │   │   └── invoices.service.unit.test.ts
+    │   │   │   │   │   │   ├── invoices.service.unit.test.ts
+    │   │   │   │   │   │   └── invoices.validator.unit.test.ts
     │   │   │   │   ├── seed/
     │   │   │   │   │   └── invoices.seed.ts
     │   │   │   │   ├── invoices.amounts.ts

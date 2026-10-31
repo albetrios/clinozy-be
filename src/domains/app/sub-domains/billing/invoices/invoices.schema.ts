@@ -37,6 +37,7 @@ import {
   RECORD_DELETE_REASON_VALUES,
 } from '@/shared/constants/record-fields.constants.js';
 import {
+  INVOICE_ITEM_DESCRIPTION_MAX,
   INVOICE_ITEM_GST_PERCENT_VALUES,
   INVOICE_ITEM_QUANTITY_MAX,
   INVOICE_ITEMS_MAX,
@@ -245,6 +246,8 @@ export const invoice_items = appSchema
       ),
       // Snapshots of the offering or medicine when billed (B9)
       name: varchar('name', { length: 120 }).notNull(),
+      // Typed on the line, printed under its name — never a snapshot (BD4)
+      description: varchar('description', { length: INVOICE_ITEM_DESCRIPTION_MAX }),
       pack_size: varchar('pack_size', { length: 30 }),
       hsn_code: varchar('hsn_code', { length: 8 }),
       quantity: smallint('quantity').notNull(),
