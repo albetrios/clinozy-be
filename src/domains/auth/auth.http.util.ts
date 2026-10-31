@@ -8,7 +8,6 @@ import {
 import { translateRequestMessage } from '@/shared/utils/i18n/translate-request.util.js';
 import { env } from '@/shared/config/env.config.js';
 import { deriveSecretsSubKey } from '@/shared/utils/security/secrets-sub-key.util.js';
-import { SECONDS_PER_DAY } from '@/shared/constants/index.js';
 import { OAUTH_STATE_TTL_SECONDS } from '@/shared/constants/ttl.constants.js';
 
 /** Name of the httpOnly cookie that carries the opaque session public id used for refresh and auth-route flows. */
@@ -28,7 +27,16 @@ export function generateCsrfToken(): string {
   return randomBytes(32).toString('base64url');
 }
 
-/** Builds the cookie options used for {@link SESSION_COOKIE_NAME}: httpOnly, sameSite from COOKIE_SAMESITE, scoped to `/api/v1/auth`. */
+/**
+ * Builds the cookie options used for {@link SESSION_COOKIE_NAME}: httpOnly, sameSite from
+ * COOKIE_SAMESITE, scoped to `/api/v1/auth`, and a browser-session cookie (no `Max-Age`).
+ *
+ * @remarks
+ * E-2: the cookie has no `Max-Age`/`Expires`, so the browser drops it when it closes; the server's
+ * idle and absolute limits (`AUTH_SESSION_IDLE_TIMEOUT_SECONDS`,
+ * `AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS`) end the session itself. There is no "remember this
+ * device" option at sign-in, so every session cookie is a browser-session one.
+ */
 export function getSessionCookieOptions() {
   return {
     httpOnly: true,
@@ -36,7 +44,6 @@ export function getSessionCookieOptions() {
     // Configurable so a cross-site SPA can opt into `none`; see COOKIE_SAMESITE in env-schema.
     sameSite: env.COOKIE_SAMESITE,
     path: SESSION_COOKIE_PATH,
-    maxAge: env.AUTH_SESSION_MAX_AGE_DAYS * SECONDS_PER_DAY,
   };
 }
 
@@ -49,7 +56,7 @@ export function getCsrfCookieOptions() {
     // stricter SameSite here would silently break double-submit on cross-site requests.
     sameSite: env.COOKIE_SAMESITE,
     path: SESSION_COOKIE_PATH,
-    maxAge: env.AUTH_SESSION_MAX_AGE_DAYS * SECONDS_PER_DAY,
+    // A browser-session cookie, like the session cookie it pairs with (E-2).
   };
 }
 

@@ -40,7 +40,7 @@ clinozy-be splits one short-lived, JS-held **access token** from one long-lived,
 | Credential | Where it lives | Lifetime | Sent how | Purpose |
 |------------|----------------|----------|----------|---------|
 | **Access token** (JWT, RS256) | JavaScript memory | ~15 min | `Authorization: Bearer` header | Authorizes every API call; carries the signed **`org`** claim (active organization; the compact key is intentional — JWT claim convention, rides on every request) |
-| **Refresh session** | `session_id` httpOnly cookie (path `/api/v1/auth`, `SameSite=Strict`) | days (default 7) | browser sends it automatically to `/auth/*` | Mints fresh access tokens via `POST /auth/refresh`; revocable server-side |
+| **Refresh session** | `session_id` httpOnly cookie (path `/api/v1/auth`, `SameSite=Strict`; a browser-session cookie — no `Max-Age`) | ends after 30 min without a request or refresh, and 12 h after sign-in (`AUTH_SESSION_IDLE_TIMEOUT_SECONDS` / `AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS`) | browser sends it automatically to `/auth/*` | Mints fresh access tokens via `POST /auth/refresh`; revocable server-side |
 | **CSRF token** | `csrf_token` cookie (readable by JS) | matches session | mirrored into `X-CSRF-Token` **only** for cookie-auth fallback | Double-submit defense on `/auth/refresh` when no `Origin` is sent |
 
 Why this split (and why not put the access token in a cookie too): a `Bearer` header is **never
@@ -105,7 +105,13 @@ You don't watch a clock. When a call returns `401` (token expired), refresh once
 | Logout | `POST /auth/logout` + `Authorization: Bearer` | `200`, session revoked server-side, cookie cleared |
 
 If **refresh itself fails** (`401`/`403`), the session is gone (logged out elsewhere, admin-suspended,
-or expired) → clear the in-memory token and send the user to login.
+or expired) → clear the in-memory token and send the user to login. Two refresh 401s say why in
+`error.reason`, so the login screen can tell the user (the server has already revoked the session):
+
+| `error.reason` | Meaning |
+|----------------|---------|
+| `idle_timeout` | No request or refresh for `AUTH_SESSION_IDLE_TIMEOUT_SECONDS` (default 30 min). |
+| `session_expired` | The session reached `AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS` since sign-in (default 12 h). |
 
 ---
 

@@ -15,6 +15,7 @@ Session lifecycle: create on successful authentication, validate on every authen
 - **Origin-checked refresh**: the refresh path requires the `session_id` cookie + matching `Origin` header (CSRF defence). See [docs/reference/security/csrf-and-session-cookies.md](docs/reference/security/csrf-and-session-cookies.md).
 - **MFA assurance**: `auth_sessions.mfa_verified_at` is set when the session proves a second factor — created by the MFA login challenge, or marked by `markSessionMfaVerified` after an authenticated MFA verification or enrollment confirmation (only on a non-revoked, unexpired row). It is never cleared while the session lives; switch and refresh mint `amr: ['mfa']` from it.
 - **The live token names the session's organization**: a switch writes `token_hash` and `organization_id` together; a refresh signs for the organization it read, then rotates. A switch committing between that read and the rotation moves the session, so `refreshToken` compares the rotated row's `organization_id` with the one it signed for and, when they differ, re-mints for the row's organization and swaps it in (`replaceRefreshedAccessToken` — only while the refreshed token is still the live one). The refresh never answers with a token for the organization the caller just left.
+- **Server-side idle and absolute limits (E-2)**: `POST /auth/refresh` revokes and refuses a session whose `last_active_at` (bumped by every successful refresh) is `AUTH_SESSION_IDLE_TIMEOUT_SECONDS` old (401, `error.reason` `idle_timeout`) or that was created `AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS` ago (401, `error.reason` `session_expired`; the row's `expires_at` is set to the same cap at sign-in) — `session-lifetime.ts`. The `session_id` and `csrf_token` cookies are browser-session cookies (no `Max-Age`); there is no "remember this device" option.
 - **Session retention**: rows past `expires_at + retention window` are hard-deleted by the [auth-session retention worker](src/domains/auth/sub-domains/auth-session/workers/).
 
 ## Lifecycle
@@ -24,6 +25,7 @@ stateDiagram-v2
   [*] --> active: signAccessToken + INSERT auth_sessions
   active --> active: refresh (Origin-checked)
   active --> revoked: explicit logout / admin revoke / lockout
+  active --> revoked: refresh after idle timeout / absolute cap
   active --> expired: expires_at < NOW
   revoked --> purged: retention worker
   expired --> purged: retention worker
@@ -44,4 +46,5 @@ This sub-domain neither emits nor consumes domain events. Session lifecycle is r
 
 - `SESSION_TOKEN_CACHE_TTL_SECONDS = 60`
 - `ACCESS_TOKEN_EXPIRY_SECONDS = 900`
-- `AUTH_SESSION_MAX_AGE_DAYS` (env-tunable; controls the long-form session expiry)
+- `AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS` (env-tunable; default 43200 — 12 h; the session's `expires_at`)
+- `AUTH_SESSION_IDLE_TIMEOUT_SECONDS` (env-tunable; default 1800 — 30 min since the last refresh)

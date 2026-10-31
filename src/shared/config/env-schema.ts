@@ -352,14 +352,29 @@ const envSchemaBase = z.object({
   GLOBAL_ADMIN_ACCESS_TOKEN_EXPIRY_SECONDS: z.coerce.number().int().min(60).max(3600).default(300),
 
   // Session
-  // sec-r4-C4: cap session lifetime at one year. Without an upper bound, an
-  // operator typo (`AUTH_SESSION_MAX_AGE_DAYS=3650`) or stale config could
-  // produce sessions that effectively never expire — extending the breach
-  // window after a credential compromise indefinitely. 365 is well clear of
-  // any realistic "stay signed in" UX (Slack / GitHub / GMail all rotate
-  // long-lived sessions inside this window) and bounds the worst-case impact
-  // of a stolen refresh token to a known interval.
-  AUTH_SESSION_MAX_AGE_DAYS: z.coerce.number().int().min(1).max(365).default(7),
+  /**
+   * Absolute session lifetime (seconds): a session expires this long after it was created, however
+   * active it is — `POST /auth/refresh` then answers 401 `session_expired` and revokes it, and the
+   * session row's `expires_at` is set to it at sign-in. Default 43200 (12 h, E-2).
+   *
+   * @remarks
+   * sec-r4-C4: bounded at one year so an operator typo cannot produce sessions that effectively
+   * never expire (the breach window of a stolen refresh token stays a known interval). The
+   * production-safe default is the short one; a longer value is a deliberate operator choice.
+   */
+  AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(300)
+    .max(31_536_000)
+    .default(43_200),
+  /**
+   * Idle session timeout (seconds): a session whose last refresh (`last_active_at`) is older than
+   * this is refused by `POST /auth/refresh` with 401 `idle_timeout` and revoked. Default 1800
+   * (30 min, E-2) — twice the 15-minute access-token lifetime, so an open tab that refreshes on
+   * schedule never trips it. Bounded at one day.
+   */
+  AUTH_SESSION_IDLE_TIMEOUT_SECONDS: z.coerce.number().int().min(60).max(86_400).default(1800),
   /** Secure flag for session + CSRF cookies. Set false only for plaintext local loops. */
   COOKIE_SECURE: booleanString('true'),
   /**

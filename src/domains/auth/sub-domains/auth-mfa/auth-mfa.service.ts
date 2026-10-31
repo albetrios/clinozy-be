@@ -11,7 +11,6 @@ import {
   assertUserAccountActive,
 } from '@/shared/utils/auth/account-status.util.js';
 import { resolveAccessTokenRoleForUser } from '@/shared/utils/auth/global-admin-role.util.js';
-import { env } from '@/shared/config/env.config.js';
 import { MFA_AUTHENTICATION_METHOD, signAccessToken } from '@/shared/utils/security/jwt.util.js';
 import { resolveDefaultActiveOrganizationPublicId } from '@/domains/tenancy/sub-domains/organization/resolve-active-organization.js';
 import { omitUndefined } from '@/shared/utils/validation/omit-undefined.util.js';
@@ -21,7 +20,6 @@ import type { AuthSessionService } from '@/domains/auth/sub-domains/auth-session
 import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
 import {
   MAX_MFA_VERIFICATION_ATTEMPTS,
-  MILLISECONDS_PER_DAY,
   MFA_RECOVERY_CODE_COUNT,
   MFA_TOTP_CODE_REPLAY_TTL_SECONDS,
   MFA_TOTP_ENROLLMENT_STAGE_TTL_SECONDS,
@@ -49,6 +47,7 @@ import {
   invalidateAllUnusedRecoveryCodesForUser,
 } from './auth-mfa-recovery-code.repository.js';
 import { generateMfaRecoveryCodes } from './auth-mfa-recovery-code.util.js';
+import { sessionExpiresAtFromNow } from '@/domains/auth/sub-domains/auth-session/session-lifetime.js';
 import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
@@ -300,8 +299,7 @@ export class MfaService {
       authenticationMethods: [MFA_AUTHENTICATION_METHOD],
     });
     const sessionTokenHash = createHash('sha256').update(jsonWebToken).digest('hex');
-    const sessionMaxAgeDays = env.AUTH_SESSION_MAX_AGE_DAYS;
-    const expiresAt = new Date(Date.now() + sessionMaxAgeDays * MILLISECONDS_PER_DAY);
+    const expiresAt = sessionExpiresAtFromNow();
     const authSession = await this.authSessionService.createSessionForUser({
       userPublicId: user.public_id,
       data: omitUndefined({

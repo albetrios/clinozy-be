@@ -267,6 +267,7 @@
   "invalidOrRevokedToken": "Token no válido o ya revocado",
   "invalidOrExpiredSession": "Sesión no válida o caducada",
   "sessionExpired": "La sesión ha caducado. Inicia sesión de nuevo.",
+  "sessionIdleTimeout": "Se cerró tu sesión tras un periodo de inactividad. Inicia sesión de nuevo.",
   "userNotFound": "Usuario no encontrado",
   "accountNotActive": "La cuenta no está activa",
   "invalidOrExpiredResetToken": "Token de restablecimiento no válido o caducado",

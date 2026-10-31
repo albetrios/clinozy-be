@@ -2,7 +2,7 @@ import { seedRecentStepUpForTestUser } from '@/tests/helpers/test-step-up.helper
 import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { env } from '@/shared/config/env.config.js';
-import { MILLISECONDS_PER_DAY } from '@/shared/constants/index.js';
+import { sessionExpiresAtFromNow } from '@/domains/auth/sub-domains/auth-session/session-lifetime.js';
 import { signAccessToken } from '@/shared/utils/security/jwt.util.js';
 import { AuthSessionRepository } from '@/domains/auth/sub-domains/auth-session/auth-session.repository.js';
 import {
@@ -31,7 +31,7 @@ async function persistActiveSessionForToken(
     return null;
   }
   const tokenHash = createHash('sha256').update(token).digest('hex');
-  const expiresAt = new Date(Date.now() + env.AUTH_SESSION_MAX_AGE_DAYS * MILLISECONDS_PER_DAY);
+  const expiresAt = sessionExpiresAtFromNow();
   const sessionRepository = new AuthSessionRepository();
   // The session row itself is written through the repository inside the owner's context —
   // the same shape `AuthSessionService` uses in production, so the fixture exercises the real
@@ -195,7 +195,7 @@ export async function generateTestTokenWithActiveSession(
       : {}),
   });
   const tokenHash = createHash('sha256').update(token).digest('hex');
-  const expiresAt = new Date(Date.now() + env.AUTH_SESSION_MAX_AGE_DAYS * MILLISECONDS_PER_DAY);
+  const expiresAt = sessionExpiresAtFromNow();
   const session = await application.authDomain.authSessionService.createSessionForUser({
     userPublicId,
     data: {

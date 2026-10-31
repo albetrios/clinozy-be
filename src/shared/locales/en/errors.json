@@ -267,6 +267,7 @@
   "invalidOrRevokedToken": "Invalid or already revoked token",
   "invalidOrExpiredSession": "Invalid or expired session",
   "sessionExpired": "Session has expired. Please log in again.",
+  "sessionIdleTimeout": "You were signed out after a period of inactivity. Please log in again.",
   "userNotFound": "User not found",
   "accountNotActive": "Account is not active",
   "invalidOrExpiredResetToken": "Invalid or expired reset token",

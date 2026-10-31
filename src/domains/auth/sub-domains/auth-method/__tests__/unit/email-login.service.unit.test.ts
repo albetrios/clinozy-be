@@ -62,7 +62,8 @@ vi.mock('@/shared/config/env.config.js', () => {
     // LOG_LEVEL is consumed at import time by logger.util.ts (pino); the mock must carry it so
     // module-init order can never surface `pino({ level: undefined })`.
     LOG_LEVEL: 'info',
-    AUTH_SESSION_MAX_AGE_DAYS: 7,
+    AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS: 43_200,
+    AUTH_SESSION_IDLE_TIMEOUT_SECONDS: 1800,
     PERSONAL_ORGANIZATION_ENABLED: false,
     SECRETS_ENCRYPTION_KEY: 'test-secret-encryption-key-for-verification-code-pepper',
     // TEST_MODE gates the send-code `debug_verification_code` affordance; the Vitest harness runs

@@ -26,6 +26,10 @@ import { incrementWithExpiryOnFirst } from '@/shared/utils/infrastructure/redis-
 import type { UserService } from '@/domains/user/user.service.js';
 import type { OrganizationSettingsService } from '@/domains/tenancy/sub-domains/organization/organization-settings/organization-settings.service.js';
 import type { AuthSessionService } from './sub-domains/auth-session/auth-session.service.js';
+import {
+  findSessionLapse,
+  SESSION_LAPSE_REASON,
+} from './sub-domains/auth-session/session-lifetime.js';
 import type { MfaService } from './sub-domains/auth-mfa/auth-mfa.service.js';
 import type { AuthMethodService } from './sub-domains/auth-method/auth-method.service.js';
 import { validateLogin } from './auth.validator.js';
@@ -381,8 +385,33 @@ export class AuthService {
       throw new UnauthorizedError('errors:invalidOrExpiredSession');
     }
 
+    // E-2: the server owns the idle and absolute limits. A live session idle past
+    // AUTH_SESSION_IDLE_TIMEOUT_SECONDS, or older than AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS, is
+    // revoked and refused with the `error.reason` clinozy-fe reads to say why. A revoked row skips
+    // this and reaches the reuse detection below (sec-re-05).
+    if (!session.is_revoked) {
+      const lapse = findSessionLapse({
+        createdAt: session.created_at,
+        lastActiveAt: session.last_active_at,
+        expiresAt: session.expires_at,
+      });
+      if (lapse !== null) {
+        await this.authSessionService.revokeLapsedSession({
+          sessionPublicId,
+          userId: session.user_id,
+        });
+        throw new UnauthorizedError(
+          lapse === SESSION_LAPSE_REASON.IDLE_TIMEOUT
+            ? 'errors:sessionIdleTimeout'
+            : 'errors:sessionExpired',
+        ).withReason(lapse);
+      }
+    }
+
     if (new Date(session.expires_at) <= new Date()) {
-      throw new UnauthorizedError('errors:sessionExpired');
+      throw new UnauthorizedError('errors:sessionExpired').withReason(
+        SESSION_LAPSE_REASON.SESSION_EXPIRED,
+      );
     }
 
     const user = await this.userService.findById(session.user_id);

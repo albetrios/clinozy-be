@@ -1139,7 +1139,8 @@ src/
     │   │   │   ├── organization-mfa-enforcement.integration.test.ts
     │   │   │   ├── refresh-preserves-active-organization.integration.test.ts
     │   │   │   ├── refresh-reuse-detection.integration.test.ts
-    │   │   │   └── refresh-rotates-token-hash.integration.test.ts
+    │   │   │   ├── refresh-rotates-token-hash.integration.test.ts
+    │   │   │   └── refresh-session-lifetime.integration.test.ts
     │   │   ├── unit/
     │   │   │   ├── auth-me-context.serializer.unit.test.ts
     │   │   │   ├── auth-me-context.service.unit.test.ts
@@ -1288,6 +1289,7 @@ src/
     │   │   │   │   │   ├── auth-session.service.unit.test.ts
     │   │   │   │   │   ├── session-cleanup.constants.unit.test.ts
     │   │   │   │   │   ├── session-cleanup.worker.unit.test.ts
+    │   │   │   │   │   ├── session-lifetime.unit.test.ts
     │   │   │   │   │   └── session-token-cache.service.unit.test.ts
     │   │   │   ├── seed/
     │   │   │   │   ├── auth-session.bulk.seed.ts
@@ -1302,6 +1304,7 @@ src/
     │   │   │   ├── auth-session.serializer.ts
     │   │   │   ├── auth-session.service.ts
     │   │   │   ├── auth-session.types.ts
+    │   │   │   ├── session-lifetime.ts
     │   │   │   └── session-token-cache.service.ts
     │   │   └── auth-webauthn/
     │   │   │   ├── __tests__/

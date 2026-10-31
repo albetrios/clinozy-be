@@ -318,35 +318,42 @@ describe('env-schema', () => {
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.PORT).toBe(4000);
-      expect(parsed.data.AUTH_SESSION_MAX_AGE_DAYS).toBe(7);
+      // E-2: a 12-hour absolute cap and a 30-minute idle timeout unless an operator says otherwise.
+      expect(parsed.data.AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS).toBe(43_200);
+      expect(parsed.data.AUTH_SESSION_IDLE_TIMEOUT_SECONDS).toBe(1800);
     }
   });
 
-  // sec-r4-C4: AUTH_SESSION_MAX_AGE_DAYS must be bounded at 365 so a config
-  // typo cannot produce effectively-never-expiring sessions.
-  it('rejects AUTH_SESSION_MAX_AGE_DAYS above 365 (sec-r4-C4)', () => {
+  // sec-r4-C4: the absolute session lifetime is bounded at one year so a config typo cannot
+  // produce effectively-never-expiring sessions; E-2 adds the idle timeout, bounded at one day.
+  it.each([
+    ['AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS', '31536001'],
+    ['AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS', '299'],
+    ['AUTH_SESSION_IDLE_TIMEOUT_SECONDS', '86401'],
+    ['AUTH_SESSION_IDLE_TIMEOUT_SECONDS', '59'],
+  ])('rejects %s=%s outside its bounds (sec-r4-C4, E-2)', (key, value) => {
     const parsed = envSchema.safeParse({
       ...commonRequiredBase,
       NODE_ENV: 'development',
-      AUTH_SESSION_MAX_AGE_DAYS: '366',
+      [key]: value,
     });
     expect(parsed.success).toBe(false);
     if (!parsed.success) {
-      expect(
-        parsed.error.issues.some((issue) => issue.path.includes('AUTH_SESSION_MAX_AGE_DAYS')),
-      ).toBe(true);
+      expect(parsed.error.issues.some((issue) => issue.path.includes(key))).toBe(true);
     }
   });
 
-  it('accepts AUTH_SESSION_MAX_AGE_DAYS at the 365 ceiling (sec-r4-C4)', () => {
+  it('accepts the session limits at their ceilings (sec-r4-C4, E-2)', () => {
     const parsed = envSchema.safeParse({
       ...commonRequiredBase,
       NODE_ENV: 'development',
-      AUTH_SESSION_MAX_AGE_DAYS: '365',
+      AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS: '31536000',
+      AUTH_SESSION_IDLE_TIMEOUT_SECONDS: '86400',
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect(parsed.data.AUTH_SESSION_MAX_AGE_DAYS).toBe(365);
+      expect(parsed.data.AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS).toBe(31_536_000);
+      expect(parsed.data.AUTH_SESSION_IDLE_TIMEOUT_SECONDS).toBe(86_400);
     }
   });
 

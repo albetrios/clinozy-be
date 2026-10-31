@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { env } from '@/shared/config/env.config.js';
-import { SECONDS_PER_DAY } from '@/shared/constants/index.js';
 import { OAUTH_STATE_TTL_SECONDS } from '@/shared/constants/ttl.constants.js';
 import { NotImplementedError } from '@/shared/errors/index.js';
 import {
@@ -81,13 +80,14 @@ describe('auth.http.util — session cookie options', () => {
     expect(getCsrfCookieOptions().sameSite).toBe(getSessionCookieOptions().sameSite);
   });
 
-  it('drives `secure` from config and bounds maxAge by AUTH_SESSION_MAX_AGE_DAYS', () => {
+  it('drives `secure` from config and makes the session cookie a browser-session cookie (E-2)', () => {
     const options = getSessionCookieOptions();
     // `secure` is config-driven (COOKIE_SECURE), not hardcoded — production refines it to true.
     expect(options.secure).toBe(env.COOKIE_SECURE);
-    // A bounded maxAge: never a session cookie (undefined) and never unbounded.
-    expect(options.maxAge).toBe(env.AUTH_SESSION_MAX_AGE_DAYS * SECONDS_PER_DAY);
-    expect(options.maxAge).toBeGreaterThan(0);
+    // No Max-Age / Expires: the browser drops it when it closes; the server's idle and absolute
+    // limits end the session itself.
+    expect(options).not.toHaveProperty('maxAge');
+    expect(options).not.toHaveProperty('expires');
   });
 
   it('leaves the CSRF cookie readable by the SPA (NOT httpOnly) for double-submit', () => {
@@ -97,14 +97,13 @@ describe('auth.http.util — session cookie options', () => {
     expect(CSRF_HEADER_NAME).toBe('x-csrf-token');
   });
 
-  it('still applies the secure/sameSite/path/maxAge hardening to the CSRF cookie', () => {
+  it('still applies the secure/sameSite/path hardening to the CSRF cookie', () => {
     const csrf = getCsrfCookieOptions();
-    const session = getSessionCookieOptions();
     expect(csrf.secure).toBe(env.COOKIE_SECURE);
     expect(csrf.sameSite).toBe(env.COOKIE_SAMESITE);
     expect(csrf.path).toBe(SESSION_COOKIE_PATH);
-    // The CSRF token must not outlive the session it protects.
-    expect(csrf.maxAge).toBe(session.maxAge);
+    // The CSRF token must not outlive the session it protects: a browser-session cookie too.
+    expect(csrf).not.toHaveProperty('maxAge');
   });
 });
 
