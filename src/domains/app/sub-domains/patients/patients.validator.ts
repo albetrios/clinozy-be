@@ -1,5 +1,8 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
-import { readContactLinkedSearch } from '@/domains/app/sub-domains/contacts/contacts.validator.js';
+import {
+  readContactAgeRange,
+  readContactLinkedSearch,
+} from '@/domains/app/sub-domains/contacts/contacts.validator.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import { queryInstantRange, withInstants } from '@/shared/utils/validation/record-fields.util.js';
 import {
@@ -54,6 +57,7 @@ export function validateListPatientsQuery(data: unknown): BaseRecordListInput {
         options: { recordPrefix: PATIENT_NUMBER_PREFIX },
       }),
       types: query.types?.split(','),
+      age: readContactAgeRange(query),
     },
     ranges: {
       follow_up_at: queryInstantRange({

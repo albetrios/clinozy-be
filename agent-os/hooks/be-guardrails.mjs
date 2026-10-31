@@ -3,10 +3,10 @@
 //
 // BLOCK (deny): reading or writing secret files, secret content, destructive shell commands,
 //   skipping the git hooks (--no-verify, `git commit -n`, HUSKY=0).
-// ASK: `gh pr create` — a PR only when the user asked (be-no-unrequested-pr.mjs covers the MCP tool).
+// WARN (systemMessage): edits to protected paths, cross-domain imports in a service, and a
 //   `git push` of auth, RLS, billing, migration or route changes with no clean
 //   /be-pre-merge-review recorded for HEAD (`pnpm agent-os:review-clean` records it).
-// WARN (systemMessage): edits to protected paths, cross-domain imports in a service.
+// Nothing here asks: the permission mode decides every call no rule blocks.
 //
 // Reads the PreToolUse payload on stdin. Fail-open by design: any parse/read
 // error allows the tool (exit 0) so a guardrail bug can never brick the agent.
@@ -66,7 +66,7 @@ function gitIn(directory, args) {
 }
 
 /**
- * Why a push needs the user's yes: it changes auth, RLS, billing, migrations or routes and no
+ * Why a push should have had a review: it changes auth, RLS, billing, migrations or routes and no
  * clean /be-pre-merge-review is recorded for HEAD — or "" when it does not. Fails open.
  */
 function unreviewedSensitivePush(scan) {
@@ -84,20 +84,17 @@ function unreviewedSensitivePush(scan) {
   if (sensitive.length === 0) return "";
   const examples = sensitive.slice(0, 3).join(", ");
   return (
-    `clinozy-be review gate: this push changes auth, RLS, billing, migrations or routes (${sensitive.length} file(s): ${examples}` +
+    `push review gate: this push changes auth, RLS, billing, migrations or routes (${sensitive.length} file(s): ${examples}` +
     `${sensitive.length > 3 ? ", …" : ""}) and /be-pre-merge-review has no clean result for HEAD ${head.slice(0, 7)}. ` +
-    "Run /be-pre-merge-review first (a clean review records itself with pnpm agent-os:review-clean), or confirm to push anyway."
+    "Run /be-pre-merge-review before the PR merges (a clean review records itself with pnpm agent-os:review-clean)."
   );
 }
 
-function decide(decision, reason) {
-  writePermissionDecision({ decision, reason });
+function deny(reason) {
+  writePermissionDecision({ decision: "deny", reason });
   recordTelemetry("be-guardrails", "PreToolUse", "fired");
   process.exit(0);
 }
-
-const ask = (reason) => decide("ask", reason);
-const deny = (reason) => decide("deny", reason);
 
 // --- BLOCK: agent reading secrets files --------------------------------------
 if ((tool === "Read" || tool === "Grep") && isReadableSecretPath(filePath)) {
@@ -129,12 +126,7 @@ if (tool === "Bash" && command) {
     } catch {
       /* fail-open */
     }
-    if (reason) ask(reason);
-  }
-  if (/\bgh\s+pr\s+create\b/.test(scan)) {
-    ask(
-      "clinozy-be policy: open a PR only when the user explicitly asked for one (Bash(gh pr*) is allowlisted, so this hook is the check). Confirm this was requested before proceeding.",
-    );
+    if (reason) warnings.push(reason);
   }
   if (/\bgit\s+reset\s+--hard\b/i.test(scan) || /\bgit\s+clean\s+-[a-z]*f/i.test(scan)) {
     warnings.push(`destructive git op ("${command.slice(0, 80)}") discards uncommitted work.`);

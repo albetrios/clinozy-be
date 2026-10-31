@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { ValidationError } from '@/shared/errors/index.js';
 import {
   readContactLinkedSearch,
+  validateCreateContact,
   validateListContactsQuery,
+  validateUpdateContact,
 } from '@/domains/app/sub-domains/contacts/contacts.validator.js';
 
 /**
@@ -97,5 +99,39 @@ describe('contacts.validator — a list about a contact (leads L7, patients P9)'
       text: 'Meera 9825011241',
     });
     expect(readContactLinkedSearch({ q: 'iyer meera' })).toEqual({ text: 'iyer meera' });
+  });
+});
+
+/** A typed age instead of a birth date, and the age filters (feat-approximate-age AG1, AG4). */
+describe('contacts.validator — age', () => {
+  const body = { first_name: 'Asha', phones: [{ phone: '+919825000001', is_primary: true }] };
+
+  it('takes an age of 0–120 whole years instead of a birth date', () => {
+    expect(validateCreateContact({ ...body, age: 0 }).age).toBe(0);
+    expect(validateCreateContact({ ...body, age: 120 }).age).toBe(120);
+    for (const age of [-1, 121, 3.5, '34']) {
+      expect(() => validateCreateContact({ ...body, age }), String(age)).toThrow(ValidationError);
+    }
+  });
+
+  it('refuses an age and a birth date in one body', () => {
+    expect(() => validateCreateContact({ ...body, age: 34, date_of_birth: '1992-01-01' })).toThrow(
+      ValidationError,
+    );
+    expect(() => validateUpdateContact({ age: 34, date_of_birth: null })).toThrow(ValidationError);
+    expect(validateUpdateContact({ age: 34 }).age).toBe(34);
+  });
+
+  it('reads age_from / age_to as the age filter, absent when neither is set', () => {
+    expect(validateListContactsQuery({ age_from: '30', age_to: '40' }).derived?.age).toEqual({
+      from: 30,
+      to: 40,
+    });
+    expect(validateListContactsQuery({ age_to: '29' }).derived?.age).toEqual({
+      from: undefined,
+      to: 29,
+    });
+    expect(validateListContactsQuery({}).derived?.age).toBeUndefined();
+    expect(() => validateListContactsQuery({ age_from: '121' })).toThrow(ValidationError);
   });
 });

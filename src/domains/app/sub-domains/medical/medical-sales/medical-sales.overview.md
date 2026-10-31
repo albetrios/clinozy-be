@@ -37,6 +37,9 @@ ROUTE #186–#187). The store's Payments tab moved to [`medical-payments/`](../m
 
 ## Key invariants
 
+- **A line's description (feat-bill-line-description BD10):** taken per item on the sale and
+  written on every line its batches draw — the only way to set one, since the sale's invoice is
+  never changed.
 - **A sale is never edited:** its invoice is the sale's — `/invoices` refuses to change, delete or
   restore it (`409 invoice_of_sale`).
 - **Void** only with nothing paid and nothing returned; it puts the stock back and deletes the

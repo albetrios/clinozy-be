@@ -19,6 +19,8 @@ export interface SeedInvoiceLine {
   medicine_batch_id?: number;
   batch_number?: string;
   name: string;
+  /** The line's free text, printed under its name. */
+  description?: string;
   /** A medicine line's snapshots — its pack label and HSN code. */
   pack_size?: string;
   hsn_code?: string;
@@ -103,6 +105,7 @@ export async function seedInvoice(
         medicine_batch_id: line.medicine_batch_id,
         batch_number: line.batch_number,
         name: line.name,
+        description: line.description,
         pack_size: line.pack_size,
         hsn_code: line.hsn_code,
         quantity: line.quantity,

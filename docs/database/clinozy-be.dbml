@@ -366,6 +366,7 @@ Table app.contacts {
   created_at timestamptz [not null]
   created_by_user_id bigint
   date_of_birth date
+  date_of_birth_is_approximate boolean [not null]
   default_channel varchar(9) [not null]
   delete_note varchar(280)
   delete_reason varchar(20)
@@ -468,6 +469,7 @@ Table app.invoice_items {
   batch_number varchar(20)
   created_at timestamptz [not null]
   created_by_user_id bigint
+  description varchar(280)
   discount_amount numeric(12, 2) [not null]
   discount_percent numeric(5, 2) [not null]
   gst_amount numeric(12, 2) [not null]

@@ -503,6 +503,29 @@ export function addDaysToCalendarDate(options: { date: string; days: number }): 
 }
 
 /**
+ * The calendar date `years` before `date` — 29 February lands on 28 February in a non-leap year,
+ * as Postgres's `date - interval 'n years'` does (a typed age's approximate birth date).
+ */
+export function subtractYearsFromCalendarDate(options: { date: string; years: number }): string {
+  const [year, month, day] = options.date.split('-').map(Number) as [number, number, number];
+  const targetYear = year - options.years;
+  const lastDayOfMonth = new Date(Date.UTC(targetYear, month, 0)).getUTCDate();
+  const at = new Date(Date.UTC(targetYear, month - 1, Math.min(day, lastDayOfMonth)));
+  at.setUTCFullYear(targetYear);
+  return at.toISOString().slice(0, 10);
+}
+
+/**
+ * Whole years from the calendar date `from` to `to` — a person's age on `to` when born on `from`
+ * (one less until the month and day are reached; someone born on 29 February turns a year older on
+ * 1 March in a non-leap year).
+ */
+export function wholeYearsBetweenCalendarDates(options: { from: string; to: string }): number {
+  const years = Number(options.to.slice(0, 4)) - Number(options.from.slice(0, 4));
+  return options.to.slice(5) < options.from.slice(5) ? years - 1 : years;
+}
+
+/**
  * The instant a wall-clock date and time in an IANA time zone names (`2026-10-07` `10:30` in
  * `Asia/Kolkata` → `2026-10-07T05:00:00Z`).
  *

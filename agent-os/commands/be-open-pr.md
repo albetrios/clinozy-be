@@ -4,7 +4,7 @@ argument-hint: [optional PR title]
 allowed-tools: Bash(git push*), Bash(git status), Bash(git diff*), Bash(git log*)
 ---
 
-Open a PR for the current branch — this command is the explicit opt-in that satisfies the "never open a PR unless asked" rule and the `no-unrequested-pr` guard:
+Open a PR for the current branch — this command is the explicit opt-in that satisfies the "never open a PR unless asked" rule:
 
 1. Confirm the branch and changeset: `git status`, `git log --oneline origin/main..HEAD`.
 2. Push: `git push -u origin <branch>` (retry with backoff on transient network errors).

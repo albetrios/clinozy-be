@@ -312,7 +312,22 @@ export const contactSchema = {
     first_name: { type: 'string', maxLength: 60 },
     last_name: { ...nullableString, maxLength: 60 },
     gender: { type: 'string', enum: ['female', 'male', 'other'], nullable: true },
-    date_of_birth: { type: 'string', format: 'date', nullable: true },
+    date_of_birth: {
+      type: 'string',
+      format: 'date',
+      nullable: true,
+      description: 'Approximate when it came from a typed age',
+    },
+    date_of_birth_is_approximate: {
+      type: 'boolean',
+      description:
+        "True when date_of_birth came from a typed age (the organization's today minus it)",
+    },
+    age: {
+      type: 'integer',
+      nullable: true,
+      description: "Whole years from date_of_birth to the organization's today; null without one",
+    },
     primary_phone: { type: 'string', pattern: '^\\+91\\d{10}$' },
     phones: {
       type: 'array',
@@ -363,6 +378,8 @@ export const contactExample = {
   last_name: 'Shah',
   gender: 'female',
   date_of_birth: '1994-03-12',
+  date_of_birth_is_approximate: false,
+  age: 32,
   primary_phone: '+919825044120',
   phones: [{ phone: '+919825044120', is_primary: true, is_on_whatsapp: true }],
   email: null,

@@ -12,6 +12,7 @@ import {
 } from '@/shared/utils/validation/record-fields.util.js';
 import { PAYMENT_MONEY_MODE_VALUES } from '@/domains/app/sub-domains/billing/payments/payments.constants.js';
 import {
+  INVOICE_ITEM_DESCRIPTION_MAX,
   INVOICE_ITEM_QUANTITY_MAX,
   INVOICE_ITEMS_MAX,
   INVOICE_MEMBERS_MAX,
@@ -39,6 +40,8 @@ const invoiceItemFields = {
     .max(INVOICE_ITEM_QUANTITY_MAX)
     .refine(distinct, { message: 'errors:validation.eachTreatmentOnce' }),
   batch_number: trimmedStringMinMax({ min: 1, max: 20 }).nullable(),
+  // Free text printed under the line's name; on a change, omitted keeps the kept line's, null clears it
+  description: trimmedStringMinMax({ min: 1, max: INVOICE_ITEM_DESCRIPTION_MAX }).nullable(),
 };
 
 /** A new line: exactly one of the offering and the medicine. */
@@ -51,6 +54,7 @@ const newInvoiceItem = z
     patient_offering_suggestion_id: invoiceItemFields.patient_offering_suggestion_id.optional(),
     patient_treatment_ids: invoiceItemFields.patient_treatment_ids.optional(),
     batch_number: invoiceItemFields.batch_number.optional(),
+    description: invoiceItemFields.description.optional(),
   })
   .strict()
   .refine((item) => (item.offering_id === undefined) !== (item.medicine_id === undefined), {
@@ -68,6 +72,7 @@ const changedInvoiceItem = z
     patient_offering_suggestion_id: invoiceItemFields.patient_offering_suggestion_id.optional(),
     patient_treatment_ids: invoiceItemFields.patient_treatment_ids.optional(),
     batch_number: invoiceItemFields.batch_number.optional(),
+    description: invoiceItemFields.description.optional(),
   })
   .strict()
   .refine(

@@ -7,7 +7,10 @@ import {
   recordIdSchema,
   valueListSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
-import { CreateContactDto } from '@/domains/app/sub-domains/contacts/contacts.dto.js';
+import {
+  CreateContactDto,
+  contactAgeRangeQueryFields,
+} from '@/domains/app/sub-domains/contacts/contacts.dto.js';
 import {
   PATIENT_CLINICAL_ITEM_MAX,
   PATIENT_CLINICAL_LIST_MAX,
@@ -105,7 +108,7 @@ export const UpdatePatientDto = z
  * Query of the patients list and export (routes-final 7.A.8 #1, #2, P9) — `q` (the patient number
  * `PT-0412` / `#412`; through the contact: names, numbers, contact number), `status`, `conversion`,
  * `types` (several, comma-separated — any of them), `home_branch_id`, `doctor_membership_id`,
- * `contact_id`, the follow-up and created ranges; sort `created_at` (default, newest first) |
+ * `contact_id`, the contact's age (`age_from` / `age_to`, AG4), the follow-up and created ranges; sort `created_at` (default, newest first) |
  * `patient_number` | `follow_up_at` (a file without one last). The saved-view registry checks a
  * view's `filters` against it.
  */
@@ -121,6 +124,7 @@ export const listPatientsQueryDto = listSearchSortSchema([
     home_branch_id: recordIdSchema.optional(),
     doctor_membership_id: recordIdSchema.optional(),
     contact_id: recordIdSchema.optional(),
+    ...contactAgeRangeQueryFields,
     follow_up_at_from: instantSchema.optional(),
     follow_up_at_to: instantSchema.optional(),
     created_from: instantSchema.optional(),

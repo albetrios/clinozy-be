@@ -89,6 +89,21 @@ function searchTextOf(q: string): string {
 /** A bare number short enough to be a record number. */
 const BARE_NUMBER_QUERY = /^\s*0*(\d{1,9})\s*$/;
 
+/** An age filter of a list of people (AG4): whole years, inclusive; either bound may be open. */
+export interface ContactAgeRange {
+  from?: number | undefined;
+  to?: number | undefined;
+}
+
+/** The age filter of a list query (`age_from` / `age_to`, AG4) — undefined when neither is set. */
+export function readContactAgeRange(query: {
+  age_from?: number | undefined;
+  age_to?: number | undefined;
+}): ContactAgeRange | undefined {
+  if (query.age_from === undefined && query.age_to === undefined) return undefined;
+  return { from: query.age_from, to: query.age_to };
+}
+
 /**
  * How a list of records about a contact reads `q` (leads L7, appointments 6.8): the contact's search
  * text (its rules — CT9), a contact number (`C-12345`) and the record's own number (`#2371`) — a
@@ -213,6 +228,7 @@ export function validateListContactsQuery(data: unknown): BaseRecordListInput {
       preference_tags: query.preference_tags?.split(','),
       is_patient: query.is_patient === undefined ? undefined : query.is_patient === 'true',
       has_open_lead: query.has_open_lead === undefined ? undefined : query.has_open_lead === 'true',
+      age: readContactAgeRange(query),
     },
     ranges: {
       created_at: {
