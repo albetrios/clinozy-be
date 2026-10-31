@@ -19,6 +19,8 @@ export interface SupplierOutput {
   name: string;
   phone: string | null;
   gst_number: string | null;
+  email: string | null;
+  address: string | null;
   is_quick: boolean;
   manufacturers: SupplierManufacturerOutput[];
   payable: number;

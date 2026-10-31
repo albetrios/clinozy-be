@@ -41,3 +41,11 @@ ROUTE #153 — routes-final 11.D, MD12–MD14). Tables `app.medicines`, `app.med
 - **Expiry (MD5):** `expiry_month` is the month's first day; a batch of an earlier month is expired
   and never sold.
 - **Delete only at zero stock** (`409 medicine_has_stock`).
+- **Units (change-pharmacy-record-fields D5):** `units_per_pack` (1–1000, default 1) is how many
+  loose units a pack holds; `quantity`, `min_stock`, `max_stock` and every batch's `quantity` count
+  units — packs while it is 1. It changes only while the medicine holds no stock
+  (`409 medicine_has_stock`, D7).
+- **Batch MRP (D8):** a batch keeps the MRP printed on it (`mrp`, null = the medicine's); a sale
+  charges it, per unit and rounded down to the paisa (D2, D6).
+- **HSN and pack (D3):** `hsn_code` (4, 6 or 8 digits) and `pack_label` are snapshotted on every bill
+  line as `hsn_code` and `pack_size`.

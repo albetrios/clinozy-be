@@ -3,6 +3,7 @@ import { listSearchSortSchema } from '@/shared/utils/http/list-query.util.js';
 import { trimmedStringMinMax } from '@/shared/utils/validation/validation.util.js';
 import {
   expectedUpdatedAtSchema,
+  hsnCodeSchema,
   instantSchema,
   moneySchema,
   recordIdListSchema,
@@ -17,13 +18,19 @@ import {
   MEDICINE_QUANTITY_MAX,
   MEDICINE_STOCK_LEVEL_VALUES,
   MEDICINE_SUPPLIER_PRICES_MAX,
+  MEDICINE_UNITS_PER_PACK_MAX,
 } from './medicines.constants.js';
 
 /** True when every entry of a list is different. */
 const distinct = (values: readonly unknown[]) => new Set(values).size === values.length;
 
-/** A pack count, 0–9999 (the design's steppers). */
+/** A stock count, 0–9999 — packs, or loose units when the medicine sells loose (the design's steppers). */
 const packsSchema = z.number().int().min(0).max(MEDICINE_QUANTITY_MAX);
+
+/** An MRP as printed on a pack — above 0 (a batch's, an order line's). */
+export const printedMrpSchema = moneySchema.refine((mrp) => mrp > 0, {
+  message: 'errors:validation.moreThanZero',
+});
 
 /** `2027-03` — a batch's expiry month (MD5). */
 export const expiryMonthSchema = z
@@ -39,7 +46,8 @@ const discountPercentSchema = z
 
 /**
  * One batch of a medicine (MD13): a kept one names its `id`; `batch_number` (unique per medicine,
- * any case), `expiry_month`, `quantity` (packs left), `purchase_rate`, `supplier_id`.
+ * any case), `expiry_month`, `quantity` (units left — packs while `units_per_pack` is 1),
+ * `purchase_rate` (a pack's), `mrp` (printed on the batch; null = the medicine's), `supplier_id`.
  */
 const medicineBatchDto = z
   .object({
@@ -48,6 +56,7 @@ const medicineBatchDto = z
     expiry_month: expiryMonthSchema,
     quantity: packsSchema,
     purchase_rate: moneySchema.nullable().optional(),
+    mrp: printedMrpSchema.nullable().optional(),
     supplier_id: recordIdSchema.nullable().optional(),
   })
   .strict();
@@ -87,6 +96,9 @@ const medicineFields = {
   composition: trimmedStringMinMax({ min: 1, max: 160 }).nullable(),
   manufacturer_id: recordIdSchema,
   is_prescription_only: z.boolean(),
+  hsn_code: hsnCodeSchema.nullable(),
+  pack_label: trimmedStringMinMax({ min: 1, max: 30 }).nullable(),
+  units_per_pack: z.number().int().min(1).max(MEDICINE_UNITS_PER_PACK_MAX),
   mrp: moneySchema,
   gst_percent: z.literal(MEDICINE_GST_PERCENT_VALUES),
   min_stock: packsSchema,
@@ -103,9 +115,9 @@ export const medicinesIdParamsDto = z
 
 /**
  * Body of `POST /app/medicines` (11.D.8 #19): `name*`, `mrp*` and `manufacturer_id*` (both
- * optional on a quick medicine); optional `composition`, `is_prescription_only`, `gst_percent`,
- * `min_stock`, `max_stock`, `near_expiry_discount_percent`, `is_quick`, `batches`,
- * `supplier_prices`.
+ * optional on a quick medicine); optional `composition`, `is_prescription_only`, `hsn_code`,
+ * `pack_label`, `units_per_pack` (default 1), `gst_percent`, `min_stock`, `max_stock`,
+ * `near_expiry_discount_percent`, `is_quick`, `batches`, `supplier_prices`.
  */
 export const CreateMedicineDto = z
   .object({
@@ -113,6 +125,9 @@ export const CreateMedicineDto = z
     composition: medicineFields.composition.optional(),
     manufacturer_id: medicineFields.manufacturer_id.optional(),
     is_prescription_only: medicineFields.is_prescription_only.optional(),
+    hsn_code: medicineFields.hsn_code.optional(),
+    pack_label: medicineFields.pack_label.optional(),
+    units_per_pack: medicineFields.units_per_pack.optional(),
     mrp: medicineFields.mrp.optional(),
     gst_percent: medicineFields.gst_percent.optional(),
     min_stock: medicineFields.min_stock.optional(),
@@ -127,7 +142,8 @@ export const CreateMedicineDto = z
 /**
  * Body of `PATCH /app/medicines/{medicine_id}` (11.D.8 #21): any field of the create but
  * `is_quick`; `batches` is the whole list (a kept one with its `id`), `supplier_prices` replaces
- * the prices; `null` clears the composition and the discount; `expected_updated_at` refuses a
+ * the prices; `null` clears the composition, the HSN code, the pack label and the discount;
+ * `units_per_pack` changes only while the medicine holds no stock; `expected_updated_at` refuses a
  * stale save.
  */
 export const UpdateMedicineDto = z
@@ -136,6 +152,9 @@ export const UpdateMedicineDto = z
     composition: medicineFields.composition.optional(),
     manufacturer_id: medicineFields.manufacturer_id.optional(),
     is_prescription_only: medicineFields.is_prescription_only.optional(),
+    hsn_code: medicineFields.hsn_code.optional(),
+    pack_label: medicineFields.pack_label.optional(),
+    units_per_pack: medicineFields.units_per_pack.optional(),
     mrp: medicineFields.mrp.optional(),
     gst_percent: medicineFields.gst_percent.optional(),
     min_stock: medicineFields.min_stock.optional(),

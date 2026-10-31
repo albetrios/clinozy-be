@@ -7,6 +7,8 @@ export interface MedicalPurchaseOrderItemOutput {
   quantity: number;
   free_quantity: number;
   rate: number;
+  /** The MRP printed on the line's packs — the batch it fills takes it. */
+  mrp: number | null;
   amount: number;
   is_received: boolean | null;
   batch_number: string | null;
@@ -27,6 +29,8 @@ export interface MedicalPurchaseOrderOutput {
   /** The supplier — with its phone and GSTIN, a deleted one's too (the PO print sheet, MD30 (c)). */
   supplier: { id: string; name: string; phone: string | null; gst_number: string | null };
   supplier_bill_number: string | null;
+  /** What the desk noted ("30 DAYS DUE") — the one field a received order still changes. */
+  note: string | null;
   order_date: string;
   stage: string;
   received_at: string | null;

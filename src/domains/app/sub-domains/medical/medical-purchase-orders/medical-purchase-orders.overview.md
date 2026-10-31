@@ -36,9 +36,12 @@ What the store orders from its suppliers — ordered, then received into batches
 ## Key invariants
 
 - **Ordered → received:** while ordered it changes and can be cancelled (the delete, with its own
-  reasons); once received it is read-only (`409 transition_not_allowed`).
-- **Receive** moves each ticked line into its batch, refreshes the supplier's price, sets the
-  total to the received lines' and applies the supplier's open credits.
+  reasons); once received it is read-only (`409 transition_not_allowed`) — but a change of `note`
+  alone (change-pharmacy-record-fields D10).
+- **Receive** moves each ticked line into its batch — `(quantity + free_quantity) ×` the
+  medicine's `units_per_pack` units, with the line's `mrp` on the batch when it has one (D5, D8) —
+  refreshes the supplier's price, sets the total to the received lines' and applies the
+  supplier's open credits.
 - **Goods not ordered (MD26):** receive's lines without `id` — a medicine or a quick one added as
   typed, its quantity, free packs and rate — become received lines of the order (at most 50), with
   their batch and price like an ordered line.

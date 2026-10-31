@@ -54,6 +54,7 @@ export interface MedicineBatchRow {
   expiry_month: string;
   quantity: number;
   purchase_rate: string | null;
+  mrp: string | null;
   supplier_id: number | null;
 }
 
@@ -65,6 +66,7 @@ export interface MedicineBatchReadRow {
   expiry_month: string;
   quantity: number;
   purchase_rate: string | null;
+  mrp: string | null;
   supplier_id: string | null;
   is_expired: boolean;
 }
@@ -85,6 +87,7 @@ export type MedicineBatchValues = Partial<{
   expiry_month: string;
   quantity: number;
   purchase_rate: string | null;
+  mrp: string | null;
   supplier_id: number | null;
   medical_purchase_order_id: number | null;
 }>;
@@ -98,6 +101,7 @@ const BATCH_COLUMNS = {
   expiry_month: medicine_batches.expiry_month,
   quantity: medicine_batches.quantity,
   purchase_rate: medicine_batches.purchase_rate,
+  mrp: medicine_batches.mrp,
   supplier_id: medicine_batches.supplier_id,
 };
 
@@ -326,6 +330,7 @@ export class MedicinesRepository extends BaseRecordRepository {
         expiry_month: medicine_batches.expiry_month,
         quantity: medicine_batches.quantity,
         purchase_rate: medicine_batches.purchase_rate,
+        mrp: medicine_batches.mrp,
         supplier_id: suppliers.public_id,
         is_expired: sql<boolean>`${medicine_batches.expiry_month} < ${thisMonthSql(options.organizationId)}`,
       })

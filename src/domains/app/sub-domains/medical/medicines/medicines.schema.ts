@@ -23,7 +23,10 @@ import { organizations } from '@/domains/tenancy/sub-domains/organization/organi
 import { manufacturers } from '@/domains/app/sub-domains/medical/manufacturers/manufacturers.schema.js';
 import { suppliers } from '@/domains/app/sub-domains/medical/suppliers/suppliers.schema.js';
 import { medical_purchase_orders } from '@/domains/app/sub-domains/medical/medical-purchase-orders/medical-purchase-orders.schema.js';
-import { RECORD_DELETE_REASON_VALUES } from '@/shared/constants/record-fields.constants.js';
+import {
+  HSN_CODE_PATTERN,
+  RECORD_DELETE_REASON_VALUES,
+} from '@/shared/constants/record-fields.constants.js';
 import {
   MEDICINE_DEFAULT_GST_PERCENT,
   MEDICINE_DEFAULT_MAX_STOCK,
@@ -31,6 +34,7 @@ import {
   MEDICINE_GST_PERCENT_VALUES,
   MEDICINE_NEAR_EXPIRY_DISCOUNT_MAX,
   MEDICINE_QUANTITY_MAX,
+  MEDICINE_UNITS_PER_PACK_MAX,
 } from './medicines.constants.js';
 
 /** The organization GUC's row, for a policy. */
@@ -67,6 +71,11 @@ export const medicines = appSchema
         { onDelete: 'restrict' },
       ),
       is_prescription_only: boolean('is_prescription_only').notNull().default(false),
+      // The GST HSN code and the pack as printed ("1*10", "30GM") — bill lines snapshot both
+      hsn_code: varchar('hsn_code', { length: 8 }),
+      pack_label: varchar('pack_label', { length: 30 }),
+      // Loose units in a pack: 1 = whole packs; above 1 the stock below counts units
+      units_per_pack: smallint('units_per_pack').notNull().default(1),
       mrp: numeric('mrp', { precision: 12, scale: 2 }).notNull().default('0.00'),
       gst_percent: smallint('gst_percent').notNull().default(MEDICINE_DEFAULT_GST_PERCENT),
       min_stock: integer('min_stock').notNull().default(MEDICINE_DEFAULT_MIN_STOCK),
@@ -138,6 +147,12 @@ export const medicines = appSchema
         sql`${table.min_stock} >= 0 AND ${table.max_stock} >= ${table.min_stock} AND ${table.max_stock} <= ${sqlLiteral(MEDICINE_QUANTITY_MAX)}`,
       ),
       check('chk_medicines_quantity', sql`${table.quantity} >= 0`),
+      check('chk_medicines_hsn_code', sql`${table.hsn_code} ~ ${sqlLiteral(HSN_CODE_PATTERN)}`),
+      check('chk_medicines_pack_label', sql`char_length(${table.pack_label}) > 0`),
+      check(
+        'chk_medicines_units_per_pack',
+        sql`${table.units_per_pack} >= 1 AND ${table.units_per_pack} <= ${sqlLiteral(MEDICINE_UNITS_PER_PACK_MAX)}`,
+      ),
       check(
         'chk_medicines_near_expiry_discount_percent',
         sql`${table.near_expiry_discount_percent} > 0 AND ${table.near_expiry_discount_percent} <= ${sqlLiteral(MEDICINE_NEAR_EXPIRY_DISCOUNT_MAX)}`,
@@ -194,6 +209,8 @@ export const medicine_batches = appSchema
       expiry_month: date('expiry_month', { mode: 'string' }).notNull(),
       quantity: integer('quantity').notNull().default(0),
       purchase_rate: numeric('purchase_rate', { precision: 12, scale: 2 }),
+      // The MRP printed on this batch — a sale charges it (the medicine's MRP when null)
+      mrp: numeric('mrp', { precision: 12, scale: 2 }),
       supplier_id: bigint('supplier_id', { mode: 'number' }).references(() => suppliers.id, {
         onDelete: 'set null',
       }),
@@ -239,6 +256,7 @@ export const medicine_batches = appSchema
         sql`${table.quantity} >= 0 AND ${table.quantity} <= ${sqlLiteral(MEDICINE_QUANTITY_MAX)}`,
       ),
       check('chk_medicine_batches_purchase_rate', sql`${table.purchase_rate} >= 0`),
+      check('chk_medicine_batches_mrp', sql`${table.mrp} > 0`),
       check('chk_medicine_batches_updated', sql`${table.updated_at} >= ${table.created_at}`),
       pgPolicy('medicine_batches_tenant_isolation', {
         as: 'permissive',

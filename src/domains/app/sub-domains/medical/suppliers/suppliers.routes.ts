@@ -48,7 +48,7 @@ export function suppliersRoutes(service: SuppliersService): FastifyPluginAsync {
         schema: {
           summary: 'Add a supplier',
           description:
-            'Adds an agency the store buys from — never the clinic stock\'s vendors: `name*` (1–120, unique in any case — a 409 `record_already_exists`); optional `phone` (`+91` and ten digits), `gst_number` (a GSTIN), `manufacturer_ids` ("Distributes", up to 50 live manufacturers — a 400 otherwise), `is_quick` (a picker\'s inline add). Requires medicine:create.',
+            'Adds an agency the store buys from — never the clinic stock\'s vendors: `name*` (1–120, unique in any case — a 409 `record_already_exists`); optional `phone` (`+91` and ten digits), `gst_number` (a GSTIN), `email` (up to 120), `address` (1–240), `manufacturer_ids` ("Distributes", up to 50 live manufacturers — a 400 otherwise), `is_quick` (a picker\'s inline add). Requires medicine:create.',
           tags: ['Medical store'],
           body: CreateSupplierDto,
         },
@@ -80,7 +80,7 @@ export function suppliersRoutes(service: SuppliersService): FastifyPluginAsync {
         schema: {
           summary: 'Change a supplier',
           description:
-            "Changes a supplier's `name` (unique — a 409 `record_already_exists`), `phone`, `gst_number` (null clears either) or `manufacturer_ids` (replaces the links). Send `expected_updated_at` and a save over a newer change is a 409 `record_changed`. Requires medicine:update.",
+            "Changes a supplier's `name` (unique — a 409 `record_already_exists`), `phone`, `gst_number`, `email`, `address` (null clears any of them) or `manufacturer_ids` (replaces the links). Send `expected_updated_at` and a save over a newer change is a 409 `record_changed`. Requires medicine:update.",
           tags: ['Medical store'],
           params: suppliersIdParamsDto,
           body: UpdateSupplierDto,

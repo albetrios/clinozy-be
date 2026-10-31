@@ -1,7 +1,10 @@
 import { findMembershipIdOfUser, resolveRecordIds } from '@/domains/app/base-record.repository.js';
 import type { BaseRecordRules, BaseRecordWriteContext } from '@/domains/app/base-record.types.js';
 import { MedicinesRepository } from '@/domains/app/sub-domains/medical/medicines/medicines.repository.js';
-import { moveMedicineBatch } from '@/domains/app/sub-domains/medical/medicines/medicines.stock.js';
+import {
+  moveMedicineBatch,
+  unitPurchaseRate,
+} from '@/domains/app/sub-domains/medical/medicines/medicines.stock.js';
 import { roundToPaise, toAmount } from '@/shared/utils/validation/record-fields.util.js';
 import { applySupplierCredits, reapplySupplierCredits } from './supplier-credits.ledger.js';
 import type { SupplierCreditsRepository } from './supplier-credits.repository.js';
@@ -37,7 +40,8 @@ async function moveCreditPacks(options: {
  * @remarks
  * - **Algorithm:** a create reads the batch (its medicine and purchase rate — 0 for an opening
  *   batch without one), takes the quantity out of it (guarded, MD4), prices the credit
- *   (`amount` = quantity × rate) and names the caller's membership (K2); once written, the
+ *   (`amount` = quantity × rate, the rate a unit's — the pack rate over the medicine's units per
+ *   pack) and names the caller's membership (K2); once written, the
  *   supplier's open credits are applied to their received orders still due, oldest first. A void
  *   puts the quantity back into the batch; an undo takes it again; after either, the supplier's
  *   live credits are applied again oldest first ({@link reapplySupplierCredits}). Every read adds
@@ -49,8 +53,12 @@ export function createSupplierCreditsRules(repository: SupplierCreditsRepository
   return {
     prepareCreate: async (values, context) => {
       const batch = await medicinesRepository.findBatch(values.medicine_batch_id as number);
+      const medicine = batch ? await medicinesRepository.findById(batch.medicine_id) : null;
       const quantity = values.quantity as number;
-      const rate = toAmount(batch?.purchase_rate) ?? 0;
+      const rate = unitPurchaseRate({
+        packRate: toAmount(batch?.purchase_rate) ?? 0,
+        unitsPerPack: Number(medicine?.units_per_pack ?? 1),
+      });
       values.medicine_id = batch?.medicine_id;
       values.rate = rate.toFixed(2);
       values.amount = roundToPaise(quantity * rate).toFixed(2);

@@ -20,6 +20,7 @@ export interface MedicalPurchaseOrderItemReadRow {
   quantity: number;
   free_quantity: number;
   rate: string;
+  mrp: string | null;
   amount: string;
   is_received: boolean | null;
   batch_number: string | null;
@@ -35,6 +36,7 @@ export interface MedicalPurchaseOrderItemRow {
   quantity: number;
   free_quantity: number;
   rate: string;
+  mrp: string | null;
   amount: string;
 }
 
@@ -45,6 +47,7 @@ export interface MedicalPurchaseOrderItemValues {
   quantity: number;
   free_quantity: number;
   rate: string;
+  mrp: string | null;
   amount: string;
 }
 
@@ -103,6 +106,7 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
         quantity: medical_purchase_order_items.quantity,
         free_quantity: medical_purchase_order_items.free_quantity,
         rate: medical_purchase_order_items.rate,
+        mrp: medical_purchase_order_items.mrp,
         amount: medical_purchase_order_items.amount,
         is_received: medical_purchase_order_items.is_received,
         batch_number: medical_purchase_order_items.batch_number,
@@ -128,6 +132,7 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
         quantity: medical_purchase_order_items.quantity,
         free_quantity: medical_purchase_order_items.free_quantity,
         rate: medical_purchase_order_items.rate,
+        mrp: medical_purchase_order_items.mrp,
         amount: medical_purchase_order_items.amount,
       })
       .from(medical_purchase_order_items)
@@ -176,22 +181,25 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
         quantity: medical_purchase_order_items.quantity,
         free_quantity: medical_purchase_order_items.free_quantity,
         rate: medical_purchase_order_items.rate,
+        mrp: medical_purchase_order_items.mrp,
         amount: medical_purchase_order_items.amount,
       });
   }
 
-  /** MD16: what receiving did to one line — ticked or not, and the batch it went into. */
+  /** MD16: what receiving did to one line — ticked or not, its MRP, and the batch it went into. */
   async markItemReceived(options: {
     id: number;
     isReceived: boolean;
     batchNumber: string | null;
     expiryMonth: string | null;
+    mrp: string | null;
     medicineBatchId: number | null;
   }): Promise<void> {
     await getRequestDatabase()
       .update(medical_purchase_order_items)
       .set({
         is_received: options.isReceived,
+        mrp: options.mrp,
         batch_number: options.batchNumber,
         expiry_month: options.expiryMonth,
         medicine_batch_id: options.medicineBatchId,
