@@ -232,14 +232,15 @@ The recovery is the same in every case:
 ### Step-up before an irreversible action
 
 Deleting the account (`DELETE /users/me`), requesting the data export (`POST /users/me/data-export`),
-transferring ownership (`POST /tenancy/organization/transfer-ownership`) and deleting the organization
-(`DELETE /tenancy/organization`) need a recent step-up on **this** session, valid for 10 minutes:
+transferring ownership (`POST /tenancy/organization/transfer-ownership`), deleting the organization
+(`DELETE /tenancy/organization`) and changing its `status` (`PATCH /tenancy/organization` with
+`status` — the owner's alone, like deleting it) need a recent step-up on **this** session, valid for 10 minutes:
 `POST /auth/step-up` with the password (a passwordless account without MFA uses an emailed code), or an
 MFA verification for an MFA user. Without it they answer
 `403 errors:recentStepUpRequired` — ask the user to confirm who they are, then retry. A stolen access
 token alone can therefore not erase an account or an organization.
 
-**Client checklist (clinozy-fe).** Each of the four calls above needs the same wrapper:
+**Client checklist (clinozy-fe).** Each of the calls above needs the same wrapper:
 
 1. Send the request. On `403` with `errors:recentStepUpRequired`, keep the request and open a
    "confirm it's you" prompt; any other status is handled as before.

@@ -2103,6 +2103,7 @@ export class MembershipService {
           membership: newOwnerMembership,
           mainRoleId: ownerRoleId,
           keepPreviousMainRole: true,
+          dropRoleIds: [],
           actingUserId: currentUserId,
         });
         const formerOwnerUpdated = await this.moveMainRole({
@@ -2110,6 +2111,7 @@ export class MembershipService {
           membership: formerOwnerMembership,
           mainRoleId: formerOwnerRoleId,
           keepPreviousMainRole: false,
+          dropRoleIds: [ownerRoleId],
           actingUserId: currentUserId,
         });
         // Serialized against the new owner, so the answer reads `is_owner: true`.
@@ -2176,14 +2178,16 @@ export class MembershipService {
 
   /**
    * Makes `mainRoleId` a membership's main role, keeping its other roles: with
-   * `keepPreviousMainRole` the role it held as main stays as an extra role (first), and the new
-   * main role leaves the extra roles. MUST run inside the organization context.
+   * `keepPreviousMainRole` the role it held as main stays as an extra role (first); the new main
+   * role and every `dropRoleIds` role leave the extra roles. MUST run inside the organization
+   * context.
    */
   private async moveMainRole(options: {
     organizationId: number;
     membership: MembershipRow;
     mainRoleId: number;
     keepPreviousMainRole: boolean;
+    dropRoleIds: readonly number[];
     actingUserId: number;
   }): Promise<MembershipRow> {
     const { membership } = options;
@@ -2193,7 +2197,7 @@ export class MembershipService {
     const keptRoleIds = [
       ...new Set([...(options.keepPreviousMainRole ? [membership.role_id] : []), ...extraRoleIds]),
     ]
-      .filter((roleId) => roleId !== options.mainRoleId)
+      .filter((roleId) => roleId !== options.mainRoleId && !options.dropRoleIds.includes(roleId))
       .slice(0, MEMBERSHIP_ROLE_IDS_MAX - 1);
     const updated = await this.membershipRepository.update(
       membership.public_id,
