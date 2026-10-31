@@ -2711,8 +2711,10 @@ src/
     │   │   └── zod-type-provider.middleware.ts
     │   ├── rate-limit/
     │   │   ├── failed-authentication-rate-limit.ts
+    │   │   ├── per-email-rate-limit.ts
     │   │   ├── rate-limit-fallback-store.ts
     │   │   ├── rate-limit-presets.constants.ts
+    │   │   ├── rate-limit-refusal.ts
     │   │   ├── rate-limit-telemetry-throttle.ts
     │   │   └── rate-limit.middleware.ts
     │   ├── security/

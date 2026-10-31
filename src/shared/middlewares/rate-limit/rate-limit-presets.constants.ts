@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
-import type { RateLimitOptions } from '@fastify/rate-limit';
+import type { CreateRateLimitOptions } from '@fastify/rate-limit';
 import { env } from '@/shared/config/env.config.js';
 import { getAuthenticatedActorId } from '@/shared/utils/http/request.util.js';
 import { rateLimitIpKey } from '@/shared/utils/http/rate-limit-ip-key.util.js';
@@ -177,16 +177,20 @@ const STRICT_PUBLIC_PER_EMAIL_MAX_REQUESTS_PER_WINDOW = RATE_LIMIT_CAPS_RELAXED 
 const STRICT_PUBLIC_PER_EMAIL_WINDOW_MS = 15 * MILLISECONDS_PER_MINUTE;
 
 /**
- * Options for an `app.rateLimit(...)` preHandler that throttles per normalized email/identity,
- * independent of IP. Pass to `app.rateLimit(...)` and add the returned hook to a route's
- * `preHandler` array; keying happens at `preHandler` so the validated body is available.
+ * Options for the per-email limiter `app.createRateLimit(...)` builds in
+ * `createPerEmailRateLimitPreHandler` (`per-email-rate-limit.ts`) — throttles per normalized
+ * email/identity, independent of IP; keyed at `preHandler` so the validated body is available.
+ *
+ * @remarks
+ * A standalone limiter, never `app.rateLimit(...)`: `@fastify/rate-limit` marks a request as
+ * limited the first time any of its hooks runs, so on a route that already carries
+ * {@link STRICT_PUBLIC_RATE_LIMIT} (an `onRequest` hook) an `app.rateLimit()` preHandler returned
+ * without counting and the per-email cap never fired.
  */
-export const STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS: RateLimitOptions = {
+export const STRICT_PUBLIC_PER_EMAIL_RATE_LIMIT_OPTIONS: CreateRateLimitOptions = {
   max: STRICT_PUBLIC_PER_EMAIL_MAX_REQUESTS_PER_WINDOW,
   timeWindow: STRICT_PUBLIC_PER_EMAIL_WINDOW_MS,
-  hook: 'preHandler',
   keyGenerator: buildRateLimitKeyFromRequestBodyEmail,
-  onExceeded: recordRouteRateLimitExceeded,
 };
 
 const STRICT_AUTHED_MAX_REQUESTS_PER_WINDOW = RATE_LIMIT_CAPS_RELAXED ? 5000 : 10;

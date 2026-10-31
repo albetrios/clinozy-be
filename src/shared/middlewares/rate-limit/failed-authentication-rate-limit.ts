@@ -1,11 +1,13 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { CreateRateLimitOptions } from '@fastify/rate-limit';
 import { env } from '@/shared/config/env.config.js';
-import { RateLimitedError } from '@/shared/errors/index.js';
 import { MILLISECONDS_PER_MINUTE } from '@/shared/constants/ttl.constants.js';
 import { rateLimitIpKey } from '@/shared/utils/http/rate-limit-ip-key.util.js';
-import { logger } from '@/shared/utils/infrastructure/logger.util.js';
-import { shouldEmitRateLimitTelemetry } from '@/shared/middlewares/rate-limit/rate-limit-telemetry-throttle.js';
+import {
+  refuseRateLimitedRequest,
+  setRateLimitHeaders,
+  type StandaloneRateLimit,
+} from '@/shared/middlewares/rate-limit/rate-limit-refusal.js';
 
 /**
  * Failed authentications one client address may make per {@link FAILED_AUTHENTICATION_WINDOW_MS}
@@ -28,12 +30,7 @@ export const FAILED_AUTHENTICATION_RATE_LIMIT_OPTIONS: CreateRateLimitOptions = 
 };
 
 /** The limiter `app.createRateLimit(FAILED_AUTHENTICATION_RATE_LIMIT_OPTIONS)` returns. */
-export type FailedAuthenticationRateLimit = ReturnType<FastifyInstance['createRateLimit']>;
-
-type FailedAuthenticationRateLimitState = Extract<
-  Awaited<ReturnType<FailedAuthenticationRateLimit>>,
-  { isAllowed: false }
->;
+export type FailedAuthenticationRateLimit = StandaloneRateLimit;
 
 /** Inputs shared by {@link refuseWhenFailedAuthenticationBudgetSpent} and {@link recordFailedAuthentication}. */
 interface FailedAuthenticationBudgetOptions {
@@ -48,42 +45,6 @@ interface FailedAuthenticationBudgetOptions {
  */
 export function requestPresentsCredential(request: FastifyRequest): boolean {
   return request.headers.authorization !== undefined || request.headers['x-api-key'] !== undefined;
-}
-
-function setRateLimitHeaders({
-  reply,
-  state,
-  remaining,
-}: {
-  reply: FastifyReply;
-  state: FailedAuthenticationRateLimitState;
-  remaining: number;
-}): void {
-  reply.header('x-ratelimit-limit', state.max);
-  reply.header('x-ratelimit-remaining', remaining);
-  reply.header('x-ratelimit-reset', state.ttlInSeconds);
-}
-
-function refuseFailedAuthentication({
-  request,
-  reply,
-  state,
-}: {
-  request: FastifyRequest;
-  reply: FastifyReply;
-  state: FailedAuthenticationRateLimitState;
-}): never {
-  if (shouldEmitRateLimitTelemetry(state.key)) {
-    logger.warn({
-      event: 'rate_limit.exceeded',
-      ip: request.ip,
-      method: request.method,
-      url: request.routeOptions?.url ?? request.url,
-      key: state.key,
-    });
-  }
-  setRateLimitHeaders({ reply, state, remaining: 0 });
-  throw new RateLimitedError().withRetryAfter(Math.max(1, state.ttlInSeconds));
 }
 
 /**
@@ -108,7 +69,7 @@ export async function refuseWhenFailedAuthenticationBudgetSpent({
 }: FailedAuthenticationBudgetOptions): Promise<void> {
   const state = await rateLimit(request, { increment: false });
   if (state.isAllowed || state.remaining > 0) return;
-  refuseFailedAuthentication({ request, reply, state });
+  refuseRateLimitedRequest({ request, reply, state });
 }
 
 /**
@@ -130,7 +91,7 @@ export async function recordFailedAuthentication({
 }: FailedAuthenticationBudgetOptions): Promise<void> {
   const state = await rateLimit(request);
   if (state.isAllowed) return;
-  if (state.isExceeded) refuseFailedAuthentication({ request, reply, state });
+  if (state.isExceeded) refuseRateLimitedRequest({ request, reply, state });
   if (!reply.hasHeader('x-ratelimit-limit')) {
     setRateLimitHeaders({ reply, state, remaining: state.remaining });
   }
