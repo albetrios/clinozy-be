@@ -1,5 +1,8 @@
 import type { BaseRecordListInput } from '@/domains/app/base-record.types.js';
-import { readContactLinkedSearch } from '@/domains/app/sub-domains/contacts/contacts.validator.js';
+import {
+  readContactAgeRange,
+  readContactLinkedSearch,
+} from '@/domains/app/sub-domains/contacts/contacts.validator.js';
 import { parseWithSchema } from '@/shared/utils/validation/parse-with-schema.util.js';
 import {
   queryInstantRange,
@@ -64,6 +67,7 @@ export function validateListLeadsQuery(data: unknown): BaseRecordListInput {
       team_membership_id: query.team_membership_id,
       is_awaiting_reply: readFlag(query.is_awaiting_reply),
       ownership: query.ownership,
+      age: readContactAgeRange(query),
     },
     ranges: {
       follow_up_at: queryInstantRange({

@@ -5,6 +5,7 @@ import {
   BaseRecordRepository,
   type BaseRecordChildTable,
   type BaseRecordListQuery,
+  organizationTodaySql,
 } from '@/domains/app/base-record.repository.js';
 import {
   buildContainsLikePattern,
@@ -13,7 +14,7 @@ import {
   searchWords,
 } from '@/shared/utils/http/list-query.util.js';
 import { contacts, contact_phones } from './contacts.schema.js';
-import type { ContactLinkedSearch } from './contacts.validator.js';
+import type { ContactAgeRange, ContactLinkedSearch } from './contacts.validator.js';
 import type { ContactSummaryRow } from './contacts.types.js';
 import { patients } from '@/domains/app/sub-domains/patients/patients.schema.js';
 import { leads } from '@/domains/app/sub-domains/leads/leads.schema.js';
@@ -80,6 +81,56 @@ function leadNumberCondition(leadNumber: number, organizationId: number): SQL {
 }
 
 /**
+ * The condition of an age filter on a birth-date column (AG4): the age — whole years from the date
+ * to the organization's today — within the range, inclusive; a row without a date never matches.
+ *
+ * @remarks
+ * - **Algorithm:** `age >= from` is `date <= today - from years`, `age <= to` is
+ *   `date > today - (to + 1) years` — Postgres's year subtraction moves 29 February to 28 February,
+ *   as the response's `age` and a typed age's date do (AA6). Real and approximate dates alike.
+ */
+export function contactAgeCondition(options: {
+  range: ContactAgeRange;
+  /** The birth-date column (`contacts.date_of_birth`). */
+  dateOfBirthColumn: AnyPgColumn;
+  organizationId: number;
+}): SQL {
+  const { range, dateOfBirthColumn, organizationId } = options;
+  const today = organizationTodaySql(organizationId);
+  const conditions: SQL[] = [];
+  if (range.from !== undefined) {
+    conditions.push(
+      sql`${dateOfBirthColumn} <= (${today} - make_interval(years => ${range.from}::int))::date`,
+    );
+  }
+  if (range.to !== undefined) {
+    conditions.push(
+      sql`${dateOfBirthColumn} > (${today} - make_interval(years => ${range.to + 1}::int))::date`,
+    );
+  }
+  return conditions.length === 0 ? sql`true` : sql`(${sql.join(conditions, sql` and `)})`;
+}
+
+/**
+ * The condition of an age filter on a list about a contact (patients, leads — AG4): the record's
+ * contact is of that age ({@link contactAgeCondition}).
+ */
+export function contactLinkedAgeCondition(options: {
+  range: ContactAgeRange;
+  /** The record's column naming its contact (`patients.contact_id`). */
+  contactIdColumn: AnyPgColumn;
+  organizationId: number;
+}): SQL {
+  const { contactIdColumn, organizationId } = options;
+  const age = contactAgeCondition({
+    range: options.range,
+    dateOfBirthColumn: contacts.date_of_birth,
+    organizationId,
+  });
+  return sql`${contactIdColumn} in (select ${contacts.id} from ${contacts} where ${contacts.organization_id} = ${organizationId} and ${age})`;
+}
+
+/**
  * The condition of a list about a contact for its `q` (leads L7, appointments 6.8 —
  * `readContactLinkedSearch`): the contact's trigram-indexed search text holding every word of it
  * (NS5), or its contact number (an `IN` over the organization's contacts), or the record's own
@@ -129,7 +180,8 @@ export function contactLinkedSearchCondition(options: {
  *   derived filters read the record numbers `q` names (`record_number` — the live patient file's or
  *   lead's number, `#2371`; `patient_number` — `PT-0412`, SHELL-M1), the numbers (`phone`), the
  *   reply state, the tags (`&&`, the GIN index) — `has_open_lead` (a live lead in an open status,
- *   L6) and `is_patient` (a live patient file — opened by a check-in since #132).
+ *   L6), `is_patient` (a live patient file — opened by a check-in since #132) and `age` (the birth
+ *   date against the organization's today, AG4).
  * - **Failure modes:** a unique or exclusion violation propagates (the service maps it).
  */
 export class ContactsRepository extends BaseRecordRepository {
@@ -185,6 +237,12 @@ export class ContactsRepository extends BaseRecordRepository {
           const file = sql`exists (select 1 from ${patients} where ${patients.contact_id} = ${contacts.id} and ${patients.deleted_at} is null)`;
           return value === true ? file : sql`not ${file}`;
         },
+        age: (value, organizationId) =>
+          contactAgeCondition({
+            range: value as ContactAgeRange,
+            dateOfBirthColumn: contacts.date_of_birth,
+            organizationId,
+          }),
         has_open_lead: (value) => {
           const open = sql`exists (select 1 from ${leads} where ${leads.contact_id} = ${contacts.id} and ${leads.deleted_at} is null and ${leads.status} in (${sql.join(
             LEAD_OPEN_STATUS_VALUES.map((status) => sql`${status}`),
