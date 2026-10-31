@@ -20,6 +20,7 @@ import { database } from '@/infrastructure/database/connection.js';
 import { redisConnection } from '@/infrastructure/cache/redis.client.js';
 import { api_keys } from '@/domains/tenancy/sub-domains/organization/organization-api-key/organization-api-key.schema.js';
 import { users } from '@/domains/user/user.schema.js';
+import { organizations } from '@/domains/tenancy/sub-domains/organization/organization.schema.js';
 import { getOperatorDatabase } from '@/tests/helpers/operator-database.js';
 type ApiKeyCreateResponse = {
   data: { api_key: { id: string }; raw_key: string };
@@ -381,6 +382,51 @@ describe('Security: Organization API key authentication', () => {
         .where(eq(users.id, context.member.id));
 
       expect((await listMembersWithKey(context.rawKey)).statusCode).toBe(401);
+    });
+  });
+
+  describe('the organization and the creator must still be there', () => {
+    function readKeysWithKey(rawKey: string) {
+      return injectRoute(app, {
+        method: 'GET',
+        url: testApiPath('/tenancy/organization/api-keys'),
+        headers: { authorization: `ApiKey ${rawKey}` },
+      });
+    }
+
+    it('refuses the key of a suspended organization, and takes it again once reactivated (B2-3)', async () => {
+      const { organization, rawKey } = await createApiKeyWithPermissions([
+        TENANCY_PERMISSIONS.API_KEY_READ,
+        TENANCY_PERMISSIONS.API_KEY_MANAGE,
+      ]);
+      expect((await readKeysWithKey(rawKey)).statusCode).toBe(200);
+
+      await getOperatorDatabase()
+        .update(organizations)
+        .set({ status: 'SUSPENDED' })
+        .where(eq(organizations.id, organization.id));
+      expect((await readKeysWithKey(rawKey)).statusCode).toBe(401);
+
+      await getOperatorDatabase()
+        .update(organizations)
+        .set({ status: 'ACTIVE' })
+        .where(eq(organizations.id, organization.id));
+      expect((await readKeysWithKey(rawKey)).statusCode).toBe(200);
+    });
+
+    it('refuses a key whose creator is gone (created_by_user_id NULL after the account purge) (B2-8)', async () => {
+      const { rawKey, apiKeyPublicId } = await createApiKeyWithPermissions([
+        TENANCY_PERMISSIONS.API_KEY_READ,
+        TENANCY_PERMISSIONS.API_KEY_MANAGE,
+      ]);
+      expect((await readKeysWithKey(rawKey)).statusCode).toBe(200);
+
+      // What the retention purge leaves behind: ON DELETE SET NULL on the creator.
+      await getOperatorDatabase()
+        .update(api_keys)
+        .set({ created_by_user_id: null })
+        .where(eq(api_keys.public_id, apiKeyPublicId));
+      expect((await readKeysWithKey(rawKey)).statusCode).toBe(401);
     });
   });
 });

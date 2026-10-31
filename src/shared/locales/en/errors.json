@@ -303,6 +303,7 @@
   "ownerMembershipCannotBeModified": "The organization owner's status and main role cannot change; transfer ownership first",
   "onlyOwnerCanTransfer": "Only the organization owner can transfer ownership",
   "onlyOwnerCanDeleteOrganization": "Only the organization owner can delete the organization",
+  "onlyOwnerCanChangeOrganizationStatus": "Only the organization owner can change the organization's status",
   "oauthProviderNotConfigured": "OAuth provider \"{{provider}}\" is not configured.",
   "googleOAuthNotConfigured": "Google OAuth credentials are not configured.",
   "oauthProviderUnavailable": "Sign-in with this provider is temporarily unavailable. Please try again.",

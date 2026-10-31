@@ -1,5 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { requireRecentStepUpPreHandler } from '@/shared/middlewares/core/recent-step-up.middleware.js';
+import {
+  requireRecentStepUpPreHandler,
+  requireRecentStepUpWhenBodyHas,
+} from '@/shared/middlewares/core/recent-step-up.middleware.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   EXPENSIVE_AUTHED_RATE_LIMIT,
@@ -131,12 +134,16 @@ export function organizationRoutes(deps: OrganizationRoutesDeps): FastifyPluginA
         schema: {
           summary: 'Update organization',
           description:
-            'Updates organization details (name, slug, status, logo). Requires ORGANIZATION_UPDATE permission.',
+            "Updates organization details (name, slug, specialties, timezone, status). Requires ORGANIZATION_UPDATE permission. `status` is the owner's alone (403 `owner_only` for anyone else, an API key included) and needs a recent step-up on this session (`POST /auth/step-up`, within 10 minutes). A SUSPENDED or ARCHIVED organization grants its members no permission, refuses its API keys and cannot be switched into — except by its owner, who keeps organization:read and organization:update to reactivate it.",
           tags: ['Organization'],
           body: updateOrganizationDto,
         },
         onRequest: [app.authenticate],
-        preHandler: [requireOrganizationPermission(TENANCY_PERMISSIONS.ORGANIZATION_UPDATE)],
+        preHandler: [
+          requireOrganizationPermission(TENANCY_PERMISSIONS.ORGANIZATION_UPDATE),
+          // B2-3: suspending the clinic locks everyone out — a stolen token alone must not do it.
+          requireRecentStepUpWhenBodyHas('status'),
+        ],
       },
       organizationController.updateOrganization,
     );

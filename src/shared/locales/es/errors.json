@@ -303,6 +303,7 @@
   "ownerMembershipCannotBeModified": "No se pueden cambiar el estado ni el rol principal del propietario de la organización; transfiere la propiedad primero",
   "onlyOwnerCanTransfer": "Solo el propietario puede transferir la propiedad",
   "onlyOwnerCanDeleteOrganization": "Solo el propietario puede eliminar la organización",
+  "onlyOwnerCanChangeOrganizationStatus": "Solo el propietario puede cambiar el estado de la organización",
   "oauthProviderNotConfigured": "El proveedor OAuth \"{{provider}}\" no está configurado.",
   "googleOAuthNotConfigured": "Credenciales de Google OAuth no configuradas.",
   "oauthProviderUnavailable": "El inicio de sesión con este proveedor no está disponible temporalmente. Vuelve a intentarlo.",

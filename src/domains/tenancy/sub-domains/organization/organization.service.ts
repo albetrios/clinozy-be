@@ -617,6 +617,22 @@ export class OrganizationService {
     return created;
   }
 
+  /**
+   * Changes the organization (`PATCH /tenancy/organization`): name, slug, specialties, time zone —
+   * and `status`, which only its owner may change (B2-3).
+   *
+   * @remarks
+   * - **Algorithm:** inside the organization context — a body carrying `status` is refused unless
+   *   the caller is the owner (the route also demands a fresh step-up for it); the slug is checked
+   *   free; the row is written and `organization.updated` emitted. After commit, a status change
+   *   purges the organization's cached permissions, so suspending it stops every member at once
+   *   (the owner keeps what reactivating it takes — see the permission repository).
+   * - **Failure modes:** `NotFoundError('Organization')`; `ForbiddenError` (`owner_only`) for a
+   *   `status` from anyone but the owner, an API key included; `ConflictError`
+   *   (`organization_slug_exists`).
+   * - **Side effects:** one `tenancy.organizations` write; one event; a permission-cache purge on a
+   *   status change.
+   */
   async update({
     scope,
     body,
@@ -628,11 +644,21 @@ export class OrganizationService {
   }): Promise<OrganizationOutput> {
     const public_id = scope.organizationPublicId;
     const parsed = validateUpdateOrganization(body);
-    return withAppDatabaseContext({
+    let statusChanged = false;
+    const result = await withAppDatabaseContext({
       scope,
       callback: async () => {
         const organization = await this.repository.findByPublicId(public_id);
         if (!organization) throw new NotFoundError('Organization');
+        if (parsed.status !== undefined) {
+          // B2-3: suspending or archiving decides whether anyone can use the clinic — the owner's
+          // call alone, never an Admin's (who could otherwise lock the owner out).
+          await this.assertCallerOwnsOrganization({
+            organization,
+            callerUserPublicId: updated_by_user_public_id,
+            messageKey: 'errors:onlyOwnerCanChangeOrganizationStatus',
+          });
+        }
         const userId = await this.repository.resolveUserIdByPublicId(updated_by_user_public_id);
         if (parsed.slug) {
           const existing = await this.repository.findBySlug(parsed.slug);
@@ -662,6 +688,7 @@ export class OrganizationService {
           throw error;
         }
         if (!updated) throw new NotFoundError('Organization');
+        statusChanged = updated.status !== organization.status;
         const output = await this.toOrganizationOutput(updated);
         await this.emitOrganizationEvent({
           type: ORGANIZATION_EVENT.UPDATED,
@@ -670,6 +697,9 @@ export class OrganizationService {
         return output;
       },
     });
+    // After commit, so a racing recompute cannot re-cache the old status's permission sets.
+    if (statusChanged) await invalidateOrganizationPermissions(public_id);
+    return result;
   }
 
   /**

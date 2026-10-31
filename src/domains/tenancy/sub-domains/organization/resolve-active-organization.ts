@@ -93,14 +93,16 @@ export async function resolveDefaultActiveOrganizationPublicId(
 }
 
 /**
- * Confirm the user holds an ACTIVE membership in the given organization (and the organization is
- * active/not-deleted), returning its internal `id`, `public_id` and `type`. Runs under the caller's own
+ * Confirm the user holds a live ACTIVE membership in the given organization (and the organization is
+ * not deleted and either ACTIVE or owned by the user — the owner's way back into a suspended
+ * clinic, B2-3), returning its internal `id`, `public_id` and `type`. Runs under the caller's own
  * user RLS context (no organization context at switch time) so the tenancy discovery policies match,
  * and the query is additionally constrained to the caller's own `user_id`.
  *
  * @remarks
- * - **Algorithm:** one indexed join (memberships → organizations) filtered to ACTIVE
- *   membership + active/non-deleted organization matching `organizationPublicId`.
+ * - **Algorithm:** one indexed join (memberships → organizations) filtered to a live ACTIVE
+ *   membership + a non-deleted organization, ACTIVE or the user's own, matching
+ *   `organizationPublicId`.
  * - **Side effects:** none (read-only). Returns `undefined` when no such active
  *   membership exists (caller maps to 403, or falls back to a default organization).
  */
@@ -123,8 +125,8 @@ export async function findUserActiveOrganizationByPublicId({
 }
 
 /**
- * Confirm the user holds an ACTIVE membership in the given organization (and the organization is
- * active/not-deleted) — the membership gate for `switch-to-organization`. Returns the
+ * Confirm the user holds a live ACTIVE membership in the given organization (not deleted, and
+ * ACTIVE or owned by the user — B2-3) — the membership gate for `switch-to-organization`. Returns the
  * organization `public_id` when valid, otherwise `undefined` (caller maps to 403). Runs under the caller's own
  * user RLS context (no organization context at switch time) so the tenancy discovery policies match,
  * and the query is additionally constrained to the caller's own `user_id`.
@@ -143,7 +145,8 @@ export async function findUserActiveOrganizationPublicId({
 /**
  * Refresh-time revalidation of the active organization persisted on a session
  * (audit-#3). Given the session's stored internal `organization_id`, confirm the
- * user still holds an ACTIVE membership in that active/non-deleted organization and return
+ * user still holds a live ACTIVE membership in that non-deleted organization (ACTIVE, or owned
+ * by the user — B2-3) and return
  * its `public_id`; otherwise `undefined` so the caller falls back to the default
  * active organization. Constrained to the caller's own `user_id` under that same
  * user RLS context (no organization context at refresh time).

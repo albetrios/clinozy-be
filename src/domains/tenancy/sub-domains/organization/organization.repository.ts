@@ -12,6 +12,7 @@ import {
   sql,
   lt,
   ne,
+  type SQL,
 } from 'drizzle-orm';
 import type { WorkerDatabaseHandle } from '@/infrastructure/queue/worker-runtime/worker-processor.util.js';
 import { finishKeysetPage } from '@/shared/utils/http/list-query.util.js';
@@ -36,6 +37,7 @@ import {
   parseListCursor,
 } from '@/shared/utils/http/pagination.util.js';
 import type { Organization } from './organization.types.js';
+import { ACTIVE_ORGANIZATION_STATUS } from './organization-capability.js';
 
 /**
  * Normalizes a `db.execute()` result into rows (node-postgres returns a `{ rows }` envelope; a bare
@@ -43,6 +45,19 @@ import type { Organization } from './organization.types.js';
  */
 function extractResolverRows<T>(result: unknown): T[] {
   return (Array.isArray(result) ? result : ((result as { rows?: unknown[] }).rows ?? [])) as T[];
+}
+
+/**
+ * SQL condition: the organization is `ACTIVE`, or `user_id` owns it — the organizations a user may
+ * switch into and keep on refresh (B2-3). A suspended or archived organization stays reachable
+ * for its owner alone, who holds only what reactivating it takes
+ * (`INACTIVE_ORGANIZATION_OWNER_PERMISSION_CODES`).
+ */
+function usableOrganizationFor(user_id: number): SQL | undefined {
+  return or(
+    eq(organizations.status, ACTIVE_ORGANIZATION_STATUS),
+    eq(organizations.owner_user_id, user_id),
+  );
 }
 
 interface OrganizationListPagination {
@@ -315,8 +330,10 @@ export class OrganizationRepository {
         and(
           eq(memberships.user_id, user_id),
           eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
+          // B2-4: a removed member's row keeps `status = active` — only a live one counts.
+          isNull(memberships.deleted_at),
           isNull(organizations.deleted_at),
-          eq(organizations.status, 'ACTIVE'),
+          eq(organizations.status, ACTIVE_ORGANIZATION_STATUS),
           includePersonalOrganizations ? undefined : sql`${organizations.type} <> 'PERSONAL'`,
         ),
       )
@@ -331,9 +348,10 @@ export class OrganizationRepository {
   }
 
   /**
-   * Confirm the user holds an ACTIVE membership in the given (active, non-deleted) organization and
-   * return its `public_id`, or `null` when the membership does not exist — the gate for
-   * `switch-to-organization`. Constrained to the caller's own `user_id`.
+   * Confirm the user holds a live ACTIVE membership in the given non-deleted organization — one
+   * that is `ACTIVE`, or that the user owns (the way back into a suspended one, B2-3) — and return
+   * its `public_id`, or `null` when there is none — the gate for `switch-to-organization`.
+   * Constrained to the caller's own `user_id`.
    */
   async findActiveMembershipOrganizationPublicId(
     user_id: number,
@@ -347,9 +365,11 @@ export class OrganizationRepository {
         and(
           eq(memberships.user_id, user_id),
           eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
+          // B2-4: a removed member's row keeps `status = active` — only a live one counts.
+          isNull(memberships.deleted_at),
           eq(organizations.public_id, organization_public_id),
           isNull(organizations.deleted_at),
-          eq(organizations.status, 'ACTIVE'),
+          usableOrganizationFor(user_id),
         ),
       )
       .limit(1);
@@ -376,9 +396,9 @@ export class OrganizationRepository {
   }
 
   /**
-   * Confirm the user holds an ACTIVE membership in the given (active, non-deleted) organization
-   * and return its internal `id`, `public_id` and `type`, or `null` when no such active membership
-   * exists. Used when the caller needs the internal id (e.g. persisting it on the session row at
+   * Confirm the user holds a live ACTIVE membership in the given non-deleted organization — one
+   * that is `ACTIVE`, or that the user owns (B2-3) — and return its internal `id`, `public_id` and
+   * `type`, or `null` when no such membership exists. Used when the caller needs the internal id (e.g. persisting it on the session row at
    * switch time — audit-#3) or the type (a pinned default clinic must be a TEAM). Constrained to
    * the caller's own `user_id`.
    */
@@ -398,9 +418,11 @@ export class OrganizationRepository {
         and(
           eq(memberships.user_id, user_id),
           eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
+          // B2-4: a removed member's row keeps `status = active` — only a live one counts.
+          isNull(memberships.deleted_at),
           eq(organizations.public_id, organization_public_id),
           isNull(organizations.deleted_at),
-          eq(organizations.status, 'ACTIVE'),
+          usableOrganizationFor(user_id),
         ),
       )
       .limit(1);
@@ -408,9 +430,10 @@ export class OrganizationRepository {
   }
 
   /**
-   * Confirm the user holds an ACTIVE membership in the organization identified by its internal
-   * `id` and return the org's `public_id`, or `null` — refresh-time revalidation of the organization
-   * persisted on a session (audit-#3). Constrained to the caller's own `user_id`.
+   * Confirm the user holds a live ACTIVE membership in the organization identified by its internal
+   * `id` — `ACTIVE`, or owned by the user (B2-3) — and return the org's `public_id`, or `null` —
+   * refresh-time revalidation of the organization persisted on a session (audit-#3). Constrained
+   * to the caller's own `user_id`.
    */
   async findActiveMembershipOrganizationPublicIdByInternalId(
     user_id: number,
@@ -424,9 +447,11 @@ export class OrganizationRepository {
         and(
           eq(memberships.user_id, user_id),
           eq(memberships.status, MEMBERSHIP_STATUS.ACTIVE),
+          // B2-4: a removed member's row keeps `status = active` — only a live one counts.
+          isNull(memberships.deleted_at),
           eq(organizations.id, organization_id),
           isNull(organizations.deleted_at),
-          eq(organizations.status, 'ACTIVE'),
+          usableOrganizationFor(user_id),
         ),
       )
       .limit(1);

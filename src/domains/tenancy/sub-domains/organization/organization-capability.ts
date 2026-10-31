@@ -1,4 +1,22 @@
 import { UnprocessableEntityError } from '@/shared/errors/index.js';
+import { TENANCY_PERMISSIONS } from '@/domains/tenancy/tenancy.permissions.js';
+
+/** `tenancy.organizations.status` of an organization in use — anything else is suspended or archived. */
+export const ACTIVE_ORGANIZATION_STATUS = 'ACTIVE';
+
+/**
+ * The codes the owner of a suspended or archived organization keeps — enough to read it and to
+ * reactivate it (`PATCH /tenancy/organization` with `status`), nothing else (B2-3).
+ *
+ * @remarks
+ * Every other member of such an organization resolves no permission at all and cannot switch into
+ * it; its API keys are refused. The owner can still switch in, so the clinic is never locked out
+ * for good.
+ */
+export const INACTIVE_ORGANIZATION_OWNER_PERMISSION_CODES: readonly string[] = [
+  TENANCY_PERMISSIONS.ORGANIZATION_READ,
+  TENANCY_PERMISSIONS.ORGANIZATION_UPDATE,
+];
 
 /**
  * A team-only capability a caller may attempt to exercise on an organization.
