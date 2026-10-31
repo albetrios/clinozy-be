@@ -9,8 +9,12 @@ import {
   recordDeleteQuerySchemaOf,
   recordIdSchema,
   valueListSchema,
+  yearMonthSchema,
 } from '@/shared/utils/validation/record-fields.util.js';
-import { MEDICINE_QUANTITY_MAX } from '@/domains/app/sub-domains/medical/medicines/medicines.constants.js';
+import {
+  MEDICINE_GST_PERCENT_VALUES,
+  MEDICINE_QUANTITY_MAX,
+} from '@/domains/app/sub-domains/medical/medicines/medicines.constants.js';
 import {
   expiryMonthSchema,
   printedMrpSchema,
@@ -36,6 +40,8 @@ const medicalPurchaseOrderItemFields = z.object({
   free_quantity: z.number().int().min(0).max(MEDICINE_QUANTITY_MAX).optional(),
   rate: moneySchema.refine((rate) => rate > 0, { message: 'errors:validation.moreThanZero' }),
   mrp: printedMrpSchema.nullable().optional(),
+  gst_percent: z.literal(MEDICINE_GST_PERCENT_VALUES).optional(),
+  is_gst_inclusive: z.boolean().optional(),
 });
 
 /** Exactly one of `medicine_id` and `new_medicine_name` names a line's medicine. */
@@ -47,7 +53,8 @@ const oneMedicine = (item: {
 /**
  * One order line (MD15): a medicine — or `new_medicine_name`, a quick one added as typed —
  * `quantity*` (1–9999 packs), `free_quantity`, `rate*` (a pack's, above 0), `mrp` (printed on
- * the packs).
+ * the packs), `gst_percent` (0, 5, 12, 18, 28 — the medicine's unless sent) and
+ * `is_gst_inclusive` (the rate includes GST — yes unless sent, PG5).
  */
 const medicalPurchaseOrderItemDto = medicalPurchaseOrderItemFields
   .strict()
@@ -176,6 +183,9 @@ export const listMedicalPurchaseOrdersQueryDto = listSearchSortSchema([
     created_to: instantSchema.optional(),
   })
   .strict();
+
+/** Query of the purchase GST summary and its CSV (PG9): `month*` as `YYYY-MM`. */
+export const medicalPurchaseGstSummaryQueryDto = z.object({ month: yearMonthSchema }).strict();
 
 /** Parsed {@link CreateMedicalPurchaseOrderDto}. */
 export type CreateMedicalPurchaseOrderInput = z.infer<typeof CreateMedicalPurchaseOrderDto>;

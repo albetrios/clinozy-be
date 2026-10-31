@@ -2478,7 +2478,14 @@ export const medicalPurchaseOrdersRecordSchema = {
           quantity: { type: 'integer' },
           free_quantity: { type: 'integer' },
           rate: { type: 'number' },
-          amount: { type: 'number' },
+          amount: {
+            type: 'number',
+            description: 'taxable_amount + gst_amount — quantity × rate when the rate includes GST',
+          },
+          gst_percent: { type: 'integer', enum: [0, 5, 12, 18, 28] },
+          is_gst_inclusive: { type: 'boolean', description: 'The rate includes GST' },
+          taxable_amount: { type: 'number' },
+          gst_amount: { type: 'number' },
           is_received: { type: 'boolean', nullable: true },
           batch_number: { type: 'string', nullable: true },
           expiry_month: { type: 'string', nullable: true, example: '2028-10' },
@@ -2487,7 +2494,9 @@ export const medicalPurchaseOrdersRecordSchema = {
     },
     item_count: { type: 'integer' },
     free_count: { type: 'integer' },
-    total: { type: 'number' },
+    total: { type: 'number', description: 'taxable_total + gst_total' },
+    taxable_total: { type: 'number' },
+    gst_total: { type: 'number' },
     paid_amount: { type: 'number' },
     credited_amount: { type: 'number' },
     due_amount: { type: 'number' },
@@ -2528,6 +2537,10 @@ export const medicalPurchaseOrdersRecordExample = {
       free_quantity: 1,
       rate: 246,
       amount: 2460,
+      gst_percent: 12,
+      is_gst_inclusive: true,
+      taxable_amount: 2196.43,
+      gst_amount: 263.57,
       is_received: true,
       batch_number: 'GC2403',
       expiry_month: '2028-10',
@@ -2536,6 +2549,8 @@ export const medicalPurchaseOrdersRecordExample = {
   item_count: 1,
   free_count: 1,
   total: 2460,
+  taxable_total: 2196.43,
+  gst_total: 263.57,
   paid_amount: 1633,
   credited_amount: 0,
   due_amount: 827,
@@ -2545,6 +2560,87 @@ export const medicalPurchaseOrdersRecordExample = {
   deleted_at: null,
   delete_reason: null,
   delete_note: null,
+};
+
+/** The amounts of one group of the purchase GST summary. */
+const purchaseGstAmountsProperties = {
+  line_count: { type: 'integer' },
+  taxable_amount: { type: 'number' },
+  gst_amount: { type: 'number' },
+  total_amount: { type: 'number' },
+};
+
+/** `MedicalPurchaseGstSummaryOutput` — one month's purchase GST by rate and HSN code (PG9). */
+export const medicalPurchaseGstSummarySchema = {
+  type: 'object',
+  properties: {
+    month: { type: 'string', example: '2026-10' },
+    by_rate: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          gst_percent: { type: 'integer', enum: [0, 5, 12, 18, 28] },
+          ...purchaseGstAmountsProperties,
+        },
+      },
+    },
+    by_hsn: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          hsn_code: { type: 'string', nullable: true, description: 'Null: medicines without one' },
+          gst_percent: { type: 'integer', enum: [0, 5, 12, 18, 28] },
+          ...purchaseGstAmountsProperties,
+        },
+      },
+    },
+    totals: {
+      type: 'object',
+      properties: { order_count: { type: 'integer' }, ...purchaseGstAmountsProperties },
+    },
+  },
+};
+
+/** Example `MedicalPurchaseGstSummaryOutput`. */
+export const medicalPurchaseGstSummaryExample = {
+  month: '2026-10',
+  by_rate: [
+    { gst_percent: 0, line_count: 1, taxable_amount: 500, gst_amount: 0, total_amount: 500 },
+    {
+      gst_percent: 12,
+      line_count: 2,
+      taxable_amount: 3196.43,
+      gst_amount: 383.57,
+      total_amount: 3580,
+    },
+  ],
+  by_hsn: [
+    {
+      hsn_code: '30049099',
+      gst_percent: 12,
+      line_count: 2,
+      taxable_amount: 3196.43,
+      gst_amount: 383.57,
+      total_amount: 3580,
+    },
+    {
+      hsn_code: null,
+      gst_percent: 0,
+      line_count: 1,
+      taxable_amount: 500,
+      gst_amount: 0,
+      total_amount: 500,
+    },
+  ],
+  totals: {
+    order_count: 2,
+    line_count: 3,
+    taxable_amount: 3696.43,
+    gst_amount: 383.57,
+    total_amount: 4080,
+  },
 };
 
 /** `MedicalSaleOutput` — one sale and its `medical` invoice (11.H.6). */

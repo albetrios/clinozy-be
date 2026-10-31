@@ -346,6 +346,8 @@
   "GET /api/v1/app/payments/exports": "both",
   "GET /api/v1/app/medicines/exports": "both",
   "GET /api/v1/app/medical-purchase-orders/exports": "both",
+  "GET /api/v1/app/medical-purchase-orders/gst-summary": "both",
+  "GET /api/v1/app/medical-purchase-orders/gst-summary/exports": "both",
   "GET /api/v1/app/medical-sales/exports": "both",
   "GET /api/v1/app/medical-sales/dues": "both",
   "GET /api/v1/app/stock-items/exports": "both",

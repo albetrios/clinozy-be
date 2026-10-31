@@ -15,10 +15,11 @@ What the store orders from its suppliers — ordered, then received into batches
 | File | Role |
 | --- | --- |
 | `medical-purchase-orders.schema.ts` | the tables: stages, the generated due and payment status, the cancel reasons, lines, RLS |
-| `medical-purchase-orders.rules.ts` | the lines (quick medicines as typed), read-only once received, receiving into batches |
+| `medical-purchase-orders.rules.ts` | the lines (quick medicines as typed) and their GST, read-only once received, receiving into batches |
+| `medical-purchase-orders.gst-summary.ts` | the month's purchase GST by rate and HSN code, and its CSV (feat-purchase-line-gst PG9) |
 | `medical-purchase-orders.repository.ts` | the shared reads and writes, lines, a supplier's dues, credits |
 | `medical-purchase-orders.{dto,validator,serializer,types}.ts` | request shapes, the response |
-| `medical-purchase-orders.service.ts` / `.controller.ts` / `.routes.ts` | routes 25–32 |
+| `medical-purchase-orders.service.ts` / `.controller.ts` / `.routes.ts` | routes 25–32, the GST summary and its CSV |
 
 ## Routes
 
@@ -26,6 +27,8 @@ What the store orders from its suppliers — ordered, then received into batches
 | --- | --- |
 | `GET /app/medical-purchase-orders` | `medicine:read` |
 | `GET /app/medical-purchase-orders/exports` | `medicine:export` |
+| `GET /app/medical-purchase-orders/gst-summary` | `medicine:read` |
+| `GET /app/medical-purchase-orders/gst-summary/exports` | `medicine:export` + `medicine:read` |
 | `POST /app/medical-purchase-orders` | `medicine:create` |
 | `GET /app/medical-purchase-orders/{medical_purchase_order_id}` | `medicine:read` |
 | `PATCH /app/medical-purchase-orders/{medical_purchase_order_id}` | `medicine:update` |
@@ -48,3 +51,13 @@ What the store orders from its suppliers — ordered, then received into batches
 - **The supplier on every order** carries its name, phone and GSTIN — a deleted supplier's too —
   for the PO sheet (MD30 (c)).
 - **`due_amount`** = total − paid − credited once received; payments move `paid_amount`.
+- **GST per line (feat-purchase-line-gst PG3–PG8):** each line carries `gst_percent` (the
+  medicine's unless sent), `is_gst_inclusive` (true unless sent), `taxable_amount` and
+  `gst_amount` — the invoice calculation (`computeInvoiceAmounts`, no discount), per line to the
+  paisa; `amount = taxable_amount + gst_amount` (quantity × rate when inclusive, GST on top when
+  not). The order stores `taxable_total` and `gst_total`, `total = taxable_total + gst_total` —
+  its lines' while ordered, the received lines' once received.
+- **Purchase GST summary (PG9, PG11–PG13):** `month` (`YYYY-MM`, not after this month) — the
+  received lines of the live orders received in that month (organization time zone), `by_rate`,
+  `by_hsn` (the medicine's HSN code and rate) and `totals`; its CSV one row per group with a
+  `section` column. Served by `idx_medical_purchase_orders_organization_received`.

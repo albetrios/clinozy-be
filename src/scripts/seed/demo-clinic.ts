@@ -38,6 +38,7 @@ import {
   type DemoSupplierKey,
 } from './demo-clinic.catalog.js';
 import { demoMedicine, demoStockItem, momentKey } from './demo-clinic.stock.plan.js';
+import { computeInvoiceAmounts } from '@/domains/app/sub-domains/billing/invoices/invoices.amounts.js';
 import {
   PRINCIPAL_SCOPE,
   withAppDatabaseContext,
@@ -138,6 +139,39 @@ export interface DemoClinicSeedResult {
 /** Paise as the `numeric(12,2)` text a money column takes (`74800` → `748.00`). */
 function rupeesText(paise: number): string {
   return (paise / 100).toFixed(2);
+}
+
+/**
+ * A demo purchase line's GST (PG8): the medicine's rate, its rate GST-inclusive — the invoice
+ * calculation, so the line's amount stays quantity × rate.
+ */
+function purchaseLineGst(line: {
+  medicine: DemoMedicineKey;
+  quantity: number;
+  ratePaise: number;
+}): {
+  gstPercent: number;
+  taxablePaise: number;
+  gstPaise: number;
+} {
+  const { gstPercent } = demoMedicine(line.medicine);
+  const [amounts] = computeInvoiceAmounts({
+    lines: [
+      {
+        quantity: line.quantity,
+        rate: line.ratePaise / 100,
+        discountPercent: 0,
+        gstPercent,
+        isGstInclusive: true,
+      },
+    ],
+    overallDiscount: 0,
+  }).lines;
+  return {
+    gstPercent,
+    taxablePaise: Math.round((amounts?.taxableAmount ?? 0) * 100),
+    gstPaise: Math.round((amounts?.gstAmount ?? 0) * 100),
+  };
 }
 
 /** A payment the shelves owe the ledger, written in the order it was paid. */
@@ -842,6 +876,10 @@ class DemoClinicWriter {
     }
     const orderIds: number[] = [];
     for (const order of store.purchaseOrders) {
+      const taxablePaise = order.lines.reduce(
+        (total, line) => total + purchaseLineGst(line).taxablePaise,
+        0,
+      );
       const orderId = await seedMedicalPurchaseOrder({
         organization_id,
         supplier_id: supplierIds.get(order.supplier)!,
@@ -852,6 +890,8 @@ class DemoClinicWriter {
           : MEDICAL_PURCHASE_ORDER_STAGE.ORDERED,
         received_at: this.optionalInstant(order.receivedAt),
         total: rupeesText(order.totalPaise),
+        taxable_total: rupeesText(taxablePaise),
+        gst_total: rupeesText(order.totalPaise - taxablePaise),
         paid_amount: rupeesText(order.paidPaise),
         credited_amount: rupeesText(order.creditedPaise),
         created_by_user_id: frontDeskId,
@@ -899,6 +939,7 @@ class DemoClinicWriter {
     for (const [index, order] of store.purchaseOrders.entries()) {
       for (const [lineIndex, line] of order.lines.entries()) {
         const batch = line.batch === undefined ? undefined : store.batches[line.batch]!;
+        const gst = purchaseLineGst(line);
         await seedMedicalPurchaseOrderItem({
           organization_id,
           medical_purchase_order_id: orderIds[index]!,
@@ -908,6 +949,10 @@ class DemoClinicWriter {
           free_quantity: line.freeQuantity,
           rate: rupeesText(line.ratePaise),
           amount: rupeesText(line.amountPaise),
+          gst_percent: gst.gstPercent,
+          is_gst_inclusive: true,
+          taxable_amount: rupeesText(gst.taxablePaise),
+          gst_amount: rupeesText(gst.gstPaise),
           is_received: batch ? true : null,
           batch_number: batch?.batchNumber ?? null,
           expiry_month: batch?.expiryMonth ?? null,

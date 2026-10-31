@@ -166,6 +166,7 @@
     "taskOutcomeNotOffered": "Esta tarea no ofrece ese resultado: elige uno de {{outcomes}}",
     "taskRuleNotAutomatic": "Esta regla no se puede gestionar automáticamente: solo Confirmar, Pago pendiente, Opinión y Sin visitas",
     "medicalPurchaseOrderDateInFuture": "La fecha del pedido no puede ser posterior a hoy",
+    "medicalPurchaseGstMonthInFuture": "El mes no puede ser posterior al mes actual",
     "medicalPurchaseOrderItemNotOnOrder": "{{id}} no es una línea de este pedido",
     "medicalPurchaseOrderNothingReceived": "Recibe al menos una línea",
     "medicalPurchaseOrderTooManyLines": "Un pedido admite como máximo {{max}} líneas",

@@ -289,24 +289,51 @@ function processMigrationSql(sql: string): void {
     }
   }
 
-  const addColumnPattern =
-    /alter\s+table\s+"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?\s+add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\s+([^;]+)/gi;
-  for (const addColumnMatch of sql.matchAll(addColumnPattern)) {
-    // A definition can span lines (`... NOT NULL\n  DEFAULT (...)`); the parser reads one line.
-    const parsed = parseColumnDefinitionLine(
-      `${addColumnMatch[3] ?? ''} ${(addColumnMatch[4] ?? '').replace(/\s+/g, ' ')}`,
-    );
-    if (!(parsed && addColumnMatch[1] && addColumnMatch[2])) continue;
-    const tableDefinition = getOrCreateTable({
-      schema: addColumnMatch[1],
-      table: addColumnMatch[2],
-    });
-    tableDefinition.columns.set(parsed.column.name, parsed.column);
-    if (parsed.foreignKey) {
-      tableDefinition.foreignKeys.push({
-        column: parsed.column.name,
-        reference: parsed.foreignKey,
+  // One ALTER TABLE may add several columns (`ADD COLUMN a …, ADD COLUMN b …`): each clause is read
+  // on its own. A type's own commas (`NUMERIC(12, 2)`) are never followed by `ADD`.
+  const alterAddPattern =
+    /alter\s+table\s+"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?\s+(add\s[^;]+)/gi;
+  const addColumnClausePattern =
+    /^add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\s+([\s\S]+)$/i;
+  for (const alterAddMatch of sql.matchAll(alterAddPattern)) {
+    if (!(alterAddMatch[1] && alterAddMatch[2])) continue;
+    for (const clause of (alterAddMatch[3] ?? '').split(/,\s*(?=add\s)/i)) {
+      const addColumnMatch = addColumnClausePattern.exec(clause.trim());
+      if (!addColumnMatch) continue;
+      // A definition can span lines (`... NOT NULL\n  DEFAULT (...)`); the parser reads one line.
+      const parsed = parseColumnDefinitionLine(
+        `${addColumnMatch[1] ?? ''} ${(addColumnMatch[2] ?? '').replace(/\s+/g, ' ')}`,
+      );
+      if (!parsed) continue;
+      const tableDefinition = getOrCreateTable({
+        schema: alterAddMatch[1],
+        table: alterAddMatch[2],
       });
+      tableDefinition.columns.set(parsed.column.name, parsed.column);
+      if (parsed.foreignKey) {
+        tableDefinition.foreignKeys.push({
+          column: parsed.column.name,
+          reference: parsed.foreignKey,
+        });
+      }
+    }
+  }
+
+  // ALTER TABLE schema.table ALTER COLUMN col SET | DROP NOT NULL (several clauses per statement).
+  const alterColumnPattern =
+    /alter\s+table\s+(?:if\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?\s+(alter\s[^;]+)/gi;
+  for (const alterColumnMatch of sql.matchAll(alterColumnPattern)) {
+    const table = tables.get(
+      qualifiedTableKey({ schema: alterColumnMatch[1] ?? '', table: alterColumnMatch[2] ?? '' }),
+    );
+    if (!table) continue;
+    for (const clause of (alterColumnMatch[3] ?? '').split(/,\s*(?=alter\s)/i)) {
+      const nullability =
+        /^alter\s+(?:column\s+)?"?([a-z_][a-z0-9_]*)"?\s+(set|drop)\s+not\s+null/i.exec(
+          clause.trim(),
+        );
+      const column = nullability ? table.columns.get(nullability[1] ?? '') : undefined;
+      if (column) column.notNull = nullability?.[2]?.toLowerCase() === 'set';
     }
   }
 

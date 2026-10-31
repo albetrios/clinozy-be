@@ -166,6 +166,7 @@
     "taskOutcomeNotOffered": "This task doesn't offer that outcome — choose one of: {{outcomes}}",
     "taskRuleNotAutomatic": "This rule can't be handled automatically — only Confirm, Payment due, Feedback and Gone quiet",
     "medicalPurchaseOrderDateInFuture": "The order date can't be after today",
+    "medicalPurchaseGstMonthInFuture": "The month can't be after this month",
     "medicalPurchaseOrderItemNotOnOrder": "{{id}} is not a line of this order",
     "medicalPurchaseOrderNothingReceived": "Receive at least one line",
     "medicalPurchaseOrderTooManyLines": "An order holds at most {{max}} lines",

@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { getRequestDatabase } from '@/infrastructure/database/contexts/database-context-runtime.js';
 import { generatePublicId } from '@/shared/utils/identity/public-id.util.js';
 import { BaseRecordRepository } from '@/domains/app/base-record.repository.js';
@@ -22,6 +22,10 @@ export interface MedicalPurchaseOrderItemReadRow {
   rate: string;
   mrp: string | null;
   amount: string;
+  gst_percent: number;
+  is_gst_inclusive: boolean;
+  taxable_amount: string;
+  gst_amount: string;
   is_received: boolean | null;
   batch_number: string | null;
   expiry_month: string | null;
@@ -38,6 +42,8 @@ export interface MedicalPurchaseOrderItemRow {
   rate: string;
   mrp: string | null;
   amount: string;
+  taxable_amount: string;
+  gst_amount: string;
 }
 
 /** An order line as a write adds it. */
@@ -48,7 +54,21 @@ export interface MedicalPurchaseOrderItemValues {
   free_quantity: number;
   rate: string;
   mrp: string | null;
+  gst_percent: number;
+  is_gst_inclusive: boolean;
+  taxable_amount: string;
+  gst_amount: string;
   amount: string;
+}
+
+/** One group of the purchase GST summary — a GST rate and an HSN code (PG12). */
+export interface MedicalPurchaseGstGroupRow {
+  gst_percent: number;
+  hsn_code: string | null;
+  line_count: number;
+  taxable_amount: string;
+  gst_amount: string;
+  total_amount: string;
 }
 
 /** A received order still owed, as the supplier's dues read it (MD10, MD11). */
@@ -108,6 +128,10 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
         rate: medical_purchase_order_items.rate,
         mrp: medical_purchase_order_items.mrp,
         amount: medical_purchase_order_items.amount,
+        gst_percent: medical_purchase_order_items.gst_percent,
+        is_gst_inclusive: medical_purchase_order_items.is_gst_inclusive,
+        taxable_amount: medical_purchase_order_items.taxable_amount,
+        gst_amount: medical_purchase_order_items.gst_amount,
         is_received: medical_purchase_order_items.is_received,
         batch_number: medical_purchase_order_items.batch_number,
         expiry_month: medical_purchase_order_items.expiry_month,
@@ -134,6 +158,8 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
         rate: medical_purchase_order_items.rate,
         mrp: medical_purchase_order_items.mrp,
         amount: medical_purchase_order_items.amount,
+        taxable_amount: medical_purchase_order_items.taxable_amount,
+        gst_amount: medical_purchase_order_items.gst_amount,
       })
       .from(medical_purchase_order_items)
       .where(eq(medical_purchase_order_items.medical_purchase_order_id, orderId))
@@ -183,6 +209,8 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
         rate: medical_purchase_order_items.rate,
         mrp: medical_purchase_order_items.mrp,
         amount: medical_purchase_order_items.amount,
+        taxable_amount: medical_purchase_order_items.taxable_amount,
+        gst_amount: medical_purchase_order_items.gst_amount,
       });
   }
 
@@ -281,6 +309,55 @@ export class MedicalPurchaseOrdersRepository extends BaseRecordRepository {
           gt(medical_purchase_orders.credited_amount, '0'),
         ),
       );
+  }
+
+  /**
+   * PG11, PG12: the purchase GST of one month — the received lines of the organization's live
+   * orders received in `[from, to)`, grouped by GST rate and the medicine's HSN code; and how many
+   * orders they came on.
+   */
+  async findGstSummary(options: {
+    organizationId: number;
+    from: Date;
+    to: Date;
+  }): Promise<{ groups: MedicalPurchaseGstGroupRow[]; orderCount: number }> {
+    const received = and(
+      eq(medical_purchase_orders.organization_id, options.organizationId),
+      isNull(medical_purchase_orders.deleted_at),
+      eq(medical_purchase_orders.stage, MEDICAL_PURCHASE_ORDER_STAGE.RECEIVED),
+      gte(medical_purchase_orders.received_at, options.from),
+      lt(medical_purchase_orders.received_at, options.to),
+      eq(medical_purchase_order_items.is_received, true),
+    );
+    const database = getRequestDatabase();
+    const groups = await database
+      .select({
+        gst_percent: medical_purchase_order_items.gst_percent,
+        hsn_code: medicines.hsn_code,
+        line_count: sql<number>`count(*)::int`,
+        taxable_amount: sql<string>`sum(${medical_purchase_order_items.taxable_amount})`,
+        gst_amount: sql<string>`sum(${medical_purchase_order_items.gst_amount})`,
+        total_amount: sql<string>`sum(${medical_purchase_order_items.amount})`,
+      })
+      .from(medical_purchase_order_items)
+      .innerJoin(
+        medical_purchase_orders,
+        eq(medical_purchase_orders.id, medical_purchase_order_items.medical_purchase_order_id),
+      )
+      .innerJoin(medicines, eq(medicines.id, medical_purchase_order_items.medicine_id))
+      .where(received)
+      .groupBy(medical_purchase_order_items.gst_percent, medicines.hsn_code);
+    const [count] = await database
+      .select({
+        order_count: sql<number>`count(distinct ${medical_purchase_orders.id})::int`,
+      })
+      .from(medical_purchase_order_items)
+      .innerJoin(
+        medical_purchase_orders,
+        eq(medical_purchase_orders.id, medical_purchase_order_items.medical_purchase_order_id),
+      )
+      .where(received);
+    return { groups, orderCount: count?.order_count ?? 0 };
   }
 
   /** MD15: whether a supplier has a live order still waiting to be received. */

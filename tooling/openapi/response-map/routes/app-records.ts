@@ -1138,6 +1138,19 @@ export const appRecordRouteResponses: Record<string, ResponseDefinition> = {
     schema: wrapSuccess(schemas.recordExportSchema, schemas.recordExportExample),
     example: null,
   },
+  'GET /api/v1/app/medical-purchase-orders/gst-summary': {
+    statusCode: 200,
+    schema: wrapSuccess(
+      schemas.medicalPurchaseGstSummarySchema,
+      schemas.medicalPurchaseGstSummaryExample,
+    ),
+    example: null,
+  },
+  'GET /api/v1/app/medical-purchase-orders/gst-summary/exports': {
+    statusCode: 200,
+    schema: wrapSuccess(schemas.recordExportSchema, schemas.recordExportExample),
+    example: null,
+  },
   'POST /api/v1/app/medical-purchase-orders': {
     statusCode: 200,
     schema: wrapSuccess(
