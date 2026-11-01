@@ -33,6 +33,7 @@ import {
 } from './faker-data.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
 import { runDemoClinicSeed } from './demo-clinic.js';
+import { assertBulkSeedAllowed } from './production-guard.js';
 
 const DEMO_EMAIL = 'demo@example.com';
 
@@ -51,11 +52,15 @@ const ADMIN_PERMISSION_CODES = SYSTEM_PERMISSIONS.map((permission) => permission
 /**
  * Orchestrator for the full demo seed: applies the minimal seed (permissions,
  * plans, demo user) and then layers on faker-generated organizations,
- * memberships, invitations, role wiring and the demo clinic. Idempotent — re-running upserts
+ * memberships, invitations, role wiring and the demo clinic. Refuses a non-local `DATABASE_URL`
+ * before any write ({@link assertBulkSeedAllowed}). Idempotent — re-running upserts
  * existing rows. Does not manage the DB connection; `pnpm db:seed:full` drains the pool after it
  * resolves, so a test may call it directly.
  */
 export async function runFullSeed(): Promise<void> {
+  // Demo users with known or logged passwords and faker organizations: local databases only, as
+  // the bulk seed (H-11). `pnpm db:seed` (the reference rows every deploy needs) never gets here.
+  assertBulkSeedAllowed(process.env);
   logger.info('seed.full: starting');
   initFakerSeed();
 

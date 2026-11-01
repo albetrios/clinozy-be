@@ -3522,6 +3522,7 @@ src/
     │   │   │   ├── bulk-config.unit.test.ts
     │   │   │   ├── demo-clinic-plan.unit.test.ts
     │   │   │   ├── demo-clinic-stock-plan.unit.test.ts
+    │   │   │   ├── demo-seed-local-guard.unit.test.ts
     │   │   │   ├── modules.unit.test.ts
     │   │   │   ├── production-guard.unit.test.ts
     │   │   │   ├── seed-contract.unit.test.ts

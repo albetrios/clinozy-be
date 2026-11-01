@@ -38,7 +38,7 @@ Alongside them, **`pnpm db:seed:stripe-catalog`** (`stripe-catalog.ts`, the sync
 
 - **`bulk.ts`** — `MODULES` (one `DomainSeedModule` per domain), `runBulkSeed` (guard → resolve config → all `seedReference`, then all `seedBulk` in `dependsOn` order), `closeDatabase()` in `finally`.
 - **`bulk-config.ts`** — `PROFILES` (`demo` / `edge` / `load`) and `resolveCounts` (`BULK_PROFILE`, `SCALE` multiplier, per-knob `BULK_ORGS` / `BULK_USERS_PER_ORG` / `BULK_AUDIT_MONTHS` / `BULK_AUDIT_PER_ORG_PER_MONTH`). `HARD_CAP` keeps a run in the tens-of-thousands band — exceeding it is a fatal config error (the COPY-based load path is out of scope).
-- **`production-guard.ts`** — `assertBulkSeedAllowed`: refuses on a non-loopback `DATABASE_URL` unless `ALLOW_BULK_SEED=1` (a deliberate override; no script passes it).
+- **`production-guard.ts`** — `assertBulkSeedAllowed`: refuses on a non-loopback `DATABASE_URL` unless `ALLOW_BULK_SEED=1` (a deliberate override; no script passes it). The bulk seed, the full seed, the demo admin, the demo clinic's `--fresh` and the load-test credential pool call it before any write; the minimal seed every deploy runs does not.
 - **`seed-registry.ts`** — in-memory `createSeedRegistry()`.
 - **`faker-data.ts`** — `initFakerSeed()` and shared faker helpers. **`helpers.ts`** — re-exports such as `closeDatabase`.
 
@@ -68,7 +68,7 @@ pnpm db:seed:stripe-catalog --dry-run     # say what it would create; write noth
 
 ## Failure modes
 
-- **Hosted / production `DATABASE_URL`** → `assertBulkSeedAllowed` throws before any write (override only with `ALLOW_BULK_SEED=1`). The demo clinic's `--fresh` asks it before deleting the clinic.
+- **Hosted / production `DATABASE_URL`** → `assertBulkSeedAllowed` throws before any write (override only with `ALLOW_BULK_SEED=1`), in the bulk seed, `pnpm db:seed:full` and `pnpm db:seed:demo-admin` (H-11). The demo clinic's `--fresh` asks it before deleting the clinic.
 - **Demo clinic records fail mid-way** → they roll back together (one transaction in the clinic's context). The logins, organization and memberships written before them stay, and `--fresh` replaces them.
 - **Counts exceed `HARD_CAP`** → fatal config error pointing at the out-of-scope COPY path.
 - **Unknown `BULK_PROFILE` / invalid integer env / dependency cycle in `dependsOn`** → throws during config resolution or `orderModules`.

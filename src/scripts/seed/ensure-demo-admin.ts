@@ -36,9 +36,8 @@ import {
   seedMembership,
 } from '@/domains/tenancy/seed/tenancy.seed.js';
 import { logger } from '@/shared/utils/infrastructure/logger.util.js';
-import { parseCommandLine } from '@tooling/setup/common/script.js';
-
-parseCommandLine({ args: process.argv.slice(2) });
+import { isMain, parseCommandLine } from '@tooling/setup/common/script.js';
+import { assertBulkSeedAllowed } from './production-guard.js';
 
 const DEMO_EMAIL = process.env.DEMO_EMAIL || 'demo@example.com';
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'DemoPassword123!';
@@ -47,8 +46,13 @@ const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'DemoPassword123!';
  * Create-or-repair the demo super_admin plus the demo organization, Admin role, system
  * permissions, and an active membership so the user can complete a password login. All calls
  * are idempotent upserts; running twice changes nothing beyond resetting the demo password.
+ *
+ * @remarks
+ * Refuses a non-local `DATABASE_URL` before any write ({@link assertBulkSeedAllowed}, H-11): the
+ * account has a known default password and every system permission.
  */
 export async function ensureDemoAdmin(): Promise<void> {
+  assertBulkSeedAllowed(process.env);
   await seedPermissions();
 
   const demoUser = await seedDemoUser({ email: DEMO_EMAIL, password: DEMO_PASSWORD });
@@ -94,11 +98,14 @@ export async function ensureDemoAdmin(): Promise<void> {
  * would `process.exit(1)` before the database pool finishes draining and leave
  * aborted connections behind in Postgres.
  */
-ensureDemoAdmin()
-  .catch((error) => {
-    logger.error({ error }, 'ensure-demo-admin: failed');
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await closeDatabase();
-  });
+if (isMain(import.meta.url)) {
+  parseCommandLine({ args: process.argv.slice(2) });
+  ensureDemoAdmin()
+    .catch((error) => {
+      logger.error({ error }, 'ensure-demo-admin: failed');
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await closeDatabase();
+    });
+}
