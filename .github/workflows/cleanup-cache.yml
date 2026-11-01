@@ -42,8 +42,8 @@ on: # zizmor: ignore[dangerous-triggers]
         required: false
         default: ""
 
+# Read-only at the top (H-14); the cleanup job alone deletes caches (`actions: write`).
 permissions:
-  actions: write
   contents: read
 
 concurrency:
@@ -60,6 +60,9 @@ jobs:
     name: Delete caches
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: read
     steps:
       - name: Resolve cache scope
         id: scope

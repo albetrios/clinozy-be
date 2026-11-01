@@ -1,4 +1,9 @@
 {
   "name": "development",
-  "protection": {}
+  "protection": {
+    "deploymentBranchPolicy": {
+      "protectedBranches": true,
+      "customBranchPolicies": false
+    }
+  }
 }

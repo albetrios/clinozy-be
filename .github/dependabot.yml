@@ -2,7 +2,7 @@
 #
 # npm PRs are grouped by risk to reduce lockfile-conflict cascades:
 #   - `npm-non-major` (patch + minor, prod + dev) — auto-merged after approval via
-#     .github/workflows/dependabot-auto-merge.yml.
+#     .github/workflows/dependabot-approval.yml → dependabot-auto-merge.yml.
 #   - `npm-major` (major, prod + dev) — manual review + merge.
 #   - `security-updates` — manual review + merge.
 # github-actions and docker bumps are reviewed and merged manually.

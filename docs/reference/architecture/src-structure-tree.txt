@@ -3325,6 +3325,7 @@ src/
     │   │   ├── codegraph-git-hooks.policy.unit.test.ts
     │   │   ├── compose-stack.policy.unit.test.ts
     │   │   ├── db-shard-balance.policy.unit.test.ts
+    │   │   ├── dependabot-auto-merge.policy.unit.test.ts
     │   │   ├── dependabot-ci-triage.policy.unit.test.ts
     │   │   ├── deploy-node-env.policy.unit.test.ts
     │   │   ├── docker-api-smoke.policy.unit.test.ts
@@ -3372,7 +3373,8 @@ src/
     │   │   ├── tooling-command-line.policy.unit.test.ts
     │   │   ├── vitest-cache-path.policy.unit.test.ts
     │   │   ├── warn-only.policy.unit.test.ts
-    │   │   └── worker-pool-budget.policy.unit.test.ts
+    │   │   ├── worker-pool-budget.policy.unit.test.ts
+    │   │   └── workflow-permissions.policy.unit.test.ts
     │   ├── composition-root/
     │   │   ├── domain-containers-boot.unit.test.ts
     │   │   ├── domain-services-object-storage.policy.unit.test.ts

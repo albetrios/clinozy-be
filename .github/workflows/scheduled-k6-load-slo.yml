@@ -7,6 +7,10 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
 
+# Read-only at the top (H-14); the two issue jobs grant themselves `issues: write`.
+permissions:
+  contents: read
+
 concurrency:
   group: load-tests-${{ github.ref }}
   cancel-in-progress: false

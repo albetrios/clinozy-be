@@ -29,6 +29,13 @@ least-privilege scoping matters.
   declares `environment: development` and reads `secrets.RELEASE_PLEASE_TOKEN` from it.
 - It is read from the **development** environment because the **production** environment has a
   required-reviewer gate that would otherwise block the Release-PR refresh on every merge.
+- **development allows the `main` branch only** (`deploymentBranchPolicy.protectedBranches` in
+  [`.github/environments/development.json`](../../../.github/environments/development.json), H-4),
+  so no job a pull request or a pushed branch starts can read the PAT. The Dependabot auto-merge,
+  which needs it to merge, is split: `dependabot-approval.yml` (the PR's review, holds nothing) →
+  `dependabot-auto-merge.yml` (`workflow_run`, main's copy, re-checks the approval from the API).
+  A separate environment for the PAT is not expressible in `pnpm github:sync` yet (every
+  environment must be a `NODE_ENV` value) — see [`.github/environments/README.md`](../../../.github/environments/README.md).
 - `pnpm github:sync` provisions the token into **both** the **development** and **production**
   environments; the weekly canary in
   [scheduled-release-guards.yml](../../../.github/workflows/scheduled-release-guards.yml) probes
