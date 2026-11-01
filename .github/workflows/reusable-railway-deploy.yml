@@ -190,13 +190,13 @@ jobs:
       api_image: ${{ steps.ghcr_images.outputs.api_image }}
       worker_image: ${{ steps.ghcr_images.outputs.worker_image }}
       deployment_environment: ${{ needs.resolve-environment.outputs.environment }}
+    # No secret at job level (H-2): job env reaches every step, the dependency install and the
+    # Railway CLI install included. The steps that read the GitHub Environment's secrets name
+    # GH_SECRETS_JSON themselves, after both installs; "Export GitHub Environment to runner" then
+    # hands the steps after it the whole environment (RAILWAY_TOKEN and the service ids among it).
     env:
       ENVIRONMENT: ${{ needs.resolve-environment.outputs.environment }}
-      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-      RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
-      RAILWAY_WORKER_SERVICE_ID: ${{ secrets.RAILWAY_WORKER_SERVICE_ID }}
       RAILWAY_GIT_COMMIT_SHA: ${{ inputs.merge_commit_sha || github.sha }}
-      GH_SECRETS_JSON: ${{ toJSON(secrets) }}
       GH_VARS_JSON: ${{ toJSON(vars) }}
     steps:
       - name: Checkout
@@ -210,8 +210,11 @@ jobs:
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
+      # Pinned and SHA-256-verified (RAILWAY_VERSION in tooling/setup/agent/tool-versions.sh), and
+      # before any secret is in reach (H-2): `npm install -g @railway/cli` installed whatever npm
+      # served that day and ran its postinstall download with every production secret in env.
+      - name: Install Railway CLI (pinned, before any secret)
+        run: sudo bash tooling/setup/agent/install-railway.sh
 
       - name: Derive NODE_ENV from the deploy environment
         # NODE_ENV is the deploy TARGET, so it comes from the resolved environment — the
@@ -229,6 +232,8 @@ jobs:
         # workflow sets it — never the image (CI runs the image with TEST_MODE for clinozy-fe's
         # e2e) — and the literal wins over any GitHub Environment value. Pinned by
         # src/tests/unit/ci/hosted-deployment-marker.policy.unit.test.ts.
+        env:
+          GH_SECRETS_JSON: ${{ toJSON(secrets) }}
         run: |
           set -euo pipefail
           configured="$(jq -nr \
@@ -256,6 +261,8 @@ jobs:
         # Multi-line values (e.g. JWT_PRIVATE_KEY PEM) MUST use the heredoc
         # form: `KEY<<DELIM\n...\nDELIM`. We pick a random per-key delimiter
         # so a value containing the literal "EOF" cannot escape the heredoc.
+        env:
+          GH_SECRETS_JSON: ${{ toJSON(secrets) }}
         run: |
           set -euo pipefail
           jq -nrj \
@@ -320,6 +327,8 @@ jobs:
 
       - name: Validate Railway deploy secrets
         if: inputs.debug == true
+        env:
+          GH_SECRETS_JSON: ${{ toJSON(secrets) }}
         run: |
           set -euo pipefail
 
@@ -525,7 +534,7 @@ jobs:
         # in sync from .env.<environment> via `pnpm github:sync`), so any new
         # runtime key flows through automatically — no workflow edit needed.
         #
-        # Implementation: read `GH_SECRETS_JSON` / `GH_VARS_JSON` (job-level),
+        # Implementation: read `GH_SECRETS_JSON` (this step's) / `GH_VARS_JSON` (job-level),
         # merge in jq, drop infra-only / CI-only keys, and emit NUL-delimited
         # KEY=VALUE pairs so multi-line values (PEM keys) survive intact.
         # Empty/null values are skipped so Railway is never blanked out by an
@@ -557,6 +566,8 @@ jobs:
         # call would also queue its own redeploy, and Railway's best-effort
         # coalescing window is shorter than the gap between these CLI calls,
         # so we saw 2–3 extra deployments per service per CD run.
+        env:
+          GH_SECRETS_JSON: ${{ toJSON(secrets) }}
         run: |
           set -euo pipefail
 

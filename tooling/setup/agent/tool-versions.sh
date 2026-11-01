@@ -16,8 +16,8 @@
 # Trial without a commit: set the KEY (and, for downloaded binaries, its *_SHA256_* keys) as
 # variables on a separate cloud environment; an environment variable overrides the pin here.
 #
-# Also here, outside AGENT_TOOLS (tooling/dev/agent-tools.ts): Node and gh, two release downloads
-# the setup scripts verify (H-12). `pnpm tool:agent-tools --outdated` does not cover them; their
+# Also here, outside AGENT_TOOLS (tooling/dev/agent-tools.ts): Node, gh and the Railway CLI,
+# release downloads the setup scripts and the deploy verify (H-2, H-12). `pnpm tool:agent-tools --outdated` does not cover them; their
 # checksums come from the upstream files named beside them.
 #
 # Not here: pnpm (package.json `packageManager`), Docker images (compose files, pinned by digest
@@ -54,3 +54,10 @@ NODE_SHA256_LINUX_ARM64=6ad1325edbdb5649c379b75a237147a666c95d4f9ae8d340fef2d157
 GH_VERSION=2.89.0
 GH_SHA256_LINUX_AMD64=d0422caade520530e76c1c558da47daebaa8e1203d6b7ff10ad7d6faba3490d8
 GH_SHA256_LINUX_ARM64=9e64a623dfc242990aa5d9b3f507111149c4282f66b68eaad1dc79eeb13b9ce5
+
+# Railway CLI (github.com/railwayapp/cli release binary) — install-railway.sh, which the Railway
+# deploy runs before any secret is in reach (H-2). The release publishes no checksum file: these
+# are the SHA-256 of the two release assets, taken when the version was pinned.
+RAILWAY_VERSION=5.71.0
+RAILWAY_SHA256_LINUX_X64=2e682fd2ddf8d6fdf9e46d9d99d99646ff0022a6abb0c2bca93011348a269fb9
+RAILWAY_SHA256_LINUX_ARM64=d160ad2a029eaac4b4c85012adb67c1f5709ba81f7320edb5a27be928211d638

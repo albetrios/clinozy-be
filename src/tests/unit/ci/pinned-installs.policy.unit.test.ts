@@ -80,6 +80,13 @@ function unpinnedInstall(line: string): string {
   if (pip && !pip.startsWith('$') && !/==(?:\d+\.\d+\.\d+|\$\{[A-Z_]+_VERSION\})$/.test(pip)) {
     return `pip installs ${pip} without ==version`;
   }
+  // A global npm install runs its package's install scripts as well (H-2: `@railway/cli`).
+  const npmGlobal = /\bnpm (?:install|i) (?:-g|--global)\b(?:\s+--?\S+)*\s+["']?([^\s"']+)/.exec(
+    line,
+  )?.[1];
+  if (npmGlobal && !npmGlobal.startsWith('$') && !/.@\d+\.\d+\.\d+$/.test(npmGlobal)) {
+    return `npm installs ${npmGlobal} globally without an exact version`;
+  }
   if (/\bcurl\b[^|]*\|\s*(?:ba)?sh\b/.test(line)) return 'pipes a download into a shell';
   return '';
 }
@@ -116,6 +123,9 @@ describe('pinned installs (H-12)', () => {
     ['  for tool in node npm npx corepack pnpm pnpx; do', false],
     ['  value=$(npx --yes some-tool --flag)', true],
     ['            docker push "${API_IMAGE}:latest"', false],
+    ['        run: npm install -g @railway/cli', true],
+    ['  npm install -g "${package}" >&2 2>&1', false],
+    ['npm install --global --ignore-scripts netlify-cli@27.13.0', false],
   ])('reads %s as unpinned: %s', (line, unpinned) => {
     expect(unpinnedInstall(line) !== '').toBe(unpinned);
   });
@@ -137,6 +147,7 @@ describe('pinned installs (H-12)', () => {
       ['tooling/setup/agent/install-gh.sh', 'GH_SHA256_LINUX_'],
       ['tooling/setup/agent/install-gitleaks.sh', 'GITLEAKS_SHA256_LINUX_'],
       ['tooling/setup/agent/install-k6.sh', 'K6_SHA256_LINUX_'],
+      ['tooling/setup/agent/install-railway.sh', 'RAILWAY_SHA256_LINUX_'],
     ] as const) {
       const source = codeLines(readFileSync(script, 'utf8'))
         .map(({ line }) => line)
