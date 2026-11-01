@@ -2387,7 +2387,8 @@ src/
     │   ├── __tests__/
     │   │   └── unit/
     │   │   │   ├── mcp-blocked-headers.policy.unit.test.ts
-    │   │   │   └── mcp-call-api-policy.unit.test.ts
+    │   │   │   ├── mcp-call-api-policy.unit.test.ts
+    │   │   │   └── mcp-server-lifecycle.unit.test.ts
     │   ├── mcp-capabilities.ts
     │   ├── mcp-client-guide.ts
     │   ├── mcp-server.ts
