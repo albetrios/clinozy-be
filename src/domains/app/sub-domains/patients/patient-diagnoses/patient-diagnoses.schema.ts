@@ -49,6 +49,7 @@ export const patient_diagnoses = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      uniqueIndex('idx_patient_diagnoses_organization_id_id').on(table.organization_id, table.id),
       uniqueIndex('idx_patient_diagnoses_public_id').on(table.public_id),
       // P18: one live entry of a name, in any case
       uniqueIndex('idx_patient_diagnoses_organization_name_unique')

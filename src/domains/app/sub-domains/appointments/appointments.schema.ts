@@ -287,6 +287,7 @@ function appointmentChecks(table: AppointmentTable) {
  */
 export const appointments = appSchema
   .table('appointments', appointmentColumns, (table) => [
+    uniqueIndex('idx_appointments_organization_id_id').on(table.organization_id, table.id),
     index('idx_appointments_organization_doctor').on(
       table.organization_id,
       table.doctor_membership_id,

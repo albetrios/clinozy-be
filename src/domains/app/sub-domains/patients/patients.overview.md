@@ -54,6 +54,10 @@ care, in the nested sub-domains below. **The person lives on the contact** (P1, 
   and doctor from the visit, `lead_id` the lead), not converted — the first treatment converts (P4).
 - **Never purged (P7):** soft delete only; out of `APP_RECORD_TABLES`; every table pointing at a
   patient does so `ON DELETE RESTRICT`.
+- **Links stay inside the clinic (B2-5):** the file's contact, home branch and lead, and each
+  clinical record's patient, visit, treatment, bought session, offering, check-in, review, invoice
+  line or diagnosis, are composite keys `(organization_id, <column>)` → `(organization_id, id)`; the
+  database refuses a link to another clinic's record (`20261101101100_tenant_composite_foreign_keys.sql`).
 - **The clinical gates (P14):** clinical notes, photos and reports are read with
   `patient:clinical_record:read` and written with `patient:update` and it; a private photo also
   needs `patient:private_album:read` (P23). Deleting or restoring a clinical note, photo, report or

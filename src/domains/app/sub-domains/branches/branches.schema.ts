@@ -105,6 +105,7 @@ export const branches = appSchema
       ),
     },
     (table) => [
+      uniqueIndex('idx_branches_organization_id_id').on(table.organization_id, table.id),
       uniqueIndex('idx_branches_public_id').on(table.public_id),
       // Names are unique per organization, ignoring case — a branch is never deleted (D3, D16).
       uniqueIndex('idx_branches_organization_name_unique').on(

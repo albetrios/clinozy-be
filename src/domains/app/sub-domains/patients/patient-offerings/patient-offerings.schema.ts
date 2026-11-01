@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm';
 import {
-  type AnyPgColumn,
   bigint,
   bigserial,
   check,
@@ -11,6 +10,7 @@ import {
   timestamp,
   uniqueIndex,
   varchar,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
@@ -44,16 +44,10 @@ export const patient_offerings = appSchema
       organization_id: bigint('organization_id', { mode: 'number' })
         .notNull()
         .references(() => organizations.id, { onDelete: 'cascade' }),
-      patient_id: bigint('patient_id', { mode: 'number' })
-        .notNull()
-        .references((): AnyPgColumn => patients.id, { onDelete: 'restrict' }),
-      offering_id: bigint('offering_id', { mode: 'number' })
-        .notNull()
-        .references((): AnyPgColumn => offerings.id, { onDelete: 'restrict' }),
+      patient_id: bigint('patient_id', { mode: 'number' }).notNull(),
+      offering_id: bigint('offering_id', { mode: 'number' }).notNull(),
       // The invoice line that sold it — one per line; it goes with its line (PK4)
-      invoice_item_id: bigint('invoice_item_id', { mode: 'number' })
-        .notNull()
-        .references((): AnyPgColumn => invoice_items.id, { onDelete: 'cascade' }),
+      invoice_item_id: bigint('invoice_item_id', { mode: 'number' }).notNull(),
       sessions_total: smallint('sessions_total').notNull(),
       sessions_used: smallint('sessions_used').notNull().default(0),
       // None = no expiry
@@ -73,7 +67,31 @@ export const patient_offerings = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
-      index('idx_patient_offerings_organization_id').on(table.organization_id),
+      uniqueIndex('idx_patient_offerings_organization_id_id').on(table.organization_id, table.id),
+      foreignKey({
+        name: 'patient_offerings_invoice_item_fk',
+        columns: [table.organization_id, table.invoice_item_id],
+        foreignColumns: [invoice_items.organization_id, invoice_items.id],
+      }).onDelete('cascade'),
+      index('idx_patient_offerings_organization_invoice_item')
+        .on(table.organization_id, table.invoice_item_id)
+        .where(sql`${table.invoice_item_id} IS NOT NULL`),
+      foreignKey({
+        name: 'patient_offerings_offering_fk',
+        columns: [table.organization_id, table.offering_id],
+        foreignColumns: [offerings.organization_id, offerings.id],
+      }).onDelete('restrict'),
+      index('idx_patient_offerings_organization_offering')
+        .on(table.organization_id, table.offering_id)
+        .where(sql`${table.offering_id} IS NOT NULL`),
+      foreignKey({
+        name: 'patient_offerings_patient_fk',
+        columns: [table.organization_id, table.patient_id],
+        foreignColumns: [patients.organization_id, patients.id],
+      }).onDelete('restrict'),
+      index('idx_patient_offerings_organization_patient')
+        .on(table.organization_id, table.patient_id)
+        .where(sql`${table.patient_id} IS NOT NULL`),
       uniqueIndex('idx_patient_offerings_public_id').on(table.public_id),
       // The patient's tab, newest first
       index('idx_patient_offerings_patient_created').on(

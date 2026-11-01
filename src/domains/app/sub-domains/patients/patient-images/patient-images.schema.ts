@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm';
 import {
-  type AnyPgColumn,
   bigint,
   bigserial,
   check,
@@ -10,6 +9,7 @@ import {
   timestamp,
   uniqueIndex,
   varchar,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
@@ -46,18 +46,10 @@ export const patient_images = appSchema
       organization_id: bigint('organization_id', { mode: 'number' })
         .notNull()
         .references(() => organizations.id, { onDelete: 'cascade' }),
-      patient_id: bigint('patient_id', { mode: 'number' })
-        .notNull()
-        .references((): AnyPgColumn => patients.id, { onDelete: 'restrict' }),
-      appointment_id: bigint('appointment_id', { mode: 'number' }).references(
-        (): AnyPgColumn => appointments.id,
-        { onDelete: 'set null' },
-      ),
+      patient_id: bigint('patient_id', { mode: 'number' }).notNull(),
+      appointment_id: bigint('appointment_id', { mode: 'number' }),
       // The session it was taken at (P24)
-      patient_treatment_id: bigint('patient_treatment_id', { mode: 'number' }).references(
-        (): AnyPgColumn => patient_treatments.id,
-        { onDelete: 'set null' },
-      ),
+      patient_treatment_id: bigint('patient_treatment_id', { mode: 'number' }),
       album: varchar('album', { length: 7 }).notNull().default('general'),
       stage: varchar('stage', { length: 6 }),
       // The confirmed upload's object key
@@ -86,6 +78,32 @@ export const patient_images = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      // The SQL says ON DELETE SET NULL ("appointment_id"): organization_id is kept.
+      foreignKey({
+        name: 'patient_images_appointment_fk',
+        columns: [table.organization_id, table.appointment_id],
+        foreignColumns: [appointments.organization_id, appointments.id],
+      }).onDelete('set null'),
+      index('idx_patient_images_organization_appointment')
+        .on(table.organization_id, table.appointment_id)
+        .where(sql`${table.appointment_id} IS NOT NULL`),
+      foreignKey({
+        name: 'patient_images_patient_fk',
+        columns: [table.organization_id, table.patient_id],
+        foreignColumns: [patients.organization_id, patients.id],
+      }).onDelete('restrict'),
+      index('idx_patient_images_organization_patient')
+        .on(table.organization_id, table.patient_id)
+        .where(sql`${table.patient_id} IS NOT NULL`),
+      // The SQL says ON DELETE SET NULL ("patient_treatment_id"): organization_id is kept.
+      foreignKey({
+        name: 'patient_images_patient_treatment_fk',
+        columns: [table.organization_id, table.patient_treatment_id],
+        foreignColumns: [patient_treatments.organization_id, patient_treatments.id],
+      }).onDelete('set null'),
+      index('idx_patient_images_organization_patient_treatment')
+        .on(table.organization_id, table.patient_treatment_id)
+        .where(sql`${table.patient_treatment_id} IS NOT NULL`),
       uniqueIndex('idx_patient_images_public_id').on(table.public_id),
       // Each album tab, newest first, and its count
       index('idx_patient_images_patient_album_taken_on').on(

@@ -93,6 +93,7 @@ export const offerings = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      uniqueIndex('idx_offerings_organization_id_id').on(table.organization_id, table.id),
       uniqueIndex('idx_offerings_public_id').on(table.public_id),
       index('idx_offerings_organization_created').on(
         table.organization_id,

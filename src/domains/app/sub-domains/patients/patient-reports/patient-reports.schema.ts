@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm';
 import {
-  type AnyPgColumn,
   bigint,
   bigserial,
   check,
@@ -11,6 +10,7 @@ import {
   timestamp,
   uniqueIndex,
   varchar,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
@@ -42,9 +42,7 @@ export const patient_reports = appSchema
       organization_id: bigint('organization_id', { mode: 'number' })
         .notNull()
         .references(() => organizations.id, { onDelete: 'cascade' }),
-      patient_id: bigint('patient_id', { mode: 'number' })
-        .notNull()
-        .references((): AnyPgColumn => patients.id, { onDelete: 'restrict' }),
+      patient_id: bigint('patient_id', { mode: 'number' }).notNull(),
       type: varchar('type', { length: 7 }).notNull().default('lab'),
       name: varchar('name', { length: 120 }).notNull(),
       report_date: date('report_date', { mode: 'string' }).notNull(),
@@ -66,6 +64,14 @@ export const patient_reports = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      foreignKey({
+        name: 'patient_reports_patient_fk',
+        columns: [table.organization_id, table.patient_id],
+        foreignColumns: [patients.organization_id, patients.id],
+      }).onDelete('restrict'),
+      index('idx_patient_reports_organization_patient')
+        .on(table.organization_id, table.patient_id)
+        .where(sql`${table.patient_id} IS NOT NULL`),
       index('idx_patient_reports_organization_id').on(table.organization_id),
       uniqueIndex('idx_patient_reports_public_id').on(table.public_id),
       index('idx_patient_reports_patient_report_date').on(

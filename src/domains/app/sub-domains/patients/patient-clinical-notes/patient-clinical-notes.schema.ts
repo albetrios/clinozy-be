@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm';
 import {
-  type AnyPgColumn,
   bigint,
   bigserial,
   check,
@@ -9,6 +8,7 @@ import {
   timestamp,
   uniqueIndex,
   varchar,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { appSchema, maintenanceBypassArm } from '@/infrastructure/database/pg-schemas.js';
 import { sqlLiteralList } from '@/infrastructure/database/utils/sql-literal.util.js';
@@ -42,21 +42,13 @@ export const patient_clinical_notes = appSchema
       organization_id: bigint('organization_id', { mode: 'number' })
         .notNull()
         .references(() => organizations.id, { onDelete: 'cascade' }),
-      patient_id: bigint('patient_id', { mode: 'number' })
-        .notNull()
-        .references((): AnyPgColumn => patients.id, { onDelete: 'restrict' }),
+      patient_id: bigint('patient_id', { mode: 'number' }).notNull(),
       kind: varchar('kind', { length: 20 }).notNull(),
       text: varchar('text', { length: 500 }).notNull(),
       // The visit the note was taken at (A10)
-      appointment_id: bigint('appointment_id', { mode: 'number' }).references(
-        (): AnyPgColumn => appointments.id,
-        { onDelete: 'set null' },
-      ),
+      appointment_id: bigint('appointment_id', { mode: 'number' }),
       // A `diagnosis` note's catalogue entry (P12)
-      patient_diagnosis_id: bigint('patient_diagnosis_id', { mode: 'number' }).references(
-        (): AnyPgColumn => patient_diagnoses.id,
-        { onDelete: 'set null' },
-      ),
+      patient_diagnosis_id: bigint('patient_diagnosis_id', { mode: 'number' }),
       added_at: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -73,6 +65,32 @@ export const patient_clinical_notes = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      // The SQL says ON DELETE SET NULL ("appointment_id"): organization_id is kept.
+      foreignKey({
+        name: 'patient_clinical_notes_appointment_fk',
+        columns: [table.organization_id, table.appointment_id],
+        foreignColumns: [appointments.organization_id, appointments.id],
+      }).onDelete('set null'),
+      index('idx_patient_clinical_notes_organization_appointment')
+        .on(table.organization_id, table.appointment_id)
+        .where(sql`${table.appointment_id} IS NOT NULL`),
+      // The SQL says ON DELETE SET NULL ("patient_diagnosis_id"): organization_id is kept.
+      foreignKey({
+        name: 'patient_clinical_notes_patient_diagnosis_fk',
+        columns: [table.organization_id, table.patient_diagnosis_id],
+        foreignColumns: [patient_diagnoses.organization_id, patient_diagnoses.id],
+      }).onDelete('set null'),
+      index('idx_patient_clinical_notes_organization_patient_diagnosis')
+        .on(table.organization_id, table.patient_diagnosis_id)
+        .where(sql`${table.patient_diagnosis_id} IS NOT NULL`),
+      foreignKey({
+        name: 'patient_clinical_notes_patient_fk',
+        columns: [table.organization_id, table.patient_id],
+        foreignColumns: [patients.organization_id, patients.id],
+      }).onDelete('restrict'),
+      index('idx_patient_clinical_notes_organization_patient')
+        .on(table.organization_id, table.patient_id)
+        .where(sql`${table.patient_id} IS NOT NULL`),
       index('idx_patient_clinical_notes_organization_id').on(table.organization_id),
       uniqueIndex('idx_patient_clinical_notes_public_id').on(table.public_id),
       index('idx_patient_clinical_notes_patient_kind_created').on(

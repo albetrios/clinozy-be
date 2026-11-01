@@ -119,6 +119,7 @@ export const contacts = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      uniqueIndex('idx_contacts_organization_id_id').on(table.organization_id, table.id),
       uniqueIndex('idx_contacts_public_id').on(table.public_id),
       uniqueIndex('idx_contacts_organization_contact_number').on(
         table.organization_id,

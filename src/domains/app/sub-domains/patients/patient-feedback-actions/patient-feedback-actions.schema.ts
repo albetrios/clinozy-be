@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm';
 import {
-  type AnyPgColumn,
   bigint,
   bigserial,
   check,
@@ -42,14 +41,8 @@ export const patient_feedback_actions = appSchema
       organization_id: bigint('organization_id', { mode: 'number' })
         .notNull()
         .references(() => organizations.id, { onDelete: 'cascade' }),
-      patient_check_in_id: bigint('patient_check_in_id', { mode: 'number' }).references(
-        (): AnyPgColumn => patient_check_ins.id,
-        { onDelete: 'cascade' },
-      ),
-      patient_review_id: bigint('patient_review_id', { mode: 'number' }).references(
-        (): AnyPgColumn => patient_reviews.id,
-        { onDelete: 'cascade' },
-      ),
+      patient_check_in_id: bigint('patient_check_in_id', { mode: 'number' }),
+      patient_review_id: bigint('patient_review_id', { mode: 'number' }),
       action: varchar('action', { length: 18 }).notNull(),
       note: varchar('note', { length: 280 }),
       // The caller (the design's "by")
@@ -61,6 +54,22 @@ export const patient_feedback_actions = appSchema
       ),
     },
     (table) => [
+      foreignKey({
+        name: 'patient_feedback_actions_patient_check_in_fk',
+        columns: [table.organization_id, table.patient_check_in_id],
+        foreignColumns: [patient_check_ins.organization_id, patient_check_ins.id],
+      }).onDelete('cascade'),
+      index('idx_patient_feedback_actions_organization_patient_check_in')
+        .on(table.organization_id, table.patient_check_in_id)
+        .where(sql`${table.patient_check_in_id} IS NOT NULL`),
+      foreignKey({
+        name: 'patient_feedback_actions_patient_review_fk',
+        columns: [table.organization_id, table.patient_review_id],
+        foreignColumns: [patient_reviews.organization_id, patient_reviews.id],
+      }).onDelete('cascade'),
+      index('idx_patient_feedback_actions_organization_patient_review')
+        .on(table.organization_id, table.patient_review_id)
+        .where(sql`${table.patient_review_id} IS NOT NULL`),
       index('idx_patient_feedback_actions_organization_id').on(table.organization_id),
       uniqueIndex('idx_patient_feedback_actions_public_id').on(table.public_id),
       index('idx_patient_feedback_actions_patient_check_in')

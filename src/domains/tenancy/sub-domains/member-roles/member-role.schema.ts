@@ -59,6 +59,7 @@ export const roles = tenancySchema
       ),
     },
     (table) => [
+      uniqueIndex('idx_roles_organization_id_id').on(table.organization_id, table.id),
       // Tombstone purge: only the soft-deleted rows, so live writes never maintain it.
       index('idx_roles_tombstoned')
         .on(table.deleted_at)

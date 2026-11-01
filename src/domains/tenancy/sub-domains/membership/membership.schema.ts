@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   check,
   pgPolicy,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { maintenanceBypassArm, tenancySchema } from '@/infrastructure/database/pg-schemas.js';
 import { sqlLiteral } from '@/infrastructure/database/utils/sql-literal.util.js';
@@ -63,9 +64,7 @@ export const memberships = tenancySchema
       organization_id: bigint('organization_id', { mode: 'number' })
         .notNull()
         .references(() => organizations.id, { onDelete: 'cascade' }),
-      role_id: bigint('role_id', { mode: 'number' })
-        .notNull()
-        .references(() => roles.id, { onDelete: 'restrict' }),
+      role_id: bigint('role_id', { mode: 'number' }).notNull(),
       status: varchar('status', { length: 20 }).notNull().default(MEMBERSHIP_STATUS.INVITED),
       invited_by_user_id: bigint('invited_by_user_id', { mode: 'number' }).references(
         () => users.id,
@@ -113,6 +112,14 @@ export const memberships = tenancySchema
         .default(''),
     },
     (table) => [
+      foreignKey({
+        name: 'memberships_role_fk',
+        columns: [table.organization_id, table.role_id],
+        foreignColumns: [roles.organization_id, roles.id],
+      }).onDelete('restrict'),
+      index('idx_memberships_organization_role')
+        .on(table.organization_id, table.role_id)
+        .where(sql`${table.role_id} IS NOT NULL`),
       // Tombstone purge: only the soft-deleted rows, so live writes never maintain it.
       index('idx_memberships_tombstoned')
         .on(table.deleted_at)

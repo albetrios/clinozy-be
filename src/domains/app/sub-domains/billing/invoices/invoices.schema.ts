@@ -288,7 +288,7 @@ export const invoice_items = appSchema
       ),
     },
     (table) => [
-      index('idx_invoice_items_organization_id').on(table.organization_id),
+      uniqueIndex('idx_invoice_items_organization_id_id').on(table.organization_id, table.id),
       uniqueIndex('idx_invoice_items_public_id').on(table.public_id),
       // Deferrable in the init migration — a save renumbers kept lines (B12)
       unique('uq_invoice_items_invoice_line').on(table.invoice_id, table.line_number),

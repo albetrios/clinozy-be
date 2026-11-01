@@ -8,6 +8,7 @@ import {
   primaryKey,
   smallint,
   timestamp,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { tenancySchema } from '@/infrastructure/database/pg-schemas.js';
 import { users } from '@/domains/user/user.schema.js';
@@ -27,14 +28,10 @@ export const membership_additional_roles = tenancySchema
   .table(
     'membership_additional_roles',
     {
-      membership_id: bigint('membership_id', { mode: 'number' })
-        .notNull()
-        .references(() => memberships.id, { onDelete: 'cascade' }),
+      membership_id: bigint('membership_id', { mode: 'number' }).notNull(),
       // CASCADE, not RESTRICT: the role delete guard already refuses a role anyone holds, and an
       // organization purge removes roles and memberships in one cascade.
-      role_id: bigint('role_id', { mode: 'number' })
-        .notNull()
-        .references(() => roles.id, { onDelete: 'cascade' }),
+      role_id: bigint('role_id', { mode: 'number' }).notNull(),
       organization_id: bigint('organization_id', { mode: 'number' })
         .notNull()
         .references(() => organizations.id, { onDelete: 'cascade' }),
@@ -47,6 +44,22 @@ export const membership_additional_roles = tenancySchema
       ),
     },
     (table) => [
+      foreignKey({
+        name: 'membership_additional_roles_membership_fk',
+        columns: [table.organization_id, table.membership_id],
+        foreignColumns: [memberships.organization_id, memberships.id],
+      }).onDelete('cascade'),
+      index('idx_membership_additional_roles_organization_membership')
+        .on(table.organization_id, table.membership_id)
+        .where(sql`${table.membership_id} IS NOT NULL`),
+      foreignKey({
+        name: 'membership_additional_roles_role_fk',
+        columns: [table.organization_id, table.role_id],
+        foreignColumns: [roles.organization_id, roles.id],
+      }).onDelete('cascade'),
+      index('idx_membership_additional_roles_organization_role')
+        .on(table.organization_id, table.role_id)
+        .where(sql`${table.role_id} IS NOT NULL`),
       primaryKey({
         name: 'membership_additional_roles_pkey',
         columns: [table.membership_id, table.role_id],

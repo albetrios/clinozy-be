@@ -38,6 +38,56 @@ const DONE = sqlLiteral(PATIENT_TREATMENT_STATUS.DONE);
 const REVERSED = sqlLiteral(PATIENT_TREATMENT_STATUS.REVERSED);
 
 /**
+ * A session's links to its clinic's visit, offering, patient and bought session (B2-5): each a
+ * composite key `(organization_id, <column>)` to the parent's `(organization_id, id)`, so a row
+ * cannot name another clinic's record, with the index its delete action uses
+ * (`20261101101100_tenant_composite_foreign_keys.sql`).
+ */
+function patientTreatmentLinks(
+  table: Record<
+    'organization_id' | 'appointment_id' | 'offering_id' | 'patient_id' | 'patient_offering_id',
+    AnyPgColumn
+  >,
+) {
+  return [
+    // The SQL says ON DELETE SET NULL ("appointment_id"): organization_id is kept.
+    foreignKey({
+      name: 'patient_treatments_appointment_fk',
+      columns: [table.organization_id, table.appointment_id],
+      foreignColumns: [appointments.organization_id, appointments.id],
+    }).onDelete('set null'),
+    index('idx_patient_treatments_organization_appointment')
+      .on(table.organization_id, table.appointment_id)
+      .where(sql`${table.appointment_id} IS NOT NULL`),
+    // The SQL says ON DELETE SET NULL ("offering_id"): organization_id is kept.
+    foreignKey({
+      name: 'patient_treatments_offering_fk',
+      columns: [table.organization_id, table.offering_id],
+      foreignColumns: [offerings.organization_id, offerings.id],
+    }).onDelete('set null'),
+    index('idx_patient_treatments_organization_offering')
+      .on(table.organization_id, table.offering_id)
+      .where(sql`${table.offering_id} IS NOT NULL`),
+    foreignKey({
+      name: 'patient_treatments_patient_fk',
+      columns: [table.organization_id, table.patient_id],
+      foreignColumns: [patients.organization_id, patients.id],
+    }).onDelete('restrict'),
+    index('idx_patient_treatments_organization_patient')
+      .on(table.organization_id, table.patient_id)
+      .where(sql`${table.patient_id} IS NOT NULL`),
+    foreignKey({
+      name: 'patient_treatments_patient_offering_fk',
+      columns: [table.organization_id, table.patient_offering_id],
+      foreignColumns: [patient_offerings.organization_id, patient_offerings.id],
+    }).onDelete('restrict'),
+    index('idx_patient_treatments_organization_patient_offering')
+      .on(table.organization_id, table.patient_offering_id)
+      .where(sql`${table.patient_offering_id} IS NOT NULL`),
+  ];
+}
+
+/**
  * Drizzle table for `app.patient_treatments` — one session recorded for a patient, reversed with a
  * reason, never deleted (launch ROUTE #134, routes-final 7.H).
  *
@@ -58,17 +108,9 @@ export const patient_treatments = appSchema
       organization_id: bigint('organization_id', { mode: 'number' })
         .notNull()
         .references(() => organizations.id, { onDelete: 'cascade' }),
-      patient_id: bigint('patient_id', { mode: 'number' })
-        .notNull()
-        .references((): AnyPgColumn => patients.id, { onDelete: 'restrict' }),
-      appointment_id: bigint('appointment_id', { mode: 'number' }).references(
-        (): AnyPgColumn => appointments.id,
-        { onDelete: 'set null' },
-      ),
-      offering_id: bigint('offering_id', { mode: 'number' }).references(
-        (): AnyPgColumn => offerings.id,
-        { onDelete: 'set null' },
-      ),
+      patient_id: bigint('patient_id', { mode: 'number' }).notNull(),
+      appointment_id: bigint('appointment_id', { mode: 'number' }),
+      offering_id: bigint('offering_id', { mode: 'number' }),
       name: varchar('name', { length: 120 }).notNull(),
       template: varchar('template', { length: 7 }).notNull().default('skin'),
       performed_at: timestamp('performed_at', { withTimezone: true }).notNull().defaultNow(),
@@ -81,10 +123,7 @@ export const patient_treatments = appSchema
       remark: varchar('remark', { length: 2000 }),
       aftercare_call: varchar('aftercare_call', { length: 11 }).notNull().default('next_day'),
       // The bought session it spent (TR7, TR13)
-      patient_offering_id: bigint('patient_offering_id', { mode: 'number' }).references(
-        (): AnyPgColumn => patient_offerings.id,
-        { onDelete: 'restrict' },
-      ),
+      patient_offering_id: bigint('patient_offering_id', { mode: 'number' }),
       status: varchar('status', { length: 8 }).notNull().default('done'),
       reversed_reason: varchar('reversed_reason', { length: 280 }),
       reversed_at: timestamp('reversed_at', { withTimezone: true }),
@@ -100,6 +139,8 @@ export const patient_treatments = appSchema
       ),
     },
     (table) => [
+      uniqueIndex('idx_patient_treatments_organization_id_id').on(table.organization_id, table.id),
+      ...patientTreatmentLinks(table),
       uniqueIndex('idx_patient_treatments_public_id').on(table.public_id),
       // The patient's tab, newest first
       index('idx_patient_treatments_patient_performed').on(

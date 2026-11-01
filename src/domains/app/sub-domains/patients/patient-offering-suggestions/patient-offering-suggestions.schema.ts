@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm';
 import {
-  type AnyPgColumn,
   bigint,
   bigserial,
   check,
@@ -49,27 +48,17 @@ export const patient_offering_suggestions = appSchema
       organization_id: bigint('organization_id', { mode: 'number' })
         .notNull()
         .references(() => organizations.id, { onDelete: 'cascade' }),
-      patient_id: bigint('patient_id', { mode: 'number' })
-        .notNull()
-        .references((): AnyPgColumn => patients.id, { onDelete: 'restrict' }),
-      offering_id: bigint('offering_id', { mode: 'number' })
-        .notNull()
-        .references((): AnyPgColumn => offerings.id, { onDelete: 'restrict' }),
+      patient_id: bigint('patient_id', { mode: 'number' }).notNull(),
+      offering_id: bigint('offering_id', { mode: 'number' }).notNull(),
       quantity: smallint('quantity').notNull().default(1),
       // The line's final amount for the whole quantity; none = the billed price × quantity (PK9)
       price: numeric('price', { precision: 12, scale: 2 }),
       status: varchar('status', { length: 9 }).notNull().default('planned'),
       reason: varchar('reason', { length: 200 }),
       // Planned at a visit (PK8)
-      appointment_id: bigint('appointment_id', { mode: 'number' }).references(
-        (): AnyPgColumn => appointments.id,
-        { onDelete: 'set null' },
-      ),
+      appointment_id: bigint('appointment_id', { mode: 'number' }),
       // A check-in's next offering (TR10, PK8)
-      patient_check_in_id: bigint('patient_check_in_id', { mode: 'number' }).references(
-        (): AnyPgColumn => patient_check_ins.id,
-        { onDelete: 'set null' },
-      ),
+      patient_check_in_id: bigint('patient_check_in_id', { mode: 'number' }),
       // The caller (the design's "by")
       suggested_by_membership_id: bigint('suggested_by_membership_id', { mode: 'number' }),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -87,6 +76,40 @@ export const patient_offering_suggestions = appSchema
       delete_note: varchar('delete_note', { length: 280 }),
     },
     (table) => [
+      // The SQL says ON DELETE SET NULL ("appointment_id"): organization_id is kept.
+      foreignKey({
+        name: 'patient_offering_suggestions_appointment_fk',
+        columns: [table.organization_id, table.appointment_id],
+        foreignColumns: [appointments.organization_id, appointments.id],
+      }).onDelete('set null'),
+      index('idx_patient_offering_suggestions_organization_appointment')
+        .on(table.organization_id, table.appointment_id)
+        .where(sql`${table.appointment_id} IS NOT NULL`),
+      foreignKey({
+        name: 'patient_offering_suggestions_offering_fk',
+        columns: [table.organization_id, table.offering_id],
+        foreignColumns: [offerings.organization_id, offerings.id],
+      }).onDelete('restrict'),
+      index('idx_patient_offering_suggestions_organization_offering')
+        .on(table.organization_id, table.offering_id)
+        .where(sql`${table.offering_id} IS NOT NULL`),
+      // The SQL says ON DELETE SET NULL ("patient_check_in_id"): organization_id is kept.
+      foreignKey({
+        name: 'patient_offering_suggestions_patient_check_in_fk',
+        columns: [table.organization_id, table.patient_check_in_id],
+        foreignColumns: [patient_check_ins.organization_id, patient_check_ins.id],
+      }).onDelete('set null'),
+      index('idx_patient_offering_suggestions_organization_patient_check_in')
+        .on(table.organization_id, table.patient_check_in_id)
+        .where(sql`${table.patient_check_in_id} IS NOT NULL`),
+      foreignKey({
+        name: 'patient_offering_suggestions_patient_fk',
+        columns: [table.organization_id, table.patient_id],
+        foreignColumns: [patients.organization_id, patients.id],
+      }).onDelete('restrict'),
+      index('idx_patient_offering_suggestions_organization_patient')
+        .on(table.organization_id, table.patient_id)
+        .where(sql`${table.patient_id} IS NOT NULL`),
       index('idx_patient_offering_suggestions_organization_id').on(table.organization_id),
       uniqueIndex('idx_patient_offering_suggestions_public_id').on(table.public_id),
       // The plan, newest first
