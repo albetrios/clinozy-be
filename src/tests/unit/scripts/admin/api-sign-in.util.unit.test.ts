@@ -1,4 +1,4 @@
-import { verify } from 'otplib';
+import { generateSecret, verify } from 'otplib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { signInOverApi } from '@/scripts/admin/api-sign-in.util.js';
 
@@ -7,7 +7,8 @@ import { signInOverApi } from '@/scripts/admin/api-sign-in.util.js';
  * `mfa_required`. The sign-in completes `POST /auth/mfa/login` with a TOTP code from the account's
  * secret, and retries once on the next time step when the code was just used by another tool.
  */
-const SECRET = 'MFSG22LOFV2G623FNYWWS3TUMVTXEYLUNFXW4LLGNF4HI5LSMU'; // gitleaks:allow
+/** A fresh fixture secret per run (otplib's own generator), never a real factor. */
+const SECRET = generateSecret();
 const API_PREFIX = 'http://127.0.0.1:3000/api/v1';
 
 function answer(status: number, data: Record<string, unknown>): Response {

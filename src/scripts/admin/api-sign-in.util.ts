@@ -60,7 +60,7 @@ export async function signInOverApi(options: {
       body: { email: options.email, password: options.password },
     });
     if (!login.ok) {
-      console.error(`Login as ${options.email} failed:`, login.status, login.text);
+      console.error('Login as %s failed: %d %s', options.email, login.status, login.text);
       process.exit(1);
     }
     if (login.data?.access_token) return login.data.access_token;
@@ -70,7 +70,8 @@ export async function signInOverApi(options: {
     }
     if (!options.totpSecret) {
       console.error(
-        `${options.email} has MFA enrolled: set its TOTP secret (ADMIN_TOTP_SECRET or DEMO_TOTP_SECRET) to complete POST /auth/mfa/login.`,
+        '%s has MFA enrolled: set its TOTP secret (ADMIN_TOTP_SECRET or DEMO_TOTP_SECRET) to complete POST /auth/mfa/login.',
+        options.email,
       );
       process.exit(1);
     }
@@ -87,7 +88,8 @@ export async function signInOverApi(options: {
     }
     if (verification.status !== 401 || attempt > 1) {
       console.error(
-        `MFA login as ${options.email} failed:`,
+        'MFA login as %s failed: %d %s',
+        options.email,
         verification.status,
         verification.text,
       );

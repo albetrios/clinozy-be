@@ -1,4 +1,5 @@
 import type { AddressInfo } from 'node:net';
+import { generateSecret } from 'otplib';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -26,8 +27,8 @@ describe.runIf(runAsApplicationBehaviour)(
   () => {
     const adminEmail = (process.env.GLOBAL_ADMIN_EMAILS ?? '').split(',')[0]?.trim() ?? '';
     const password = 'AdminTokenFixture123!';
-    // Base32 of `admin-token-integration-fixture`: a test-database fixture, never a real factor.
-    const totpSecret = 'MFSG22LOFV2G623FNYWWS3TUMVTXEYLUNFXW4LLGNF4HI5LSMU'; // gitleaks:allow
+    // A fresh secret per run: a test-database fixture, never a real factor.
+    const totpSecret = generateSecret();
     let application: FastifyInstance;
     let apiPrefix: string;
 
@@ -82,6 +83,7 @@ describe.runIf(runAsApplicationBehaviour)(
         );
         expect(exit).toHaveBeenCalledWith(1);
         expect(String(error.mock.calls[0]?.[0])).toContain('has MFA enrolled');
+        expect(error.mock.calls[0]?.[1]).toBe(adminEmail);
       } finally {
         exit.mockRestore();
         error.mockRestore();
