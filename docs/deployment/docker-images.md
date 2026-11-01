@@ -155,15 +155,15 @@ docker build --target api -t clinozy-be:local .
 pnpm compose:up
 # a throwaway RS256 pair — the API parses it at boot, so placeholder strings cannot start it
 node -e "const { generateKeyPairSync } = require('node:crypto'); const fs = require('node:fs'); const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 }); fs.writeFileSync('/tmp/jwt-private.pem', privateKey.export({ type: 'pkcs8', format: 'pem' })); fs.writeFileSync('/tmp/jwt-public.pem', publicKey.export({ type: 'spki', format: 'pem' }));"
-docker run --rm -p 3000:3000 \
+docker run --rm -p 127.0.0.1:3000:3000 --network clinozy-be_default \
   -e NODE_ENV=development \
   `# boot-time safety checks default hardened; relax them for the plaintext local Postgres/Redis:` \
   -e DATABASE_SSL_ENABLED=false -e DATABASE_TLS_ENFORCED=false -e DATABASE_RLS_SAFETY_ENFORCED=false \
   -e DATABASE_CONNECTION_BUDGET_ENFORCED=false -e REDIS_TLS_ENFORCED=false -e TRUST_PROXY_REQUIRED=false \
   -e HOST=0.0.0.0 -e PORT=3000 \
-  -e DATABASE_URL=postgresql://clinozy:clinozy@host.docker.internal:5432/clinozy \
-  -e DATABASE_MAINTENANCE_URL=postgresql://clinozy:clinozy@host.docker.internal:5432/clinozy \
-  -e REDIS_URL=redis://host.docker.internal:6379 \
+  -e DATABASE_URL=postgresql://clinozy:clinozy@postgres:5432/clinozy \
+  -e DATABASE_MAINTENANCE_URL=postgresql://clinozy:clinozy@postgres:5432/clinozy \
+  -e REDIS_URL=redis://redis:6379 \
   -e JWT_PRIVATE_KEY="$(cat /tmp/jwt-private.pem)" -e JWT_PUBLIC_KEY="$(cat /tmp/jwt-public.pem)" \
   -e SECRETS_ENCRYPTION_KEY="$(openssl rand -hex 32)" -e METRICS_ENABLED=false \
   -e ALLOWED_ORIGINS=http://localhost:3000 \
@@ -171,7 +171,10 @@ docker run --rm -p 3000:3000 \
   clinozy-be:local
 ```
 
-On Linux without `host.docker.internal`, use compose smoke or map to `172.17.0.1`.
+Postgres and Redis publish their ports on `127.0.0.1` only (H-8), so `host.docker.internal` (the
+bridge gateway on Linux) does not reach them: the container joins the compose project's network
+(`clinozy-be_default` from a checkout in a `clinozy-be` folder; `docker network ls` names it) and
+reaches them by service name, as the `smoke` profile does.
 
 ## Compose vs production
 
