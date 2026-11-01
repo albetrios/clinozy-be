@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 import { UnauthorizedError } from '@/shared/errors/index.js';
+import { ORGANIZATION_API_KEY_PREFIX_DISPLAY_LENGTH } from '@/shared/constants/limits.constants.js';
 import type { AuthContext } from '@/shared/types/index.js';
 
 const API_KEY_PREFIX = 'ak_';
@@ -63,7 +64,7 @@ export async function applyApiKeyAuthentication(request: FastifyRequest): Promis
   }
 
   const keyHash = hashApiKey(rawKey);
-  const keyPrefix = rawKey.slice(0, 8);
+  const keyPrefix = rawKey.slice(0, ORGANIZATION_API_KEY_PREFIX_DISPLAY_LENGTH);
   const match = await request.server.tenancyDomain.organizationApiKeyService.authenticate({
     key_prefix: keyPrefix,
     key_hash: keyHash,
