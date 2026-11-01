@@ -33,7 +33,7 @@ flowchart LR
 ```bash
 brew install railway
 # or, on Linux, the version the deploy runs (pinned, SHA-256-verified):
-#   sudo bash tooling/setup/agent/install-railway.sh
+#   sudo bash tooling/ci/install-railway-cli.sh
 
 brew install gh
 

@@ -6,29 +6,30 @@
 # its postinstall script downloads the binary unverified — in the deploy job, where every
 # production secret was in reach (H-2). The npm package wraps this same release binary.
 #
-#     sudo bash tooling/setup/agent/install-railway.sh
+#     sudo bash tooling/ci/install-railway-cli.sh
 #
 # Version: RAILWAY_VERSION + RAILWAY_SHA256_LINUX_<ARCH> in tool-versions.sh (an environment
 # variable of that name wins, a trial). Installs when missing, reinstalls when the installed
 # version differs, and refuses a download whose SHA-256 does not match the pin.
 #
 # Fails (exit 1) when it cannot install the pin: the deploy that runs it cannot go on without
-# the CLI. Diagnostics go to stderr.
+# the CLI. Diagnostics go to stderr. It lives with the CI scripts, not the agent installers
+# bootstrap.sh runs: no session needs it. The pin and the checksum helpers are the agent tools'.
 set -uo pipefail
 
 readonly DESTINATION="${RAILWAY_INSTALL_DIRECTORY:-/usr/local/bin}"
 
 # shellcheck source=tool-install.lib.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tool-install.lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../setup/agent" && pwd)/tool-install.lib.sh"
 railway_version="$(pinned_version RAILWAY_VERSION)"
 current_version="$(installed_version railway --version)"
 
 if [ "${current_version}" = "${railway_version}" ]; then
-  echo "install-railway: railway ${current_version} is at the pin — nothing to install." >&2
+  echo "install-railway-cli: railway ${current_version} is at the pin — nothing to install." >&2
   exit 0
 fi
 require_linux railway "${railway_version}" || exit 1
-echo "install-railway: installing railway ${railway_version} (found: ${current_version:-none})…" >&2
+echo "install-railway-cli: installing railway ${railway_version} (found: ${current_version:-none})…" >&2
 
 # Railway's release assets name the architectures by their Rust target triples.
 case "$(linux_architecture)" in
@@ -42,9 +43,9 @@ if download_verified "${railway_url}" "${temporary_directory}/${railway_tarball}
   && tar -xzf "${temporary_directory}/${railway_tarball}" -C "${temporary_directory}" railway 2>/dev/null \
   && install -m 0755 "${temporary_directory}/railway" "${DESTINATION}/railway"; then
   rm -rf "${temporary_directory}"
-  echo "install-railway: installed $("${DESTINATION}/railway" --version 2>/dev/null) (SHA-256 verified)." >&2
+  echo "install-railway-cli: installed $("${DESTINATION}/railway" --version 2>/dev/null) (SHA-256 verified)." >&2
   exit 0
 fi
 rm -rf "${temporary_directory}"
-echo "install-railway: could not install railway ${railway_version} from ${railway_url}." >&2
+echo "install-railway-cli: could not install railway ${railway_version} from ${railway_url}." >&2
 exit 1

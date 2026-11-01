@@ -5,7 +5,7 @@ import { jobBlock } from '@/tests/helpers/workflow-jobs.helper.js';
 const workflow = readFileSync('.github/workflows/reusable-railway-deploy.yml', 'utf8');
 const deploy = jobBlock({ workflow, job: 'deploy' });
 const pins = readFileSync('tooling/setup/agent/tool-versions.sh', 'utf8');
-const installer = readFileSync('tooling/setup/agent/install-railway.sh', 'utf8');
+const installer = readFileSync('tooling/ci/install-railway-cli.sh', 'utf8');
 
 /** The `env:` block of the job itself (4-space key, 6-space entries), without its comments. */
 function jobEnvironment(job: string): string {
@@ -45,7 +45,7 @@ describe('Railway deploy: pinned CLI, secrets only where they are read (H-2)', (
   });
 
   it('installs the pinned, verified CLI, never from npm', () => {
-    expect(deploy).toContain('run: sudo bash tooling/setup/agent/install-railway.sh');
+    expect(deploy).toContain('run: sudo bash tooling/ci/install-railway-cli.sh');
     const code = workflow
       .split('\n')
       .filter((line) => !line.trimStart().startsWith('#'))
@@ -62,7 +62,7 @@ describe('Railway deploy: pinned CLI, secrets only where they are read (H-2)', (
     const firstSecret = deploy.search(/\$\{\{\s*(?:secrets\.|toJSON\(secrets\))/);
     expect(firstSecret).toBeGreaterThan(-1);
     expect(deploy.indexOf('uses: ./.github/actions/setup-node-pnpm')).toBeLessThan(firstSecret);
-    expect(deploy.indexOf('install-railway.sh')).toBeLessThan(firstSecret);
+    expect(deploy.indexOf('install-railway-cli.sh')).toBeLessThan(firstSecret);
   });
 
   it('hands the whole GitHub Environment only to the steps that read it', () => {

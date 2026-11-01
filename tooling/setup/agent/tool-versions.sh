@@ -55,7 +55,7 @@ GH_VERSION=2.89.0
 GH_SHA256_LINUX_AMD64=d0422caade520530e76c1c558da47daebaa8e1203d6b7ff10ad7d6faba3490d8
 GH_SHA256_LINUX_ARM64=9e64a623dfc242990aa5d9b3f507111149c4282f66b68eaad1dc79eeb13b9ce5
 
-# Railway CLI (github.com/railwayapp/cli release binary) — install-railway.sh, which the Railway
+# Railway CLI (github.com/railwayapp/cli release binary) — tooling/ci/install-railway-cli.sh, which the Railway
 # deploy runs before any secret is in reach (H-2). The release publishes no checksum file: these
 # are the SHA-256 of the two release assets, taken when the version was pinned.
 RAILWAY_VERSION=5.71.0

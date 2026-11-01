@@ -149,7 +149,7 @@ describe('pinned installs (H-12)', () => {
       ['tooling/setup/agent/install-gh.sh', 'GH_SHA256_LINUX_'],
       ['tooling/setup/agent/install-gitleaks.sh', 'GITLEAKS_SHA256_LINUX_'],
       ['tooling/setup/agent/install-k6.sh', 'K6_SHA256_LINUX_'],
-      ['tooling/setup/agent/install-railway.sh', 'RAILWAY_SHA256_LINUX_'],
+      ['tooling/ci/install-railway-cli.sh', 'RAILWAY_SHA256_LINUX_'],
     ] as const) {
       const source = codeLines(readFileSync(script, 'utf8'))
         .map(({ line }) => line)

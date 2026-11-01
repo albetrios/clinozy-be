@@ -227,7 +227,7 @@ sequenceDiagram
 
 Steps in each deploy workflow:
 
-1. Checkout code, install dependencies (migrations only — no app `pnpm build`), and install the Railway CLI at its pin (`tooling/setup/agent/install-railway.sh`: `RAILWAY_VERSION`, SHA-256-verified). No secret is in the job's env until both installs are done (H-2): the steps that read the GitHub Environment name `GH_SECRETS_JSON` themselves, and the export step then hands it to the steps after it.
+1. Checkout code, install dependencies (migrations only — no app `pnpm build`), and install the Railway CLI at its pin (`tooling/ci/install-railway-cli.sh`: `RAILWAY_VERSION`, SHA-256-verified). No secret is in the job's env until both installs are done (H-2): the steps that read the GitHub Environment name `GH_SECRETS_JSON` themselves, and the export step then hands it to the steps after it.
 2. Run `pnpm validate:github-env-runtime` against the exported GitHub environment (schema-required keys present).
 3. **Log expected scanned CI image refs from GHCR** — default `ghcr.io/<owner>/<repo>/clinozy-be-api:<commit-sha>` and `clinozy-be-worker:<commit-sha>`; optional secrets **`GHCR_API_IMAGE`** / **`GHCR_WORKER_IMAGE`** override the logged ref. These are the exact refs the next step pins onto Railway.
 4. Run `pnpm db:migrate` + `pnpm db:seed` (reference data), sync app env vars with `railway variable set`.
@@ -421,7 +421,7 @@ After this, pushes to **main** will run the deploy workflow. No keys or tokens a
 
 ```bash
 brew install railway
-# or, on Linux, the version the deploy runs: sudo bash tooling/setup/agent/install-railway.sh
+# or, on Linux, the version the deploy runs: sudo bash tooling/ci/install-railway-cli.sh
 ```
 
 **One-time login** — `railway login` (opens browser).
@@ -465,7 +465,7 @@ gh secret set DATABASE_URL --env development --body "postgresql://..."
 
 | Step                   | Railway                                           | GitHub                                                                          |
 | ---------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Install                | `brew install railway` or `tooling/setup/agent/install-railway.sh` (the deploy's pin) | `brew install gh`                                                               |
+| Install                | `brew install railway` or `tooling/ci/install-railway-cli.sh` (the deploy's pin) | `brew install gh`                                                               |
 | Auth                   | `railway login`                                   | `gh auth login`                                                                 |
 | Create project/service | `railway init` then `railway add`                 | Create environments development, production in repo Settings                    |
 | Get service ID         | `railway status --json`                           | —                                                                               |

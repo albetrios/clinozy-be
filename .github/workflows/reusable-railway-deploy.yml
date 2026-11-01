@@ -214,7 +214,7 @@ jobs:
       # before any secret is in reach (H-2): `npm install -g @railway/cli` installed whatever npm
       # served that day and ran its postinstall download with every production secret in env.
       - name: Install Railway CLI (pinned, before any secret)
-        run: sudo bash tooling/setup/agent/install-railway.sh
+        run: sudo bash tooling/ci/install-railway-cli.sh
 
       - name: Derive NODE_ENV from the deploy environment
         # NODE_ENV is the deploy TARGET, so it comes from the resolved environment — the
